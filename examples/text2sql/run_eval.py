@@ -42,8 +42,6 @@ def main():
         metrics=[
             execution_accuracy,
             valid_sql,
-            "relevance",
-            "toxicity",
             ],
         model="openai/gpt-4o-mini",
         config={
@@ -53,7 +51,8 @@ def main():
         input_mapping={
             "sql_prompt": "question",
             "sql_context": "schema"
-        }
+        },
+        samples = 8
     )
 
     evaluator.run()

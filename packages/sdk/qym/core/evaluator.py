@@ -47,6 +47,7 @@ from .dashboard import RunDashboard, console_supports_live
 from ..adapters.base import TaskAdapter, auto_detect_task
 from ..metrics.registry import get_metric, get_metric_spec
 from ..metrics.judges.base import JudgeInputError
+from ..metrics.result import MetricResult
 from ..metrics.spec import Metric, MetricSpec
 from ..utils.env import load_cwd_dotenv
 
@@ -73,7 +74,7 @@ def _compute_run_config_id(config: Dict[str, Any]) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
-from ..utils.errors import DatasetNotFoundError
+from ..utils.errors import DatasetNotFoundError, NonRetryableError
 
 # UIServer has been removed - platform streaming is now required
 # from ..server.app import UIServer  # DEPRECATED
@@ -412,6 +413,24 @@ def _detect_git_info(
             commit = None
 
     return {"git_branch": branch, "git_commit": commit}
+
+
+async def _emit_platform_event(stream, type_: str, payload, *, sync=False):
+    if callable(getattr(type(stream), "aemit", None)):
+        await stream.aemit(type_, payload, sync=sync)
+    else:
+        # Stream substitutes historically expose only emit().
+        if sync:
+            await asyncio.to_thread(stream.emit, type_, payload, sync=True)
+        else:
+            stream.emit(type_, payload)
+
+
+async def _close_platform_stream(stream):
+    if callable(getattr(type(stream), "aclose", None)):
+        await stream.aclose()
+    else:
+        await asyncio.to_thread(stream.close)
 
 
 class Evaluator:
@@ -964,6 +983,24 @@ class Evaluator:
     async def arun(
         self, show_tui: bool = True, auto_save: bool = False, save_format: str = "csv"
     ) -> EvaluationResult:
+        """Run an evaluation and release its judge clients on every exit path."""
+        from ..metrics.judges._client import judge_client_scope
+
+        async with judge_client_scope():
+            completed = False
+            try:
+                result = await self._arun(show_tui, auto_save, save_format)
+                completed = True
+                return result
+            finally:
+                if not completed:
+                    stream = getattr(self, "_platform_stream", None)
+                    if stream is not None:
+                        await _close_platform_stream(stream)
+
+    async def _arun(
+        self, show_tui: bool = True, auto_save: bool = False, save_format: str = "csv"
+    ) -> EvaluationResult:
         """
         Run the evaluation asynchronously.
 
@@ -1157,7 +1194,8 @@ class Evaluator:
                         )
                     # Seed run_started event (platform also has run record already; this is for richer metadata)
                     try:
-                        self._platform_stream.emit(
+                        await _emit_platform_event(
+                            self._platform_stream,
                             "run_started",
                             {
                                 "external_run_id": self.run_name,
@@ -1430,7 +1468,8 @@ class Evaluator:
                         try:
                             ps = getattr(self, "_platform_stream", None)
                             if ps is not None:
-                                ps.emit(
+                                await _emit_platform_event(
+                                    ps,
                                     "item_failed",
                                     {
                                         "item_id": str(item_id),
@@ -1572,7 +1611,7 @@ class Evaluator:
             # the interrupt handler below drains the right tasks.
             worker_tasks: List[asyncio.Task] = []
 
-            def _emit_pass_completed(pass_number: int) -> None:
+            async def _emit_pass_completed(pass_number: int) -> None:
                 if self.samples <= 1:
                     return
                 try:
@@ -1599,7 +1638,7 @@ class Evaluator:
                     }
                     ps = getattr(self, "_platform_stream", None)
                     if ps is not None:
-                        ps.emit("pass_completed", payload)
+                        await _emit_platform_event(ps, "pass_completed", payload)
                     self._notify_observer("on_pass_completed", **payload)
 
                     # Sampling sanity check: if pass 2 reproduced pass 1's
@@ -1656,7 +1695,7 @@ class Evaluator:
                     if interrupted or self._should_stop_requested():
                         interrupted = True
                         break
-                    _emit_pass_completed(_pass_number)
+                    await _emit_pass_completed(_pass_number)
             except (KeyboardInterrupt, asyncio.CancelledError) as exc:
                 interrupted = True
                 cancel_exc = exc
@@ -1728,23 +1767,29 @@ class Evaluator:
 
         # Flush and shut down OTEL
         try:
-            self._otel.shutdown()
+            await asyncio.to_thread(self._otel.shutdown)
         finally:
             self._otel.reset_stream(otel_stream_token)
 
         # Finalize remote streaming after all spans have had a chance to emit.
         self._run_completed = False
         _final_status = "STOPPED" if interrupted else "COMPLETED"
-        if getattr(self, "_platform_stream", None) is not None:
+        platform_stream = getattr(self, "_platform_stream", None)
+        if platform_stream is not None:
             try:
                 # Close the async queue after all late span/item emits have happened.
-                self._platform_stream.close()
+                await _close_platform_stream(platform_stream)
             except Exception:
                 pass
             try:
-                # Send run_completed synchronously to guarantee delivery.
+                # A timed-out drain must not publish completion ahead of queued
+                # item/span events. close() has already reported the backlog.
+                if callable(getattr(type(platform_stream), "aflush", None)) and not await platform_stream.aflush(0):
+                    raise RuntimeError("Platform upload still pending after close")
+                # Send run_completed after the ordered queue has drained.
                 final_run_metadata = dict(result.run_metadata or {})
-                self._platform_stream.emit(
+                await _emit_platform_event(
+                    platform_stream,
                     "run_completed",
                     {
                         "ended_at": _utc_now_str(),
@@ -1758,6 +1803,8 @@ class Evaluator:
                     },
                     sync=True,
                 )
+                if callable(getattr(type(platform_stream), "aflush", None)) and not await platform_stream.aflush(0):
+                    raise RuntimeError("Platform completion was not acknowledged")
                 self._run_completed = True
             except Exception:
                 pass
@@ -1902,15 +1949,63 @@ class Evaluator:
             return input_cols[0] or None
         return None
 
-    def _metric_input_aliases(self, input_data: Any) -> Dict[str, Any]:
-        """Expose original and mapped input names without changing input_data."""
+    def _prepare_metric_input(self, input_data: Any) -> Any:
+        """Apply configured input names at the metric boundary.
+
+        Without an input mapping, preserve the dataset value exactly for legacy
+        metrics. When a configured mapping renames at least one field, expose
+        the renamed shape through the metric's ``input_data`` argument.
+        """
+        if not self.input_mapping:
+            return input_data
+
+        if isinstance(input_data, dict):
+            mapped: Dict[str, Any] = {}
+            changed = False
+            for input_name, value in input_data.items():
+                mapped_name = self.input_mapping.get(input_name, input_name)
+                if mapped_name in mapped:
+                    raise ValueError(
+                        "Multiple input columns map to the same task parameter "
+                        f"'{mapped_name}'."
+                    )
+                mapped[mapped_name] = value
+                changed = changed or mapped_name != input_name
+            return mapped if changed else input_data
+
+        input_name = self._single_dataset_input_name()
+        if input_name:
+            mapped_name = self.input_mapping.get(input_name)
+            if mapped_name and mapped_name != input_name:
+                return {mapped_name: input_data}
+            return input_data
+
+        # A one-entry mapping is unambiguous even for dataset implementations
+        # that do not expose their single input column name.
+        if len(self.input_mapping) == 1:
+            input_name, mapped_name = next(iter(self.input_mapping.items()))
+            if mapped_name != input_name:
+                return {mapped_name: input_data}
+
+        return input_data
+
+    def _metric_input_aliases(
+        self, input_data: Any, mapped_input_data: Any
+    ) -> Dict[str, Any]:
+        """Expose original and mapped input names as metric arguments."""
         aliases: Dict[str, Any] = {}
         if isinstance(input_data, dict):
             for key, value in input_data.items():
                 if not isinstance(key, str):
                     continue
                 aliases.setdefault(key, value)
-                aliases[self.input_mapping.get(key, key)] = value
+
+            # Apply the mapped shape after the original shape so an explicit
+            # mapping has deterministic precedence if names overlap.
+            if isinstance(mapped_input_data, dict):
+                for key, value in mapped_input_data.items():
+                    if isinstance(key, str):
+                        aliases[key] = value
             return aliases
 
         input_name = self._single_dataset_input_name()
@@ -1942,13 +2037,12 @@ class Evaluator:
         sig = inspect.signature(metric)
         params = list(sig.parameters.values())
         has_var_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params)
+        mapped_input_data = self._prepare_metric_input(input_data)
 
         named_values = {
             "output": output,
             "expected": expected,
-            # Preserve the longstanding metric contract: input_data is exactly
-            # the value stored on the dataset item.
-            "input_data": input_data,
+            "input_data": mapped_input_data,
             "task_metadata": task_metadata or {},
             "metadata": item_metadata or {},
             "item_metadata": item_metadata or {},
@@ -1956,7 +2050,9 @@ class Evaluator:
 
         # Individual parameters may use either original dataset names or names
         # produced by input_mapping. Reserved metric parameters win collisions.
-        for key, value in self._metric_input_aliases(input_data).items():
+        for key, value in self._metric_input_aliases(
+            input_data, mapped_input_data
+        ).items():
             named_values.setdefault(key, value)
 
         concrete_params = [
@@ -1985,7 +2081,7 @@ class Evaluator:
         positional = [
             output,
             expected,
-            input_data,
+            mapped_input_data,
             item_metadata or {},
         ]
         return tuple(positional[: len(concrete_params)]), {}
@@ -2144,13 +2240,14 @@ class Evaluator:
 
         return spans
 
-    def _emit_item_started(self, index: int, item: Any):
+    async def _emit_item_started(self, index: int, item: Any):
         """Emit item_started to platform stream and notify observer."""
         try:
             ps = getattr(self, "_platform_stream", None)
             if ps is not None:
                 item_id = getattr(item, "id", None) or f"item_{index}"
-                ps.emit(
+                await _emit_platform_event(
+                    ps,
                     "item_started",
                     {
                         "item_id": str(item_id),
@@ -2173,7 +2270,7 @@ class Evaluator:
             },
         )
 
-    def _emit_item_attempt_started(
+    async def _emit_item_attempt_started(
         self,
         index: int,
         item: Any,
@@ -2187,7 +2284,8 @@ class Evaluator:
             if ps is None:
                 return
             item_id = getattr(item, "id", None) or f"item_{index}"
-            ps.emit(
+            await _emit_platform_event(
+                ps,
                 "item_attempt_started",
                 {
                     "item_id": str(item_id),
@@ -2221,7 +2319,7 @@ class Evaluator:
         adapter_trace.trace_id = spans.trace_id
 
         task_started_at_ms = int(time.time() * 1000)
-        self._emit_item_attempt_started(
+        await self._emit_item_attempt_started(
             index, item, attempt_number, spans, task_started_at_ms
         )
         attempt_start_time = time.monotonic()
@@ -2268,6 +2366,10 @@ class Evaluator:
             error = f"{type(e).__name__}: {e}"
             logger.warning(f"Item {index}: {error}")
             retryable = False
+        except NonRetryableError as e:
+            error = f"{type(e).__name__}: {e}"
+            logger.warning(f"Item {index}: {error} (non-retryable)")
+            retryable = False
         except Exception as e:
             error = f"{type(e).__name__}: {e} (attempt {attempt_number}/{1 + self.max_retries})"
             logger.warning(f"Item {index}: {error}")
@@ -2305,7 +2407,7 @@ class Evaluator:
 
             is_terminal_attempt = attempt_number == 1 + self.max_retries
             if not is_terminal_attempt:
-                self._emit_item_attempt_finished(
+                await self._emit_item_attempt_finished(
                     index, item, attempt, is_last_attempt=False
                 )
                 base_delay = min(2 ** (attempt_number - 1), 30)
@@ -2386,6 +2488,34 @@ class Evaluator:
                 "completed_at_ms": metric_started_at_ms + int(duration_s * 1000.0),
                 "status": metric_status,
             }
+
+        async def _emit_platform_metric_result(
+            raw_score_value: Any, result: MetricResult
+        ) -> None:
+            """Send both the score and its execution status to the platform."""
+            try:
+                ps = getattr(self, "_platform_stream", None)
+                if ps is None:
+                    return
+                item_id = getattr(item, "id", None) or f"item_{index}"
+                await _emit_platform_event(
+                    ps,
+                    "metric_scored",
+                    {
+                        "item_id": str(item_id),
+                        "pass_number": self._current_pass,
+                        "metric_name": str(m_name),
+                        "score_numeric": result.score,
+                        "score_value": raw_score_value,
+                        "score_raw": result.to_legacy_dict(),
+                        "meta": result.metadata or {},
+                        "label": result.label,
+                        "explanation": result.explanation,
+                    },
+                )
+            except Exception:
+                # Platform reporting must never break the local evaluation.
+                pass
 
         # Inline helper that runs the actual metric compute (preserves the
         # existing probe logic for async metrics that accidentally block the loop).
@@ -2495,12 +2625,27 @@ class Evaluator:
                 finally:
                     self._otel.reset_usage_scope(usage_scope_token)
 
-            # Wrap in MetricResult
-            from qym.metrics.result import MetricResult
-
             raw_score_value = score.score if isinstance(score, MetricResult) else score
             if isinstance(score, dict):
                 raw_score_value = score.get("score")
+            raw_metric_error = score.get("error") if isinstance(score, dict) else None
+            raw_metric_traceback = (
+                score.get("traceback") if isinstance(score, dict) else None
+            )
+            if raw_metric_error is not None and str(raw_metric_error).strip():
+                metric_status = "error"
+
+            # Wrap in MetricResult. A caught exception still has score 0 for
+            # aggregation, but its metadata explicitly marks it as Error so
+            # clients do not confuse it with an ordinary judged failure.
+            result = MetricResult.from_raw(score)
+            if metric_status in {"error", "timeout"}:
+                result.metadata = dict(result.metadata or {})
+                result.metadata["status"] = metric_status
+                if raw_metric_error is not None:
+                    result.metadata["error"] = str(raw_metric_error)
+                if raw_metric_traceback:
+                    result.metadata["traceback"] = str(raw_metric_traceback)
             # Internal harnesses and older integrations may replace ``metrics``
             # directly without rebuilding ``metric_specs``. Preserve the
             # legacy score path instead of turning an otherwise valid metric
@@ -2511,35 +2656,14 @@ class Evaluator:
             if metric_status not in {"timeout", "error"}:
                 validated_score = spec.validate_score(raw_score_value)
             else:
-                validated_score = MetricResult.from_raw(score).score
-            result = MetricResult.from_raw(score)
+                validated_score = result.score
             result.score = validated_score
             main_val = result.score
 
             # Add score as OTEL event on eval span (provider-agnostic)
             spans.add_score_event(m_name, main_val, result.label, result.explanation)
 
-            # Platform: metric scored
-            try:
-                ps = getattr(self, "_platform_stream", None)
-                if ps is not None:
-                    item_id = getattr(item, "id", None) or f"item_{index}"
-                    ps.emit(
-                        "metric_scored",
-                        {
-                            "item_id": str(item_id),
-                            "pass_number": self._current_pass,
-                            "metric_name": str(m_name),
-                            "score_numeric": result.score,
-                            "score_value": raw_score_value,
-                            "score_raw": result.to_legacy_dict(),
-                            "meta": result.metadata or {},
-                            "label": result.label,
-                            "explanation": result.explanation,
-                        },
-                    )
-            except Exception:
-                pass
+            await _emit_platform_metric_result(raw_score_value, result)
 
             self._notify_observer(
                 "on_metric_result",
@@ -2563,13 +2687,26 @@ class Evaluator:
                 )
             else:
                 logger.error(f"Metric {m_name} failed: {e}")
-            error_text = (
+            error_message = (
                 f"metric timeout after {self.metric_timeout}s "
                 f"({self.metric_max_retries + 1} attempts)"
                 if isinstance(e, asyncio.TimeoutError)
-                else traceback.format_exc()
+                else str(e).strip() or type(e).__name__
             )
-            score = {"score": 0, "error": error_text}
+            error_traceback = traceback.format_exc()
+            score = {
+                "score": 0,
+                "error": error_message,
+                "traceback": error_traceback,
+            }
+            error_result = MetricResult.from_raw(score)
+            error_result.metadata = {
+                **(error_result.metadata or {}),
+                "status": metric_status,
+                "error": error_message,
+                "traceback": error_traceback,
+            }
+            await _emit_platform_metric_result(0, error_result)
             self._notify_observer(
                 "on_metric_result",
                 item_index=index,
@@ -2598,11 +2735,28 @@ class Evaluator:
 
         for m_name, score in scores.items():
             if score is not None:
+                score_metadata = (
+                    score.get("metadata", {}) if isinstance(score, dict) else {}
+                )
+                has_metric_error = isinstance(score, dict) and (
+                    (
+                        score.get("error") is not None
+                        and str(score.get("error")).strip() != ""
+                    )
+                    or (
+                        isinstance(score_metadata, dict)
+                        and str(score_metadata.get("status", "")).lower()
+                        in {"error", "failed", "timeout"}
+                    )
+                )
+                if has_metric_error:
+                    tracker.set_metric_error(index, m_name)
+                    continue
                 main_val = score
                 meta_map = {}
                 if isinstance(score, dict):
                     main_val = score.get("score", None)
-                    md = score.get("metadata", {})
+                    md = score_metadata
                     if isinstance(md, dict):
                         for k, v in md.items():
                             if isinstance(v, dict):
@@ -2617,7 +2771,7 @@ class Evaluator:
         scores = {k: v for k, v in scores.items() if v is not None}
         tracker.complete_item(index, elapsed_time=task_time)
 
-    def _emit_item_attempt_finished(
+    async def _emit_item_attempt_finished(
         self,
         index: int,
         item: Any,
@@ -2631,7 +2785,8 @@ class Evaluator:
             if ps is None:
                 return
             item_id = getattr(item, "id", None) or f"item_{index}"
-            ps.emit(
+            await _emit_platform_event(
+                ps,
                 "item_attempt_finished",
                 {
                     "item_id": str(item_id),
@@ -2655,7 +2810,7 @@ class Evaluator:
         except Exception:
             pass
 
-    def _emit_item_completed(
+    async def _emit_item_completed(
         self,
         index: int,
         item: Any,
@@ -2680,7 +2835,8 @@ class Evaluator:
             ps = getattr(self, "_platform_stream", None)
             if ps is not None:
                 item_id = getattr(item, "id", None) or f"item_{index}"
-                ps.emit(
+                await _emit_platform_event(
+                    ps,
                     "item_completed",
                     {
                         "item_id": str(item_id),
@@ -2755,7 +2911,8 @@ class Evaluator:
         try:
             ps = getattr(self, "_platform_stream", None)
             if ps is not None:
-                ps.emit(
+                await _emit_platform_event(
+                    ps,
                     "item_failed",
                     {
                         "item_id": str(item_id),
@@ -2772,7 +2929,7 @@ class Evaluator:
         except Exception:
             pass
         if attempt is not None:
-            self._emit_item_attempt_finished(index, item, attempt, is_last_attempt=True)
+            await self._emit_item_attempt_finished(index, item, attempt, is_last_attempt=True)
         # 2. Update local tracker
         try:
             tracker.update_trace_info(index, trace_id, trace_url)
@@ -2835,11 +2992,11 @@ class Evaluator:
         # Persist the final attempt before item_completed.  Older platforms
         # attach a repeat pass's output to the already-existing final-attempt
         # row when they process item_completed.
-        self._emit_item_attempt_finished(
+        await self._emit_item_attempt_finished(
             index, item, success_attempt, is_last_attempt=True
         )
         # Emit item_completed to the platform stream (fire-and-forget queue put)
-        self._emit_item_completed(
+        await self._emit_item_completed(
             index,
             item,
             success_attempt.output,
@@ -2864,7 +3021,7 @@ class Evaluator:
 
         try:
             tracker.start_item(index)
-            self._emit_item_started(index, item)
+            await self._emit_item_started(index, item)
 
             success_attempt, attempts, retry_count = await self._execute_task(
                 index, item
@@ -2995,7 +3152,8 @@ class Evaluator:
                     ps = getattr(self, "_platform_stream", None)
                     if ps is not None:
                         item_id = getattr(item, "id", None) or f"item_{index}"
-                        ps.emit(
+                        await _emit_platform_event(
+                            ps,
                             "item_failed",
                             {
                                 "item_id": str(item_id),
@@ -3045,7 +3203,11 @@ class Evaluator:
             logger.error(
                 f"Metric {getattr(metric_func, '__name__', 'unknown')} failed: {error_tb}"
             )
-            return {"score": 0, "error": str(e), "traceback": error_tb}
+            return {
+                "score": 0,
+                "error": str(e).strip() or type(e).__name__,
+                "traceback": error_tb,
+            }
 
 
 def _announce_saved_results(

@@ -115,6 +115,69 @@ class Project(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class ProjectAnalysisCategoryCatalogVersion(Base):
+    """Immutable project-scoped diagnosis category catalog snapshot."""
+
+    __tablename__ = "project_analysis_category_catalog_versions"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    categories: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    category_entries: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    category_details_map: Mapped[dict[str, list[str]]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    category_taxonomy: Mapped[dict[str, dict[str, str]]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    subcategory_taxonomy: Mapped[dict[str, dict[str, dict[str, str]]]] = (
+        mapped_column(JSON, default=dict, nullable=False)
+    )
+    max_root_cause_categories: Mapped[int] = mapped_column(
+        Integer, default=3, server_default="3", nullable=False
+    )
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    source: Mapped[str] = mapped_column(
+        String(30), default="manual", server_default="manual", nullable=False
+    )
+    restored_from_version_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("project_analysis_category_catalog_versions.id"), nullable=True
+    )
+    parent_version_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("project_analysis_category_catalog_versions.id"), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="1", nullable=False
+    )
+    created_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "version",
+            name="uq_project_analysis_category_catalog_version",
+        ),
+        Index(
+            "ix_project_analysis_category_catalog_versions_active",
+            "project_id",
+            "is_active",
+        ),
+        Index(
+            "ix_project_analysis_category_catalog_versions_project_version",
+            "project_id",
+            "version",
+        ),
+    )
+
+
 class ProjectAnalysisRuleVersion(Base):
     """Project-scoped analyzer rules draft or immutable published snapshot."""
 
@@ -134,7 +197,7 @@ class ProjectAnalysisRuleVersion(Base):
         ),
         default=AnalysisRuleVersionStatus.DRAFT,
     )
-    rules: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list)
+    rules: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     source: Mapped[str] = mapped_column(String(30), default="manual")
     parent_version_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey("project_analysis_rule_versions.id"), nullable=True
@@ -318,6 +381,26 @@ class ProjectLlmConnection(Base):
     )
 
 
+class ProjectAnalysisPromptSettings(Base):
+    """Project-scoped system prompts used by the analysis pipeline."""
+
+    __tablename__ = "project_analysis_prompt_settings"
+
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True
+    )
+    llm_analyzer_system_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    aggregator_system_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    rules_writer_system_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+
 class Run(Base):
     __tablename__ = "runs"
 
@@ -463,6 +546,7 @@ class RunItem(Base):
     __table_args__ = (
         UniqueConstraint("run_id", "item_id", name="uq_run_item"),
         Index("ix_run_item_run_index", "run_id", "index"),
+        Index("ix_run_item_run_trace", "run_id", "trace_id"),
     )
 
 
@@ -859,6 +943,15 @@ class ReviewCorrection(Base):
     scores_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
     ai_root_cause: Mapped[str] = mapped_column(String(200))
+    # Plural category storage. The singular columns remain as the primary
+    # category for compatibility with existing queries and clients.
+    ai_root_causes: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
+    ai_root_cause_issues: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(
+        JSON, nullable=True
+    )
+    ai_category_taxonomy: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSON, nullable=True
+    )
     ai_root_cause_detail: Mapped[str] = mapped_column(Text, default="")
     ai_root_cause_note: Mapped[str] = mapped_column(Text, default="")
     ai_confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -866,6 +959,13 @@ class ReviewCorrection(Base):
     ai_solution_note: Mapped[str] = mapped_column(Text, default="")
 
     human_root_cause: Mapped[str] = mapped_column(String(200))
+    human_root_causes: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
+    human_root_cause_issues: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(
+        JSON, nullable=True
+    )
+    human_category_taxonomy: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSON, nullable=True
+    )
     human_root_cause_detail: Mapped[str] = mapped_column(Text, default="")
     human_root_cause_note: Mapped[str] = mapped_column(Text, default="")
     human_solution: Mapped[str] = mapped_column(String(200), default="")
@@ -896,3 +996,46 @@ class ReviewCorrection(Base):
             "is_active",
         ),
     )
+
+
+class RunTraceSummary(Base):
+    """Private numeric accumulator for incremental live trace statistics."""
+
+    __tablename__ = "run_trace_summaries"
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), primary_key=True)
+    totals: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
+class RunTraceContribution(Base):
+    """Last applied item contribution, independent of mutable item metadata."""
+
+    __tablename__ = "run_trace_contributions"
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), primary_key=True)
+    item_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    item_order: Mapped[int] = mapped_column(BigInteger)
+    trace_id: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    included: Mapped[bool] = mapped_column(Boolean, default=False)
+    bucket: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    __table_args__ = (Index("ix_trace_contribution_run_trace", "run_id", "trace_id"),)
+
+
+class RunTraceNamedContribution(Base):
+    """Indexed first-contributor order for named outer-scope trace latencies."""
+
+    __tablename__ = "run_trace_named_contributions"
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), primary_key=True)
+    item_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    name: Mapped[str] = mapped_column(String(500), primary_key=True)
+    item_order: Mapped[int] = mapped_column(BigInteger)
+    name_position: Mapped[int] = mapped_column(Integer)
+    __table_args__ = (Index("ix_trace_named_first", "run_id", "name", "item_order", "name_position"),)
+
+# Import projection mappings so Base.metadata includes their durable tables.
+from qym_platform.db.dashboard_models import (  # noqa: E402,F401
+    DashboardChangeEvent, DashboardEventCause, DashboardRecordState,
+    DashboardRecordCause, DashboardRunDimension, DashboardRunSummary,
+    DashboardBucketRollup, DashboardHistogram, DashboardPartitionState,
+    DashboardDeadLetter,
+)
+from qym_platform.services.dashboard_outbox import install_dashboard_outbox_hooks
+install_dashboard_outbox_hooks()

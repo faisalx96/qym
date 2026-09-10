@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from cryptography.fernet import Fernet
@@ -27,6 +28,7 @@ if "openai" not in sys.modules:
     sys.modules["openai"] = MagicMock()
 
 from qym_platform.app import create_app
+from qym_platform.api import analysis as analysis_api
 from qym_platform.db.base import Base
 from qym_platform.db.models import (
     ApiKey,
@@ -39,6 +41,8 @@ from qym_platform.db.models import (
     ReviewCorrection,
     Run,
     RunItem,
+    RunItemAttempt,
+    RunItemPassScore,
     RunItemScore,
     RunWorkflowStatus,
     User,
@@ -46,6 +50,7 @@ from qym_platform.db.models import (
 )
 from qym_platform.deps import get_db
 from qym_platform.security import api_key_prefix, hash_api_key
+from qym_platform.services.analysis_aggregation import AnalysisAggregationError
 
 
 @pytest.fixture()
@@ -222,6 +227,73 @@ def _seed_api_key(session: Session, *, token: str, scopes: list[str]) -> None:
     session.commit()
 
 
+def test_project_analysis_context_works_without_runs(client, session_factory) -> None:
+    with session_factory() as session:
+        manager = User(
+            id="empty-project-manager",
+            email="empty-project-manager@example.com",
+            role=UserRole.MEMBER,
+        )
+        project = Project(
+            id="empty-project",
+            name="Empty Project",
+            slug="empty-project",
+            created_by_user_id=manager.id,
+        )
+        membership = ProjectMembership(
+            project_id=project.id,
+            user_id=manager.id,
+            role=ProjectRole.MANAGER,
+            added_by_user_id=manager.id,
+        )
+        session.add_all([manager, project, membership])
+        session.commit()
+
+    config = client.get(
+        "/api/projects/empty-project/analysis-config",
+        headers=_headers("empty-project-manager@example.com"),
+    )
+    assert config.status_code == 200
+    assert config.json()["total_items"] == 0
+    assert config.json()["analysis_rules"] == []
+
+    empty_documents = client.get(
+        "/api/projects/empty-project/analysis-documents",
+        headers=_headers("empty-project-manager@example.com"),
+    )
+    assert empty_documents.status_code == 200
+    assert empty_documents.json()["documents"] == []
+
+    uploaded = client.post(
+        "/api/projects/empty-project/analysis-documents",
+        headers=_headers("empty-project-manager@example.com"),
+        files={"file": ("rubric.txt", b"Use evidence.", "text/plain")},
+    )
+    assert uploaded.status_code == 200
+    assert uploaded.json()["document"]["content"] == "Use evidence."
+
+    versions = client.get(
+        "/api/projects/empty-project/analysis-rule-versions",
+        headers=_headers("empty-project-manager@example.com"),
+    )
+    assert versions.status_code == 200
+    assert versions.json()["versions"] == []
+
+    draft = client.post(
+        "/api/projects/empty-project/analysis-rule-versions",
+        headers=_headers("empty-project-manager@example.com"),
+        json={"description": "First project draft"},
+    )
+    assert draft.status_code == 200
+    assert draft.json()["version"]["status"] == "draft"
+
+    denied = client.get(
+        "/api/projects/empty-project/analysis-config",
+        headers=_headers("not-a-project-member@example.com"),
+    )
+    assert denied.status_code == 403
+
+
 def test_proxy_headers_auto_provisions_new_user(client, session_factory):
     response = client.get("/api/runs", headers=_headers("new.user@example.com"))
     assert response.status_code == 200
@@ -287,6 +359,13 @@ def test_run_mutation_permissions_enforced(client, session_factory) -> None:
     )
     assert denied_analyze.status_code == 403
 
+    denied_aggregate = client.post(
+        "/api/runs/run-1/aggregate-analysis",
+        headers=_headers("other@example.com"),
+        json={},
+    )
+    assert denied_aggregate.status_code == 403
+
     owner_document = client.post(
         "/api/runs/run-1/analysis-documents",
         headers=_headers("owner@example.com"),
@@ -346,10 +425,7 @@ def test_run_mutation_permissions_enforced(client, session_factory) -> None:
         "/api/runs/run-2/analysis-documents",
         headers=_headers("manager-a@example.com"),
     )
-    assert (
-        project_selection_from_second_run.json()["documents"][0]["selected"]
-        is False
-    )
+    assert project_selection_from_second_run.json()["documents"][0]["selected"] is False
 
     manager_can_change_project_document_selection = client.patch(
         f"/api/runs/run-1/analysis-documents/{document_id}",
@@ -386,6 +462,90 @@ def test_run_mutation_permissions_enforced(client, session_factory) -> None:
     )
     assert deleted.status_code == 200
     assert deleted.json() == {"ok": True, "document_id": document_id}
+
+
+def test_saved_analysis_can_be_aggregated_from_the_run(
+    client, session_factory, monkeypatch
+) -> None:
+    with session_factory() as session:
+        _seed_platform_data(session)
+        item = (
+            session.query(RunItem)
+            .filter(RunItem.run_id == "run-1", RunItem.item_id == "item-1")
+            .one()
+        )
+        item.item_metadata = {
+            "metric_analyses": {
+                "judge": {
+                    "source": "ai",
+                    "root_cause": "Reasoning Error",
+                    "root_cause_detail": "Incorrect grouping",
+                }
+            }
+        }
+        session.commit()
+
+    monkeypatch.setattr(
+        analysis_api,
+        "_get_llm_config",
+        lambda *_args, **_kwargs: {"llm_model": "test-model"},
+    )
+    monkeypatch.setattr(analysis_api, "build_client", lambda *_args: object())
+
+    response = client.post(
+        "/api/runs/run-1/aggregate-analysis",
+        headers=_headers("owner@example.com"),
+        json={},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "succeeded"
+    assert response.json()["categories"] == {"Reasoning Error": 1}
+    with session_factory() as session:
+        run = session.get(Run, "run-1")
+        assert run is not None
+        assert run.run_metadata["analysis_aggregation"]["status"] == "succeeded"
+        assert run.run_metadata["analysis_aggregation"]["aggregated"] == 0
+
+
+def test_saved_analysis_aggregation_failure_is_persisted_for_the_run_ui(
+    client, session_factory, monkeypatch
+) -> None:
+    with session_factory() as session:
+        _seed_platform_data(session)
+
+    monkeypatch.setattr(
+        analysis_api,
+        "_get_llm_config",
+        lambda *_args, **_kwargs: {"llm_model": "test-model"},
+    )
+    monkeypatch.setattr(analysis_api, "build_client", lambda *_args: object())
+    monkeypatch.setattr(
+        analysis_api,
+        "_aggregate_run_analysis_results",
+        AsyncMock(
+            side_effect=AnalysisAggregationError(
+                "root_cause_detail aggregation quality retry failed"
+            )
+        ),
+    )
+
+    response = client.post(
+        "/api/runs/run-1/aggregate-analysis",
+        headers=_headers("owner@example.com"),
+        json={},
+    )
+
+    assert response.status_code == 502
+    assert response.headers["X-Qym-Aggregation-Status"] == "failed"
+    assert "quality retry failed" in response.json()["detail"]
+    with session_factory() as session:
+        run = session.get(Run, "run-1")
+        assert run is not None
+        status = run.run_metadata["analysis_aggregation"]
+        assert status["status"] == "failed"
+        assert status["metrics"] is None
+        assert "quality retry failed" in status["error"]
 
 
 def test_regular_member_cannot_repoint_preserved_llm_key(
@@ -522,6 +682,73 @@ def test_metric_root_cause_edits_are_scoped_and_audited(
         assert audits[0].after["root_cause"] == "Reasoning Error"
 
 
+def test_failed_metric_analysis_keeps_manual_recovery_available(
+    client, session_factory
+) -> None:
+    with session_factory() as session:
+        _seed_platform_data(session)
+        item = (
+            session.query(RunItem)
+            .filter(RunItem.run_id == "run-1", RunItem.item_id == "item-1")
+            .one()
+        )
+        item.item_metadata = {
+            "analysis_error": "judge: missing_category_taxonomy",
+            "metric_analyses": {
+                "judge": {
+                    "source": "ai",
+                    "error": "missing_category_taxonomy",
+                }
+            },
+        }
+        session.commit()
+
+    context = client.post(
+        "/api/runs/update_root_cause",
+        headers=_headers("owner@example.com"),
+        json={
+            "run_id": "run-1",
+            "item_id": "item-1",
+            "metric_name": "judge",
+            "root_cause_note": "The reviewer can still capture context before choosing a category.",
+        },
+    )
+    assert context.status_code == 200
+    context_analysis = context.json()["row"]["item_metadata"]["metric_analyses"][
+        "judge"
+    ]
+    assert context_analysis["error"] == "missing_category_taxonomy"
+    assert context_analysis["root_cause_note"].startswith("The reviewer")
+    assert context.json()["row"]["item_metadata"]["analysis_error"] == (
+        "judge: missing_category_taxonomy"
+    )
+
+    recovered = client.post(
+        "/api/runs/update_root_cause",
+        headers=_headers("owner@example.com"),
+        json={
+            "run_id": "run-1",
+            "item_id": "item-1",
+            "metric_name": "judge",
+            "root_causes": ["Manual taxonomy fallback"],
+            "root_cause_detail": "Incorrect answer",
+            "root_cause_note": "Reviewed manually after the AI taxonomy validation failed.",
+            "solution": "Add a targeted check",
+        },
+    )
+    assert recovered.status_code == 200
+    recovered_meta = recovered.json()["row"]["item_metadata"]
+    recovered_analysis = recovered_meta["metric_analyses"]["judge"]
+    assert recovered_analysis["root_causes"] == ["Manual taxonomy fallback"]
+    assert recovered_analysis["root_cause"] == "Manual taxonomy fallback"
+    assert recovered_analysis["root_cause_detail"] == "Incorrect answer"
+    assert recovered_analysis["root_cause_note"].startswith("Reviewed manually")
+    assert recovered_analysis["solution"] == "Add a targeted check"
+    assert recovered_analysis["source"] == "human"
+    assert "error" not in recovered_analysis
+    assert "analysis_error" not in recovered_meta
+
+
 def test_correction_review_permissions_and_filtering(client, session_factory) -> None:
     with session_factory() as session:
         _seed_platform_data(session)
@@ -569,10 +796,17 @@ def test_correction_review_permissions_and_filtering(client, session_factory) ->
             "item_id": "item-1",
             "metric_name": None,
             "run_name": "run-1",
-            "dataset": "dataset-1",
-            "model": "",
-            "detail": "",
-            "note": "Human review",
+                "dataset": "dataset-1",
+                "model": "",
+                "root_cause_issues": [
+                    {
+                        "category": "Wrong Format",
+                        "subcategory": "",
+                        "finding": "Human review",
+                    }
+                ],
+                "detail": "",
+                "note": "Human review",
             "solution": "",
             "solution_note": "",
             "input": {"prompt": "hello"},
@@ -634,3 +868,181 @@ def test_api_key_scopes_are_not_enforced(client, session_factory) -> None:
             },
         )
         assert response.status_code == 200, (token, response.text)
+
+
+def test_csv_run_upload_disambiguates_duplicate_item_ids(
+    client, session_factory
+) -> None:
+    with session_factory() as session:
+        _seed_api_key(session, token="upload-token", scopes=["runs:write"])
+
+    csv_body = (
+        "dataset_name,run_name,item_id,input,output,expected_output,time,accuracy_score\n"
+        "dataset,run-1,repeated-id,first,one,one,0.1,1\n"
+        "dataset,run-1,repeated-id,second,two,two,0.2,1\n"
+    )
+    response = client.post(
+        "/v1/runs:upload",
+        headers=_auth_headers("upload-token"),
+        data={"task": "task", "dataset": "dataset", "model": "model"},
+        files={"file": ("run.csv", csv_body, "text/csv")},
+    )
+
+    assert response.status_code == 200, response.text
+    run_id = response.json()["run_id"]
+    with session_factory() as session:
+        item_ids = [
+            row.item_id
+            for row in session.query(RunItem)
+            .filter(RunItem.run_id == run_id)
+            .order_by(RunItem.index)
+            .all()
+        ]
+    assert item_ids == ["repeated-id", "repeated-id__duplicate_0002"]
+
+
+def test_csv_run_upload_preserves_multi_pass_structure(client, session_factory) -> None:
+    with session_factory() as session:
+        _seed_api_key(session, token="multi-pass-token", scopes=["runs:write"])
+
+    csv_body = (
+        "dataset_name,run_name,run_metadata,run_config,trace_id,item_id,pass_number,"
+        "input,item_metadata,output,expected_output,time,task_started_at_ms,accuracy_score\n"
+        'dataset,run-1,"{}","{}",trace-1,item-1,1,question,"{}",wrong,right,0.1,1000,0\n'
+        'dataset,run-1,"{}","{}",trace-2,item-1,2,question,"{}",right,right,0.2,2000,1\n'
+    )
+    response = client.post(
+        "/v1/runs:upload",
+        headers=_auth_headers("multi-pass-token"),
+        data={"task": "task", "dataset": "dataset", "model": "model"},
+        files={"file": ("run.csv", csv_body, "text/csv")},
+    )
+
+    assert response.status_code == 200, response.text
+    run_id = response.json()["run_id"]
+    with session_factory() as session:
+        run = session.get(Run, run_id)
+        items = session.query(RunItem).filter(RunItem.run_id == run_id).all()
+        attempts = (
+            session.query(RunItemAttempt)
+            .filter(RunItemAttempt.run_id == run_id)
+            .order_by(RunItemAttempt.pass_number)
+            .all()
+        )
+        pass_scores = (
+            session.query(RunItemPassScore)
+            .filter(RunItemPassScore.run_id == run_id)
+            .order_by(RunItemPassScore.pass_number)
+            .all()
+        )
+        reduced = (
+            session.query(RunItemScore).filter(RunItemScore.run_id == run_id).one()
+        )
+
+        assert run is not None
+        assert run.samples == 2
+        assert run.run_config["samples"] == 2
+        assert len(items) == 1
+        assert items[0].output == "right"
+        assert [attempt.pass_number for attempt in attempts] == [1, 2]
+        assert [attempt.output for attempt in attempts] == ["wrong", "right"]
+        assert [score.score_numeric for score in pass_scores] == [0.0, 1.0]
+        assert reduced.score_numeric == pytest.approx(0.5)
+        assert reduced.meta == {"sample_reducer": "mean", "samples_observed": 2}
+
+
+def test_platform_snapshot_upload_preserves_indices_and_passes(
+    client, session_factory
+) -> None:
+    with session_factory() as session:
+        _seed_api_key(session, token="snapshot-token", scopes=["runs:write"])
+
+    snapshot = {
+        "run": {
+            "task_name": "source-task",
+            "dataset_name": "source-dataset",
+            "model_name": "source-model",
+            "run_name": "source-run",
+            "metric_names": ["accuracy"],
+            "metadata": {"source": "another-qym"},
+            "config": {},
+            "samples": 2,
+            "last_completed_pass": 2,
+        },
+        "snapshot": {
+            "metric_names": ["accuracy"],
+            "rows": [
+                {
+                    "index": 7,
+                    "item_id": "item-b",
+                    "input_full": "second",
+                    "expected_full": "yes",
+                    "output_full": "yes",
+                    "metric_values": [0.5],
+                    "metric_meta": {"accuracy": {"samples_observed": 2}},
+                    "pass_scores": {"accuracy": [0, 1]},
+                    "pass_attempts": [
+                        {"status": "completed", "output": "no", "latency_ms": 10},
+                        {"status": "completed", "output": "yes", "latency_ms": 20},
+                    ],
+                },
+                {
+                    "index": 2,
+                    "item_id": "item-a",
+                    "input_full": "first",
+                    "expected_full": "yes",
+                    "output_full": "yes",
+                    "metric_values": [1.0],
+                    "metric_meta": {"accuracy": {"samples_observed": 2}},
+                    "pass_scores": {"accuracy": [1, 1]},
+                    "pass_attempts": [
+                        {"status": "completed", "output": "yes", "latency_ms": 11},
+                        {"status": "completed", "output": "yes", "latency_ms": 21},
+                    ],
+                },
+            ],
+        },
+    }
+    response = client.post(
+        "/v1/runs:upload",
+        headers=_auth_headers("snapshot-token"),
+        data={"task": "imported", "dataset": "imported"},
+        files={
+            "file": (
+                "source-run.json",
+                json.dumps(snapshot),
+                "application/json",
+            )
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    run_id = response.json()["run_id"]
+    with session_factory() as session:
+        run = session.get(Run, run_id)
+        items = (
+            session.query(RunItem)
+            .filter(RunItem.run_id == run_id)
+            .order_by(RunItem.index)
+            .all()
+        )
+        attempts = (
+            session.query(RunItemAttempt).filter(RunItemAttempt.run_id == run_id).all()
+        )
+        pass_scores = (
+            session.query(RunItemPassScore)
+            .filter(RunItemPassScore.run_id == run_id)
+            .all()
+        )
+
+        assert run is not None
+        assert run.task == "source-task"
+        assert run.dataset == "source-dataset"
+        assert run.model == "source-model"
+        assert run.samples == 2
+        assert [(item.item_id, item.index) for item in items] == [
+            ("item-a", 2),
+            ("item-b", 7),
+        ]
+        assert len(attempts) == 4
+        assert len(pass_scores) == 4

@@ -14,13 +14,27 @@ from qym_platform.db.models import (
     RunItem,
     RunItemScore,
 )
+from qym_platform.services.root_cause_categories import (
+    analysis_root_cause_issues,
+    analysis_root_causes,
+    normalize_root_cause_issues,
+    normalize_category_taxonomy,
+    normalize_root_causes,
+    patch_issue_categories,
+    project_root_cause_issues,
+)
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 MANAGED_ANALYSIS_KEYS = {
     "root_cause",
+    "root_causes",
+    "root_cause_categories",
+    "root_cause_issues",
     "root_cause_detail",
     "root_cause_note",
+    "root_cause_reason",
+    "category_taxonomy",
     "root_cause_source",
     "root_cause_confidence",
     "root_cause_metric_name",
@@ -28,6 +42,10 @@ MANAGED_ANALYSIS_KEYS = {
     "solution_note",
     "solution_source",
 }
+
+# Repeat runs keep one score row per sample/pass.  Store the diagnosis next to
+# that score so editing a selected sample cannot mutate the reduced item row.
+PASS_ANALYSIS_META_KEY = "root_cause_analysis"
 
 
 @dataclass
@@ -39,12 +57,64 @@ class RootCauseChangeResult:
     after_state: dict[str, Any]
 
 
+def lock_run_item(db: Session, *, run: Run, item: RunItem) -> RunItem:
+    """Return the current item while holding its transaction row lock.
+
+    Every human and AI write goes through this helper at the final persistence
+    boundary.  ``with_for_update`` is ignored by SQLite, but remains useful in
+    production PostgreSQL deployments and keeps the ownership check and write
+    in one transaction.
+    """
+    locked = (
+        db.query(RunItem)
+        .filter(RunItem.run_id == run.id, RunItem.item_id == item.item_id)
+        .populate_existing()
+        .with_for_update()
+        .one_or_none()
+    )
+    if locked is None:
+        raise ValueError("Run item no longer exists")
+    return locked
+
+
+def is_human_metric_analysis(
+    metadata: dict[str, Any] | None, metric_name: str
+) -> bool:
+    """Return whether a metric diagnosis is currently owned by a reviewer."""
+    md = metadata if isinstance(metadata, dict) else {}
+    metric = str(metric_name or "").strip()
+    metric_analyses = md.get("metric_analyses")
+    if isinstance(metric_analyses, dict):
+        analysis = metric_analyses.get(metric)
+        if isinstance(analysis, dict):
+            source = str(
+                analysis.get("source") or analysis.get("root_cause_source") or ""
+            ).strip().lower()
+            if source == "human":
+                return True
+
+    legacy_source = str(md.get("root_cause_source") or "").strip().lower()
+    if legacy_source != "human":
+        return False
+    legacy_metric = str(md.get("root_cause_metric_name") or "").strip()
+    return not legacy_metric or legacy_metric == metric
+
+
 def extract_analysis_state(meta: dict[str, Any] | None) -> dict[str, Any]:
     md = meta if isinstance(meta, dict) else {}
+    raw_root_causes = md.get("root_causes")
+    if raw_root_causes is None:
+        raw_root_causes = md.get("root_cause_categories")
     state = {
-        "root_cause": str(md.get("root_cause", "") or "").strip(),
+        "root_cause": md.get("root_cause", ""),
+        "root_causes": raw_root_causes,
+        "root_cause_issues": md.get("root_cause_issues"),
         "root_cause_detail": str(md.get("root_cause_detail", "") or "").strip(),
         "root_cause_note": str(md.get("root_cause_note", "") or "").strip(),
+        "root_cause_reason": str(md.get("root_cause_reason", "") or "").strip(),
+        "category_taxonomy": normalize_category_taxonomy(
+            md.get("category_taxonomy")
+        ),
         "root_cause_source": str(md.get("root_cause_source", "") or "").strip(),
         "root_cause_confidence": md.get("root_cause_confidence"),
         "solution": str(md.get("solution", "") or "").strip(),
@@ -56,10 +126,31 @@ def extract_analysis_state(meta: dict[str, Any] | None) -> dict[str, Any]:
 
 def normalize_analysis_state(state: dict[str, Any] | None) -> dict[str, Any]:
     src = state or {}
+    raw_root_causes = src.get("root_causes")
+    if raw_root_causes is None:
+        raw_root_causes = src.get("root_cause_categories")
+    if raw_root_causes is None:
+        raw_root_causes = src.get("root_cause")
+    root_cause_issues = normalize_root_cause_issues(
+        src.get("root_cause_issues"),
+        legacy_root_causes=raw_root_causes,
+        legacy_detail=src.get("root_cause_detail"),
+        legacy_finding=src.get("root_cause_note"),
+    )
+    root_causes = normalize_root_causes(
+        issue.get("category") for issue in root_cause_issues
+    )
+    primary_issue = root_cause_issues[0] if root_cause_issues else {}
     normalized = {
-        "root_cause": str(src.get("root_cause", "") or "").strip(),
-        "root_cause_detail": str(src.get("root_cause_detail", "") or "").strip(),
-        "root_cause_note": str(src.get("root_cause_note", "") or "").strip(),
+        "root_cause": root_causes[0] if root_causes else "",
+        "root_causes": root_causes,
+        "root_cause_issues": root_cause_issues,
+        "root_cause_detail": str(primary_issue.get("subcategory") or "").strip(),
+        "root_cause_note": str(primary_issue.get("finding") or "").strip(),
+        "root_cause_reason": str(src.get("root_cause_reason", "") or "").strip(),
+        "category_taxonomy": normalize_category_taxonomy(
+            src.get("category_taxonomy")
+        ),
         "root_cause_source": str(src.get("root_cause_source", "") or "").strip(),
         "root_cause_confidence": src.get("root_cause_confidence"),
         "solution": str(src.get("solution", "") or "").strip(),
@@ -69,15 +160,23 @@ def normalize_analysis_state(state: dict[str, Any] | None) -> dict[str, Any]:
 
     if normalized["root_cause"].lower() == "unanalyzed":
         normalized["root_cause"] = ""
+        normalized["root_causes"] = []
+        normalized["root_cause_issues"] = []
         normalized["root_cause_detail"] = ""
         normalized["root_cause_note"] = ""
+        normalized["root_cause_reason"] = ""
+        normalized["category_taxonomy"] = {}
         normalized["root_cause_source"] = ""
         normalized["root_cause_confidence"] = None
 
     if not normalized["root_cause"]:
         normalized["root_cause"] = ""
+        normalized["root_causes"] = []
+        normalized["root_cause_issues"] = []
         normalized["root_cause_detail"] = ""
         normalized["root_cause_note"] = ""
+        normalized["root_cause_reason"] = ""
+        normalized["category_taxonomy"] = {}
         normalized["root_cause_source"] = ""
         normalized["root_cause_confidence"] = None
 
@@ -106,11 +205,17 @@ def build_item_metadata(
     normalized = normalize_analysis_state(state)
     if normalized["root_cause"]:
         meta["root_cause"] = normalized["root_cause"]
+        meta["root_causes"] = list(normalized["root_causes"])
+        meta["root_cause_issues"] = list(normalized["root_cause_issues"])
         meta["root_cause_source"] = normalized["root_cause_source"]
         if normalized["root_cause_detail"]:
             meta["root_cause_detail"] = normalized["root_cause_detail"]
         if normalized["root_cause_note"]:
             meta["root_cause_note"] = normalized["root_cause_note"]
+        if normalized["root_cause_reason"]:
+            meta["root_cause_reason"] = normalized["root_cause_reason"]
+        if normalized["category_taxonomy"]:
+            meta["category_taxonomy"] = dict(normalized["category_taxonomy"])
         if normalized["root_cause_confidence"] is not None:
             meta["root_cause_confidence"] = normalized["root_cause_confidence"]
 
@@ -128,23 +233,76 @@ def apply_human_patch(
 ) -> dict[str, Any]:
     state = dict(before_state)
 
-    if "root_cause" in patch:
-        root_cause = str(patch.get("root_cause") or "").strip()
-        if root_cause:
-            state["root_cause"] = root_cause
+    if "root_cause_issues" in patch:
+        state["root_cause_issues"] = normalize_root_cause_issues(
+            patch.get("root_cause_issues")
+        )
+
+    elif "root_causes" in patch or "root_cause_categories" in patch:
+        raw_categories = patch.get(
+            "root_causes", patch.get("root_cause_categories")
+        )
+        root_causes = normalize_root_causes(
+            raw_categories
+        )
+        if root_causes:
+            current_issues = analysis_root_cause_issues(state)
+            state["root_cause_issues"] = patch_issue_categories(
+                current_issues, root_causes
+            )
+            state["root_causes"] = root_causes
+            state["root_cause"] = root_causes[0]
             state["root_cause_source"] = "human"
             state["root_cause_confidence"] = None
         else:
             state["root_cause"] = ""
+            state["root_causes"] = []
+            state["root_cause_issues"] = []
             state["root_cause_detail"] = ""
             state["root_cause_note"] = ""
+            state["root_cause_reason"] = ""
+            state["root_cause_source"] = ""
+            state["root_cause_confidence"] = None
+
+    elif "root_cause" in patch:
+        root_cause = str(patch.get("root_cause") or "").strip()
+        if root_cause:
+            current_issues = analysis_root_cause_issues(state)
+            primary = dict(current_issues[0]) if current_issues else {}
+            primary["category"] = root_cause
+            state["root_cause_issues"] = [primary, *current_issues[1:]]
+            state["root_cause"] = root_cause
+            state["root_causes"] = [root_cause]
+            state["root_cause_source"] = "human"
+            state["root_cause_confidence"] = None
+        else:
+            state["root_cause"] = ""
+            state["root_causes"] = []
+            state["root_cause_issues"] = []
+            state["root_cause_detail"] = ""
+            state["root_cause_note"] = ""
+            state["root_cause_reason"] = ""
             state["root_cause_source"] = ""
             state["root_cause_confidence"] = None
 
     if "root_cause_detail" in patch:
-        state["root_cause_detail"] = str(patch.get("root_cause_detail") or "").strip()
+        current_issues = analysis_root_cause_issues(state)
+        if current_issues:
+            current_issues[0]["subcategory"] = str(
+                patch.get("root_cause_detail") or ""
+            ).strip()
+            state["root_cause_issues"] = current_issues
     if "root_cause_note" in patch:
-        state["root_cause_note"] = str(patch.get("root_cause_note") or "").strip()
+        current_issues = analysis_root_cause_issues(state)
+        if current_issues:
+            current_issues[0]["finding"] = str(
+                patch.get("root_cause_note") or ""
+            ).strip()
+            state["root_cause_issues"] = current_issues
+    if "category_taxonomy" in patch:
+        state["category_taxonomy"] = normalize_category_taxonomy(
+            patch.get("category_taxonomy")
+        )
     if "solution" in patch:
         solution = str(patch.get("solution") or "").strip()
         if solution:
@@ -157,7 +315,7 @@ def apply_human_patch(
     if "solution_note" in patch:
         state["solution_note"] = str(patch.get("solution_note") or "").strip()
 
-    if state.get("root_cause"):
+    if analysis_root_cause_issues(state):
         state["root_cause_source"] = "human"
         state["root_cause_confidence"] = None
     if state.get("solution"):
@@ -169,19 +327,37 @@ def apply_human_patch(
 def build_ai_state(
     *,
     root_cause: str,
+    root_cause_issues: Any = None,
+    root_causes: Any = None,
     root_cause_detail: str = "",
     root_cause_note: str = "",
+    root_cause_reason: str = "",
     confidence: Optional[float] = None,
     solution: str = "",
     solution_note: str = "",
+    category_taxonomy: Any = None,
 ) -> dict[str, Any]:
+    issues = normalize_root_cause_issues(
+        root_cause_issues,
+        legacy_root_causes=(
+            root_causes if root_causes is not None else root_cause
+        ),
+        legacy_detail=root_cause_detail,
+        legacy_finding=root_cause_note,
+    )
+    categories = normalize_root_causes(issue["category"] for issue in issues)
+    primary = categories[0] if categories else ""
     return normalize_analysis_state(
         {
-            "root_cause": root_cause,
+            "root_cause": primary,
+            "root_causes": categories,
+            "root_cause_issues": issues,
             "root_cause_detail": root_cause_detail,
             "root_cause_note": root_cause_note,
+            "root_cause_reason": root_cause_reason,
+            "category_taxonomy": normalize_category_taxonomy(category_taxonomy),
             "root_cause_source": (
-                "ai" if (root_cause or "").strip().lower() != "unanalyzed" else ""
+                "ai" if primary.lower() != "unanalyzed" and primary else ""
             ),
             "root_cause_confidence": confidence,
             "solution": solution,
@@ -226,6 +402,9 @@ def replace_metric_review_candidate(
     actor_user_id: Optional[str],
     actor_source: str,
     created_at: Optional[datetime] = None,
+    active_candidates: Optional[list[ReviewCorrection]] = None,
+    scores_snapshot: Optional[dict[str, Any]] = None,
+    item_locked: bool = False,
 ) -> Optional[ReviewCorrection]:
     """Replace the active review candidate for one item/metric analysis."""
     if actor_source not in {"ai", "human", "system"}:
@@ -235,16 +414,42 @@ def replace_metric_review_candidate(
     if not metric_name:
         raise ValueError("metric_name is required")
 
-    active_candidates = (
-        db.query(ReviewCorrection)
-        .filter(
-            ReviewCorrection.run_id == run.id,
-            ReviewCorrection.item_id == item.item_id,
-            ReviewCorrection.metric_name == metric_name,
-            ReviewCorrection.is_active.is_(True),
+    # Lock and reload the item before inspecting or writing its review state.
+    # This is deliberately inside the service so all callers share the same
+    # ownership boundary.
+    if not item_locked:
+        item = lock_run_item(db, run=run, item=item)
+    if active_candidates is None:
+        active_candidates = (
+            db.query(ReviewCorrection)
+            .filter(
+                ReviewCorrection.run_id == run.id,
+                ReviewCorrection.item_id == item.item_id,
+                ReviewCorrection.metric_name == metric_name,
+                ReviewCorrection.is_active.is_(True),
+            )
+            .all()
         )
-        .all()
-    )
+
+    # An approved example is a reviewer-owned snapshot.  AI may create a new
+    # candidate only after a reviewer changes or withdraws the diagnosis; it
+    # must never silently supersede the approved row during another analysis.
+    if actor_source == "ai":
+        approved_candidate = (
+            db.query(ReviewCorrection)
+            .filter(
+                ReviewCorrection.run_id == run.id,
+                ReviewCorrection.item_id == item.item_id,
+                ReviewCorrection.metric_name == metric_name,
+                ReviewCorrection.status == CorrectionStatus.APPROVED,
+                ReviewCorrection.is_active.is_(True),
+            )
+            .order_by(ReviewCorrection.created_at.desc(), ReviewCorrection.id.desc())
+            .first()
+        )
+        if approved_candidate is not None:
+            return approved_candidate
+
     ai_baseline = next(
         (
             candidate
@@ -267,7 +472,10 @@ def replace_metric_review_candidate(
             .first()
         )
 
-    root_cause = str(analysis.get("root_cause") or "").strip()
+    root_cause_issues = analysis_root_cause_issues(analysis)
+    issue_projection = project_root_cause_issues(root_cause_issues)
+    root_causes = issue_projection["root_causes"]
+    root_cause = issue_projection["root_cause"]
     deactivation_status = (
         CorrectionStatus.SUPERSEDED if root_cause else CorrectionStatus.WITHDRAWN
     )
@@ -280,6 +488,18 @@ def replace_metric_review_candidate(
 
     timestamp = to_storage_utc(created_at) or utc_now_naive()
     is_ai = actor_source == "ai"
+    ai_baseline_issues = normalize_root_cause_issues(
+        getattr(ai_baseline, "ai_root_cause_issues", None) if ai_baseline else None,
+        legacy_root_causes=(
+            getattr(ai_baseline, "ai_root_causes", None)
+            or getattr(ai_baseline, "ai_root_cause", "")
+            if ai_baseline
+            else None
+        ),
+        legacy_detail=ai_baseline.ai_root_cause_detail if ai_baseline else "",
+        legacy_finding=ai_baseline.ai_root_cause_note if ai_baseline else "",
+    )
+    ai_baseline_projection = project_root_cause_issues(ai_baseline_issues)
     candidate = ReviewCorrection(
         run_id=run.id,
         item_id=item.item_id,
@@ -288,19 +508,40 @@ def replace_metric_review_candidate(
         input_snapshot=item.input,
         expected_snapshot=item.expected,
         output_snapshot=item.output,
-        scores_snapshot=_snapshot_scores(db, run.id, item.item_id),
+        scores_snapshot=(
+            dict(scores_snapshot)
+            if scores_snapshot is not None
+            else _snapshot_scores(db, run.id, item.item_id)
+        ),
         ai_root_cause=(
-            root_cause if is_ai else (ai_baseline.ai_root_cause if ai_baseline else "")
+            root_cause if is_ai else ai_baseline_projection["root_cause"]
+        ),
+        ai_root_causes=(
+            root_causes
+            if is_ai
+            else ai_baseline_projection["root_causes"]
+        ),
+        ai_root_cause_issues=(
+            root_cause_issues if is_ai else ai_baseline_issues
+        ),
+        ai_category_taxonomy=(
+            normalize_category_taxonomy(analysis.get("category_taxonomy"))
+            if is_ai
+            else normalize_category_taxonomy(
+                getattr(ai_baseline, "ai_category_taxonomy", None)
+                if ai_baseline
+                else None
+            )
         ),
         ai_root_cause_detail=(
-            str(analysis.get("root_cause_detail") or "")
+            issue_projection["root_cause_detail"]
             if is_ai
-            else (ai_baseline.ai_root_cause_detail if ai_baseline else "")
+            else ai_baseline_projection["root_cause_detail"]
         ),
         ai_root_cause_note=(
-            str(analysis.get("root_cause_note") or "")
+            issue_projection["root_cause_note"]
             if is_ai
-            else (ai_baseline.ai_root_cause_note if ai_baseline else "")
+            else ai_baseline_projection["root_cause_note"]
         ),
         ai_confidence=(
             analysis.get("confidence")
@@ -318,11 +559,18 @@ def replace_metric_review_candidate(
             else (ai_baseline.ai_solution_note if ai_baseline else "")
         ),
         human_root_cause="" if is_ai else root_cause,
+        human_root_causes=[] if is_ai else root_causes,
+        human_root_cause_issues=[] if is_ai else root_cause_issues,
+        human_category_taxonomy=(
+            {}
+            if is_ai
+            else normalize_category_taxonomy(analysis.get("category_taxonomy"))
+        ),
         human_root_cause_detail=(
-            "" if is_ai else str(analysis.get("root_cause_detail") or "")
+            "" if is_ai else issue_projection["root_cause_detail"]
         ),
         human_root_cause_note=(
-            "" if is_ai else str(analysis.get("root_cause_note") or "")
+            "" if is_ai else issue_projection["root_cause_note"]
         ),
         human_solution="" if is_ai else str(analysis.get("solution") or ""),
         human_solution_note="" if is_ai else str(analysis.get("solution_note") or ""),
@@ -354,6 +602,17 @@ def _build_candidate_snapshot(
     had_real_ai = ai_state.get("root_cause_source") == "ai" and bool(
         ai_state.get("root_cause")
     )
+    ai_root_causes = normalize_root_causes(
+        ai_state.get("root_causes", ai_state.get("root_cause"))
+    ) if had_real_ai else []
+    ai_root_cause_issues = analysis_root_cause_issues(ai_state) if had_real_ai else []
+    human_root_causes = normalize_root_causes(
+        after_state.get("root_causes", after_state.get("root_cause"))
+    )
+    human_root_cause_issues = analysis_root_cause_issues(after_state)
+    category_taxonomy = normalize_category_taxonomy(
+        after_state.get("category_taxonomy")
+    )
     return ReviewCorrection(
         run_id=run.id,
         item_id=item.item_id,
@@ -363,6 +622,11 @@ def _build_candidate_snapshot(
         output_snapshot=item.output,
         scores_snapshot=scores_snapshot,
         ai_root_cause=ai_state.get("root_cause", "") if had_real_ai else "",
+        ai_root_causes=ai_root_causes,
+        ai_root_cause_issues=ai_root_cause_issues,
+        ai_category_taxonomy=(
+            category_taxonomy if had_real_ai else {}
+        ),
         ai_root_cause_detail=(
             ai_state.get("root_cause_detail", "") if had_real_ai else ""
         ),
@@ -371,6 +635,9 @@ def _build_candidate_snapshot(
         ai_solution=ai_state.get("solution", "") if had_real_ai else "",
         ai_solution_note=ai_state.get("solution_note", "") if had_real_ai else "",
         human_root_cause=after_state.get("root_cause", ""),
+        human_root_causes=human_root_causes,
+        human_root_cause_issues=human_root_cause_issues,
+        human_category_taxonomy=category_taxonomy,
         human_root_cause_detail=after_state.get("root_cause_detail", ""),
         human_root_cause_note=after_state.get("root_cause_note", ""),
         human_solution=after_state.get("solution", ""),
@@ -397,6 +664,10 @@ def _build_ai_review_candidate(
     created_at: datetime,
 ) -> ReviewCorrection:
     normalized_ai = normalize_analysis_state(ai_state)
+    ai_root_causes = normalize_root_causes(
+        normalized_ai.get("root_causes", normalized_ai.get("root_cause"))
+    )
+    ai_root_cause_issues = analysis_root_cause_issues(normalized_ai)
     return ReviewCorrection(
         run_id=run.id,
         item_id=item.item_id,
@@ -406,12 +677,20 @@ def _build_ai_review_candidate(
         output_snapshot=item.output,
         scores_snapshot=scores_snapshot,
         ai_root_cause=normalized_ai.get("root_cause", ""),
+        ai_root_causes=ai_root_causes,
+        ai_root_cause_issues=ai_root_cause_issues,
         ai_root_cause_detail=normalized_ai.get("root_cause_detail", ""),
         ai_root_cause_note=normalized_ai.get("root_cause_note", ""),
+        ai_category_taxonomy=normalize_category_taxonomy(
+            normalized_ai.get("category_taxonomy")
+        ),
         ai_confidence=normalized_ai.get("root_cause_confidence"),
         ai_solution=normalized_ai.get("solution", ""),
         ai_solution_note=normalized_ai.get("solution_note", ""),
         human_root_cause="",
+        human_root_causes=[],
+        human_root_cause_issues=[],
+        human_category_taxonomy={},
         human_root_cause_detail="",
         human_root_cause_note="",
         human_solution="",
@@ -426,11 +705,24 @@ def _build_ai_review_candidate(
 
 def _candidate_ai_state(candidate: ReviewCorrection) -> dict[str, Any]:
     ai_root_cause = str(candidate.ai_root_cause or "").strip()
+    ai_root_causes = normalize_root_causes(candidate.ai_root_causes)
+    if not ai_root_causes and ai_root_cause:
+        ai_root_causes = [ai_root_cause]
     return normalize_analysis_state(
         {
             "root_cause": ai_root_cause,
+            "root_causes": ai_root_causes,
+            "root_cause_issues": normalize_root_cause_issues(
+                getattr(candidate, "ai_root_cause_issues", None),
+                legacy_root_causes=ai_root_causes,
+                legacy_detail=candidate.ai_root_cause_detail,
+                legacy_finding=candidate.ai_root_cause_note,
+            ),
             "root_cause_detail": candidate.ai_root_cause_detail or "",
             "root_cause_note": candidate.ai_root_cause_note or "",
+            "category_taxonomy": normalize_category_taxonomy(
+                getattr(candidate, "ai_category_taxonomy", None)
+            ),
             "root_cause_source": "ai" if ai_root_cause else "",
             "root_cause_confidence": candidate.ai_confidence,
             "solution": candidate.ai_solution or "",
@@ -535,15 +827,48 @@ def apply_root_cause_change(
     next_state: dict[str, Any] | None = None,
     revision_created_at: Optional[datetime] = None,
     backfilled_from_legacy: bool = False,
+    scores_snapshot: Optional[dict[str, Any]] = None,
+    item_locked: bool = False,
 ) -> RootCauseChangeResult:
     if actor_source not in {"human", "ai", "system"}:
         raise ValueError(f"Unsupported actor_source: {actor_source}")
     if (human_patch is None) == (next_state is None):
         raise ValueError("Provide exactly one of human_patch or next_state")
 
+    # Human edits and AI aggregation both acquire the same deterministic row
+    # lock before reading metadata and creating revisions/candidates.
+    if not item_locked:
+        item = lock_run_item(db, run=run, item=item)
+
     before_state = extract_analysis_state(
         item.item_metadata if isinstance(item.item_metadata, dict) else {}
     )
+
+    # Item-scoped legacy corrections use a NULL metric name.  Keep the same
+    # immutable approval boundary as metric-scoped corrections so the older
+    # persistence path cannot erase an approved example either.
+    if actor_source == "ai":
+        approved_candidate = (
+            db.query(ReviewCorrection)
+            .filter(
+                ReviewCorrection.run_id == run.id,
+                ReviewCorrection.item_id == item.item_id,
+                ReviewCorrection.metric_name.is_(None),
+                ReviewCorrection.status == CorrectionStatus.APPROVED,
+                ReviewCorrection.is_active.is_(True),
+            )
+            .order_by(ReviewCorrection.created_at.desc(), ReviewCorrection.id.desc())
+            .first()
+        )
+        if approved_candidate is not None:
+            return RootCauseChangeResult(
+                changed=False,
+                revision=None,
+                candidate=approved_candidate,
+                before_state=before_state,
+                after_state=before_state,
+            )
+
     after_state = (
         apply_human_patch(before_state, human_patch or {})
         if human_patch is not None
@@ -619,7 +944,11 @@ def apply_root_cause_change(
                 after_state=after_state,
                 actor_user_id=actor_user_id,
                 revision_id=revision.id,
-                scores_snapshot=_snapshot_scores(db, run.id, item.item_id),
+                scores_snapshot=(
+                    dict(scores_snapshot)
+                    if scores_snapshot is not None
+                    else _snapshot_scores(db, run.id, item.item_id)
+                ),
                 created_at=created_at,
                 status=(
                     CorrectionStatus.APPROVED
@@ -653,7 +982,11 @@ def apply_root_cause_change(
                 ai_state=after_state,
                 actor_user_id=actor_user_id,
                 revision_id=revision.id,
-                scores_snapshot=_snapshot_scores(db, run.id, item.item_id),
+                scores_snapshot=(
+                    dict(scores_snapshot)
+                    if scores_snapshot is not None
+                    else _snapshot_scores(db, run.id, item.item_id)
+                ),
                 created_at=created_at,
             )
             db.add(candidate)

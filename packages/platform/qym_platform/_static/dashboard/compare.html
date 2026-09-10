@@ -5,14 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Compare Runs</title>
   <link rel="icon" type="image/png" href="./static/qym_icon.png">
-  <link rel="stylesheet" href="./static/dashboard.css?v=runs-analysis-c1-20260804-16">
+<link rel="stylesheet" href="./static/dashboard.css?v=rule-history-bottom-20260816-1">
   <link rel="stylesheet" href="./static/shell.css">
   <script src="./static/auth.js"></script>
   <script src="./static/shell.js?v=ui-consistency-20260730-15"></script>
-  <script src="./static/metrics.js"></script>
+  <script src="./static/metrics.js?v=metric-errors-20260907-3"></script>
+  <script src="./static/run_details.js"></script>
   <script src="./static/trace_viewer.js?v=merge-20260804-1"></script>
   <script src="./static/step_latency.js?v=step-latency-33"></script>
-  <script src="./static/playground.js?v=runs-analysis-c1-20260804-16"></script>
+  <script src="./static/playground.js?v=rule-history-bottom-20260816-1"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
     /* Compare-specific styles */
@@ -2757,6 +2758,24 @@
       background: var(--bg-hover);
       border-color: var(--border-default);
     }
+    .item-comparison-row.item-collapsed.item-execution-error,
+    .items-grid > .item-comparison-row.item-collapsed.item-execution-error:hover {
+      border-color: var(--error);
+    }
+    .item-failure-icon {
+      width: 12px;
+      height: 12px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      flex: 0 0 auto;
+    }
+    .item-error-indicator {
+      min-width: var(--badge-height);
+      padding: 0;
+    }
     /* Disclosure is neutral at rest and uses glyph-only accent feedback;
        the open state rotates without adding a hover tile. */
     .item-chevron {
@@ -2960,6 +2979,11 @@
       background: var(--bg-elevated);
       border-radius: 0 4px 4px 0;
       padding: var(--space-sm);
+    }
+    .qym-output-card.item-run-output.item-execution-error {
+      border: 1px solid var(--error);
+      border-left-width: 3px;
+      border-radius: 6px;
     }
     .item-run-output .output-header {
       display: flex;
@@ -3933,6 +3957,163 @@
       background: var(--bg-surface);
       border: 1px solid var(--border-subtle);
       border-radius: 8px;
+    }
+    .compare-issue-list {
+      display: grid;
+      gap: var(--space-sm);
+      width: 100%;
+    }
+    .compare-issue {
+      padding: var(--space-sm);
+      border: 1px solid var(--border-subtle);
+      border-left: 3px solid var(--compare-issue-color, var(--accent-tertiary));
+      border-radius: var(--control-radius);
+      background: var(--bg-elevated);
+    }
+    .compare-issue-head {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      margin-bottom: var(--space-xs);
+    }
+    .compare-issue-number {
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: var(--font-sm);
+    }
+    .compare-issue-confidence {
+      margin-left: auto;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: var(--font-sm);
+    }
+    .compare-issue-category {
+      color: var(--compare-issue-color, var(--text-primary));
+      font-size: var(--font-md);
+      font-weight: 600;
+    }
+    .compare-issue-subcategory {
+      color: var(--text-primary);
+      font-size: var(--font-base);
+      font-weight: 600;
+    }
+    .compare-issue-finding {
+      margin-top: var(--space-xs);
+      color: var(--text-secondary);
+      font-size: var(--font-base);
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+    .compare-issue-empty {
+      color: var(--text-muted);
+      font-size: var(--font-sm);
+      font-style: italic;
+    }
+    .compare-issue-reason {
+      margin-top: var(--space-xs);
+      color: var(--text-muted);
+      font-size: var(--font-sm);
+    }
+    .compare-issue-edit {
+      margin-bottom: var(--space-sm);
+    }
+    .compare-issues-editor {
+      position: fixed;
+      z-index: 1000;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: var(--space-lg);
+      background: color-mix(in srgb, var(--bg-void) 76%, transparent);
+    }
+    .compare-issues-editor__panel {
+      display: flex;
+      width: min(620px, calc(100vw - (2 * var(--space-lg))));
+      max-height: calc(100vh - (2 * var(--space-lg)));
+      flex-direction: column;
+      overflow: hidden;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      background: var(--bg-surface);
+    }
+    .compare-issues-editor__header,
+    .compare-issues-editor__footer {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--space-md);
+      padding: var(--space-lg);
+    }
+    .compare-issues-editor__header { border-bottom: 1px solid var(--border-default); }
+    .compare-issues-editor__footer { border-top: 1px solid var(--border-default); }
+    .compare-issues-editor__header h2 {
+      margin: 0;
+      color: var(--text-primary);
+      font-size: var(--font-xl);
+      font-weight: 650;
+    }
+    .compare-issues-editor__header p,
+    .compare-issues-editor__status {
+      margin: var(--space-xs) 0 0;
+      color: var(--text-muted);
+      font-size: var(--font-sm);
+      line-height: 1.5;
+    }
+    .compare-issues-editor__status.is-error { color: var(--error); }
+    .compare-issues-editor__body {
+      display: grid;
+      gap: var(--space-md);
+      padding: var(--space-lg);
+      overflow-y: auto;
+    }
+    .compare-issues-editor__row {
+      padding: var(--space-md);
+      border: 1px solid var(--border-default);
+      border-radius: var(--control-radius);
+      background: var(--bg-base);
+    }
+    .compare-issues-editor__row-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-sm);
+      margin-bottom: var(--space-sm);
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: var(--font-sm);
+    }
+    .compare-issues-editor__fields {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-md);
+    }
+    .compare-issues-editor__field {
+      display: grid;
+      gap: var(--space-xs);
+      color: var(--text-muted);
+      font-size: var(--font-sm);
+      font-weight: 600;
+    }
+    .compare-issues-editor__field--finding { grid-column: 1 / -1; }
+    .compare-issues-editor__field textarea {
+      min-height: calc(var(--space-xl) * 2);
+      padding: var(--space-sm);
+      resize: vertical;
+      border: 1px solid var(--border-default);
+      border-radius: var(--control-radius);
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: var(--font-base);
+      line-height: 1.5;
+    }
+    .compare-issues-editor__actions {
+      display: flex;
+      gap: var(--space-sm);
+    }
+    @media (max-width: 640px) {
+      .compare-issues-editor__fields { grid-template-columns: 1fr; }
+      .compare-issues-editor__field--finding { grid-column: auto; }
     }
     .rc-sol-label {
       display: block;
@@ -5179,6 +5360,7 @@
         'Knowledge Gap',
         'Dataset Issue',
       ];
+      const MAX_ROOT_CAUSE_CATEGORIES = 3;
 
       const ROOT_CAUSE_COLORS = {
         'Hallucination': '#ef4444',
@@ -5485,6 +5667,7 @@
             leftRunIds,
             rightRunIds,
             threshold,
+            metricName,
             getMetricIndex,
             getItemId,
             getRunId,
@@ -5524,8 +5707,10 @@
 
           const selectedRuns = [...leftRuns, ...rightRuns];
           const itemIds = new Set();
+          const rowIndexes = new Map();
           selectedRuns.forEach((runData) => {
             const rows = runData?.snapshot?.rows || [];
+            rowIndexes.set(runData, window.QymMetrics.indexRowsById(rows, getItemId));
             rows.forEach((row) => {
               const itemId = getItemId(row);
               if (itemId !== undefined && itemId !== null && itemId !== '') itemIds.add(itemId);
@@ -5536,12 +5721,11 @@
           function collectPasses(groupRuns) {
             const values = [];
             for (const runData of groupRuns) {
-              const rows = runData?.snapshot?.rows || [];
-              const row = rows.find(candidate => getItemId(candidate) === currentItemId);
+              const row = rowIndexes.get(runData).get(currentItemId);
               if (!row) return null;
               const metricIdx = getMetricIndex(runData);
               if (metricIdx < 0) return null;
-              const { score } = window.QymMetrics.getRowScore(row, metricIdx);
+              const { score } = window.QymMetrics.getRowScore(row, metricIdx, metricName);
               if (score === null) return null;
               values.push(score >= threshold);
             }
@@ -5644,6 +5828,7 @@
           leftRunIds: groups.leftRunIds || [],
           rightRunIds: groups.rightRunIds || [],
           threshold,
+          metricName,
           getMetricIndex: (runData) => {
             const metricNames = runData?.snapshot?.metric_names || runData?.run?.metric_names || [];
             return metricNames.indexOf(metricName);
@@ -6015,6 +6200,7 @@
       const SWEEP_INTERNAL_METADATA_KEYS = new Set([
         'root_cause',
         'root_cause_detail',
+        'root_cause_reason',
         'root_cause_note',
         'root_cause_source',
         'root_cause_confidence',
@@ -7227,24 +7413,160 @@
         return row?.compare_item_id || null;
       }
 
+      const comparisonRowIndexes = new WeakMap();
+
+      function invalidateComparisonRowIndex(rows) {
+        if (rows) comparisonRowIndexes.delete(rows);
+      }
+
       function findRowByCompareId(rows, compareItemId) {
-        return (rows || []).find(r => getRowCompareId(r) === compareItemId) || null;
+        if (!rows) return null;
+        let cached = comparisonRowIndexes.get(rows);
+        if (!cached || cached.length !== rows.length) {
+          cached = { length: rows.length, index: window.QymMetrics.indexRowsById(rows, getRowCompareId) };
+          comparisonRowIndexes.set(rows, cached);
+        }
+        return cached.index.get(compareItemId) || null;
       }
 
       function canRenderItemComparison() {
         return state.compareAlignmentStatus === 'aligned';
       }
 
-      function getApprovalState(row) {
+      const comparisonDetails = new Map();
+      let comparisonRenderVersion = 0;
+      let visibleComparisonItems = [];
+      let comparisonFullTextRetained = false;
+
+      function initializeComparisonDetails() {
+        for (const details of comparisonDetails.values()) details.stop();
+        comparisonDetails.clear();
+        if (IS_COMPARE_EXPORT || !window.QymRunDetails) return;
+        for (const run of state.runs) {
+          if (run.snapshot?.detail_mode !== 'lazy') continue;
+          const ref = run.run?.file_path || run.run?.run_id;
+          const base = passRefBase(ref);
+          const pass = ref === base ? null : Number(ref.slice(base.length + PASS_REF_SEP.length));
+          comparisonDetails.set(run, window.QymRunDetails.create({
+            runId: base, apiUrl, passNumber: pass,
+            transformRow: row => pass
+              ? sliceRunToPass({ run: run.run, snapshot: { ...run.snapshot, rows: [row] } }, ref, pass).snapshot.rows[0]
+              : row,
+          }));
+        }
+      }
+
+      document.addEventListener('qym:before-navigate', () => {
+        comparisonRenderVersion++;
+        for (const details of comparisonDetails.values()) details.stop();
+      }, { once: true });
+
+      function hasComparisonDetails() { return comparisonDetails.size > 0; }
+      function comparisonOutputIdentity(row) {
+        // Empty outputs were excluded by the original truthy-value filter.
+        if (row?.output_digest === 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855') return '';
+        return row?.output_digest ?? (row?.output_full || row?.output || '');
+      }
+      function comparisonTextConditions() {
+        const conditions = [];
+        if (state.searchQuery) conditions.push({ field: 'content', value: state.searchQuery });
+        function visit(node) {
+          if (_isFilterGroup(node)) node.children.forEach(visit);
+          else if (node.field === 'output' && compareFilterConditionComplete(node)) conditions.push({ field: 'output', value: node.value });
+        }
+        visit(state.filterRoot);
+        return conditions;
+      }
+      function comparisonNeedsFullText() {
+        // A newline may span fields or runs in the original joined search.
+        // Load complete bodies for that uncommon case to retain exact matches.
+        return comparisonTextConditions().some(condition => /[\r\n]/.test(String(condition.value)) || String(condition.value).length > 10000);
+      }
+      function ensureComparisonRows(items, settings = {}) {
+        const pending = [];
+        state.runs.forEach((run, ri) => {
+          const promise = comparisonDetails.get(run)?.ensureRows(items.map(item => item.rowData[ri]).filter(Boolean), settings);
+          if (promise) pending.push(promise);
+        });
+        return pending.length ? Promise.all(pending) : null;
+      }
+      function ensureAllComparisonRows() {
+        const pending = [];
+        for (const [run, details] of comparisonDetails) {
+          const promise = details.ensureRows(run.snapshot.rows || [], { retainAll: true });
+          if (promise) pending.push(promise);
+        }
+        return pending.length ? Promise.all(pending) : null;
+      }
+      function ensureComparisonSearch() {
+        if (comparisonNeedsFullText()) {
+          comparisonFullTextRetained = true;
+          return ensureAllComparisonRows();
+        }
+        const pending = [];
+        const conditions = comparisonTextConditions();
+        for (const details of comparisonDetails.values()) {
+          const promise = details.ensureSearch(conditions);
+          if (promise) pending.push(promise);
+        }
+        return pending.length ? Promise.all(pending) : null;
+      }
+      function comparisonTextMatches(condition, rows) {
+        return rows.some((row, ri) => {
+          if (!row) return false;
+          const details = comparisonDetails.get(state.runs[ri]);
+          if (details) return details.matches(condition, row);
+          const fields = condition.field === 'output' ? [row.output_full || row.output || '']
+            : [row.input_full || row.input || '', row.expected_full || row.expected || '', row.output_full || row.output || ''];
+          return fields.some(value => stringify(value).toLowerCase().includes(String(condition.value).toLowerCase()));
+        });
+      }
+      function releaseComparisonBodies() {
+        if (comparisonNeedsFullText()) return;
+        state.runs.forEach((run, ri) => comparisonDetails.get(run)?.releaseExcept(visibleComparisonItems.map(item => item.rowData[ri]).filter(Boolean)));
+      }
+      function deferComparisonItems(promise, version, scrollToTop) {
+        if (!promise) return false;
+        const container = el('items-grid');
+        container.setAttribute('aria-busy', 'true');
+        container.textContent = 'Loading items…';
+        promise.then(() => {
+          if (version === comparisonRenderVersion) renderItems(scrollToTop);
+        }).catch(error => {
+          if (version !== comparisonRenderVersion || error.name === 'AbortError') return;
+          container.removeAttribute('aria-busy');
+          container.textContent = 'Items could not be loaded. ';
+          const retry = document.createElement('button');
+          retry.type = 'button';
+          retry.className = 'qym-inline-action qym-inline-action--accent';
+          retry.textContent = 'Retry';
+          retry.onclick = () => renderItems(scrollToTop);
+          container.appendChild(retry);
+          showToast('error', 'Could not load items', error.message);
+        });
+        return true;
+      }
+
+      function getApprovalState(row, metricName) {
         if (!row) return '';
-        const reviewStatus = String(row.review_correction_status || '').toLowerCase();
-        if (reviewStatus === 'approved') return 'approved';
+        const itemStatus = String(row.review_correction_status || '').toLowerCase();
+        const metricReviews = (row.review_corrections && typeof row.review_corrections === 'object')
+          ? row.review_corrections : {};
+        if (metricName) {
+          const metricStatus = String(metricReviews[metricName]?.status || '').toLowerCase();
+          if (metricStatus) return metricStatus === 'approved' ? 'approved' : 'not_approved';
+          if (itemStatus) return itemStatus === 'approved' ? 'approved' : 'not_approved';
+          return 'not_approved';
+        }
+        if (itemStatus === 'approved') return 'approved';
+        if (Object.values(metricReviews).some(review =>
+          String(review?.status || '').toLowerCase() === 'approved')) return 'approved';
         return 'not_approved';
       }
 
-      function matchesApprovalFilter(row, approvalSelection) {
+      function matchesApprovalFilter(row, approvalSelection, metricName) {
         if (!approvalSelection) return true;
-        const approvalState = getApprovalState(row);
+        const approvalState = getApprovalState(row, metricName);
         if (!approvalState) return false;
         if (typeof approvalSelection === 'string') {
           return approvalState === approvalSelection;
@@ -7508,7 +7830,7 @@
         const baseFiles = [...new Set(files.map(f => passRefBase(f)))];
         const params = baseFiles.map(f => 'files=' + encodeURIComponent(f)).join('&');
         try {
-          const compareResponse = await fetch(apiUrl('api/compare?' + params));
+          const compareResponse = await fetch(apiUrl('api/compare?' + params + '&view=compact'));
           const data = await compareResponse.json();
 
           if (!data.runs || data.runs.length < (baseFiles.length > 1 ? 2 : 1)) {
@@ -7544,6 +7866,7 @@
             state.langfuseProjectId = state.langfuseProjectId || firstRun.langfuse_project_id || '';
           }
           processRuns();
+          initializeComparisonDetails();
           render();
         } catch (err) {
           console.error('Failed to load comparison:', err);
@@ -7563,6 +7886,7 @@
             });
           }
           const rows = run.snapshot?.rows || [];
+          invalidateComparisonRowIndex(rows);
           for (const row of rows) {
             const compareItemId = getRowCompareId(row);
             if (compareItemId) compareItemIds.add(compareItemId);
@@ -7631,9 +7955,9 @@
               if (md.domain != null && md.domain !== '') {
                 for (const d of parseMetaList(md.domain)) domainSet.add(d);
               }
-              if (md.root_cause != null && md.root_cause !== '') rootCauseSet.add(String(md.root_cause));
+              rootCauseCategories(md).forEach(category => rootCauseSet.add(category));
               for (const analysis of getRowRootCauseAnalyses(row, 'all')) {
-                if (analysis.root_cause) rootCauseSet.add(String(analysis.root_cause));
+                rootCauseCategories(analysis).forEach(category => rootCauseSet.add(category));
               }
             }
           }
@@ -7656,7 +7980,7 @@
         }
 
         // Auto-select categories for breakdown chips
-        const EXCLUDED_CATEGORY_KEYS = new Set(['root_cause', 'root_cause_detail', 'root_cause_note', 'root_cause_source', 'root_cause_confidence', 'solution', 'solution_note', 'solution_source', 'task_started_at_ms', 'retry_count', 'analysis_error', 'trace_stats']);
+        const EXCLUDED_CATEGORY_KEYS = new Set(['root_cause', 'root_causes', 'root_cause_issues', 'root_cause_detail', 'root_cause_reason', 'root_cause_note', 'root_cause_source', 'root_cause_confidence', 'solution', 'solution_note', 'solution_source', 'task_started_at_ms', 'retry_count', 'analysis_error', 'trace_stats']);
         const MAX_CARDINALITY = 30;
         if (state.selectedCategories.size === 0) {
           for (const k of state.allMetadataKeys) {
@@ -7942,7 +8266,7 @@
             if (!itemIdSet.has(itemId)) continue;
             // Score for the selected metric (use centralized error handling)
             if (metricIdx >= 0) {
-              const { score } = window.QymMetrics.getRowScore(row, metricIdx);
+              const { score } = window.QymMetrics.getRowScore(row, metricIdx, metricName);
               if (score !== null) { scoreSum += score; scoreCount++; }
             }
             // Latency
@@ -7952,7 +8276,7 @@
             }
             // Errors (use centralized check)
             if (window.QymMetrics.isErrorRow(row)) {
-              const output = (row.output_full || row.output || '').toLowerCase();
+              const output = (row.__execution_error || row.output_full || row.output || '').toLowerCase();
               if (output.includes('timeout')) timeoutErrors++;
               else if (output.includes('error')) runtimeErrors++;
               else otherErrors++;
@@ -7976,7 +8300,7 @@
             const metricIdx = getMetricIndex(run);
             if (metricIdx < 0) return { score: null, failed: false };
             // Use centralized error handling from metrics.js
-            const { score, isError } = window.QymMetrics.getRowScore(row, metricIdx);
+            const { score, isError } = window.QymMetrics.getRowScore(row, metricIdx, metricName);
             return { score, failed: isError };
           });
 
@@ -8089,7 +8413,7 @@
           for (const row of rows) {
             const itemId = getRowCompareId(row);
             if (!itemIdSet.has(itemId)) continue;
-            const { score } = window.QymMetrics.getRowScore(row, mIdx);
+            const { score } = window.QymMetrics.getRowScore(row, mIdx, metricName);
             if (score !== null) {
               if (score < allScoresMin) allScoresMin = score;
               if (score > allScoresMax) allScoresMax = score;
@@ -8344,7 +8668,7 @@
 
       // Render aggregated metadata breakdowns using the Run Detail category component.
       function getCategoryChipKeys() {
-        const EXCLUDED = new Set(['root_cause', 'root_cause_detail', 'root_cause_note', 'root_cause_source', 'root_cause_confidence', 'solution', 'solution_note', 'solution_source', 'task_started_at_ms', 'retry_count', 'analysis_error']);
+        const EXCLUDED = new Set(['root_cause', 'root_causes', 'root_cause_issues', 'root_cause_detail', 'root_cause_reason', 'root_cause_note', 'root_cause_source', 'root_cause_confidence', 'solution', 'solution_note', 'solution_source', 'task_started_at_ms', 'retry_count', 'analysis_error']);
         const MAX_CARD = 30;
         const keys = [];
         for (const k of state.allMetadataKeys) {
@@ -8406,7 +8730,7 @@
               if (!itemsByGroup[effective][itemId]) itemsByGroup[effective][itemId] = { scores: [], latencies: [] };
 
               if (metricIndex >= 0) {
-                const { score } = window.QymMetrics.getRowScore(row, metricIndex);
+                const { score } = window.QymMetrics.getRowScore(row, metricIndex, selectedMetric);
                 if (score !== null) itemsByGroup[effective][itemId].scores.push(score);
               }
               if (row.latency_ms && row.status === 'completed') {
@@ -8480,7 +8804,7 @@
           for (const row of rows) {
             const itemId = getRowCompareId(row);
             if (!itemId || !filteredItemIds.has(itemId)) continue;
-            const { score } = window.QymMetrics.getRowScore(row, metricIndex);
+            const { score } = window.QymMetrics.getRowScore(row, metricIndex, selectedMetric);
             if (score !== null) overallScores.push(score);
           }
         }
@@ -9063,7 +9387,7 @@
             let sum = 0, count = 0;
             for (const row of rows) {
               // Use centralized error handling - errors count as 0
-              const { score } = window.QymMetrics.getRowScore(row, idx);
+              const { score } = window.QymMetrics.getRowScore(row, idx, metric);
               if (score !== null) {
                 sum += score;
                 count++;
@@ -9177,29 +9501,138 @@
       var _sankeyResizeObserver = null;
       var _sankeyResizeTimeout = null;
 
+      function rootCauseCategories(value) {
+        const hasCanonicalIssues = value && typeof value === 'object' && !Array.isArray(value) && Array.isArray(value.root_cause_issues);
+        const issues = rootCauseIssues(value, false);
+        if (hasCanonicalIssues || issues.length) {
+          const categories = [];
+          const seen = new Set();
+          issues.forEach(issue => {
+            const category = String(issue.category || '').trim();
+            const key = category.toLocaleLowerCase();
+            if (!category || seen.has(key)) return;
+            seen.add(key);
+            categories.push(category);
+          });
+          return categories;
+        }
+        const raw = value && typeof value === 'object' && !Array.isArray(value)
+          ? (Object.prototype.hasOwnProperty.call(value, 'root_causes')
+            ? value.root_causes
+            : (Object.prototype.hasOwnProperty.call(value, 'root_cause_categories')
+              ? value.root_cause_categories : value.root_cause))
+          : value;
+        const values = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+        const seen = new Set();
+        return values.map(value => String(value || '').trim()).filter(value => {
+          const key = value.toLocaleLowerCase();
+          if (!value || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        }).slice(0, MAX_ROOT_CAUSE_CATEGORIES);
+      }
+
+      function rootCauseIssues(value, legacyFallback = true) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+        if (Array.isArray(value.root_cause_issues)) {
+          const issues = value.root_cause_issues.map(issue => {
+            if (!issue || typeof issue !== 'object' || Array.isArray(issue)) return null;
+            const rawConfidence = issue.confidence;
+            const confidence = rawConfidence == null || rawConfidence === '' ? NaN : Number(rawConfidence);
+            const normalized = {
+              category: String(issue.category || issue.root_cause || '').trim(),
+              subcategory: String(issue.subcategory || issue.root_cause_detail || '').trim(),
+              finding: String(issue.finding || issue.root_cause_note || '').trim(),
+              category_reason: String(issue.category_reason || issue.root_cause_reason || '').trim(),
+            };
+            if (Number.isFinite(confidence)) normalized.confidence = Math.min(1, Math.max(0, confidence));
+            else delete normalized.confidence;
+            return normalized.category || normalized.subcategory || normalized.finding ? normalized : null;
+          }).filter(Boolean);
+          if (issues.length) {
+            const topReason = String(value.root_cause_reason || '').trim();
+            if (!issues[0].category_reason && topReason) issues[0].category_reason = topReason;
+            const rawTopConfidence = value.confidence ?? value.root_cause_confidence;
+            const topConfidence = rawTopConfidence == null || rawTopConfidence === '' ? NaN : Number(rawTopConfidence);
+            if (issues[0].confidence == null && Number.isFinite(topConfidence)) {
+              issues[0].confidence = Math.min(1, Math.max(0, topConfidence));
+            }
+          }
+          return issues;
+        }
+        if (!legacyFallback) return [];
+        const rawCategories = Object.prototype.hasOwnProperty.call(value, 'root_causes')
+          ? value.root_causes
+          : (Object.prototype.hasOwnProperty.call(value, 'root_cause_categories') ? value.root_cause_categories : value.root_cause);
+        const categories = (Array.isArray(rawCategories) ? rawCategories : (rawCategories ? [rawCategories] : []))
+          .map(category => String(category || '').trim()).filter(Boolean);
+        const subcategory = String(value.root_cause_detail || '').trim();
+        const finding = String(value.root_cause_note || '').trim();
+        const reason = String(value.root_cause_reason || '').trim();
+        const confidence = Number(value.confidence ?? value.root_cause_confidence);
+        if (!categories.length && !subcategory && !finding) return [];
+        return (categories.length ? categories : ['']).map((category, index) => ({
+          category,
+          subcategory,
+          finding,
+          ...(index === 0 && reason ? { category_reason: reason } : {}),
+          ...(index === 0 && Number.isFinite(confidence) ? { confidence: Math.min(1, Math.max(0, confidence)) } : {}),
+        }));
+      }
+
+      function rootCauseIssuePatch(issues) {
+        const displayIssues = rootCauseIssues({ root_cause_issues: issues });
+        const normalized = displayIssues.map(issue => ({
+          category: issue.category,
+          subcategory: issue.subcategory,
+          finding: issue.finding,
+        }));
+        const categories = [];
+        const seen = new Set();
+        normalized.forEach(issue => {
+          const key = issue.category.toLocaleLowerCase();
+          if (!issue.category || seen.has(key)) return;
+          seen.add(key);
+          categories.push(issue.category);
+        });
+        const first = normalized[0] || {};
+        return {
+          root_cause_issues: normalized,
+          root_causes: categories,
+          root_cause: first.category || '',
+          root_cause_detail: first.subcategory || '',
+          root_cause_note: first.finding || '',
+          root_cause_reason: (displayIssues[0] && displayIssues[0].category_reason) || '',
+        };
+      }
+
       function getRowRootCauseAnalyses(row, metricFilter) {
         const md = row?.item_metadata || {};
         const metricAnalyses = md.metric_analyses && typeof md.metric_analyses === 'object'
           ? md.metric_analyses
           : {};
         const isValid = analysis => analysis && typeof analysis === 'object' &&
-          !analysis.error && String(analysis.root_cause || '').trim();
+          !analysis.error && rootCauseCategories(analysis).length;
         const metricEntries = Object.entries(metricAnalyses)
           .filter(([, analysis]) => isValid(analysis));
         if (metricFilter === 'all' && metricEntries.length) {
-          return metricEntries.map(([metricName, analysis]) => ({ ...analysis, metric_name: metricName }));
+          return metricEntries.map(([metricName, analysis]) => ({ ...analysis, root_causes: rootCauseCategories(analysis), root_cause: rootCauseCategories(analysis)[0] || '', metric_name: metricName }));
         }
         if (metricFilter !== 'all') {
           const analysis = metricAnalyses[metricFilter];
-          if (isValid(analysis)) return [{ ...analysis, metric_name: metricFilter }];
+          if (isValid(analysis)) return [{ ...analysis, root_causes: rootCauseCategories(analysis), root_cause: rootCauseCategories(analysis)[0] || '', metric_name: metricFilter }];
           if (metricEntries.length) return [];
         }
-        const legacyCategory = String(md.root_cause || '').trim();
         const legacyMetric = String(md.root_cause_metric_name || '').trim();
+        const legacyCategories = rootCauseCategories(md);
+        if (legacyMetric && md.root_cause_source !== 'human' &&
+            !isValid(metricAnalyses[legacyMetric])) return [];
         const canUseLegacy = metricFilter === 'all' || legacyMetric === metricFilter ||
           (!legacyMetric && state.allMetrics.length <= 1);
-        return legacyCategory && canUseLegacy ? [{
-          root_cause: legacyCategory,
+        return legacyCategories.length && canUseLegacy ? [{
+          root_cause_issues: rootCauseIssues(md),
+          root_causes: legacyCategories,
+          root_cause: legacyCategories[0],
           root_cause_detail: md.root_cause_detail || '',
           solution: md.solution || '',
           metric_name: legacyMetric,
@@ -9213,6 +9646,29 @@
           )).join('');
         return '<label class="root-cause-metric-control" for="root-cause-metric-select">Metric' +
           '<select id="root-cause-metric-select" class="filter-select">' + options + '</select></label>';
+      }
+
+      function compareRootCauseScope(row, runIdx, selectedMetric = state.selectedItemsMetric) {
+        const ref = state.runs[runIdx]?.run?.file_path || '';
+        const runId = passRefBase(ref);
+        const passNumber = runId === ref
+          ? null
+          : parseInt(ref.slice(runId.length + PASS_REF_SEP.length), 10);
+        const md = row?.item_metadata || {};
+        const analyses = Number.isFinite(passNumber)
+          ? Object.fromEntries(Object.entries(row?.pass_metric_analyses || {})
+              .map(([name, values]) => [name, values?.[passNumber - 1]]))
+          : (md.metric_analyses || {});
+        const summaryMetric = String(md.root_cause_metric_name || '').trim();
+        const metricName = selectedMetric || summaryMetric || Object.keys(analyses)[0] || '';
+        const isMetricScoped = Number.isFinite(passNumber) || summaryMetric ||
+          Object.keys(analyses).length || !rootCauseIssues(md).length;
+        return {
+          runId,
+          passNumber,
+          metricName: isMetricScoped ? metricName : '',
+          analysis: isMetricScoped ? (analyses[metricName] || {}) : md,
+        };
       }
 
       function wireRootCauseMetricControl(section) {
@@ -9239,13 +9695,14 @@
             if (!itemId) continue;
             if (!filteredItemIds.has(itemId)) continue;
             for (const analysis of getRowRootCauseAnalyses(row, metricFilter)) {
-              const rc = analysis.root_cause || '';
               const sol = analysis.solution || '';
-              if (!rc || !sol) continue;
-              const key = rc + '|||' + sol;
-              links[key] = (links[key] || 0) + 1;
-              rcCounts[rc] = (rcCounts[rc] || 0) + 1;
-              solCounts[sol] = (solCounts[sol] || 0) + 1;
+              if (!sol) continue;
+              for (const rc of rootCauseCategories(analysis)) {
+                const key = rc + '|||' + sol;
+                links[key] = (links[key] || 0) + 1;
+                rcCounts[rc] = (rcCounts[rc] || 0) + 1;
+                solCounts[sol] = (solCounts[sol] || 0) + 1;
+              }
             }
           }
         }
@@ -9506,7 +9963,7 @@
         if (!row) return;
         const itemKey = (runName || 'Run') + '::' + (itemId || getRowCompareId(row) || row.item_id || String(row.index || ''));
         if ((row.status || '') === 'error') {
-          const executionError = row.error || row.output_full || row.output || '';
+          const executionError = row.error || row.__execution_error || row.output_full || row.output || '';
           addErrorBucket(buckets, 'Task error', normalizeErrorLabel(executionError, 'Task failed'), 1, itemKey, runName);
         }
 
@@ -9666,13 +10123,16 @@
             if (!itemId) continue;
             if (!filteredItemIds.has(itemId)) continue;
             for (const analysis of getRowRootCauseAnalyses(row, state.rootCauseMetric)) {
-              const rcRaw = String(analysis.root_cause || '');
-              if (!rcRaw) continue;
-              const rcDetail = analysis.root_cause_detail || '';
-              if (!rcCategories[rcRaw]) rcCategories[rcRaw] = { count: 0, subcauses: {} };
-              rcCategories[rcRaw].count++;
-              if (rcDetail) {
-                rcCategories[rcRaw].subcauses[rcDetail] = (rcCategories[rcRaw].subcauses[rcDetail] || 0) + 1;
+              const issues = rootCauseIssues(analysis);
+              for (let issueIndex = 0; issueIndex < issues.length; issueIndex++) {
+                const issue = issues[issueIndex];
+                const rcRaw = issue.category;
+                if (!rcRaw) continue;
+                if (!rcCategories[rcRaw]) rcCategories[rcRaw] = { count: 0, subcauses: {} };
+                rcCategories[rcRaw].count++;
+                if (issue.subcategory) {
+                  rcCategories[rcRaw].subcauses[issue.subcategory] = (rcCategories[rcRaw].subcauses[issue.subcategory] || 0) + 1;
+                }
               }
             }
           }
@@ -9699,7 +10159,11 @@
               autoAnalyzeHtml +
             '</div></div>';
           var aaBtn0 = section.querySelector('#auto-analyze-btn');
-          if (aaBtn0) aaBtn0.addEventListener('click', function () { QymPlayground.open(); });
+          if (aaBtn0) aaBtn0.addEventListener('click', function () {
+            QymPlayground.open().catch(function (error) {
+              showToast('error', 'Auto-analysis', error.message || 'Could not load the analyzer.');
+            });
+          });
           wireRootCauseMetricControl(section);
           return;
         }
@@ -9801,7 +10265,11 @@
 
         // Wire auto-analyze button
         var aaBtn = section.querySelector('#auto-analyze-btn');
-        if (aaBtn) aaBtn.addEventListener('click', function () { QymPlayground.open(); });
+        if (aaBtn) aaBtn.addEventListener('click', function () {
+          QymPlayground.open().catch(function (error) {
+            showToast('error', 'Auto-analysis', error.message || 'Could not load the analyzer.');
+          });
+        });
       }
 
       // Compare uses the same composable filter builder as run detail, with
@@ -9919,7 +10387,7 @@
           .filter(index => index >= 0);
         const outcomes = [];
         const outputs = rowData.map(row => row?.output_full || row?.output || '').filter(Boolean);
-        if (new Set(outputs).size > 1) outcomes.push('different');
+        if (new Set(rowData.map(comparisonOutputIdentity).filter(Boolean)).size > 1) outcomes.push('different');
         const hasError = rowData.some(row => row && window.QymMetrics.isErrorRow(row));
         const hasEditedMetric = rowData.some(rowHasEditedMetric);
         if (hasError) outcomes.push('errors');
@@ -9945,11 +10413,12 @@
           return metadata.root_cause ? String(metadata.root_cause) : '__none__';
         });
         const approvals = rowData.filter(Boolean).map(row =>
-          matchesApprovalFilter(row, 'approved') ? 'approved' : 'not_approved');
+          matchesApprovalFilter(row, 'approved', state.selectedItemsMetric) ? 'approved' : 'not_approved');
         const latencies = rowData.map(row => Number(row?.latency_ms) || 0);
 
         return {
           scores,
+          rowData,
           outcomes,
           winners,
           passCount: correctRuns.length,
@@ -9999,7 +10468,9 @@
           return node.oper === 'notin' ? !matched : matched;
         }
         if (field.kind === 'bool') return node.value === 'false' ? !value : !!value;
-        const matched = String(value).toLowerCase().includes(String(node.value || '').toLowerCase());
+        const matched = field.id === 'output' && hasComparisonDetails() && !comparisonNeedsFullText()
+          ? comparisonTextMatches({ field: 'output', value: node.value }, context.rowData)
+          : String(value).toLowerCase().includes(String(node.value || '').toLowerCase());
         return node.oper === 'notcontains' ? !matched : matched;
       }
 
@@ -10186,13 +10657,17 @@
             const metricIdx = getMetricIndex(run);
             if (metricIdx < 0) return null;
             // Use centralized error handling from metrics.js
-            const { score } = window.QymMetrics.getRowScore(row, metricIdx);
+            const { score } = window.QymMetrics.getRowScore(row, metricIdx, selectedMetric);
             return score;
           });
           const validScores = scores.filter(s => s !== null);
 
           // #19: Apply search query filter across input/expected and all run outputs
           if (state.searchQuery) {
+            if (hasComparisonDetails() && !comparisonNeedsFullText()) {
+              if (!String(itemId).toLowerCase().includes(state.searchQuery.toLowerCase()) &&
+                  !comparisonTextMatches({ field: 'content', value: state.searchQuery }, rowData)) continue;
+            } else {
             const q = state.searchQuery.toLowerCase();
             const searchableText = rowData
               .filter(r => r)
@@ -10205,6 +10680,7 @@
               .join('\n')
               .toLowerCase();
             if (!searchableText.includes(q)) continue;
+            }
           }
 
           // #2: Apply complexity/domain/root_cause category filters (null = all, array = explicit)
@@ -10241,7 +10717,8 @@
               const matchesNamed = namedFilters.length > 0 && rowData.some(r => {
                 if (!r) return false;
                 const values = getRowRootCauseAnalyses(r, state.rootCauseMetric)
-                  .map(analysis => String(analysis.root_cause || '').toLowerCase());
+                  .flatMap(analysis => rootCauseCategories(analysis))
+                  .map(value => value.toLowerCase());
                 return namedFilters.some(f => values.includes(f.toLowerCase()));
               });
               // Show row if ANY run has no root cause (partial match)
@@ -10268,7 +10745,7 @@
             if (customFilterFail) continue;
           }
           if (state.approvalFilter !== null) {
-            const matchingApproval = rowData.some(r => r && matchesApprovalFilter(r, state.approvalFilter));
+            const matchingApproval = rowData.some(r => r && matchesApprovalFilter(r, state.approvalFilter, state.selectedItemsMetric));
             if (!matchingApproval) continue;
           }
           if (state.taskErrorFilter || state.traceErrorFilter || state.analysisErrorFilter) {
@@ -10282,7 +10759,7 @@
 
           // Apply item filter
           if (state.itemFilter === 'different') {
-            const outputs = rowData.map(r => r?.output_full || r?.output || '').filter(o => o);
+            const outputs = rowData.map(comparisonOutputIdentity).filter(Boolean);
             const uniqueOutputs = new Set(outputs);
             if (uniqueOutputs.size <= 1) continue;
           } else if (state.itemFilter === 'errors') {
@@ -10372,7 +10849,7 @@
                 const mNames = run.snapshot?.metric_names || run.run?.metric_names || [];
                 const mIdx = selectedMetric ? mNames.indexOf(selectedMetric) : 0;
                 if (mIdx < 0) return null;
-                return window.QymMetrics.getRowScore(row, mIdx).score;
+                return window.QymMetrics.getRowScore(row, mIdx, selectedMetric).score;
               }).filter(s => s !== null);
               return vals.length > 0 ? Math.max(...vals) : -1;
             };
@@ -10428,6 +10905,22 @@
         const sep = String(ref).indexOf(PASS_REF_SEP);
         return sep < 0 ? String(ref) : String(ref).slice(0, sep);
       }
+      function scopedComparisonPassMetadata(row, metricNames, passNumber) {
+        const metadata = { ...(row.item_metadata || {}) };
+        [
+          'root_cause', 'root_causes', 'root_cause_issues', 'root_cause_detail', 'root_cause_note', 'root_cause_reason',
+          'root_cause_source', 'root_cause_confidence', 'root_cause_metric_name',
+          'solution', 'solution_note', 'solution_source',
+          'metric_analyses', 'analysis_error', 'analysis_warning',
+        ].forEach(key => delete metadata[key]);
+        const analyses = {};
+        (metricNames || []).forEach(name => {
+          const analysis = row.pass_metric_analyses?.[name]?.[passNumber - 1];
+          if (analysis && typeof analysis === 'object') analyses[name] = analysis;
+        });
+        if (Object.keys(analyses).length) metadata.metric_analyses = analyses;
+        return metadata;
+      }
       function sliceRunToPass(rd, ref, passNo) {
         const baseRun = rd.run || {};
         const run = {
@@ -10465,6 +10958,7 @@
           const hasPassScore = mv.some(value => value !== null && value !== undefined && value !== '');
           const next = {
             ...row,
+            item_metadata: scopedComparisonPassMetadata(row, metricNames, passNo),
             metric_values: mv,
             metric_meta: meta,
             pass_scores: null,
@@ -10474,6 +10968,9 @@
             error: att?.error || '',
             output: att ? (att.output ?? null) : null,
             output_full: att ? (att.output ?? null) : null,
+            output_digest: att?.output_digest ?? null,
+            __has_output: !!(att && (att.__has_output || att.output != null)),
+            __execution_error: att?.__execution_error || '',
             latency_ms: Number(att?.latency_ms || 0),
             task_started_at_ms: att?.task_started_at_ms ?? null,
             retry_count: Number(att?.retry_count || 0),
@@ -10570,6 +11067,40 @@
         return blocks ? `<div class="metric-det-zone">${blocks}</div>` : '';
       }
 
+      const COMPARE_FAILURE_ICON = '<svg class="item-failure-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="m5.75 5.75 4.5 4.5m0-4.5-4.5 4.5"/></svg>';
+
+      function compareExecutionErrorInfo(row, runIdx) {
+        if (!row) {
+          return { hasError: false, hasTaskError: false, metricErrorNames: [], title: '' };
+        }
+        const hasTaskError = window.QymMetrics.isTaskErrorRow(row);
+        const runData = state.runs[runIdx] || {};
+        const metricNames = Array.from(new Set([
+          ...(runData.snapshot?.metric_names || runData.run?.metric_names || []),
+          ...Object.keys(row.metric_meta || {}),
+          ...Object.keys(row.pass_metric_meta || {}),
+        ]));
+        const metricErrorNames = metricNames.filter(name =>
+          window.QymMetrics.hasMetricError(row, name)
+        );
+        const hasMetricError = metricErrorNames.length > 0;
+        const title = hasTaskError
+          ? 'Task execution failed'
+          : (hasMetricError
+              ? 'Metric execution failed: ' + metricErrorNames.join(', ')
+              : '');
+        return {
+          hasError: hasTaskError || hasMetricError,
+          hasTaskError,
+          metricErrorNames,
+          title,
+        };
+      }
+
+      function renderCompareErrorIndicator(title) {
+        return `<span class="qym-tag qym-tag--danger item-error-indicator" title="${escapeAttr(title)}" role="img" aria-label="${escapeAttr(title)}">${COMPARE_FAILURE_ICON}</span>`;
+      }
+
       function renderCompareOutputGroup(itemId, rowData) {
         const hidden = (state.itemHiddenOutputs || {})[itemId] || new Set();
         const activeMetric = (state.itemComparedMetric || {})[itemId] || '';
@@ -10591,12 +11122,12 @@
             meta: (row.metric_meta || {})[name] || {},
           };
         };
-        const verdictFor = (row, runIdx) => {
+        const verdictStateFor = (row, runIdx) => {
           if (!row) return '';
           const metric = state.selectedItemsMetric;
           let verdict = '';
-          if (row.status === 'error') {
-            verdict = 'fail';
+          if (compareExecutionErrorInfo(row, runIdx).hasError) {
+            verdict = 'error';
           } else if (metric && (state.metricTypes?.[metric] || 'score') !== 'numeric') {
             const score = scoreData(row, runIdx, metric).parsed;
             const threshold = state.metricIsBoolean[metric]
@@ -10604,10 +11135,42 @@
               : (state.metricThresholds[metric] ?? 0.8);
             if (score !== null) verdict = score >= threshold ? 'pass' : 'fail';
           }
+          return verdict;
+        };
+        const verdictFor = (row, runIdx) => {
+          const verdict = verdictStateFor(row, runIdx);
           if (!verdict) return '';
+          const errorInfo = compareExecutionErrorInfo(row, runIdx);
+          if (verdict === 'error') return renderCompareErrorIndicator(errorInfo.title);
+          const metric = state.selectedItemsMetric;
           const label = verdict === 'pass' ? 'Pass' : 'Fail';
-          const title = row.status === 'error' ? 'Execution error' : `${label} on ${metric}`;
+          const title = `${label} on ${metric}`;
           return `<span class="qym-tag ${verdict === 'pass' ? 'qym-tag--success' : 'qym-tag--danger'}" title="${escapeAttr(title)}">${label}</span>`;
+        };
+        const rootCauseBlockFor = (row, runIdx) => {
+          const scope = compareRootCauseScope(row, runIdx);
+          const issues = rootCauseIssues(scope.analysis);
+          const verdict = verdictStateFor(row, runIdx);
+          if (!issues.length && (IS_COMPARE_EXPORT || !['fail', 'error'].includes(verdict))) return '';
+          const issueHtml = issues.length
+            ? '<div class="compare-issue-list" role="list" aria-label="Root-cause issues">' + issues.map((issue, issueIndex) => {
+                const issueColor = rootCauseColor(issue.category);
+                const confidence = issue.confidence == null ? '' : Math.round(issue.confidence * 100) + '%';
+                return '<article class="compare-issue" role="listitem" style="--compare-issue-color:' + issueColor + ';">' +
+                  '<div class="compare-issue-head"><span class="compare-issue-number">Issue ' + (issueIndex + 1) + '</span>' +
+                    (issue.category ? '<span class="compare-issue-category">' + escapeHtml(issue.category) + '</span>' : '') +
+                    (confidence ? '<span class="compare-issue-confidence">' + escapeHtml(confidence) + '</span>' : '') + '</div>' +
+                  (issue.subcategory ? '<div class="compare-issue-subcategory">' + escapeHtml(issue.subcategory) + '</div>' : '') +
+                  (issue.finding ? '<div class="compare-issue-finding">' + escapeHtml(issue.finding) + '</div>' : '') +
+                  (issue.category_reason ? '<details class="compare-issue-reason"><summary>Why this category</summary><div>' + escapeHtml(issue.category_reason) + '</div></details>' : '') +
+                '</article>';
+              }).join('') + '</div>'
+            : '<span class="compare-issue-empty">No root-cause issues assigned.</span>';
+          const editButton = IS_COMPARE_EXPORT
+            ? ''
+            : `<button class="root-cause-assign-btn compare-issue-edit" data-rc-issues-item="${escapeAttr(itemId)}" data-rc-issues-run-idx="${runIdx}" data-rc-issues-metric="${escapeAttr(scope.metricName)}" type="button">Edit issues</button>`;
+          const metricLabel = scope.metricName ? ' · ' + escapeHtml(scope.metricName) : '';
+          return `<div class="rc-sol-row"><div class="rc-badges-row"><div class="rc-badge-group" style="max-width:100%;"><span class="rc-sol-label rc-label">ROOT-CAUSE ISSUES${metricLabel}</span>${issueHtml}${editButton}</div></div></div>`;
         };
         const metricStripFor = (row, runIdx) => {
           if (!row) return '';
@@ -10663,7 +11226,10 @@
             ? `<button type="button" class="trace-drawer-btn qym-inline-action qym-inline-action--neutral qym-trace-action" data-trace-endpoint="${escapeAttr(traceEndpoint)}" data-trace-item-label="${escapeAttr(identity + ' · ' + runItemId)}" data-trace-id="${escapeAttr(traceId || '')}" data-trace-url="${escapeAttr(traceUrl || '')}" title="Open trace viewer"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.5 4h11M2.5 8h7M2.5 12h9"/><circle cx="12.5" cy="8" r="1.2" fill="currentColor" stroke="none" opacity=".5"/><circle cx="13.5" cy="12" r="1.2" fill="currentColor" stroke="none" opacity=".5"/></svg>Trace</button>`
             : '';
           const copyButton = `<button class="copy-btn qym-icon-action" data-copy-text="${escapeAttr(typeof output === 'object' ? JSON.stringify(output, null, 2) : String(output))}" title="Copy output">${COPY_ICON}</button>`;
-          return `<article class="item-run-output qym-output-card${hidden.has(runIdx) ? ' is-hidden' : ''}" data-output-card="${outputId}" style="border-left-color:${color}"><div class="qym-output-card__header"><span class="qym-output-card__identity"><span class="qym-output-swatch" style="background:${color}"></span>${identityHtml}${verdictFor(row, runIdx)}</span>${row.latency_ms ? `<span class="qym-output-card__duration">${CLOCK_ICON}<span>${formatLatency(row.latency_ms)}</span></span>` : '<span class="qym-output-card__duration">\u2014</span>'}<span class="qym-output-card__actions">${traceButton}${copyButton}</span></div><div class="output-text ${row.status === 'error' ? 'score-1' : ''}">${renderMarkdownSafe(output)}</div>${metricStripFor(row, runIdx)}</article>`;
+          const errorInfo = compareExecutionErrorInfo(row, runIdx);
+          const executionErrorClass = errorInfo.hasError ? ' item-execution-error' : '';
+          const borderColor = errorInfo.hasError ? 'var(--error)' : color;
+          return `<article class="item-run-output qym-output-card${executionErrorClass}${hidden.has(runIdx) ? ' is-hidden' : ''}" data-output-card="${outputId}" style="border-left-color:${borderColor}"><div class="qym-output-card__header"><span class="qym-output-card__identity"><span class="qym-output-swatch" style="background:${color}"></span>${identityHtml}${verdictFor(row, runIdx)}</span>${row.latency_ms ? `<span class="qym-output-card__duration">${CLOCK_ICON}<span>${formatLatency(row.latency_ms)}</span></span>` : '<span class="qym-output-card__duration">\u2014</span>'}<span class="qym-output-card__actions">${traceButton}${copyButton}</span></div><div class="output-text ${errorInfo.hasTaskError ? 'score-1' : ''}">${renderMarkdownSafe(output)}</div>${metricStripFor(row, runIdx)}${rootCauseBlockFor(row, runIdx)}</article>`;
         }).join('');
         const panels = state.allMetrics.map(name => {
           const cells = rowData.map((row, runIdx) => {
@@ -10697,6 +11263,17 @@
           const safeBaseId = makeSafeDomId(itemId);
           const safeId = options.idSuffix ? `${safeBaseId}_${options.idSuffix}` : safeBaseId;
           const isExpanded = !!options.forceExpanded || !!(state.itemExpanded || {})[itemId];
+          const itemExecutionErrors = rowData
+            .map((row, runIdx) => compareExecutionErrorInfo(row, runIdx))
+            .filter(info => info.hasError);
+          const hasItemExecutionError = itemExecutionErrors.length > 0;
+          const itemExecutionErrorTitle = itemExecutionErrors.length === 1
+            ? itemExecutionErrors[0].title
+            : `Execution failed in ${itemExecutionErrors.length} compared runs`;
+          const itemExecutionErrorClass = hasItemExecutionError ? ' item-execution-error' : '';
+          const itemExecutionErrorIndicator = hasItemExecutionError
+            ? renderCompareErrorIndicator(itemExecutionErrorTitle)
+            : '';
           // Keep the pre-unification renderer inert while the surrounding item
           // card logic is progressively retired. The visible output is rendered
           // exclusively by renderCompareOutputGroup below.
@@ -10834,49 +11411,31 @@
               ? `<div class="status-indicator qym-badge ${pfClass === 'pass' ? 'qym-badge--success' : 'qym-badge--danger'}"><div class="status-dot ${pfClass}"></div><span class="status-label ${pfClass}">${pfClass === 'pass' ? 'Pass' : 'Fail'}</span></div>`
               : '';
 
-            // Root cause + Solution badges + feedback (only for failed items)
+            // Root-cause issues and solution for this run.
             let rootCauseHtml = '';
             const itemPassed = pfClass === 'pass';
-            const rowRc = row.item_metadata?.root_cause || '';
-            const rowRcDetail = row.item_metadata?.root_cause_detail || '';
-            const rowRcNote = row.item_metadata?.root_cause_note || '';
-            const rowRcSource = row.item_metadata?.root_cause_source || '';
-            const rowRcConfidence = row.item_metadata?.root_cause_confidence;
+            const issueScope = compareRootCauseScope(row, runIdx);
+            const rowIssues = rootCauseIssues(issueScope.analysis);
             const rowSol = row.item_metadata?.solution || '';
             const rowSolNote = row.item_metadata?.solution_note || '';
             const reviewStatus = row.review_correction_status || '';
 
-            if (rowRc || rowRcDetail || rowSol || !itemPassed) {
-              const feedbackIcon = '<svg class="feedback-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h12v8H4l-2 2V3z"/></svg>';
-              const isAi = rowRcSource === 'ai';
-              const rcColor = rootCauseColor(rowRc);
-
-              // Detail badge — uses same color as category
-              let rcDetailBadge = '';
-              if (rowRcDetail) {
-                const aiClass = isAi ? ' ai-suggested' : '';
-                const aiIcon = isAi ? '<span class="ai-indicator" title="AI suggested">\uD83E\uDD16</span>' : '';
-                rcDetailBadge = `<span class="meta-badge badge-rc-detail${aiClass}" data-rcdetail-item="${escapeAttr(itemId)}" data-rcdetail-run-idx="${runIdx}" style="border-color:${rcColor}40;color:${rcColor};background:${rcColor}15;max-width:100%;box-sizing:border-box;display:inline-flex;" title="Root cause: ${escapeAttr(rowRcDetail)}. Click to change.">${aiIcon}${escapeHtml(rowRcDetail)}</span>`;
-              } else if (!itemPassed) {
-                rcDetailBadge = `<button class="root-cause-assign-btn" data-rcdetail-item="${escapeAttr(itemId)}" data-rcdetail-run-idx="${runIdx}" title="Assign root cause"><span class="badge-icon">+</span>Root Cause</button>`;
-              }
-
-              // Category badge
-              let rcCategoryBadge = '';
-              if (rowRc) {
-                const aiClass = isAi ? ' ai-suggested' : '';
-              let confidenceDot = '';
-              const aiIcon = isAi ? '<span class="ai-indicator" title="AI suggested">\uD83E\uDD16</span>' : '';
-              if (isAi && rowRcConfidence != null) {
-                  const confidencePct = Math.round(rowRcConfidence * 100);
-                  confidenceDot = `<button type="button" class="qym-help-marker" aria-label="AI confidence ${confidencePct}%" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">AI confidence: ${confidencePct}%</span></button>`;
-              }
-                rcCategoryBadge = `<span class="meta-badge badge-root-cause${aiClass}" data-rc-item="${escapeAttr(itemId)}" data-rc-run-idx="${runIdx}" style="border-color: ${rcColor}40; color: ${rcColor}; background: ${rcColor}15;max-width:100%;box-sizing:border-box;display:inline-flex;" title="Category: ${escapeAttr(rowRc)}. Click to change.">${aiIcon}${escapeHtml(rowRc)}${confidenceDot}</span>`;
-              } else if (!itemPassed) {
-                rcCategoryBadge = `<button class="root-cause-assign-btn rc-category-assign" data-rc-item="${escapeAttr(itemId)}" data-rc-run-idx="${runIdx}" title="Assign root cause category"><span class="badge-icon">+</span>Category</button>`;
-              }
-
-              // Solution badge group
+            if (rowIssues.length || rowSol || !itemPassed) {
+              const issueHtml = rowIssues.length
+                ? '<div class="compare-issue-list" role="list" aria-label="Root-cause issues">' + rowIssues.map((issue, issueIndex) => {
+                    const issueColor = rootCauseColor(issue.category);
+                    const confidence = issue.confidence == null ? '' : Math.round(issue.confidence * 100) + '%';
+                    return '<article class="compare-issue" role="listitem" style="--compare-issue-color:' + issueColor + ';">' +
+                      '<div class="compare-issue-head"><span class="compare-issue-number">Issue ' + (issueIndex + 1) + '</span>' +
+                        (issue.category ? '<span class="compare-issue-category">' + escapeHtml(issue.category) + '</span>' : '') +
+                        (confidence ? '<span class="compare-issue-confidence">' + escapeHtml(confidence) + '</span>' : '') + '</div>' +
+                      (issue.subcategory ? '<div class="compare-issue-subcategory">' + escapeHtml(issue.subcategory) + '</div>' : '') +
+                      (issue.finding ? '<div class="compare-issue-finding">' + escapeHtml(issue.finding) + '</div>' : '') +
+                      (issue.category_reason ? '<details class="compare-issue-reason"><summary>Why this category</summary><div>' + escapeHtml(issue.category_reason) + '</div></details>' : '') +
+                    '</article>';
+                  }).join('') + '</div>'
+                : '<span class="feedback-placeholder">No root-cause issues assigned.</span>';
+              const editIssues = `<button class="root-cause-assign-btn compare-issue-edit" data-rc-issues-item="${escapeAttr(itemId)}" data-rc-issues-run-idx="${runIdx}" data-rc-issues-metric="${escapeAttr(issueScope.metricName)}" type="button">Edit issues</button>`;
               let solBadgeHtml = '';
               if (rowSol) {
                 const solColor = SOLUTION_COLORS[rowSol] || '#60a5fa';
@@ -10895,19 +11454,9 @@
                 </div>`;
               }
 
-              // Feedback
-              let feedbackHtml = '';
-              if (rowRc || rowRcDetail) {
-                feedbackHtml = rowRcNote
-                  ? `<div class="feedback-section"><div class="feedback-display" data-feedback-item="${escapeAttr(itemId)}" data-feedback-run-idx="${runIdx}" title="Click to edit feedback">${feedbackIcon}<span class="feedback-text">${escapeHtml(rowRcNote)}</span></div></div>`
-                  : `<div class="feedback-section"><div class="feedback-display" data-feedback-item="${escapeAttr(itemId)}" data-feedback-run-idx="${runIdx}" title="Click to add feedback">${feedbackIcon}<span class="feedback-text feedback-placeholder">Add feedback\u2026</span></div></div>`;
-              }
-
-              const detailGroup = rcDetailBadge ? `<div class="rc-badge-group" style="max-width:100%;"><span class="rc-sol-label rc-label">\u26A0 ROOT CAUSE</span>${rcDetailBadge}</div>` : '';
-              const catGroup = rcCategoryBadge ? `<div class="rc-badge-group" style="max-width:100%;"><span class="rc-sol-label rc-label">\uD83D\uDCC2 CATEGORY</span>${rcCategoryBadge}</div>` : '';
               const reviewStatusHtml = reviewStatus === 'approved' ? '<div class="rc-status-pill qym-badge approved">Approved</div>' : '';
               const solSep = solBadgeHtml ? '<div class="rc-badges-sep"></div>' : '';
-              rootCauseHtml = `<div class="rc-sol-row">${reviewStatusHtml}<div class="rc-badges-row">${detailGroup}${catGroup}${solSep}${solBadgeHtml}</div>${feedbackHtml}</div>`;
+              rootCauseHtml = `<div class="rc-sol-row">${reviewStatusHtml}<div class="rc-badges-row"><div class="rc-badge-group" style="max-width:100%;"><span class="rc-sol-label rc-label">ROOT-CAUSE ISSUES</span>${issueHtml}${editIssues}</div>${solSep}${solBadgeHtml}</div></div>`;
             }
 
             return `
@@ -10945,7 +11494,7 @@
           // #5/#6: Build item metadata row — complexity & domain as first-class badges
           let itemMetadataHtml = '';
           {
-            const SPECIAL_KEYS = ['complexity', 'domain', 'root_cause', 'root_cause_detail', 'root_cause_note', 'root_cause_source', 'root_cause_confidence', 'solution', 'solution_note', 'solution_source'];
+            const SPECIAL_KEYS = ['complexity', 'domain', 'root_cause', 'root_causes', 'root_cause_issues', 'root_cause_detail', 'root_cause_reason', 'root_cause_note', 'root_cause_source', 'root_cause_confidence', 'solution', 'solution_note', 'solution_source'];
             const metaRow = rowData.find(r => r);
             const md = metaRow?.item_metadata || {};
             if (typeof md === 'object') {
@@ -11002,6 +11551,11 @@
             if (!row) return emptyPill;
             const run = state.runs[runIdx];
             const runInfo = run?.run || {};
+            const errorInfo = compareExecutionErrorInfo(row, runIdx);
+            const color = COLORS[runIdx % COLORS.length];
+            if (errorInfo.hasError) {
+              return `<span class="item-agg-pill qym-item-metric-cell qym-item-metric-cell--selected" data-qym-metric-column="${runIdx}" title="${escapeAttr((runInfo.run_name || ('Run ' + (runIdx + 1))) + ' · ' + errorInfo.title)}"><span class="compare-run-dot" style="background:${color}"></span>${renderCompareErrorIndicator(errorInfo.title)}</span>`;
+            }
             const mNames = run?.snapshot?.metric_names || runInfo.metric_names || [];
             const mIdx = headerMetric ? mNames.indexOf(headerMetric) : 0;
             if (mIdx < 0) return emptyPill;
@@ -11010,7 +11564,6 @@
             const mType = state.metricTypes?.[mNames[mIdx]] || 'score';
             const cls = window.QymMetrics.getMetricColorClass(v, mType);
             const display = window.QymMetrics.formatMetricObservation(v, mType, state.metricSpecs?.[mNames[mIdx]]);
-            const color = COLORS[runIdx % COLORS.length];
             return `<span class="item-agg-pill qym-item-metric-cell qym-item-metric-cell--selected" data-qym-metric-column="${runIdx}" title="${escapeAttr((runInfo.run_name || ('Run ' + (runIdx + 1))) + ' \u00B7 ' + mNames[mIdx])}"><span class="compare-run-dot" style="background:${color}"></span><span class="metric-score-value qym-score-value ${cls}">${display}</span></span>`;
           }).join('');
           const expandable = !options.forceExpanded;
@@ -11020,6 +11573,7 @@
               <div class="item-header${expandable ? ' item-header-expand' : ''}"${expandable && isExpanded ? expandAttrs : ''}>
                 ${expandable ? `<span class="item-chevron${isExpanded ? ' open' : ''}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 3.5 5 4.5-5 4.5"/></svg></span>` : ''}
                 <span class="item-index" title="ID: ${escapeHtml(itemId)}">${escapeHtml(compactItemLabel)}</span>
+                ${itemExecutionErrorIndicator}
                 ${isExpanded
                   ? `<span class="item-header-spacer"></span><span class="item-pass-note">${visibleRunCount} run${visibleRunCount === 1 ? '' : 's'}</span>`
                   : `<span class="item-title">${escapeHtml(titleText)}</span><span class="item-agg-pills qym-item-metric-grid" data-qym-metric-grid>${headerPills}</span>`}
@@ -11027,7 +11581,7 @@
 
           if (!isExpanded) {
             // The whole collapsed card is the expand target
-            return `<div class="item-comparison-row item-collapsed item-header-expand"${expandable ? expandAttrs : ''}>${headerHtml}</div>`;
+            return `<div class="item-comparison-row item-collapsed item-header-expand${itemExecutionErrorClass}"${expandable ? expandAttrs : ''}>${headerHtml}</div>`;
           }
 
           return `
@@ -11162,7 +11716,7 @@
         if (hasComparisonRowData(rowData)) renderItemComparisonModalBody(overlay, itemId, rowData);
       }
 
-      function openItemComparisonModal(itemId) {
+      async function openItemComparisonModal(itemId) {
         if (!itemId || !canRenderItemComparison()) {
           showToast('error', 'Comparison Unavailable', 'Item comparison is unavailable for this selection.');
           return;
@@ -11177,11 +11731,23 @@
         overlay.dataset.itemId = itemId;
         overlay.classList.add('open');
         document.body.style.overflow = 'hidden';
+        const hydration = ensureComparisonRows([{ itemId, rowData }]);
+        if (hydration) {
+          overlay.querySelector('#item-comparison-modal-body').textContent = 'Loading item…';
+          try { await hydration; }
+          catch (error) {
+            if (overlay.dataset.itemId === itemId) overlay.querySelector('#item-comparison-modal-body').textContent = 'Item could not be loaded. Close and reopen it to retry.';
+            return;
+          }
+          if (overlay.dataset.itemId !== itemId || !overlay.classList.contains('open')) return;
+        }
         renderItemComparisonModalBody(overlay, itemId, rowData);
         overlay.querySelector('#item-comparison-modal-close')?.focus();
       }
 
       function renderItems(scrollToTop = false) {
+        const version = ++comparisonRenderVersion;
+        if (hasComparisonDetails() && deferComparisonItems(ensureComparisonSearch(), version, scrollToTop)) return;
         const preserveAnchor = state.hasRenderedItems && !scrollToTop;
         const anchorTop = preserveAnchor ? getItemsGridTop() : null;
         // Keep Performance by Category and Root Cause Analysis in sync with filters
@@ -11229,6 +11795,13 @@
         if (state.page > totalPages) state.page = totalPages;
         const start = (state.page - 1) * state.pageSize;
         const pageItems = items.slice(start, start + state.pageSize);
+        visibleComparisonItems = pageItems;
+        if (hasComparisonDetails() && deferComparisonItems(ensureComparisonRows(pageItems, { retainAll: comparisonNeedsFullText() }), version, scrollToTop)) return;
+        if (comparisonFullTextRetained && !comparisonNeedsFullText()) {
+          releaseComparisonBodies();
+          comparisonFullTextRetained = false;
+        }
+        container.removeAttribute('aria-busy');
 
         if (items.length === 0) {
           container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-muted);">No items match the current filter</div>';
@@ -11574,6 +12147,7 @@
               : null;
             nextRow = {
               ...updatedRow,
+              item_metadata: scopedComparisonPassMetadata(updatedRow, metricNames, passNumber),
               metric_values: metricNames.map((name, metricIndex) => {
                 const values = updatedRow.pass_scores?.[name];
                 if (Array.isArray(values)) return values[passIndex] == null ? '' : values[passIndex];
@@ -11595,12 +12169,19 @@
             }
           }
           const rows = run.snapshot.rows || [];
+          invalidateComparisonRowIndex(rows);
           const idx = Number(nextRow.index) || 0;
           if (idx >= 0 && idx < rows.length) {
-            rows[idx] = nextRow;
+            const next = { ...rows[idx], ...nextRow };
+            comparisonDetails.get(run)?.adoptRow(next, rows[idx]);
+            rows[idx] = next;
           } else {
             const pos = rows.findIndex(r => Number(r.index) === idx);
-            if (pos >= 0) rows[pos] = nextRow;
+            if (pos >= 0) {
+              const next = { ...rows[pos], ...nextRow };
+              comparisonDetails.get(run)?.adoptRow(next, rows[pos]);
+              rows[pos] = next;
+            }
           }
         } catch {}
       }
@@ -11690,6 +12271,12 @@
 
       function wireRootCauseHandlers(scope = document) {
         const root = scope || document;
+        root.querySelectorAll('[data-rc-issues-item]').forEach(trigger => {
+          trigger.addEventListener('click', event => {
+            event.stopPropagation();
+            showRootCauseIssuesEditor(trigger.dataset.rcIssuesItem, Number(trigger.dataset.rcIssuesRunIdx), trigger.dataset.rcIssuesMetric);
+          });
+        });
         root.querySelectorAll('[data-rc-item]:not([data-feedback-item])').forEach(trigger => {
           trigger.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -11738,6 +12325,152 @@
         });
       }
 
+      async function saveRootCauseIssues(itemId, runIdx, issues, metricName) {
+        const run = state.runs[runIdx];
+        const rows = run?.snapshot?.rows || [];
+        const row = findRowByCompareId(rows, itemId);
+        const scope = compareRootCauseScope(row, runIdx, metricName);
+        const runId = scope.runId;
+        const rawItemId = row?.item_id;
+        if (!runId || !rawItemId) return false;
+        const patch = rootCauseIssuePatch(issues);
+        try {
+          const response = await fetch(apiUrl('api/runs/update_root_cause'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              item_id: rawItemId,
+              run_id: runId,
+              ...patch,
+              ...(scope.metricName ? { metric_name: scope.metricName } : {}),
+              ...(Number.isFinite(scope.passNumber) ? { pass_number: scope.passNumber } : {}),
+            }),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok || data.error || data.detail) {
+            console.error('Failed to save root-cause issues:', data.detail || data.error);
+            return false;
+          }
+          if (data.row) applyUpdatedRowToRun(runIdx, data.row);
+          else if (row && scope.metricName) {
+            const analysis = { ...scope.analysis, ...patch, source: 'human' };
+            delete analysis.confidence;
+            delete analysis.review_status;
+            if (patch.root_cause_issues.length) delete analysis.error;
+            if (Number.isFinite(scope.passNumber)) {
+              if (!row.pass_metric_analyses) row.pass_metric_analyses = {};
+              if (!row.pass_metric_analyses[scope.metricName]) row.pass_metric_analyses[scope.metricName] = [];
+              row.pass_metric_analyses[scope.metricName][scope.passNumber - 1] = analysis;
+            } else {
+              if (!row.item_metadata) row.item_metadata = {};
+              if (!row.item_metadata.metric_analyses) row.item_metadata.metric_analyses = {};
+              row.item_metadata.metric_analyses[scope.metricName] = analysis;
+            }
+          } else if (row) {
+            if (!row.item_metadata) row.item_metadata = {};
+            Object.assign(row.item_metadata, patch);
+            if (!patch.root_cause_issues.length) {
+              ['root_cause_issues', 'root_causes', 'root_cause', 'root_cause_detail', 'root_cause_note', 'root_cause_reason'].forEach(key => delete row.item_metadata[key]);
+            }
+            if (patch.root_cause_issues.length) row.item_metadata.root_cause_source = 'human';
+            else delete row.item_metadata.root_cause_source;
+            delete row.item_metadata.root_cause_confidence;
+          }
+          rootCauseCategories(patch).forEach(category => {
+            if (!state.rootCauseValues.includes(category)) state.rootCauseValues.push(category);
+          });
+          state.rootCauseValues.sort();
+          buildCategoryDropdowns();
+          renderItems();
+          return true;
+        } catch (error) {
+          console.error('Error saving root-cause issues:', error);
+          return false;
+        }
+      }
+
+      function showRootCauseIssuesEditor(itemId, runIdx, metricName) {
+        if (IS_COMPARE_EXPORT) return;
+        document.querySelectorAll('.compare-issues-editor, .root-cause-dropdown').forEach(node => node.remove());
+        const run = state.runs[runIdx];
+        const row = findRowByCompareId(run?.snapshot?.rows || [], itemId);
+        const scope = compareRootCauseScope(row, runIdx, metricName);
+        metricName = scope.metricName;
+        let issues = rootCauseIssues(scope.analysis).map(issue => ({ ...issue }));
+        if (!issues.length) issues = [{}];
+        const categories = [...new Set([...ROOT_CAUSE_PRESETS, ...state.rootCauseValues])].sort();
+        const editor = document.createElement('div');
+        editor.className = 'compare-issues-editor';
+        editor.innerHTML = '<div class="compare-issues-editor__panel" role="dialog" aria-modal="true" aria-labelledby="compare-issues-editor-title">' +
+          '<div class="compare-issues-editor__header"><div><h2 id="compare-issues-editor-title">Edit root-cause issues</h2><p>Keep each independent cause in its own issue.</p></div><button type="button" class="qym-icon-action" data-close-issues aria-label="Close issue editor" title="Close">×</button></div>' +
+          '<div class="compare-issues-editor__body" data-issue-list></div>' +
+          '<div class="compare-issues-editor__footer"><span class="compare-issues-editor__status" data-issue-status role="status" aria-live="polite"></span><div class="compare-issues-editor__actions"><button type="button" class="qym-inline-action qym-inline-action--neutral" data-add-issue>Add issue</button><button type="button" class="qym-inline-action qym-inline-action--accent" data-save-issues>Save</button></div></div>' +
+          '</div><datalist id="compare-issue-categories">' + categories.map(category => '<option value="' + escapeAttr(category) + '"></option>').join('') + '</datalist>';
+        const list = editor.querySelector('[data-issue-list]');
+        const status = editor.querySelector('[data-issue-status]');
+        const renderRows = () => {
+          list.innerHTML = issues.map((issue, index) => '<article class="compare-issues-editor__row" data-issue-row>' +
+            '<div class="compare-issues-editor__row-head"><span>Issue ' + (index + 1) + '</span><button type="button" class="qym-icon-action" data-remove-issue="' + index + '" title="Remove issue" aria-label="Remove issue">×</button></div>' +
+            '<div class="compare-issues-editor__fields">' +
+              '<label class="compare-issues-editor__field"><span>Category</span><input class="qym-control qym-input" data-issue-field="category" list="compare-issue-categories" value="' + escapeAttr(issue.category || '') + '" placeholder="Root-cause category" /></label>' +
+              '<label class="compare-issues-editor__field"><span>Subcategory</span><input class="qym-control qym-input" data-issue-field="subcategory" value="' + escapeAttr(issue.subcategory || '') + '" placeholder="Reusable failure mechanism" /></label>' +
+              '<label class="compare-issues-editor__field compare-issues-editor__field--finding"><span>Finding</span><textarea data-issue-field="finding" placeholder="Item-specific diagnosis">' + escapeHtml(issue.finding || '') + '</textarea></label>' +
+            '</div></article>').join('');
+        };
+        const readRows = () => {
+          issues = Array.from(list.querySelectorAll('[data-issue-row]')).map((issueRow, index) => {
+            const issue = { ...(issues[index] || {}) };
+            issueRow.querySelectorAll('[data-issue-field]').forEach(field => {
+              issue[field.dataset.issueField] = field.value.trim();
+            });
+            return issue;
+          });
+        };
+        list.addEventListener('click', event => {
+          const remove = event.target.closest('[data-remove-issue]');
+          if (!remove) return;
+          readRows();
+          issues.splice(Number(remove.dataset.removeIssue), 1);
+          if (!issues.length) issues.push({});
+          renderRows();
+        });
+        editor.querySelector('[data-add-issue]').addEventListener('click', () => {
+          readRows();
+          issues.push({});
+          renderRows();
+          list.lastElementChild?.querySelector('[data-issue-field="category"]')?.focus();
+        });
+        const cleanup = () => editor.remove();
+        editor.querySelector('[data-close-issues]').addEventListener('click', cleanup);
+        editor.addEventListener('click', event => { if (event.target === editor) cleanup(); });
+        editor.querySelector('[data-save-issues]').addEventListener('click', async event => {
+          readRows();
+          const nextIssues = issues.filter(issue => issue.category || issue.subcategory || issue.finding);
+          if (nextIssues.some(issue => !issue.category)) {
+            status.textContent = 'Every issue needs a category.';
+            status.classList.add('is-error');
+            return;
+          }
+          const saveButton = event.currentTarget;
+          saveButton.disabled = true;
+          status.classList.remove('is-error');
+          status.textContent = 'Saving issues…';
+          try {
+            const saved = await saveRootCauseIssues(itemId, runIdx, nextIssues, metricName);
+            if (!saved) throw new Error('Issue save failed');
+            cleanup();
+          } catch (error) {
+            status.textContent = 'Could not save these issues.';
+            status.classList.add('is-error');
+          } finally {
+            saveButton.disabled = false;
+          }
+        });
+        renderRows();
+        document.body.appendChild(editor);
+        setTimeout(() => list.querySelector('[data-issue-field="category"]')?.focus(), 0);
+      }
+
       async function saveFeedback(itemId, runIdx, note) {
         const runId = state.runs[runIdx]?.run?.file_path;
         if (!runId) return;
@@ -11779,7 +12512,7 @@
         const run = state.runs[runIdx];
         const rows = run?.snapshot?.rows || [];
         const row = findRowByCompareId(rows, itemId);
-        const currentRC = row?.item_metadata?.root_cause || '';
+        let selectedCategories = rootCauseCategories(row?.item_metadata);
 
         // Build options: predefined + any custom values already in data
         const allOptions = [...ROOT_CAUSE_PRESETS];
@@ -11791,19 +12524,51 @@
         dropdown.className = 'root-cause-dropdown';
 
         let html = '';
-        html += `<div class="rc-option ${!currentRC ? 'active' : ''}" data-rc-value=""><span class="rc-dot" style="background: var(--text-muted);"></span> None (clear)</div>`;
+        html += '<div class="rc-option" data-rc-value=""><span class="rc-dot" style="background: var(--text-muted);"></span> None (clear)</div>';
         html += '<div class="rc-divider"></div>';
-
-        for (const opt of allOptions) {
-          const color = rootCauseColor(opt);
-          const isActive = opt === currentRC;
-          html += `<div class="rc-option ${isActive ? 'active' : ''}" data-rc-value="${escapeAttr(opt)}"><span class="rc-dot" style="background: ${color};"></span> ${escapeHtml(opt)}</div>`;
-        }
-
+        html += '<div class="rc-category-options"></div>';
+        html += '<div class="rc-category-count" style="padding:4px 10px;color:var(--text-muted);font-size:var(--font-xs);"></div>';
         html += '<div class="rc-divider"></div>';
         html += `<div class="rc-custom-input"><input class="qym-control qym-input" type="text" placeholder="Custom cause..." /><button class="qym-inline-action">Add</button></div>`;
+        html += '<button type="button" class="rc-save-btn" data-rc-save style="width:100%;margin-top:6px;">Save categories</button>';
 
         dropdown.innerHTML = html;
+
+        const optionsContainer = dropdown.querySelector('.rc-category-options');
+        const countLabel = dropdown.querySelector('.rc-category-count');
+        const sameCategory = (left, right) => String(left).trim().toLocaleLowerCase() === String(right).trim().toLocaleLowerCase();
+        const refreshSelection = () => {
+          dropdown.querySelectorAll('.rc-option[data-rc-value]').forEach(option => {
+            const value = option.dataset.rcValue || '';
+            option.classList.toggle('active', value === ''
+              ? selectedCategories.length === 0
+              : selectedCategories.some(category => sameCategory(category, value)));
+          });
+          if (countLabel) countLabel.textContent = selectedCategories.length + ' / ' + MAX_ROOT_CAUSE_CATEGORIES + ' categories selected';
+        };
+        const bindOptions = () => {
+          dropdown.querySelectorAll('.rc-option[data-rc-value]').forEach(option => {
+            option.addEventListener('click', () => {
+              const value = String(option.dataset.rcValue || '').trim();
+              if (!value) selectedCategories = [];
+              else {
+                const index = selectedCategories.findIndex(category => sameCategory(category, value));
+                if (index >= 0) selectedCategories.splice(index, 1);
+                else if (selectedCategories.length < MAX_ROOT_CAUSE_CATEGORIES) selectedCategories.push(value);
+              }
+              refreshSelection();
+            });
+          });
+        };
+        const renderOptions = () => {
+          optionsContainer.innerHTML = allOptions.map(opt => {
+            const color = rootCauseColor(opt);
+            return '<div class="rc-option" data-rc-value="' + escapeAttr(opt) + '"><span class="rc-dot" style="background:' + color + ';"></span> ' + escapeHtml(opt) + '</div>';
+          }).join('');
+          bindOptions();
+          refreshSelection();
+        };
+        renderOptions();
 
         // Position near the anchor element, flipping above if it would clip the bottom
         document.body.appendChild(dropdown);
@@ -11819,32 +12584,27 @@
         dropdown.style.left = Math.min(rect.left, window.innerWidth - dropdown.offsetWidth - 8) + 'px';
         dropdown.style.maxHeight = Math.max(spaceBelow, spaceAbove) + 'px';
 
-        // Wire option clicks
-        dropdown.querySelectorAll('.rc-option').forEach(opt => {
-          opt.addEventListener('click', async () => {
-            await saveRootCause(itemId, runIdx, opt.dataset.rcValue);
-            dropdown.remove();
-          });
-        });
-
         // Wire custom input
         const customInput = dropdown.querySelector('.rc-custom-input input');
         const customBtn = dropdown.querySelector('.rc-custom-input button');
-        customBtn.addEventListener('click', async () => {
+        const addCustomCategory = () => {
           const val = customInput.value.trim();
-          if (val) {
-            await saveRootCause(itemId, runIdx, val);
-            dropdown.remove();
+          if (!val || selectedCategories.length >= MAX_ROOT_CAUSE_CATEGORIES || allOptions.some(option => sameCategory(option, val))) return;
+          allOptions.push(val);
+          selectedCategories.push(val);
+          customInput.value = '';
+          renderOptions();
+        };
+        customBtn.addEventListener('click', addCustomCategory);
+        customInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            addCustomCategory();
           }
         });
-        customInput.addEventListener('keydown', async (e) => {
-          if (e.key === 'Enter') {
-            const val = customInput.value.trim();
-            if (val) {
-              await saveRootCause(itemId, runIdx, val);
-              dropdown.remove();
-            }
-          }
+        dropdown.querySelector('[data-rc-save]').addEventListener('click', async () => {
+          await saveRootCause(itemId, runIdx, selectedCategories);
+          dropdown.remove();
         });
 
         // Close on outside click or scroll (but not scroll within the dropdown itself)
@@ -11865,7 +12625,8 @@
         }, 0);
       }
 
-      async function saveRootCause(itemId, runIdx, rootCause) {
+      async function saveRootCause(itemId, runIdx, rootCauses) {
+        const categories = rootCauseCategories({ root_causes: rootCauses });
         const runId = state.runs[runIdx]?.run?.file_path;
         if (!runId) return;
         const run = state.runs[runIdx];
@@ -11877,7 +12638,7 @@
           const res = await fetch(apiUrl('api/runs/update_root_cause'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ item_id: rawItemId, root_cause: rootCause, run_id: runId }),
+            body: JSON.stringify({ item_id: rawItemId, root_causes: categories, run_id: runId }),
           });
           const data = await res.json().catch(() => ({}));
           if (!res.ok || data.error) {
@@ -11888,11 +12649,13 @@
           // Update local state: set root_cause only on this run's item
           if (row) {
             if (!row.item_metadata) row.item_metadata = {};
-            if (rootCause) {
-              row.item_metadata.root_cause = rootCause;
+            if (categories.length) {
+              row.item_metadata.root_causes = categories;
+              row.item_metadata.root_cause = categories[0];
               row.item_metadata.root_cause_source = 'human';
               delete row.item_metadata.root_cause_confidence;
             } else {
+              delete row.item_metadata.root_causes;
               delete row.item_metadata.root_cause;
               delete row.item_metadata.root_cause_source;
               delete row.item_metadata.root_cause_confidence;
@@ -11900,13 +12663,11 @@
           }
 
           // Update root cause values set
-          if (rootCause && !state.rootCauseValues.includes(rootCause)) {
-            state.rootCauseValues.push(rootCause);
-            state.rootCauseValues.sort();
-          }
+          categories.forEach(category => { if (!state.rootCauseValues.includes(category)) state.rootCauseValues.push(category); });
+          state.rootCauseValues.sort();
 
           // Ensure root_cause is in allMetadataKeys
-          if (rootCause && !state.allMetadataKeys.includes('root_cause')) {
+          if (categories.length && !state.allMetadataKeys.includes('root_cause')) {
             state.allMetadataKeys.push('root_cause');
             state.allMetadataKeys.sort();
           }
@@ -11977,7 +12738,7 @@
                 if (runId) {
                   await fetch(apiUrl('api/runs/update_root_cause'), {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ item_id: rid, root_cause: r.item_metadata?.root_cause || '', root_cause_detail: '', run_id: runId }),
+                    body: JSON.stringify({ item_id: rid, root_causes: rootCauseCategories(r.item_metadata), root_cause_detail: '', run_id: runId }),
                   }).catch(() => {});
                 }
                 if (r.item_metadata) delete r.item_metadata.root_cause_detail;
@@ -12046,7 +12807,7 @@
           const res = await fetch(apiUrl('api/runs/update_root_cause'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ item_id: rawItemId, root_cause: existingCategory, root_cause_detail: detail, run_id: runId }),
+            body: JSON.stringify({ item_id: rawItemId, root_causes: rootCauseCategories(row?.item_metadata), root_cause_detail: detail, run_id: runId }),
           });
           const data = await res.json().catch(() => ({}));
           if (!res.ok || data.error) { console.error('Failed to save root cause detail:', data.error); return; }
@@ -12156,7 +12917,7 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               item_id: rawItemId,
-              root_cause: row?.item_metadata?.root_cause || '',
+              root_causes: rootCauseCategories(row?.item_metadata),
               root_cause_detail: row?.item_metadata?.root_cause_detail || '',
               solution: solution,
               run_id: runId
@@ -12791,8 +13552,8 @@
         if (category === 'approval') {
           for (const itemId of (state.compareItemIds || [])) {
             const rowData = state.runs.map(run => findRowByCompareId(run.snapshot?.rows || [], itemId));
-            const hasApproved = rowData.some(r => r && getApprovalState(r) === 'approved');
-            const hasNotApproved = rowData.some(r => r && getApprovalState(r) === 'not_approved');
+            const hasApproved = rowData.some(r => r && getApprovalState(r, state.selectedItemsMetric) === 'approved');
+            const hasNotApproved = rowData.some(r => r && getApprovalState(r, state.selectedItemsMetric) === 'not_approved');
             if (hasApproved) itemCounts.approved++;
             if (hasNotApproved) itemCounts.not_approved++;
           }
@@ -12802,7 +13563,9 @@
             const md = row.item_metadata || {};
             const vals = category === 'domain'
               ? parseMetaList(md.domain)
-              : [String(md[category] ?? '')];
+              : category === 'root_cause'
+                ? [...rootCauseCategories(md), ...getRowRootCauseAnalyses(row, 'all').flatMap(analysis => rootCauseCategories(analysis))]
+                : [String(md[category] ?? '')];
             vals.forEach(val => {
               if (itemCounts[val] !== undefined) itemCounts[val]++;
             });
@@ -12820,7 +13583,7 @@
               const anyMissingRc = state.runs.some(run => {
                 const rRows = run.snapshot?.rows || [];
                 const rRow = findRowByCompareId(rRows, getRowCompareId(row));
-                return !rRow || !rRow.item_metadata?.root_cause;
+                return !rRow || getRowRootCauseAnalyses(rRow, 'all').length === 0;
               });
               if (anyMissingRc) noRcCount++;
             }
@@ -13315,6 +14078,7 @@
           }
           runCols.push({ key: 'run:' + ri + ':status', label: 'Status', checked: true });
           runCols.push({ key: 'run:' + ri + ':root_cause', label: 'Root Cause', checked: true });
+          runCols.push({ key: 'run:' + ri + ':root_cause_issues', label: 'Root cause issues (JSON)', checked: true });
           for (const m of metricNames) {
             runCols.push({ key: 'run:' + ri + ':' + m + '_score', label: m + ' Score', checked: true });
             for (const k of Array.from(metricMetaKeys[m]).sort()) {
@@ -13376,8 +14140,13 @@
           overlay.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = false; });
         });
 
-        document.getElementById('export-modal-cancel').addEventListener('click', () => { overlay.classList.remove('open'); });
-        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('open'); });
+        function closeExportModal() {
+          overlay.classList.remove('open');
+          releaseComparisonBodies();
+          _exportItems = null;
+        }
+        document.getElementById('export-modal-cancel').addEventListener('click', closeExportModal);
+        overlay.onclick = e => { if (e.target === overlay) closeExportModal(); };
 
         document.getElementById('export-modal-confirm').addEventListener('click', () => {
           const selectedCols = [];
@@ -13387,8 +14156,8 @@
               if (cb && cb.checked) selectedCols.push(groups[gi].columns[ci]);
             }
           }
-          overlay.classList.remove('open');
           if (selectedCols.length > 0) performExport(_exportItems, selectedCols);
+          closeExportModal();
         });
 
         overlay.classList.add('open');
@@ -13430,7 +14199,11 @@
             return obj ? stringify(obj[field.slice(7)]) : '';
           }
           if (field === 'status') return rd.status || '';
-          if (field === 'root_cause') return String((rd.item_metadata || {}).root_cause || '');
+          if (field === 'root_cause') return rootCauseCategories(compareRootCauseScope(rd, ri).analysis)[0] || '';
+          if (field === 'root_cause_issues') {
+            const issues = rootCauseIssuePatch(rootCauseIssues(compareRootCauseScope(rd, ri).analysis)).root_cause_issues;
+            return issues.length ? JSON.stringify(issues) : '';
+          }
           if (field === 'latency_ms') return String(rd.latency_ms || '');
           if (field === 'trace_url') return rd.trace_url || '';
 
@@ -13477,11 +14250,20 @@
         URL.revokeObjectURL(url);
       }
 
-      el('export-filtered-btn').addEventListener('click', () => {
+      el('export-filtered-btn').addEventListener('click', async function() {
+        this.disabled = true;
+        try {
+        await ensureComparisonSearch();
         _exportItems = getFilteredItems();
         if (_exportItems.length === 0) return;
+        await ensureComparisonRows(_exportItems, { retainAll: true });
         const groups = discoverExportColumns(_exportItems);
         renderExportModal(groups);
+        } catch (error) {
+          showToast('error', 'Could not prepare CSV', error.message);
+        } finally {
+          this.disabled = false;
+        }
       });
 
       function stringify(val) {
@@ -13558,22 +14340,27 @@
                           row.item_metadata.metric_analyses[result.metric_name] = {
                               source: 'ai',
                               root_cause: result.root_cause,
+                              root_causes: rootCauseCategories(result),
                               root_cause_detail: result.root_cause_detail || '',
+                              root_cause_reason: result.root_cause_reason || '',
                               root_cause_note: result.root_cause_note || '',
                               confidence: result.confidence,
                               solution: result.solution || '',
                               solution_note: result.solution_note || '',
                               error: result.error || '',
                           };
+                          if (Array.isArray(result.root_cause_issues)) {
+                              row.item_metadata.metric_analyses[result.metric_name].root_cause_issues = result.root_cause_issues;
+                          }
                       }
                   }
               }
               // Update root cause values
               for (var j = 0; j < (data.results || []).length; j++) {
                   var res = data.results[j];
-                  if (res.root_cause && !state.rootCauseValues.includes(res.root_cause)) {
-                      state.rootCauseValues.push(res.root_cause);
-                  }
+                  rootCauseCategories(res).forEach(function (category) {
+                      if (!state.rootCauseValues.includes(category)) state.rootCauseValues.push(category);
+                  });
               }
               state.rootCauseValues.sort();
               if (typeof buildCategoryDropdowns === 'function') buildCategoryDropdowns();
@@ -13608,7 +14395,7 @@
           html = html.replace(match[0], () => '<script>\n' + escapeInlineScriptContent(js) + '\n</' + 'script>');
         }
 
-        html = html.replace(/\s*<script\s+src="(?:\.\/|\/)static\/(?:auth|shell|playground)\.js(?:\?[^"]*)?"><\/script>\s*/g, '\n');
+        html = html.replace(/\s*<script\s+src="(?:\.\/|\/)static\/(?:auth|shell|playground|run_details)\.js(?:\?[^"]*)?"><\/script>\s*/g, '\n');
         html = html.replace(/\s*<link\s+rel="icon"\s+type="image\/png"\s+href="(?:\.\/|\/)static\/qym_icon\.png(?:\?[^"]*)?">\s*/g, '\n');
         return html;
       }
@@ -13620,6 +14407,8 @@
           try {
             shareBtn.disabled = true;
             shareBtn.textContent = 'Exporting...';
+
+            await ensureAllComparisonRows();
 
             // Serialize current state data
             const exportData = {
@@ -13654,6 +14443,7 @@
             console.error('Export failed:', err);
             showToast('error', 'Export Failed', err.message);
           } finally {
+            releaseComparisonBodies();
             shareBtn.disabled = false;
             shareBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg> Share';
           }

@@ -8,6 +8,7 @@ from html import escape
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import parse_qsl, quote, urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
@@ -37,6 +38,7 @@ from qym_platform.db.models import (
     RunEvent,
     RunItem,
     RunItemAttempt,
+    RunItemPassScore,
     RunItemScore,
     RunMetricSpec,
     RunTraceAggregate,
@@ -58,13 +60,24 @@ from qym_platform.permissions import (
     has_project_access,
 )
 from qym_platform.services.run_lifecycle import reconcile_stale_running_run
+from qym_platform.services.run_payloads import compact_row, detail_item_ids, search_conditions
 from qym_platform.services.repeat_passes import (
     RepeatPassDeletionError,
     delete_repeat_pass,
 )
 from qym_platform.services.root_cause_changes import (
+    PASS_ANALYSIS_META_KEY,
     apply_root_cause_change,
+    lock_run_item,
     replace_metric_review_candidate,
+)
+from qym_platform.services.root_cause_categories import (
+    analysis_root_cause_issues,
+    analysis_root_causes,
+    normalize_category_taxonomy,
+    normalize_root_cause_issues,
+    normalize_root_causes,
+    patch_issue_categories,
 )
 from qym_platform.settings import PlatformSettings
 
@@ -102,6 +115,162 @@ def _metric_specs_for_runs(
     for row in rows:
         result.setdefault(row.run_id, {})[row.metric_name] = _metric_spec_payload(row)
     return result
+
+
+def _refresh_metric_analysis_error(meta: Dict[str, Any]) -> None:
+    """Keep the item-level analysis error summary aligned with metric edits."""
+    metric_analyses = meta.get("metric_analyses")
+    errors = []
+    if isinstance(metric_analyses, dict):
+        for metric_name, analysis in metric_analyses.items():
+            if not isinstance(analysis, dict):
+                continue
+            error = str(analysis.get("error") or "").strip()
+            if error:
+                errors.append(f"{metric_name}: {error}")
+    if errors:
+        meta["analysis_error"] = "; ".join(errors)
+    else:
+        meta.pop("analysis_error", None)
+
+
+def _apply_metric_analysis_patch(
+    before_analysis: Dict[str, Any] | None,
+    patch: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Apply the editable diagnosis fields without touching other metadata."""
+    analysis = dict(before_analysis or {})
+
+    if "root_cause_issues" in patch:
+        issues = normalize_root_cause_issues(patch.get("root_cause_issues"))
+        analysis["root_cause_issues"] = issues
+    elif "root_causes" in patch:
+        root_causes = normalize_root_causes(patch.get("root_causes"))
+        if root_causes:
+            existing = analysis_root_cause_issues(analysis)
+            analysis["root_cause_issues"] = patch_issue_categories(
+                existing, root_causes
+            )
+        else:
+            analysis["root_cause_issues"] = []
+    elif "root_cause" in patch:
+        root_cause = str(patch.get("root_cause") or "").strip()
+        if root_cause:
+            existing = analysis_root_cause_issues(analysis)
+            primary = dict(existing[0]) if existing else {}
+            primary["category"] = root_cause
+            analysis["root_cause_issues"] = [primary, *existing[1:]]
+        else:
+            analysis["root_cause_issues"] = []
+    if "root_cause_detail" in patch:
+        issues = analysis_root_cause_issues(analysis)
+        if issues:
+            issues[0]["subcategory"] = str(
+                patch.get("root_cause_detail") or ""
+            ).strip()
+            analysis["root_cause_issues"] = issues
+        else:
+            detail = str(patch.get("root_cause_detail") or "").strip()
+            if detail:
+                analysis["root_cause_detail"] = detail
+            else:
+                analysis.pop("root_cause_detail", None)
+    if "root_cause_note" in patch:
+        issues = analysis_root_cause_issues(analysis)
+        if issues:
+            issues[0]["finding"] = str(
+                patch.get("root_cause_note") or ""
+            ).strip()
+            analysis["root_cause_issues"] = issues
+        else:
+            note = str(patch.get("root_cause_note") or "").strip()
+            if note:
+                analysis["root_cause_note"] = note
+            else:
+                analysis.pop("root_cause_note", None)
+
+    category_was_patched = any(
+        field in patch for field in ("root_cause_issues", "root_causes", "root_cause")
+    )
+    if category_was_patched or any(
+        field in patch
+        for field in ("root_cause_detail", "root_cause_note")
+    ):
+        issues = normalize_root_cause_issues(
+            analysis.get("root_cause_issues"),
+            legacy_root_causes=(
+                analysis.get("root_causes") or analysis.get("root_cause")
+            ),
+            legacy_detail=analysis.get("root_cause_detail"),
+            legacy_finding=analysis.get("root_cause_note"),
+        )
+        if issues:
+            categories = normalize_root_causes(
+                issue.get("category") for issue in issues
+            )
+            primary = issues[0]
+            analysis["root_cause_issues"] = issues
+            analysis["root_causes"] = categories
+            analysis["root_cause"] = categories[0]
+            if primary.get("subcategory"):
+                analysis["root_cause_detail"] = primary["subcategory"]
+            else:
+                analysis.pop("root_cause_detail", None)
+            if primary.get("finding"):
+                analysis["root_cause_note"] = primary["finding"]
+            else:
+                analysis.pop("root_cause_note", None)
+        else:
+            for field in (
+                "root_cause_issues",
+                "root_causes",
+                "root_cause",
+                "root_cause_reason",
+                "confidence",
+            ):
+                analysis.pop(field, None)
+            if category_was_patched:
+                analysis.pop("root_cause_detail", None)
+                analysis.pop("root_cause_note", None)
+    if "category_taxonomy" in patch:
+        taxonomy = normalize_category_taxonomy(patch.get("category_taxonomy"))
+        if taxonomy:
+            analysis["category_taxonomy"] = taxonomy
+        else:
+            analysis.pop("category_taxonomy", None)
+    if "solution" in patch:
+        solution = str(patch.get("solution") or "").strip()
+        if solution:
+            analysis["solution"] = solution
+        else:
+            analysis.pop("solution", None)
+            analysis.pop("solution_note", None)
+    if "solution_note" in patch:
+        solution_note = str(patch.get("solution_note") or "").strip()
+        if solution_note:
+            analysis["solution_note"] = solution_note
+        else:
+            analysis.pop("solution_note", None)
+
+    if patch:
+        if normalize_root_causes(
+            analysis.get("root_causes") or analysis.get("root_cause")
+        ):
+            analysis.pop("error", None)
+        analysis.pop("confidence", None)
+        # A new human edit reopens review for this pass.  Keep the review
+        # state next to the pass diagnosis so an approved sample does not
+        # remain approved after its category or notes change.
+        analysis.pop("review_status", None)
+        analysis.pop("reviewed_at", None)
+        analysis["source"] = "human"
+
+    meaningful = {
+        key: value
+        for key, value in analysis.items()
+        if key != "source" and value not in (None, "", [])
+    }
+    return analysis if meaningful else {}
 
 
 def _median(values: List[Optional[float]]) -> float:
@@ -222,6 +391,11 @@ def _completed_pass_outputs(
     rows = (
         db.query(RunEvent.payload)
         .filter(RunEvent.run_id == run_id, RunEvent.type == "item_completed")
+        .filter(
+            RunEvent.payload["item_id"]
+            .as_string()
+            .in_({item_id for item_id, _ in wanted})
+        )
         .order_by(RunEvent.sequence.asc())
         .all()
     )
@@ -239,7 +413,9 @@ def _completed_pass_outputs(
     return recovered
 
 
-def _repeat_pass_event_state(db: Session, run_id: str) -> Dict[str, Any]:
+def _repeat_pass_event_state(
+    db: Session, run_id: str, *, item_ids: Optional[List[str]] = None
+) -> Dict[str, Any]:
     """Recover per-pass lifecycle state that is not represented by final attempts.
 
     New evaluations emit attempt-start events before an attempt finishes, while
@@ -260,6 +436,11 @@ def _repeat_pass_event_state(db: Session, run_id: str) -> Dict[str, Any]:
     rows = (
         db.query(RunEvent)
         .filter(RunEvent.run_id == run_id, RunEvent.type.in_(event_types))
+        .filter(
+            RunEvent.payload["item_id"].as_string().in_(item_ids)
+            if item_ids is not None
+            else True
+        )
         .order_by(RunEvent.sequence.asc())
         .all()
     )
@@ -587,6 +768,198 @@ def _guard_project_page(
         if exc.status_code == 404:
             return _project_not_found_page(request, project_slug)
         raise
+    return None
+
+
+def _analysis_query(
+    request: Request,
+    *,
+    remove: set[str] | None = None,
+    scope: str | None = None,
+) -> str:
+    """Preserve harmless analyzer query state while canonicalizing routes."""
+    remove = remove or set()
+    pairs = parse_qsl(request.url.query, keep_blank_values=True)
+    result: list[tuple[str, str]] = []
+    scope_written = False
+    for key, value in pairs:
+        if key in remove:
+            continue
+        if key == "scope" and scope is not None:
+            if not scope_written:
+                result.append(("scope", scope))
+                scope_written = True
+            continue
+        result.append((key, value))
+    if scope is not None and not scope_written:
+        result.append(("scope", scope))
+    return urlencode(result, doseq=True)
+
+
+def _analysis_project_base(request: Request) -> str:
+    path = request.url.path
+    marker = "/projects/"
+    return path.split(marker, 1)[0] if marker in path else ""
+
+
+def _analysis_project_url(
+    request: Request,
+    project_slug: str,
+    suffix: str = "analysis",
+    query: str = "",
+) -> str:
+    path = (
+        _analysis_project_base(request).rstrip("/")
+        + "/projects/"
+        + quote(str(project_slug), safe="")
+        + ("/" + suffix.lstrip("/") if suffix else "")
+    )
+    return path + ("?" + query if query else "")
+
+
+def _visible_run_for_redirect(
+    db: Session,
+    request: Request,
+    run_id: str,
+) -> Run | None:
+    run = Run.active(db).filter(Run.id == run_id).first()
+    if run is None:
+        return None
+    try:
+        principal = require_ui_principal(
+            request=request,
+            db=db,
+            x_user_email=request.headers.get("X-User-Email"),
+            x_email=request.headers.get("X-Email"),
+            x_admin_bootstrap=request.headers.get("X-Admin-Bootstrap"),
+        )
+    except HTTPException:
+        return None
+    return run if can_view_run(db, principal, run) else None
+
+
+def _canonical_legacy_analyzer_redirect(
+    run_id: str,
+    request: Request,
+    db: Session,
+) -> RedirectResponse | None:
+    run = _visible_run_for_redirect(db, request, run_id)
+    if run is None:
+        return None
+    project = db.get(Project, run.project_id)
+    if project is None:
+        return None
+    requested_scope = dict(parse_qsl(request.url.query, keep_blank_values=True)).get(
+        "scope"
+    )
+    query = _analysis_query(
+        request,
+        scope="run" if requested_scope == "dashboard" else None,
+    )
+    return RedirectResponse(
+        url=_analysis_project_url(
+            request,
+            project.slug,
+            "runs/" + quote(run.id, safe="") + "/analyzer",
+            query,
+        ),
+        status_code=307,
+    )
+
+
+def _canonical_project_analysis_redirect(
+    project_slug: str,
+    request: Request,
+    db: Session,
+) -> RedirectResponse | None:
+    params = dict(parse_qsl(request.url.query, keep_blank_values=True))
+    requested_run_id = params.get("run", "").strip()
+    if requested_run_id:
+        run = _visible_run_for_redirect(db, request, requested_run_id)
+        if run is None:
+            return None
+        project = db.get(Project, run.project_id)
+        if project is None:
+            return None
+        query = _analysis_query(request, remove={"run", "scope"})
+        return RedirectResponse(
+            url=_analysis_project_url(
+                request,
+                project.slug,
+                "runs/" + quote(run.id, safe="") + "/analyzer",
+                query,
+            ),
+            status_code=307,
+        )
+
+    aliases = {"diagnosis": "categories", "project": "rules", "dashboard": "run"}
+    requested_scope = params.get("scope")
+    canonical_scope = aliases.get(requested_scope or "")
+    if canonical_scope is not None:
+        query = _analysis_query(request, scope=canonical_scope)
+        return RedirectResponse(
+            url=_analysis_project_url(request, project_slug, "analysis", query),
+            status_code=307,
+        )
+    return None
+
+
+def _canonical_project_run_analyzer_redirect(
+    project_slug: str,
+    run_id: str,
+    request: Request,
+    db: Session,
+) -> RedirectResponse | None:
+    run = _visible_run_for_redirect(db, request, run_id)
+    if run is not None:
+        project = db.get(Project, run.project_id)
+        if project is not None and project.slug != project_slug:
+            return RedirectResponse(
+                url=_analysis_project_url(
+                    request,
+                    project.slug,
+                    "runs/" + quote(run.id, safe="") + "/analyzer",
+                    _analysis_query(request),
+                ),
+                status_code=307,
+            )
+    requested_scope = dict(parse_qsl(request.url.query, keep_blank_values=True)).get(
+        "scope"
+    )
+    if requested_scope == "dashboard":
+        return RedirectResponse(
+            url=_analysis_project_url(
+                request,
+                project_slug,
+                "runs/" + quote(run_id, safe="") + "/analyzer",
+                _analysis_query(request, remove={"scope"}, scope="run"),
+            ),
+            status_code=307,
+        )
+    aliases = {"diagnosis": "categories", "project": "rules"}
+    canonical_scope = aliases.get(requested_scope or "")
+    if canonical_scope is not None:
+        return RedirectResponse(
+            url=_analysis_project_url(
+                request,
+                project_slug,
+                "analysis",
+                _analysis_query(request, remove={"scope"}, scope=canonical_scope),
+            ),
+            status_code=307,
+        )
+    if requested_scope in {"categories", "rules", "documents"}:
+        return RedirectResponse(
+            url=_analysis_project_url(
+                request,
+                project_slug,
+                "analysis",
+                _analysis_query(
+                    request, remove={"scope"}, scope=str(requested_scope)
+                ),
+            ),
+            status_code=307,
+        )
     return None
 
 
@@ -1226,6 +1599,9 @@ def analyzer_ui(run_id: str, request: Request, db: Session = Depends(get_db)) ->
     redirect = _maybe_redirect_to_login(request, db)
     if redirect:
         return redirect
+    canonical = _canonical_legacy_analyzer_redirect(run_id, request, db)
+    if canonical:
+        return canonical
     idx = _platform_static_dashboard_analyzer()
     if not idx.exists():
         raise HTTPException(status_code=404, detail="LLM Analyzer UI not found")
@@ -1242,6 +1618,9 @@ def project_analysis_ui(
     guarded = _guard_project_page(request, db, project_slug)
     if guarded:
         return guarded
+    canonical = _canonical_project_analysis_redirect(project_slug, request, db)
+    if canonical:
+        return canonical
     idx = _platform_static_dashboard_analyzer()
     if not idx.exists():
         raise HTTPException(status_code=404, detail="Auto-analysis UI not found")
@@ -1258,7 +1637,15 @@ def project_analyzer_ui(
     guarded = _guard_project_page(request, db, project_slug)
     if guarded:
         return guarded
-    return analyzer_ui(run_id=run_id, request=request, db=db)
+    canonical = _canonical_project_run_analyzer_redirect(
+        project_slug, run_id, request, db
+    )
+    if canonical:
+        return canonical
+    idx = _platform_static_dashboard_analyzer()
+    if not idx.exists():
+        raise HTTPException(status_code=404, detail="LLM Analyzer UI not found")
+    return _dashboard_html_response(idx, request)
 
 
 @router.get("/run/{run_id:path}", response_model=None)
@@ -1294,6 +1681,14 @@ def legacy_list_runs(
     exclude_live: bool = Query(
         default=False, description="Exclude live run statuses from the result set"
     ),
+    include_total: bool = Query(
+        default=True,
+        description=(
+            "Compute total_count. Defaults to true so existing clients are "
+            "unaffected; pagers that already know the total can pass false to "
+            "skip a full count on every page."
+        ),
+    ),
     user: Optional[str] = Query(
         default=None, description="Filter by run owner user id, email, or display name"
     ),
@@ -1306,7 +1701,8 @@ def legacy_list_runs(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
-    q = Run.active(db).order_by(Run.created_at.desc())
+    # A unique tie-breaker keeps offset pages disjoint when runs share a timestamp.
+    q = Run.active(db).order_by(Run.created_at.desc(), Run.id.asc())
 
     selected_project = None
     if project_slug:
@@ -1385,8 +1781,10 @@ def legacy_list_runs(
             )
         )
 
-    # Total count before pagination
-    total_count = q.count()
+    # Total count before pagination.  The count scans the whole project, so a
+    # pager walking N pages paid for it N times; callers that already have it
+    # can opt out.
+    total_count = q.count() if include_total else None
 
     # Apply pagination
     runs: List[Run] = q.offset(offset).limit(limit).all()
@@ -1508,6 +1906,7 @@ def legacy_list_runs(
             agg["avg_latency"] = attempt_summary["avg_latency_ms"]
             agg["median_latency"] = attempt_summary["median_latency_ms"]
     pass_summary_map: Dict[str, List[Dict[str, Any]]] = {}
+    pass_analysis_cause_totals: Dict[str, int] = {}
     if sampled_run_ids:
         from qym_platform.db.models import RunItemAttempt, RunItemPassScore
 
@@ -1559,6 +1958,39 @@ def legacy_list_runs(
             pass_attempts.setdefault(rid, {})[int(pass_number)] = int(n_attempts or 0)
             pass_errors.setdefault(rid, {})[int(pass_number)] = int(errs or 0)
 
+        # A repeat-run diagnosis is stored on the pass score, not on the
+        # reduced RunItem.  Keep the runs-list chip scoped to that pass so a
+        # diagnosis on one sample cannot appear on every sample row.
+        # Only pass scores that carry an analysis payload can contribute a
+        # cause; the loop below discards the rest.  Applying that predicate in
+        # SQL and streaming the result keeps this independent of pass volume.
+        pass_analysis_rows = (
+            db.query(
+                RunItemPassScore.run_id,
+                RunItemPassScore.pass_number,
+                RunItemPassScore.meta,
+            )
+            .filter(
+                RunItemPassScore.run_id.in_(sampled_run_ids),
+                cast(RunItemPassScore.meta, Text).like(
+                    f'%"{PASS_ANALYSIS_META_KEY}"%'
+                ),
+            )
+            .yield_per(1000)
+        )
+        pass_analysis_causes: Dict[str, Dict[int, set[str]]] = {}
+        for rid, pass_number, meta in pass_analysis_rows:
+            analysis = (
+                meta.get(PASS_ANALYSIS_META_KEY)
+                if isinstance(meta, dict)
+                else None
+            )
+            if not isinstance(analysis, dict):
+                continue
+            pass_analysis_causes.setdefault(rid, {}).setdefault(
+                int(pass_number), set()
+            ).update(analysis_root_causes(analysis))
+
         for r in runs:
             k = int(getattr(r, "samples", 1) or 1)
             if k <= 1:
@@ -1590,9 +2022,19 @@ def legacy_list_runs(
                         "status": p_status,
                         "primary_score": means.get(p),
                         "error_count": errors.get(p, 0),
+                        "analysis_cause_count": len(
+                            (pass_analysis_causes.get(r.id) or {}).get(p, set())
+                        ),
                     }
                 )
             pass_summary_map[r.id] = summaries
+            # The aggregate row represents the whole repeat run.  Its chip
+            # therefore totals each sample's diagnosis count, including the
+            # same category when it appears on multiple samples.
+            pass_analysis_cause_totals[r.id] = sum(
+                len((pass_analysis_causes.get(r.id) or {}).get(p, set()))
+                for p in range(1, k + 1)
+            )
 
     # --- Batch query: approvals ---
     approvals = db.query(Approval).filter(Approval.run_id.in_(run_ids)).all()
@@ -1608,7 +2050,7 @@ def legacy_list_runs(
             RunItem.run_id.in_(run_ids),
             cast(RunItem.item_metadata, Text).like('%"root_cause"%'),
         )
-        .all()
+        .yield_per(1000)
     )
     analysis_causes: Dict[str, set] = {}
     for row in analysis_rows:
@@ -1782,7 +2224,12 @@ def legacy_list_runs(
             else None,
             "owner": owner_info,
             "approval": approval_info,
-            "analysis_cause_count": len(analysis_causes.get(r.id, ())),
+            "analysis_cause_count": (
+                pass_analysis_cause_totals[r.id]
+                if int(getattr(r, "samples", 1) or 1) > 1
+                and pass_analysis_cause_totals.get(r.id, 0) > 0
+                else len(analysis_causes.get(r.id, ()))
+            ),
             "trace_stats": r.run_metadata.get("trace_stats")
             if isinstance(r.run_metadata, dict)
             else None,
@@ -2143,6 +2590,7 @@ def legacy_compare(
     files: List[str] = Query(default=[]),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
+    view: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Return multiple run snapshots for comparison.
 
@@ -2155,7 +2603,7 @@ def legacy_compare(
 
     runs_data: list[dict[str, Any]] = []
     for run_id in run_ids:
-        data = legacy_run_data(run_id=run_id, db=db, principal=principal)
+        data = legacy_run_data(run_id=run_id, db=db, principal=principal, view=view)
         if not data.get("error"):
             runs_data.append(data)
 
@@ -2192,19 +2640,28 @@ def _can_approve_run(db: Session, principal: Principal, run: Run) -> bool:
     return permission_can_approve_run(db, principal, run)
 
 
-def _build_run_data(db: Session, run: Run) -> Dict[str, Any]:
+def _build_run_data(
+    db: Session,
+    run: Run,
+    *,
+    item_ids: Optional[List[str]] = None,
+    compact: bool = False,
+) -> Dict[str, Any]:
     """Build the run + snapshot data dict used by the UI."""
-    items: List[RunItem] = (
-        db.query(RunItem)
-        .filter(RunItem.run_id == run.id)
-        .order_by(RunItem.index.asc())
-        .all()
-    )
+    item_query = db.query(RunItem).filter(RunItem.run_id == run.id)
+    if item_ids is not None:
+        item_query = item_query.filter(RunItem.item_id.in_(item_ids))
+    item_query = item_query.order_by(RunItem.index.asc())
+    item_count = item_query.count() if compact else None
+    items = item_query.yield_per(200) if compact else item_query.all()
     metrics = list(run.metrics or [])
     metric_specs = _metric_specs_for_runs(db, [run.id]).get(run.id, {})
     corrections = (
         db.query(ReviewCorrection)
         .filter(ReviewCorrection.run_id == run.id, ReviewCorrection.is_active.is_(True))
+        .filter(
+            ReviewCorrection.item_id.in_(item_ids) if item_ids is not None else True
+        )
         .order_by(ReviewCorrection.created_at.desc())
         .all()
     )
@@ -2228,7 +2685,12 @@ def _build_run_data(db: Session, run: Run) -> Dict[str, Any]:
     run_metadata = run.run_metadata if isinstance(run.run_metadata, dict) else {}
 
     # Build per-item score/meta for UI
-    scores = db.query(RunItemScore).filter(RunItemScore.run_id == run.id).all()
+    scores = (
+        db.query(RunItemScore)
+        .filter(RunItemScore.run_id == run.id)
+        .filter(RunItemScore.item_id.in_(item_ids) if item_ids is not None else True)
+        .all()
+    )
     by_item: Dict[str, Dict[str, RunItemScore]] = {}
     for s in scores:
         by_item.setdefault(s.item_id, {})[s.metric_name] = s
@@ -2237,18 +2699,27 @@ def _build_run_data(db: Session, run: Run) -> Dict[str, Any]:
     run_samples = int(getattr(run, "samples", 1) or 1)
     pass_scores_by_item: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {}
     pass_meta_by_item: Dict[str, Dict[str, Dict[int, Dict[str, Any]]]] = {}
+    pass_analysis_by_item: Dict[str, Dict[str, Dict[int, Dict[str, Any]]]] = {}
     pass_attempts_by_item: Dict[str, Dict[int, Dict[str, Any]]] = {}
     if run_samples > 1:
-        from qym_platform.db.models import RunItemAttempt, RunItemPassScore
-
         for ps in (
-            db.query(RunItemPassScore).filter(RunItemPassScore.run_id == run.id).all()
+            db.query(RunItemPassScore)
+            .filter(RunItemPassScore.run_id == run.id)
+            .filter(
+                RunItemPassScore.item_id.in_(item_ids) if item_ids is not None else True
+            )
+            .all()
         ):
             pass_scores_by_item.setdefault(ps.item_id, {}).setdefault(
                 ps.metric_name, {}
             )[int(ps.pass_number)] = ps.score_numeric
             # Per-pass judge output, same shape as row-level metric_meta.
             ps_meta: dict[str, Any] = dict(ps.meta) if ps.meta else {}
+            pass_analysis = ps_meta.pop(PASS_ANALYSIS_META_KEY, None)
+            if isinstance(pass_analysis, dict):
+                pass_analysis_by_item.setdefault(ps.item_id, {}).setdefault(
+                    ps.metric_name, {}
+                )[int(ps.pass_number)] = pass_analysis
             if ps.label:
                 ps_meta.setdefault("label", ps.label)
             if ps.explanation:
@@ -2262,9 +2733,14 @@ def _build_run_data(db: Session, run: Run) -> Dict[str, Any]:
         # show each attempt, not just the item's last one.  Event state fills
         # the two gaps in this table: an attempt that is currently running and
         # legacy item outcomes that arrived without a final-attempt event.
-        pass_event_state = _repeat_pass_event_state(db, run.id)
+        pass_event_state = _repeat_pass_event_state(db, run.id, item_ids=item_ids)
         all_attempts = (
-            db.query(RunItemAttempt).filter(RunItemAttempt.run_id == run.id).all()
+            db.query(RunItemAttempt)
+            .filter(RunItemAttempt.run_id == run.id)
+            .filter(
+                RunItemAttempt.item_id.in_(item_ids) if item_ids is not None else True
+            )
+            .all()
         )
         final_attempts = [
             attempt for attempt in all_attempts if attempt.is_last_attempt
@@ -2372,12 +2848,21 @@ def _build_run_data(db: Session, run: Run) -> Dict[str, Any]:
             isinstance(it.item_metadata, dict)
             and it.item_metadata.get("task_started_at_ms")
         )
-        for it in items
+        for it in (
+            item_query.with_entities(RunItem.item_metadata).yield_per(200)
+            if compact
+            else items
+        )
     )
     if need_ts:
         started_events: List[RunEvent] = (
             db.query(RunEvent)
             .filter(RunEvent.run_id == run.id, RunEvent.type == "item_started")
+            .filter(
+                RunEvent.payload["item_id"].as_string().in_(item_ids)
+                if item_ids is not None
+                else True
+            )
             .all()
         )
         for ev in started_events:
@@ -2388,7 +2873,7 @@ def _build_run_data(db: Session, run: Run) -> Dict[str, Any]:
 
     ui_rows = []
     stats = {
-        "total": len(items),
+        "total": item_count if compact else len(items),
         "completed": 0,
         "in_progress": 0,
         "pending": 0,
@@ -2460,17 +2945,19 @@ def _build_run_data(db: Session, run: Run) -> Dict[str, Any]:
                 "error": it.error or "",
                 "input": _stringify(it.input),
                 "input_full": _stringify(it.input),
-                "output": _stringify(it.output)
-                if not is_error
-                else f"ERROR: {it.error}",
-                "output_full": _stringify(it.output)
-                if not is_error
-                else f"ERROR: {it.error}",
+                "output": (
+                    _stringify(it.output) if not is_error else f"ERROR: {it.error}"
+                ),
+                "output_full": (
+                    _stringify(it.output) if not is_error else f"ERROR: {it.error}"
+                ),
                 "expected": _stringify(it.expected),
                 "expected_full": _stringify(it.expected),
-                "time": ""
-                if it.latency_ms is None
-                else f"{(it.latency_ms or 0)/1000.0:.3f}",
+                "time": (
+                    ""
+                    if it.latency_ms is None
+                    else f"{(it.latency_ms or 0)/1000.0:.3f}"
+                ),
                 "latency_ms": it.latency_ms or 0,
                 "retry_count": retry_count,
                 "trace_id": it.trace_id or "",
@@ -2496,9 +2983,11 @@ def _build_run_data(db: Session, run: Run) -> Dict[str, Any]:
                     }
                     for metric_name, metric_correction in metric_corrections.items()
                 },
-                "trace_stats": item_metadata.get("trace_stats")
-                if isinstance(item_metadata, dict)
-                else None,
+                "trace_stats": (
+                    item_metadata.get("trace_stats")
+                    if isinstance(item_metadata, dict)
+                    else None
+                ),
                 # Repeat runs: metric -> [score per pass, index 0 = pass 1]
                 "pass_scores": (
                     {
@@ -2522,6 +3011,19 @@ def _build_run_data(db: Session, run: Run) -> Dict[str, Any]:
                     if run_samples > 1 and pass_meta_by_item.get(it.item_id)
                     else None
                 ),
+                # Repeat runs: metric -> [root-cause analysis per pass].  This
+                # is deliberately separate from item_metadata so the aggregate
+                # view can read it without presenting an editable item card.
+                "pass_metric_analyses": (
+                    {
+                        m: [by_pass.get(p) for p in range(1, run_samples + 1)]
+                        for m, by_pass in (
+                            pass_analysis_by_item.get(it.item_id) or {}
+                        ).items()
+                    }
+                    if run_samples > 1 and pass_analysis_by_item.get(it.item_id)
+                    else None
+                ),
                 # Repeat runs: [attempt per pass, index 0 = pass 1] — each
                 # pass's final output/latency/trace (null where not run yet).
                 "pass_attempts": (
@@ -2534,6 +3036,8 @@ def _build_run_data(db: Session, run: Run) -> Dict[str, Any]:
                 ),
             }
         )
+        if compact:
+            ui_rows[-1] = compact_row(ui_rows[-1])
 
     stats["success_rate"] = (
         (stats["completed"] / stats["total"] * 100.0) if stats["total"] else 0.0
@@ -2609,6 +3113,7 @@ def _build_run_data(db: Session, run: Run) -> Dict[str, Any]:
                 "stats": stats,
                 "metric_names": metrics,
                 "metric_specs": metric_specs,
+                **({"detail_mode": "lazy", "detail_page_size": 100} if compact else {}),
             },
         }
     )
@@ -2695,6 +3200,12 @@ def export_run_html(
         r'\s*<script\s+src="/static/playground\.js(?:\?[^"]*)?"></script>\s*',
         "\n",
         run_html,
+    )
+
+    # Export embeds full rows and needs no network hydration helper.
+    run_html = re.sub(
+        r'\s*<script\s+(?:defer\s+)?src="/static/run_details\.js(?:\?[^"]*)?"></script>\s*',
+        "\n", run_html,
     )
 
     # Remove favicon (would be a broken link)
@@ -2830,6 +3341,25 @@ def run_passes(
             float(avg_val) if avg_val is not None else None
         )
         counts[int(pass_number)] = max(counts.get(int(pass_number), 0), int(cnt or 0))
+
+    pass_analysis_rows = (
+        db.query(RunItemPassScore.pass_number, RunItemPassScore.meta)
+        .filter(
+            RunItemPassScore.run_id == run.id,
+            cast(RunItemPassScore.meta, Text).like(f'%"{PASS_ANALYSIS_META_KEY}"%'),
+        )
+        .yield_per(1000)
+    )
+    pass_analysis_causes: Dict[int, set[str]] = {}
+    for pass_number, meta in pass_analysis_rows:
+        analysis = (
+            meta.get(PASS_ANALYSIS_META_KEY) if isinstance(meta, dict) else None
+        )
+        if not isinstance(analysis, dict):
+            continue
+        pass_analysis_causes.setdefault(int(pass_number), set()).update(
+            analysis_root_causes(analysis)
+        )
 
     # Per-pass item state.  Final attempts are canonical; lifecycle events
     # cover the currently-running item and legacy outcomes that have no final
@@ -3000,6 +3530,7 @@ def run_passes(
                 "items_started": started_items_by_pass.get(p, 0),
                 "completed_count": completed_by_pass.get(p, 0),
                 "error_count": errors_by_pass.get(p, 0),
+                "analysis_cause_count": len(pass_analysis_causes.get(p, set())),
                 "running_count": (
                     running_by_pass.get(p, 0) if status == "running" else 0
                 ),
@@ -3208,11 +3739,139 @@ def run_group_metrics(
     }
 
 
+def _detail_run(db: Session, principal: Principal, run_id: str) -> Run:
+    run = Run.active(db).filter(Run.id == run_id).first()
+    if not run:
+        raise HTTPException(404, "Run not found")
+    if not can_view_run(db, principal, run):
+        raise HTTPException(403, "Access denied")
+    return run
+
+
+@router.post("/api/runs/{run_id}/items/details")
+def run_item_details(
+    run_id: str,
+    request: Dict[str, Any],
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    run = _detail_run(db, principal, run_id)
+    ids = detail_item_ids(request)
+    data = _build_run_data(db, run, item_ids=ids)
+    rows = data["snapshot"]["rows"]
+    for row in rows:
+        # Occurrence-based comparison identity comes from the complete compact
+        # index; hydrating a subset must never reset duplicate occurrence IDs.
+        row.pop("compare_item_id", None)
+        row.pop("compare_alignment_source", None)
+        row["__details_loaded"] = True
+    present = {row["item_id"] for row in rows}
+    return {
+        "rows": rows,
+        "missing_item_ids": [iid for iid in ids if iid not in present],
+    }
+
+
+@router.post("/api/runs/{run_id}/items/search")
+def search_run_items(
+    run_id: str,
+    request: Dict[str, Any],
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    run = _detail_run(db, principal, run_id)
+    conditions = search_conditions(request)
+    pass_number = request.get("pass_number")
+    if pass_number is not None:
+        if (
+            isinstance(pass_number, bool)
+            or not isinstance(pass_number, int)
+            or not 1 <= pass_number <= int(run.samples or 1)
+        ):
+            raise HTTPException(422, "pass_number must identify an existing pass")
+
+    matches: Dict[str, List[str]] = {condition["id"]: [] for condition in conditions}
+    # Search is deliberately explicit: the initial index never transfers large
+    # bodies. Streaming selected columns bounds aggregate-mode server memory.
+    if pass_number is None:
+        rows = (
+            db.query(
+                RunItem.item_id,
+                RunItem.index,
+                RunItem.input,
+                RunItem.expected,
+                RunItem.output,
+                RunItem.error,
+            )
+            .filter(RunItem.run_id == run.id)
+            .order_by(RunItem.index.asc())
+            .yield_per(200)
+        )
+        texts = (
+            (
+                row.item_id,
+                [
+                    str(row.item_id or row.index or ""),
+                    _stringify(row.input),
+                    _stringify(row.expected),
+                    f"ERROR: {row.error}" if row.error else _stringify(row.output),
+                ],
+            )
+            for row in rows
+        )
+    else:
+        # Reuse established legacy pass recovery so pre-attempt SDK runs and
+        # missing/final attempts have exactly the same search semantics as UI.
+        # Scope each recovery batch so repeated searches cannot load every
+        # input/output/explanation into memory at once.
+        def pass_texts():
+            from itertools import islice
+
+            item_ids = iter(
+                db.query(RunItem.item_id)
+                .filter(RunItem.run_id == run.id)
+                .order_by(RunItem.index.asc())
+                .yield_per(100)
+            )
+            while True:
+                batch = [item_id for (item_id,) in islice(item_ids, 100)]
+                if not batch:
+                    break
+                data = _build_run_data(db, run, item_ids=batch)
+                for row in data["snapshot"]["rows"]:
+                    attempts = row.get("pass_attempts") or []
+                    output = (
+                        str((attempts[pass_number - 1] or {}).get("output") or "")
+                        if len(attempts) >= pass_number
+                        else ""
+                    )
+                    yield row["item_id"], [
+                        str(row["item_id"] or row["index"] or ""),
+                        row["input"], row["expected"], output,
+                    ]
+                del data
+
+        texts = pass_texts()
+    for item_id, values in texts:
+        lowered = [value.lower() for value in values]
+        for condition in conditions:
+            candidates = (
+                lowered if condition["field"] == "all"
+                else lowered[1:] if condition["field"] == "content"
+                else lowered[-1:]
+            )
+            if any(condition["value"] in candidate for candidate in candidates):
+                matches[condition["id"]].append(item_id)
+    return {"matches": matches}
+
+
+
 @router.get("/api/runs/{run_id}")
 def legacy_run_data(
     run_id: str,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
+    view: Optional[str] = None,
 ) -> Dict[str, Any]:
     run = Run.active(db).filter(Run.id == run_id).first()
     if not run:
@@ -3221,7 +3880,9 @@ def legacy_run_data(
         return {"error": "Access denied"}
     _reconcile_run_liveness(db, [run])
 
-    return _build_run_data(db, run)
+    if view not in (None, "full", "compact"):
+        raise HTTPException(422, "view must be full or compact")
+    return _build_run_data(db, run, compact=view == "compact")
 
 
 @router.post("/api/runs/update_metric")
@@ -3393,12 +4054,12 @@ def update_metric(
     # per-pass detail (and pass-scoped pages can re-apply their lens).
     pass_scores: Optional[Dict[str, list]] = None
     pass_metric_meta: Optional[Dict[str, list]] = None
+    pass_metric_analyses: Optional[Dict[str, list]] = None
     pass_attempts: Optional[list] = None
     if run_samples > 1:
-        from qym_platform.db.models import RunItemAttempt, RunItemPassScore
-
         by_metric: Dict[str, Dict[int, Optional[float]]] = {}
         by_metric_meta: Dict[str, Dict[int, Dict[str, Any]]] = {}
+        by_metric_analysis: Dict[str, Dict[int, Dict[str, Any]]] = {}
         pass_score_rows = (
             db.query(RunItemPassScore)
             .filter(
@@ -3412,6 +4073,11 @@ def update_metric(
                 int(ps.pass_number)
             ] = ps.score_numeric
             ps_meta = dict(ps.meta) if ps.meta else {}
+            pass_analysis = ps_meta.pop(PASS_ANALYSIS_META_KEY, None)
+            if isinstance(pass_analysis, dict):
+                by_metric_analysis.setdefault(ps.metric_name, {})[
+                    int(ps.pass_number)
+                ] = pass_analysis
             if ps.label:
                 ps_meta.setdefault("label", ps.label)
             if ps.explanation:
@@ -3430,6 +4096,14 @@ def update_metric(
                 for m, by_pass in by_metric_meta.items()
             }
             if by_metric_meta
+            else None
+        )
+        pass_metric_analyses = (
+            {
+                m: [by_pass.get(p) for p in range(1, run_samples + 1)]
+                for m, by_pass in by_metric_analysis.items()
+            }
+            if by_metric_analysis
             else None
         )
         attempts_by_pass: Dict[int, Dict[str, Any]] = {}
@@ -3536,6 +4210,7 @@ def update_metric(
         else {},
         "pass_scores": pass_scores,
         "pass_metric_meta": pass_metric_meta,
+        "pass_metric_analyses": pass_metric_analyses,
         "pass_attempts": pass_attempts,
     }
 
@@ -3577,9 +4252,13 @@ def update_root_cause(
     )
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
+    item = lock_run_item(db, run=run, item=item)
 
     editable_fields = (
         "root_cause",
+        "root_causes",
+        "root_cause_issues",
+        "category_taxonomy",
         "root_cause_detail",
         "root_cause_note",
         "solution",
@@ -3591,6 +4270,94 @@ def update_root_cause(
             field == "root_cause_note" and request.get(field) is not None
         ):
             patch[field] = request.get(field)
+
+    raw_pass_number = request.get("pass_number")
+    pass_number: Optional[int] = None
+    if raw_pass_number is not None:
+        try:
+            pass_number = int(raw_pass_number)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="Invalid pass_number") from exc
+        if pass_number < 1:
+            raise HTTPException(status_code=400, detail="pass_number must be positive")
+    run_samples = int(getattr(run, "samples", 1) or 1)
+    if run_samples > 1 and pass_number is None:
+        raise HTTPException(
+            status_code=400,
+            detail="pass_number is required when editing a repeat-run diagnosis",
+        )
+    if pass_number is not None and (
+        run_samples <= 1 or pass_number > run_samples
+    ):
+        raise HTTPException(status_code=400, detail="pass_number is outside this run")
+
+    if pass_number is not None:
+        raw_metric_name = request.get("metric_name")
+        metric_name = str(raw_metric_name or "").strip()
+        if not metric_name:
+            raise HTTPException(
+                status_code=400,
+                detail="metric_name is required for a repeat-run diagnosis",
+            )
+        known_metrics = {str(name) for name in (run.metrics or [])}
+        if metric_name not in known_metrics:
+            raise HTTPException(status_code=400, detail="Unknown metric_name")
+        pass_score = (
+            db.query(RunItemPassScore)
+            .filter(
+                RunItemPassScore.run_id == run.id,
+                RunItemPassScore.item_id == item.item_id,
+                RunItemPassScore.metric_name == metric_name,
+                RunItemPassScore.pass_number == pass_number,
+            )
+            .with_for_update()
+            .one_or_none()
+        )
+        if pass_score is None:
+            raise HTTPException(status_code=404, detail="Pass score not found")
+
+        pass_meta = dict(pass_score.meta) if isinstance(pass_score.meta, dict) else {}
+        before_analysis = (
+            dict(pass_meta.get(PASS_ANALYSIS_META_KEY))
+            if isinstance(pass_meta.get(PASS_ANALYSIS_META_KEY), dict)
+            else {}
+        )
+        after_analysis = _apply_metric_analysis_patch(before_analysis, patch)
+        if after_analysis:
+            after_analysis["review_status"] = "pending"
+            pass_meta[PASS_ANALYSIS_META_KEY] = after_analysis
+        else:
+            pass_meta.pop(PASS_ANALYSIS_META_KEY, None)
+        pass_score.meta = pass_meta
+
+        if before_analysis != after_analysis:
+            db.add(
+                AuditLog(
+                    actor_user_id=(
+                        principal.user.id if principal.auth_type != "none" else None
+                    ),
+                    action="metric_root_cause_change:human",
+                    entity_type="run_item_pass_metric_analysis",
+                    entity_id=(
+                        f"{run.id}:{item.item_id}:{pass_number}:{metric_name}"
+                    ),
+                    before=before_analysis,
+                    after=after_analysis,
+                    created_at=utc_now_naive(),
+                )
+            )
+        db.commit()
+        updated_snapshot = _build_run_data(db, run).get("snapshot", {})
+        updated_rows = (
+            updated_snapshot.get("rows", [])
+            if isinstance(updated_snapshot, dict)
+            else []
+        )
+        updated_row = next(
+            (row for row in updated_rows if row.get("item_id") == item.item_id),
+            None,
+        )
+        return {"ok": True, "row": updated_row}
 
     raw_metric_name = request.get("metric_name")
     if raw_metric_name is not None:
@@ -3614,55 +4381,12 @@ def update_root_cause(
             if isinstance(metric_analyses.get(metric_name), dict)
             else {}
         )
-        analysis = dict(before_analysis)
-
-        if "root_cause" in patch:
-            root_cause = str(patch.get("root_cause") or "").strip()
-            if root_cause:
-                analysis["root_cause"] = root_cause
-            else:
-                for field in (
-                    "root_cause",
-                    "root_cause_detail",
-                    "root_cause_note",
-                    "confidence",
-                ):
-                    analysis.pop(field, None)
-        if "root_cause_detail" in patch:
-            detail = str(patch.get("root_cause_detail") or "").strip()
-            if detail:
-                analysis["root_cause_detail"] = detail
-            else:
-                analysis.pop("root_cause_detail", None)
-        if "root_cause_note" in patch:
-            note = str(patch.get("root_cause_note") or "").strip()
-            if note:
-                analysis["root_cause_note"] = note
-            else:
-                analysis.pop("root_cause_note", None)
-        if "solution" in patch:
-            solution = str(patch.get("solution") or "").strip()
-            if solution:
-                analysis["solution"] = solution
-            else:
-                analysis.pop("solution", None)
-                analysis.pop("solution_note", None)
-        if "solution_note" in patch:
-            solution_note = str(patch.get("solution_note") or "").strip()
-            if solution_note:
-                analysis["solution_note"] = solution_note
-            else:
-                analysis.pop("solution_note", None)
-
-        if patch:
-            analysis.pop("error", None)
-            analysis.pop("confidence", None)
-            analysis["source"] = "human"
+        analysis = _apply_metric_analysis_patch(before_analysis, patch)
 
         meaningful_analysis = {
             key: value
             for key, value in analysis.items()
-            if key != "source" and value not in (None, "")
+            if key != "source" and value not in (None, "", [])
         }
         if meaningful_analysis:
             metric_analyses[metric_name] = analysis
@@ -3673,6 +4397,7 @@ def update_root_cause(
             meta["metric_analyses"] = metric_analyses
         else:
             meta.pop("metric_analyses", None)
+        _refresh_metric_analysis_error(meta)
         item.item_metadata = meta
 
         after_analysis = dict(metric_analyses.get(metric_name) or {})
@@ -3687,6 +4412,7 @@ def update_root_cause(
                     principal.user.id if principal.auth_type != "none" else None
                 ),
                 actor_source="human",
+                item_locked=True,
             )
             db.add(
                 AuditLog(
@@ -3721,6 +4447,7 @@ def update_root_cause(
         actor_user_id=principal.user.id if principal.auth_type != "none" else None,
         actor_source="human",
         human_patch=patch,
+        item_locked=True,
     )
 
     db.commit()
@@ -3751,7 +4478,8 @@ def delete_run(
     if not can_delete_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Permission denied")
 
-    # Soft-delete: mark as deleted instead of removing data
+    # Soft-delete only. All evaluation, analysis, and review history remains
+    # available if an administrator restores the run.
     snapshot = run.audit_snapshot()
     run.deleted_at = utc_now_naive()
     run.deleted_by_user_id = principal.user.id
@@ -3762,7 +4490,9 @@ def delete_run(
         entity_type="run",
         entity_id=run.id,
         before=snapshot,
-        after={"deleted_at": run.deleted_at.isoformat()},
+        after={
+            "deleted_at": run.deleted_at.isoformat(),
+        },
     )
     db.add(audit)
     db.commit()

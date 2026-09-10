@@ -16,12 +16,22 @@ from qym_platform.api.runs import router as runs_router
 from qym_platform.api.step_latency import router as step_latency_router
 from qym_platform.api.ingest import router as ingest_router
 from qym_platform.api.analysis import router as analysis_router
+from qym_platform.api.root_cause_dashboard import router as root_cause_dashboard_router
 from qym_platform.api.product_evals import router as product_evals_router
 from qym_platform.api.datasets import router as datasets_router
+from qym_platform.api.insights import router as insights_router
+from qym_platform.api.dashboard import router as dashboard_router
+from qym_platform.services.analysis_jobs import (
+    analysis_job_manager,
+    rule_inference_job_manager,
+)
+from qym_platform.services.dashboard_summaries import DashboardSummaryWorker
 
 
 def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     settings = settings or PlatformSettings()
+    analysis_job_manager.configure(max_workers=settings.analysis_job_max_workers)
+    rule_inference_job_manager.configure(max_workers=settings.analysis_job_max_workers)
 
     app = FastAPI(
         title="qym-platform",
@@ -30,6 +40,23 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
         redoc_url=None,
         openapi_url="/openapi.json",
     )
+
+    from qym_platform.db.session import SessionLocal
+    from qym_platform.deps import get_db
+
+    dashboard_worker = DashboardSummaryWorker(SessionLocal)
+    app.state.dashboard_summary_worker = dashboard_worker
+
+    @app.on_event("startup")
+    def start_dashboard_summary_worker() -> None:
+        # Dependency-overridden apps own their test/embedding database. They can
+        # use app.state.dashboard_summary_worker or run a worker for that factory.
+        if get_db not in app.dependency_overrides:
+            dashboard_worker.start()
+
+    @app.on_event("shutdown")
+    def stop_dashboard_summary_worker() -> None:
+        dashboard_worker.stop()
 
     if session_auth_enabled(settings):
         if not settings.auth_session_secret:
@@ -81,10 +108,22 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     app.include_router(web_router)
     app.include_router(projects_router)
     app.include_router(analysis_router)  # before runs_router (its {run_id:path} is a catch-all)
+    # Keep the dashboard route family registered so the feature can be restored
+    # without rebuilding the application; its handlers are feature-gated.
+    app.include_router(root_cause_dashboard_router)
     app.include_router(product_evals_router)
     app.include_router(datasets_router)
+    app.include_router(insights_router)
+    app.include_router(dashboard_router)
     app.include_router(step_latency_router)
     app.include_router(runs_router)
     app.include_router(ingest_router)
+
+    @app.on_event("shutdown")
+    def shutdown_analysis_jobs() -> None:
+        # The registry is in-memory by design for the current single-worker
+        # deployment; release its bounded executor with the application.
+        analysis_job_manager.shutdown(wait=True)
+        rule_inference_job_manager.shutdown(wait=True)
 
     return app

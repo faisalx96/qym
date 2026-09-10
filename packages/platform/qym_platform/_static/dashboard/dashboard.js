@@ -114,6 +114,18 @@
     return apiUrl(`projects/${encoded}${cleanSuffix ? `/${cleanSuffix}` : ''}`);
   }
 
+  function analyzerUrlForRun(run, passNumber = null) {
+    const slug = state.currentProject && state.currentProject.slug;
+    const runId = run && (run.file_path || run.run_id || '');
+    const parsedPass = Number(passNumber);
+    const passQuery = Number.isInteger(parsedPass) && parsedPass > 0
+      ? `&pass=${encodeURIComponent(parsedPass)}`
+      : '';
+    return slug
+      ? projectUrl(slug, `analysis?run=${encodeURIComponent(runId)}${passQuery}`)
+      : apiUrl(`run/${encodeURIComponent(runId)}/analyzer${passQuery.replace(/^&/, '?')}`);
+  }
+
   function navigateTo(url) {
     if (window.QymShell && typeof window.QymShell.navigateTo === 'function') {
       window.QymShell.navigateTo(url);
@@ -134,6 +146,24 @@
     navigateTo(url);
   }
 
+  const ANALYSIS_RUN_PICKER_PARAM = 'qym_analysis_run_picker';
+  const ANALYSIS_RUN_PICKER_VALUE = '1';
+
+  function consumeAnalysisRunPickerContext() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get(ANALYSIS_RUN_PICKER_PARAM) !== ANALYSIS_RUN_PICKER_VALUE) return false;
+    params.delete(ANALYSIS_RUN_PICKER_PARAM);
+    const query = params.toString();
+    const cleanUrl = window.location.pathname + (query ? `?${query}` : '') + window.location.hash;
+    window.history.replaceState(window.history.state, '', cleanUrl);
+    return true;
+  }
+
+  // The analyzer hands off to Runs with a one-time picker context. Consume it
+  // when this page loads so the special run-name behavior cannot leak into a
+  // later visit or a browser-back navigation.
+  let analysisRunPickerContext = consumeAnalysisRunPickerContext();
+
   // ═══════════════════════════════════════════════════
   // STATE
   // ═══════════════════════════════════════════════════
@@ -141,6 +171,16 @@
   const state = {
     runs: null,
     flatRuns: [],
+    dashboardPage: null,
+    dashboardOverview: null,
+    dashboardBackfilling: false,
+    dashboardOverviewFilterKey: null,
+    dashboardRequestKey: null,
+    dashboardPinnedRuns: new Map(),
+    chartHistory: new Map(),
+    chartHistoryQueue: [],
+    chartHistoryActive: 0,
+    chartHistoryObserver: null,
     filteredRuns: [],
     sortKey: 'time-desc',
     tablePage: 1,
@@ -236,6 +276,7 @@
   const MODELS_VIEW_SCORE_STAT_KEYS = ['passAtK', 'passHatK', 'maxAtK', 'consistency', 'reliability', 'avgScore', 'failedCount', 'totalRetries', 'avgLatency', 'medianLatency', 'correctDistribution'];
   const MODELS_VIEW_NUMERIC_STAT_KEYS = ['avgScore', 'minScore', 'maxAtK', 'stddevScore', 'totalScoreSum', 'failedCount', 'totalRetries', 'avgLatency', 'medianLatency'];
   function _traceMetricsForRuns(runs = null) {
+    if (usesDashboardPage()) return state.dashboardOverview?.has_trace_stats ? TRACE_METRICS : [];
     const sourceRuns = Array.isArray(runs)
       ? runs
       : ((state.filteredRuns && state.filteredRuns.length) ? state.filteredRuns : state.flatRuns);
@@ -252,7 +293,9 @@
       ...(baseMetrics || []),
       ...GROUP_DISPLAY_COLUMNS.map(col => col.key),
       ...SYSTEM_DISPLAY_COLUMNS.map(col => col.key),
-      ..._traceMetricsForRuns(runs).map(tm => tm.key),
+      ...(usesDashboardSummary() && runs === state.flatRuns
+        ? (state.dashboardOverview.has_any_trace_stats ? TRACE_METRICS : [])
+        : _traceMetricsForRuns(runs)).map(tm => tm.key),
     ];
   }
 
@@ -611,11 +654,11 @@
     });
   }
 
-  function getTablePageCount(totalRuns = state.filteredRuns.length) {
+  function getTablePageCount(totalRuns = usesDashboardPage() ? state.dashboardPage.total_runs : state.filteredRuns.length) {
     return Math.max(1, Math.ceil((totalRuns || 0) / TABLE_PAGE_SIZE));
   }
 
-  function clampTablePage(totalRuns = state.filteredRuns.length) {
+  function clampTablePage(totalRuns = usesDashboardPage() ? state.dashboardPage.total_runs : state.filteredRuns.length) {
     const pageCount = getTablePageCount(totalRuns);
     if (!Number.isFinite(state.tablePage) || state.tablePage < 1) state.tablePage = 1;
     if (state.tablePage > pageCount) state.tablePage = pageCount;
@@ -623,7 +666,7 @@
   }
 
   function getTablePageSlice(runs = state.filteredRuns) {
-    const totalRuns = Array.isArray(runs) ? runs.length : 0;
+    const totalRuns = usesDashboardPage() ? state.dashboardPage.total_runs : (Array.isArray(runs) ? runs.length : 0);
     const pageCount = clampTablePage(totalRuns);
     const start = totalRuns === 0 ? 0 : (state.tablePage - 1) * TABLE_PAGE_SIZE;
     const end = Math.min(start + TABLE_PAGE_SIZE, totalRuns);
@@ -632,7 +675,7 @@
       pageCount,
       start,
       end,
-      pageRuns: Array.isArray(runs) ? runs.slice(start, end) : [],
+      pageRuns: usesDashboardPage() ? runs : (Array.isArray(runs) ? runs.slice(start, end) : []),
     };
   }
 
@@ -701,6 +744,7 @@
 
   function getOwnerForFilterValue(value) {
     if (value === EMPTY_FILTER_VALUE) return null;
+    if (usesDashboardSummary()) return state.dashboardOverview?.owners?.[value] || null;
     const run = state.flatRuns.find(r => getRunOwnerKey(r) === value);
     return run && run.owner ? run.owner : null;
   }
@@ -898,6 +942,7 @@
   // ═══════════════════════════════════════════════════
 
   function getAvailableMetricsForRuns(runs) {
+    if (usesDashboardSummary()) return state.dashboardOverview?.metrics || [];
     if (!Array.isArray(runs) || runs.length === 0) return [];
 
     const available = new Set();
@@ -1637,6 +1682,10 @@
   }
 
   function filterRuns() {
+    if (usesDashboardPage()) {
+      state.filteredRuns = state.dashboardPage.rows;
+      return state.filteredRuns;
+    }
     let runs = [...state.flatRuns];
 
     // Quick filter (time-based)
@@ -1900,7 +1949,7 @@
     if (subtitleEl) {
       const isFiltered = state.quickFilter !== 'all' || state.filterStatuses.size > 0 || state.filterVersions.size > 0;
       if (isFiltered) {
-        subtitleEl.textContent = `Filtered: ${state.filteredRuns.length} runs • Showing average metric scores across all items`;
+        subtitleEl.textContent = `Filtered: ${usesDashboardSummary() ? state.dashboardOverview.total_runs : state.filteredRuns.length} runs • Showing average metric scores across all items`;
       } else {
         subtitleEl.textContent = `Showing average metric scores across all items in matching runs`;
       }
@@ -1980,6 +2029,27 @@
       const visSet = state.visibleMetrics;
       const metrics = orderChartMetrics(visSet ? allComboMetrics.filter(m => visSet.has(m)) : allComboMetrics);
       const modelEntries = Object.entries(combo.models);
+      const historyKey = JSON.stringify([combo.task, combo.dataset]);
+      const history = state.chartHistory.get(historyKey);
+      if (usesDashboardSummary() && history?.status !== 'ready') {
+        const failed = history?.status === 'error';
+        return `
+          <div class="chart-task-section">
+            <div class="chart-task-header">
+              <span class="chart-task-name">${escapeHtml(taskName)}</span>
+              <span class="chart-task-meta">${totalTaskRuns} runs · ${allTaskModels.size} models</span>
+            </div>
+            <div class="chart-card">
+              ${datasetTabsHtml}
+              <div class="chart-card-body" id="${chartPanelId}" role="tabpanel" aria-labelledby="${activeDatasetTabId}">
+                <div class="chart-no-data" data-chart-history="${encodeURIComponent(historyKey)}" role="status">
+                  ${failed ? 'Could not load chart history.' : 'Loading chart history…'}
+                  ${failed ? `<button type="button" class="qym-inline-action" data-chart-history-retry="${encodeURIComponent(historyKey)}">Retry</button>` : ''}
+                </div>
+              </div>
+            </div>
+          </div>`;
+      }
 
       // Collect all runs across all models
       const allRuns = [];
@@ -2736,6 +2806,8 @@
       `;
     }).join('');
 
+    observeChartHistory();
+
     // Wire up click events for run labels
     gridEl.querySelectorAll('.chart-bar-label.clickable-run').forEach(label => {
       label.addEventListener('click', (e) => {
@@ -2911,12 +2983,12 @@
   // when the run has analysis data, a static Analyze action styled like the
   // run-detail inline actions when the run is eligible, and a dash while the
   // run is still live.
-  function renderAnalysisCell(run, status) {
-    const causeCount = Number(run.analysis_cause_count || 0);
-    const analyzerHref = projectUrl(
-      state.currentProject && state.currentProject.slug,
-      `analysis?run=${encodeURIComponent(run.run_id)}`,
-    );
+  function renderAnalysisCell(run, status, passNumber = null, analysisCauseCount = null) {
+    const isPassScoped = passNumber !== null && passNumber !== undefined;
+    const causeCount = isPassScoped
+      ? Number(analysisCauseCount || 0)
+      : Number(run.analysis_cause_count || 0);
+    const analyzerHref = analyzerUrlForRun(run, passNumber);
     if (causeCount > 0) {
       const label = `${causeCount} cause${causeCount === 1 ? '' : 's'}`;
       return `<a class="run-analysis-chip" href="${analyzerHref}" title="${label} found — open auto-analysis" aria-label="${label} found — open auto-analysis">${ANALYSIS_SPARK_ICON}${label}</a>`;
@@ -3162,6 +3234,12 @@
       sortRuns(allRuns);
     }
 
+    if (usesDashboardPage() && dashboardPageRequestKey() !== state.dashboardRequestKey) {
+      el('table-view')?.setAttribute('aria-busy', 'true');
+      fetchRuns();
+      return;
+    }
+
     // Update header with dynamic metric columns
     updateTableHeader(metricsToShow);
     const headerRow = el('table-header-row');
@@ -3234,7 +3312,9 @@
         }
         const mType = state._metricTypes?.[metric] || window.QymMetrics.detectMetricTypeFromAvg(value);
         const metricClass = window.QymMetrics.getMetricColorClass(value, mType);
-        const peerValues = getRunComboPeerValues(allRuns, run, candidate => candidate.metric_averages?.[metric]);
+        const peerValues = usesDashboardPage()
+          ? (run.metric_neighbor_values?.[metric] || [])
+          : getRunComboPeerValues(allRuns, run, candidate => candidate.metric_averages?.[metric]);
         const display = window.QymMetrics.formatMetricValueSmart(value, mType, peerValues);
         // report_k needs headroom: pass@k estimated from barely k passes is
         // high-noise, so nudge toward samples >= 2k.
@@ -3427,7 +3507,7 @@
     tbody.querySelectorAll('tr[data-idx]').forEach(tr => {
       const idx = parseInt(tr.dataset.idx);
       const filePath = decodeURIComponent(tr.dataset.file);
-      const run = state.filteredRuns[idx];
+      const run = state.filteredRuns[idx - (usesDashboardPage() ? state.dashboardPage.offset : 0)];
 
       const checkbox = tr.querySelector('.row-checkbox');
       if (checkbox) {
@@ -3602,6 +3682,7 @@
                   : {},
                 items_scored: null,
                 error_count: s.error_count,
+                analysis_cause_count: s.analysis_cause_count,
               })),
             },
             group: { metric: primary },
@@ -3693,6 +3774,7 @@
         const cell = row.querySelector(`td.${cls}`);
         return `<td class="${cls}">${cell ? cell.innerHTML : ''}</td>`;
       };
+      const parentRun = runs.find(candidate => candidate.run_id === runId) || { run_id: runId };
       const pending = allPasses.filter(p => String(p.status || '').toLowerCase() === 'pending');
       const passRows = allPasses.filter(p => String(p.status || '').toLowerCase() !== 'pending');
       const pendingWillNotRun = ['STOPPED', 'FAILED', 'CANCELED', 'CANCELLED']
@@ -3816,7 +3898,7 @@
           <td class="col-time">${passDate
             ? `<span class="timestamp" title="${escapeHtml(passDate.full)}"><span class="date">${passDate.date}</span><span class="timestamp-sep">·</span><span class="time">${passDate.time}</span></span>`
             : '<span class="metric-na">—</span>'}</td>
-          ${inherit('col-analysis')}
+          <td class="col-analysis" onclick="event.stopPropagation()">${renderAnalysisCell(parentRun, runStatus, firstPass, pass.analysis_cause_count)}</td>
           ${inherit('col-version')}
           ${metricCells}${visibleTraceMetrics.length > 0 ? '<td class="col-trace-separator"></td>' : ''}
           ${visibleSystemColumns.has('latency') ? latencyCell('col-latency', pass.avg_latency_ms, avgLatencyWinners) : ''}
@@ -3987,6 +4069,13 @@
         const passNumber = detail.dataset.passNumber;
         if (!passNumber) return;
         detail.addEventListener('click', event => {
+          const analysisLink = event.target.closest?.('.run-analysis-chip, .run-analysis-start');
+          if (analysisLink) {
+            event.preventDefault();
+            event.stopPropagation();
+            navigateTo(analysisLink.href);
+            return;
+          }
           event.stopPropagation();
           const filePath = decodeURIComponent(row.dataset.file || '');
           if (!filePath) return;
@@ -4319,8 +4408,8 @@
   // ═══════════════════════════════════════════════════
 
   function renderStatusBar() {
-    const total = state.flatRuns.length;
-    const filtered = state.filteredRuns.length;
+    const total = usesDashboardSummary() ? state.dashboardOverview.total_count : state.flatRuns.length;
+    const filtered = usesDashboardSummary() ? state.dashboardOverview.total_runs : state.filteredRuns.length;
     const countText = filtered === total ? `${total} runs` : `${filtered} of ${total} runs`;
 
     const hasFilters = state.quickFilter !== 'all'
@@ -4480,6 +4569,19 @@
   // ═══════════════════════════════════════════════════
 
   function render() {
+    if (state.dashboardRequestKey !== null) {
+      const filterKey = getTableFilterKey();
+      if (filterKey !== state.tableFilterKey) {
+        state.tableFilterKey = filterKey;
+        state.tablePage = 1;
+        state.focusedIndex = -1;
+      }
+      if (dashboardPageRequestKey() !== state.dashboardRequestKey) {
+        el('table-view')?.setAttribute('aria-busy', 'true');
+        fetchRuns();
+        return;
+      }
+    }
     // Re-populate dropdowns with applicable values for current filter state
     populateFilterDropdowns();
 
@@ -4490,7 +4592,7 @@
     const gridView = el('grid-view');
     const timelineView = el('timeline-view');
     const modelsView = el('models-view');
-    const selectionAvailable = !!state.runs && state.flatRuns.length > 0;
+    const selectionAvailable = !!state.runs && (usesDashboardSummary() ? state.dashboardOverview.total_count > 0 : state.flatRuns.length > 0);
 
     if (!selectionAvailable) {
       state.selectMode = false;
@@ -4536,7 +4638,17 @@
       state.focusedIndex = -1;
     }
 
-    if (state.flatRuns.length === 0) {
+    if (usesDashboardSummary() && state.dashboardOverview.freshness?.updating && state.dashboardOverview.total_count === 0) {
+      loading.innerHTML = '<span>Preparing run history…</span>';
+      loading.style.display = 'flex';
+      empty.style.display = 'none';
+      if (tableView) tableView.style.display = 'none';
+      if (chartsView) chartsView.style.display = 'none';
+      if (modelsView) modelsView.style.display = 'none';
+      return;
+    }
+
+    if (usesDashboardSummary() ? state.dashboardOverview.total_count === 0 : state.flatRuns.length === 0) {
       const tbody = el('runs-tbody');
       if (tbody) tbody.innerHTML = '';
       renderTablePagination({ totalRuns: 0, pageCount: 1, start: 0, end: 0 });
@@ -4558,7 +4670,7 @@
     empty.style.display = 'none';
 
     // Recompute chart data before rendering display controls; grouped column visibility is chart-mode dependent.
-    state.chartData = computeChartData(state.filteredRuns);
+    if (!usesDashboardSummary()) state.chartData = computeChartData(state.filteredRuns);
 
     const metricSourceRuns = state.filteredRuns.length > 0 ? state.filteredRuns : state.flatRuns;
     const availableMetrics = getAvailableMetricsForRuns(metricSourceRuns);
@@ -4671,10 +4783,22 @@
     const modelsRanking = el('models-ranking');
     const modelsStatVisibilityWrapper = el('models-stat-visibility-wrapper');
 
-    // Populate dropdowns if not already populated
-    populateModelsViewDropdowns();
-
     const mvs = state.modelsViewState;
+    const renderToken = (mvs.renderToken || 0) + 1;
+    const scopeKey = getTableFilterKey();
+    mvs.renderToken = renderToken;
+    let candidates = null;
+    if (usesDashboardSummary()) {
+      try {
+        candidates = await fetchModelCandidates();
+      } catch (error) {
+        if (mvs.renderToken === renderToken && getTableFilterKey() === scopeKey) showModelsLoadError(error);
+        return;
+      }
+      if (mvs.renderToken !== renderToken || getTableFilterKey() !== scopeKey) return;
+      mvs.candidates = candidates;
+    }
+    populateModelsViewDropdowns();
 
     // Use global filters for task and dataset
     // Models view requires exactly one task and one dataset.
@@ -4685,8 +4809,8 @@
     let selectedDataset = state.filterDatasets.size === 1 && !state.filterDatasets.has('__none__') ? [...state.filterDatasets][0] : '';
 
     if (!selectedTask || !selectedDataset) {
-      const uniqueTasks = new Set(state.filteredRuns.map(r => r.task_name));
-      const uniqueDatasets = new Set(state.filteredRuns.map(r => getRunDatasetKey(r)));
+      const uniqueTasks = new Set(candidates ? candidates.scope.tasks : state.filteredRuns.map(r => r.task_name));
+      const uniqueDatasets = new Set(candidates ? candidates.scope.datasets : state.filteredRuns.map(r => getRunDatasetKey(r)));
       if (!selectedTask && uniqueTasks.size === 1) selectedTask = [...uniqueTasks][0];
       if (!selectedDataset && uniqueDatasets.size === 1) selectedDataset = [...uniqueDatasets][0];
     }
@@ -4704,7 +4828,7 @@
 
     // Start from the globally filtered run set so version, model, status, user,
     // and quick-date filters all constrain the Models view consistently.
-    const matchingRuns = state.filteredRuns.filter(r => {
+    const matchingRuns = (candidates ? candidates.rows : state.filteredRuns).filter(r => {
       if (!matchesFilterSelection(new Set([selectedTask]), r.task_name)) return false;
       if (!matchesFilterSelection(new Set([selectedDataset]), getRunDatasetKey(r))) return false;
       return true;
@@ -4718,7 +4842,7 @@
     }
 
     // Group runs by model
-    const runsByModel = {};
+    const runsByModel = Object.create(null);
     for (const run of matchingRuns) {
       const modelKey = getRunModelKey(run);
       if (!runsByModel[modelKey]) {
@@ -4751,6 +4875,13 @@
 
     // Detect if metric is boolean
     detectModelsViewMetricType(matchingRuns, mvs.selectedMetric);
+    const globalMetric = candidates?.metric_summary?.[mvs.selectedMetric];
+    if (globalMetric) {
+      mvs.metricIsBoolean = !!globalMetric.is_boolean;
+      mvs.metricIsNumeric = !!globalMetric.is_numeric;
+      const thresholdRow = el('models-threshold-row');
+      if (thresholdRow) thresholdRow.style.display = (mvs.metricIsBoolean || mvs.metricIsNumeric) ? 'none' : 'inline-flex';
+    }
     populateModelsStatVisibility(matchingRuns);
 
     const models = Object.keys(runsByModel);
@@ -4761,6 +4892,8 @@
     });
     const traceSourceRuns = modelSelections.flatMap(({ selectedRuns }) => selectedRuns);
     const requestKey = [
+      String(candidates?.filtered_revision ?? candidates?.revision ?? state.dashboardOverview?.revision ?? ''),
+      getTableFilterKey(),
       selectedTask,
       selectedDataset,
       mvs.selectedMetric,
@@ -4784,21 +4917,32 @@
     // Show loading state only when the Models payload actually needs to change.
     if (modelsGrid) modelsGrid.innerHTML = '<div class="models-loading"><img src="/static/qym_icon.png" alt="" class="loading-icon" /><span>Loading run data...</span></div>';
 
-    const renderToken = (mvs.renderToken || 0) + 1;
-    mvs.renderToken = renderToken;
-
     let combinedRunsPromise = null;
     if (mvs.inFlightRequestKey === requestKey && mvs.inFlightRequestPromise) {
       combinedRunsPromise = mvs.inFlightRequestPromise;
     } else {
       const allSelectedPaths = Array.from(new Set(modelSelections.flatMap(({ selectedPaths }) => selectedPaths)));
-      combinedRunsPromise = fetchModelRunsData(allSelectedPaths);
+      const selectedRows = modelSelections.flatMap(({ selectedRuns }) => selectedRuns);
+      const selectedRevision = selectedRows.every(run => run._revision !== undefined)
+        ? JSON.stringify(selectedRows.map(run => [run.file_path, run._revision]).sort((a, b) => a[0].localeCompare(b[0])))
+        : candidates?.selected_revision ?? candidates?.revision;
+      combinedRunsPromise = fetchModelRunsData(allSelectedPaths, selectedRevision);
       mvs.inFlightRequestKey = requestKey;
       mvs.inFlightRequestPromise = combinedRunsPromise;
     }
 
-    const comparePayload = await combinedRunsPromise;
-    if (mvs.renderToken !== renderToken) return;
+    let comparePayload;
+    try {
+      comparePayload = await combinedRunsPromise;
+    } catch (error) {
+      if (mvs.inFlightRequestKey === requestKey) {
+        mvs.inFlightRequestKey = '';
+        mvs.inFlightRequestPromise = null;
+      }
+      if (mvs.renderToken === renderToken && getTableFilterKey() === scopeKey) showModelsLoadError(error);
+      return;
+    }
+    if (mvs.renderToken !== renderToken || getTableFilterKey() !== scopeKey) return;
     if (mvs.inFlightRequestKey === requestKey) {
       mvs.inFlightRequestKey = '';
       mvs.inFlightRequestPromise = null;
@@ -4817,7 +4961,7 @@
       mvs.modelStats[model] = calculateModelStatsFromItems(detailedData, mvs.selectedMetric, mvs.threshold, mvs.metricIsBoolean);
       mvs.modelStats[model].traceAverages = calculateModelTraceStats(selectedRuns);
       mvs.modelStats[model].totalRetries = selectedRuns.reduce((sum, run) => sum + Number(run.total_retries || 0), 0);
-      mvs.modelStats[model].totalAvailable = runsByModel[model].length;
+      mvs.modelStats[model].totalAvailable = candidates?.totals?.[model] ?? runsByModel[model].length;
       mvs.modelStats[model].selectedCount = selectedRuns.length;
       mvs.modelStats[model].selectedPaths = selectedPaths;
     });
@@ -4840,9 +4984,10 @@
     let currentTask = state.filterTasks.size === 1 && !state.filterTasks.has('__none__') ? [...state.filterTasks][0] : '';
     let currentDataset = state.filterDatasets.size === 1 && !state.filterDatasets.has('__none__') ? [...state.filterDatasets][0] : '';
 
+    const candidates = usesDashboardSummary() ? state.modelsViewState.candidates : null;
     if (!currentTask || !currentDataset) {
-      const uniqueTasks = new Set(state.filteredRuns.map(r => r.task_name));
-      const uniqueDatasets = new Set(state.filteredRuns.map(r => getRunDatasetKey(r)));
+      const uniqueTasks = new Set(candidates ? candidates.scope.tasks : state.filteredRuns.map(r => r.task_name));
+      const uniqueDatasets = new Set(candidates ? candidates.scope.datasets : state.filteredRuns.map(r => getRunDatasetKey(r)));
       if (!currentTask && uniqueTasks.size === 1) currentTask = [...uniqueTasks][0];
       if (!currentDataset && uniqueDatasets.size === 1) currentDataset = [...uniqueDatasets][0];
     }
@@ -4851,7 +4996,7 @@
     const runsForCombo = currentTask && currentDataset
       ? state.filteredRuns.filter(r => r.task_name === currentTask && getRunDatasetKey(r) === currentDataset)
       : [];
-    const metricsSet = new Set();
+    const metricsSet = new Set(currentTask && currentDataset && candidates ? candidates.metrics : []);
     for (const run of runsForCombo) {
       if (run.metrics) {
         run.metrics.forEach(m => metricsSet.add(m));
@@ -4860,7 +5005,7 @@
     const metrics = [...metricsSet].sort();
     const currentMetric = state.modelsViewState.selectedMetric;
     metricSelect.innerHTML = '<option value="">Select a metric...</option>' +
-      metrics.map(m => `<option value="${m}" ${m === currentMetric ? 'selected' : ''}>${m}</option>`).join('');
+      metrics.map(m => `<option value="${escapeHtml(m)}" ${m === currentMetric ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('');
 
     // Auto-select first metric if none selected or current metric not in list
     if ((!currentMetric || !metrics.includes(currentMetric)) && metrics.length > 0) {
@@ -4883,29 +5028,80 @@
     }
   }
 
-  // Cache for fetched Models run data to avoid re-fetching
-  const modelsRunDataCache = {};
+  function showModelsLoadError(error) {
+    const grid = el('models-grid');
+    if (grid) {
+      grid.innerHTML = `<div class="models-empty" role="alert"><h3>Could not load models</h3><p>${escapeHtml(error.message || 'Please retry.')}</p><button type="button" class="btn btn-secondary" id="models-load-retry">Retry</button></div>`;
+      el('models-load-retry')?.addEventListener('click', () => renderModelsView());
+    }
+    if (el('models-empty')) el('models-empty').style.display = 'none';
+    if (el('models-ranking')) el('models-ranking').style.display = 'none';
+  }
 
-  async function fetchModelRunsData(filePaths) {
+  // Keep only the current candidate scope and current detailed selection.
+  let modelCandidatesCache = null;
+  async function fetchModelCandidates() {
+    const mvs = state.modelsViewState;
+    const payload = {
+      project_slug: state.currentProject?.slug || getProjectSlugFromPath() || '',
+      filters: dashboardFilters(), k: parseInt(mvs.globalK) || 5,
+      selected: mvs.modelRunSelections,
+    };
+    const key = [getProjectSlugFromPath(), getTableFilterKey(), mvs.globalK,
+      JSON.stringify(mvs.modelRunSelections), state.dashboardOverview?.filtered_revision ?? state.dashboardOverview?.revision].join('|');
+    if (modelCandidatesCache?.key === key) return modelCandidatesCache.promise;
+    const entry = { key, promise: null };
+    entry.promise = (async () => {
+      const data = await dashboardQuery('models', payload);
+      if (!Array.isArray(data.models) || !data.scope) throw new Error('Incomplete model candidates response');
+      const rows = [];
+      const totals = Object.create(null);
+      for (const model of data.models) {
+        const grouped = {};
+        for (const run of model.rows || []) {
+          const task = grouped[run.task_name] ||= {};
+          (task[run.model_name || ''] ||= []).push(run);
+        }
+        const flattened = flattenRuns({ tasks: grouped }).runs;
+        const key = model.model_key || model.model_name || getRunModelKey(flattened[0]);
+        flattened.forEach(run => { run.model_key = key; });
+        rows.push(...flattened);
+        totals[key] = Number(model.total_runs || 0);
+      }
+      return { ...data, rows, totals };
+    })();
+    modelCandidatesCache = entry;
+    entry.promise.catch(() => { if (modelCandidatesCache === entry) modelCandidatesCache = null; });
+    return entry.promise;
+  }
+
+  // Cache for fetched Models run data to avoid re-fetching
+  let modelsRunDataCache = null;
+
+  async function fetchModelRunsData(filePaths, revision = state.dashboardOverview?.revision) {
     if (filePaths.length === 0) return { runs: [], cacheHit: true };
 
     // Check cache first
-    const cacheKey = filePaths.sort().join('|');
-    if (modelsRunDataCache[cacheKey]) {
-      return { runs: modelsRunDataCache[cacheKey], cacheHit: true };
-    }
-
-    try {
-      const params = filePaths.map(f => `files=${encodeURIComponent(f)}`).join('&');
-      const response = await fetch(apiUrl(`api/models/runs?${params}`));
-      if (!response.ok) throw new Error('Failed to fetch run data');
-      const data = await response.json();
-      modelsRunDataCache[cacheKey] = data.runs || [];
-      return { runs: data.runs || [], cacheHit: false };
-    } catch (error) {
-      console.error('Error fetching model runs data:', error);
-      return { runs: [], cacheHit: false };
-    }
+    const paths = [...new Set(filePaths)].sort();
+    const cacheKey = [getProjectSlugFromPath(), revision, ...paths].join('|');
+    if (modelsRunDataCache?.key === cacheKey) return modelsRunDataCache.promise;
+    const entry = { key: cacheKey, promise: null };
+    entry.promise = (async () => {
+      const runs = [];
+      for (let offset = 0; offset < paths.length; offset += 100) {
+        const batch = paths.slice(offset, offset + 100);
+        const params = batch.map(f => `files=${encodeURIComponent(f)}`).join('&');
+        const response = await fetch(apiUrl(`api/models/runs?${params}`));
+        if (!response.ok) throw new Error(`Could not load selected runs (HTTP ${response.status})`);
+        const data = await response.json();
+        if (!Array.isArray(data.runs) || data.runs.length !== batch.length) throw new Error('Some selected runs are no longer available. Refresh the model selection.');
+        runs.push(...data.runs);
+      }
+      return { runs, cacheHit: false };
+    })();
+    modelsRunDataCache = entry;
+    entry.promise.catch(() => { if (modelsRunDataCache === entry) modelsRunDataCache = null; });
+    return entry.promise;
   }
 
   function calculateModelStatsFromItems(runsData, metricName, threshold, isBoolean) {
@@ -5242,7 +5438,118 @@
     `;
   }
 
+  let modelRunSelectionToken = 0;
+  function openPagedModelRunSelection(modelName, allRuns) {
+    const modal = el('run-selection-modal');
+    const listEl = el('run-selection-list');
+    const oldConfirm = el('confirm-run-selection-btn');
+    if (!modal || !listEl || !oldConfirm) return;
+    const mvs = state.modelsViewState;
+    const globalK = parseInt(mvs.globalK) || 5;
+    const selected = new Set(mvs.modelStats[modelName]?.selectedPaths || allRuns.slice(0, globalK).map(run => run.file_path));
+    const scope = mvs.candidates?.scope;
+    const filters = { ...dashboardFilters(), models: [modelName] };
+    if (scope?.tasks?.length === 1) filters.tasks = scope.tasks;
+    if (scope?.datasets?.length === 1) filters.datasets = scope.datasets;
+    const modalToken = ++modelRunSelectionToken;
+    let pageToken = 0;
+    let pageNumber = 1;
+    let total = Number(mvs.modelStats[modelName]?.totalAvailable || allRuns.length);
+    const confirm = oldConfirm.cloneNode(true);
+    oldConfirm.parentNode.replaceChild(confirm, oldConfirm);
+    el('run-selection-model-name').innerHTML = renderModelLabelForModelName(modelName);
+    el('run-selection-model-name').title = getModelFilterOptionLabel(modelName);
+    modal.style.display = 'flex';
+
+    const updateCounter = () => {
+      const counter = listEl.querySelector('#selection-count');
+      if (!counter) return;
+      counter.textContent = selected.size;
+      counter.parentElement.classList.toggle('at-limit', selected.size >= globalK);
+      counter.parentElement.classList.toggle('over-limit', selected.size > globalK);
+      const offPage = selected.size - listEl.querySelectorAll('input[type="checkbox"]:checked').length;
+      const hint = listEl.querySelector('[data-selection-offpage]');
+      if (hint) hint.textContent = offPage ? `${offPage} selected on other pages` : '';
+    };
+
+    async function loadPage(nextPage) {
+      const token = ++pageToken;
+      pageNumber = Math.max(1, nextPage);
+      const offset = (pageNumber - 1) * TABLE_PAGE_SIZE;
+      listEl.innerHTML = '<div class="models-loading" role="status">Loading runs...</div>';
+      confirm.disabled = true;
+      const payload = {
+        project_slug: state.currentProject?.slug || getProjectSlugFromPath() || '',
+        filters, sort: 'time-desc', limit: TABLE_PAGE_SIZE, offset, include_config_groups: true,
+      };
+      try {
+        const data = await dashboardQuery('runs', payload);
+        if (modalToken !== modelRunSelectionToken || token !== pageToken || modal.style.display === 'none') return;
+        total = Number(data.total_runs || 0);
+        if (offset >= total && offset > 0) { loadPage(Math.max(1, Math.ceil(total / TABLE_PAGE_SIZE))); return; }
+        const runs = flattenRuns({ tasks: data.tasks || {} }).runs;
+        const groupSummaries = new Map((data.config_groups || []).map(group => [group.key, group]));
+        const configGroups = new Map();
+        for (const run of runs) {
+          const key = run.config_group_key || computeRunConfigGroupKey(run) || '__ungrouped__';
+          if (!configGroups.has(key)) configGroups.set(key, []);
+          configGroups.get(key).push(run);
+        }
+        const groupCount = groupSummaries.size || configGroups.size;
+        let html = '';
+        for (const [key, groupRuns] of configGroups) {
+          if (groupCount > 1 && key !== '__ungrouped__') {
+            const group = groupSummaries.get(key);
+            const label = group?.label || getRunDisplayName(groupRuns[0]);
+            html += `<div style="padding:6px 8px;font-size:var(--font-sm);color:var(--accent-primary);font-weight:600;border-bottom:1px solid var(--border-default);">${escapeHtml(label)} (${group?.total_runs ?? groupRuns.length} runs)</div>`;
+          }
+          for (const run of groupRuns) {
+            const isSelected = selected.has(run.file_path);
+            const score = run.metric_averages?.[mvs.selectedMetric];
+            const metricType = mvs.metricIsNumeric ? 'numeric' : 'score';
+            const scoreClass = score !== undefined ? window.QymMetrics.getMetricColorClass(score, metricType) : '';
+            const scoreDisplay = score !== undefined ? window.QymMetrics.formatMetricValue(score, metricType) : '';
+            const runDisplayName = getRunDisplayName(run);
+            html += `<label class="run-selection-item ${isSelected ? 'selected' : ''}">
+              <input type="checkbox" data-file="${escapeHtml(run.file_path)}" ${isSelected ? 'checked' : ''} />
+              <div class="run-info"><div class="run-name" title="${escapeHtml(runDisplayName)}">${escapeHtml(runDisplayName)}</div><div class="run-date">${formatDate(run.timestamp).full}</div></div>
+              ${score !== undefined ? `<span class="run-score ${scoreClass}">${scoreDisplay}</span>` : ''}
+            </label>`;
+          }
+        }
+        listEl.innerHTML = `<div class="run-selection-header"><span class="selection-counter"><span id="selection-count">${selected.size}</span> / ${globalK} selected</span>${groupCount > 1 ? `<span>${groupCount} config groups</span>` : ''}<span data-selection-offpage></span></div><div class="run-selection-items">${html || '<p>No runs match these filters.</p>'}</div><div data-selection-pagination></div>`;
+        listEl.querySelectorAll('input[type="checkbox"]').forEach(checkbox => checkbox.addEventListener('change', () => {
+          if (checkbox.checked && selected.size >= globalK) { checkbox.checked = false; return; }
+          if (checkbox.checked) selected.add(checkbox.dataset.file);
+          else selected.delete(checkbox.dataset.file);
+          checkbox.closest('.run-selection-item').classList.toggle('selected', checkbox.checked);
+          updateCounter();
+        }));
+        updateCounter();
+        window.QymUIComponents.renderPagination(listEl.querySelector('[data-selection-pagination]'), {
+          page: pageNumber, pageCount: Math.max(1, Math.ceil(total / TABLE_PAGE_SIZE)), pageSize: TABLE_PAGE_SIZE,
+          total, start: total ? offset + 1 : 0, end: Math.min(offset + TABLE_PAGE_SIZE, total), noun: 'runs',
+          onPageChange: next => loadPage(next),
+        });
+        confirm.disabled = false;
+      } catch (error) {
+        if (modalToken !== modelRunSelectionToken || token !== pageToken || modal.style.display === 'none') return;
+        listEl.innerHTML = `<div role="alert"><p>${escapeHtml(error.message)}</p><button type="button" class="btn btn-secondary" data-selection-retry>Retry</button></div>`;
+        listEl.querySelector('[data-selection-retry]').addEventListener('click', () => loadPage(pageNumber));
+      }
+    }
+    confirm.addEventListener('click', () => {
+      if (selected.size) mvs.modelRunSelections[modelName] = [...selected];
+      else delete mvs.modelRunSelections[modelName];
+      modal.style.display = 'none';
+      modelRunSelectionToken++;
+      renderModelsView();
+    });
+    loadPage(1);
+  }
+
   function openRunSelectionModal(modelName, allRuns) {
+    if (usesDashboardSummary()) { openPagedModelRunSelection(modelName, allRuns); return; }
     const modal = el('run-selection-modal');
     const modelNameEl = el('run-selection-model-name');
     const listEl = el('run-selection-list');
@@ -5493,6 +5800,12 @@
   }
 
   function openRun(filePath, e) {
+    const run = state.flatRuns.find(candidate => candidate.file_path === filePath);
+    if (analysisRunPickerContext && run) {
+      analysisRunPickerContext = false;
+      openUrl(analyzerUrlForRun(run), e);
+      return;
+    }
     sessionStorage.removeItem('compareRuns');
     sessionStorage.removeItem('compareCohorts');
     sessionStorage.setItem('dashboardRunFile', filePath);
@@ -5860,7 +6173,7 @@
 
   function moveFocus(delta) {
     const newIdx = state.focusedIndex + delta;
-    if (newIdx >= 0 && newIdx < state.filteredRuns.length) {
+    if (newIdx >= 0 && newIdx < (usesDashboardPage() ? state.dashboardPage.total_runs : state.filteredRuns.length)) {
       state.focusedIndex = newIdx;
       setTablePage(Math.floor(newIdx / TABLE_PAGE_SIZE) + 1);
       render();
@@ -5874,15 +6187,17 @@
   }
 
   function openFocusedRun() {
-    if (state.focusedIndex >= 0 && state.focusedIndex < state.filteredRuns.length) {
-      const run = state.filteredRuns[state.focusedIndex];
+    if (state.focusedIndex >= 0 && state.focusedIndex < (usesDashboardPage() ? state.dashboardPage.total_runs : state.filteredRuns.length)) {
+      const run = state.filteredRuns[state.focusedIndex - (usesDashboardPage() ? state.dashboardPage.offset : 0)];
+      if (!run) return;
       openRun(run.file_path);
     }
   }
 
   function toggleFocusedSelect() {
-    if (state.focusedIndex >= 0 && state.focusedIndex < state.filteredRuns.length) {
-      const run = state.filteredRuns[state.focusedIndex];
+    if (state.focusedIndex >= 0 && state.focusedIndex < (usesDashboardPage() ? state.dashboardPage.total_runs : state.filteredRuns.length)) {
+      const run = state.filteredRuns[state.focusedIndex - (usesDashboardPage() ? state.dashboardPage.offset : 0)];
+      if (!run) return;
       toggleSelect(run.file_path);
     }
   }
@@ -5892,6 +6207,8 @@
   // ═══════════════════════════════════════════════════
 
   const PAGE_SIZE = 100;
+  // Bounds in-flight page requests without bounding how many are fetched.
+  const PAGE_CONCURRENCY = 3;
   const LIVE_REFRESH_INTERVAL_MS = 15000;
   const IDLE_REFRESH_INTERVAL_MS = 60000;
   const FULL_REFRESH_STALE_MS = 5 * 60 * 1000;
@@ -5942,16 +6259,19 @@
   }
 
   function saveRunsDataCache(data) {
+    if (usesDashboardSummary() || state.dashboardBackfilling) return;
     try {
-      const payload = {
-        saved_at: Date.now(),
-        data: _cloneRunsData(data),
-      };
-      sessionStorage.setItem(getRunsCacheKey(), JSON.stringify(payload));
+      // JSON.stringify already snapshots the payload, so the extra
+      // _cloneRunsData round trip only doubled the peak for no benefit.
+      sessionStorage.setItem(
+        getRunsCacheKey(),
+        JSON.stringify({ saved_at: Date.now(), data }),
+      );
     } catch {}
   }
 
   function restoreRunsDataCache(maxAgeMs = 15 * 60 * 1000) {
+    if (['table', 'charts', 'models'].includes(state.currentView)) return false;
     try {
       const raw = sessionStorage.getItem(getRunsCacheKey());
       if (!raw) return false;
@@ -6022,12 +6342,12 @@
       currentVersionKeys.forEach(v => state.knownVersions.add(v));
     }
     state.flatRuns = runs;
-    state.allMetrics = metrics;
-    state._metricTypes = metricTypes;
+    state.allMetrics = usesDashboardSummary() ? (state.dashboardOverview.all_metrics || state.dashboardOverview.metrics || []) : metrics;
+    state._metricTypes = usesDashboardSummary() ? (state.dashboardOverview.metric_types || {}) : metricTypes;
     loadMetricVisibility();
     updateProfileLink();
-    state.aggregations = computeAggregations(state.flatRuns);
-    state.chartData = computeChartData(state.flatRuns);
+    state.aggregations = usesDashboardSummary() ? state.dashboardOverview.aggregations : computeAggregations(state.flatRuns);
+    state.chartData = usesDashboardSummary() ? buildDashboardChartData() : computeChartData(state.flatRuns);
     saveRunsDataCache(data);
     populateFilterDropdowns();
     populateMetricVisibility();
@@ -6036,26 +6356,33 @@
   }
 
   async function _fetchRemainingPages(data, totalCount) {
-    // Fetch remaining pages in the background and merge into state
+    // Fetch remaining pages in the background and merge into state.  Every page
+    // is still fetched -- nothing is capped or dropped -- but a fixed worker
+    // pool bounds how many are in flight, and each page is merged as it lands
+    // instead of every response being retained until the last one resolves.
     const fetched = PAGE_SIZE; // first page already loaded
     if (fetched >= totalCount) return;
 
-    const pagePromises = [];
-    const projectSlug = state.currentProject && state.currentProject.slug ? `&project_slug=${encodeURIComponent(state.currentProject.slug)}` : '';
+    const offsets = [];
     for (let offset = fetched; offset < totalCount; offset += PAGE_SIZE) {
-      pagePromises.push(
-        fetch(apiUrl(`api/runs?limit=${PAGE_SIZE}&offset=${offset}${projectSlug}`))
+      offsets.push(offset);
+    }
+
+    const projectSlug = state.currentProject && state.currentProject.slug ? `&project_slug=${encodeURIComponent(state.currentProject.slug)}` : '';
+    let cursor = 0;
+    const drainPages = async () => {
+      while (cursor < offsets.length) {
+        if (!dashboardActive) return;
+        const offset = offsets[cursor++];
+        const page = await fetch(apiUrl(`api/runs?limit=${PAGE_SIZE}&offset=${offset}&include_total=false${projectSlug}`))
           .then(r => r.ok ? r.json() : null)
-          .catch(() => null)
-      );
-    }
+          .catch(() => null);
+        if (page) _mergeTasksData(data, page);
+      }
+    };
 
-    const pages = await Promise.all(pagePromises);
+    await Promise.all(Array.from({ length: PAGE_CONCURRENCY }, drainPages));
     if (!dashboardActive) return;
-
-    for (const page of pages) {
-      if (page) _mergeTasksData(data, page);
-    }
 
     // Re-apply with full data
     _applyRunsData(data);
@@ -6257,6 +6584,363 @@
     return false;
   }
 
+  function usesDashboardSummary() {
+    return !!state.dashboardOverview;
+  }
+
+  function usesDashboardPage() {
+    return state.currentView === 'table' && !!state.dashboardPage;
+  }
+
+  function dashboardFilters(now = new Date()) {
+    const filters = {
+      tasks: [...state.filterTasks], models: [...state.filterModels],
+      datasets: [...state.filterDatasets], statuses: [...state.filterStatuses],
+      versions: [...state.filterVersions], users: [...state.filterUsers],
+    };
+    if (state.quickFilter === 'today') {
+      const start = new Date(now);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 1);
+      filters.since = start.toISOString();
+      filters.until = end.toISOString();
+    } else if (state.quickFilter === 'week') {
+      const start = new Date(now);
+      start.setDate(start.getDate() - 7);
+      filters.since = start.toISOString();
+    }
+    return filters;
+  }
+
+  function dashboardPageRequestKey() {
+    return [getProjectSlugFromPath(), state.currentView, getTableFilterKey(), state.sortKey, state.tablePage].join('|');
+  }
+
+  function buildDashboardChartData() {
+    const source = state.dashboardOverview?.chart_data;
+    if (!source) return { combos: [], tasks: [], models: [], metrics: [] };
+    const combos = (source.combos || []).map(combo => {
+      const entry = state.chartHistory.get(JSON.stringify([combo.task, combo.dataset]));
+      if (entry?.status !== 'ready') return combo;
+      const orderedRows = entry.rows.slice();
+      sortRuns(orderedRows);
+      const detail = computeChartData(orderedRows).combos[0];
+      return detail ? { ...detail, totalRuns: combo.totalRuns } : combo;
+    });
+    const byKey = new Map(combos.map(combo => [JSON.stringify([combo.task, combo.dataset]), combo]));
+    const models = (source.models || []).slice().sort((a, b) =>
+      (source.model_frequency?.[b] || 0) - (source.model_frequency?.[a] || 0) || compareModelVariantKeys(a, b)
+    );
+    return { ...source, models, modelIndex: Object.fromEntries(models.map((model, index) => [model, index])), combos, tasks: (source.tasks || []).map(task => ({
+      ...task, datasets: task.datasets.map(combo => byKey.get(JSON.stringify([combo.task, combo.dataset])) || combo),
+    })) };
+  }
+
+  async function fetchDashboardChartOverview() {
+    const key = dashboardPageRequestKey();
+    const overview = await dashboardQuery('overview', {
+      project_slug: state.currentProject?.slug || getProjectSlugFromPath() || '',
+      filters: dashboardFilters(), sort: state.sortKey, collation: dashboardCollation(state.dashboardOverview, state.sortKey),
+    });
+    if (overview.freshness?.backfilling) {
+      await fetchDashboardBackfill(key);
+      return;
+    }
+    if (!dashboardActive || key !== dashboardPageRequestKey()) { queueRunsFetch({}); return; }
+    const revisions = new Map((overview.chart_data?.combos || []).map(combo => [JSON.stringify([combo.task, combo.dataset]), combo.revision]));
+    const previousRevisions = new Map((state.dashboardOverview?.chart_data?.combos || []).map(combo => [JSON.stringify([combo.task, combo.dataset]), combo.revision]));
+    for (const [historyKey, entry] of state.chartHistory) {
+      if (key !== state.dashboardRequestKey || !revisions.has(historyKey) || revisions.get(historyKey) !== previousRevisions.get(historyKey)) {
+        entry.controller?.abort();
+        state.chartHistory.delete(historyKey);
+      }
+    }
+    state.chartHistoryQueue = state.chartHistoryQueue.filter(entry => !entry.controller.signal.aborted);
+    state.dashboardBackfilling = false;
+    state.dashboardOverview = overview;
+    state.dashboardOverviewFilterKey = getTableFilterKey();
+    state.dashboardRequestKey = key;
+    state.tableFilterKey = getTableFilterKey();
+    state.runsFetchMeta.totalCount = overview.total_count;
+    const tasks = {};
+    for (const entry of state.chartHistory.values()) if (entry.status === 'ready') {
+      for (const row of entry.rows) ((tasks[row.task_name] ||= {})[row.model_name || ''] ||= []).push(row);
+    }
+    _applyRunsData({ tasks, project: state.currentProject, total_count: overview.total_count });
+  }
+
+  function observeChartHistory() {
+    state.chartHistoryObserver?.disconnect();
+    if (!usesDashboardSummary()) return;
+    const enqueue = node => {
+      const key = decodeURIComponent(node.dataset.chartHistory);
+      if (state.chartHistory.has(key)) return;
+      const entry = { status: 'queued', controller: new AbortController(), rows: [], key };
+      state.chartHistory.set(key, entry);
+      state.chartHistoryQueue.push(entry);
+      drainChartHistory();
+    };
+    state.chartHistoryObserver = new IntersectionObserver(entries => {
+      for (const entry of entries) if (entry.isIntersecting) enqueue(entry.target);
+    }, { rootMargin: '200px' });
+    document.querySelectorAll('[data-chart-history]').forEach(node => state.chartHistoryObserver.observe(node));
+    document.querySelectorAll('[data-chart-history-retry]').forEach(button => button.addEventListener('click', () => {
+      const key = decodeURIComponent(button.dataset.chartHistoryRetry);
+      state.chartHistory.delete(key);
+      enqueue(button.closest('[data-chart-history]'));
+    }));
+  }
+
+  async function drainChartHistory() {
+    while (dashboardActive && state.chartHistoryActive < 2 && state.chartHistoryQueue.length) {
+      const entry = state.chartHistoryQueue.shift();
+      if (entry.controller.signal.aborted) continue;
+      state.chartHistoryActive++;
+      entry.status = 'loading';
+      const requestKey = state.dashboardRequestKey;
+      const [task, dataset] = JSON.parse(entry.key);
+      const params = {
+        project_slug: state.currentProject?.slug || getProjectSlugFromPath() || '',
+        filters: dashboardFilters(), task, dataset, limit: 500, offset: 0, sort: state.sortKey, collation: dashboardCollation(state.dashboardOverview, state.sortKey),
+      };
+      const run = async () => {
+        try {
+          let offset = 0;
+          while (true) {
+            params.offset = offset;
+            const data = await dashboardQuery('points', params, { signal: entry.controller.signal });
+            const rows = flattenRuns({ tasks: data.tasks || {} }).runs;
+            entry.rows.push(...rows);
+            offset += rows.length;
+            if (!data.has_more || rows.length === 0) break;
+          }
+          if (entry.controller.signal.aborted || requestKey !== state.dashboardRequestKey || state.chartHistory.get(entry.key) !== entry) return;
+          entry.status = 'ready';
+          // Keep complete points for the opened chart; unopened datasets are
+          // summary-only. Drop earlier datasets when switching a task's tab.
+          for (const [key, cached] of state.chartHistory) {
+            const [cachedTask, cachedDataset] = JSON.parse(key);
+            const active = state.chartDatasetTab[cachedTask] || state.dashboardOverview?.chart_data?.tasks?.find(t => t.task === cachedTask)?.datasets?.[0]?.dataset;
+            if (cachedDataset !== active) {
+              cached.controller?.abort();
+              state.chartHistory.delete(key);
+            }
+          }
+          state.flatRuns = Array.from(state.chartHistory.values()).filter(item => item.status === 'ready').flatMap(item => item.rows);
+          state.chartData = buildDashboardChartData();
+          render();
+        } catch (error) {
+          if (error.name === 'AbortError' || !dashboardActive || requestKey !== state.dashboardRequestKey) return;
+          entry.status = 'error';
+          render();
+        } finally {
+          state.chartHistoryActive--;
+          drainChartHistory();
+        }
+      };
+      run();
+    }
+  }
+
+  async function dashboardQuery(path, payload, options = {}) {
+    payload = { ...payload };
+    if (payload.collation == null) delete payload.collation;
+    const response = await fetch(apiUrl(`api/dashboard/${path}`), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload), ...options,
+    });
+    if (response.status === 401) {
+      if (dashboardActive) {
+        showAuthError();
+        teardownDashboard();
+      }
+      const error = new Error('Authentication required');
+      error.status = 401;
+      throw error;
+    }
+    if (response.status === 404) throw new Error('Project not found');
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+  }
+
+  function dashboardCollation(overview, sortKey) {
+    const field = sortKey.replace(/-(asc|desc)$/, '');
+    const column = { task: 'tasks', model: 'models', dataset: 'dataset_names', version: 'git_commits', owner: 'owner_names' }[field];
+    if (!column) return null;
+    return (overview?.sort_values?.[column] || []).slice().sort(
+      field === 'model' ? compareModelVariantKeys : (a, b) => String(a).localeCompare(String(b))
+    );
+  }
+
+  async function fetchDashboardBackfill(key, retry = true) {
+    // A migrating project's projection omits unfinished historical runs. Use
+    // the established source-backed view until its complete history is ready.
+    // Publish all pages together so totals, filters and charts stay complete.
+    const project = state.currentProject?.slug || getProjectSlugFromPath() || '';
+    const readPage = async offset => {
+      const response = await fetch(apiUrl(`api/runs?limit=${PAGE_SIZE}&offset=${offset}&include_total=${offset === 0}&project_slug=${encodeURIComponent(project)}`));
+      if (response.status === 401) {
+        if (dashboardActive) { showAuthError(); teardownDashboard(); }
+        throw new Error('Authentication required');
+      }
+      if (response.status === 404) throw new Error('Project not found');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    };
+    const data = await readPage(0);
+    const total = Number(data.total_count || 0);
+    let offset = PAGE_SIZE;
+    let failure = null;
+    const drain = async () => {
+      try {
+        while (!failure && dashboardActive && key === dashboardPageRequestKey() && offset < total) {
+          const next = offset;
+          offset += PAGE_SIZE;
+          _mergeTasksData(data, await readPage(next));
+        }
+      } catch (error) {
+        failure = error;
+      }
+    };
+    await Promise.all(Array.from({ length: PAGE_CONCURRENCY }, drain));
+    if (failure) throw failure;
+    if (!dashboardActive || key !== dashboardPageRequestKey()) {
+      if (dashboardActive) queueRunsFetch({});
+      return;
+    }
+    const rows = Object.values(data.tasks || {}).flatMap(models => Object.values(models).flat());
+    const ids = new Set(rows.map(row => row.run_id));
+    if (rows.length !== total || ids.size !== total) {
+      // Concurrent inserts/deletes can shift offset pages. Retry once rather
+      // than display missing runs or double-count duplicates in aggregates.
+      if (retry) return fetchDashboardBackfill(key, false);
+      throw new Error('Run history changed while loading');
+    }
+    // Clear any earlier partial projection only after a successful full read.
+    state.dashboardBackfilling = true;
+    state.dashboardOverview = null;
+    state.dashboardPage = null;
+    state.dashboardOverviewFilterKey = null;
+    for (const entry of state.chartHistory.values()) entry.controller?.abort();
+    state.chartHistory.clear();
+    state.chartHistoryQueue = [];
+    state.dashboardRequestKey = null;
+    state.runsFetchMeta.totalCount = total;
+    state.runsFetchMeta.hasLoadedAllPages = true;
+    el('table-view')?.setAttribute('aria-busy', 'false');
+    // The legacy response has identity only; keep the authorized project role.
+    data.project = { ...state.currentProject, ...(data.project || {}) };
+    _applyRunsData(data);
+    const updated = el('last-updated');
+    if (updated) { updated.textContent = 'Updating summaries…'; updated.setAttribute('role', 'status'); }
+    try { updateRunsRefreshCadence && updateRunsRefreshCadence(); } catch {}
+  }
+
+  async function fetchDashboardPage() {
+    const key = dashboardPageRequestKey();
+    const filterKey = getTableFilterKey();
+    const offset = (state.tablePage - 1) * TABLE_PAGE_SIZE;
+    const retainedIds = new Set([
+      ...state.selectedRuns, ...(state.cohortAnchorRuns || []),
+    ].map(passRefBase));
+    const retained = [...retainedIds];
+    const payload = {
+      project_slug: state.currentProject?.slug || getProjectSlugFromPath() || '',
+      filters: dashboardFilters(), sort: state.sortKey,
+      limit: TABLE_PAGE_SIZE, offset, ids: retained.slice(0, 100), include_overview: true,
+    };
+    let collation = dashboardCollation(state.dashboardOverview, state.sortKey);
+    if (collation !== null && state.dashboardOverviewFilterKey !== filterKey) {
+      const catalog = await dashboardQuery('overview', { project_slug: payload.project_slug, filters: payload.filters });
+      collation = dashboardCollation(catalog, state.sortKey);
+    }
+    if (collation !== null) payload.collation = collation;
+    let page = await dashboardQuery('runs', payload);
+    if (page.freshness?.backfilling) {
+      await fetchDashboardBackfill(key);
+      return;
+    }
+    let overview = page.overview;
+    const latestCollation = dashboardCollation(overview, state.sortKey);
+    if (latestCollation !== null && JSON.stringify(latestCollation) !== JSON.stringify(collation)) {
+      payload.collation = latestCollation;
+      page = await dashboardQuery('runs', payload);
+      overview = page.overview;
+    }
+    if (page.freshness?.backfilling) {
+      await fetchDashboardBackfill(key);
+      return;
+    }
+    const pinnedRows = [...(page.pinned_rows || [])];
+    // Additional requests follow only explicit retained selections, in batches.
+    for (let start = 100; start < retained.length; start += 100) {
+      const selected = await dashboardQuery('runs', {
+        ...payload, ids: retained.slice(start, start + 100), limit: 1, offset: 0, include_overview: false,
+      });
+      pinnedRows.push(...(selected.pinned_rows || []));
+    }
+    if (!dashboardActive || key !== dashboardPageRequestKey()) {
+      queueRunsFetch({});
+      return;
+    }
+    const total = Number(page.total_runs || 0);
+    if (offset >= total && offset > 0) {
+      state.tablePage = Math.max(1, Math.ceil(total / TABLE_PAGE_SIZE));
+      queueRunsFetch({});
+      return;
+    }
+    const pageData = { tasks: page.tasks || {}, project: page.project || state.currentProject, total_count: overview.total_count };
+    const normalizedRows = new Map(flattenRuns(pageData).runs.map(run => [run.file_path, run]));
+    // Task/model groups lose cross-group order. Keep the API's sorted rows,
+    // including its tie-breaking order, when applying display normalization.
+    const pageRows = page.rows.map(run => normalizedRows.get(run.file_path));
+    retainedIds.clear();
+    for (const ref of [...state.selectedRuns, ...(state.cohortAnchorRuns || [])]) retainedIds.add(passRefBase(ref));
+
+    for (const run of state.flatRuns) {
+      if (retainedIds.has(run.file_path)) state.dashboardPinnedRuns.set(run.file_path, run);
+    }
+    for (const id of state.dashboardPinnedRuns.keys()) {
+      if (!retainedIds.has(id)) state.dashboardPinnedRuns.delete(id);
+    }
+    for (const run of [...pinnedRows, ...pageRows]) {
+      if (retainedIds.has(run.file_path)) state.dashboardPinnedRuns.set(run.file_path, run);
+    }
+    if (!page.freshness?.updating) {
+      const found = new Set(pinnedRows.map(run => run.file_path));
+      for (const id of retained) if (retainedIds.has(id) && !found.has(id)) {
+        state.dashboardPinnedRuns.delete(id);
+        for (const ref of state.selectedRuns) if (passRefBase(ref) === id) state.selectedRuns.delete(ref);
+        if (state.cohortAnchorRuns) state.cohortAnchorRuns = state.cohortAnchorRuns.filter(ref => passRefBase(ref) !== id);
+      }
+    }
+    const mergedRows = new Map(pageRows.map(run => [run.file_path, run]));
+    for (const [id, run] of state.dashboardPinnedRuns) if (!mergedRows.has(id)) mergedRows.set(id, run);
+    const mergedTasks = {};
+    for (const run of mergedRows.values()) {
+      const models = mergedTasks[run.task_name] ||= {};
+      (models[run.model_name || ''] ||= []).push(run);
+    }
+    state.dashboardBackfilling = false;
+    state.dashboardOverview = overview;
+    state.dashboardOverviewFilterKey = filterKey;
+    state.dashboardPage = { ...page, total_runs: total, offset, rows: pageRows };
+    state.dashboardRequestKey = key;
+    state.tableFilterKey = filterKey;
+    state.runsFetchMeta.totalCount = overview.total_count;
+    state.runsFetchMeta.hasLoadedAllPages = false;
+    el('table-view')?.setAttribute('aria-busy', 'false');
+    _applyRunsData({ ...pageData, tasks: mergedTasks });
+    const freshness = page.freshness || overview.freshness;
+    const updated = el('last-updated');
+    if (updated && freshness?.updating) {
+      updated.textContent = 'Updating summaries…';
+      updated.setAttribute('role', 'status');
+    }
+    try { updateRunsRefreshCadence && updateRunsRefreshCadence(); } catch {}
+  }
+
   async function fetchRuns(options = {}) {
     if (!dashboardActive) return;
 
@@ -6293,6 +6977,14 @@
       }
 
       const projectSlug = state.currentProject && state.currentProject.slug ? `&project_slug=${encodeURIComponent(state.currentProject.slug)}` : '';
+      if (state.currentView === 'table') {
+        await fetchDashboardPage();
+        return;
+      }
+      if (state.currentView === 'charts' || state.currentView === 'models') {
+        await fetchDashboardChartOverview();
+        return;
+      }
       const runsResponse = await fetch(apiUrl(`api/runs?limit=${PAGE_SIZE}&offset=0${projectSlug}`));
 
       // Handle authentication errors
@@ -6563,11 +7255,12 @@
       return runs;
     }
 
-    const tasks = collectFilterValues(runsExcluding('tasks'), r => r.task_name);
-    const datasets = collectFilterValues(runsExcluding('datasets'), r => getRunDatasetKey(r));
-    const models = collectFilterValues(runsExcluding('models'), r => getRunModelKey(r)).sort(compareModelVariantKeys);
-    const statusValues = collectFilterValues(runsExcluding('statuses'), r => r.status);
-    const ownerValues = collectFilterValues(runsExcluding('users'), r => getRunOwnerKey(r));
+    const facets = usesDashboardSummary() ? state.dashboardOverview.facets : null;
+    const tasks = facets?.tasks || collectFilterValues(runsExcluding('tasks'), r => r.task_name);
+    const datasets = facets?.datasets || collectFilterValues(runsExcluding('datasets'), r => getRunDatasetKey(r));
+    const models = facets?.models || collectFilterValues(runsExcluding('models'), r => getRunModelKey(r)).sort(compareModelVariantKeys);
+    const statusValues = facets?.statuses || collectFilterValues(runsExcluding('statuses'), r => r.status);
+    const ownerValues = facets?.users || collectFilterValues(runsExcluding('users'), r => getRunOwnerKey(r));
     const owners = ownerValues
       .filter(v => v !== EMPTY_FILTER_VALUE)
       .sort((a, b) => getOwnerFilterLabel(a).localeCompare(getOwnerFilterLabel(b)))
@@ -6578,12 +7271,13 @@
       || state.filterModels.size > 0
       || state.filterStatuses.size > 0
       || state.filterUsers.size > 0;
-    const versionValues = collectFilterValues(runsExcluding('versions'), r => getRunVersionKey(r));
-    const versions = (!constrainingFiltersActive && state.knownVersions.size > versionValues.length)
+    const versionValues = facets?.versions || collectFilterValues(runsExcluding('versions'), r => getRunVersionKey(r));
+    const versions = (!facets && !constrainingFiltersActive && state.knownVersions.size > versionValues.length)
       ? Array.from(new Set([...versionValues, ...state.knownVersions])).sort()
       : versionValues;
 
-    state.allModels = [...new Set(state.flatRuns.map(r => getRunModelKey(r)).filter(m => !isEmptyFilterValue(m)))].sort(compareModelVariantKeys);
+    state.allModels = usesDashboardSummary() ? (state.dashboardOverview.all_models || []).slice().sort(compareModelVariantKeys)
+      : [...new Set(state.flatRuns.map(r => getRunModelKey(r)).filter(m => !isEmptyFilterValue(m)))].sort(compareModelVariantKeys);
 
     // Task multi-select
     buildMultiSelect({
@@ -6990,6 +7684,7 @@
       inFlightRequestPromise,
       inFlightRequestKey,
       renderToken,
+      candidates,
       ...serializableModelsViewState
     } = state.modelsViewState || {};
     const stateToSave = {
@@ -7024,6 +7719,7 @@
           restoredModelsViewState.inFlightRequestKey = '';
           restoredModelsViewState.inFlightRequestPromise = null;
           restoredModelsViewState.renderToken = 0;
+          restoredModelsViewState.candidates = null;
           if (restoredModelsViewState.visibleStatKeys !== null && !Array.isArray(restoredModelsViewState.visibleStatKeys)) {
             restoredModelsViewState.visibleStatKeys = null;
           }
@@ -7061,6 +7757,9 @@
   window.addEventListener('pagehide', saveDashboardState);
   function teardownDashboard() {
     dashboardActive = false;
+    state.chartHistoryObserver?.disconnect();
+    for (const entry of state.chartHistory.values()) entry.controller?.abort();
+    state.chartHistoryQueue.length = 0;
     saveDashboardState();
     state.runsFetchMeta.pendingOptions = null;
     if (window.__QYM_DASHBOARD_INTERVAL__) {
@@ -7134,7 +7833,9 @@
   function updateRunsRefreshCadence() {
     if (!dashboardActive) return;
     try {
-      const intervalMs = hasActiveRuns() ? LIVE_REFRESH_INTERVAL_MS : IDLE_REFRESH_INTERVAL_MS;
+      const intervalMs = state.dashboardBackfilling ? LIVE_REFRESH_INTERVAL_MS
+        : state.dashboardOverview?.freshness?.updating ? 2000
+        : (state.dashboardOverview?.has_active_runs || hasActiveRuns()) ? LIVE_REFRESH_INTERVAL_MS : IDLE_REFRESH_INTERVAL_MS;
       if (window.__QYM_DASHBOARD_INTERVAL__) clearInterval(window.__QYM_DASHBOARD_INTERVAL__);
       window.__QYM_DASHBOARD_INTERVAL__ = setInterval(fetchRuns, intervalMs);
     } catch {
