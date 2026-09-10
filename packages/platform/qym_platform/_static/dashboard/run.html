@@ -11,6 +11,7 @@
   <script src="/static/shell.js?v=ui-consistency-20260730-15"></script>
   <script src="/static/metrics.js"></script>
   <script src="/static/trace_viewer.js?v=merge-20260804-1"></script>
+  <script src="/static/step_latency.js?v=step-latency-33"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
     .run-container {
@@ -4973,6 +4974,9 @@
 
       <div id="metadata-breakdown"></div>
 
+      <!-- Step latency distributions -->
+      <div id="step-latency-panel" class="system-trace-row"></div>
+
       <div id="error-distribution-section"></div>
 
       <div id="root-cause-section"></div>
@@ -7825,6 +7829,15 @@
           '</div>' +
           (cards ? '<div class="metric-cards-grid">' + cards + '</div>' : '');
         deepSection.innerHTML = systemCards + intelligenceCharts;
+
+        try {
+          if (window.QymStepLatency) {
+            const slPanel = el('step-latency-panel');
+            if (slPanel) QymStepLatency.mount(slPanel, [RUN_ID]);
+          }
+        } catch (err) {
+          console.error('[step-latency] mount failed:', err);
+        }
 
         // ── Wire click handlers ──
         const grid = section;

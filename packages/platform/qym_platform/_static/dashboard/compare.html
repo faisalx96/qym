@@ -11,6 +11,7 @@
   <script src="./static/shell.js?v=ui-consistency-20260730-15"></script>
   <script src="./static/metrics.js"></script>
   <script src="./static/trace_viewer.js?v=merge-20260804-1"></script>
+  <script src="./static/step_latency.js?v=step-latency-33"></script>
   <script src="./static/playground.js?v=runs-analysis-c1-20260804-16"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
@@ -4961,6 +4962,9 @@
           <div class="stats-grid" id="stats-grid"></div>
         </div>
 
+        <!-- Step latency distributions (pooled across selected runs) -->
+        <div id="step-latency-panel"></div>
+
         <div id="error-distribution-section"></div>
 
         <div id="root-cause-section"></div>
@@ -7466,6 +7470,29 @@
         if (!Array.isArray(files) || files.length < 2) {
           showEmpty();
           return;
+        }
+
+        try {
+          if (window.QymStepLatency) {
+            const slPanel = document.getElementById('step-latency-panel');
+            // One lane per compared entry (pass refs included), or one lane
+            // per cohort when comparing sides — each cohort's runs pooled.
+            const slOpts = { pooled: true };
+            const slCohorts = state.explicitGroupedOutcomeGroups;
+            if (slCohorts
+                && (slCohorts.leftRunIds || []).length
+                && (slCohorts.rightRunIds || []).length) {
+              slOpts.cohorts = [
+                { label: slCohorts.modelALabel || 'Cohort A',
+                  runIds: slCohorts.leftRunIds },
+                { label: slCohorts.modelBLabel || 'Cohort B',
+                  runIds: slCohorts.rightRunIds },
+              ];
+            }
+            if (slPanel) QymStepLatency.mount(slPanel, files.map(String), slOpts);
+          }
+        } catch (err) {
+          console.error('[step-latency] mount failed:', err);
         }
 
         // Update URL to include run IDs for shareability
