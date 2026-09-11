@@ -12,7 +12,7 @@
   <script src="/static/metrics.js?v=metric-errors-20260907-3"></script>
   <script src="/static/run_details.js"></script>
   <script src="/static/trace_viewer.js?v=merge-20260804-1"></script>
-  <script src="/static/step_latency.js?v=step-latency-fixes-20260911-1"></script>
+  <script src="/static/step_latency.js?v=empty-sections-20260911-2"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
     .run-container {
@@ -544,6 +544,17 @@
       font-weight: 600;
       color: var(--text-primary);
       margin-bottom: var(--space-md);
+    }
+    #error-distribution-section:not(:empty) {
+      margin-top: var(--space-xl);
+    }
+    #overview-primary-section:empty,
+    #overview-deep-section:empty,
+    #samples-analysis-section:empty,
+    #metadata-breakdown:empty,
+    #error-distribution-section:empty,
+    #root-cause-section:empty {
+      display: none;
     }
     .overview-kpis {
       display: flex;
@@ -5534,6 +5545,7 @@
             <h3 class="section-title">Item-by-Item Detail</h3>
             <p class="qym-item-section-copy">Inspect each input, outcome, and metric result.</p>
           </div>
+          <button type="button" class="auto-analyze-btn" id="items-auto-analyze-btn" style="display:none;" title="AI-powered root cause analysis"><span class="ai-icon">&#129302;</span> Auto-Analyze</button>
         </div>
         <div class="filter-panel qym-item-control-center">
           <div class="qym-item-toolbar">
@@ -7148,7 +7160,9 @@
 
         // Same finished tile component used by the Models summary cards.
         function statTile(title, value, tooltip, options = {}) {
+          if (!Number.isFinite(value)) return '';
           const scoreEncoded = options.scoreEncoded !== false;
+          if (scoreEncoded && g.total_items === 0) return '';
           const cls = options.valueClass || ((scoreEncoded && typeof value === 'number') ? getSuccessClass(value) : '');
           const display = options.format ? options.format(value) : fp(value);
           return '<div class="model-stat-box qym-stat-strip__item">' +
@@ -7192,7 +7206,7 @@
 
         // Pass sweep table: every metric + latency stats per pass.
         let sweepHtml = '';
-        if (passes && Array.isArray(passes.passes)) {
+        if (passes && Array.isArray(passes.passes) && passRows.length) {
           const metricCols = passes.metrics || [];
           const visible = passRows;
           const queued = passes.passes.length - visible.length;
@@ -7412,7 +7426,8 @@
             '</tr></thead><tbody>' + rows + '</tbody></table></div>';
         }
         const curveBlock = () => {
-          const mode = state.samplesCurveView || 'chart';
+          if (!ks.length || g.total_items === 0) return '';
+          const mode = ks.length < 2 ? 'table' : (state.samplesCurveView || 'chart');
           const selected = selectedStatistic();
           const isComparison = selected.key === 'compare';
           const hasUncertainty = ks.some(k => isComparison
@@ -7526,7 +7541,7 @@
         const distributionCopy = isBool
           ? 'Items by exact correct-pass count. Runs above 10 passes are grouped into percentage bins.'
           : 'Items by attempts meeting the selected pass threshold. Runs above 10 passes are grouped into percentage bins.';
-        const distBlockHtml = (dist && dist.length > 1)
+        const distBlockHtml = (dist && dist.length > 1 && dist.some(count => count > 0))
           ? '<div class="ri-panel samples-distribution-panel">' +
               '<div class="ri-panel-head"><div>' +
                 '<div class="ri-panel-title">' + distributionTitle + '</div>' +
@@ -7542,26 +7557,31 @@
               '<div class="ri-grid">' + stabilityPanelsHtml + '</div>' +
             '</div>'
           : '';
+        const curveHtml = curveBlock();
+        const hasReport = sweepHtml || curveHtml || distBlockHtml || stabilitySectionHtml || (g.total_items !== 0 && tilesHtml);
 
         container.innerHTML =
-          '<div class="overview-header">' +
+          (hasReport ? '<div class="overview-header">' +
             '<div><h3 class="section-title">Repeat Run Analysis</h3>' +
             '<div class="overview-header-hint">Every item was evaluated ' + samplesCount + 'x in this run. Select the metric summarized across all ' + samplesCount + ' passes.</div></div>' +
-          '</div>' +
+          '</div>' : '') +
           '<div class="samples-metric-row">' +
             '<div class="samples-metric-tabs qym-segmented" role="group" data-qym-segmented-key="repeat-metric" aria-label="Repeat run aggregate metric">' + metricTabsHtml + '</div>' +
             thresholdControlHtml +
           '</div>' +
-          '<div class="samples-group-tiles qym-stat-strip">' + tilesHtml + '</div>' +
+          (hasReport && tilesHtml ? '<div class="samples-group-tiles qym-stat-strip">' + tilesHtml + '</div>' : '') +
           sweepHtml +
-          '<div class="ri-analysis-section samples-performance-section" style="--ri-section-color:var(--accent-primary)">' +
+          (curveHtml || distBlockHtml ? '<div class="ri-analysis-section samples-performance-section" style="--ri-section-color:var(--accent-primary)">' +
             '<div class="ri-subhead"><h4>Repeat Performance</h4><span>' + escapeHtml(selectedStatistic().copy) + '</span></div>' +
             '<div class="samples-charts-row' + (distBlockHtml ? ' with-distribution' : '') + '">' +
-              '<div class="samples-chart-block samples-sweep-wrap" id="samples-curve-block">' + curveBlock() + '</div>' +
+              (curveHtml ? '<div class="samples-chart-block samples-sweep-wrap" id="samples-curve-block">' + curveHtml + '</div>' : '') +
               distBlockHtml +
             '</div>' +
-          '</div>' +
+          '</div>' : '') +
           stabilitySectionHtml;
+        if (!hasReport && !riMetricSeries(state.snapshot?.rows || []).length) {
+          container.innerHTML = '';
+        }
 
         const blockEl = el('samples-curve-block');
         container.querySelectorAll('tr[data-sw-pass]').forEach(tr => {
@@ -7682,6 +7702,11 @@
       }
 
       function wireTopActions() {
+        const analyzeBtn = el('items-auto-analyze-btn');
+        if (analyzeBtn && !analyzeBtn.dataset.boundAnalyze) {
+          analyzeBtn.dataset.boundAnalyze = '1';
+          analyzeBtn.addEventListener('click', openAnalyzerPage);
+        }
         const shareBtn = el('export-share-btn');
         if (shareBtn && !shareBtn.dataset.boundShare && !IS_EXPORT) {
           shareBtn.dataset.boundShare = '1';
@@ -8403,7 +8428,7 @@
         const total = rows.length;
         const completed = rows.filter(r => r.status === 'completed' || r.__has_output || r.output != null || r.output_full != null || r.error).length;
         const failed = rows.filter(r => window.QymMetrics.isErrorRow(r)).length;
-        const latencies = rows.filter(r => r.latency_ms && r.latency_ms > 0 && r.status === 'completed').map(r => r.latency_ms);
+        const latencies = rows.filter(r => Number.isFinite(r.latency_ms) && r.latency_ms >= 0 && r.status === 'completed').map(r => r.latency_ms);
         const summaryItem = (kind, label, valueHtml, iconHtml) =>
           '<div class="overview-summary-pill qym-stat-strip__item ' + kind + '">' +
             '<span class="overview-summary-icon">' + iconHtml + '</span>' +
@@ -8586,7 +8611,7 @@
 
           // Round latency for ruler labels (no decimals)
           const fmtRuler = (ms) => {
-            if (!ms || ms <= 0) return '—';
+            if (!Number.isFinite(ms) || ms < 0) return '—';
             if (ms >= 60000) {
               const m = Math.floor(ms / 60000);
               const s = Math.round((ms % 60000) / 1000);
@@ -8630,7 +8655,7 @@
           }
 
           // Format mean as rounded integer seconds if >= 1s
-          const meanFmt = meanLat >= 1000 ? Math.round(meanLat / 1000) + 's' : formatLatency(meanLat);
+          const meanFmt = meanLat >= 1000 ? Math.round(meanLat / 1000) + 's' : (meanLat === 0 ? '0ms' : formatLatency(meanLat));
 
           latencyCard = '<div class="metric-card system-latency-card" style="animation-delay:' + (cardIdx * 50) + 'ms;">' +
             '<div class="latency-hero">' +
@@ -8652,7 +8677,13 @@
         const ts = state.viewPass
           ? state.passSummary?.trace_stats
           : (state.run && state.run.trace_stats);
-        if (ts && ts.has_spans) {
+        const hasTraceValues = ts && (
+          ['avg_tokens', 'avg_llm_calls', 'avg_tool_calls', 'tool_success_rate', 'avg_llm_ms',
+            'avg_tool_ms', 'avg_retriever_ms', 'avg_top_level_chain_ms', 'avg_evaluator_ms']
+            .some(key => Number.isFinite(ts[key])) ||
+          (Array.isArray(ts.outer_scope_parent_spans) && ts.outer_scope_parent_spans.some(span => span?.name && Number.isFinite(span.avg_ms)))
+        );
+        if (total > 0 && ts && ts.has_spans && hasTraceValues) {
           const fmtV = (v) => v != null ? _fmtTraceNum(v) : '\u2014';
           const fmtD = (v) => v != null ? v.toFixed(1) : '\u2014';
           const fmtLatency = (v) => v != null ? formatLatency(v) : '\u2014';
@@ -8701,13 +8732,13 @@
             : '');
 
         // ── Assemble ──
-        primarySection.innerHTML =
+        primarySection.innerHTML = total > 0 ?
           '<div class="overview-header">' +
             '<div><h3 class="section-title">Overview</h3>' +
             '<div class="overview-header-hint">Score distributions per metric and response latency. Click any bar to filter the item table.</div></div>' +
             runSummaryHtml +
           '</div>' +
-          (cards ? '<div class="metric-cards-grid">' + cards + '</div>' : '');
+          (cards ? '<div class="metric-cards-grid">' + cards + '</div>' : '') : '';
         deepSection.innerHTML = systemCards + intelligenceCharts;
 
         try {
@@ -9462,15 +9493,16 @@
         }
 
         const stats = Object.entries(groups).map(([groupValue, group]) => {
+          if (!group.scores.length) return null;
           const passCount = supportsPassRate ? group.scores.filter(score => score >= threshold).length : 0;
           return {
             groupVal: groupValue,
             itemCount: group.count,
-            avgScore: group.scores.length ? group.scores.reduce((sum, score) => sum + score, 0) / group.scores.length : 0,
+            avgScore: group.scores.length ? group.scores.reduce((sum, score) => sum + score, 0) / group.scores.length : null,
             passRate: supportsPassRate && group.scores.length ? passCount / group.scores.length : null,
             avgLatency: group.latencies.length ? group.latencies.reduce((sum, latency) => sum + latency, 0) / group.latencies.length : null,
           };
-        });
+        }).filter(Boolean);
 
         if (state.categoryBreakdownSort === 'name') {
           stats.sort((a, b) => a.groupVal.localeCompare(b.groupVal));
@@ -9500,13 +9532,16 @@
         const section = el('metadata-breakdown');
         if (!section) return;
 
-        const chipKeys = getCategoryChipKeys();
+        const filteredItems = getFilteredItems();
+        let chipKeys = getCategoryChipKeys().filter(({ key }) => filteredItems.some(({ row }) =>
+          getMetadataCategoryValues(row.item_metadata || {}, key).length > 0
+        ));
 
         // If no metadata keys at all, hide the section
         if (chipKeys.length === 0) { section.innerHTML = ''; return; }
 
         const metric = state.samplesMetric || state.selectedMetric || state.allMetrics[0];
-        if (!metric) return;
+        if (!metric) { section.innerHTML = ''; return; }
         const mIdx = state.allMetrics.indexOf(metric);
         const metricType = state.metricTypes[metric] || 'score';
         const isBoolean = state.metricIsBoolean[metric];
@@ -9518,7 +9553,6 @@
         const threshold = isBoolean ? 0.9999 : (state.metricThresholds[metric] || 0.8);
 
         // Get filtered item IDs so breakdown only shows items matching current filters
-        const filteredItems = getFilteredItems();
         const filteredItemIds = new Set(filteredItems.map(item => {
           const r = item.row;
           return r.item_id || String(r.index);
@@ -9532,7 +9566,11 @@
         const overallAverage = overallScores.length
           ? overallScores.reduce((sum, score) => sum + score, 0) / overallScores.length
           : null;
-        let html = '<h3 class="section-title">Performance by Category</h3>';
+        if (!overallScores.length) { section.innerHTML = ''; return; }
+        const statsByKey = new Map(chipKeys.map(({ key }) => [key, getCategoryGroupStats(key, rows, filteredItemIds, metric, mIdx, threshold, supportsPassRate)]));
+        chipKeys = chipKeys.filter(({ key }) => statsByKey.get(key).length > 0);
+        if (!chipKeys.length) { section.innerHTML = ''; return; }
+        let html = '';
 
         html += '<div class="category-breakdown-toolbar"><div class="category-chip-bar">';
         html += '<span class="category-chip-bar-label">Categories</span>';
@@ -9552,15 +9590,12 @@
         const breakdownKeys = chipKeys.filter(c => state.selectedCategories.has(c.key)).map(c => c.key);
 
         if (breakdownKeys.length === 0) {
-          html += '<div class="comparison-stats"><div class="section-empty-state">' +
-            '<div class="section-empty-copy"><strong>Select categories above to see performance breakdowns</strong><span>Choose from your item metadata fields to analyze scores by group</span></div>' +
-          '</div></div>';
           section.innerHTML = html;
           wireChipClicks(section);
           return;
         }
 
-        const statsByKey = new Map(breakdownKeys.map(key => [key, getCategoryGroupStats(key, rows, filteredItemIds, metric, mIdx, threshold, supportsPassRate)]));
+        html = '<h3 class="section-title">Performance by Category</h3>' + html;
         html += '<div class="comparison-stats metadata-breakdown-content">';
         if (supportsPassRate && overallAverage !== null) {
           html += '<div class="category-baseline-note"><span class="category-baseline-marker"></span><span>Overall metric average score</span><strong class="category-baseline-score" style="--category-average-color:' + riScoreColor(overallAverage) + '">' + window.QymMetrics.formatMetricValue(overallAverage, metricType, 0) + '</strong></div>';
@@ -9825,15 +9860,11 @@
         const totalErrors = stats.reduce((sum, entry) => sum + entry.count, 0);
 
         if (totalErrors === 0) {
-          section.innerHTML = '<h3 class="section-title">Error Distribution</h3>' +
-            '<div class="comparison-stats"><div class="section-empty-state">' +
-              '<div class="section-empty-copy"><span>No errors in the current filtered items.</span></div>' +
-            '</div></div>';
+          section.innerHTML = '';
           return;
         }
 
         function renderErrorCards(entries) {
-          if (!entries.length) return '<div class="category-empty-state">No errors in this category.</div>';
           let cards = '<div class="breakdown-grid">';
           for (const entry of entries) {
             const labelParts = splitErrorLabel(entry.label);
@@ -9855,8 +9886,8 @@
           return cards + '</div>';
         }
 
-      function renderErrorGroup(title, icon, entries, alwaysShow) {
-        if (!alwaysShow && entries.length === 0) return '';
+      function renderErrorGroup(title, icon, entries) {
+        if (entries.length === 0) return '';
         const groupTotal = entries.reduce((sum, entry) => sum + entry.count, 0);
           const iconHtml = icon === 'task'
             ? '<svg class="breakdown-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>'
@@ -9877,10 +9908,10 @@
 
         let html = '<h3 class="section-title">Error Distribution</h3>';
         html += '<div class="comparison-stats">';
-        html += renderErrorGroup('Task Errors', 'task', taskStats, true);
-        html += renderErrorGroup('Metric Errors', 'metric', metricStats, true);
-        html += renderErrorGroup('Trace Errors', 'trace', traceStats, true);
-        html += renderErrorGroup('Analysis Errors', 'trace', analysisStats, false);
+        html += renderErrorGroup('Task Errors', 'task', taskStats);
+        html += renderErrorGroup('Metric Errors', 'metric', metricStats);
+        html += renderErrorGroup('Trace Errors', 'trace', traceStats);
+        html += renderErrorGroup('Analysis Errors', 'trace', analysisStats);
         html += '</div>';
         section.innerHTML = html;
 
@@ -9927,20 +9958,6 @@
           const r = item.row;
           return r.item_id || String(r.index);
         }));
-        const anyAssignedOverall = rows.some(row => {
-          return getRowRootCauseAnalyses(row, 'all').length > 0;
-        });
-        const filteredFailedCount = filteredItems.filter(item => {
-          const row = item.row;
-          const status = row.status || '';
-          if (status === 'error') return true;
-          const metric = state.selectedMetric;
-          const mIdx = metric ? state.allMetrics.indexOf(metric) : -1;
-          if (mIdx < 0) return false;
-          const score = window.QymMetrics.parseScoreValue((row.metric_values || [])[mIdx]);
-          const threshold = state.metricIsBoolean[metric] ? 0.9999 : (state.metricThresholds[metric] || 0.8);
-          return score !== null && score < threshold;
-        }).length;
 
         // Build hierarchical root cause categories
         const rcCategories = {};
@@ -9964,24 +9981,17 @@
           .map(([cat, data]) => ({ category: cat, count: data.count, subcauses: data.subcauses }))
           .sort((a, b) => b.count - a.count);
 
-        // Empty state if no root cause data
+        const analyzeBtn = el('items-auto-analyze-btn');
+        if (analyzeBtn) analyzeBtn.style.display = !IS_EXPORT && filteredItems.length > 0 && catStats.length === 0 ? '' : 'none';
+
         if (catStats.length === 0) {
-          const emptyMsg = anyAssignedOverall
-            ? (filteredFailedCount === 0
-                ? 'The current filtered items are all passing, so there are no root causes to summarize.'
-                : 'No root causes appear in the current filtered items. Adjust filters to view failure patterns.')
-            : 'No root causes assigned yet. Run Auto-Analyze to identify failure patterns.';
-          const autoAnalyzeHtml = anyAssignedOverall
-            ? ''
-            : '<button class="auto-analyze-btn" id="auto-analyze-btn" title="AI-powered root cause analysis"><span class="ai-icon">\uD83E\uDD16</span> Auto-Analyze</button>';
-          section.innerHTML = '<div class="root-cause-title-row"><h3 class="section-title">Root Cause Analysis</h3>' +
-            rootCauseMetricControlHtml() + '</div>' +
-            '<div class="comparison-stats"><div class="section-empty-state">' +
-              '<div class="section-empty-copy"><span>' + escapeHtml(emptyMsg) + '</span></div>' +
-              (autoAnalyzeHtml ? '<div class="section-empty-actions">' + autoAnalyzeHtml + '</div>' : '') +
-            '</div></div>';
-          var aaBtn0 = section.querySelector('#auto-analyze-btn');
-          if (aaBtn0) aaBtn0.addEventListener('click', openAnalyzerPage);
+          // Keep metric selection reachable when another metric has results.
+          const hasOtherMetricResults = filteredItems.some(({ row }) =>
+            getRowRootCauseAnalyses(row, 'all').some(analysis => rootCauseIssues(analysis).some(issue => issue.category))
+          );
+          section.innerHTML = hasOtherMetricResults
+            ? '<div class="root-cause-title-row">' + rootCauseMetricControlHtml() + '</div>'
+            : '';
           wireRootCauseMetricControl(section);
           return;
         }
@@ -10910,6 +10920,8 @@
         renderOverview(items);
 
         const totalRows = (state.snapshot.rows || []).length;
+        const itemsSection = container.closest('.items-comparison');
+        if (itemsSection) itemsSection.style.display = totalRows > 0 ? '' : 'none';
         filterCountEl.innerHTML = '<span><span class="count-num">' + items.length + '</span> of ' + totalRows + ' items</span>';
         const displayLabel = el('item-display-label');
         if (displayLabel) displayLabel.textContent = 'Display · ' + formatItemControlMetric(metric);
