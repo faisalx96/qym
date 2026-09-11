@@ -613,6 +613,61 @@ def test_dataset_runs_endpoint(client_and_session):
     assert missing.status_code == 404
 
 
+def test_arabic_search_pagination_and_neighbors_share_matching_rules(
+    client_and_session,
+):
+    client, _ = client_and_session
+    response = client.post(
+        "/v1/datasets",
+        headers=_bearer(),
+        json={"name": "Arabic", "slug": "arabic-search"},
+    )
+    assert response.status_code == 200
+    response = client.post(
+        "/v1/datasets/arabic-search/versions", headers=_bearer(), json={"version": "v1"}
+    )
+    assert response.status_code == 200
+    endpoint = "/v1/datasets/arabic-search/versions/v1/items"
+    for payload in [
+        {
+            "item_id": "first",
+            "input": {"question": "زيارة ٱلرِّيَـاض"},
+            "labels": ["vip"],
+        },
+        {"item_id": "second", "input": "أين؟", "expected_output": ["الرِّيَاض"]},
+        {"item_id": "الرياض-٣", "input": "third", "labels": ["vip"]},
+        {"item_id": "other", "input": "جدة"},
+    ]:
+        assert client.post(endpoint, headers=_bearer(), json=payload).status_code == 200
+
+    response = client.get(
+        endpoint,
+        headers=_bearer(),
+        params={"search": "الرياض", "limit": 1, "offset": 1},
+    )
+    assert response.status_code == 200
+    assert response.json()["total"] == 3
+    assert response.json()["next_offset"] == 2
+    assert [item["item_id"] for item in response.json()["items"]] == ["second"]
+
+    response = client.get(
+        endpoint + "/second/neighbors", headers=_bearer(), params={"search": "الرياض"}
+    )
+    assert response.status_code == 200
+    assert response.json()["total"] == 3
+    assert response.json()["previous"]["item_id"] == "first"
+    assert response.json()["next"]["item_id"] == "الرياض-٣"
+
+    response = client.get(
+        endpoint, headers=_bearer(), params={"search": "الرِّيَاض", "label": "vip"}
+    )
+    assert response.status_code == 200
+    assert [item["item_id"] for item in response.json()["items"]] == [
+        "first",
+        "الرياض-٣",
+    ]
+
+
 def test_items_search_sort_label_and_bulk_endpoint_and_compare_diffs(client_and_session):
     client, _ = client_and_session
 

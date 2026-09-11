@@ -12,7 +12,7 @@
   <script src="./static/metrics.js?v=metric-errors-20260907-3"></script>
   <script src="./static/run_details.js"></script>
   <script src="./static/trace_viewer.js?v=merge-20260804-1"></script>
-  <script src="./static/step_latency.js?v=step-latency-fixes-20260911-1"></script>
+  <script src="./static/step_latency.js?v=empty-sections-20260911-2"></script>
   <script src="./static/playground.js?v=rule-history-bottom-20260816-1"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
@@ -1297,6 +1297,16 @@
       font-weight: 600;
       color: var(--text-primary);
       margin-bottom: var(--space-md);
+    }
+
+    #error-distribution-section:not(:empty) {
+      margin-top: var(--space-xl);
+    }
+
+    #metadata-breakdown:empty,
+    #error-distribution-section:empty,
+    #root-cause-section:empty {
+      display: none;
     }
 
     .comparison-overview-heading {
@@ -5157,6 +5167,7 @@
               <h3 class="section-title">Item-by-Item Comparison</h3>
               <p class="compare-section-copy">Filter and inspect aligned inputs, outputs, scores, and review metadata.</p>
             </div>
+            <button type="button" class="auto-analyze-btn" id="compare-auto-analyze-btn" title="AI-powered root cause analysis" style="display:none;"><span class="ai-icon">&#x1F916;</span> Auto-Analyze</button>
           </div>
           <div class="compare-empty" id="alignment-warning" style="display:none;margin-bottom:var(--space-lg);"></div>
 
@@ -6889,7 +6900,7 @@
             </div>
           </div>
 
-          ${verdictHtml}
+          ${presentation.items.length ? verdictHtml : ''}
 
           <div class="sweep-filter-bar">
             <div class="sweep-filter-group">
@@ -8749,13 +8760,14 @@
           const itemIds = Object.keys(items);
           const scores = itemIds.flatMap(itemId => items[itemId].scores);
           const latencies = itemIds.flatMap(itemId => items[itemId].latencies);
+          if (!scores.length) return null;
           return {
             groupVal: groupValue,
             itemCount: itemIds.length,
-            avgScore: scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0,
+            avgScore: scores.reduce((sum, score) => sum + score, 0) / scores.length,
             avgLatency: latencies.length ? latencies.reduce((sum, latency) => sum + latency, 0) / latencies.length : null,
           };
-        });
+        }).filter(Boolean);
 
         if (categoryKey === 'complexity') {
           const order = ['easy', 'medium', 'hard', 'expert'];
@@ -8782,16 +8794,9 @@
           }
         }
 
-        const chipKeys = getCategoryChipKeys();
-        if (chipKeys.length === 0) { existingSection.innerHTML = ''; return; }
-
         const selectedMetric = state.selectedOverviewMetric || state.allMetrics[0];
-        if (!selectedMetric) return;
-        if (!canRenderItemComparison()) {
-          existingSection.innerHTML = `
-            <h3 class="section-title">Performance by Category</h3>
-            <div class="compare-empty" style="display:flex;">${getAlignmentWarningHtml('Category Breakdown Unavailable')}</div>
-          `;
+        if (!selectedMetric || !canRenderItemComparison()) {
+          existingSection.innerHTML = '';
           return;
         }
 
@@ -8799,6 +8804,15 @@
         const supportsScoreTrack = metricType !== 'numeric';
         const filteredItems = getFilteredItems();
         const filteredItemIds = new Set(filteredItems.map(item => item.itemId));
+        const availableChipKeys = getCategoryChipKeys().filter(({ key }) => filteredItems.some(item =>
+          (item.rowData || []).some(row => row && getMetadataCategoryValues(row.item_metadata || {}, key).length)
+        ));
+        const statsByKey = new Map(availableChipKeys.map(({ key }) => [
+          key,
+          getCompareCategoryGroupStats(key, selectedMetric, filteredItemIds),
+        ]));
+        const chipKeys = availableChipKeys.filter(({ key }) => statsByKey.get(key)?.length);
+        if (!chipKeys.length) { existingSection.innerHTML = ''; return; }
 
         const overallScores = [];
         for (const run of state.runs) {
@@ -8817,7 +8831,8 @@
           ? overallScores.reduce((sum, score) => sum + score, 0) / overallScores.length
           : null;
 
-        let html = '<h3 class="section-title">Performance by Category</h3>';
+        const breakdownKeys = chipKeys.filter(c => state.selectedCategories.has(c.key)).map(c => c.key);
+        let html = breakdownKeys.length ? '<h3 class="section-title">Performance by Category</h3>' : '';
 
         html += '<div class="category-breakdown-toolbar"><div class="category-chip-bar">';
         html += '<span class="category-chip-bar-label">Categories</span>';
@@ -8833,21 +8848,11 @@
             `<button type="button" class="samples-view-btn qym-segmented__option category-breakdown-view-btn${state.categoryBreakdownView === 'compare' ? ' active' : ''}" data-category-view="compare" aria-pressed="${state.categoryBreakdownView === 'compare'}">Compare</button>` +
           '</span></div></div>';
 
-        const breakdownKeys = chipKeys.filter(c => state.selectedCategories.has(c.key)).map(c => c.key);
-
         if (breakdownKeys.length === 0) {
-          html += '<div class="comparison-stats"><div class="section-empty-state">' +
-            '<div class="section-empty-copy"><strong>Select categories above to see performance breakdowns</strong><span>Choose from your item metadata fields to analyze scores by group</span></div>' +
-          '</div></div>';
           existingSection.innerHTML = html;
           wireChipClicks(existingSection);
           return;
         }
-
-        const statsByKey = new Map(breakdownKeys.map(key => [
-          key,
-          getCompareCategoryGroupStats(key, selectedMetric, filteredItemIds),
-        ]));
 
         html += '<div class="comparison-stats metadata-breakdown-content">';
         if (supportsScoreTrack && overallAverage !== null) {
@@ -9007,22 +9012,34 @@
 
       function renderComparisonStats(filteredItemsOverride = null) {
         const container = el('stats-grid');
-        if (!container || !state.comparisonStats || !state.selectedOverviewMetric) return;
-        if (!canRenderItemComparison()) {
-          container.innerHTML = `<div class="compare-empty" style="display:flex;grid-column:1/-1;">${getAlignmentWarningHtml('Head-to-Head Stats Unavailable')}</div>`;
-          return;
-        }
-
+        const section = el('comparison-stats');
+        const heading = document.querySelector('.comparison-overview-heading');
+        const headingCopy = heading?.firstElementChild;
+        if (!container || !section) return;
+        container.innerHTML = '';
+        section.style.display = 'none';
+        if (headingCopy) headingCopy.style.display = 'none';
+        if (heading) heading.style.display = 'none';
+        if (!state.comparisonStats || !state.selectedOverviewMetric || !canRenderItemComparison()) return;
         const filteredItems = Array.isArray(filteredItemsOverride) ? filteredItemsOverride : getFilteredItems();
         const filteredItemIds = filteredItems.map(item => item.itemId);
-        if (filteredItemIds.length === 0) {
-          container.innerHTML = '<div class="compare-empty" style="display:flex;grid-column:1/-1;">No items match the current filters.</div>';
-          return;
-        }
+        if (filteredItemIds.length === 0) return;
+        // Leave metric controls available when another metric has reportable data.
+        const hasScores = state.allMetrics.some(metric => filteredItems.some(item =>
+          (item.rowData || []).some((row, runIdx) => {
+            if (!row) return false;
+            const run = state.runs[runIdx];
+            const metricIndex = (run?.snapshot?.metric_names || run?.run?.metric_names || []).indexOf(metric);
+            return metricIndex >= 0 && window.QymMetrics.getRowScore(row, metricIndex, metric).score !== null;
+          })
+        ));
+        if (heading && hasScores) heading.style.display = '';
         const previousItemIdToIndex = state.itemIdToIndex;
         const stats = calculateComparisonStatsForMetric(state.selectedOverviewMetric, filteredItemIds);
         state.itemIdToIndex = previousItemIdToIndex;
-        if (!stats) return;
+        if (!stats || !stats.allScoresCount || !stats.totalCompared) return;
+        section.style.display = '';
+        if (headingCopy) headingCopy.style.display = '';
         const runNames = state.runs.map((r, i) => r.run?.run_name || `Run ${i + 1}`);
         const K = state.runs.length;
 
@@ -9409,7 +9426,7 @@
           const rows = snap.rows || [];
           let sum = 0, count = 0;
           for (const row of rows) {
-            if (row.latency_ms && row.status === 'completed') {
+            if (Number.isFinite(row.latency_ms) && row.latency_ms >= 0 && row.status === 'completed') {
               sum += row.latency_ms;
               count++;
             }
@@ -9433,7 +9450,9 @@
         }
 
         // Render rows - metrics first, then latency
-        const metricRows = state.allMetrics.map(metric => {
+        const metricRows = state.allMetrics.filter(metric => runMetricAvgs.some(avgs =>
+          avgs[metric] !== null && Number.isFinite(avgs[metric])
+        )).map(metric => {
           const mType = state.metricTypes?.[metric] || 'score';
           const peerValues = runMetricAvgs
             .map(avgs => avgs[metric])
@@ -9459,15 +9478,15 @@
         const latencyCells = runLatencyAvgs.map(val => {
           if (val === null) return '<td class="metric-value-cell"><span class="metric-val">—</span></td>';
           const isBest = val === bestLatency && state.runs.length > 1;
-          return `<td class="metric-value-cell"><span class="metric-val ${isBest ? 'best' : ''}"${isBest ? ' title="Best across runs"' : ''}>${formatLatency(val)}</span></td>`;
+          return `<td class="metric-value-cell"><span class="metric-val ${isBest ? 'best' : ''}"${isBest ? ' title="Best across runs"' : ''}>${val === 0 ? '0ms' : formatLatency(val)}</span></td>`;
         }).join('');
 
-        const latencyRow = `
+        const latencyRow = runLatencyAvgs.some(value => value !== null) ? `
           <tr>
             <td class="metric-name">⚡ Avg Latency</td>
             ${latencyCells}
           </tr>
-        `;
+        ` : '';
 
         // ⚡ Trace stats rows
         const hasAnyTrace = state.runs.some(r => r.run?.trace_stats?.has_spans);
@@ -9490,6 +9509,7 @@
               return ts ? ts[td.key] : null;
             });
             const validVals = vals.filter(v => v != null && v >= 0);
+            if (!validVals.length) continue;
             const bestVal = validVals.length > 0 ? (td.best === 'high' ? Math.max(...validVals) : Math.min(...validVals)) : null;
             const cells = vals.map(v => {
               const isBest = v != null && bestVal != null && v === bestVal && validVals.length > 1;
@@ -9500,6 +9520,8 @@
         }
 
         tbody.innerHTML = metricRows + latencyRow + traceRows;
+        const section = document.querySelector('.metrics-comparison');
+        if (section) section.style.display = tbody.innerHTML ? '' : 'none';
       }
 
       // ── Sankey Diagram ──
@@ -9988,7 +10010,7 @@
         const section = el('error-distribution-section');
         if (!section) return;
         if (!canRenderItemComparison()) {
-          section.innerHTML = `<div class="compare-empty" style="display:flex;margin-bottom:var(--space-xl);">${getAlignmentWarningHtml('Error Distribution Unavailable')}</div>`;
+          section.innerHTML = '';
           return;
         }
 
@@ -10005,13 +10027,12 @@
         const totalErrors = stats.reduce((sum, entry) => sum + entry.count, 0);
 
         if (totalErrors === 0) {
-          section.innerHTML = '<h3 class="section-title">Error Distribution</h3>' +
-            '<div class="comparison-stats"><div class="category-empty-state">No errors in the current filtered items.</div></div>';
+          section.innerHTML = '';
           return;
         }
 
         function renderErrorCards(entries) {
-          if (!entries.length) return '<div class="category-empty-state">No errors in this category.</div>';
+          if (!entries.length) return '';
           let cards = '<div class="breakdown-grid">';
           for (const entry of entries) {
             const labelParts = splitErrorLabel(entry.label);
@@ -10033,18 +10054,18 @@
           return cards + '</div>';
         }
 
-      function renderErrorGroup(title, icon, entries, alwaysShow) {
-        if (!alwaysShow && entries.length === 0) return '';
-        const groupTotal = entries.reduce((sum, entry) => sum + entry.count, 0);
+        function renderErrorGroup(title, icon, entries) {
+          if (entries.length === 0) return '';
+          const groupTotal = entries.reduce((sum, entry) => sum + entry.count, 0);
           const iconHtml = icon === 'task'
             ? '<svg class="breakdown-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>'
             : '<svg class="breakdown-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h4l2-7 4 14 2-7h4"/></svg>';
           const groupClass = icon === 'task' ? 'task-error-group' : 'trace-error-group';
-        return '<div class="breakdown-section breakdown-errors ' + groupClass + '">' +
+          return '<div class="breakdown-section breakdown-errors ' + groupClass + '">' +
             '<div class="breakdown-header">' + iconHtml + ' ' + escapeHtml(title) + ' <span class="breakdown-metric">' + groupTotal + '</span></div>' +
             renderErrorCards(entries) +
           '</div>';
-      }
+        }
 
         const taskStats = stats.filter(entry => entry.kind === 'Task error');
         const traceStats = stats.filter(entry => entry.kind === 'Trace error');
@@ -10052,9 +10073,9 @@
 
         let html = '<h3 class="section-title">Error Distribution</h3>';
         html += '<div class="comparison-stats">';
-        html += renderErrorGroup('Task Errors', 'task', taskStats, true);
-        html += renderErrorGroup('Trace Errors', 'trace', traceStats, true);
-        html += renderErrorGroup('Analysis Errors', 'trace', analysisStats, false);
+        html += renderErrorGroup('Task Errors', 'task', taskStats);
+        html += renderErrorGroup('Trace Errors', 'trace', traceStats);
+        html += renderErrorGroup('Analysis Errors', 'trace', analysisStats);
         html += '</div>';
         section.innerHTML = html;
 
@@ -10094,30 +10115,18 @@
       function renderRootCauseSection() {
         const section = el('root-cause-section');
         if (!section) return;
+        const fallbackAnalyzeButton = el('compare-auto-analyze-btn');
+        if (fallbackAnalyzeButton) fallbackAnalyzeButton.style.display = 'none';
         if (!canRenderItemComparison()) {
-          section.innerHTML = `<div class="compare-empty" style="display:flex;margin-bottom:var(--space-xl);">${getAlignmentWarningHtml('Root Cause Comparison Unavailable')}</div>`;
+          section.innerHTML = '';
           return;
         }
 
         const filteredItems = getFilteredItems();
         const filteredItemIds = new Set(filteredItems.map(item => item.itemId));
-        const anyAssignedOverall = state.runs.some(run => (run.snapshot?.rows || []).some(row => {
-          return getRowRootCauseAnalyses(row, 'all').length > 0;
-        }));
-        const filteredFailedCount = filteredItems.filter(item => {
-          return (item.rowData || []).some((row, runIdx) => {
-            if (!row) return false;
-            if ((row.status || '') === 'error') return true;
-            const run = state.runs[runIdx];
-            const metricNames = run.snapshot?.metric_names || run.run?.metric_names || [];
-            const metricIdx = state.selectedItemsMetric ? metricNames.indexOf(state.selectedItemsMetric) : 0;
-            if (metricIdx < 0) return false;
-            const score = window.QymMetrics.parseScoreValue((row.metric_values || [])[metricIdx]);
-            const isBoolean = state.selectedItemsMetric ? state.metricIsBoolean[state.selectedItemsMetric] : false;
-            const threshold = isBoolean ? 0.9999 : (state.metricThresholds[state.selectedItemsMetric] || 0.8);
-            return score !== null && score < threshold;
-          });
-        }).length;
+        const hasFilteredAnalyses = filteredItems.some(item => (item.rowData || []).some(row =>
+          row && getRowRootCauseAnalyses(row, 'all').some(analysis => rootCauseIssues(analysis).length)
+        ));
 
         // Build hierarchical root cause categories across ALL runs
         const rcCategories = {};
@@ -10147,28 +10156,14 @@
           .map(([cat, data]) => ({ category: cat, count: data.count, subcauses: data.subcauses }))
           .sort((a, b) => b.count - a.count);
 
-        // Empty state
         if (catStats.length === 0) {
-          const emptyMsg = anyAssignedOverall
-            ? (filteredFailedCount === 0
-                ? 'The current filtered items are all passing, so there are no root causes to summarize.'
-                : 'No root causes appear in the current filtered items. Adjust filters to view failure patterns.')
-            : 'No root causes assigned yet. Run Auto-Analyze to identify failure patterns.';
-          const autoAnalyzeHtml = anyAssignedOverall
-            ? ''
-            : '<button class="auto-analyze-btn" id="auto-analyze-btn" title="AI-powered root cause analysis"><span class="ai-icon">\uD83E\uDD16</span> Auto-Analyze</button>';
-          section.innerHTML = '<div class="root-cause-title-row"><h3 class="section-title">Root Cause Analysis</h3>' +
-            rootCauseMetricControlHtml() + '</div>' +
-            '<div class="comparison-stats"><div style="padding:32px 24px;text-align:center;">' +
-              '<div style="color:var(--text-muted);font-size:var(--font-sm);margin-bottom:12px;">' + escapeHtml(emptyMsg) + '</div>' +
-              autoAnalyzeHtml +
-            '</div></div>';
-          var aaBtn0 = section.querySelector('#auto-analyze-btn');
-          if (aaBtn0) aaBtn0.addEventListener('click', function () {
-            QymPlayground.open().catch(function (error) {
-              showToast('error', 'Auto-analysis', error.message || 'Could not load the analyzer.');
-            });
-          });
+          // Keep the metric selector when another metric has root causes.
+          section.innerHTML = hasFilteredAnalyses
+            ? '<div class="root-cause-title-row">' + rootCauseMetricControlHtml() + '</div>'
+            : '';
+          if (fallbackAnalyzeButton && !IS_COMPARE_EXPORT && filteredItems.length) {
+            fallbackAnalyzeButton.style.display = '';
+          }
           wireRootCauseMetricControl(section);
           return;
         }
@@ -11764,9 +11759,11 @@
         const paginationEl = el('pagination');
         const filterCountEl = el('filter-count');
         const warningEl = el('alignment-warning');
+        const itemsSection = document.querySelector('.items-comparison');
         const filterPanel = document.querySelector('.items-comparison .filter-panel');
         const resultsShell = document.querySelector('.items-comparison .qym-item-results');
         if (!canRenderItemComparison()) {
+          if (itemsSection) itemsSection.style.display = '';
           if (warningEl) {
             warningEl.innerHTML = getAlignmentWarningHtml('Item-by-Item Comparison Unavailable');
             warningEl.style.display = 'flex';
@@ -11787,6 +11784,7 @@
 
         // Update filter count & clear button
         const totalItems = (state.compareItemIds || []).length;
+        if (itemsSection) itemsSection.style.display = totalItems ? '' : 'none';
         filterCountEl.innerHTML = `<span class="count-num">${items.length}</span> of ${totalItems} items`;
         const displayLabel = el('item-display-label');
         if (displayLabel) displayLabel.textContent = `Display · ${formatFieldName(state.selectedItemsMetric || 'Outcome')}`;
@@ -14286,6 +14284,11 @@
 
       // ── AI Evaluator Playground (compare view) ──────────────
       if (!IS_COMPARE_EXPORT && typeof QymPlayground !== 'undefined') {
+        el('compare-auto-analyze-btn')?.addEventListener('click', () => {
+          QymPlayground.open().catch(error => {
+            showToast('error', 'Auto-analysis', error.message || 'Could not load the analyzer.');
+          });
+        });
         QymPlayground.init({
           apiUrl: apiUrl,
           getRunId: function () {

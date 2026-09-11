@@ -193,6 +193,7 @@
     data: null,        // groups from the API for current rollup
     cache: {},         // groups per rollup for the current pass scope
     traceCount: 0,     // distinct traces behind the current data
+    hasUnscopedGroups: false, // keep pass controls usable after an empty selection
     collapsed: {},     // group keys collapsed in the plot (client-side only)
     series: [],        // [{key, label, refs}] one lane each: a run, or a cohort
     activeSeries: [],  // series keys currently drawn
@@ -204,6 +205,10 @@
   };
 
   let container = null;
+
+  function hasGroupData(group) {
+    return group && (group.n > 0 || group.error_count > 0);
+  }
 
   function apiUrl(params) {
     const base = { run_ids: [...new Set(state.runIds)].join(",") };
@@ -226,7 +231,8 @@
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       const payload = await resp.json();
       if (seq !== state.seq) return null;
-      state.cache[rollup] = payload.groups || [];
+      payload.groups = (payload.groups || []).filter(hasGroupData);
+      state.cache[rollup] = payload.groups;
       state.passes = payload.passes || [];
       state.traceCount = payload.trace_count || 0;
       return payload;
@@ -247,11 +253,12 @@
       ]);
       if (seq !== state.seq || !payload) return;
       state.data = payload.groups || [];
-      refreshTraceStatsInset();
+      if (state.passNum == null) state.hasUnscopedGroups = state.data.length > 0;
     } catch (err) {
       if (seq !== state.seq) return;
       state.error = String((err && err.message) || err);
     }
+    refreshTraceStatsInset();
     render();
   }
 
@@ -277,7 +284,7 @@
         });
         if (!resp.ok) throw new Error("HTTP " + resp.status);
         const payload = await resp.json();
-        if (seq === state.seq) bucket[key] = payload.groups || [];
+        if (seq === state.seq) bucket[key] = (payload.groups || []).filter(hasGroupData);
       })().catch((err) => {
         if (seq === state.seq && state.activeSeries.includes(key)) throw err;
       }).finally(() => { delete pending[key]; });
@@ -720,6 +727,7 @@
   function render() {
     if (!container) return;
     let body;
+    let emptySelection = false;
     if (state.error) {
       body = '<div class="sl-empty">Failed to load step latency: ' + esc(state.error) + "</div>";
     } else if (state.data == null) {
@@ -728,16 +736,14 @@
       const bucket = state.runData[state.rollup] || {};
       const pending = state.activeSeries.some((key) => !bucket[key]);
       const rows = compareRows();
-      let inner;
-      if (!state.activeSeries.length) {
-        inner = '<div class="sl-empty">Select at least one run to compare.</div>';
-      } else if (rows.length) {
+      let inner = "";
+      if (rows.length) {
         inner = '<div class="sl-legend">' + inAppLegend() + "</div>" +
           '<div class="sl-plot">' + plotSvgByRun(rows) + "</div>";
+      } else if (pending) {
+        inner = '<div class="sl-empty">Loading\u2026</div>';
       } else {
-        inner = '<div class="sl-empty">' +
-          (pending ? "Loading\u2026" : "No step spans recorded for this selection.") +
-          "</div>";
+        emptySelection = true;
       }
       body = runChipsHtml() + inner;
     } else {
@@ -745,31 +751,41 @@
       body = groups.length
         ? '<div class="sl-legend">' + inAppLegend() + '</div>' +
           '<div class="sl-plot">' + plotSvg(groups) + "</div>"
-        : '<div class="sl-empty">No step spans recorded for this selection.</div>';
+        : "";
+      emptySelection = !groups.length;
+    }
+
+    // Empty scopes disappear entirely. A local filter may still have data
+    // elsewhere, so retain only its controls to let the user return to it.
+    const canRecover = state.hasUnscopedGroups || (state.data || []).length > 0;
+    container.style.display = emptySelection && !canRecover ? "none" : "";
+    if (emptySelection && !canRecover) {
+      container.innerHTML = "";
+      return;
     }
 
     container.innerHTML =
-      '<div class="metric-card sl-card">' +
+      (emptySelection ? '<div class="sl-filter-controls">' : '<div class="metric-card sl-card">' +
       '<div class="ri-header"><div>' +
         '<h3 class="section-title">Step Latency Distributions</h3>' +
         '<div class="ri-header-copy">Percentile latency intervals per step. ' +
         "Errors are excluded from " +
         "distributions and counted separately.</div>" +
-      "</div></div>" +
+      "</div></div>") +
       '<div class="sl-controls">' +
         seg("phase", [
           { value: "all", label: "All" },
           { value: "task", label: "Agent" },
           { value: "eval", label: "Eval" },
         ], state.phase, "Phase filter") +
-        seg("rollup", [
+        (emptySelection ? "" : seg("rollup", [
           { value: "name", label: "By step" },
           { value: "kind", label: "By kind" },
         ], state.rollup, "Grouping") +
         seg("scale", [
           { value: "linear", label: "Linear" },
           { value: "log", label: "Log" },
-        ], state.scale, "Axis scale") +
+        ], state.scale, "Axis scale")) +
         (state.passes.length > 1 && !state.passLocked && !state.pooled
           ? seg("passNum",
               state.passes.map((n) => ({ value: String(n), label: "Pass " + n }))
@@ -777,7 +793,7 @@
               state.passNum == null ? "" : String(state.passNum),
               "Repeat pass")
           : "") +
-        '<span class="sl-spacer"></span>' +
+        (emptySelection ? "" : '<span class="sl-spacer"></span>' +
         '<a class="qym-inline-action qym-inline-action--accent sl-btn" href="' +
           esc(apiUrl({ format: "csv", rollup: state.rollup })) +
           '" download title="Download summary CSV">' + DL_ICON + "CSV summary</a>" +
@@ -785,7 +801,7 @@
           esc(apiUrl({ format: "csv", level: "spans" })) +
           '" download title="Download raw span CSV">' + DL_ICON + "CSV raw spans</a>" +
         '<button type="button" class="qym-inline-action qym-inline-action--accent sl-btn" ' +
-          'data-sl-download-svg title="Download plot as SVG">' + DL_ICON + "SVG</button>" +
+          'data-sl-download-svg title="Download plot as SVG">' + DL_ICON + "SVG</button>") +
       "</div>" + body + "</div>";
 
     container.querySelectorAll("[data-sl-seg]").forEach((group) => {
@@ -1038,7 +1054,10 @@
 
   function _breakdownRows(spec) {
     const groups = (state.cache.name || []).filter(
-      (g) => g.phase === "task" && g.kind === spec.kind);
+      (g) => g.phase === "task" && g.kind === spec.kind &&
+        (spec.mode !== "latency" || g.n > 0) &&
+        (spec.mode !== "tokens" || g.tokens_total > 0 ||
+          g.tokens_prompt > 0 || g.tokens_completion > 0));
     const tc = state.traceCount || 1;
     const rows = groups.map((g) => {
       const calls = g.n + g.error_count;
@@ -1074,27 +1093,18 @@
   function _insetHtml(label) {
     let rows;
     if (label !== "Avg Trace Latency" && !state.cache.name) {
-      return '<div class="sl-ts-empty">Loading\u2026</div>';
+      return '<div class="sl-ts-empty">' +
+        (state.error ? "Breakdown unavailable." : "Loading\u2026") + "</div>";
     }
     if (label === "Avg Trace Latency") {
-      rows = _tsFolded.map((f) => ({
+      rows = _tsFolded.filter((f) => f.value && f.value !== "\u2014").map((f) => ({
         name: f.label.replace(/^Avg\s+/i, "").replace(/\s+latency$/i, ""),
         iconKey: /evaluator/i.test(f.label) ? "EVALUATOR" : "AGENT",
         value: f.value, sub: "" }));
     } else {
       rows = _breakdownRows(TILE_BREAKDOWNS[label]);
     }
-    if (!rows.length) {
-      return '<div class="sl-ts-empty">No step data for this scope.</div>';
-    }
-    if (label === "Avg Tokens") {
-      const groups = (state.cache.name || []).filter(
-        (g) => g.phase === "task" && g.kind === "LLM");
-      if (!groups.some((g) => (g.tokens_total || 0) > 0)) {
-        return '<div class="sl-ts-empty">No token counts recorded on these ' +
-          "LLM spans.</div>";
-      }
-    }
+    if (!rows.length) return "";
     return '<div class="sl-ts-rows">' + rows.map((r) =>
       '<div class="sl-ts-row">' +
         '<span class="sl-ts-name">' +
@@ -1121,21 +1131,37 @@
         _tsInset.className = "sl-ts-inset";
         strip.insertAdjacentElement("afterend", _tsInset);
       }
-      try {
-        _tsInset.innerHTML = _insetHtml(label);
-      } catch (err) {
-        console.error("[step-latency] inset render failed:", err);
-        _tsInset.innerHTML = '<div class="sl-ts-empty">Breakdown unavailable.</div>';
-      }
     }
-    strip.querySelectorAll("[data-sl-ts]").forEach((pill) => {
-      pill.classList.toggle("sl-ts-active",
-        pill.getAttribute("data-sl-ts") === _tsOpenLabel);
-    });
+    refreshTraceStatsInset();
+  }
+
+  function _safeInsetHtml(label) {
+    try {
+      return _insetHtml(label);
+    } catch (err) {
+      console.error("[step-latency] inset render failed:", err);
+      return '<div class="sl-ts-empty">Breakdown unavailable.</div>';
+    }
   }
 
   function refreshTraceStatsInset() {
-    if (_tsOpenLabel && _tsInset) _tsInset.innerHTML = _insetHtml(_tsOpenLabel);
+    if (_tsOpenLabel && _tsInset) {
+      const markup = _safeInsetHtml(_tsOpenLabel);
+      if (markup) _tsInset.innerHTML = markup;
+      else {
+        _tsInset.remove();
+        _tsInset = null;
+        _tsOpenLabel = null;
+      }
+    }
+    _tsBindings.forEach(({ pill }) => {
+      const label = pill.getAttribute("data-sl-ts");
+      const available = !!_safeInsetHtml(label);
+      pill.classList.toggle("sl-ts-expandable", available);
+      pill.classList.toggle("sl-ts-active", available && label === _tsOpenLabel);
+      const chevron = pill.querySelector(".sl-ts-chev");
+      if (chevron) chevron.style.display = available ? "" : "none";
+    });
   }
 
   function enhanceTraceStats() {
@@ -1187,6 +1213,7 @@
           console.error("[step-latency] pill enhance failed:", err, pill);
         }
       });
+      refreshTraceStatsInset();
     }, 250);
   }
 
@@ -1204,6 +1231,7 @@
       state.error = null;
       state.passes = [];
       state.traceCount = 0;
+      state.hasUnscopedGroups = false;
       state.runIds = runIds.map(String);
       state.pooled = (opts && typeof opts.pooled === "boolean")
         ? opts.pooled
