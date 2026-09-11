@@ -1,0 +1,117 @@
+name: Shared Codex PR review
+
+# Fork PRs need base-repository credentials. Never check out or execute their
+# code in this workflow. The reviewer reads their git diff from a main checkout.
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to review
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codex-review-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      enabled: ${{ steps.prepare.outputs.enabled }}
+      pr_number: ${{ steps.prepare.outputs.pr_number }}
+      head_sha: ${{ steps.prepare.outputs.head_sha }}
+      base_sha: ${{ steps.prepare.outputs.base_sha }}
+      actor: ${{ steps.prepare.outputs.actor }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Check PR, contributor access, and configuration
+        id: prepare
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          HAS_REVIEW_KEY: ${{ secrets.OPENAI_API_KEY != '' }}
+          REVIEW_AUTHORS: ${{ vars.CODEX_REVIEW_AUTHORS || 'faisalx96,saudalsulaiman,waleed-6' }}
+        with:
+          script: |
+            const { prepare } = require('./.github/codex/review.cjs');
+            await prepare({ github, context, core, env: process.env });
+
+  review:
+    needs: prepare
+    if: needs.prepare.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      report: ${{ steps.codex.outputs.final-message }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.prepare.outputs.base_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Fetch PR objects without checking out PR files
+        env:
+          PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
+          EXPECTED_HEAD: ${{ needs.prepare.outputs.head_sha }}
+        run: |
+          git fetch --no-tags origin "refs/pull/${PR_NUMBER}/head:refs/review/head"
+          test "$(git rev-parse refs/review/head)" = "$EXPECTED_HEAD"
+      - name: Prepare review instructions
+        env:
+          REVIEW_HEAD_SHA: ${{ needs.prepare.outputs.head_sha }}
+          REVIEW_BASE_SHA: ${{ needs.prepare.outputs.base_sha }}
+        run: node .github/codex/review.cjs prompt
+      - name: Review changes
+        id: codex
+        uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: '0.154.0'
+          permission-profile: ':read-only'
+          safety-strategy: drop-sudo
+          allow-users: ${{ needs.prepare.outputs.actor }}
+          model: ${{ vars.CODEX_REVIEW_MODEL }}
+          effort: high
+          codex-args: '["--ephemeral"]'
+          prompt-file: ${{ runner.temp }}/qym-review-prompt.md
+          output-schema-file: .github/codex/review-schema.json
+
+  publish:
+    needs: [prepare, review]
+    if: needs.review.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.prepare.outputs.base_sha }}
+          persist-credentials: false
+      - name: Validate findings and publish GitHub review
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          REVIEW_REPORT: ${{ needs.review.outputs.report }}
+          REVIEW_PR_NUMBER: ${{ needs.prepare.outputs.pr_number }}
+          REVIEW_HEAD_SHA: ${{ needs.prepare.outputs.head_sha }}
+          REVIEW_BASE_SHA: ${{ needs.prepare.outputs.base_sha }}
+        with:
+          script: |
+            const { publish } = require('./.github/codex/review.cjs');
+            await publish({ github, context, core, env: process.env });

@@ -48,6 +48,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Test shared PR reviewer
+        run: node --test tests/automation/*.test.cjs
       - name: Install packages and test tools
         run: >-
           python -m pip install -e packages/sdk -e packages/platform
