@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["summary", "findings", "limitations"],
+  "properties": {
+    "summary": { "type": "string" },
+    "limitations": { "type": "array", "items": { "type": "string" } },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["priority", "title", "body", "path", "line"],
+        "properties": {
+          "priority": { "type": "integer", "enum": [0, 1, 2] },
+          "title": { "type": "string" },
+          "body": { "type": "string" },
+          "path": { "type": "string" },
+          "line": { "type": "integer" }
+        }
+      }
+    }
+  }
+}
