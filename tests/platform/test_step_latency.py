@@ -105,6 +105,21 @@ class TestPhaseAttribution:
         ids = {r["span_id"] for r in rows}
         assert "root" not in ids and "task" not in ids and "em" not in ids
 
+    def test_matching_span_ids_in_other_runs_do_not_inherit_eval_phase(self):
+        rows = classify_spans([
+            FakeSpan(
+                span_id="call", name="evaluate", run_id="r1", trace_id="t1",
+                duration_ms=100.0, attributes={"qym.usage_scope": "metric"},
+            ),
+            FakeSpan(
+                span_id="call", name="task", run_id="r2", trace_id="t2",
+                duration_ms=200.0,
+            ),
+        ])
+        assert {row["run_id"]: row["phase"] for row in rows} == {
+            "r1": "eval", "r2": "task",
+        }
+
 
 class TestStats:
     def test_group_stats(self):
@@ -206,6 +221,20 @@ class TestLeafRule:
         ]
         rows = classify_spans(spans)
         assert "em" not in {r["span_id"] for r in rows}
+
+    def test_other_runs_children_do_not_hide_a_leaf_with_the_same_ids(self):
+        spans = [
+            FakeSpan(span_id="root", name="parse", run_id="r1", duration_ms=50.0),
+            FakeSpan(span_id="root", name="parse", run_id="r2", duration_ms=60.0),
+            FakeSpan(
+                span_id="child", name="read", run_id="r2", parent_span_id="root",
+                duration_ms=40.0,
+            ),
+        ]
+        rows = classify_spans(spans)
+        assert {(row["run_id"], row["span_id"]) for row in rows} == {
+            ("r1", "root"), ("r2", "child"),
+        }
 
 
 class TestTokens:

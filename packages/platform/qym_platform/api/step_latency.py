@@ -19,7 +19,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from qym_platform.api.ingest import _span_oi_kind, _span_usage_scope
@@ -113,13 +113,13 @@ def _percentile(sorted_values: Sequence[float], pct: float) -> float:
 
 
 def _metric_span_ids(spans: Sequence[Any]) -> set:
-    """Span ids in the eval phase, per trace: metric-scoped spans and all
+    """Run/trace/span keys in the eval phase: metric-scoped spans and all
     descendants of metric roots (``eval_metrics`` name or metric usage scope).
     Mirrors ingestion's attribution."""
     eval_ids: set = set()
-    by_trace: Dict[str, List[Any]] = defaultdict(list)
+    by_trace: Dict[tuple, List[Any]] = defaultdict(list)
     for span in spans:
-        by_trace[span.trace_id].append(span)
+        by_trace[(span.run_id, span.trace_id)].append(span)
 
     for trace_spans in by_trace.values():
         spans_by_id = {span.span_id: span for span in trace_spans}
@@ -147,7 +147,7 @@ def _metric_span_ids(spans: Sequence[Any]) -> set:
 
         for span in trace_spans:
             if span.span_id in metric_root_ids or _is_metric_descendant(span):
-                eval_ids.add(span.span_id)
+                eval_ids.add((span.run_id, span.trace_id, span.span_id))
     return eval_ids
 
 
@@ -168,7 +168,7 @@ def classify_spans(spans: Sequence[Any], rollup: str = "name") -> List[Dict[str,
     error status."""
     eval_ids = _metric_span_ids(spans)
     parent_ids = {
-        (span.trace_id, span.parent_span_id)
+        (span.run_id, span.trace_id, span.parent_span_id)
         for span in spans
         if span.parent_span_id
     }
@@ -178,7 +178,8 @@ def classify_spans(spans: Sequence[Any], rollup: str = "name") -> List[Dict[str,
         kind = _span_oi_kind(attrs)
         if span.name in _STRUCTURAL_SPAN_NAMES:
             continue
-        is_leaf = (span.trace_id, span.span_id) not in parent_ids
+        span_key = (span.run_id, span.trace_id, span.span_id)
+        is_leaf = span_key not in parent_ids
         if kind not in _STEP_KINDS and not is_leaf:
             continue
         if not kind:
@@ -199,7 +200,7 @@ def classify_spans(spans: Sequence[Any], rollup: str = "name") -> List[Dict[str,
                 "run_id": span.run_id,
                 "trace_id": span.trace_id,
                 "span_id": span.span_id,
-                "phase": "eval" if span.span_id in eval_ids else "task",
+                "phase": "eval" if span_key in eval_ids else "task",
                 "kind": kind,
                 "step_type": _step_label(kind, span.name, attrs, rollup),
                 "name": span.name,
@@ -339,40 +340,26 @@ def _load_spans(
         if row[0] is not None
     )
 
-    def _traces_for(run_id: str, pass_no: int) -> List[str]:
-        return [
-            row[0]
-            for row in db.query(RunItemAttempt.trace_id)
-            .filter(
-                RunItemAttempt.run_id == run_id,
-                RunItemAttempt.pass_number == pass_no,
-                RunItemAttempt.trace_id.isnot(None),
-            )
-            .distinct()
-            .all()
-        ]
-
-    # Resolve each ref to either "the whole run" or "these traces", then take
-    # the union so mixed selections (a whole run + one pass of another) work.
+    # Trace ids are client supplied and can repeat across runs. Keep each
+    # pass's trace selection bound to the run whose access was checked.
     whole_runs: List[str] = []
-    trace_ids: List[str] = []
+    filters = []
     for base, ref_pass in refs:
         effective = ref_pass if ref_pass is not None else pass_number
         if effective is None:
             whole_runs.append(base)
         else:
-            trace_ids.extend(_traces_for(base, effective))
-
-    query = db.query(Span)
-    if whole_runs and trace_ids:
-        query = query.filter(
-            or_(Span.run_id.in_(whole_runs), Span.trace_id.in_(trace_ids))
-        )
-    elif whole_runs:
-        query = query.filter(Span.run_id.in_(whole_runs))
-    else:
-        query = query.filter(Span.trace_id.in_(trace_ids))
-    return query.all(), passes
+            pass_traces = db.query(RunItemAttempt.trace_id).filter(
+                RunItemAttempt.run_id == base,
+                RunItemAttempt.pass_number == effective,
+                RunItemAttempt.trace_id.isnot(None),
+            )
+            filters.append(
+                and_(Span.run_id == base, Span.trace_id.in_(pass_traces))
+            )
+    if whole_runs:
+        filters.append(Span.run_id.in_(whole_runs))
+    return db.query(Span).filter(or_(*filters)).all(), passes
 
 
 def _csv_response(fieldnames: List[str], rows: Iterable[Dict[str, Any]], filename: str) -> PlainTextResponse:
@@ -400,7 +387,9 @@ def multi_run_step_latency(
 ):
     ids = [rid.strip() for rid in run_ids.split(",") if rid.strip()]
     spans, passes = _load_spans(db, principal, ids, pass_number=pass_number)
-    trace_count = len({span.trace_id for span in spans if span.trace_id})
+    trace_count = len(
+        {(span.run_id, span.trace_id) for span in spans if span.trace_id}
+    )
     if level == "spans":
         rows = classify_spans(spans, rollup=rollup)
         if format == "csv":

@@ -169,6 +169,24 @@ class ViewFixture:
                 }
             )
             return
+        if pathname == "/api/runs/step-latency":
+            self.requests.append(("step-latency", "summary", query))
+            refs = query["run_ids"][0].split(",")
+            route.fulfill(json={
+                "run_ids": refs,
+                "passes": [],
+                "trace_count": len(refs),
+                "groups": [{
+                    "phase": "task", "kind": "TOOL",
+                    "step_type": "tool" if query.get("rollup") == ["kind"] else "lookup",
+                    "n": len(refs), "error_count": 0,
+                    "mean_ms": 100, "median_ms": 100, "std_ms": 0,
+                    "p5_ms": 100, "p25_ms": 100, "p75_ms": 100, "p95_ms": 100,
+                    "min_ms": 100, "max_ms": 100, "cv": 0,
+                    "tokens_total": 0, "tokens_prompt": 0, "tokens_completion": 0,
+                }],
+            })
+            return
         if self.api_client is not None and (
             pathname == "/api/compare" or pathname.startswith("/api/runs/")
         ):
@@ -308,7 +326,7 @@ class ViewFixture:
                 if self.kind == "compare"
                 else "      loadRunData();"
             )
-            helpers = "openItemComparisonModal," if self.kind == "compare" else ""
+            helpers = "openItemComparisonModal, render," if self.kind == "compare" else ""
             source = source.replace(
                 init,
                 "window.__viewTest = {state, renderItems, getFilteredItems, "
@@ -350,6 +368,12 @@ class ViewFixture:
         return self.page.evaluate(
             """() => ({ids: __viewTest.getFilteredItems().map(item => item.itemId || item.row.item_id), count: document.querySelector('#filter-count').textContent, stats: __viewTest.state.comparisonStats || null})"""
         )
+
+    def latency_selections(self):
+        return [
+            tuple(query["run_ids"][0].split(","))
+            for run_id, _, query in self.requests if run_id == "step-latency"
+        ]
 
     def close(self):
         self.context.close()
@@ -915,6 +939,76 @@ def test_compare_modal_loads_off_page_repeated_passes(browser):
         fixture.settled()
         assert fixture.state_result()["ids"] == ["aligned-259"]
         assert len(fixture.page.evaluate("__viewTest.state.runs")) == 6
+    finally:
+        fixture.close()
+
+
+def test_compare_latency_tracks_expanded_passes_and_removed_cards(browser):
+    fixture = ViewFixture(browser, "compare", samples=3, count=3)
+    try:
+        fixture.data["run-1"]["run"]["run_name"] = "Baseline"
+        fixture.data["run-2"]["run"]["run_name"] = "Candidate"
+        fixture.goto()
+        page = fixture.page
+        page.wait_for_function("document.querySelectorAll('.sl-run-chip').length === 6")
+        page.wait_for_load_state("networkidle")
+        refs = [f"run-{run}::pass{number}" for run in (1, 2) for number in (1, 2, 3)]
+        assert set(fixture.latency_selections()) == {tuple(refs)} | {
+            (ref,) for ref in refs
+        }
+        assert page.locator(".sl-run-chip").all_text_contents() == (
+            page.locator(".compare-run-title").all_text_contents()
+        )
+
+        initial_requests = len(fixture.latency_selections())
+        page.evaluate("__viewTest.render(); __viewTest.render()")
+        page.wait_for_load_state("networkidle")
+        assert len(fixture.latency_selections()) == initial_requests
+
+        removed = refs.pop(1)
+        page.locator('.compare-run-remove[data-idx="1"]').click()
+        page.wait_for_function("document.querySelectorAll('.sl-run-chip').length === 5")
+        page.wait_for_load_state("networkidle")
+        next_selections = fixture.latency_selections()[initial_requests:]
+        assert set(next_selections) == {tuple(refs)} | {(ref,) for ref in refs}
+        assert all(removed not in selection for selection in next_selections)
+        assert parse_qs(urlparse(page.url).query)["runs"] == refs
+        assert page.evaluate("JSON.parse(sessionStorage.getItem('compareRuns'))") == refs
+        assert page.locator(".sl-run-chip").all_text_contents() == (
+            page.locator(".compare-run-title").all_text_contents()
+        )
+
+        page.reload()
+        fixture.ready()
+        page.wait_for_function("document.querySelectorAll('.sl-run-chip').length === 5")
+        assert page.evaluate("__viewTest.state.runs.map(run => run.run.file_path)") == refs
+    finally:
+        fixture.close()
+
+
+def test_compare_latency_uses_expanded_cohorts_and_updated_labels(browser):
+    fixture = ViewFixture(browser, "compare", samples=3, count=3)
+    try:
+        fixture.goto(
+            "&cohortA=run-1&cohortB=run-2&cohortALabel=Baseline&cohortBLabel=Candidate"
+        )
+        page = fixture.page
+        page.wait_for_function("document.querySelectorAll('.sl-run-chip').length === 2")
+        page.wait_for_load_state("networkidle")
+        left = tuple(f"run-1::pass{number}" for number in (1, 2, 3))
+        right = tuple(f"run-2::pass{number}" for number in (1, 2, 3))
+        assert set(fixture.latency_selections()) == {left + right, left, right}
+        assert page.locator(".sl-run-chip").all_text_contents() == ["Baseline", "Candidate"]
+
+        page.once("dialog", lambda dialog: dialog.accept("Renamed baseline"))
+        page.locator('.compare-cohort-pill[data-cohort-side="left"]').dblclick()
+        page.wait_for_function(
+            "document.querySelector('.sl-run-chip')?.textContent === 'Renamed baseline'"
+        )
+        assert page.locator(".sl-run-chip").all_text_contents() == [
+            "Renamed baseline", "Candidate",
+        ]
+        assert parse_qs(urlparse(page.url).query)["cohortALabel"] == ["Renamed baseline"]
     finally:
         fixture.close()
 

@@ -209,9 +209,10 @@ def test_unknown_run_404(client, session_factory):
     assert resp.status_code == 404
 
 
-def _seed_second_pass(session: Session, run_id: str = "run-1") -> None:
+def _seed_second_pass(
+    session: Session, run_id: str = "run-1", trace: str = "trace-p2"
+) -> None:
     """Add a pass-2 attempt with its own trace and one slow tool span."""
-    trace = "trace-p2"
     session.add(RunItemAttempt(
         run_id=run_id, item_id="item-1", pass_number=2, attempt_number=1,
         status="COMPLETED", trace_id=trace, is_last_attempt=True,
@@ -291,3 +292,80 @@ def test_unknown_base_in_pass_ref_404s(client, session_factory):
     resp = client.get("/api/runs/step-latency?run_ids=nope::pass1",
                       headers=_headers("owner@example.com"))
     assert resp.status_code == 404
+
+
+@pytest.mark.parametrize("selection", [
+    "/api/runs/run-1/step-latency?pass_number=1",
+    "/api/runs/step-latency?run_ids=run-1::pass1",
+    "/api/runs/step-latency?run_ids=run-2,run-1::pass1",
+])
+def test_pass_selection_excludes_private_runs_with_shared_traces(
+    client, session_factory, selection
+):
+    with session_factory() as session:
+        _seed(session, run_id="run-1", trace="shared-trace")
+        _seed(session, run_id="run-2", trace="other-trace")
+        _seed(session, run_id="private-run", trace="shared-trace")
+        session.add(Project(
+            id="private-project", name="Private", slug="private",
+            created_by_user_id="user-other",
+        ))
+        private_run = session.get(Run, "private-run")
+        private_run.project_id = "private-project"
+        private_run.owner_user_id = "user-other"
+        private_run.created_by_user_id = "user-other"
+        session.commit()
+
+    headers = _headers("owner@example.com")
+    denied = client.get("/api/runs/private-run/step-latency", headers=headers)
+    assert denied.status_code == 403
+
+    response = client.get(selection + "&level=spans", headers=headers)
+    assert response.status_code == 200
+    expected_runs = {"run-1", "run-2"} if "run-2," in selection else {"run-1"}
+    rows = response.json()["spans"]
+    assert {row["run_id"] for row in rows} == expected_runs
+    assert len(rows) == 5 * len(expected_runs)
+
+
+def test_pass_refs_keep_shared_trace_ids_bound_to_each_run(client, session_factory):
+    with session_factory() as session:
+        _seed(session, run_id="run-1", trace="trace-a")
+        _seed_second_pass(session, run_id="run-1", trace="trace-b")
+        _seed(session, run_id="run-2", trace="trace-a")
+        _seed_second_pass(session, run_id="run-2", trace="trace-b")
+
+    response = client.get(
+        "/api/runs/step-latency?run_ids=run-1::pass1,run-2::pass2&level=spans",
+        headers=_headers("owner@example.com"),
+    )
+    assert response.status_code == 200
+    rows = response.json()["spans"]
+    assert {(row["run_id"], row["trace_id"]) for row in rows} == {
+        ("run-1", "trace-a"), ("run-2", "trace-b"),
+    }
+    assert len(rows) == 6
+
+
+def test_pooled_runs_keep_shared_trace_ancestry_separate(client, session_factory):
+    with session_factory() as session:
+        _seed(session, run_id="run-1", trace="shared-trace")
+        _seed(session, run_id="run-2", trace="shared-trace")
+        container = session.query(Span).filter(
+            Span.run_id == "run-2", Span.span_id == "shared-trace-em"
+        ).one()
+        container.name = "task_container"
+        session.commit()
+
+    response = client.get(
+        "/api/runs/step-latency?run_ids=run-1,run-2&level=spans",
+        headers=_headers("owner@example.com"),
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["trace_count"] == 2
+    phases = {
+        row["run_id"]: row["phase"] for row in payload["spans"]
+        if row["span_id"] == "shared-trace-s3"
+    }
+    assert phases == {"run-1": "eval", "run-2": "task"}

@@ -12,7 +12,7 @@
   <script src="./static/metrics.js?v=metric-errors-20260907-3"></script>
   <script src="./static/run_details.js"></script>
   <script src="./static/trace_viewer.js?v=merge-20260804-1"></script>
-  <script src="./static/step_latency.js?v=step-latency-33"></script>
+  <script src="./static/step_latency.js?v=step-latency-fixes-20260911-1"></script>
   <script src="./static/playground.js?v=rule-history-bottom-20260816-1"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
@@ -5638,6 +5638,7 @@
         }
 
         inferGroupedOutcomeGroups();
+        syncStepLatency();
         renderCompareCohortBanner();
         populateItemFilterOptions();
         renderCompareModeTabs();
@@ -7794,29 +7795,6 @@
           return;
         }
 
-        try {
-          if (window.QymStepLatency) {
-            const slPanel = document.getElementById('step-latency-panel');
-            // One lane per compared entry (pass refs included), or one lane
-            // per cohort when comparing sides — each cohort's runs pooled.
-            const slOpts = { pooled: true };
-            const slCohorts = state.explicitGroupedOutcomeGroups;
-            if (slCohorts
-                && (slCohorts.leftRunIds || []).length
-                && (slCohorts.rightRunIds || []).length) {
-              slOpts.cohorts = [
-                { label: slCohorts.modelALabel || 'Cohort A',
-                  runIds: slCohorts.leftRunIds },
-                { label: slCohorts.modelBLabel || 'Cohort B',
-                  runIds: slCohorts.rightRunIds },
-              ];
-            }
-            if (slPanel) QymStepLatency.mount(slPanel, files.map(String), slOpts);
-          }
-        } catch (err) {
-          console.error('[step-latency] mount failed:', err);
-        }
-
         // Update URL to include run IDs for shareability
         _updateCompareUrl(files, state.explicitGroupedOutcomeGroups ? {
           left: state.explicitGroupedOutcomeGroups.leftRunIds,
@@ -8490,15 +8468,10 @@
         state.runs.splice(idx, 1);
 
         // Update sessionStorage and URL so they persist
-        let files = null;
-        const filesJson = sessionStorage.getItem('compareRuns');
-        if (filesJson) {
-          try {
-            files = JSON.parse(filesJson);
-            files.splice(idx, 1);
-            sessionStorage.setItem('compareRuns', JSON.stringify(files));
-          } catch {}
-        }
+        // The original URL can contain whole repeat runs, while the cards
+        // contain individual passes. Persist the actual remaining entries.
+        const files = state.runs.map(getCompareRunDataId);
+        sessionStorage.setItem('compareRuns', JSON.stringify(files));
 
         if (state.explicitGroupedOutcomeGroups && removedRunId) {
           const explicit = state.explicitGroupedOutcomeGroups;
@@ -8522,7 +8495,7 @@
             sessionStorage.removeItem('compareCohorts');
           }
         }
-        _updateCompareUrl(files || state.runs.map(getCompareRunDataId), state.explicitGroupedOutcomeGroups ? {
+        _updateCompareUrl(files, state.explicitGroupedOutcomeGroups ? {
           left: state.explicitGroupedOutcomeGroups.leftRunIds,
           right: state.explicitGroupedOutcomeGroups.rightRunIds,
           leftLabel: state.explicitGroupedOutcomeGroups.modelALabel,
@@ -8544,11 +8517,43 @@
         el('compare-content').style.display = 'none';
       }
 
+      let stepLatencySelection = '';
+
+      function syncStepLatency() {
+        if (IS_COMPARE_EXPORT || !window.QymStepLatency || !state.runs.length) return;
+        const panel = el('step-latency-panel');
+        if (!panel) return;
+        // Use the same resolved pass entries and order as the run cards.
+        const runIds = state.runs.map(getCompareRunDataId);
+        const opts = {
+          pooled: true,
+          runLabels: Object.fromEntries(state.runs.map((run, index) => [
+            runIds[index], run.run?.run_name || `Run ${index + 1}`,
+          ])),
+        };
+        if (state.explicitGroupedOutcomeGroups && state.groupedOutcomeGroups) {
+          const groups = state.groupedOutcomeGroups;
+          opts.cohorts = [
+            { label: groups.modelALabel, runIds: groups.leftRunIds },
+            { label: groups.modelBLabel, runIds: groups.rightRunIds },
+          ];
+        }
+        const selection = JSON.stringify({ runIds, opts });
+        if (selection === stepLatencySelection) return;
+        try {
+          QymStepLatency.mount(panel, runIds, opts);
+          stepLatencySelection = selection;
+        } catch (err) {
+          console.error('[step-latency] mount failed:', err);
+        }
+      }
+
       function render() {
         el('loading').style.display = 'none';
         el('empty').style.display = 'none';
         el('compare-content').style.display = 'block';
 
+        syncStepLatency();
         renderCompareModeTabs();
         renderCompareCohortBanner();
         renderSummaries();
@@ -14395,7 +14400,7 @@
           html = html.replace(match[0], () => '<script>\n' + escapeInlineScriptContent(js) + '\n</' + 'script>');
         }
 
-        html = html.replace(/\s*<script\s+src="(?:\.\/|\/)static\/(?:auth|shell|playground|run_details)\.js(?:\?[^"]*)?"><\/script>\s*/g, '\n');
+        html = html.replace(/\s*<script\s+src="(?:\.\/|\/)static\/(?:auth|shell|playground|run_details|step_latency)\.js(?:\?[^"]*)?"><\/script>\s*/g, '\n');
         html = html.replace(/\s*<link\s+rel="icon"\s+type="image\/png"\s+href="(?:\.\/|\/)static\/qym_icon\.png(?:\?[^"]*)?">\s*/g, '\n');
         return html;
       }

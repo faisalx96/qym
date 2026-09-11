@@ -147,13 +147,6 @@
   function runColor(key) {
     return RUN_COLORS[seriesIndex(key) % RUN_COLORS.length];
   }
-  function runRefParts(id) {
-    const sep = String(id).indexOf("::pass");
-    if (sep < 0) return { base: String(id), pass: null };
-    return { base: String(id).slice(0, sep),
-             pass: parseInt(String(id).slice(sep + 6), 10) || null };
-  }
-
   const DL_ICON =
     '<svg class="qym-item-control-icon" viewBox="0 0 16 16" aria-hidden="true">' +
     '<path d="M8 2v8"/><path d="m4.5 7 3.5 3.5L11.5 7"/><path d="M3 13.5h10"/></svg>';
@@ -201,52 +194,74 @@
     cache: {},         // groups per rollup for the current pass scope
     traceCount: 0,     // distinct traces behind the current data
     collapsed: {},     // group keys collapsed in the plot (client-side only)
-    compareMode: "pooled",  // compare page: pooled | byrun
     series: [],        // [{key, label, refs}] one lane each: a run, or a cohort
     activeSeries: [],  // series keys currently drawn
     runData: {},       // groups keyed by rollup then series key
     error: null,
-    seq: 0,            // mount generation; stale responses are discarded
+    seq: 0,            // request generation; stale responses are discarded
+    pending: {},       // shared requests for each rollup in this generation
+    runPending: {},    // shared requests for each comparison lane
   };
 
   let container = null;
 
   function apiUrl(params) {
-    const baseIds = [...new Set(state.runIds.map((r) => runRefParts(r).base))];
-    const base = { run_ids: baseIds.join(",") };
+    const base = { run_ids: [...new Set(state.runIds)].join(",") };
     if (state.passNum != null) base.pass_number = state.passNum;
     const q = new URLSearchParams(Object.assign(base, params || {}));
     return "/api/runs/step-latency?" + q.toString();
   }
 
-  async function fetchData() {
-    const seq = state.seq;
-    state.data = null;
-    state.error = null;
-    try {
-      const resp = await fetch(apiUrl({ rollup: state.rollup }), {
+  async function loadGroups(rollup, seq) {
+    if (state.cache[rollup]) {
+      return { groups: state.cache[rollup], passes: state.passes,
+        trace_count: state.traceCount };
+    }
+    const pending = state.pending;
+    if (!pending[rollup]) pending[rollup] = (async () => {
+      const resp = await fetch(apiUrl({ rollup: rollup }), {
         headers: { Accept: "application/json" },
         credentials: "same-origin",
       });
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       const payload = await resp.json();
-      if (seq !== state.seq) return;   // superseded by a newer mount
-      state.data = payload.groups || [];
+      if (seq !== state.seq) return null;
+      state.cache[rollup] = payload.groups || [];
       state.passes = payload.passes || [];
       state.traceCount = payload.trace_count || 0;
-      state.cache[state.rollup] = state.data;
+      return payload;
+    })().finally(() => { delete pending[rollup]; });
+    return pending[rollup];
+  }
+
+  async function fetchData() {
+    const seq = state.seq;
+    const rollup = state.rollup;
+    state.data = null;
+    state.error = null;
+    render();
+    try {
+      const [payload] = await Promise.all([
+        loadGroups(rollup, seq),
+        state.pooled ? ensureRunData(seq) : ensureNameGroups(seq),
+      ]);
+      if (seq !== state.seq || !payload) return;
+      state.data = payload.groups || [];
       refreshTraceStatsInset();
     } catch (err) {
+      if (seq !== state.seq) return;
       state.error = String((err && err.message) || err);
     }
     render();
   }
 
-  async function ensureRunData() {
+  async function ensureRunData(seq = state.seq) {
     const rollup = state.rollup;
     const bucket = state.runData[rollup] || (state.runData[rollup] = {});
+    const pending = state.runPending[rollup] || (state.runPending[rollup] = {});
     const missing = state.activeSeries.filter((key) => !bucket[key]);
     await Promise.all(missing.map(async (key) => {
+      if (pending[key]) return pending[key];
       const s = state.series.find((x) => x.key === key);
       if (!s) return;
       // The endpoint pools every ref it is given, so a cohort is one call
@@ -255,29 +270,26 @@
         run_ids: s.refs.join(","), rollup: rollup,
       });
       if (state.passNum != null) q.set("pass_number", state.passNum);
-      const resp = await fetch("/api/runs/step-latency?" + q.toString(), {
-        headers: { Accept: "application/json" },
-        credentials: "same-origin",
-      });
-      if (!resp.ok) throw new Error("HTTP " + resp.status);
-      const payload = await resp.json();
-      bucket[key] = payload.groups || [];
+      pending[key] = (async () => {
+        const resp = await fetch("/api/runs/step-latency?" + q.toString(), {
+          headers: { Accept: "application/json" },
+          credentials: "same-origin",
+        });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        const payload = await resp.json();
+        if (seq === state.seq) bucket[key] = payload.groups || [];
+      })().catch((err) => {
+        if (seq === state.seq && state.activeSeries.includes(key)) throw err;
+      }).finally(() => { delete pending[key]; });
+      return pending[key];
     }));
   }
 
   // Ensure name-rollup groups are available (used by the trace-stats
   // breakdowns regardless of the panel's current rollup toggle).
-  async function ensureNameGroups() {
-    if (state.cache.name) return state.cache.name;
-    const resp = await fetch(apiUrl({ rollup: "name" }), {
-      headers: { Accept: "application/json" },
-      credentials: "same-origin",
-    });
-    if (!resp.ok) throw new Error("HTTP " + resp.status);
-    const payload = await resp.json();
-    state.cache.name = payload.groups || [];
-    state.traceCount = payload.trace_count || state.traceCount;
-    return state.cache.name;
+  async function ensureNameGroups(seq = state.seq) {
+    const payload = await loadGroups("name", seq);
+    return payload ? payload.groups || [] : null;
   }
 
   const KIND_ORDER = ["LLM", "TOOL", "RETRIEVER", "EMBEDDING", "RERANKER", "GUARDRAIL", "OTHER"];
@@ -556,7 +568,7 @@
         const p5 = scale.x(g.p5_ms), p25 = scale.x(g.p25_ms), p75 = scale.x(g.p75_ms),
           p95 = scale.x(g.p95_ms), medX = scale.x(g.median_ms), meanX = scale.x(g.mean_ms);
         const title = "<title>" + esc(r.step_type) + " (" + r.phase + ") \u2014 " +
-          seriesLabel(state.activeSeries[li]) + "\nn=" + g.n + ", err=" + g.error_count +
+          esc(seriesLabel(state.activeSeries[li])) + "\nn=" + g.n + ", err=" + g.error_count +
           "\nmedian " + FMT(g.median_ms) + " \u00b7 mean " + FMT(g.mean_ms) +
           "\np5 " + FMT(g.p5_ms) + " \u00b7 p95 " + FMT(g.p95_ms) + "</title>";
         s += "<g>" + title +
@@ -633,22 +645,50 @@
     }).join("") + "</div>";
   }
 
+  function seriesLegendMarkup(y, textColor, maxWidth, font) {
+    let x = 16;
+    let cy = y;
+    let width = 0;
+    let markup = "";
+    const cs = getComputedStyle(container);
+    const fontSize = cs.getPropertyValue("--font-sm").trim() || "11px";
+    const fontFamily = cs.getPropertyValue("--font-sans").trim() || cs.fontFamily;
+    const context = document.createElement("canvas").getContext("2d");
+    if (context) context.font = font || fontSize + " " + fontFamily;
+    const measure = (text) => context ? context.measureText(text).width : text.length * 11;
+    const maxTextWidth = Math.max(1, maxWidth - 70);
+    state.activeSeries.forEach((key) => {
+      const label = seriesLabel(key);
+      let shown = label;
+      if (measure(label) > maxTextWidth) {
+        const chars = Array.from(label);
+        let lo = 0, hi = chars.length;
+        while (lo < hi) {
+          const mid = Math.ceil((lo + hi) / 2);
+          if (measure(chars.slice(0, mid).join("") + "\u2026") <= maxTextWidth) lo = mid;
+          else hi = mid - 1;
+        }
+        shown = chars.slice(0, lo).join("") + "\u2026";
+      }
+      const itemWidth = 38 + Math.ceil(measure(shown));
+      if (x > 16 && x + itemWidth > maxWidth - 16) { x = 16; cy += 24; }
+      markup += '<g><title>' + esc(label) + '</title><rect x="' + x + '" y="' +
+        (cy - 6) + '" width="12" height="12" rx="2" fill="' + runColor(key) + '"/>' +
+        '<text x="' + (x + 18) + '" y="' + (cy + 4) + '" fill="' + textColor +
+        '">' + esc(shown) + '</text></g>';
+      x += itemWidth;
+      width = Math.max(width, x + 8);
+    });
+    return { markup: markup, width: width, height: cy - y + 28 };
+  }
+
   function inAppLegend() {
-    if (state.pooled && state.compareMode === "byrun") {
-      let lx = 16;
-      let lh = "";
-      state.activeSeries.forEach((key) => {
-        const color = runColor(key);
-        const label = seriesLabel(key);
-        lh += '<rect x="' + lx + '" y="8" width="12" height="12" rx="2" fill="' +
-          color + '"/>';
-        lh += '<text x="' + (lx + 18) + '" y="18" font-size="11" ' +
-          'fill="var(--text-muted, #888)">' + esc(label) + "</text>";
-        lx += 24 + label.length * 7 + 14;
-      });
-      return '<svg viewBox="0 0 ' + (lx + 8) + ' 28" width="' + (lx + 8) +
-        '" height="28" xmlns="http://www.w3.org/2000/svg" role="img" ' +
-        'aria-label="Run legend">' + lh + "</svg>";
+    if (state.pooled) {
+      const legend = seriesLegendMarkup(14, "var(--text-muted, #888)", 860);
+      return '<svg viewBox="0 0 ' + legend.width + ' ' + legend.height +
+        '" width="' + legend.width + '" height="' + legend.height +
+        '" style="font-size:var(--font-sm)" xmlns="http://www.w3.org/2000/svg" role="img" ' +
+        'aria-label="Run legend">' + legend.markup + "</svg>";
     }
     const legend = legendMarkup(
       14,
@@ -753,16 +793,17 @@
       group.querySelectorAll("[data-sl-val]").forEach((btn) => {
         btn.addEventListener("click", () => {
           const val = btn.getAttribute("data-sl-val");
-          if (state[name] === val) return;
-          state[name] = name === "passNum" ? (val === "" ? null : Number(val)) : val;
+          const next = name === "passNum" ? (val === "" ? null : Number(val)) : val;
+          if (state[name] === next) return;
+          state[name] = next;
           if (name === "passNum") { state.cache = {}; state.runData = {}; }
-          if (state.pooled && (name === "rollup" || name === "passNum")) {
-            ensureRunData().then(render).catch((err) => {
-              state.error = String((err && err.message) || err);
-              render();
-            });
+          if (name === "rollup" || name === "passNum") {
+            state.seq += 1;
+            state.pending = {};
+            state.runPending = {};
+            refreshTraceStatsInset();
+            fetchData();
           }
-          if (name === "rollup" || name === "passNum") fetchData();
           else render();
         });
       });
@@ -790,7 +831,12 @@
         } else {
           state.activeSeries.splice(idx, 1);
         }
-        ensureRunData().then(render).catch((err) => {
+        const seq = state.seq;
+        state.error = null;
+        ensureRunData(seq).then(() => {
+          if (seq === state.seq) render();
+        }).catch((err) => {
+          if (seq !== state.seq) return;
           state.error = String((err && err.message) || err);
           render();
         });
@@ -842,12 +888,15 @@
         if (v && v.indexOf("var(") !== -1) el.setAttribute(attr, resolve(v));
       });
     });
-    clone.setAttribute("font-family",
-      "-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif");
+    const exportFont = "-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+    clone.setAttribute("font-family", exportFont);
     const SVGNS = "http://www.w3.org/2000/svg";
     const vb = (clone.getAttribute("viewBox") || "0 0 860 400").split(/\s+/);
     const W = Number(vb[2]), H = Number(vb[3]);
-    const TITLE_H = 40, LEGEND_H = 44;
+    const TITLE_H = 40;
+    const seriesLegend = state.pooled
+      ? seriesLegendMarkup(TITLE_H + H + 48, "#6b7280", W, "11px " + exportFont) : null;
+    const LEGEND_H = 44 + (seriesLegend ? seriesLegend.height : 0);
     const textColor = "#1f2937";
     const mutedColor = "#6b7280";
     const agentColor = resolve(PHASE_COLORS.task);
@@ -880,9 +929,9 @@
     legend.innerHTML = legendMarkup(
       ly,
       { text: textColor, muted: mutedColor, agent: agentColor, evalc: evalColor },
-      state.phase !== "eval",
-      state.phase !== "task"
-    ).markup;
+      !state.pooled && state.phase !== "eval",
+      !state.pooled && state.phase !== "task"
+    ).markup + (seriesLegend ? seriesLegend.markup : "");
     clone.appendChild(legend);
     return clone.outerHTML;
   }
@@ -956,6 +1005,28 @@
   let _tsOpenLabel = null;
   let _tsFolded = [];   // [{label, value}] tiles folded into Trace Latency
   let _tsTimer = null;  // singleton retry timer: mount() can run repeatedly
+  let _tsBindings = [];
+
+  function resetTraceStats() {
+    if (_tsTimer) clearInterval(_tsTimer);
+    _tsTimer = null;
+    if (_tsInset) _tsInset.remove();
+    _tsInset = null;
+    _tsOpenLabel = null;
+    _tsBindings.forEach(({ pill, handler }) => {
+      pill.removeEventListener("click", handler);
+      pill.removeAttribute("data-sl-ts");
+      pill.classList.remove("sl-ts-expandable", "sl-ts-active");
+      const chevron = pill.querySelector(".sl-ts-chev");
+      if (chevron) chevron.remove();
+    });
+    _tsBindings = [];
+    _tsFolded.forEach(({ pill, display }) => {
+      pill.style.display = display;
+      pill.removeAttribute("data-sl-folded");
+    });
+    _tsFolded = [];
+  }
 
   function _tileLabel(pill) {
     const labelEl = pill.querySelector(
@@ -1002,6 +1073,9 @@
 
   function _insetHtml(label) {
     let rows;
+    if (label !== "Avg Trace Latency" && !state.cache.name) {
+      return '<div class="sl-ts-empty">Loading\u2026</div>';
+    }
     if (label === "Avg Trace Latency") {
       rows = _tsFolded.map((f) => ({
         name: f.label.replace(/^Avg\s+/i, "").replace(/\s+latency$/i, ""),
@@ -1077,55 +1151,60 @@
       }
       clearInterval(_tsTimer);
       _tsTimer = null;
-      ensureNameGroups().then(() => {
-        let decorated = 0;
-        Array.from(strip.children).forEach((pill) => {
-          try {
-            if (pill.hasAttribute("data-sl-ts") ||
-                pill.hasAttribute("data-sl-folded")) return;
-            const label = _tileLabel(pill);
-            const foldable = /^Avg\s+.+\s+latency$/i.test(label) &&
-              !(label in TILE_BREAKDOWNS) && label !== "Avg Trace Latency";
-            if (foldable) {
-              const valEl = pill.querySelector(".trace-pill-val");
-              _tsFolded.push({
-                label: label,
-                value: (valEl ? valEl.textContent : "").trim() || "\u2014",
-              });
-              pill.setAttribute("data-sl-folded", "1");
-              pill.style.display = "none";
-              return;
-            }
-            const expandable = (label in TILE_BREAKDOWNS) ||
-              label === "Avg Trace Latency";
-            if (!expandable) return;
-            pill.setAttribute("data-sl-ts", label);
-            pill.classList.add("sl-ts-expandable");
-            pill.insertAdjacentHTML("beforeend",
-              '<svg class="sl-ts-chev" viewBox="0 0 16 16" width="12" height="12" ' +
-              'fill="none" stroke="currentColor" stroke-width="1.7" ' +
-              'stroke-linecap="round" aria-hidden="true">' +
-              '<path d="M4 6.5 8 10.5 12 6.5"/></svg>');
-            pill.addEventListener("click", () => _toggleInset(label, strip));
-            decorated += 1;
-          } catch (err) {
-            console.error("[step-latency] pill enhance failed:", err, pill);
+      Array.from(strip.children).forEach((pill) => {
+        try {
+          if (pill.hasAttribute("data-sl-ts") ||
+              pill.hasAttribute("data-sl-folded")) return;
+          const label = _tileLabel(pill);
+          const foldable = /^Avg\s+.+\s+latency$/i.test(label) &&
+            !(label in TILE_BREAKDOWNS) && label !== "Avg Trace Latency";
+          if (foldable) {
+            const valEl = pill.querySelector(".trace-pill-val");
+            _tsFolded.push({
+              label: label,
+              value: (valEl ? valEl.textContent : "").trim() || "\u2014",
+              pill: pill,
+              display: pill.style.display,
+            });
+            pill.setAttribute("data-sl-folded", "1");
+            pill.style.display = "none";
+            return;
           }
-        });
-        console.log("[step-latency] trace stats enhanced:", decorated,
-          "expandable,", _tsFolded.length, "folded");
-      }).catch((err) => { console.error("[step-latency] trace stats enhance failed:", err); });
+          const expandable = (label in TILE_BREAKDOWNS) ||
+            label === "Avg Trace Latency";
+          if (!expandable) return;
+          pill.setAttribute("data-sl-ts", label);
+          pill.classList.add("sl-ts-expandable");
+          pill.insertAdjacentHTML("beforeend",
+            '<svg class="sl-ts-chev" viewBox="0 0 16 16" width="12" height="12" ' +
+            'fill="none" stroke="currentColor" stroke-width="1.7" ' +
+            'stroke-linecap="round" aria-hidden="true">' +
+            '<path d="M4 6.5 8 10.5 12 6.5"/></svg>');
+          const handler = () => _toggleInset(label, strip);
+          pill.addEventListener("click", handler);
+          _tsBindings.push({ pill: pill, handler: handler });
+        } catch (err) {
+          console.error("[step-latency] pill enhance failed:", err, pill);
+        }
+      });
     }, 250);
   }
 
   window.QymStepLatency = {
     mount(el, runIds, opts) {
       if (!el || !runIds || !runIds.length) return;
+      resetTraceStats();
       container = el;
       state.seq += 1;
       state.runData = {};
       state.cache = {};
-      state.runIds = runIds;
+      state.pending = {};
+      state.runPending = {};
+      state.data = null;
+      state.error = null;
+      state.passes = [];
+      state.traceCount = 0;
+      state.runIds = runIds.map(String);
       state.pooled = (opts && typeof opts.pooled === "boolean")
         ? opts.pooled
         : runIds.length > 1;
@@ -1153,25 +1232,19 @@
           .filter((c) => c && Array.isArray(c.runIds) && c.runIds.length)
           .map((c, i) => ({
             key: "cohort:" + i,
-            label: c.label || "Cohort " + String.fromCharCode(65 + i),
+            label: String(c.label || "Cohort " + String.fromCharCode(65 + i)),
             refs: c.runIds.map(String),
           }));
       } else {
         state.series = runIds.map((id, i) => ({
-          key: String(id), label: "Run " + (i + 1), refs: [String(id)],
+          key: String(id),
+          label: String((opts && opts.runLabels && opts.runLabels[id]) || "Run " + (i + 1)),
+          refs: [String(id)],
         }));
       }
       state.activeSeries = state.pooled ? state.series.map((s) => s.key) : [];
       injectStyles();
-      render();
       fetchData();
-      if (state.pooled) {
-        // must re-render: lane data arrives after the first paint
-        ensureRunData().then(render).catch((err) => {
-          state.error = String((err && err.message) || err);
-          render();
-        });
-      }
       enhanceTraceStats();
     },
   };
