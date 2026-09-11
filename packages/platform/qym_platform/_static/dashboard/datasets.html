@@ -1543,7 +1543,7 @@
         format: null,           // 'csv' | 'jsonl'
         csvDelimiter: ',',
         csvHeaders: [],
-        csvRows: [],            // first 100 rows for preview
+        csvRows: [],            // all rows for import; only the preview is truncated
         jsonlRows: [],
         name: '',
         slug: '',
@@ -1687,7 +1687,7 @@
           wstate.csvHeaders = rows.length
             ? rows[0].map((header, index) => index === 0 ? header.replace(/^\uFEFF/, '').trim() : header.trim())
             : [];
-          wstate.csvRows = rows.slice(1, 101);
+          wstate.csvRows = rows.slice(1);
           // auto-map
           autoMap();
         };
@@ -1697,7 +1697,7 @@
         const reader = new FileReader();
         reader.onload = () => {
           const text = String(reader.result || '');
-          const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0).slice(0, 100);
+          const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
           wstate.jsonlRows = lines.map(l => { try { return JSON.parse(l); } catch(_) { return null; } }).filter(Boolean);
         };
         reader.readAsText(file);
@@ -1879,10 +1879,13 @@
         }
 
         const summary = el('div', { className: 'shell-form-help' });
-        let rowCount = wstate.format === 'csv' ? wstate.csvRows.length : wstate.jsonlRows.length;
+        const rows = wstate.format === 'csv' ? wstate.csvRows : wstate.jsonlRows;
+        const rowCount = rows.length;
+        const previewRows = rows.slice(0, 10);
         summary.innerHTML = '<strong>' + (wstate.file ? wstate.file.name : '—') + '</strong> · '
           + (wstate.format ? wstate.format.toUpperCase() : '—') + ' · '
-          + 'preview shows first ' + rowCount + ' row' + (rowCount === 1 ? '' : 's');
+          + rowCount + ' row' + (rowCount === 1 ? '' : 's') + ' · '
+          + 'preview shows first ' + previewRows.length + ' row' + (previewRows.length === 1 ? '' : 's');
         wrap.appendChild(summary);
 
         // Preview
@@ -1898,7 +1901,6 @@
         headers.slice(0, 6).forEach(h => trh.appendChild(el('th', null, h)));
         thead.appendChild(trh); tbl.appendChild(thead);
         const tbody = el('tbody');
-        const previewRows = wstate.format === 'csv' ? wstate.csvRows.slice(0, 10) : wstate.jsonlRows.slice(0, 10);
         previewRows.forEach(r => {
           const tr = el('tr');
           headers.slice(0, 6).forEach(h => {
