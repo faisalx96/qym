@@ -2535,7 +2535,7 @@ def test_compare_html_export_is_self_contained_and_export_safe() -> None:
     assert "async function inlineCompareExportAssets(html)" in source
     assert "(?:dashboard|shell|ui_components)\\.css" in source
     assert "(?:metrics|trace_viewer|ui_components)\\.js" in source
-    assert "(?:auth|shell|playground|run_details)\\.js" in source
+    assert "(?:auth|shell|playground|run_details|step_latency)\\.js" in source
     assert "html.replace(match[0], () => '<style>" in source
     assert "html.replace(match[0], () => '<script>" in source
     assert "html = await inlineCompareExportAssets(html);" in source
