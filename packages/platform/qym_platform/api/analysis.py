@@ -62,7 +62,6 @@ from qym_platform.services.analysis_aggregation import (
     aggregate_analysis_categories,
 )
 from qym_platform.services.document_extractor import (
-    MAX_REFERENCE_DOCUMENT_CONTENT_CHARS,
     MAX_REFERENCE_DOCUMENT_CHARS,
     MAX_REFERENCE_UPLOAD_BYTES,
     DocumentExtractionError,
@@ -89,7 +88,10 @@ from qym_platform.services.llm_analyzer import (
     MAX_RULE_WRITER_DOCUMENT_CHARS,
     MAX_RULE_WRITER_EXAMPLE_CHARS,
     MAX_RULE_WRITER_PROMPT_CHARS,
-    MAX_TOTAL_REFERENCE_DOCUMENT_CHARS,
+)
+from qym_platform.services.issue_reviews import (
+    change_metric_issue, correction_issue_id, correction_issues, issue_content,
+    sync_correction_issue_metadata, lock_issue_correction,
 )
 from qym_platform.services.root_cause_changes import (
     PASS_ANALYSIS_META_KEY,
@@ -832,7 +834,7 @@ class ReferenceDocument(BaseModel):
     """Extracted document content included in each analyzer prompt."""
 
     name: str = Field(..., min_length=1, max_length=255)
-    content: str = Field(..., min_length=1, max_length=MAX_REFERENCE_DOCUMENT_CHARS)
+    content: str = Field(..., min_length=1)
 
 
 class AnalyzerRuleConfig(AnalysisRule):
@@ -864,9 +866,7 @@ class PlaygroundConfig(BaseModel):
     """Configuration overrides for the AI evaluator playground."""
 
     analysis_rules: Optional[List[AnalyzerRuleConfig]] = None
-    reference_documents: Optional[List[ReferenceDocument]] = Field(
-        default=None, max_length=8
-    )
+    reference_documents: Optional[List[ReferenceDocument]] = None
     include_project_rules: Optional[bool] = None
     include_project_documents: Optional[bool] = None
     system_prompt: Optional[str] = Field(
@@ -1195,6 +1195,14 @@ def _supports_metric_name_arg(func: Any) -> bool:
     """Return True when the callable accepts metric_name."""
     try:
         return "metric_name" in inspect.signature(func).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+def _supports_callable_arg(func: Any, argument: str) -> bool:
+    """Return True when a callable exposes an optional compatibility argument."""
+    try:
+        return argument in inspect.signature(func).parameters
     except (TypeError, ValueError):
         return False
 
@@ -2238,8 +2246,8 @@ def _analysis_config_with_category_catalog(
     return config or None
 
 
-def _result_root_cause_issues(result: AnalysisResult) -> list[dict[str, str]]:
-    return normalize_root_cause_issues(
+def _result_root_cause_issues(result: AnalysisResult) -> list[dict[str, Any]]:
+    issues = normalize_root_cause_issues(
         getattr(result, "root_cause_issues", None),
         legacy_root_causes=(
             getattr(result, "root_causes", None) or result.root_cause
@@ -2247,6 +2255,11 @@ def _result_root_cause_issues(result: AnalysisResult) -> list[dict[str, str]]:
         legacy_detail=result.root_cause_detail,
         legacy_finding=result.root_cause_note,
     )
+    # Model output can supply diagnosis content, never reviewer authority.
+    for issue in issues:
+        for key in ("review_status", "reviewed_at", "reviewed_by_user_id", "source"):
+            issue.pop(key, None)
+    return issues
 
 
 def _root_cause_issue_signature(
@@ -2259,28 +2272,40 @@ def _root_cause_issue_signature(
 
 
 def _analysis_result_payload(result: AnalysisResult) -> Dict[str, Any]:
+    failed = bool(result.error)
     return {
         "item_id": result.item_id,
         "metric_name": result.metric_name,
-        "root_cause": result.root_cause,
-        "root_causes": normalize_root_causes(
+        # An analyzer failure is operational state, never a diagnosis. Keep the
+        # response error-only so the live UI cannot briefly render model output
+        # that the persistence layer correctly refuses to save.
+        "root_cause": "" if failed else result.root_cause,
+        "root_causes": []
+        if failed
+        else normalize_root_causes(
             getattr(result, "root_causes", None) or result.root_cause
         ),
-        "root_cause_issues": _result_root_cause_issues(result),
-        "category_taxonomy": normalize_category_taxonomy(
+        "root_cause_issues": [] if failed else _result_root_cause_issues(result),
+        "category_taxonomy": {}
+        if failed
+        else normalize_category_taxonomy(
             getattr(result, "category_taxonomy", None)
         ),
-        "root_cause_detail": result.root_cause_detail,
-        "root_cause_reason": result.root_cause_reason,
-        "root_cause_note": result.root_cause_note,
-        "confidence": result.confidence,
-        "solution": result.solution,
-        "solution_note": result.solution_note,
+        "root_cause_detail": "" if failed else result.root_cause_detail,
+        "root_cause_reason": "" if failed else result.root_cause_reason,
+        "root_cause_note": "" if failed else result.root_cause_note,
+        "confidence": 0.0 if failed else result.confidence,
+        "solution": "" if failed else result.solution,
+        "solution_note": "" if failed else result.solution_note,
         "warning": result.warning,
         "error": result.error,
+        "error_code": result.error_code,
         "analyzer_model": result.analyzer_model,
         "prompt_hash": result.prompt_hash,
         "provider_request_id": result.provider_request_id,
+        "retry_count": result.retry_count,
+        "retry_reason": result.retry_reason,
+        "request_timeout_seconds": result.request_timeout_seconds,
         "usage": {
             "prompt_tokens": result.prompt_tokens,
             "completion_tokens": result.completion_tokens,
@@ -2998,7 +3023,8 @@ async def _aggregate_run_analysis_results(
     aggregatable_new_results = [
         result
         for result in new_results
-        if not _review_key_is_approved(
+        if not result.error
+        and not _review_key_is_approved(
             approved_binding_keys, result.item_id, result.metric_name
         )
     ]
@@ -3333,12 +3359,16 @@ def _save_analysis_results(
                 metric_analyses[metric_name] = {
                     "source": "ai",
                     "error": result.error,
+                    "error_code": result.error_code,
                     "analyzer_model": result.analyzer_model,
                     "analyzer_connection_id": analyzer_connection_id,
                     "analyzer_rule_version_id": analyzer_rule_version_id,
                     "category_catalog_version": category_catalog_version,
                     "category_catalog_version_id": category_catalog_version_id,
                     "prompt_hash": result.prompt_hash,
+                    "retry_count": result.retry_count,
+                    "retry_reason": result.retry_reason,
+                    "request_timeout_seconds": result.request_timeout_seconds,
                 }
                 continue
             previous_metric_analysis = metric_analyses.get(metric_name)
@@ -3372,6 +3402,9 @@ def _save_analysis_results(
                 "category_catalog_version_id": category_catalog_version_id,
                 "prompt_hash": result.prompt_hash,
                 "provider_request_id": result.provider_request_id,
+                "retry_count": result.retry_count,
+                "retry_reason": result.retry_reason,
+                "request_timeout_seconds": result.request_timeout_seconds,
                 "prompt_tokens": result.prompt_tokens,
                 "completion_tokens": result.completion_tokens,
                 "total_tokens": result.total_tokens,
@@ -3500,12 +3533,16 @@ def _save_pass_analysis_results(
             analysis = {
                 "source": "ai",
                 "error": result.error,
+                "error_code": result.error_code,
                 "analyzer_model": result.analyzer_model,
                 "analyzer_connection_id": analyzer_connection_id,
                 "analyzer_rule_version_id": analyzer_rule_version_id,
                 "category_catalog_version": category_catalog_version,
                 "category_catalog_version_id": category_catalog_version_id,
                 "prompt_hash": result.prompt_hash,
+                "retry_count": result.retry_count,
+                "retry_reason": result.retry_reason,
+                "request_timeout_seconds": result.request_timeout_seconds,
                 "analyzed_at": to_api_timestamp(utc_now_naive()),
             }
         else:
@@ -3534,6 +3571,9 @@ def _save_pass_analysis_results(
                 "category_catalog_version_id": category_catalog_version_id,
                 "prompt_hash": result.prompt_hash,
                 "provider_request_id": result.provider_request_id,
+                "retry_count": result.retry_count,
+                "retry_reason": result.retry_reason,
+                "request_timeout_seconds": result.request_timeout_seconds,
                 "prompt_tokens": result.prompt_tokens,
                 "completion_tokens": result.completion_tokens,
                 "total_tokens": result.total_tokens,
@@ -3580,6 +3620,26 @@ def _metric_passed(
     if direction in {"minimize", "lower", "lower_is_better"}:
         return score.score_numeric <= threshold
     return score.score_numeric >= threshold
+
+
+_EXECUTION_ERROR_STATUSES = {"error", "failed", "timeout"}
+
+
+def _metric_score_has_execution_error(score: Any) -> bool:
+    """Return whether a metric score represents an exception, not a bad answer."""
+    if score is None:
+        return False
+    label = str(getattr(score, "label", "") or "").strip().lower()
+    if label in _EXECUTION_ERROR_STATUSES:
+        return True
+    meta = getattr(score, "meta", None)
+    if not isinstance(meta, dict):
+        return False
+    status = str(meta.get("status") or "").strip().lower()
+    if status in _EXECUTION_ERROR_STATUSES:
+        return True
+    error = meta.get("error")
+    return error is not None and bool(str(error).strip())
 
 
 def _analysis_metric_names(
@@ -3660,6 +3720,11 @@ def _filter_analysis_targets(
             continue
 
         is_error = bool(item.error)
+        # Execution exceptions are operational errors, not model-quality
+        # failures. There is no trustworthy response/metric judgment for the
+        # root-cause analyzer to diagnose, so never create analysis targets.
+        if is_error:
+            continue
         if request.item_filter == "errors" and not is_error:
             continue
 
@@ -3692,10 +3757,10 @@ def _filter_analysis_targets(
         )
         for metric_name in metrics:
             score = item_scores.get(metric_name)
+            if _metric_score_has_execution_error(score):
+                continue
             passed = (
-                False
-                if is_error
-                else _metric_passed(
+                _metric_passed(
                     score,
                     metric_specs.get(metric_name),
                     request.threshold,
@@ -3858,6 +3923,7 @@ async def _run_analysis_job(
             total=len(analysis_targets),
             completed=0,
             errors=0,
+            retries=0,
         )
 
         if not analysis_targets:
@@ -3876,6 +3942,7 @@ async def _run_analysis_job(
                     "categories": {},
                     "aggregated": 0,
                     "errors": 0,
+                    "retries": 0,
                     **_persistence_totals([]),
                 }
             try:
@@ -3909,25 +3976,58 @@ async def _run_analysis_job(
                 "categories": categories,
                 "aggregated": aggregated,
                 "errors": 0,
+                "retries": 0,
                 **_persistence_totals([]),
             }
 
         progress_errors = 0
+        progress_retries = 0
+        progress_completed = 0
+        retry_progress_lock = asyncio.Lock()
+
+        async def on_retry(event: dict[str, Any]) -> None:
+            nonlocal progress_retries
+            if job.cancel_requested:
+                raise asyncio.CancelledError()
+            async with retry_progress_lock:
+                progress_retries += 1
+                current_retries = progress_retries
+                current_completed = progress_completed
+                current_errors = progress_errors
+            analysis_job_manager.update_progress(
+                job,
+                phase="retrying",
+                completed=current_completed,
+                total=len(analysis_targets),
+                errors=current_errors,
+                retries=current_retries,
+                item_id=event.get("item_id"),
+                metric_name=event.get("metric_name"),
+                retry_reason=event.get("reason"),
+                retry_attempt=event.get("attempt"),
+                retry_max_attempts=event.get("max_attempts"),
+                retry_timeout_seconds=event.get("timeout_seconds"),
+            )
 
         async def on_progress(
             result: AnalysisResult, completed: int, total_count: int
         ) -> None:
-            nonlocal progress_errors
+            nonlocal progress_completed, progress_errors
             if job.cancel_requested:
                 raise asyncio.CancelledError()
-            if result.error:
-                progress_errors += 1
+            async with retry_progress_lock:
+                progress_completed = completed
+                if result.error:
+                    progress_errors += 1
+                current_errors = progress_errors
+                current_retries = progress_retries
             analysis_job_manager.update_progress(
                 job,
                 phase="analyzing",
                 completed=completed,
                 total=total_count,
-                errors=progress_errors,
+                errors=current_errors,
+                retries=current_retries,
                 item_id=result.item_id,
                 metric_name=result.metric_name,
             )
@@ -3943,6 +4043,7 @@ async def _run_analysis_job(
             temperature=request.config.temperature if request.config else None,
             max_tokens=request.config.max_tokens if request.config else None,
             progress_callback=on_progress,
+            retry_callback=on_retry,
         )
         if job.cancel_requested:
             raise asyncio.CancelledError()
@@ -3953,6 +4054,7 @@ async def _run_analysis_job(
             completed=len(analysis_targets),
             total=len(analysis_targets),
             errors=progress_errors,
+            retries=progress_retries,
         )
         aggregation_error: str | None = None
         if request.pass_number is not None:
@@ -4036,6 +4138,7 @@ async def _run_analysis_job(
             completed=len(analysis_targets),
             total=len(analysis_targets),
             errors=error_count,
+            retries=progress_retries,
         )
         return {
             "total_analyzed": len(results),
@@ -4044,6 +4147,7 @@ async def _run_analysis_job(
             "aggregated": aggregated,
             "aggregation_error": aggregation_error,
             "errors": error_count,
+            "retries": sum(result.retry_count for result in results),
             **_persistence_totals(response_results),
         }
 
@@ -4109,10 +4213,11 @@ async def _analyze_targets_batch(
     temperature: float | None,
     max_tokens: int | None,
     progress_callback: Any = None,
+    retry_callback: Any = None,
 ) -> list[AnalysisResult]:
     """Run the existing analyzer once for every item-metric target."""
     if _supports_metric_name_arg(analyze_items_batch):
-        return await analyze_items_batch(
+        batch_kwargs = dict(
             client=client,
             model=model,
             items=[
@@ -4126,6 +4231,9 @@ async def _analyze_targets_batch(
             max_tokens=max_tokens,
             progress_callback=progress_callback,
         )
+        if _supports_callable_arg(analyze_items_batch, "retry_callback"):
+            batch_kwargs["retry_callback"] = retry_callback
+        return await analyze_items_batch(**batch_kwargs)
 
     # Compatibility for deployments that still provide the older analyzer
     # callable: adapt and invoke one target at a time so metric context is not
@@ -4139,7 +4247,7 @@ async def _analyze_targets_batch(
             config,
             metric_name,
         )
-        batch_results = await analyze_items_batch(
+        batch_kwargs = dict(
             client=client,
             model=model,
             items=[(adapted_item, item_scores)],
@@ -4149,6 +4257,9 @@ async def _analyze_targets_batch(
             temperature=temperature,
             max_tokens=max_tokens,
         )
+        if _supports_callable_arg(analyze_items_batch, "retry_callback"):
+            batch_kwargs["retry_callback"] = retry_callback
+        batch_results = await analyze_items_batch(**batch_kwargs)
         for result in batch_results:
             result.item_id = item.item_id
             result.metric_name = metric_name
@@ -4312,6 +4423,7 @@ async def start_analysis_job(
             "completed": 0,
             "total": len(analysis_targets),
             "errors": 0,
+            "retries": 0,
         },
         runner=run_job,
     )
@@ -4444,6 +4556,7 @@ async def analyze_run_items(
                 "categories": {},
                 "aggregated": 0,
                 "errors": 0,
+                "retries": 0,
                 **_persistence_totals([]),
             }
         try:
@@ -4469,6 +4582,7 @@ async def analyze_run_items(
             "categories": categories,
             "aggregated": aggregated,
             "errors": 0,
+            "retries": 0,
             **_persistence_totals([]),
         }
 
@@ -4567,6 +4681,7 @@ async def analyze_run_items(
         "aggregated": aggregated,
         "aggregation_error": aggregation_error,
         "errors": error_count,
+        "retries": sum(result.retry_count for result in results),
         **_persistence_totals(response_results),
     }
 
@@ -4623,6 +4738,7 @@ async def analyze_run_items_stream(
                 "total": total,
                 "completed": 0,
                 "errors": 0,
+                "retries": 0,
                 "concurrency": request.concurrency,
             }
         )
@@ -4649,6 +4765,7 @@ async def analyze_run_items_stream(
                     "completed": 0,
                     "total": 0,
                     "errors": 0,
+                    "retries": 0,
                 }
             )
             if request.pass_number is not None:
@@ -4660,6 +4777,7 @@ async def analyze_run_items_stream(
                         "categories": {},
                         "aggregated": 0,
                         "errors": 0,
+                        "retries": 0,
                         **_persistence_totals([]),
                     }
                 )
@@ -4690,6 +4808,7 @@ async def analyze_run_items_stream(
                     "categories": categories,
                     "aggregated": aggregated,
                     "errors": 0,
+                    "retries": 0,
                     **_persistence_totals([]),
                 }
             )
@@ -4697,19 +4816,50 @@ async def analyze_run_items_stream(
 
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         progress_errors = 0
+        progress_retries = 0
+        progress_completed = 0
+        stream_progress_lock = asyncio.Lock()
+
+        async def on_retry(event: dict[str, Any]) -> None:
+            nonlocal progress_retries
+            async with stream_progress_lock:
+                progress_retries += 1
+                current_retries = progress_retries
+                current_completed = progress_completed
+                current_errors = progress_errors
+            await queue.put(
+                {
+                    "type": "retrying",
+                    "completed": current_completed,
+                    "total": total,
+                    "errors": current_errors,
+                    "retries": current_retries,
+                    "item_id": event.get("item_id"),
+                    "metric_name": event.get("metric_name"),
+                    "retry_reason": event.get("reason"),
+                    "retry_attempt": event.get("attempt"),
+                    "retry_max_attempts": event.get("max_attempts"),
+                    "retry_timeout_seconds": event.get("timeout_seconds"),
+                }
+            )
 
         async def on_progress(
             result: AnalysisResult, completed: int, total_count: int
         ) -> None:
-            nonlocal progress_errors
-            if result.error:
-                progress_errors += 1
+            nonlocal progress_completed, progress_errors
+            async with stream_progress_lock:
+                progress_completed = completed
+                if result.error:
+                    progress_errors += 1
+                current_errors = progress_errors
+                current_retries = progress_retries
             await queue.put(
                 {
                     "type": "progress",
                     "completed": completed,
                     "total": total_count,
-                    "errors": progress_errors,
+                    "errors": current_errors,
+                    "retries": current_retries,
                     "item_id": result.item_id,
                     "metric_name": result.metric_name,
                     "root_cause": result.root_cause,
@@ -4724,6 +4874,10 @@ async def analyze_run_items_stream(
                     "root_cause_reason": result.root_cause_reason,
                     "warning": result.warning,
                     "error": result.error,
+                    "error_code": result.error_code,
+                    "retry_count": result.retry_count,
+                    "retry_reason": result.retry_reason,
+                    "request_timeout_seconds": result.request_timeout_seconds,
                 }
             )
 
@@ -4740,6 +4894,7 @@ async def analyze_run_items_stream(
                     temperature=request.config.temperature if request.config else None,
                     max_tokens=request.config.max_tokens if request.config else None,
                     progress_callback=on_progress,
+                    retry_callback=on_retry,
                 )
                 await queue.put({"type": "_complete", "results": results})
             except Exception as exc:
@@ -4758,6 +4913,7 @@ async def analyze_run_items_stream(
                             "completed": total,
                             "total": total,
                             "errors": progress_errors,
+                            "retries": progress_retries,
                         }
                     )
                     aggregation_error: str | None = None
@@ -4855,6 +5011,7 @@ async def analyze_run_items_stream(
                             "aggregated": aggregated,
                             "aggregation_error": aggregation_error,
                             "errors": error_count,
+                            "retries": sum(result.retry_count for result in results),
                             **_persistence_totals(response_results),
                         }
                     )
@@ -4887,11 +5044,11 @@ def _analysis_document_payload(
         "characters": stored_characters,
         "source_characters": source_count,
         "truncated": document.truncated,
-        "prompt_limit": MAX_REFERENCE_DOCUMENT_CHARS,
-        "content_limit": MAX_REFERENCE_DOCUMENT_CONTENT_CHARS,
-        "prompt_over_limit": stored_characters > MAX_REFERENCE_DOCUMENT_CHARS,
-        "content_over_limit": bool(document.truncated and stored_characters >= MAX_REFERENCE_DOCUMENT_CONTENT_CHARS),
-        "content_was_cut": bool(document.truncated and stored_characters >= MAX_REFERENCE_DOCUMENT_CONTENT_CHARS),
+        "prompt_limit": None,
+        "content_limit": None,
+        "prompt_over_limit": False,
+        "content_over_limit": False,
+        "content_was_cut": bool(document.truncated),
         "selected": document.enabled,
         "created_at": to_api_timestamp(document.created_at),
     }
@@ -4933,9 +5090,20 @@ async def upload_analysis_document(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
-    """Extract and save a document to the run's project."""
+    """Extract and save retained document text without analyzer shortening."""
     run = _document_library_run(db, principal, run_id, modify=True)
     action = large_document_action if isinstance(large_document_action, str) else "ask"
+    if action == "truncate":
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "DOCUMENT_TRUNCATION_DISABLED",
+                "message": (
+                    "Document shortening is disabled. Upload the full document or "
+                    "use a smaller file."
+                ),
+            },
+        )
 
     try:
         raw = await file.read(MAX_REFERENCE_UPLOAD_BYTES + 1)
@@ -4953,7 +5121,6 @@ async def upload_analysis_document(
                 extract_document_text,
                 file.filename or "document",
                 raw,
-                max_chars=MAX_REFERENCE_DOCUMENT_CONTENT_CHARS,
             ),
             limiter=_DOCUMENT_EXTRACTION_LIMITER,
         )
@@ -4966,36 +5133,21 @@ async def upload_analysis_document(
         raise HTTPException(
             status_code=409,
             detail={
-                "code": "DOCUMENT_CONTENT_LIMIT",
+                "code": "DOCUMENT_CONTENT_CONFIRMATION",
                 "message": (
-                    f"{probe.name} contains about {probe.source_characters:,} characters, "
-                    f"which is above the {MAX_REFERENCE_DOCUMENT_CHARS:,}-character "
-                    "prompt-safe limit. Choose the shortened version, or explicitly "
-                    "add the larger document and let the rule writer process it in patches."
+                    f"{probe.name} contains about {probe.source_characters:,} characters. "
+                    "Confirm before its full retained content is made available to "
+                    "external analyzer requests."
                 ),
                 "filename": probe.name,
                 "source_characters": probe.source_characters,
-                "prompt_limit": MAX_REFERENCE_DOCUMENT_CHARS,
-                "content_limit": MAX_REFERENCE_DOCUMENT_CONTENT_CHARS,
-                "content_will_be_cut": bool(probe.truncated),
-                "actions": ["truncate", "full"],
+                "review_threshold": MAX_REFERENCE_DOCUMENT_CHARS,
+                "content_will_be_cut": False,
+                "actions": ["cancel", "full"],
             },
         )
 
     document = probe
-    if action == "truncate" and probe.source_characters > MAX_REFERENCE_DOCUMENT_CHARS:
-        try:
-            document = await to_thread.run_sync(
-                partial(
-                    extract_document_text,
-                    file.filename or "document",
-                    raw,
-                    max_chars=MAX_REFERENCE_DOCUMENT_CHARS,
-                ),
-                limiter=_DOCUMENT_EXTRACTION_LIMITER,
-            )
-        except (UnsupportedDocumentError, DocumentExtractionError) as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     stored = AnalyzerDocument(
         project_id=run.project_id,
@@ -5008,38 +5160,13 @@ async def upload_analysis_document(
     db.add(stored)
     db.commit()
     db.refresh(stored)
-    prompt_limit_hit = probe.source_characters > MAX_REFERENCE_DOCUMENT_CHARS
-    content_limit_hit = bool(
-        probe.truncated
-        and probe.source_characters >= MAX_REFERENCE_DOCUMENT_CONTENT_CHARS
-    )
-    if action == "truncate" and prompt_limit_hit:
-        warning = "The document was intentionally shortened to the prompt-safe limit."
-        if content_limit_hit:
-            warning += (
-                " The source also exceeded the absolute content limit, so the saved "
-                f"content is capped at {MAX_REFERENCE_DOCUMENT_CHARS:,} characters."
-            )
-    elif action == "full" and content_limit_hit:
-        warning = (
-            "The document exceeded the absolute content limit, so only the first "
-            f"{MAX_REFERENCE_DOCUMENT_CONTENT_CHARS:,} extracted characters were "
-            "retained even after choosing full content."
-        )
-    elif document.characters > MAX_REFERENCE_DOCUMENT_CHARS:
-        warning = (
-            "The document is larger than the prompt-safe limit. The rule writer "
-            "will process it in bounded patches."
-        )
-    else:
-        warning = None
     return {
         "document": _analysis_document_payload(
             stored,
             source_characters=probe.source_characters,
         ),
-        "content_decision": action,
-        "warning": warning,
+        "content_decision": "full",
+        "warning": None,
     }
 
 
@@ -6754,8 +6881,9 @@ def analyze_preview(
         "messages": messages,
         "metric_name": preview_metric,
         "prompt_characters": prompt_characters,
-        "prompt_limit": MAX_ANALYSIS_PROMPT_CHARS,
-        "prompt_at_limit": prompt_characters >= MAX_ANALYSIS_PROMPT_CHARS,
+        "prompt_limit": None,
+        "prompt_at_limit": False,
+        "prompt_truncated": False,
     }
 
 
@@ -6935,6 +7063,10 @@ async def analyze_test(
             "solution": result.solution,
             "solution_note": result.solution_note,
             "error": result.error,
+            "error_code": result.error_code,
+            "retry_count": result.retry_count,
+            "retry_reason": result.retry_reason,
+            "request_timeout_seconds": result.request_timeout_seconds,
             "messages": messages,
         }
         for result, messages in zip(analyzed_results, messages_by_result)
@@ -6944,6 +7076,7 @@ async def analyze_test(
         "results": results,
         "categories": categories,
         "aggregation_error": aggregation_error,
+        "retries": sum(result.retry_count for result in analyzed_results),
     }
 
 
@@ -7014,7 +7147,7 @@ def get_corrections(
                 "ai_root_cause_note": c.ai_root_cause_note,
                 "ai_confidence": c.ai_confidence,
                 "ai_solution": c.ai_solution,
-                "human_solution": c.human_solution,
+                "human_solution": (correction_issues(c)[0].get("solution", c.human_solution) if correction_issue_id(c) else c.human_solution),
                 "human_solution_note": c.human_solution_note,
                 "input_snapshot": c.input_snapshot,
                 "expected_snapshot": c.expected_snapshot,
@@ -7196,14 +7329,15 @@ def get_analysis_config(
         "enabled_document_count": enabled_document_count,
         "analysis_limits": {
             "document_upload_bytes": MAX_REFERENCE_UPLOAD_BYTES,
-            "document_prompt_characters": MAX_REFERENCE_DOCUMENT_CHARS,
-            "document_content_characters": MAX_REFERENCE_DOCUMENT_CONTENT_CHARS,
-            "documents_prompt_characters": MAX_TOTAL_REFERENCE_DOCUMENT_CHARS,
-            "max_reference_documents": 8,
+            "document_prompt_characters": None,
+            "document_content_characters": None,
+            "documents_prompt_characters": None,
+            "max_reference_documents": None,
             "rule_writer_document_characters": MAX_RULE_WRITER_DOCUMENT_CHARS,
             "rule_writer_example_characters": MAX_RULE_WRITER_EXAMPLE_CHARS,
             "rule_writer_prompt_characters": MAX_RULE_WRITER_PROMPT_CHARS,
-            "final_prompt_characters": MAX_ANALYSIS_PROMPT_CHARS,
+            "final_prompt_characters": None,
+            "prompt_truncation_enabled": False,
         },
         "default_system_prompt": DEFAULT_SYSTEM_PROMPT,
         "default_categories": all_categories,
@@ -7960,6 +8094,7 @@ def _serialize_review_fields(
         "run_id": c.run_id,
         "item_id": c.item_id,
         "metric_name": c.metric_name,
+        "issue_id": correction_issue_id(c) or None,
         "task": c.task,
         "dataset": run.dataset if run else "",
         "model": _strip_model_provider(run.model or "") if run else "",
@@ -7988,7 +8123,7 @@ def _serialize_review_fields(
         "ai_root_cause_detail": "" if ai_is_unanalyzed else c.ai_root_cause_detail,
         "ai_root_cause_note": "" if ai_is_unanalyzed else c.ai_root_cause_note,
         "ai_confidence": None if ai_is_unanalyzed else c.ai_confidence,
-        "ai_solution": "" if ai_is_unanalyzed else c.ai_solution,
+        "ai_solution": "" if ai_is_unanalyzed else (ai_root_cause_issues[0].get("solution", c.ai_solution) if correction_issue_id(c) and ai_root_cause_issues else c.ai_solution),
         "ai_solution_note": "" if ai_is_unanalyzed else c.ai_solution_note,
         "human_root_cause": c.human_root_cause,
         "human_root_causes": normalize_root_causes(
@@ -8000,7 +8135,7 @@ def _serialize_review_fields(
         ),
         "human_root_cause_detail": c.human_root_cause_detail,
         "human_root_cause_note": c.human_root_cause_note,
-        "human_solution": c.human_solution,
+        "human_solution": (human_root_cause_issues[0].get("solution", c.human_solution) if correction_issue_id(c) and human_root_cause_issues else c.human_solution),
         "human_solution_note": c.human_solution_note,
         "corrected_by": _serialize_user(users_by_id.get(c.corrected_by_user_id)),
         "created_at": to_api_timestamp(c.created_at),
@@ -8162,7 +8297,9 @@ def _serialize_correction(
     payload = _serialize_review_fields(
         c, users_by_id=users_by_id, runs_by_id=runs_by_id
     )
-    payload["history"] = history or []
+    issue_id = correction_issue_id(c)
+    payload["history"] = [entry for entry in (history or [])
+                          if not issue_id or (entry.get("review") or {}).get("issue_id") in (None, issue_id)]
     return payload
 
 
@@ -8202,6 +8339,7 @@ def _approve_candidate(
     comment: str,
     reviewed_at: datetime,
 ) -> None:
+    lock_issue_correction(db, correction)
     _require_active_candidate(correction)
 
     has_human_label = any(
@@ -8253,6 +8391,8 @@ def _approve_candidate(
         .all()
     )
     for candidate in older_approved:
+        if correction_issue_id(candidate) != correction_issue_id(correction):
+            continue
         candidate.status = CorrectionStatus.SUPERSEDED
         candidate.is_active = False
 
@@ -8261,6 +8401,7 @@ def _approve_candidate(
     correction.reviewed_by_user_id = reviewer_id
     correction.reviewed_at = reviewed_at
     correction.review_comment = comment
+    sync_correction_issue_metadata(db, correction)
 
 
 def _reject_candidate(
@@ -8272,11 +8413,13 @@ def _reject_candidate(
     reviewed_at: datetime,
 ) -> None:
     """Reject a review candidate while preserving its full audit history."""
+    lock_issue_correction(db, correction)
     _require_active_candidate(correction)
     correction.status = CorrectionStatus.REJECTED
     correction.reviewed_by_user_id = reviewer_id
     correction.reviewed_at = reviewed_at
     correction.review_comment = comment
+    sync_correction_issue_metadata(db, correction)
 
 
 def _sync_legacy_summary_after_metric_deletion(
@@ -8370,6 +8513,15 @@ def _delete_active_candidate(
     if not item:
         raise HTTPException(status_code=404, detail="Run item not found")
     item = lock_run_item(db, run=run, item=item)
+
+    if correction_issue_id(correction):
+        sync_correction_issue_metadata(db, correction, remove=True)
+        correction.status = CorrectionStatus.REJECTED
+        correction.is_active = False
+        correction.reviewed_by_user_id = reviewer_id
+        correction.reviewed_at = reviewed_at
+        correction.review_comment = comment
+        return
 
     if correction.metric_name:
         meta = dict(item.item_metadata) if isinstance(item.item_metadata, dict) else {}
@@ -8789,6 +8941,41 @@ def update_correction(
         if request_key in request:
             patch[state_key] = request.get(request_key)
 
+    if c.metric_name and correction_issue_id(c):
+        current = correction_issues(c)[0]
+        content = issue_content(current)
+        if "root_causes" in patch:
+            categories = normalize_root_causes(patch["root_causes"])
+            if len(categories) != 1:
+                raise HTTPException(400, "Choose one category for this issue")
+            content["category"] = categories[0]
+        if "root_cause_issues" in patch:
+            requested = normalize_root_cause_issues(patch["root_cause_issues"])
+            if len(requested) != 1:
+                raise HTTPException(400, "Edit one issue at a time")
+            content.update({key: requested[0][key] for key in content if key in requested[0]})
+        for field, target_key in (("root_cause", "category"), ("root_cause_detail", "subcategory"),
+                                  ("root_cause_note", "finding"), ("solution", "solution"), ("solution_note", "solution_note")):
+            if field in patch:
+                content[target_key] = str(patch[field] or "")
+        meta = dict(item.item_metadata or {})
+        analyses = dict(meta.get("metric_analyses") or {})
+        analyses[c.metric_name] = change_metric_issue(
+            db, run=run, item=item, metric_name=c.metric_name,
+            analysis=analyses.get(c.metric_name) or {},
+            request={"action": "edit", "issue_id": correction_issue_id(c), "expected_issue": current, "issue": content},
+            actor_user_id=principal.user.id if principal.auth_type != "none" else None,
+        )
+        meta["metric_analyses"] = analyses
+        item.item_metadata = meta
+        db.commit()
+        targets = db.query(ReviewCorrection).filter(
+            ReviewCorrection.run_id == run.id, ReviewCorrection.item_id == item.item_id,
+            ReviewCorrection.metric_name == c.metric_name, ReviewCorrection.is_active.is_(True),
+        ).all()
+        target = next((row for row in targets if correction_issue_id(row) == correction_issue_id(c)), c)
+        return _serialize_corrections_with_history(db, [target])[0]
+
     if c.metric_name:
         from qym_platform.api.runs import _apply_metric_analysis_patch
 
@@ -8888,6 +9075,8 @@ def approve_correction(
     db.refresh(correction)
 
     target = correction
+    if not correction.is_active and correction_issue_id(correction):
+        raise HTTPException(409, "This issue was edited. Reload before approving it.")
     if not correction.is_active:
         metric_scope = (
             ReviewCorrection.metric_name.is_(None)
@@ -8905,6 +9094,8 @@ def approve_correction(
             .first()
         )
         if active_candidate:
+            if correction_issue_id(active_candidate):
+                raise HTTPException(409, "This diagnosis now has issue-level reviews. Reload and approve an issue.")
             target = active_candidate
 
     _approve_candidate(
@@ -8977,6 +9168,8 @@ def approve_metric_analysis(
 
         pass_meta = dict(pass_score.meta) if isinstance(pass_score.meta, dict) else {}
         analysis = pass_meta.get(PASS_ANALYSIS_META_KEY)
+        if any(issue.get("issue_id") for issue in analysis_root_cause_issues(analysis)):
+            raise HTTPException(409, "Approve each issue separately from its issue card.")
         if (
             not isinstance(analysis, dict)
             or not str(analysis.get("root_cause") or "").strip()
@@ -9008,6 +9201,8 @@ def approve_metric_analysis(
     ):
         raise HTTPException(status_code=404, detail="Metric analysis not found")
 
+    if any(issue.get("issue_id") for issue in analysis_root_cause_issues(analysis)):
+        raise HTTPException(409, "Approve each issue separately from its issue card.")
     candidate = (
         db.query(ReviewCorrection)
         .filter(
@@ -9093,10 +9288,12 @@ def reset_correction(
     if not run or not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
 
+    lock_issue_correction(db, c)
     c.status = CorrectionStatus.PENDING
     c.reviewed_by_user_id = None
     c.reviewed_at = None
     c.review_comment = ""
+    sync_correction_issue_metadata(db, c)
 
     db.commit()
     return _serialize_corrections_with_history(db, [c])[0]
@@ -9145,6 +9342,9 @@ def bulk_correction_action(
     reviewer_id = principal.user.id if principal.auth_type != "none" else None
     affected = 0
 
+    # Match issue edit lock order for multi-item review actions.
+    for candidate in sorted(corrections, key=lambda row: (row.run_id, row.item_id, row.id)):
+        lock_issue_correction(db, candidate)
     for c in corrections:
         if request.action == "approve":
             _approve_candidate(
@@ -9169,6 +9369,7 @@ def bulk_correction_action(
             c.reviewed_by_user_id = None
             c.reviewed_at = None
             c.review_comment = ""
+            sync_correction_issue_metadata(db, c)
             affected += 1
         elif request.action == "delete":
             _delete_active_candidate(

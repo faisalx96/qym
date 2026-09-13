@@ -1003,12 +1003,20 @@ def test_runs_list_payload_includes_pass_summaries_for_dot_strip():
             }
         }
         pass_two.meta = {
+            "status": "error",
+            "error": "metric judge unavailable",
             "root_cause_analysis": {
                 "root_cause": "Reasoning Error",
                 "root_causes": ["Reasoning Error"],
             }
         }
         session.commit()
+
+        run = session.query(Run).filter(Run.id == RUN_ID).one()
+        detail = _build_run_data(session, run)
+        assert detail["run"]["error_count"] == 1
+        assert detail["run"]["execution_error_count"] == 2
+        assert detail["snapshot"]["rows"][0]["execution_error_count"] == 2
 
         user = session.query(User).filter(User.id == "user-1").one()
         principal = Principal(
@@ -1034,6 +1042,12 @@ def test_runs_list_payload_includes_pass_summaries_for_dot_strip():
         ]
         summary = next(s for s in summaries if s["run_id"] == RUN_ID)
         assert summary["samples"] == 3
+        # The logical item ended with one task error, but the parent badge must
+        # total execution errors across passes: metric error on pass 2 plus
+        # task error on pass 3. The separate fields prevent that total from
+        # changing logical-item success math.
+        assert summary["error_count"] == 1
+        assert summary["execution_error_count"] == 2
 
         ps = summary["pass_summaries"]
         assert [p["pass_number"] for p in ps] == [1, 2, 3]
@@ -1044,9 +1058,9 @@ def test_runs_list_payload_includes_pass_summaries_for_dot_strip():
         assert ps[0]["primary_score"] == pytest.approx(1.0)
         assert ps[1]["primary_score"] == pytest.approx(0.0)
         assert ps[2]["primary_score"] == pytest.approx(0.0)
-        # pass 3 failed via item_failed (no attempt row), so attempt-derived
-        # error_count stays 0 — the zero-filled score already colors the dot
-        assert [p["error_count"] for p in ps] == [0, 0, 0]
+        # Per-pass counts include metric exceptions and legacy item_failed
+        # events, with one count per affected item/pass execution.
+        assert [p["error_count"] for p in ps] == [0, 1, 1]
         # Analysis is scoped to each sample, while the aggregate chip totals
         # both sample diagnoses.
         assert [p["analysis_cause_count"] for p in ps] == [1, 1, 0]
@@ -1058,6 +1072,141 @@ def test_runs_list_payload_includes_pass_summaries_for_dot_strip():
             1,
             0,
         ]
+        assert [p["error_count"] for p in pass_payload["passes"]] == [0, 1, 1]
+
+
+def test_runs_list_counts_metric_only_execution_error_without_task_failure():
+    """A metric exception appears in the Runs badge without changing task math."""
+    _app, SessionLocal = _make_env()
+    with SessionLocal() as session:
+        user, _, run = _seed(session, token="test-token", samples=1)
+        run.status = RunWorkflowStatus.COMPLETED
+        session.add(
+            RunItem(
+                run_id=RUN_ID,
+                item_id="metric-error-item",
+                index=0,
+                input={"q": "hello"},
+                expected="expected",
+                output="task output",
+                error=None,
+            )
+        )
+        session.add(
+            RunItemScore(
+                run_id=RUN_ID,
+                item_id="metric-error-item",
+                metric_name="accuracy",
+                score_numeric=0.0,
+                score_raw=0.0,
+                meta={"status": "error", "error": "metric exploded"},
+            )
+        )
+        session.commit()
+
+        principal = Principal(
+            user=user, auth_type="api_key", scopes=(), project_id="project-1"
+        )
+        payload = legacy_list_runs(
+            limit=100,
+            offset=0,
+            project_slug="project-1",
+            status=None,
+            exclude_live=False,
+            user=None,
+            user_id=None,
+            owner_user_id=None,
+            db=session,
+            principal=principal,
+        )
+        summary = next(
+            summary
+            for models in payload["tasks"].values()
+            for run_list in models.values()
+            for summary in run_list
+            if summary["run_id"] == RUN_ID
+        )
+
+        assert summary["error_count"] == 0
+        assert summary["execution_error_count"] == 1
+        assert summary["success_count"] == 1
+        assert summary["success_rate"] == pytest.approx(1.0)
+        assert summary["metric_averages"]["accuracy"] == pytest.approx(0.0)
+
+
+def test_repeat_run_list_totals_retries_across_every_pass():
+    """The parent and pass summaries use pass-aware attempt history."""
+    _app, SessionLocal = _make_env()
+    with SessionLocal() as session:
+        user, _, run = _seed(session, token="test-token", samples=3)
+        run.status = RunWorkflowStatus.COMPLETED
+        run.run_metadata = {"last_completed_pass": 3, "total_items": 1}
+        session.add(
+            RunItem(
+                run_id=RUN_ID,
+                item_id="retried-item",
+                index=0,
+                input={"q": "hello"},
+                expected="expected",
+                output="task output",
+                error=None,
+                # The reduced row contains only the latest pass's retry count.
+                retry_count=1,
+            )
+        )
+        for pass_number in range(1, 4):
+            session.add_all(
+                [
+                    RunItemAttempt(
+                        run_id=RUN_ID,
+                        item_id="retried-item",
+                        pass_number=pass_number,
+                        attempt_number=1,
+                        status="FAILED",
+                        error="temporary failure",
+                        is_last_attempt=False,
+                    ),
+                    RunItemAttempt(
+                        run_id=RUN_ID,
+                        item_id="retried-item",
+                        pass_number=pass_number,
+                        attempt_number=2,
+                        status="COMPLETED",
+                        output="task output",
+                        is_last_attempt=True,
+                    ),
+                ]
+            )
+        session.commit()
+
+        principal = Principal(
+            user=user, auth_type="api_key", scopes=(), project_id="project-1"
+        )
+        payload = legacy_list_runs(
+            limit=100,
+            offset=0,
+            project_slug="project-1",
+            status=None,
+            exclude_live=False,
+            user=None,
+            user_id=None,
+            owner_user_id=None,
+            db=session,
+            principal=principal,
+        )
+        summary = next(
+            summary
+            for models in payload["tasks"].values()
+            for run_list in models.values()
+            for summary in run_list
+            if summary["run_id"] == RUN_ID
+        )
+
+        assert summary["total_retries"] == 3
+        assert [p["retry_count"] for p in summary["pass_summaries"]] == [1, 1, 1]
+
+        pass_payload = run_passes(RUN_ID, db=session, principal=principal)
+        assert [p["retry_count"] for p in pass_payload["passes"]] == [1, 1, 1]
 
 
 def test_old_sdk_events_without_pass_number_still_ingest():

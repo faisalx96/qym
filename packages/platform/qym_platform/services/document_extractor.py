@@ -14,12 +14,10 @@ from zipfile import BadZipFile, ZipFile
 
 
 MAX_REFERENCE_UPLOAD_BYTES = 10 * 1024 * 1024
+# Large documents require explicit confirmation before their retained content
+# can be included in an external analyzer request. This threshold is not a
+# runtime prompt cap: confirmed content is sent in full.
 MAX_REFERENCE_DOCUMENT_CHARS = 40_000
-# The prompt-safe limit is intentionally smaller than the maximum content we
-# can retain.  Uploading a larger document therefore becomes an explicit user
-# choice instead of an invisible data loss.  This is also an absolute bound on
-# the text retained from a single document.
-MAX_REFERENCE_DOCUMENT_CONTENT_CHARS = 200_000
 # DOCX files are ZIP archives. Bound the expanded XML separately from the
 # compressed upload limit so a tiny archive cannot consume unbounded memory.
 MAX_DOCX_DOCUMENT_XML_BYTES = 4 * 1024 * 1024
@@ -233,7 +231,7 @@ def _prepare_pdf_page_content(page: object, remaining: int) -> int:
     return consumed
 
 
-def _extract_pdf_in_worker(data: bytes, max_chars: int) -> str:
+def _extract_pdf_in_worker(data: bytes) -> str:
     try:
         from pypdf import PdfReader
     except ImportError as exc:  # pragma: no cover - dependency is installed in production
@@ -247,19 +245,12 @@ def _extract_pdf_in_worker(data: bytes, max_chars: int) -> str:
             )
         parts: list[str] = []
         decompressed_bytes = 0
-        extracted_chars = 0
         for page in reader.pages:
             decompressed_bytes += _prepare_pdf_page_content(
                 page, MAX_PDF_DECOMPRESSED_BYTES - decompressed_bytes
             )
             page_text = page.extract_text() or ""
-            remaining_chars = max_chars + 1 - extracted_chars
-            if remaining_chars <= 0:
-                break
-            parts.append(page_text[:remaining_chars])
-            extracted_chars += len(parts[-1])
-            if extracted_chars > max_chars:
-                break
+            parts.append(page_text)
         return "\n\n".join(parts)
     except DocumentExtractionError:
         raise
@@ -269,7 +260,7 @@ def _extract_pdf_in_worker(data: bytes, max_chars: int) -> str:
         ) from exc
 
 
-def _pdf_extraction_worker(connection: object, data: bytes, max_chars: int) -> None:
+def _pdf_extraction_worker(connection: object, data: bytes) -> None:
     """Parse untrusted PDF data outside the request worker's resource budget."""
     try:
         try:
@@ -299,20 +290,20 @@ def _pdf_extraction_worker(connection: object, data: bytes, max_chars: int) -> N
             raise DocumentExtractionError(
                 "PDF extraction requires OS memory and CPU resource limits."
             ) from exc
-        connection.send(("ok", _extract_pdf_in_worker(data, max_chars)))
+        connection.send(("ok", _extract_pdf_in_worker(data)))
     except Exception as exc:  # noqa: BLE001 - returned as a safe upload error
         connection.send(("error", str(exc)))
     finally:
         connection.close()
 
 
-def _extract_pdf(data: bytes, max_chars: int) -> str:
+def _extract_pdf(data: bytes) -> str:
     """Extract PDF text in a bounded child process to contain parser expansion."""
     context = get_context("spawn")
     parent_connection, child_connection = context.Pipe(duplex=False)
     process = context.Process(
         target=_pdf_extraction_worker,
-        args=(child_connection, data, max_chars),
+        args=(child_connection, data),
     )
     process.start()
     child_connection.close()
@@ -346,16 +337,8 @@ def _normalize_text(text: str) -> str:
 def extract_document_text(
     filename: str,
     data: bytes,
-    *,
-    max_chars: int = MAX_REFERENCE_DOCUMENT_CHARS,
 ) -> ExtractedDocument:
-    """Extract bounded text from a supported uploaded document.
-
-    ``max_chars`` is explicit so callers can distinguish the normal
-    prompt-safe representation from an intentionally retained larger
-    document.  The absolute content bound remains enforced regardless of the
-    caller's choice.
-    """
+    """Extract and retain all readable text from a supported upload."""
     safe_name = Path(filename or "document").name[:255] or "document"
     extension = Path(safe_name).suffix.lower()
     if extension not in SUPPORTED_DOCUMENT_EXTENSIONS:
@@ -367,13 +350,8 @@ def extract_document_text(
         raise DocumentExtractionError("The document exceeds the 10 MB upload limit.")
     if not data:
         raise DocumentExtractionError("The uploaded document is empty.")
-    if max_chars < 1 or max_chars > MAX_REFERENCE_DOCUMENT_CONTENT_CHARS:
-        raise DocumentExtractionError(
-            "The requested document content limit is outside the supported range."
-        )
-
     if extension == ".pdf":
-        text = _extract_pdf(data, max_chars)
+        text = _extract_pdf(data)
     elif extension == ".docx":
         text = _extract_docx(data)
     elif extension in {".html", ".htm"}:
@@ -388,13 +366,10 @@ def extract_document_text(
         )
 
     source_characters = len(text)
-    truncated = source_characters > max_chars
-    if truncated:
-        text = text[:max_chars].rstrip()
     return ExtractedDocument(
         name=safe_name,
         content=text,
         characters=len(text),
-        truncated=truncated,
+        truncated=False,
         source_characters=source_characters,
     )

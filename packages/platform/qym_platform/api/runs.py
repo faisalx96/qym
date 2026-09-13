@@ -56,9 +56,11 @@ from qym_platform.permissions import (
     can_approve_run as permission_can_approve_run,
     can_delete_run,
     can_modify_run,
+    can_review_run,
     can_view_run,
     has_project_access,
 )
+from qym_platform.services.issue_reviews import change_metric_issue, reconcile_issue_edits
 from qym_platform.services.run_lifecycle import reconcile_stale_running_run
 from qym_platform.services.run_payloads import compact_row, detail_item_ids, search_conditions
 from qym_platform.services.repeat_passes import (
@@ -115,6 +117,140 @@ def _metric_specs_for_runs(
     for row in rows:
         result.setdefault(row.run_id, {})[row.metric_name] = _metric_spec_payload(row)
     return result
+
+
+_EXECUTION_ERROR_STATUSES = {"error", "failed", "timeout"}
+
+
+def _is_metric_execution_error(meta: Any) -> bool:
+    """Distinguish a raised metric error from an ordinary zero/failed score."""
+    if isinstance(meta, dict):
+        status = str(meta.get("status") or "").strip().lower()
+        if status in _EXECUTION_ERROR_STATUSES:
+            return True
+        error = meta.get("error")
+        if error is not None and str(error).strip():
+            return True
+    return False
+
+
+def _execution_error_pairs_for_runs(
+    db: Session,
+    run_ids: List[str],
+    *,
+    samples_by_run: Optional[Dict[str, int]] = None,
+) -> Dict[str, set[tuple[str, int]]]:
+    """Return unique ``(item_id, pass_number)`` executions with an exception.
+
+    ``RunItem`` and ``RunItemScore`` are reduced to one row for repeat runs, so
+    repeat errors must come from their pass-aware attempt, event, and score
+    records.  A set prevents a task error and its zero-filled metric score from
+    counting the same failed execution twice.
+    """
+    if not run_ids:
+        return {}
+
+    sample_counts = dict(samples_by_run or {})
+    missing_run_ids = [run_id for run_id in run_ids if run_id not in sample_counts]
+    if missing_run_ids:
+        sample_counts.update(
+            {
+                run_id: max(1, int(samples or 1))
+                for run_id, samples in db.query(Run.id, Run.samples)
+                .filter(Run.id.in_(missing_run_ids))
+                .all()
+            }
+        )
+
+    error_pairs: Dict[str, set[tuple[str, int]]] = defaultdict(set)
+
+    # Classic runs keep their task outcome directly on RunItem. Repeat runs
+    # overwrite that representative row each pass, so their pass-aware sources
+    # below are authoritative.
+    for run_id, item_id in (
+        db.query(RunItem.run_id, RunItem.item_id)
+        .filter(RunItem.run_id.in_(run_ids), RunItem.error.isnot(None))
+        .all()
+    ):
+        if sample_counts.get(run_id, 1) <= 1:
+            error_pairs[run_id].add((str(item_id), 1))
+
+    for run_id, item_id, pass_number in (
+        db.query(
+            RunItemAttempt.run_id,
+            RunItemAttempt.item_id,
+            RunItemAttempt.pass_number,
+        )
+        .filter(
+            RunItemAttempt.run_id.in_(run_ids),
+            RunItemAttempt.is_last_attempt.is_(True),
+            func.lower(RunItemAttempt.status).in_(tuple(_EXECUTION_ERROR_STATUSES)),
+        )
+        .all()
+    ):
+        error_pairs[run_id].add((str(item_id), max(1, int(pass_number or 1))))
+
+    # Legacy SDKs can emit item_failed without a final-attempt row.
+    for run_id, payload in (
+        db.query(RunEvent.run_id, RunEvent.payload)
+        .filter(RunEvent.run_id.in_(run_ids), RunEvent.type == "item_failed")
+        .yield_per(1000)
+    ):
+        if not isinstance(payload, dict):
+            continue
+        item_id = str(payload.get("item_id") or "")
+        if not item_id:
+            continue
+        try:
+            pass_number = max(1, int(payload.get("pass_number") or 1))
+        except (TypeError, ValueError):
+            pass_number = 1
+        error_pairs[run_id].add((item_id, pass_number))
+
+    aggregate_score_candidates = (
+        db.query(
+            RunItemScore.run_id,
+            RunItemScore.item_id,
+            RunItemScore.meta,
+        )
+        .filter(
+            RunItemScore.run_id.in_(run_ids),
+            or_(
+                cast(RunItemScore.meta, Text).like('%"error"%'),
+                cast(RunItemScore.meta, Text).like('%"status"%'),
+            ),
+        )
+        .yield_per(1000)
+    )
+    for run_id, item_id, meta in aggregate_score_candidates:
+        if sample_counts.get(run_id, 1) > 1:
+            continue
+        if _is_metric_execution_error(meta):
+            error_pairs[run_id].add((str(item_id), 1))
+
+    pass_score_candidates = (
+        db.query(
+            RunItemPassScore.run_id,
+            RunItemPassScore.item_id,
+            RunItemPassScore.pass_number,
+            RunItemPassScore.meta,
+        )
+        .filter(
+            RunItemPassScore.run_id.in_(run_ids),
+            or_(
+                cast(RunItemPassScore.meta, Text).like('%"error"%'),
+                cast(RunItemPassScore.meta, Text).like('%"status"%'),
+            ),
+        )
+        .yield_per(1000)
+    )
+    for run_id, item_id, pass_number, meta in pass_score_candidates:
+        if _is_metric_execution_error(meta):
+            error_pairs[run_id].add(
+                (str(item_id), max(1, int(pass_number or 1)))
+            )
+
+    return dict(error_pairs)
 
 
 def _refresh_metric_analysis_error(meta: Dict[str, Any]) -> None:
@@ -265,6 +401,14 @@ def _apply_metric_analysis_patch(
         analysis.pop("reviewed_at", None)
         analysis["source"] = "human"
 
+    if any(issue.get("issue_id") for issue in analysis_root_cause_issues(before_analysis)):
+        analysis = reconcile_issue_edits(before_analysis or {}, analysis)
+    elif "root_cause_issues" in patch:
+        # The old endpoint must not allow a form to invent approval markers.
+        for issue in analysis.get("root_cause_issues", []):
+            for key in ("review_status", "reviewed_at", "reviewed_by_user_id", "issue_id"):
+                issue.pop(key, None)
+
     meaningful = {
         key: value
         for key, value in analysis.items()
@@ -306,15 +450,17 @@ def _repeat_pass_status(
 
 def _repeat_attempt_summaries(
     db: Session, run_ids: List[str]
-) -> Dict[str, Dict[str, float]]:
-    """Aggregate latency and runtime across every retained repeat pass."""
+) -> Dict[str, Dict[str, Any]]:
+    """Aggregate latency, runtime, and retries across retained repeat passes."""
     if not run_ids:
         return {}
 
     rows = (
         db.query(
             RunItemAttempt.run_id,
+            RunItemAttempt.item_id,
             RunItemAttempt.pass_number,
+            RunItemAttempt.attempt_number,
             RunItemAttempt.latency_ms,
             RunItemAttempt.task_started_at_ms,
         )
@@ -326,7 +472,20 @@ def _repeat_attempt_summaries(
     )
     latencies_by_run: Dict[str, List[float]] = defaultdict(list)
     bounds_by_run_pass: Dict[str, Dict[int, List[float]]] = defaultdict(dict)
-    for run_id, pass_number, latency_ms, task_started_at_ms in rows:
+    retries_by_execution: Dict[str, Dict[tuple[str, int], int]] = defaultdict(dict)
+    for (
+        run_id,
+        item_id,
+        pass_number,
+        attempt_number,
+        latency_ms,
+        task_started_at_ms,
+    ) in rows:
+        execution_key = (str(item_id), max(1, int(pass_number or 1)))
+        retries_by_execution[run_id][execution_key] = max(
+            retries_by_execution[run_id].get(execution_key, 0),
+            max(0, int(attempt_number or 1) - 1),
+        )
         if latency_ms is not None:
             latencies_by_run[run_id].append(float(latency_ms))
         if task_started_at_ms is None or latency_ms is None:
@@ -337,10 +496,54 @@ def _repeat_attempt_summaries(
         bounds[0] = min(bounds[0], start)
         bounds[1] = max(bounds[1], end)
 
-    summaries: Dict[str, Dict[str, float]] = {}
-    for run_id in set(latencies_by_run) | set(bounds_by_run_pass):
+    # Legacy SDK events can carry retry_count without a retained final-attempt
+    # row. Merge by item/pass and take the maximum so an event and its matching
+    # attempt row never double-count the same retries.
+    retry_event_types = {
+        "item_attempt_started",
+        "item_attempt_finished",
+        "item_completed",
+        "item_failed",
+    }
+    for run_id, payload in (
+        db.query(RunEvent.run_id, RunEvent.payload)
+        .filter(
+            RunEvent.run_id.in_(run_ids),
+            RunEvent.type.in_(retry_event_types),
+        )
+        .yield_per(1000)
+    ):
+        if not isinstance(payload, dict):
+            continue
+        item_id = str(payload.get("item_id") or "")
+        if not item_id:
+            continue
+        try:
+            pass_number = max(1, int(payload.get("pass_number") or 1))
+        except (TypeError, ValueError):
+            pass_number = 1
+        try:
+            retry_count = max(0, int(payload.get("retry_count") or 0))
+        except (TypeError, ValueError):
+            retry_count = 0
+        try:
+            retry_count = max(
+                retry_count, max(0, int(payload.get("attempt_number") or 1) - 1)
+            )
+        except (TypeError, ValueError):
+            pass
+        execution_key = (item_id, pass_number)
+        retries_by_execution[run_id][execution_key] = max(
+            retries_by_execution[run_id].get(execution_key, 0), retry_count
+        )
+
+    summaries: Dict[str, Dict[str, Any]] = {}
+    all_run_ids = (
+        set(latencies_by_run) | set(bounds_by_run_pass) | set(retries_by_execution)
+    )
+    for run_id in all_run_ids:
         latencies = latencies_by_run.get(run_id, [])
-        summary: Dict[str, float] = {}
+        summary: Dict[str, Any] = {}
         if latencies:
             summary["avg_latency_ms"] = sum(latencies) / len(latencies)
             summary["median_latency_ms"] = _median(latencies)
@@ -349,6 +552,13 @@ def _repeat_attempt_summaries(
             summary["duration_ms"] = sum(
                 max(0.0, end - start) for start, end in pass_bounds.values()
             )
+        retry_counts_by_pass: Dict[int, int] = defaultdict(int)
+        for (_item_id, pass_number), retry_count in retries_by_execution.get(
+            run_id, {}
+        ).items():
+            retry_counts_by_pass[pass_number] += retry_count
+        summary["retry_counts_by_pass"] = dict(retry_counts_by_pass)
+        summary["total_retries"] = sum(retry_counts_by_pass.values())
         summaries[run_id] = summary
     return summaries
 
@@ -1172,7 +1382,18 @@ def _compute_run_summary(db: Session, run: Run) -> Dict[str, Any]:
     total_items = len(items)
     error_items = {it.item_id for it in items if it.error}
     error_count = len(error_items)
+    execution_error_count = len(
+        _execution_error_pairs_for_runs(
+            db,
+            [run.id],
+            samples_by_run={run.id: int(getattr(run, "samples", 1) or 1)},
+        ).get(run.id, set())
+    )
     total_retries = sum(int(it.retry_count or 0) for it in items)
+    if int(getattr(run, "samples", 1) or 1) > 1:
+        repeat_summary = _repeat_attempt_summaries(db, [run.id]).get(run.id, {})
+        if "total_retries" in repeat_summary:
+            total_retries = int(repeat_summary["total_retries"] or 0)
     success_count = total_items - error_count
     completed_count = len(
         [it for it in items if (it.output is not None) or (it.error is not None)]
@@ -1276,6 +1497,7 @@ def _compute_run_summary(db: Session, run: Run) -> Dict[str, Any]:
         "progress_pct": (completed_count / expected_total) if expected_total else None,
         "success_count": success_count,
         "error_count": error_count,
+        "execution_error_count": execution_error_count,
         "total_retries": total_retries,
         "success_rate": (success_count / total_items) if total_items else 0.0,
         "avg_latency_ms": avg_latency_ms,
@@ -1355,6 +1577,9 @@ def _live_run_summary(
         "progress_pct": (completed_count / expected_total) if expected_total else None,
         "total_items": int(item_agg.get("total") or 0),
         "error_count": int(item_agg.get("error_count") or 0),
+        "execution_error_count": int(
+            item_agg.get("execution_error_count", item_agg.get("error_count")) or 0
+        ),
         "samples": int(getattr(run, "samples", 1) or 1),
         "last_completed_pass": (
             run.run_metadata.get("last_completed_pass")
@@ -1392,6 +1617,18 @@ def _summarize_runs_for_admin(db: Session, runs: List[Run]) -> List[Dict[str, An
         }
         for row in item_agg_rows
     }
+    execution_error_pairs = _execution_error_pairs_for_runs(
+        db,
+        run_ids,
+        samples_by_run={
+            run.id: int(getattr(run, "samples", 1) or 1) for run in runs
+        },
+    )
+    for run_id in run_ids:
+        item_agg.setdefault(
+            run_id,
+            {"total": 0, "error_count": 0, "completed": 0},
+        )["execution_error_count"] = len(execution_error_pairs.get(run_id, set()))
     project_ids = {run.project_id for run in runs}
     owner_ids = {run.owner_user_id for run in runs}
     projects = (
@@ -1804,6 +2041,12 @@ def legacy_list_runs(
 
     run_ids = [r.id for r in runs]
     metric_specs_by_run = _metric_specs_for_runs(db, run_ids)
+    samples_by_run = {
+        run.id: int(getattr(run, "samples", 1) or 1) for run in runs
+    }
+    execution_error_pairs = _execution_error_pairs_for_runs(
+        db, run_ids, samples_by_run=samples_by_run
+    )
 
     # --- Batch query: item aggregates per run ---
     item_agg_rows = (
@@ -1825,6 +2068,9 @@ def legacy_list_runs(
         row.run_id: {
             "total": row.total,
             "error_count": row.error_count,
+            "execution_error_count": len(
+                execution_error_pairs.get(row.run_id, set())
+            ),
             "completed": row.completed,
             "total_retries": int(row.total_retries or 0),
             "avg_latency": float(row.avg_latency)
@@ -1848,6 +2094,9 @@ def legacy_list_runs(
             {
                 "total": 0,
                 "error_count": 0,
+                "execution_error_count": len(
+                    execution_error_pairs.get(run_id, set())
+                ),
                 "completed": 0,
                 "total_retries": 0,
                 "avg_latency": 0.0,
@@ -1897,6 +2146,9 @@ def legacy_list_runs(
             {
                 "total": 0,
                 "error_count": 0,
+                "execution_error_count": len(
+                    execution_error_pairs.get(run_id, set())
+                ),
                 "completed": 0,
                 "total_retries": 0,
                 "avg_latency": 0.0,
@@ -1905,6 +2157,8 @@ def legacy_list_runs(
         if "avg_latency_ms" in attempt_summary:
             agg["avg_latency"] = attempt_summary["avg_latency_ms"]
             agg["median_latency"] = attempt_summary["median_latency_ms"]
+        if "total_retries" in attempt_summary:
+            agg["total_retries"] = int(attempt_summary["total_retries"] or 0)
     pass_summary_map: Dict[str, List[Dict[str, Any]]] = {}
     pass_analysis_cause_totals: Dict[str, int] = {}
     if sampled_run_ids:
@@ -1941,9 +2195,6 @@ def legacy_list_runs(
                 RunItemAttempt.run_id,
                 RunItemAttempt.pass_number,
                 func.count(RunItemAttempt.id).label("n"),
-                func.sum(
-                    case((func.lower(RunItemAttempt.status) == "failed", 1), else_=0)
-                ).label("errs"),
             )
             .filter(
                 RunItemAttempt.run_id.in_(sampled_run_ids),
@@ -1954,9 +2205,12 @@ def legacy_list_runs(
         )
         pass_attempts: Dict[str, Dict[int, int]] = {}
         pass_errors: Dict[str, Dict[int, int]] = {}
-        for rid, pass_number, n_attempts, errs in dot_attempt_rows:
+        for rid, pass_number, n_attempts in dot_attempt_rows:
             pass_attempts.setdefault(rid, {})[int(pass_number)] = int(n_attempts or 0)
-            pass_errors.setdefault(rid, {})[int(pass_number)] = int(errs or 0)
+        for rid in sampled_run_ids:
+            for _item_id, pass_number in execution_error_pairs.get(rid, set()):
+                errors_for_run = pass_errors.setdefault(rid, {})
+                errors_for_run[pass_number] = errors_for_run.get(pass_number, 0) + 1
 
         # A repeat-run diagnosis is stored on the pass score, not on the
         # reduced RunItem.  Keep the runs-list chip scoped to that pass so a
@@ -2000,6 +2254,9 @@ def legacy_list_runs(
             means = (pass_means.get(r.id) or {}).get(primary, {}) if primary else {}
             attempts = pass_attempts.get(r.id, {})
             errors = pass_errors.get(r.id, {})
+            retries = (repeat_attempt_summaries.get(r.id) or {}).get(
+                "retry_counts_by_pass", {}
+            )
             last_completed = 0
             if isinstance(r.run_metadata, dict):
                 try:
@@ -2022,6 +2279,7 @@ def legacy_list_runs(
                         "status": p_status,
                         "primary_score": means.get(p),
                         "error_count": errors.get(p, 0),
+                        "retry_count": int(retries.get(p, 0) or 0),
                         "analysis_cause_count": len(
                             (pass_analysis_causes.get(r.id) or {}).get(p, set())
                         ),
@@ -2082,6 +2340,9 @@ def legacy_list_runs(
             {
                 "total": 0,
                 "error_count": 0,
+                "execution_error_count": len(
+                    execution_error_pairs.get(r.id, set())
+                ),
                 "completed": 0,
                 "total_retries": 0,
                 "avg_latency": 0.0,
@@ -2090,6 +2351,9 @@ def legacy_list_runs(
         )
         total_items = agg["total"]
         error_count = agg["error_count"]
+        execution_error_count = int(
+            agg.get("execution_error_count", error_count) or 0
+        )
         total_retries = int(agg.get("total_retries") or 0)
         success_count = total_items - error_count
         completed_count = agg["completed"]
@@ -2190,6 +2454,7 @@ def legacy_list_runs(
             else None,
             "success_count": success_count,
             "error_count": error_count,
+            "execution_error_count": execution_error_count,
             "total_retries": total_retries,
             "success_rate": (success_count / total_items) if total_items else 0.0,
             "avg_latency_ms": agg["avg_latency"],
@@ -2697,6 +2962,14 @@ def _build_run_data(
 
     # Repeat runs: per-pass scores power the dot strips in the items table.
     run_samples = int(getattr(run, "samples", 1) or 1)
+    execution_error_pairs = _execution_error_pairs_for_runs(
+        db,
+        [run.id],
+        samples_by_run={run.id: run_samples},
+    ).get(run.id, set())
+    execution_errors_by_item: Dict[str, int] = defaultdict(int)
+    for error_item_id, _pass_number in execution_error_pairs:
+        execution_errors_by_item[str(error_item_id)] += 1
     pass_scores_by_item: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {}
     pass_meta_by_item: Dict[str, Dict[str, Dict[int, Dict[str, Any]]]] = {}
     pass_analysis_by_item: Dict[str, Dict[str, Dict[int, Dict[str, Any]]]] = {}
@@ -2943,6 +3216,12 @@ def _build_run_data(
                 "compare_alignment_source": identity["compare_alignment_source"],
                 "status": status,
                 "error": it.error or "",
+                # Repeat runs retain one logical RunItem while each pass is a
+                # separate execution. This count lets filtered detail views
+                # total every errored task/metric execution for this item.
+                "execution_error_count": execution_errors_by_item.get(
+                    str(it.item_id), 0
+                ),
                 "input": _stringify(it.input),
                 "input_full": _stringify(it.input),
                 "output": (
@@ -3102,6 +3381,8 @@ def _build_run_data(
                 "langfuse_project_id": lf_project_id,
                 "trace_stats": run_trace_stats,
                 "samples": run_samples,
+                "error_count": stats["failed"],
+                "execution_error_count": len(execution_error_pairs),
                 "last_completed_pass": (
                     run_metadata.get("last_completed_pass")
                     if isinstance(run_metadata, dict)
@@ -3318,6 +3599,9 @@ def run_passes(
 
     samples = int(getattr(run, "samples", 1) or 1)
     metrics = list(run.metrics or [])
+    execution_error_pairs = _execution_error_pairs_for_runs(
+        db, [run.id], samples_by_run={run.id: samples}
+    ).get(run.id, set())
 
     # Per-pass mean per metric.
     score_rows = (
@@ -3393,7 +3677,13 @@ def run_passes(
         attempts_by_item_pass.setdefault(key, payload)
 
     latencies_by_pass: Dict[int, List[float]] = {}
-    errors_by_pass: Dict[int, int] = {}
+    error_items_by_pass: Dict[int, set[str]] = defaultdict(set)
+    for item_id, pass_number in execution_error_pairs:
+        error_items_by_pass[int(pass_number)].add(item_id)
+    errors_by_pass = {
+        pass_number: len(item_ids)
+        for pass_number, item_ids in error_items_by_pass.items()
+    }
     completed_by_pass: Dict[int, int] = {}
     running_by_pass: Dict[int, int] = {}
     started_items_by_pass: Dict[int, int] = {}
@@ -3421,8 +3711,6 @@ def run_passes(
                 ends_by_pass.setdefault(p, []).append(started + float(latency_ms))
         if trace_id and status != "error":
             trace_ids_by_pass.setdefault(p, []).append(str(trace_id))
-        if status == "error":
-            errors_by_pass[p] = errors_by_pass.get(p, 0) + 1
         retries_by_pass[p] = retries_by_pass.get(p, 0) + max(
             int(attempt.get("retry_count") or 0),
             max(0, max_attempt_by_pair.get((item_id, p), 1) - 1),
@@ -4215,6 +4503,66 @@ def update_metric(
     }
 
     return {"ok": True, "row": row}
+
+
+@router.post("/api/runs/update_root_cause_issue")
+def update_root_cause_issue(
+    request: Dict[str, Any],
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Save or approve exactly one issue, with explicit run/metric/pass scope."""
+    run_id = str(request.get("run_id") or "")
+    item_id = str(request.get("item_id") or "")
+    metric_name = str(request.get("metric_name") or "").strip()
+    if not run_id or not item_id or not metric_name:
+        raise HTTPException(400, "run_id, item_id, and metric_name required")
+    run = Run.active(db).filter(Run.id == run_id).first()
+    if run is None:
+        raise HTTPException(404, "Run not found")
+    permission = can_review_run if request.get("action") == "approve" else can_modify_run
+    if not permission(db, principal, run):
+        raise HTTPException(403, "Access denied")
+    item = db.query(RunItem).filter(RunItem.run_id == run.id, RunItem.item_id == item_id).first()
+    if item is None:
+        raise HTTPException(404, "Item not found")
+    item = lock_run_item(db, run=run, item=item)
+    meta = dict(item.item_metadata or {})
+    metric_analyses = dict(meta.get("metric_analyses") or {})
+    if metric_name not in {str(name) for name in (run.metrics or [])} | set(metric_analyses):
+        raise HTTPException(400, "Unknown metric_name")
+    pass_number = request.get("pass_number")
+    samples = int(run.samples or 1)
+    if samples > 1 and pass_number is None:
+        raise HTTPException(400, "pass_number is required for a repeat-run diagnosis")
+    if pass_number is not None and (type(pass_number) is not int or samples <= 1 or not 1 <= pass_number <= samples):
+        raise HTTPException(400, "pass_number is outside this run")
+    pass_score = None
+    if pass_number is not None:
+        pass_score = db.query(RunItemPassScore).filter(
+            RunItemPassScore.run_id == run.id, RunItemPassScore.item_id == item_id,
+            RunItemPassScore.metric_name == metric_name, RunItemPassScore.pass_number == pass_number,
+        ).with_for_update().one_or_none()
+        if pass_score is None:
+            raise HTTPException(404, "Pass score not found")
+        analysis = (pass_score.meta or {}).get(PASS_ANALYSIS_META_KEY) or {}
+    else:
+        analysis = metric_analyses.get(metric_name) or {}
+    analysis = change_metric_issue(
+        db, run=run, item=item, metric_name=metric_name, analysis=analysis,
+        request=request, actor_user_id=principal.user.id if principal.auth_type != "none" else None,
+        pass_number=pass_number,
+    )
+    if pass_score is not None:
+        pass_score.meta = {**(pass_score.meta or {}), PASS_ANALYSIS_META_KEY: analysis}
+    else:
+        metric_analyses[metric_name] = analysis
+        meta["metric_analyses"] = metric_analyses
+        _refresh_metric_analysis_error(meta)
+        item.item_metadata = meta
+    db.commit()
+    rows = _build_run_data(db, run).get("snapshot", {}).get("rows", [])
+    return {"ok": True, "row": next((row for row in rows if row.get("item_id") == item_id), None)}
 
 
 @router.post("/api/runs/update_root_cause")

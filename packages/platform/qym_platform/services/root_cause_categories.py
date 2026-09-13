@@ -288,13 +288,18 @@ def normalize_root_cause_issues(
             or raw_issue.get("note")
             or ""
         ).strip()[:10_000]
-        issues.append(
-            {
-                "category": category,
-                "subcategory": subcategory,
-                "finding": finding,
-            }
-        )
+        issue = {"category": category, "subcategory": subcategory, "finding": finding}
+        # Optional issue-owned fields live in the existing JSON. Write endpoints
+        # reconcile review fields against trusted saved state, never form input.
+        for key in (
+            "issue_id", "solution", "solution_note", "source", "category_reason",
+            "review_status", "reviewed_at", "reviewed_by_user_id",
+        ):
+            if key in raw_issue:
+                issue[key] = str(raw_issue.get(key) or "").strip()
+        if isinstance(raw_issue.get("confidence"), (int, float)):
+            issue["confidence"] = max(0.0, min(1.0, raw_issue["confidence"]))
+        issues.append(issue)
     return issues
 
 

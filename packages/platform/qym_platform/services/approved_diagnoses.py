@@ -6,6 +6,7 @@ from collections import defaultdict
 from typing import Any, Iterable, Optional, Sequence
 
 from qym_platform.db.models import CorrectionStatus, ReviewCorrection, RunItem
+from qym_platform.services.issue_reviews import correction_issue_id
 from qym_platform.services.root_cause_categories import (
     analysis_root_cause_issues,
     normalize_root_cause_issues,
@@ -133,18 +134,19 @@ def load_approved_diagnoses(
 
     result: dict[tuple[str, str], list[DiagnosisEntry]] = defaultdict(list)
     approved_scopes: set[DiagnosisScope] = set()
-    seen_scopes: set[DiagnosisScope] = set()
+    seen_scopes: set[tuple[Any, ...]] = set()
     for correction in corrections:
         scope: DiagnosisScope = (
             correction.run_id,
             correction.item_id,
             _clean(correction.metric_name) or None,
         )
-        # Normally only one active row can exist for a scope. If old data has
-        # more than one, the newest approved row is the effective diagnosis.
-        if scope in seen_scopes:
+        # Keep independently approved siblings. Within the same issue (or an
+        # old grouped scope), the newest active approved snapshot wins.
+        issue_scope = (*scope, correction_issue_id(correction))
+        if issue_scope in seen_scopes:
             continue
-        seen_scopes.add(scope)
+        seen_scopes.add(issue_scope)
         approved_scopes.add(scope)
         issues, source = _correction_issues(correction)
         if not issues:

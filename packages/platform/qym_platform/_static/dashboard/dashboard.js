@@ -1426,6 +1426,7 @@
           const totalItems = Number(run.total_items || 0);
           const successCount = Number(run.success_count || 0);
           const errorCount = Number(run.error_count || 0);
+          const executionErrorCount = Number(run.execution_error_count ?? errorCount);
           const completedCount = successCount + errorCount;
           const completionRate = totalItems > 0 ? (completedCount / totalItems) : 0;
           const successOnCompletedRate = completedCount > 0 ? (successCount / completedCount) : null;
@@ -1447,6 +1448,7 @@
             completion_rate: completionRate,
             success_on_completed_rate: successOnCompletedRate,
             total_retries: Number(run.total_retries || 0),
+            execution_error_count: executionErrorCount,
             _date: new Date(run.timestamp),
           });
         }
@@ -1800,10 +1802,10 @@
         runs.sort((a, b) => (b.owner?.display_name || '').localeCompare(a.owner?.display_name || ''));
         break;
       case 'status-asc':
-        runs.sort((a, b) => a.error_count - b.error_count);
+        runs.sort((a, b) => a.execution_error_count - b.execution_error_count);
         break;
       case 'status-desc':
-        runs.sort((a, b) => b.error_count - a.error_count);
+        runs.sort((a, b) => b.execution_error_count - a.execution_error_count);
         break;
       case 'run-asc':
         runs.sort((a, b) => a.run_id.localeCompare(b.run_id));
@@ -3327,6 +3329,8 @@
       }).join('');
 
       const status = run.status || '';
+      const executionErrorCount = Number(run.execution_error_count ?? run.error_count ?? 0);
+      const retryScope = run.samples > 1 ? ' across all passes' : ' across all items';
       const approval = run.approval || null;
 
       const globalRole = (state.currentUser && state.currentUser.role) || '';
@@ -3387,7 +3391,7 @@
             </div>
           </td>
           <td class="col-status">
-            ${status ? `<span class="status-badge qym-badge status-${status}" title="${escapeHtml(statusTooltip)}">${status}${passText}${parentProgressText}</span>` : ''}${(run.error_count > 0 && status !== 'RUNNING' && status !== 'PENDING') ? `<span class="status-errors" title="${run.error_count} item${run.error_count === 1 ? '' : 's'} errored">${run.error_count}⚠</span>` : ''}${(run.total_retries > 0 && status !== 'RUNNING' && status !== 'PENDING') ? `<span class="status-retries" title="${run.total_retries} total retr${run.total_retries === 1 ? 'y' : 'ies'} across all items">${run.total_retries}↻</span>` : ''}
+            ${status ? `<span class="status-badge qym-badge status-${status}" title="${escapeHtml(statusTooltip)}">${status}${passText}${parentProgressText}</span>` : ''}${(executionErrorCount > 0 && status !== 'RUNNING' && status !== 'PENDING') ? `<span class="status-errors" title="${executionErrorCount} execution error${executionErrorCount === 1 ? '' : 's'}${run.samples > 1 ? ' across all passes' : ''}">${executionErrorCount}⚠</span>` : ''}${(run.total_retries > 0 && status !== 'RUNNING' && status !== 'PENDING') ? `<span class="status-retries" title="${run.total_retries} total retr${run.total_retries === 1 ? 'y' : 'ies'}${retryScope}">${run.total_retries}↻</span>` : ''}
           </td>
           <td class="col-task">
             <span class="tag qym-tag task" title="${escapeHtml(run.task_name || '')}">${run.task_name ? escapeHtml(run.task_name) : '—'}</span>
@@ -3854,6 +3858,7 @@
           ? ` • ${Math.round((completedCount / totalCount) * 100)}% • ${completedCount}/${totalCount}`
           : '';
         const errors = Number(pass.error_count) || 0;
+        const retries = Number(pass.retry_count) || 0;
         const metricCells = metricsToShow.map(metric => {
           const value = (pass.metric_means || {})[metric];
           if (typeof value !== 'number') {
@@ -3890,6 +3895,8 @@
             ? `<span class="status-badge qym-badge status-${badgeClass}">${statusLabel}${progressLabel}</span>`
             : `<span class="pass-member-status">${statusLabel}</span>`}${errors
             ? `<span class="status-errors" title="${errors} item${errors === 1 ? '' : 's'} errored in this pass">${errors}⚠</span>`
+            : ''}${retries
+            ? `<span class="status-retries" title="${retries} retr${retries === 1 ? 'y' : 'ies'} in this pass">${retries}↻</span>`
             : ''}</td>
           ${inherit('col-task')}
           ${inherit('col-model')}

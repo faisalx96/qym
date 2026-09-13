@@ -124,11 +124,13 @@ visually level with adjacent 11px toolbar labels. Add `.qym-input`,
 `.qym-select`, or `.qym-search` to describe behavior, not density. There are no
 compact or roomy variants. Compact inline action buttons beside these controls
 use `.qym-inline-action` and the same height. Add
-`.qym-inline-action--neutral` for secondary toolbar actions or
-`.qym-inline-action--accent` for the primary action in that row; both use the
-shared borderless rounded-rectangle surface. External integration actions may
-use a documented brand modifier such as `.qym-inline-action--langfuse`; brand
-color belongs to the integration action, never to generic controls. Textareas,
+`.qym-inline-action--neutral` for secondary toolbar actions,
+`.qym-inline-action--accent` for the primary action in that row, or
+`.qym-inline-action--danger` for an explicit destructive action; all use the
+shared borderless rounded-rectangle surface. Danger actions use the semantic
+error color and must state what will be deleted. External integration actions
+may use a documented brand modifier such as `.qym-inline-action--langfuse`;
+brand color belongs to the integration action, never to generic controls. Textareas,
 range inputs, the 42px authentication fields, and composite controls such as
 the playground connection picker remain separate recipes and must not inherit
 `--control-height`.
