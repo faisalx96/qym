@@ -9133,6 +9133,10 @@
         // verdicts, so task diagnosis belongs to Error Distribution instead.
         if (hasTaskError || window.QymMetrics.isTaskErrorRow(row)) return false;
 
+        // Saved diagnoses stay visible even when this metric scored as passing.
+        const storedAnalysis = row?.item_metadata?.metric_analyses?.[metricName];
+        if (storedAnalysis && !storedAnalysis.error && rootCauseIssues(storedAnalysis).length) return true;
+
         // A raised metric is still a failed execution that needs diagnosis,
         // even though its stored aggregate value is zero.
         if (window.QymMetrics.hasMetricError(row, metricName)) return true;

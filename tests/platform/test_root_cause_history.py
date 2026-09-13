@@ -90,7 +90,6 @@ from qym_platform.services.analysis_aggregation import (
 )
 from qym_platform.services import llm_analyzer as llm_analyzer_service
 from qym_platform.services.llm_analyzer import (
-    MAX_ANALYSIS_PROMPT_CHARS,
     ROOT_CAUSE_CATEGORIES,
     RULE_WRITER_SYSTEM_PROMPT,
     AnalysisRule,
@@ -1301,7 +1300,7 @@ def test_large_trace_preserves_late_tools_evaluation_and_other_context(
         "b" * 40_000,
     ):
         assert evidence in content
-    assert prompt_character_count(messages) > MAX_ANALYSIS_PROMPT_CHARS
+    assert prompt_character_count(messages) > 320_000
     assert "characters omitted]" not in content
     assert "prompt context shortened before the provider request" not in content
 
@@ -1327,7 +1326,7 @@ def test_trace_is_sent_in_full_without_changing_stored_spans(
     assert organized in content
     assert "TRACE_END" in content
     assert "characters omitted]" not in content
-    assert prompt_character_count(messages) > MAX_ANALYSIS_PROMPT_CHARS
+    assert prompt_character_count(messages) > 320_000
     db_session.refresh(span)
     assert span.attributes["output.value"] == source
 
@@ -5356,7 +5355,7 @@ def test_build_analysis_prompt_does_not_shorten_the_final_prompt(
     )
 
     combined = "\n".join(message["content"] for message in messages)
-    assert prompt_character_count(messages) > MAX_ANALYSIS_PROMPT_CHARS
+    assert prompt_character_count(messages) > 320_000
     assert "System guidance " * 21_000 in combined
     assert ("reference " * 20_000).rstrip() in combined
     assert "prompt context shortened before the provider request" not in combined

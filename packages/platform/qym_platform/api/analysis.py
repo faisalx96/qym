@@ -84,7 +84,6 @@ from qym_platform.services.llm_analyzer import (
     infer_analysis_rules,
     normalize_analysis_rules,
     prompt_character_count,
-    MAX_ANALYSIS_PROMPT_CHARS,
     MAX_RULE_WRITER_DOCUMENT_CHARS,
     MAX_RULE_WRITER_EXAMPLE_CHARS,
     MAX_RULE_WRITER_PROMPT_CHARS,
@@ -869,9 +868,7 @@ class PlaygroundConfig(BaseModel):
     reference_documents: Optional[List[ReferenceDocument]] = None
     include_project_rules: Optional[bool] = None
     include_project_documents: Optional[bool] = None
-    system_prompt: Optional[str] = Field(
-        default=None, max_length=MAX_ANALYSIS_PROMPT_CHARS
-    )
+    system_prompt: Optional[str] = None
     additional_instructions: Optional[str] = Field(default=None, max_length=20_000)
     custom_variable_mapping: Optional[Dict[str, MappingSource]] = None
     root_cause_categories: Optional[List[str]] = Field(default=None, max_length=100)
