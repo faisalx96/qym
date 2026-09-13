@@ -596,6 +596,55 @@ def _median(db, query, column):
     return sum(values) / len(values)
 
 
+def _execution_error_counts(db, run_id, samples):
+    """Count unique item/pass executions with a task or metric exception."""
+    if int(samples or 1) > 1:
+        error_scope = or_(
+            and_(
+                Record.record_kind == "attempt",
+                Record.is_last.is_(True),
+            ),
+            Record.record_kind == "pass_score",
+        )
+    else:
+        error_scope = Record.record_kind.in_(("item", "score"))
+    pairs = db.execute(
+        select(Record.record_key, Record.pass_number)
+        .where(
+            Record.run_key == run_id,
+            Record.present.is_(True),
+            Record.error > 0,
+            error_scope,
+        )
+        .group_by(Record.record_key, Record.pass_number)
+    ).all()
+    by_pass = defaultdict(int)
+    for _record_key, pass_number in pairs:
+        by_pass[max(1, int(pass_number or 1))] += 1
+    return len(pairs), dict(by_pass)
+
+
+def _repeat_retry_counts(db, run_id):
+    """Sum the highest retry number for every item/pass execution."""
+    rows = db.execute(
+        select(
+            Record.record_key,
+            Record.pass_number,
+            func.max(Record.retry_count),
+        )
+        .where(
+            Record.run_key == run_id,
+            Record.record_kind == "attempt",
+            Record.present.is_(True),
+        )
+        .group_by(Record.record_key, Record.pass_number)
+    ).all()
+    by_pass = defaultdict(int)
+    for _record_key, pass_number, retry_count in rows:
+        by_pass[max(1, int(pass_number or 1))] += max(0, int(retry_count or 0))
+    return sum(by_pass.values()), dict(by_pass), bool(rows)
+
+
 def repair_extrema(db, project_key, bucket_key, granularity="hour"):
     """Repair only one dirty numeric bucket, never source payload history."""
     bucket = db.get(
@@ -850,6 +899,9 @@ def refresh_run_summary(db, run_id, version):
         )
         for metric in run.metrics or []
     }
+    execution_error_count, execution_errors_by_pass = _execution_error_counts(
+        db, run_id, run.samples
+    )
     md = run.run_metadata if isinstance(run.run_metadata, dict) else {}
     try:
         expected = int(md["total_items"]) if md.get("total_items") is not None else None
@@ -869,6 +921,7 @@ def refresh_run_summary(db, run_id, version):
         or 0
     )
     passes = None
+    total_retries = summary.retry_sum
     if int(run.samples or 1) > 1:
         from qym_platform.api.runs import _repeat_pass_status
 
@@ -931,6 +984,11 @@ def refresh_run_summary(db, run_id, version):
                 .group_by(RecordCause.pass_number)
             ).all()
         )
+        repeat_retries, retries_by_pass, has_attempt_rows = _repeat_retry_counts(
+            db, run_id
+        )
+        if has_attempt_rows:
+            total_retries = repeat_retries
         try:
             last_completed = int(md.get("last_completed_pass") or 0)
         except (TypeError, ValueError):
@@ -945,7 +1003,8 @@ def refresh_run_summary(db, run_id, version):
                     run_status=dimension.status,
                 ),
                 "primary_score": means.get(p),
-                "error_count": attempt_counts.get(p, (0, 0))[1],
+                "error_count": execution_errors_by_pass.get(p, 0),
+                "retry_count": retries_by_pass.get(p, 0),
                 "analysis_cause_count": pass_causes.get(p, 0),
             }
             for p in range(1, int(run.samples) + 1)
@@ -971,7 +1030,8 @@ def refresh_run_summary(db, run_id, version):
         "progress_pct": summary.terminal_count / expected if expected else None,
         "success_count": summary.success_count,
         "error_count": summary.error_count,
-        "total_retries": summary.retry_sum,
+        "execution_error_count": execution_error_count,
+        "total_retries": total_retries,
         "success_rate": success_rate,
         "avg_latency_ms": avg_latency,
         "median_latency_ms": median_latency,

@@ -198,6 +198,54 @@ def test_transactional_rollback_and_numeric_only_events(database):
         assert db.scalar(select(func.count()).select_from(Change)) == 2
 
 
+def test_execution_errors_include_metrics_and_deduplicate_each_repeat_pass(database):
+    with Session(database) as db:
+        run(
+            db,
+            metrics=["accuracy", "valid_sql"],
+            samples=2,
+            status=RunWorkflowStatus.COMPLETED,
+            run_metadata={"total_items": 1, "last_completed_pass": 2},
+        )
+        item(db)
+        for pass_number, status in ((1, "FAILED"), (2, "COMPLETED")):
+            db.add(
+                RunItemAttempt(
+                    run_id="r",
+                    item_id="i",
+                    pass_number=pass_number,
+                    attempt_number=1,
+                    status=status,
+                    is_last_attempt=True,
+                )
+            )
+        # Pass 1 has both a task and metric exception. Pass 2 has exceptions
+        # in two metrics. Each item/pass execution must still count only once.
+        for pass_number, metric_name in (
+            (1, "accuracy"),
+            (2, "accuracy"),
+            (2, "valid_sql"),
+        ):
+            db.add(
+                RunItemPassScore(
+                    run_id="r",
+                    item_id="i",
+                    metric_name=metric_name,
+                    pass_number=pass_number,
+                    score_numeric=0.0,
+                    meta={"status": "error", "error": "metric crashed"},
+                )
+            )
+        db.commit()
+
+    drain(database)
+    expected, actual = legacy(database), projected(database)
+    assert expected["execution_error_count"] == 2
+    assert actual["execution_error_count"] == 2
+    assert [entry["error_count"] for entry in actual["pass_summaries"]] == [1, 1]
+    assert_legacy_parity(database)
+
+
 def test_exact_legacy_means_median_errors_nulls_progress_and_metadata(database):
     with Session(database) as db:
         run(

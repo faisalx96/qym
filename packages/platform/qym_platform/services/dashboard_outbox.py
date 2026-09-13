@@ -33,6 +33,19 @@ def _number(value):
         return None
 
 
+def _metric_execution_error(value: Any) -> bool:
+    """Return whether metric metadata represents a raised execution error."""
+    if not isinstance(value, dict):
+        return False
+    status = str(value.get("status") or "").strip().lower()
+    if status in {"error", "failed", "timeout"}:
+        return True
+    error = value.get("error")
+    if isinstance(error, str):
+        return bool(error.strip())
+    return bool(error)
+
+
 def _causes(value: Any, *, pass_score=False):
     from qym_platform.services.root_cause_categories import analysis_root_causes
 
@@ -102,9 +115,13 @@ def snapshot(obj, deleted=False):
                 metric_key=str(obj.attempt_number),
                 pass_number=int(obj.pass_number),
                 observed=1,
-                error=int(str(obj.status or "").lower() == "failed"),
+                error=int(
+                    str(obj.status or "").strip().lower()
+                    in {"error", "failed", "timeout"}
+                ),
                 terminal=int(bool(obj.is_last_attempt)),
                 is_last=bool(obj.is_last_attempt),
+                retry_count=max(0, int(obj.attempt_number or 1) - 1),
                 latency_ms=_number(obj.latency_ms),
                 started_at_ms=_number(obj.task_started_at_ms),
             )
@@ -114,6 +131,7 @@ def snapshot(obj, deleted=False):
                     "pass_score" if isinstance(obj, RunItemPassScore) else "score"
                 ),
                 metric_key=obj.metric_name,
+                error=int(_metric_execution_error(obj.meta)),
                 score=_number(obj.score_numeric),
             )
             if isinstance(obj, RunItemPassScore):

@@ -139,6 +139,7 @@ def _execution_error_pairs_for_runs(
     run_ids: List[str],
     *,
     samples_by_run: Optional[Dict[str, int]] = None,
+    item_ids: Optional[List[str]] = None,
 ) -> Dict[str, set[tuple[str, int]]]:
     """Return unique ``(item_id, pass_number)`` executions with an exception.
 
@@ -170,6 +171,7 @@ def _execution_error_pairs_for_runs(
     for run_id, item_id in (
         db.query(RunItem.run_id, RunItem.item_id)
         .filter(RunItem.run_id.in_(run_ids), RunItem.error.isnot(None))
+        .filter(RunItem.item_id.in_(item_ids) if item_ids is not None else True)
         .all()
     ):
         if sample_counts.get(run_id, 1) <= 1:
@@ -186,6 +188,9 @@ def _execution_error_pairs_for_runs(
             RunItemAttempt.is_last_attempt.is_(True),
             func.lower(RunItemAttempt.status).in_(tuple(_EXECUTION_ERROR_STATUSES)),
         )
+        .filter(
+            RunItemAttempt.item_id.in_(item_ids) if item_ids is not None else True
+        )
         .all()
     ):
         error_pairs[run_id].add((str(item_id), max(1, int(pass_number or 1))))
@@ -194,6 +199,11 @@ def _execution_error_pairs_for_runs(
     for run_id, payload in (
         db.query(RunEvent.run_id, RunEvent.payload)
         .filter(RunEvent.run_id.in_(run_ids), RunEvent.type == "item_failed")
+        .filter(
+            RunEvent.payload["item_id"].as_string().in_(item_ids)
+            if item_ids is not None
+            else True
+        )
         .yield_per(1000)
     ):
         if not isinstance(payload, dict):
@@ -220,6 +230,7 @@ def _execution_error_pairs_for_runs(
                 cast(RunItemScore.meta, Text).like('%"status"%'),
             ),
         )
+        .filter(RunItemScore.item_id.in_(item_ids) if item_ids is not None else True)
         .yield_per(1000)
     )
     for run_id, item_id, meta in aggregate_score_candidates:
@@ -241,6 +252,11 @@ def _execution_error_pairs_for_runs(
                 cast(RunItemPassScore.meta, Text).like('%"error"%'),
                 cast(RunItemPassScore.meta, Text).like('%"status"%'),
             ),
+        )
+        .filter(
+            RunItemPassScore.item_id.in_(item_ids)
+            if item_ids is not None
+            else True
         )
         .yield_per(1000)
     )
@@ -2966,6 +2982,7 @@ def _build_run_data(
         db,
         [run.id],
         samples_by_run={run.id: run_samples},
+        item_ids=item_ids,
     ).get(run.id, set())
     execution_errors_by_item: Dict[str, int] = defaultdict(int)
     for error_item_id, _pass_number in execution_error_pairs:

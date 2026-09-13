@@ -53,7 +53,7 @@ MAX_RULE_WRITER_PATCHES = 128
 # Saved prompt templates retain a validation limit so one configuration field
 # cannot become unbounded. This is not a runtime prompt limit: item evidence,
 # traces, and enabled reference documents are sent to the provider in full.
-MAX_ANALYSIS_PROMPT_CHARS = 320_000
+MAX_ANALYSIS_PROMPT_CHARS = 640_000
 LLM_REQUEST_TIMEOUT_SECONDS = 120.0
 LLM_RETRY_TIMEOUT_SECONDS = 240.0
 RULE_INFERENCE_TIMEOUT_SECONDS = 120.0
