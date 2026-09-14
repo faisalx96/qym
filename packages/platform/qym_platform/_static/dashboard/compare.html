@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Compare Runs</title>
   <link rel="icon" type="image/png" href="./static/qym_icon.png">
-<link rel="stylesheet" href="./static/dashboard.css?v=rule-history-bottom-20260816-1">
+<link rel="stylesheet" href="./static/dashboard.css?v=auto-analyzer-context-20260908-7">
   <link rel="stylesheet" href="./static/shell.css">
   <script src="./static/auth.js"></script>
   <script src="./static/shell.js?v=ui-consistency-20260730-15"></script>
@@ -13,7 +13,7 @@
   <script src="./static/run_details.js"></script>
   <script src="./static/trace_viewer.js?v=merge-20260804-1"></script>
   <script src="./static/step_latency.js?v=empty-sections-20260911-2"></script>
-  <script src="./static/playground.js?v=rule-history-bottom-20260816-1"></script>
+  <script src="./static/playground.js?v=auto-analyzer-context-20260908-7"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
     /* Compare-specific styles */
@@ -2853,6 +2853,22 @@
     }
     .det-toggle:hover { background: var(--bg-hover); border-color: var(--accent-primary); }
     .det-toggle.open { background: var(--bg-elevated); border-color: var(--border-strong); }
+    /* Metric exceptions mark only the affected metric, never its task card. */
+    .metric-det-chips > .det-toggle.metric-execution-error,
+    .metric-det-chips > .det-toggle.metric-execution-error:hover,
+    .metric-det-chips > .det-toggle.metric-execution-error.open,
+    .metric-det-chips > .det-toggle.metric-execution-error:has(> .metric-compare-trigger.active) {
+      border-color: var(--error);
+    }
+    .qym-item-metric-cell.metric-execution-error {
+      border: 1px solid var(--error);
+      padding: 1px 7px;
+    }
+    .metric-error-indicator {
+      flex: 0 0 auto;
+      min-width: var(--badge-height);
+      padding: 0;
+    }
     .det-caret {
       display: inline-flex;
       align-items: center;
@@ -4180,7 +4196,9 @@
     }
 
     /* Sankey Flow Diagram */
+    .sankey-scroll { max-width: 100%; overflow-x: auto; }
     .sankey-body {
+      min-width: 600px;
       position: relative;
       width: 100%;
     }
@@ -5397,6 +5415,7 @@
         'Expand Training Data', 'Fix Tool Configuration', 'Add Output Validation',
         'Restructure Chain-of-Thought', 'Update Knowledge Base',
       ];
+      const UNASSIGNED_SOLUTION_LABEL = 'No solution assigned';
       const SOLUTION_COLORS = {
         'Improve Retrieval Context': '#3b82f6', 'Add Guardrails': '#10b981',
         'Refine Prompt Instructions': '#f97316', 'Expand Training Data': '#0ea5e9',
@@ -5448,6 +5467,7 @@
         rootCauseFilter: null,        // null = all, [] = none, [...] = specific values
         rootCauseMetric: 'all',
         taskErrorFilter: null,
+        metricErrorFilter: null,
         traceErrorFilter: null,
         analysisErrorFilter: null,
         rootCauseValues: [],          // unique root cause values found in data
@@ -8214,7 +8234,7 @@
           itemsWithMultipleRuns: 0, // Count of items with K > 1 for consistency
           itemsWithAtLeastOnePass: 0, // Count of items where at least one run passed (for reliability)
           maxAtK: 0, // Sum of max scores across all items (best possible if you pick best run per item)
-          failedCount: 0, // Total number of failed attempts across all items and runs
+          failedCount: 0, // Task or metric errors, counted once per item/run execution
           correctDistribution: [], // How many items had 0, 1, 2, ... N runs correct
           overallAvgScore: 0,
           overallAvgLatency: 0,
@@ -8287,13 +8307,14 @@
             const row = findRowByCompareId(rows, itemId);
             if (!row) return { score: null, failed: false };
             const metricIdx = getMetricIndex(run);
-            if (metricIdx < 0) return { score: null, failed: false };
-            // Use centralized error handling from metrics.js
-            const { score, isError } = window.QymMetrics.getRowScore(row, metricIdx, metricName);
-            return { score, failed: isError };
+            // Error totals cover the execution, not just the selected metric.
+            const failed = window.QymMetrics.isErrorRow(row);
+            if (metricIdx < 0) return { score: null, failed };
+            const { score } = window.QymMetrics.getRowScore(row, metricIdx, metricName);
+            return { score, failed };
           });
 
-          // Count failed attempts
+          // Count each errored item/run execution once, even if several metrics errored.
           stats.failedCount += scoresWithStatus.filter(s => s.failed).length;
 
           const scores = scoresWithStatus.map(s => s.score);
@@ -9089,7 +9110,7 @@
             : `Average of the <strong>best score</strong> across all ${K} runs for each item. Shows the upper bound of what your runs can achieve.`,
           consistency: `Measures how often runs <strong>agree on pass/fail</strong> across ${K} runs. <strong>100%</strong> = all runs agree, <strong>0%</strong> = 50/50 split.`,
           reliability: `When an item <strong>CAN be solved</strong>, how often is it? Only includes items with <strong>≥1 passing run</strong>.`,
-          failedCount: `Number of runs that <strong>threw an error</strong> (across all items). Errors are scored as 0%.`,
+          failedCount: `Item/run executions with a <strong>task or metric error</strong>, across all metrics in the current filtered items. Each execution counts once, even if multiple metrics error. A low judge score alone is not an error.`,
           avgScore: isNumeric
             ? `The <strong>mean value</strong> across all items and all runs.`
             : `The <strong>mean score</strong> across all items and all runs. A general measure of overall performance.`,
@@ -9253,6 +9274,21 @@
       }
 
 
+      function getCompareRowSummary(rows) {
+        // Compare rows are already scoped to one run or one selected pass.
+        // Do not reuse the parent run's stats or aggregate execution count.
+        return (rows || []).reduce((summary, row) => {
+          if (!row) return summary;
+          summary.total++;
+          if (String(row.status || '').toLowerCase() === 'completed' || window.QymMetrics.isTaskErrorRow(row)) {
+            // Completed means finished processing, not a passing judge score.
+            summary.completed++;
+          }
+          if (window.QymMetrics.isErrorRow(row)) summary.failed++;
+          return summary;
+        }, { total: 0, completed: 0, failed: 0 });
+      }
+
       function renderSummaries() {
         const container = el('run-summaries');
         const visibleContextRows = getVisibleCompareContextEntries();
@@ -9288,9 +9324,9 @@
           }
           const runtimeText = formatDurationMs(runtimeMs);
           const versionText = [info.git_branch, info.git_commit].filter(Boolean).join(' • ');
-          const stats = run.snapshot?.stats || {};
+          const stats = getCompareRowSummary(run.snapshot?.rows || []);
           const summaryItem = (kind, label, valueHtml, iconHtml) => `
-            <div class="compare-run-summary-pill qym-stat-strip__item ${kind}">
+            <div class="compare-run-summary-pill qym-stat-strip__item ${kind}" title="${kind === 'errors' ? 'Executions with a task error or at least one metric error; each sample counts once.' : kind === 'completed' ? 'Finished task executions, including errors. This is not the number of passing samples.' : ''}">
               <span class="compare-run-summary-icon">${iconHtml}</span>
               <span class="compare-run-summary-text">
                 <span class="compare-run-summary-label qym-stat-strip__label">${label}</span>
@@ -9572,6 +9608,9 @@
               finding: String(issue.finding || issue.root_cause_note || '').trim(),
               category_reason: String(issue.category_reason || issue.root_cause_reason || '').trim(),
             };
+            ['issue_id', 'solution', 'solution_note', 'review_status', 'source', 'reviewed_at'].forEach(key => {
+              if (Object.prototype.hasOwnProperty.call(issue, key)) normalized[key] = String(issue[key] || '');
+            });
             if (Number.isFinite(confidence)) normalized.confidence = Math.min(1, Math.max(0, confidence));
             else delete normalized.confidence;
             return normalized.category || normalized.subcategory || normalized.finding ? normalized : null;
@@ -9712,9 +9751,9 @@
         if (!container) return;
 
         // Compute root cause -> solution mapping across ALL runs
-        const links = {};
-        const rcCounts = {};
-        const solCounts = {};
+        const links = Object.create(null);
+        const rcCounts = Object.create(null);
+        const solCounts = Object.create(null);
         for (const run of state.runs) {
           const rows = run.snapshot?.rows || [];
           for (const row of rows) {
@@ -9722,10 +9761,13 @@
             if (!itemId) continue;
             if (!filteredItemIds.has(itemId)) continue;
             for (const analysis of getRowRootCauseAnalyses(row, metricFilter)) {
-              const sol = analysis.solution || '';
-              if (!sol) continue;
-              for (const rc of rootCauseCategories(analysis)) {
-                const key = rc + '|||' + sol;
+              // Every issue belongs in the flow. An unresolved issue connects
+              // to the explicit unassigned node until its own solution is saved.
+              for (const issue of rootCauseIssues(analysis, false)) {
+                const rc = issue.category;
+                const sol = String(issue.solution || '').trim() || UNASSIGNED_SOLUTION_LABEL;
+                if (!rc) continue;
+                const key = JSON.stringify([rc, sol]);
                 links[key] = (links[key] || 0) + 1;
                 rcCounts[rc] = (rcCounts[rc] || 0) + 1;
                 solCounts[sol] = (solCounts[sol] || 0) + 1;
@@ -9751,8 +9793,9 @@
         const leftOffsetY = svgPad + (diagramH - svgPad * 2 - totalLeftH) / 2;
         const rightOffsetY = svgPad + (diagramH - svgPad * 2 - totalRightH) / 2;
 
-        let html = '<div class="breakdown-header" style="color:var(--text-primary);margin-top:var(--space-md);"><span class="breakdown-icon">\u2666</span> Failure to Fix Flow</div>';
-        html += '<div class="sankey-body" style="height:' + diagramH + 'px;">';
+        const issueTotal = Object.values(rcCounts).reduce((sum, count) => sum + count, 0);
+        let html = '<div class="breakdown-header" style="color:var(--text-primary);margin-top:var(--space-md);"><span class="breakdown-icon">\u2666</span> Failure to Fix Flow <span class="breakdown-metric">' + issueTotal + ' issue' + (issueTotal === 1 ? '' : 's') + '</span></div>';
+        html += '<div class="sankey-scroll" role="region" aria-label="Failure to Fix Flow; scroll horizontally on small screens" tabindex="0"><div class="sankey-body" style="height:' + diagramH + 'px;">';
         html += '<svg class="sankey-svg" viewBox="0 0 100 ' + diagramH + '" preserveAspectRatio="none" id="sankey-svg"></svg>';
 
         html += '<div class="sankey-col sankey-col-rc" style="width:' + colWidth + 'px;">';
@@ -9764,12 +9807,19 @@
 
         html += '<div class="sankey-col sankey-col-sol" style="width:' + colWidth + 'px;">';
         solList.forEach(([sol, count]) => {
+          const isUnassigned = sol === UNASSIGNED_SOLUTION_LABEL;
           const color = SOLUTION_COLORS[sol] || '#60a5fa';
-          html += '<div class="sankey-node" data-sankey-sol="' + escapeAttr(sol) + '" style="background:' + color + '15;border-color:' + color + '40;color:' + color + ';" title="' + escapeAttr(sol) + ' (' + count + ')"><span class="sankey-node-label">' + escapeHtml(sol) + '</span><span class="sankey-node-count" style="background:' + color + '30;">' + count + '</span></div>';
+          const nodeStyle = isUnassigned
+            ? 'background:color-mix(in srgb,var(--warning) 12%,transparent);border-color:color-mix(in srgb,var(--warning) 28%,transparent);color:var(--warning);'
+            : 'background:' + color + '15;border-color:' + color + '40;color:' + color + ';';
+          const countStyle = isUnassigned
+            ? 'background:color-mix(in srgb,var(--warning) 20%,transparent);'
+            : 'background:' + color + '30;';
+          html += '<div class="sankey-node' + (isUnassigned ? ' sankey-node-unassigned' : '') + '" data-sankey-sol="' + escapeAttr(sol) + '" style="' + nodeStyle + '" title="' + escapeAttr(sol) + ' (' + count + ')"><span class="sankey-node-label">' + escapeHtml(sol) + '</span><span class="sankey-node-count" style="' + countStyle + '">' + count + '</span></div>';
         });
         html += '</div>';
 
-        html += '</div>';
+        html += '</div></div>'; // .sankey-body and .sankey-scroll
         container.innerHTML = html;
 
         requestAnimationFrame(function () {
@@ -9808,7 +9858,7 @@
 
         let paths = '';
         for (const [key, count] of linkEntries) {
-          const [rc, sol] = key.split('|||');
+          const [rc, sol] = JSON.parse(key);
           const y1 = rcActual[rc];
           const y2 = solActual[sol];
           if (y1 == null || y2 == null) continue;
@@ -9907,7 +9957,7 @@
                 const existingPaths = container.querySelectorAll('[data-sankey-link-rc]');
                 const entries = [];
                 existingPaths.forEach(p => {
-                  entries.push([p.dataset.sankeyLinkRc + '|||' + p.dataset.sankeyLinkSol, parseInt(p.dataset.sankeyCount) || 1]);
+                  entries.push([JSON.stringify([p.dataset.sankeyLinkRc, p.dataset.sankeyLinkSol]), parseInt(p.dataset.sankeyCount) || 1]);
                 });
                 if (entries.length > 0) {
                   drawSankeyPaths(container, entries, {}, {}, 190);
@@ -9940,6 +9990,9 @@
       function getErrorBucketKey(kind, label) {
         const parts = splitErrorLabel(label);
         const title = parts.title.replace(/\s+/g, ' ').trim();
+        // In Compare, one metric is one diagnostic bucket even when different
+        // runs returned different exception messages for that metric.
+        if (kind === 'Metric error') return kind + '||' + title;
         const detail = parts.detail.replace(/\s+/g, ' ').trim();
         const visibleDetail = detail.length > 72 ? detail.slice(0, 69).trimEnd() : detail;
         return kind + '||' + title + '||' + visibleDetail;
@@ -9958,10 +10011,13 @@
       function addErrorBucket(buckets, kind, label, count, itemKey, runName) {
         const safeCount = Math.max(1, Number(count) || 1);
         const key = getErrorBucketKey(kind, label);
+        const labelParts = splitErrorLabel(label);
+        const bucketLabel = kind === 'Metric error' ? labelParts.title : label;
         if (!buckets[key]) {
-          buckets[key] = { kind: kind, label: label, count: 0, itemKeys: new Set(), runCounts: {} };
+          buckets[key] = { kind: kind, label: bucketLabel, count: 0, itemKeys: new Set(), runCounts: {}, details: new Set() };
         }
         buckets[key].count += safeCount;
+        if (labelParts.detail) buckets[key].details.add(labelParts.detail);
         if (itemKey != null && itemKey !== '') buckets[key].itemKeys.add(String(itemKey));
         if (runName) buckets[key].runCounts[runName] = (buckets[key].runCounts[runName] || 0) + safeCount;
       }
@@ -9975,12 +10031,14 @@
 
       function rowMatchesActiveErrorFilters(row, runName, itemId) {
         return rowMatchesErrorFilter(row, state.taskErrorFilter, runName, itemId) &&
+          rowMatchesErrorFilter(row, state.metricErrorFilter, runName, itemId) &&
           rowMatchesErrorFilter(row, state.traceErrorFilter, runName, itemId) &&
           rowMatchesErrorFilter(row, state.analysisErrorFilter, runName, itemId);
       }
 
       function getErrorFilterSlot(kind) {
         if (kind === 'Task error') return 'taskErrorFilter';
+        if (kind === 'Metric error') return 'metricErrorFilter';
         if (kind === 'Trace error') return 'traceErrorFilter';
         if (kind === 'Analysis error') return 'analysisErrorFilter';
         return 'traceErrorFilter';
@@ -9989,9 +10047,19 @@
       function collectRowErrors(row, buckets, runName, itemId) {
         if (!row) return;
         const itemKey = (runName || 'Run') + '::' + (itemId || getRowCompareId(row) || row.item_id || String(row.index || ''));
-        if ((row.status || '') === 'error') {
+        if (window.QymMetrics.isTaskErrorRow(row)) {
           const executionError = row.error || row.__execution_error || row.output_full || row.output || '';
           addErrorBucket(buckets, 'Task error', normalizeErrorLabel(executionError, 'Task failed'), 1, itemKey, runName);
+        }
+
+        // Unlike the execution total, the breakdown counts each raised metric.
+        // Pass slicing supplies only the selected pass's metric metadata here.
+        for (const [metricName, meta] of Object.entries(row.metric_meta || {})) {
+          if (!window.QymMetrics.isMetricErrorMeta(meta)) continue;
+          const fallback = String(meta.status || '').toLowerCase() === 'timeout'
+            ? 'Metric timed out' : 'Metric failed';
+          const label = metricName + ': ' + normalizeErrorLabel(meta.error, fallback);
+          addErrorBucket(buckets, 'Metric error', label, 1, itemKey, runName);
         }
 
         const md = row.item_metadata || {};
@@ -10009,6 +10077,7 @@
       function renderErrorDistributionSection() {
         const section = el('error-distribution-section');
         if (!section) return;
+        section.hidden = false;
         if (!canRenderItemComparison()) {
           section.innerHTML = '';
           return;
@@ -10028,6 +10097,7 @@
 
         if (totalErrors === 0) {
           section.innerHTML = '';
+          section.hidden = true;
           return;
         }
 
@@ -10036,18 +10106,23 @@
           let cards = '<div class="breakdown-grid">';
           for (const entry of entries) {
             const labelParts = splitErrorLabel(entry.label);
+            const metricDetails = entry.kind === 'Metric error' && entry.details instanceof Set
+              ? Array.from(entry.details).filter(Boolean)
+              : [];
+            const detailText = metricDetails.length ? metricDetails.join(' · ') : labelParts.detail;
             const itemCount = entry.itemKeys.size;
             const itemText = itemCount === 1 ? '1 item/run pair' : itemCount + ' item/run pairs';
             const itemCountHtml = entry.kind === 'Task error' ? '' : '<div class="error-card-item-count">' + itemText + '</div>';
             const countLabel = entry.count === 1 ? 'error' : 'errors';
             const activeFilter = state[getErrorFilterSlot(entry.kind)];
-            const isActive = activeFilter && activeFilter.kind === entry.kind && activeFilter.label === entry.label;
+            const isActive = activeFilter && activeFilter.kind === entry.kind &&
+              getErrorBucketKey(activeFilter.kind, activeFilter.label) === getErrorBucketKey(entry.kind, entry.label);
             cards += '<div class="breakdown-card error-card' + (isActive ? ' active' : '') + '" role="button" tabindex="0" aria-pressed="' + (isActive ? 'true' : 'false') + '" data-error-kind="' + escapeAttr(entry.kind) + '" data-error-label="' + escapeAttr(entry.label) + '" title="Click to filter by this error">' +
               '<div class="error-card-top">' +
                 '<div class="error-card-text"><div class="error-card-title" title="' + escapeAttr(entry.label) + '">' + escapeHtml(labelParts.title) + '</div></div>' +
                 '<div class="error-card-count">' + entry.count + '<span class="error-card-count-label">' + countLabel + '</span></div>' +
               '</div>' +
-              renderErrorDetailHtml(labelParts.detail) +
+              renderErrorDetailHtml(detailText) +
               itemCountHtml +
             '</div>';
           }
@@ -10059,8 +10134,10 @@
           const groupTotal = entries.reduce((sum, entry) => sum + entry.count, 0);
           const iconHtml = icon === 'task'
             ? '<svg class="breakdown-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>'
-            : '<svg class="breakdown-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h4l2-7 4 14 2-7h4"/></svg>';
-          const groupClass = icon === 'task' ? 'task-error-group' : 'trace-error-group';
+            : icon === 'metric'
+              ? '<svg class="breakdown-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></svg>'
+              : '<svg class="breakdown-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h4l2-7 4 14 2-7h4"/></svg>';
+          const groupClass = icon === 'trace' ? 'trace-error-group' : 'task-error-group';
           return '<div class="breakdown-section breakdown-errors ' + groupClass + '">' +
             '<div class="breakdown-header">' + iconHtml + ' ' + escapeHtml(title) + ' <span class="breakdown-metric">' + groupTotal + '</span></div>' +
             renderErrorCards(entries) +
@@ -10068,12 +10145,14 @@
         }
 
         const taskStats = stats.filter(entry => entry.kind === 'Task error');
+        const metricStats = stats.filter(entry => entry.kind === 'Metric error');
         const traceStats = stats.filter(entry => entry.kind === 'Trace error');
         const analysisStats = stats.filter(entry => entry.kind === 'Analysis error');
 
         let html = '<h3 class="section-title">Error Distribution</h3>';
         html += '<div class="comparison-stats">';
         html += renderErrorGroup('Task Errors', 'task', taskStats);
+        html += renderErrorGroup('Metric Errors', 'metric', metricStats);
         html += renderErrorGroup('Trace Errors', 'trace', traceStats);
         html += renderErrorGroup('Analysis Errors', 'trace', analysisStats);
         html += '</div>';
@@ -10084,7 +10163,17 @@
             const nextFilter = { kind: card.dataset.errorKind, label: card.dataset.errorLabel };
             const slot = getErrorFilterSlot(nextFilter.kind);
             const current = state[slot];
-            state[slot] = current && current.kind === nextFilter.kind && current.label === nextFilter.label ? null : nextFilter;
+            const sameBucket = current && current.kind === nextFilter.kind &&
+              getErrorBucketKey(current.kind, current.label) === getErrorBucketKey(nextFilter.kind, nextFilter.label);
+            if (!sameBucket && nextFilter.kind === 'Metric error' && state.allMetrics.includes(nextFilter.label)) {
+              // The collapsed comparison row renders the selected metric only.
+              // Keep it in sync with the metric-error card the user chose so a
+              // non-default metric error cannot look like a healthy default score.
+              state.selectedItemsMetric = nextFilter.label;
+              const itemsMetricSelect = el('items-metric-select');
+              if (itemsMetricSelect) itemsMetricSelect.value = nextFilter.label;
+            }
+            state[slot] = sameBucket ? null : nextFilter;
             state.page = 1;
             renderItems();
           };
@@ -10748,7 +10837,7 @@
             const matchingApproval = rowData.some(r => r && matchesApprovalFilter(r, state.approvalFilter, state.selectedItemsMetric));
             if (!matchingApproval) continue;
           }
-          if (state.taskErrorFilter || state.traceErrorFilter || state.analysisErrorFilter) {
+          if (state.taskErrorFilter || state.metricErrorFilter || state.traceErrorFilter || state.analysisErrorFilter) {
             const matchingError = rowData.some((r, runIdx) => {
               if (!r) return false;
               const runName = state.runs[runIdx]?.run?.run_name || `Run ${runIdx + 1}`;
@@ -10905,21 +10994,24 @@
         const sep = String(ref).indexOf(PASS_REF_SEP);
         return sep < 0 ? String(ref) : String(ref).slice(0, sep);
       }
-      function scopedComparisonPassMetadata(row, metricNames, passNumber) {
-        const metadata = { ...(row.item_metadata || {}) };
+      function scopedPassItemMetadata(metadata, row, metricNames, passNumber) {
+        const scoped = { ...((metadata && typeof metadata === 'object') ? metadata : {}) };
         [
-          'root_cause', 'root_causes', 'root_cause_issues', 'root_cause_detail', 'root_cause_note', 'root_cause_reason',
+          'root_cause', 'root_causes', 'root_cause_categories', 'root_cause_issues',
+          'root_cause_detail', 'root_cause_note', 'root_cause_reason',
           'root_cause_source', 'root_cause_confidence', 'root_cause_metric_name',
           'solution', 'solution_note', 'solution_source',
           'metric_analyses', 'analysis_error', 'analysis_warning',
-        ].forEach(key => delete metadata[key]);
-        const analyses = {};
-        (metricNames || []).forEach(name => {
-          const analysis = row.pass_metric_analyses?.[name]?.[passNumber - 1];
-          if (analysis && typeof analysis === 'object') analyses[name] = analysis;
+        ].forEach(key => delete scoped[key]);
+        const passAnalyses = row?.pass_metric_analyses || {};
+        const selectedAnalyses = {};
+        (metricNames || []).forEach(metricName => {
+          const values = passAnalyses[metricName];
+          const analysis = Array.isArray(values) ? values[passNumber - 1] : null;
+          if (analysis && typeof analysis === 'object') selectedAnalyses[metricName] = analysis;
         });
-        if (Object.keys(analyses).length) metadata.metric_analyses = analyses;
-        return metadata;
+        if (Object.keys(selectedAnalyses).length) scoped.metric_analyses = selectedAnalyses;
+        return scoped;
       }
       function sliceRunToPass(rd, ref, passNo) {
         const baseRun = rd.run || {};
@@ -10958,9 +11050,9 @@
           const hasPassScore = mv.some(value => value !== null && value !== undefined && value !== '');
           const next = {
             ...row,
-            item_metadata: scopedComparisonPassMetadata(row, metricNames, passNo),
             metric_values: mv,
             metric_meta: meta,
+            item_metadata: scopedPassItemMetadata(row.item_metadata, row, metricNames, passNo),
             pass_scores: null,
             pass_attempts: null,
             pass_metric_meta: null,
@@ -10978,8 +11070,12 @@
             trace_url: att?.trace_url || '',
             trace_stats: att?.trace_stats || null,
           };
+          next.execution_error_count = window.QymMetrics.isErrorRow(next) ? 1 : 0;
           return next;
         });
+        snapshot.stats = getCompareRowSummary(snapshot.rows);
+        run.error_count = snapshot.rows.filter(row => window.QymMetrics.isTaskErrorRow(row)).length;
+        run.execution_error_count = snapshot.stats.failed;
         return { ...rd, run, snapshot };
       }
       function expandPassRefIds(requested, loadedRuns) {
@@ -11101,6 +11197,11 @@
         return `<span class="qym-tag qym-tag--danger item-error-indicator" title="${escapeAttr(title)}" role="img" aria-label="${escapeAttr(title)}">${COMPARE_FAILURE_ICON}</span>`;
       }
 
+      function renderCompareMetricErrorIndicator(metricName) {
+        const title = 'Metric execution failed: ' + metricName;
+        return `<span class="qym-tag qym-tag--danger metric-error-indicator" title="${escapeAttr(title)}" role="img" aria-label="${escapeAttr(title)}">${COMPARE_FAILURE_ICON}</span>`;
+      }
+
       function renderCompareOutputGroup(itemId, rowData) {
         const hidden = (state.itemHiddenOutputs || {})[itemId] || new Set();
         const activeMetric = (state.itemComparedMetric || {})[itemId] || '';
@@ -11126,8 +11227,11 @@
           if (!row) return '';
           const metric = state.selectedItemsMetric;
           let verdict = '';
-          if (compareExecutionErrorInfo(row, runIdx).hasError) {
+          if (compareExecutionErrorInfo(row, runIdx).hasTaskError) {
             verdict = 'error';
+          } else if (metric && window.QymMetrics.hasMetricError(row, metric)) {
+            // The exception belongs to this metric, not to the task verdict.
+            verdict = 'metric-error';
           } else if (metric && (state.metricTypes?.[metric] || 'score') !== 'numeric') {
             const score = scoreData(row, runIdx, metric).parsed;
             const threshold = state.metricIsBoolean[metric]
@@ -11139,9 +11243,14 @@
         };
         const verdictFor = (row, runIdx) => {
           const verdict = verdictStateFor(row, runIdx);
-          if (!verdict) return '';
           const errorInfo = compareExecutionErrorInfo(row, runIdx);
           if (verdict === 'error') return renderCompareErrorIndicator(errorInfo.title);
+          if (errorInfo.metricErrorNames.length) {
+            // An output with any raised metric is not a clean Pass, even when
+            // the metric selected for score comparison completed successfully.
+            return renderCompareMetricErrorIndicator(errorInfo.metricErrorNames.join(', '));
+          }
+          if (!verdict || verdict === 'metric-error') return '';
           const metric = state.selectedItemsMetric;
           const label = verdict === 'pass' ? 'Pass' : 'Fail';
           const title = `${label} on ${metric}`;
@@ -11151,7 +11260,7 @@
           const scope = compareRootCauseScope(row, runIdx);
           const issues = rootCauseIssues(scope.analysis);
           const verdict = verdictStateFor(row, runIdx);
-          if (!issues.length && (IS_COMPARE_EXPORT || !['fail', 'error'].includes(verdict))) return '';
+          if (!issues.length && (IS_COMPARE_EXPORT || !['fail', 'error', 'metric-error'].includes(verdict))) return '';
           const issueHtml = issues.length
             ? '<div class="compare-issue-list" role="list" aria-label="Root-cause issues">' + issues.map((issue, issueIndex) => {
                 const issueColor = rootCauseColor(issue.category);
@@ -11180,10 +11289,16 @@
               !['modified', 'original_score'].includes(key)
               && state.visibleMetricMetaFields[key] !== false
               && score.meta[key] !== undefined && score.meta[key] !== null && score.meta[key] !== '');
-            if (score.parsed === null && !hasMeta) return '';
+            const hasMetricExecutionError = window.QymMetrics.hasMetricError(row, name);
+            if (score.parsed === null && !hasMeta && !hasMetricExecutionError) return '';
+            const metricErrorClass = hasMetricExecutionError ? ' metric-execution-error' : '';
+            const metricErrorIndicator = hasMetricExecutionError ? renderCompareMetricErrorIndicator(name) : '';
+            // An exception is not a judged score (0 would render as False).
+            const scoreHtml = hasMetricExecutionError ? ''
+              : `<span class="metric-score-value qym-score-value ${score.cls}">${score.display}</span>`;
             const active = activeMetric === name;
             const edited = String(score.meta.modified || '').toLowerCase() === 'true';
-            return `<div class="det-toggle metric-compare-row${active ? ' active' : ''}"><button type="button" class="metric-compare-trigger${active ? ' active' : ''}" data-output-metric="${escapeAttr(name)}" aria-expanded="${active}"><span class="det-caret"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 3.5 5 4.5-5 4.5"/></svg></span><span class="det-metric">${escapeHtml(name)}</span><span class="metric-score-value qym-score-value ${score.cls}">${score.display}</span></button><span class="metric-edit-controls qym-metric-edit-controls hidden"><input class="metric-edit-input" type="text" value="${escapeAttr(score.raw == null ? '' : String(score.raw))}" data-run-idx="${runIdx}" data-row-index="${escapeAttr(String(row.index ?? 0))}" data-metric="${escapeAttr(name)}" aria-label="New Run ${runIdx + 1} ${escapeAttr(name)} score"><button class="metric-edit-save qym-metric-edit-action" data-run-idx="${runIdx}" data-row-index="${escapeAttr(String(row.index ?? 0))}" data-metric="${escapeAttr(name)}" title="Save" aria-label="Save Run ${runIdx + 1} ${escapeAttr(name)}">${SAVE_ICON}</button><button class="metric-edit-cancel qym-metric-edit-action" type="button" title="Cancel" aria-label="Cancel editing">${CLOSE_ICON}</button><span class="metric-edit-status" aria-live="polite"></span></span><button class="metric-edit-open qym-icon-action" type="button" aria-label="Edit Run ${runIdx + 1} ${escapeAttr(name)}" title="Edit">${EDIT_ICON}</button>${edited ? '<span class="metric-edit-badge">Edited</span>' : ''}</div>`;
+            return `<div class="det-toggle metric-compare-row${metricErrorClass}${active ? ' active' : ''}"><button type="button" class="metric-compare-trigger${active ? ' active' : ''}" data-output-metric="${escapeAttr(name)}" aria-expanded="${active}"><span class="det-caret"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 3.5 5 4.5-5 4.5"/></svg></span><span class="det-metric">${escapeHtml(name)}</span>${scoreHtml}${metricErrorIndicator}</button><span class="metric-edit-controls qym-metric-edit-controls hidden"><input class="metric-edit-input" type="text" value="${escapeAttr(score.raw == null ? '' : String(score.raw))}" data-run-idx="${runIdx}" data-row-index="${escapeAttr(String(row.index ?? 0))}" data-metric="${escapeAttr(name)}" aria-label="New Run ${runIdx + 1} ${escapeAttr(name)} score"><button class="metric-edit-save qym-metric-edit-action" data-run-idx="${runIdx}" data-row-index="${escapeAttr(String(row.index ?? 0))}" data-metric="${escapeAttr(name)}" title="Save" aria-label="Save Run ${runIdx + 1} ${escapeAttr(name)}">${SAVE_ICON}</button><button class="metric-edit-cancel qym-metric-edit-action" type="button" title="Cancel" aria-label="Cancel editing">${CLOSE_ICON}</button><span class="metric-edit-status" aria-live="polite"></span></span><button class="metric-edit-open qym-icon-action" type="button" aria-label="Edit Run ${runIdx + 1} ${escapeAttr(name)}" title="Edit">${EDIT_ICON}</button>${edited ? '<span class="metric-edit-badge">Edited</span>' : ''}</div>`;
           }).filter(Boolean).join('');
           return buttons ? `<div class="metric-det-zone"><div class="metric-det-chips">${buttons}</div></div>` : '';
         };
@@ -11227,8 +11342,8 @@
             : '';
           const copyButton = `<button class="copy-btn qym-icon-action" data-copy-text="${escapeAttr(typeof output === 'object' ? JSON.stringify(output, null, 2) : String(output))}" title="Copy output">${COPY_ICON}</button>`;
           const errorInfo = compareExecutionErrorInfo(row, runIdx);
-          const executionErrorClass = errorInfo.hasError ? ' item-execution-error' : '';
-          const borderColor = errorInfo.hasError ? 'var(--error)' : color;
+          const executionErrorClass = errorInfo.hasTaskError ? ' item-execution-error' : '';
+          const borderColor = errorInfo.hasTaskError ? 'var(--error)' : color;
           return `<article class="item-run-output qym-output-card${executionErrorClass}${hidden.has(runIdx) ? ' is-hidden' : ''}" data-output-card="${outputId}" style="border-left-color:${borderColor}"><div class="qym-output-card__header"><span class="qym-output-card__identity"><span class="qym-output-swatch" style="background:${color}"></span>${identityHtml}${verdictFor(row, runIdx)}</span>${row.latency_ms ? `<span class="qym-output-card__duration">${CLOCK_ICON}<span>${formatLatency(row.latency_ms)}</span></span>` : '<span class="qym-output-card__duration">\u2014</span>'}<span class="qym-output-card__actions">${traceButton}${copyButton}</span></div><div class="output-text ${errorInfo.hasTaskError ? 'score-1' : ''}">${renderMarkdownSafe(output)}</div>${metricStripFor(row, runIdx)}${rootCauseBlockFor(row, runIdx)}</article>`;
         }).join('');
         const panels = state.allMetrics.map(name => {
@@ -11265,11 +11380,11 @@
           const isExpanded = !!options.forceExpanded || !!(state.itemExpanded || {})[itemId];
           const itemExecutionErrors = rowData
             .map((row, runIdx) => compareExecutionErrorInfo(row, runIdx))
-            .filter(info => info.hasError);
+            .filter(info => info.hasTaskError);
           const hasItemExecutionError = itemExecutionErrors.length > 0;
           const itemExecutionErrorTitle = itemExecutionErrors.length === 1
             ? itemExecutionErrors[0].title
-            : `Execution failed in ${itemExecutionErrors.length} compared runs`;
+            : `Task execution failed in ${itemExecutionErrors.length} compared runs`;
           const itemExecutionErrorClass = hasItemExecutionError ? ' item-execution-error' : '';
           const itemExecutionErrorIndicator = hasItemExecutionError
             ? renderCompareErrorIndicator(itemExecutionErrorTitle)
@@ -11543,7 +11658,7 @@
           }
 
           // Collapsed header: the input itself is the title; each run's
-          // selected-metric score sits beside it as a color-dotted pill.
+          // execution error or selected-metric score sits beside it.
           const titleText = (typeof input === 'object' ? JSON.stringify(input) : String(input)).replace(/\s+/g, ' ').trim();
           const headerMetric = state.selectedItemsMetric;
           const headerPills = rowData.map((row, runIdx) => {
@@ -11553,18 +11668,30 @@
             const runInfo = run?.run || {};
             const errorInfo = compareExecutionErrorInfo(row, runIdx);
             const color = COLORS[runIdx % COLORS.length];
-            if (errorInfo.hasError) {
+            if (errorInfo.hasTaskError) {
               return `<span class="item-agg-pill qym-item-metric-cell qym-item-metric-cell--selected" data-qym-metric-column="${runIdx}" title="${escapeAttr((runInfo.run_name || ('Run ' + (runIdx + 1))) + ' · ' + errorInfo.title)}"><span class="compare-run-dot" style="background:${color}"></span>${renderCompareErrorIndicator(errorInfo.title)}</span>`;
+            }
+            if (errorInfo.metricErrorNames.length) {
+              // A closed item summarizes execution health. Do not render a
+              // healthy selected-metric score when a sibling metric crashed.
+              const failedMetrics = errorInfo.metricErrorNames.join(', ');
+              return `<span class="item-agg-pill qym-item-metric-cell qym-item-metric-cell--selected metric-execution-error" data-qym-metric-column="${runIdx}" title="${escapeAttr((runInfo.run_name || ('Run ' + (runIdx + 1))) + ' · ' + errorInfo.title)}"><span class="compare-run-dot" style="background:${color}"></span>${renderCompareMetricErrorIndicator(failedMetrics)}</span>`;
             }
             const mNames = run?.snapshot?.metric_names || runInfo.metric_names || [];
             const mIdx = headerMetric ? mNames.indexOf(headerMetric) : 0;
             if (mIdx < 0) return emptyPill;
+            const name = mNames[mIdx];
+            const hasMetricExecutionError = window.QymMetrics.hasMetricError(row, name);
             const v = window.QymMetrics.parseScoreValue((row.metric_values || [])[mIdx]);
-            if (v === null) return emptyPill;
-            const mType = state.metricTypes?.[mNames[mIdx]] || 'score';
-            const cls = window.QymMetrics.getMetricColorClass(v, mType);
-            const display = window.QymMetrics.formatMetricObservation(v, mType, state.metricSpecs?.[mNames[mIdx]]);
-            return `<span class="item-agg-pill qym-item-metric-cell qym-item-metric-cell--selected" data-qym-metric-column="${runIdx}" title="${escapeAttr((runInfo.run_name || ('Run ' + (runIdx + 1))) + ' \u00B7 ' + mNames[mIdx])}"><span class="compare-run-dot" style="background:${color}"></span><span class="metric-score-value qym-score-value ${cls}">${display}</span></span>`;
+            if (v === null && !hasMetricExecutionError) return emptyPill;
+            const mType = state.metricTypes?.[name] || 'score';
+            const cls = v === null ? '' : window.QymMetrics.getMetricColorClass(v, mType);
+            const display = v === null ? '\u2014' : window.QymMetrics.formatMetricObservation(v, mType, state.metricSpecs?.[name]);
+            const metricErrorClass = hasMetricExecutionError ? ' metric-execution-error' : '';
+            const metricErrorIndicator = hasMetricExecutionError ? renderCompareMetricErrorIndicator(name) : '';
+            const scoreHtml = hasMetricExecutionError ? ''
+              : `<span class="metric-score-value qym-score-value ${cls}">${display}</span>`;
+            return `<span class="item-agg-pill qym-item-metric-cell qym-item-metric-cell--selected${metricErrorClass}" data-qym-metric-column="${runIdx}" title="${escapeAttr((runInfo.run_name || ('Run ' + (runIdx + 1))) + ' \u00B7 ' + name)}"><span class="compare-run-dot" style="background:${color}"></span>${scoreHtml}${metricErrorIndicator}</span>`;
           }).join('');
           const expandable = !options.forceExpanded;
           const expandAttrs = ` data-item-expand="${escapeAttr(itemId)}" role="button" tabindex="0" aria-expanded="${isExpanded}"`;
@@ -12150,13 +12277,13 @@
               : null;
             nextRow = {
               ...updatedRow,
-              item_metadata: scopedComparisonPassMetadata(updatedRow, metricNames, passNumber),
               metric_values: metricNames.map((name, metricIndex) => {
                 const values = updatedRow.pass_scores?.[name];
                 if (Array.isArray(values)) return values[passIndex] == null ? '' : values[passIndex];
                 return updatedRow.metric_values?.[metricIndex] ?? '';
               }),
               metric_meta: passMeta,
+              item_metadata: scopedPassItemMetadata(updatedRow.item_metadata, updatedRow, metricNames, passNumber),
               pass_scores: null,
               pass_attempts: null,
               pass_metric_meta: null,
@@ -13378,6 +13505,7 @@
         if (state.domainFilter !== null) n++;
         if (state.rootCauseFilter !== null) n++;
         if (state.taskErrorFilter !== null) n++;
+        if (state.metricErrorFilter !== null) n++;
         if (state.traceErrorFilter !== null) n++;
         if (state.analysisErrorFilter !== null) n++;
         if (state.passRateOp) n++;
@@ -13396,6 +13524,7 @@
         if (state.domainFilter !== null) n++;
         if (state.rootCauseFilter !== null) n++;
         if (state.taskErrorFilter !== null) n++;
+        if (state.metricErrorFilter !== null) n++;
         if (state.traceErrorFilter !== null) n++;
         if (state.analysisErrorFilter !== null) n++;
         if (state.passRateOp) n++;
@@ -13429,6 +13558,7 @@
         state.domainExclusive.clear();
         state.rootCauseFilter = null;
         state.taskErrorFilter = null;
+        state.metricErrorFilter = null;
         state.traceErrorFilter = null;
         state.analysisErrorFilter = null;
         state.passRateOp = '';

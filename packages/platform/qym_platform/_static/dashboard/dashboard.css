@@ -8619,6 +8619,10 @@ body.chart-col-resize-active {
   background: var(--warning-dim);
   border-color: color-mix(in srgb, var(--warning) 28%, transparent);
 }
+.pg-runall-done.pg-runall-failed {
+  background: color-mix(in srgb, var(--error) 8%, var(--bg-surface));
+  border-color: color-mix(in srgb, var(--error) 45%, transparent);
+}
 @keyframes pgToastSlideIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
@@ -8627,6 +8631,10 @@ body.chart-col-resize-active {
   font-size: 32px;
   margin-bottom: 12px;
   filter: drop-shadow(0 0 8px rgba(0, 212, 170, 0.4));
+}
+.pg-runall-failed .pg-runall-done-icon {
+  color: var(--error);
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--error) 45%, transparent));
 }
 .pg-runall-done-text {
   font-size: var(--font-md);
@@ -8637,6 +8645,18 @@ body.chart-col-resize-active {
   color: #00d4aa;
   font-size: var(--font-lg);
 }
+.pg-runall-failed .pg-runall-done-text strong {
+  color: var(--error);
+}
+.pg-runall-status-title {
+  margin-bottom: var(--space-xs);
+  color: var(--text-primary);
+  font-size: var(--font-xl);
+  font-weight: 650;
+}
+.pg-runall-failed .pg-runall-status-title {
+  color: var(--error);
+}
 .pg-runall-done-actions {
   display: flex;
   justify-content: center;
@@ -8646,12 +8666,40 @@ body.chart-col-resize-active {
   text-decoration: none;
 }
 .pg-runall-done-error {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(239, 68, 68, 0.2);
-  color: #ef4444;
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid color-mix(in srgb, var(--error) 28%, transparent);
+  color: var(--error);
   font-size: var(--font-sm);
-  font-weight: 500;
+  font-weight: 600;
+}
+.pg-runall-error-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-sm);
+  margin: var(--space-md) auto 0;
+}
+.pg-runall-error-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid color-mix(in srgb, var(--error) 35%, var(--border-default));
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--error) 7%, var(--bg-elevated));
+}
+.pg-runall-error-code {
+  color: var(--error);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-weight: 650;
+}
+.pg-runall-error-count {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-weight: 650;
 }
 .pg-runall-aggregation-error {
   margin-top: var(--space-md);

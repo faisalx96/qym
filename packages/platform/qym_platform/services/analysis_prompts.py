@@ -11,15 +11,10 @@ from qym_platform.db.models import ProjectAnalysisPromptSettings
 from qym_platform.services.analysis_aggregation import AGGREGATION_SYSTEM_PROMPT
 from qym_platform.services.llm_analyzer import (
     DEFAULT_SYSTEM_PROMPT,
-    MAX_ANALYSIS_PROMPT_CHARS,
     RULE_WRITER_SYSTEM_PROMPT,
     normalize_rule_writer_system_prompt,
 )
 
-
-# Keep editable project prompts within the same budget used for the final
-# root-cause analyzer prompt.
-PROMPT_MAX_CHARS = MAX_ANALYSIS_PROMPT_CHARS
 
 DEFAULT_ANALYSIS_PROMPTS: dict[str, str] = {
     "llm_analyzer": DEFAULT_SYSTEM_PROMPT,

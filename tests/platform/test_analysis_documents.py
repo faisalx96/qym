@@ -152,17 +152,17 @@ def test_extract_html_omits_script_and_style_content() -> None:
     assert "ignore" not in document.content
 
 
-def test_extract_document_enforces_type_size_and_prompt_limits() -> None:
+def test_extract_document_keeps_complete_text_until_the_upload_safety_limit() -> None:
     with pytest.raises(UnsupportedDocumentError, match="Unsupported document type"):
         extract_document_text("archive.zip", b"not a supported document")
 
     with pytest.raises(DocumentExtractionError, match="10 MB"):
         extract_document_text("large.txt", b"x" * (MAX_REFERENCE_UPLOAD_BYTES + 1))
 
-    document = extract_document_text(
-        "long.txt",
-        b"x" * (MAX_REFERENCE_DOCUMENT_CHARS + 20),
-    )
-    assert document.truncated is True
-    assert document.characters == MAX_REFERENCE_DOCUMENT_CHARS
-    assert len(document.content) == MAX_REFERENCE_DOCUMENT_CHARS
+    long_content = b"x" * 2_000_001
+    document = extract_document_text("long.txt", long_content)
+
+    assert document.content == long_content.decode()
+    assert document.characters == len(long_content)
+    assert document.source_characters == len(long_content)
+    assert document.truncated is False

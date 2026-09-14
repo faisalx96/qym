@@ -179,8 +179,8 @@ Each upload is limited to 10 MiB. The normal prompt-safe representation is
 retain up to 200,000 characters. A document above the prompt-safe limit first
 returns a confirmation response; the caller must choose `truncate` or `full`.
 The analyzer prompt accepts at most eight selected documents and 80,000
-reference characters in total, and then applies a final 640,000-character
-message budget before calling the provider.
+reference characters in total. Saved analysis system prompts have no length
+limit, and the final prompt is sent to the provider without a size cap.
 
 The item analyzer retains up to 400,000 characters of formatted trace, within
 a 500,000-character item-context budget. Input, expected output and actual

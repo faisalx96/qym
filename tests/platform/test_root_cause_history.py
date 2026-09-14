@@ -90,9 +90,6 @@ from qym_platform.services.analysis_aggregation import (
 )
 from qym_platform.services import llm_analyzer as llm_analyzer_service
 from qym_platform.services.llm_analyzer import (
-    MAX_ANALYSIS_FALLBACK_PROMPT_CHARS,
-    MAX_ANALYSIS_PROMPT_CHARS,
-    MAX_TRACE_CHARS,
     ROOT_CAUSE_CATEGORIES,
     RULE_WRITER_SYSTEM_PROMPT,
     AnalysisRule,
@@ -107,7 +104,6 @@ from qym_platform.services.llm_analyzer import (
 )
 from qym_platform.services.document_extractor import (
     MAX_REFERENCE_DOCUMENT_CHARS,
-    MAX_REFERENCE_DOCUMENT_CONTENT_CHARS,
 )
 from qym_platform.services.root_cause_changes import (
     apply_root_cause_change,
@@ -1275,7 +1271,7 @@ def test_large_trace_preserves_late_tools_evaluation_and_other_context(
         explanation="METRIC_EVIDENCE_AFTER_TRACE",
     )
     organized_trace = llm_analyzer_service._organize_trace_content(item.trace_content)
-    assert 320_000 < len(organized_trace) < MAX_TRACE_CHARS
+    assert 320_000 < len(organized_trace)
 
     messages = build_analysis_prompt(
         item,
@@ -1304,17 +1300,17 @@ def test_large_trace_preserves_late_tools_evaluation_and_other_context(
         "b" * 40_000,
     ):
         assert evidence in content
-    assert 320_000 < prompt_character_count(messages) <= MAX_ANALYSIS_PROMPT_CHARS
+    assert prompt_character_count(messages) > 320_000
     assert "characters omitted]" not in content
     assert "prompt context shortened before the provider request" not in content
 
 
-def test_trace_beyond_new_limit_is_disclosed_without_changing_stored_spans(
+def test_trace_is_sent_in_full_without_changing_stored_spans(
     db_session: Session,
 ) -> None:
     _, _, _, item = _seed_run(db_session)
     item.trace_id = "over-limit-trace"
-    source = "TRACE_START" + "x" * MAX_TRACE_CHARS + "BEYOND_TRACE_LIMIT"
+    source = "TRACE_START" + "x" * 700_000 + "TRACE_END"
     span = Span(
         run_id=item.run_id,
         trace_id=item.trace_id,
@@ -1327,10 +1323,10 @@ def test_trace_beyond_new_limit_is_disclosed_without_changing_stored_spans(
     organized = llm_analyzer_service._organize_trace_content(item.trace_content)
     messages = build_analysis_prompt(item, {}, [])
     content = "\n".join(message["content"] for message in messages)
-    assert organized[:MAX_TRACE_CHARS].rstrip() in content
-    assert f"[{len(organized) - MAX_TRACE_CHARS} characters omitted]" in content
-    assert "BEYOND_TRACE_LIMIT" not in content
-    assert prompt_character_count(messages) <= MAX_ANALYSIS_PROMPT_CHARS
+    assert organized in content
+    assert "TRACE_END" in content
+    assert "characters omitted]" not in content
+    assert prompt_character_count(messages) > 320_000
     db_session.refresh(span)
     assert span.attributes["output.value"] == source
 
@@ -2118,6 +2114,70 @@ def test_analysis_targets_include_every_failed_metric_and_skip_each_completed_me
     )
     assert [(target.item_id, metric) for target, metric in remaining] == [
         (item.item_id, "format")
+    ]
+
+
+def test_analysis_targets_skip_task_and_metric_execution_errors(
+    db_session: Session,
+) -> None:
+    _, _, run, normal_failure = _seed_run(db_session)
+    task_error = RunItem(
+        run_id=run.id,
+        item_id="task-error",
+        index=1,
+        input={"question": "task error"},
+        error="HTTPError: request failed",
+        item_metadata={},
+    )
+    metric_error = RunItem(
+        run_id=run.id,
+        item_id="metric-error",
+        index=2,
+        input={"question": "metric error"},
+        item_metadata={},
+    )
+    task_error_score = RunItemScore(
+        run_id=run.id,
+        item_id=task_error.item_id,
+        metric_name="accuracy",
+        score_numeric=0.0,
+        label="error",
+    )
+    metric_error_score = RunItemScore(
+        run_id=run.id,
+        item_id=metric_error.item_id,
+        metric_name="accuracy",
+        score_numeric=0.0,
+        meta={"status": "error", "error": "Judge request failed"},
+    )
+    db_session.add_all(
+        [task_error, metric_error, task_error_score, metric_error_score]
+    )
+    db_session.commit()
+
+    normal_score = (
+        db_session.query(RunItemScore)
+        .filter(
+            RunItemScore.run_id == run.id,
+            RunItemScore.item_id == normal_failure.item_id,
+            RunItemScore.metric_name == "accuracy",
+        )
+        .one()
+    )
+    targets = _filter_analysis_targets(
+        run,
+        AnalyzeRequest(item_filter="failed", only_unanalyzed=False),
+        [normal_failure, task_error, metric_error],
+        {
+            normal_failure.item_id: {"accuracy": normal_score},
+            task_error.item_id: {"accuracy": task_error_score},
+            metric_error.item_id: {"accuracy": metric_error_score},
+        },
+        {},
+    )
+
+    assert [(item.item_id, metric) for item, metric in targets] == [
+        (normal_failure.item_id, "accuracy")
     ]
 
 
@@ -3037,6 +3097,51 @@ def test_save_analysis_results_does_not_replace_human_metric_with_ai_error(
     assert item.item_metadata["metric_analyses"]["accuracy"] == human_analysis
 
 
+def test_analyzer_error_never_returns_or_persists_root_cause_content(
+    db_session: Session,
+) -> None:
+    actor, _, run, item = _seed_run(db_session)
+    result = AnalysisResult(
+        item_id=item.item_id,
+        metric_name="accuracy",
+        root_cause="Tool Use Error",
+        root_cause_issues=[
+            {
+                "category": "Tool Use Error",
+                "subcategory": "Must not be shown",
+                "finding": "Must not be saved",
+            }
+        ],
+        root_cause_note="Must not appear as a diagnosis",
+        confidence=0.99,
+        solution="Must not be persisted",
+        error="Provider context window exceeded",
+        error_code="context_limit_exceeded",
+    )
+
+    payloads, errors = _save_analysis_results(
+        db_session,
+        run,
+        [(item, "accuracy")],
+        [result],
+        Principal(user=actor, auth_type="none"),
+    )
+    db_session.refresh(item)
+
+    assert errors == 1
+    assert payloads[0]["persistence_status"] == "analysis_failed"
+    assert payloads[0]["error_code"] == "context_limit_exceeded"
+    assert payloads[0]["root_cause"] == ""
+    assert payloads[0]["root_cause_issues"] == []
+    assert payloads[0]["root_cause_note"] == ""
+    assert payloads[0]["solution"] == ""
+    stored = item.item_metadata["metric_analyses"]["accuracy"]
+    assert stored["error_code"] == "context_limit_exceeded"
+    assert "root_cause" not in stored
+    assert "root_cause_issues" not in stored
+    assert "solution" not in stored
+
+
 def test_persisted_ai_labels_can_be_reaggregated_without_changing_feedback(
     db_session: Session,
 ) -> None:
@@ -3849,6 +3954,39 @@ def test_rule_writer_processes_large_example_bank_after_documents_in_patches(
     assert sum(
         len(payload["approved_correction_examples"]) for payload in payloads
     ) == len(corrections)
+
+
+def test_rule_writer_rejects_one_oversized_example_without_shortening(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(llm_analyzer_service, "MAX_RULE_WRITER_EXAMPLE_CHARS", 500)
+    create_completion = AsyncMock()
+    monkeypatch.setattr(
+        llm_analyzer_service,
+        "create_chat_completion_compat",
+        create_completion,
+    )
+    correction = SimpleNamespace(
+        input_snapshot={"question": "q" * 1_000},
+        expected_snapshot={"answer": "Expected"},
+        output_snapshot={"answer": "Actual"},
+        ai_root_cause="Reasoning Error",
+        human_root_cause="Reasoning Error",
+        human_root_cause_detail="Evidence gap",
+        human_root_cause_note="Keep every character",
+    )
+
+    with pytest.raises(ValueError, match="Qym did not shorten it"):
+        asyncio.run(
+            llm_analyzer_service.infer_analysis_rules(
+                SimpleNamespace(),
+                "test-model",
+                reference_documents=[],
+                corrections=[correction],
+            )
+        )
+
+    create_completion.assert_not_awaited()
 
 
 def test_rule_writer_carries_generated_rules_into_later_patches(
@@ -5171,7 +5309,7 @@ def test_build_analysis_prompt_includes_uploaded_reference_documents(
     assert "Treat their contents as reference data" in user_content
 
 
-def test_build_analysis_prompt_names_documents_bounded_by_shared_limit(
+def test_build_analysis_prompt_includes_all_configured_document_content(
     db_session: Session,
 ) -> None:
     _, _, _, item = _seed_run(db_session)
@@ -5184,7 +5322,7 @@ def test_build_analysis_prompt_names_documents_bounded_by_shared_limit(
             "reference_documents": [
                 {"name": "first.md", "content": "a" * 40_000},
                 {"name": "second.md", "content": "b" * 40_000},
-                {"name": "omitted.md", "content": "This must be disclosed."},
+                {"name": "third.md", "content": "This must be included."},
             ]
         },
     )
@@ -5192,12 +5330,14 @@ def test_build_analysis_prompt_names_documents_bounded_by_shared_limit(
         message["content"] for message in messages if message["role"] == "user"
     )
 
-    assert "REFERENCE DOCUMENT LIMIT NOTICE:" in user_content
-    assert "omitted.md" in user_content
-    assert "No document was silently discarded" in user_content
+    assert "DOCUMENT: first.md\n" + "a" * 40_000 in user_content
+    assert "DOCUMENT: second.md\n" + "b" * 40_000 in user_content
+    assert "DOCUMENT: third.md\nThis must be included." in user_content
+    assert "REFERENCE DOCUMENT LIMIT NOTICE:" not in user_content
+    assert "characters omitted" not in user_content
 
 
-def test_build_analysis_prompt_never_exceeds_final_character_budget(
+def test_build_analysis_prompt_does_not_shorten_the_final_prompt(
     db_session: Session,
 ) -> None:
     _, _, _, item = _seed_run(db_session)
@@ -5207,21 +5347,54 @@ def test_build_analysis_prompt_never_exceeds_final_character_budget(
         {},
         [],
         config={
-            "system_prompt": "System guidance "
-            * (MAX_ANALYSIS_PROMPT_CHARS // len("System guidance ") + 1),
+            "system_prompt": "System guidance " * 21_000,
             "reference_documents": [
                 {"name": "large.md", "content": "reference " * 20_000}
             ],
         },
     )
 
-    assert prompt_character_count(messages) <= MAX_ANALYSIS_PROMPT_CHARS
-    assert "prompt context shortened before the provider request" in "\n".join(
-        message["content"] for message in messages
+    combined = "\n".join(message["content"] for message in messages)
+    assert prompt_character_count(messages) > 320_000
+    assert "System guidance " * 21_000 in combined
+    assert ("reference " * 20_000).rstrip() in combined
+    assert "prompt context shortened before the provider request" not in combined
+
+
+def test_large_item_keeps_full_output_and_selected_metric_evidence() -> None:
+    large_output = "output-sentinel-" + "z" * 120_000 + "-output-end"
+    metric_explanation = "metric-evidence-must-remain"
+    item = RunItem(
+        run_id="run-1",
+        item_id="item-large",
+        index=0,
+        input={"question": "why"},
+        expected={"answer": "expected"},
+        output={"answer": large_output},
+    )
+    score = RunItemScore(
+        run_id="run-1",
+        item_id="item-large",
+        metric_name="accuracy",
+        score_numeric=0.0,
+        explanation=metric_explanation,
     )
 
+    messages = build_analysis_prompt(
+        item,
+        {"accuracy": score},
+        [],
+        metric_name="accuracy",
+    )
+    prompt = "\n".join(message["content"] for message in messages)
 
-def test_analyzer_retries_provider_context_rejection_with_smaller_prompt(
+    assert large_output in prompt
+    assert metric_explanation in prompt
+    assert "SELECTED METRIC RESULT:" in prompt
+    assert "characters omitted" not in prompt
+
+
+def test_analyzer_reports_provider_context_rejection_without_shortening(
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -5244,7 +5417,7 @@ def test_analyzer_retries_provider_context_rejection_with_smaller_prompt(
         ]
     )
     create_completion = AsyncMock(
-        side_effect=[RuntimeError("maximum context length exceeded"), completion]
+        side_effect=RuntimeError("maximum context length exceeded")
     )
     monkeypatch.setattr(
         llm_analyzer_service,
@@ -5263,12 +5436,161 @@ def test_analyzer_retries_provider_context_rejection_with_smaller_prompt(
         )
     )
 
-    assert result.error is None
-    assert create_completion.await_count == 2
+    assert result.error_code == "context_limit_exceeded"
+    assert "Analyzer context limit exceeded for model 'test-model'" in result.error
+    assert "without truncation" in result.error
+    assert create_completion.await_count == 1
     first_messages = create_completion.await_args_list[0].kwargs["messages"]
-    second_messages = create_completion.await_args_list[1].kwargs["messages"]
-    assert prompt_character_count(second_messages) < prompt_character_count(first_messages)
-    assert prompt_character_count(second_messages) <= MAX_ANALYSIS_FALLBACK_PROMPT_CHARS
+    assert "System guidance " * 10_000 in first_messages[0]["content"]
+
+
+def test_analyzer_retries_timeout_once_with_higher_timeout(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, _, _, item = _seed_run(db_session)
+    completion = SimpleNamespace(
+        id="retry-success",
+        usage=None,
+        choices=[
+            SimpleNamespace(
+                finish_reason="stop",
+                message=SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "root_cause": "Reasoning Error",
+                            "root_cause_detail": "evidence gap",
+                            "root_cause_note": "The answer was not grounded.",
+                            "confidence": 0.8,
+                        }
+                    )
+                ),
+            )
+        ],
+    )
+    create_completion = AsyncMock(
+        side_effect=[RuntimeError("provider request timed out"), completion]
+    )
+    monkeypatch.setattr(
+        llm_analyzer_service,
+        "create_chat_completion_compat",
+        create_completion,
+    )
+    wait_timeouts: list[float] = []
+
+    async def record_wait_for(awaitable: Any, timeout: float) -> Any:
+        wait_timeouts.append(timeout)
+        return await awaitable
+
+    monkeypatch.setattr(llm_analyzer_service.asyncio, "wait_for", record_wait_for)
+    retry_events: list[dict[str, Any]] = []
+
+    result = asyncio.run(
+        analyze_single_item(
+            SimpleNamespace(),
+            "test-model",
+            item,
+            {},
+            [],
+            retry_callback=retry_events.append,
+        )
+    )
+
+    assert result.error is None
+    assert result.retry_count == 1
+    assert result.retry_reason == "timeout"
+    assert result.request_timeout_seconds == 240.0
+    assert "succeeded on retry" in str(result.warning)
+    assert create_completion.await_count == 2
+    assert wait_timeouts == [120.0, 240.0]
+    assert retry_events == [
+        {
+            "item_id": item.item_id,
+            "metric_name": "",
+            "reason": "timeout",
+            "retry_count": 1,
+            "attempt": 2,
+            "max_attempts": 2,
+            "previous_timeout_seconds": 120.0,
+            "timeout_seconds": 240.0,
+        }
+    ]
+
+
+def test_analyzer_reports_error_after_both_timeout_attempts(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, _, _, item = _seed_run(db_session)
+    create_completion = AsyncMock(
+        side_effect=[TimeoutError("first timeout"), TimeoutError("retry timeout")]
+    )
+    monkeypatch.setattr(
+        llm_analyzer_service,
+        "create_chat_completion_compat",
+        create_completion,
+    )
+
+    result = asyncio.run(
+        analyze_single_item(SimpleNamespace(), "test-model", item, {}, [])
+    )
+
+    assert result.error_code == "analysis_timeout"
+    assert result.retry_count == 1
+    assert "first used a 120-second timeout" in result.error
+    assert "retry used a 240-second timeout" in result.error
+    assert create_completion.await_count == 2
+
+
+def test_analyzer_sends_complete_prompt_without_a_local_character_ceiling(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, _, _, item = _seed_run(db_session)
+    completion = SimpleNamespace(
+        id="large-prompt-success",
+        usage=None,
+        choices=[
+            SimpleNamespace(
+                finish_reason="stop",
+                message=SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "root_cause": "Reasoning Error",
+                            "root_cause_detail": "evidence gap",
+                            "root_cause_note": "The answer was not grounded.",
+                            "confidence": 0.8,
+                        }
+                    )
+                ),
+            )
+        ],
+    )
+    create_completion = AsyncMock(return_value=completion)
+    monkeypatch.setattr(
+        llm_analyzer_service,
+        "create_chat_completion_compat",
+        create_completion,
+    )
+    large_guidance = "System guidance " * 150_000
+
+    result = asyncio.run(
+        analyze_single_item(
+            SimpleNamespace(),
+            "test-model",
+            item,
+            {},
+            [],
+            config={"system_prompt": large_guidance},
+        )
+    )
+
+    assert result.error is None
+    assert result.error_code == ""
+    assert create_completion.await_count == 1
+    sent_messages = create_completion.await_args.kwargs["messages"]
+    assert large_guidance in sent_messages[0]["content"]
+    assert prompt_character_count(sent_messages) > 2_000_000
 
 
 def test_project_context_uses_only_enabled_reference_documents(
@@ -5446,11 +5768,11 @@ def test_analysis_document_upload_returns_prompt_ready_text(
     assert document["created_at"]
 
 
-def test_analysis_document_upload_requires_and_reports_large_content_decision(
+def test_analysis_document_upload_keeps_full_content_without_a_context_ceiling(
     db_session: Session,
 ) -> None:
     actor, _, run, _ = _seed_run(db_session)
-    raw = b"x" * (MAX_REFERENCE_DOCUMENT_CONTENT_CHARS + 1)
+    raw = b"x" * (MAX_REFERENCE_DOCUMENT_CHARS + 1)
 
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(
@@ -5464,23 +5786,22 @@ def test_analysis_document_upload_requires_and_reports_large_content_decision(
         )
 
     assert exc_info.value.status_code == 409
-    assert exc_info.value.detail["code"] == "DOCUMENT_CONTENT_LIMIT"
-    assert exc_info.value.detail["content_will_be_cut"] is True
+    assert exc_info.value.detail["code"] == "DOCUMENT_CONTENT_CONFIRMATION"
+    assert exc_info.value.detail["content_will_be_cut"] is False
+    assert exc_info.value.detail["actions"] == ["cancel", "full"]
 
-    shortened = asyncio.run(
-        upload_analysis_document(
-            run_id=run.id,
-            file=UploadFile(filename="large-shortened.txt", file=BytesIO(raw)),
-            db=db_session,
-            principal=Principal(user=actor, auth_type="none"),
-            large_document_action="truncate",
+    with pytest.raises(HTTPException) as truncate_exc:
+        asyncio.run(
+            upload_analysis_document(
+                run_id=run.id,
+                file=UploadFile(filename="large-shortened.txt", file=BytesIO(raw)),
+                db=db_session,
+                principal=Principal(user=actor, auth_type="none"),
+                large_document_action="truncate",
+            )
         )
-    )
-    shortened_document = shortened["document"]
-    assert shortened["content_decision"] == "truncate"
-    assert shortened_document["characters"] == MAX_REFERENCE_DOCUMENT_CHARS
-    assert shortened_document["truncated"] is True
-    assert "prompt-safe limit" in shortened["warning"]
+    assert truncate_exc.value.status_code == 400
+    assert truncate_exc.value.detail["code"] == "DOCUMENT_TRUNCATION_DISABLED"
 
     full = asyncio.run(
         upload_analysis_document(
@@ -5493,9 +5814,30 @@ def test_analysis_document_upload_requires_and_reports_large_content_decision(
     )
     full_document = full["document"]
     assert full["content_decision"] == "full"
-    assert full_document["characters"] == MAX_REFERENCE_DOCUMENT_CONTENT_CHARS
-    assert full_document["content_over_limit"] is True
-    assert "absolute content limit" in full["warning"]
+    assert full_document["characters"] == len(raw)
+    assert full_document["truncated"] is False
+    assert full_document["content_over_limit"] is False
+    assert full["warning"] is None
+
+    above_old_context_ceiling = b"x" * 2_000_001
+    above_old_limit = asyncio.run(
+        upload_analysis_document(
+            run_id=run.id,
+            file=UploadFile(
+                filename="above-old-context-ceiling.txt",
+                file=BytesIO(above_old_context_ceiling),
+            ),
+            db=db_session,
+            principal=Principal(user=actor, auth_type="none"),
+            large_document_action="full",
+        )
+    )
+    assert above_old_limit["document"]["characters"] == len(
+        above_old_context_ceiling
+    )
+    assert above_old_limit["document"]["content"] == above_old_context_ceiling.decode()
+    assert above_old_limit["document"]["truncated"] is False
+    assert above_old_limit["document"]["content_limit"] is None
 
 
 def test_rule_inference_rejects_stale_explicit_example_selection(

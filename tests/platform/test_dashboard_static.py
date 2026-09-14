@@ -74,44 +74,78 @@ def test_run_and_compare_exports_keep_independent_scroll_containers() -> None:
         assert "overflow-y: auto;" in rule
 
 
-def test_run_item_badge_and_card_distinguish_runtime_errors_from_judge_failures() -> None:
-    """Task/metric exceptions are Error; an ordinary low score remains Fail."""
+def test_run_item_scopes_task_and_metric_errors_to_the_right_surface() -> None:
+    """Task errors mark the item; metric errors mark only their metric."""
     source = (DASHBOARD_DIR / "run.html").read_text(encoding="utf-8")
     metrics_source = (DASHBOARD_DIR / "metrics.js").read_text(encoding="utf-8")
     verdict_block = source.split(
         "// The verdict belongs to the expanded execution", 1
     )[1].split("// Detailed AI analysis", 1)[0]
+    metric_strip = source.split("function renderMetricStrip", 1)[1].split(
+        "function renderItems", 1
+    )[0]
+    aggregate_pills = source.split("const aggPills = isExpanded", 1)[1].split(
+        "const passNote", 1
+    )[0]
+    error_distribution = source.split("function collectRowErrors", 1)[1].split(
+        "function renderErrorDistributionSection", 1
+    )[0]
 
     assert (
         "const hasTaskError = window.QymMetrics.isTaskErrorRow(row);" in verdict_block
     )
-    assert "window.QymMetrics.hasMetricError(row, name)" in verdict_block
-    assert "const hasExecutionError = hasTaskError || hasMetricError;" in verdict_block
-    assert "if (hasExecutionError)" in verdict_block
+    assert "const taskErrorAttempts = isRepeatItem" in verdict_block
+    assert "window.QymMetrics.isTaskErrorRow(att)" in verdict_block
+    assert (
+        "const hasAnyTaskError = hasTaskError || taskErrorAttempts.length > 0;"
+        in verdict_block
+    )
+    assert "const selectedMetricHasError = metric" in verdict_block
+    assert "window.QymMetrics.hasMetricError(row, metric)" in verdict_block
+    assert "if (hasAnyTaskError)" in verdict_block
+    assert "else if (!selectedMetricHasError" in verdict_block
     assert "pfClass = 'error';" in verdict_block
     assert "pfClass = pfVal >= threshold ? 'pass' : 'fail';" in verdict_block
     assert "const statusLabel = pfClass === 'pass' ? 'Pass' : 'Fail';" in verdict_block
-    assert "? 'Task execution failed'" in verdict_block
-    assert "? 'Metric execution failed: ' + metricErrorNames.join(', ')" in verdict_block
+    assert "? 'Task execution failed in ' + taskErrorAttempts.length" in verdict_block
+    assert ": 'Task execution failed')" in verdict_block
     assert ": 'qym-tag--danger';" in verdict_block
     assert "qym-tag--warning" not in verdict_block
     assert "const statusIconOnlyClass = pfClass === 'error'" in verdict_block
-    assert "const failureIcon = pfClass === 'error'" in verdict_block
-    assert 'class="item-failure-icon"' in verdict_block
-    assert "const statusContent = pfClass === 'error' ? failureIcon" in verdict_block
+    assert "const statusContent = pfClass === 'error' ? FAILURE_ICON" in verdict_block
     assert "const statusAccessibility = pfClass === 'error'" in verdict_block
     assert 'role="img" aria-label="' in verdict_block
     assert (
-        "const executionErrorClass = hasExecutionError ? ' item-execution-error' : '';"
+        "const executionErrorClass = hasAnyTaskError ? ' item-execution-error' : '';"
         in verdict_block
     )
+    assert "hasExecutionError" not in verdict_block
     assert 'class="qym-tag \' + statusTagClass' in verdict_block
     assert 'item-header-expand\' + executionErrorClass' in source
-    assert 'item-card\' + executionErrorClass' in source
+    assert "!isRepeatItem || hasAnyTaskError" in source
+    assert '<div class="item-run-output\' + executionErrorClass' in source
+    assert 'return \'<div class="item-card" data-item-id="\'' in source
+    assert 'return \'<div class="item-card\' + executionErrorClass' not in source
 
-    assert "border-color: var(--error);" in _rule(
-        source, ".item-card.item-execution-error {"
-    )
+    assert "function renderMetricErrorIndicator(metricName)" in source
+    assert 'role="img" aria-label="' in source
+    assert "window.QymMetrics.isMetricErrorMeta(fullMetricMeta)" in metric_strip
+    assert "!metaKeys.length && !hasMetricExecutionError" in metric_strip
+    assert "metric-execution-error" in metric_strip
+    assert "renderMetricErrorIndicator(name)" in metric_strip
+    assert "window.QymMetrics.hasMetricError(row, name)" in aggregate_pills
+    assert "metric-execution-error" in aggregate_pills
+    assert "renderMetricErrorIndicator(name)" in aggregate_pills
+    repeat_outputs = source.split("function renderAnswerColumns", 1)[1].split(
+        "function _parseMetaDeep", 1
+    )[0]
+    assert "window.QymMetrics.isTaskErrorRow(att)" in repeat_outputs
+    assert "const passHasTaskError = window.QymMetrics.isTaskErrorRow(att);" in repeat_outputs
+    assert "const passExecutionErrorClass = passHasTaskError" in repeat_outputs
+    assert "const borderColor = passHasTaskError ? 'var(--error)' : color;" in repeat_outputs
+    assert "qym-output-card' + passExecutionErrorClass" in repeat_outputs
+
+    assert ".item-card.item-execution-error {" not in source
     assert "border-color: var(--error);" in _rule(
         source, ".item-card.item-collapsed.item-execution-error {"
     )
@@ -119,6 +153,9 @@ def test_run_item_badge_and_card_distinguish_runtime_errors_from_judge_failures(
         source,
         ".items-grid > .item-card.item-collapsed.item-execution-error:hover {",
     )
+    output_error_rule = _rule(source, ".item-run-output.item-execution-error {")
+    assert "border: 1px solid var(--error);" in output_error_rule
+    assert "border-left-width: 3px;" in output_error_rule
     icon_rule = _rule(source, ".item-failure-icon {")
     assert "width: 12px;" in icon_rule
     assert "height: 12px;" in icon_rule
@@ -126,9 +163,20 @@ def test_run_item_badge_and_card_distinguish_runtime_errors_from_judge_failures(
     icon_only_rule = _rule(source, ".item-error-indicator {")
     assert "min-width: var(--badge-height);" in icon_only_rule
     assert "padding: 0;" in icon_only_rule
+    metric_boundary_rule = _rule(source, ".qym-item-metric-cell.metric-execution-error {")
+    assert "border: 1px solid var(--error);" in metric_boundary_rule
+    metric_row_boundary_rule = _rule(
+        source, ".metric-det-chips > .det-toggle.metric-execution-error,"
+    )
+    assert "border-color: var(--error);" in metric_row_boundary_rule
+    metric_icon_rule = _rule(source, ".metric-error-indicator {")
+    assert "min-width: var(--badge-height);" in metric_icon_rule
+    assert "padding: 0;" in metric_icon_rule
 
     assert "function isTaskErrorRow(row)" in metrics_source
     assert "function isMetricErrorMeta(meta)" in metrics_source
+    assert "const status = String(meta.status || '').toLowerCase();" in metrics_source
+    assert "meta.status || meta.label" not in metrics_source
     assert "function hasMetricError(row, metricName = null)" in metrics_source
     assert "return isTaskErrorRow(row) || hasMetricError(row);" in metrics_source
     assert "function getRowScore(row, metricIdx, metricName = null)" in metrics_source
@@ -136,10 +184,17 @@ def test_run_item_badge_and_card_distinguish_runtime_errors_from_judge_failures(
     assert "return { score, isError: metricError };" in metrics_source
     assert "Metric Errors" in source
     assert "'Metric error'" in source
+    assert "const passTaskErrors = isRepeatAggregateView()" in error_distribution
+    assert "Array.isArray(row.pass_attempts)" in error_distribution
+    assert "for (const attempt of passTaskErrors)" in error_distribution
+    assert "attempt.error || attempt.output || ''" in error_distribution
+    assert "} else if (window.QymMetrics.isTaskErrorRow(row)) {" in error_distribution
+    assert "const passErrors = Array.isArray(perPass)" in error_distribution
+    assert "passErrors.length" in error_distribution
 
 
 def test_compare_item_and_outputs_match_run_error_presentation() -> None:
-    """Collapsed errors use an outer border; expanded errors use output borders."""
+    """Task errors mark cards; metric-only errors mark their own metric surfaces."""
     source = (DASHBOARD_DIR / "compare.html").read_text(encoding="utf-8")
     renderer = source.split("function renderItemComparisonCard", 1)[1].split(
         "function getComparisonRowDataForItem", 1
@@ -148,7 +203,9 @@ def test_compare_item_and_outputs_match_run_error_presentation() -> None:
     assert "function compareExecutionErrorInfo(row, runIdx)" in source
     assert "window.QymMetrics.isTaskErrorRow(row)" in source
     assert "window.QymMetrics.hasMetricError(row, name)" in source
-    assert "if (compareExecutionErrorInfo(row, runIdx).hasError)" in source
+    assert "if (compareExecutionErrorInfo(row, runIdx).hasTaskError)" in source
+    assert "verdict === 'metric-error'" in source
+    assert ".filter(info => info.hasTaskError);" in renderer
     assert "verdict = 'error';" in source
     assert (
         "if (verdict === 'error') return renderCompareErrorIndicator(errorInfo.title);"
@@ -156,7 +213,11 @@ def test_compare_item_and_outputs_match_run_error_presentation() -> None:
     )
     assert 'class="item-failure-icon"' in source
     assert 'role="img" aria-label="${escapeAttr(title)}"' in source
-    assert "const executionErrorClass = errorInfo.hasError" in source
+    assert "const executionErrorClass = errorInfo.hasTaskError" in source
+    assert "const borderColor = errorInfo.hasTaskError" in source
+    assert "function renderCompareMetricErrorIndicator(metricName)" in source
+    assert "${metricErrorIndicator}</button>" in source
+    assert "qym-item-metric-cell--selected${metricErrorClass}" in renderer
     assert "const itemExecutionErrorClass = hasItemExecutionError" in source
     assert "${itemExecutionErrorIndicator}" in source
     assert "qym-output-card${executionErrorClass}" in source
@@ -173,6 +234,12 @@ def test_compare_item_and_outputs_match_run_error_presentation() -> None:
     )
     assert "border: 1px solid var(--error);" in output_error_rule
     assert "border-left-width: 3px;" in output_error_rule
+    assert "border-color: var(--error);" in _rule(
+        source, ".metric-det-chips > .det-toggle.metric-execution-error,"
+    )
+    assert "border: 1px solid var(--error);" in _rule(
+        source, ".qym-item-metric-cell.metric-execution-error {"
+    )
 
 
 def test_dashboard_pages_share_one_versioned_metrics_asset() -> None:
@@ -253,6 +320,39 @@ def test_repeat_run_rows_are_ordinary_rows_with_pass_count_chip() -> None:
     assert ".run-pass-count" in styles
 
 
+def test_runs_badge_totals_execution_errors_without_changing_item_math() -> None:
+    """The status badge includes metric/pass errors via a separate API field."""
+    source = DASHBOARD_JS.read_text(encoding="utf-8")
+    index = (DASHBOARD_DIR / "index.html").read_text(encoding="utf-8")
+
+    flatten = source.split("function flattenRuns(data)", 1)[1].split(
+        "function calculateMetrics", 1
+    )[0]
+    assert "const executionErrorCount = Number(run.execution_error_count ?? errorCount);" in flatten
+    assert "const completedCount = successCount + errorCount;" in flatten
+    assert "execution_error_count: executionErrorCount" in flatten
+    assert "a.execution_error_count - b.execution_error_count" in source
+    assert "b.execution_error_count - a.execution_error_count" in source
+    assert "${executionErrorCount}⚠" in source
+    assert "execution error${executionErrorCount === 1 ? '' : 's'}" in source
+    assert "run.samples > 1 ? ' across all passes' : ''" in source
+    assert "const retryScope = run.samples > 1 ? ' across all passes' : ' across all items';" in source
+    assert "${retryScope}" in source
+    assert "dashboard.js?v=repeat-error-count-" in index
+
+
+def test_repeat_run_rows_show_each_pass_retry_count() -> None:
+    """Expanded pass rows expose the retries included in the parent total."""
+    source = DASHBOARD_JS.read_text(encoding="utf-8")
+    member_row = source.split("const memberRow = (pass, isLast) =>", 1)[1].split(
+        "// The group-metrics strip", 1
+    )[0]
+
+    assert "const retries = Number(pass.retry_count) || 0;" in member_row
+    assert "${retries}↻" in member_row
+    assert "in this pass" in member_row
+
+
 def test_run_column_wraps_names_at_400px() -> None:
     styles = (DASHBOARD_DIR / "dashboard.css").read_text(encoding="utf-8")
 
@@ -326,7 +426,7 @@ def test_repeat_parent_checkbox_selects_its_current_scope() -> None:
     assert "isPartiallySelected" not in source
     assert "state.selectedRuns.delete(filePath);" in source
     assert "if (!allSelected) refs.forEach(ref => state.selectedRuns.add(ref));" in source
-    assert "dashboard.js?v=repeat-compare-pass-selection-" in index
+    assert "dashboard.js?v=repeat-error-count-" in index
 
 
 def test_repeat_comparison_selection_expands_to_exact_passes() -> None:
@@ -594,10 +694,10 @@ def test_run_page_supports_single_pass_scope() -> None:
     # A selected pass now has its own diagnosis scope; the aggregate page
     # keeps the read-only root-cause summary visible instead of hiding it.
     assert "function isRepeatAggregateView()" in source
-    assert "if (aggregateRepeatView) perMetricAnalysisHtml = '';" in source
+    assert "if (!aggregateRepeatView) {" in source
     assert "pass_metric_analyses" in source
     assert "status: String(analysis.review_status || 'pending').toLowerCase()" in source
-    assert "const reviewStatus = hasStoredAnalysis" in source
+    assert "issue.review_status || analysis.review_status || legacyReview.status" in source
     assert "if (state.viewPass) approvalBody.pass_number = state.viewPass;" in source
     assert "id: data.id || correctionId || null" in source
     assert "if (IS_EXPORT || isRepeatAggregateView()) return '';" in source
@@ -666,7 +766,8 @@ def test_repeat_and_compare_share_grouped_output_interaction() -> None:
     assert "Pass-specific details were not recorded for this run; showing the run-level result." in run
     assert "(baseRow.metric_meta || {})[name]" in run
     # Verdicts describe individual executions beside their identity. The
-    # collapsed repeat row no longer presents an aggregate Pass/Fail label.
+    # The collapsed repeat row does not present an aggregate Pass/Fail label,
+    # but it does surface an Error icon when any pass raised.
     repeat_outputs = run.split("function renderAnswerColumns", 1)[1].split(
         "function _parseMetaDeep", 1
     )[0]
@@ -681,7 +782,10 @@ def test_repeat_and_compare_share_grouped_output_interaction() -> None:
     assert "window.location.pathname + '?pass=' + encodeURIComponent(att.pass_number)" in repeat_outputs
     assert 'class="qym-output-card__link"' in repeat_outputs
     assert "${identityHtml}${verdictFor(row, runIdx)}" in compare_outputs
-    assert "(!isExpanded && !isRepeatItem ? statusIndicator : '')" in collapsed_run_header
+    assert (
+        "(!isExpanded && (!isRepeatItem || hasAnyTaskError) ? statusIndicator : '')"
+        in collapsed_run_header
+    )
     assert "qym-tag--success" in repeat_outputs
     assert "qym-tag--danger" in compare_outputs
     # Comparing repeat passes preserves pass-aware editing instead of writing
@@ -1509,6 +1613,51 @@ def test_run_and_compare_overviews_are_filter_aware() -> None:
     assert "if (!itemIdSet.has(itemId)) continue;" in compare
 
 
+def test_run_metric_diagnosis_popup_uses_solution_dropdown_and_shares_add_edit() -> None:
+    run = (DASHBOARD_DIR / "run.html").read_text(encoding="utf-8")
+    assert "showMetricIssueDialog(itemId, metricName, { mode: 'edit', focusField });" in run
+    assert 'class="metric-analysis-inline"' not in run
+    for field in ("category", "subcategory", "finding"):
+        assert f'data-issue-field="{field}"' in run
+    assert 'data-diagnosis-field="solution"' not in run
+    assert 'data-diagnosis-field="solution_note"' not in run
+    assert "Solution notes (optional)" not in run
+    assert "data-new-solution" in run
+    assert "+ Add new solution" in run
+    for control in ("data-category-guidance", "data-solution-preset", "data-jump-issues", "data-jump-solution"):
+        assert control in run
+    assert "new Set(SOLUTION_PRESETS)" in run
+    assert "Save changes" in run
+    assert "Save and add another" in run
+    assert ".metric-issue-dialog__body { display: block; overflow-y: auto; }" in run
+
+
+def test_metric_issue_delete_is_an_explicit_staged_footer_action() -> None:
+    run = (DASHBOARD_DIR / "run.html").read_text(encoding="utf-8")
+    fields = run.split("function renderMetricDiagnosisFields", 1)[1].split(
+        "function showMetricIssueDialog", 1
+    )[0]
+    dialog = run.split("function showMetricIssueDialog", 1)[1].split(
+        "function showRootCauseIssuesEditor", 1
+    )[0]
+
+    assert "data-remove-issue" not in fields
+    assert "CLOSE_ICON" not in fields
+    assert "data-delete-diagnosis-issue" in dialog
+    assert "qym-inline-action--danger metric-issue-dialog__delete" in dialog
+    assert "FILTER_TRASH_ICON + '<span>Delete issue</span>" in dialog
+    assert "draft.issues = [];" in dialog
+    components = (DASHBOARD_DIR / "ui_components.css").read_text(encoding="utf-8")
+    danger = _rule(components, ".qym-inline-action.qym-inline-action--danger {")
+    assert "background: color-mix(in srgb, var(--error) 12%, transparent);" in danger
+    assert "color: var(--error);" in danger
+    assert ".qym-inline-action[hidden]" in components
+    assert "display: none;" in components.split(".qym-inline-action[hidden]", 1)[1].split("}", 1)[0]
+    assert "Deletion staged. Save changes to delete this issue, or restore it." in dialog
+    assert "This issue will be removed when you save." in fields
+    assert "data-add-issue>Restore issue" in fields
+
+
 def test_run_html_export_inlines_versioned_static_assets() -> None:
     source = RUNS_API.read_text(encoding="utf-8")
 
@@ -2031,8 +2180,8 @@ def test_clear_filter_control_has_aligned_label_and_soft_count_pill() -> None:
     for page in DASHBOARD_DIR.glob("*.html"):
         source = page.read_text(encoding="utf-8")
         if page.name == "analyzer.html":
-            assert "dashboard.css?v=rule-history-bottom-20260816-1" in source
-            assert "playground.js?v=rule-history-bottom-20260816-1" in source
+            assert "dashboard.css?v=auto-analyzer-context-20260908-7" in source
+            assert "playground.js?v=auto-analyzer-context-20260908-7" in source
             assert "ui_components.css?v=auto-analysis-selectors-20260811-1" in source
             assert "ui_components.js?v=auto-analysis-selectors-20260811-1" in source
             continue
@@ -2155,6 +2304,21 @@ def test_operational_statistics_use_connected_strip_contract() -> None:
     )[1].split("}", 1)[0]
     assert "font-size: var(--font-md);" in compact_value
     assert "margin-top: 0;" in compact_value
+
+
+def test_run_overview_totals_execution_errors_across_repeat_passes() -> None:
+    source = (DASHBOARD_DIR / "run.html").read_text(encoding="utf-8")
+    overview = source.split(
+        "function renderOverview(filteredItemsOverride = null)", 1
+    )[1].split("// ── Gauge color", 1)[0]
+
+    assert "if (!isRepeatAggregateView()) return sum + rowError;" in overview
+    assert "const executionErrors = Number(row.execution_error_count);" in overview
+    assert (
+        "Number.isFinite(executionErrors) ? Math.max(0, executionErrors) : rowError"
+        in overview
+    )
+    assert "summaryItem('errors', 'Errors', String(failed)" in overview
 
 
 def test_run_selection_uses_explicit_mode_and_reclaims_checkbox_column() -> None:
@@ -3134,17 +3298,41 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert 'data-issue-field="category"' in run
     assert 'data-issue-field="subcategory"' in run
     assert 'data-issue-field="finding"' in run
-    assert 'data-metric-sol-item=' in run
-    assert 'AI analysis did not produce a usable diagnosis.' in run
-    assert 'role="alert"' in run
+    assert 'class="metric-analysis-issue-solution"' in run
+    assert 'AI analysis did not produce a usable diagnosis.' not in run
+    assert 'metric-analysis-error' not in run
+    assert 'function renderMetricAnalysisCard(' in run
+    assert 'renderMetricAnalysisCard(itemId, metricName, metricAnalyses[metricName]' in run
+    assert 'metric-analysis-recovery' not in run
     assert 'Could not save diagnosis' in run
     assert 'if (rootCauseCategories(analysis).length) delete analysis.error;' in run
     assert "saveMetricAnalysisPatch" in run
     assert "metric_name: metricName" in run
-    assert "if (!hasStoredAnalysis && !metricFailed) return '';" in run
-    assert "const hasCategories = analysisCategories.length > 0;" in run
-    assert "renderMetricRootCauseIssues(analysis)" in run
-    assert "'>Edit</button>'" not in run
+    assert "function shouldRenderMetricAnalysis(" in run
+    assert "const analysisCards = state.allMetrics.filter((metricName, metricIndex) => {" in run
+    assert "shouldRenderMetricAnalysis(" in run
+    assert "activeAnalysisMetric" not in run
+    assert 'data-analysis-metric-item=' not in run
+    assert 'data-metric-add-issue=' in run
+    assert 'Save and add another' in run
+    assert "dialog.showModal()" in run
+    assert "categoryCatalogEntry(category)" in run
+    assert 'class="metric-analysis-inline"' not in run
+    assert "showMetricIssueDialog(itemId, metricName, { mode: 'edit', focusField });" in run
+    assert 'data-diagnosis-field="solution"' not in run
+    assert 'data-diagnosis-field="solution_note"' not in run
+    assert "Solution notes (optional)" not in run
+    assert 'data-new-solution' in run
+    assert '+ Add new solution' in run
+    assert 'data-solution-preset' in run
+    assert 'data-jump-solution' in run
+    assert 'data-jump-issues' in run
+    assert 'new Set(SOLUTION_PRESETS)' in run
+    assert "const issueCount = rootCauseIssues(analysis).length;" in run
+    assert "renderMetricRootCauseIssues(analysis, itemId, metricName, legacyReview)" in run
+    assert "renderMetricAnalysisCard(itemId, metricName, metricAnalyses[metricName], row.review_corrections?.[metricName])" in run
+    assert 'data-approve-issue="' in run
+    assert "Choose a saved solution, or add a new one for this issue." in run
     assert 'id="analysis-metric-list"' in analyzer
     assert "getMetrics: projectScoped ? () => [] : () => state.selectedMetrics.slice()" in analyzer
     assert "body.metrics = _getSelectedMetrics()" in playground
@@ -3181,7 +3369,36 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert '"type": "aggregating"' in analysis_api
     assert "state.phase === 'aggregating'" in playground
     assert "Aggregating root causes…" in playground
+    assert 'phase="retrying"' in analysis_api
+    assert '"type": "retrying"' in analysis_api
+    assert "state.phase === 'retrying'" in playground
+    assert "Retrying timed-out analysis…" in playground
+    assert "playground.js?v=auto-analyzer-context-20260908-7" in (
+        DASHBOARD_DIR / "analyzer.html"
+    ).read_text(encoding="utf-8")
+    assert "Timeout retries: <strong>" in playground
+    assert "final timeout " in playground
+    assert "'Final prompt: ' + promptCharacters.toLocaleString() + ' characters'" in playground
+    assert "no content shortened" not in playground
+    assert "the provider will validate its model context window" not in playground
+    assert "Provider context rejection is reported as context_limit_exceeded" in playground
+    assert "Final prompt budget is enforced" not in playground
+    assert "Cancel upload" in playground
+    assert "Add full retained content" in playground
+    assert "Qym reports <code>context_limit_exceeded</code>" in playground
+    assert "Use shortened version" not in playground
+    assert "safety shortening applied before the request" not in playground
     assert "function _analysisCategoryCount(data)" in playground
+    assert "function _analysisCompletionState(data)" in playground
+    assert "Math.max(0, attemptedCount - errorCount)" in playground
+    assert "Analysis completed with errors" in playground
+    assert "allAnalysisFailed ? 'Analysis failed'" in playground
+    assert "function _analysisErrorSummaryMarkup(errorResults, errorCount, attemptedCount)" in playground
+    assert "result && result.error_code || 'analysis_error'" in playground
+    assert "pg-runall-error-target" not in playground
+    assert "pg-runall-error-message" not in playground
+    assert "pg-runall-failed" in playground
+    assert "var completionText = analyzed > 0" not in playground
     assert "Created <strong>" in playground
     assert "var categoryLabel = categoryCount === 1 ? 'category' : 'categories';" in playground
     assert "const categoryLabel = categoryCount === 1 ? 'category' : 'categories';" in analyzer
@@ -3223,6 +3440,52 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert ">Input mapping</button>" in analyzer
     assert "Advanced run configuration" not in analyzer
     assert "state.wizardStep" not in analyzer
+
+
+def test_auto_analysis_preserves_prompt_content_and_exposes_timeout_retry() -> None:
+    playground = (DASHBOARD_DIR / "playground.js").read_text(encoding="utf-8")
+    analysis_api = ANALYSIS_API.read_text(encoding="utf-8")
+    analyzer_service = (
+        ROOT
+        / "packages"
+        / "platform"
+        / "qym_platform"
+        / "services"
+        / "llm_analyzer.py"
+    ).read_text(encoding="utf-8")
+    document_service = (
+        ROOT
+        / "packages"
+        / "platform"
+        / "qym_platform"
+        / "services"
+        / "document_extractor.py"
+    ).read_text(encoding="utf-8")
+
+    assert "_fit_prompt_messages" not in analyzer_service
+    assert "_bounded_message_content" not in analyzer_service
+    assert "LLM_RETRY_TIMEOUT_SECONDS = 240.0" in analyzer_service
+    assert '"context_limit_exceeded"' in analyzer_service
+    assert '"analysis_timeout"' in analyzer_service
+    assert "MAX_ANALYZER_REQUEST_CHARS" not in analyzer_service
+    assert "AnalyzerRequestSizeError" not in analyzer_service
+    assert "analysis_request_too_large" not in analyzer_service
+    assert 'phase="retrying"' in analysis_api
+    assert '"type": "retrying"' in analysis_api
+    assert "Retrying timed-out analysis…" in playground
+    assert "if (priorResults) priorResults.innerHTML = '';" in playground
+    assert "Timeout retries: <strong>" in playground
+    assert "no content shortened" not in playground
+    assert "context_limit_exceeded" in playground
+    assert "function _isMetricExecutionError(meta)" in playground
+    assert "if (isError) return false;" in playground
+    assert "if (_isMetricExecutionError(metricMetadata[metricName])) return;" in playground
+    assert "excluded and never receive root-cause analysis" in playground
+    assert "DocumentContentLimitError" not in document_service
+    assert "MAX_REFERENCE_DOCUMENT_CONTENT_CHARS" not in document_service
+    assert '"document_content_characters": None' in analysis_api
+    assert '"final_prompt_characters": None' in analysis_api
+    assert "text = text[:max_chars]" not in document_service
 
 
 def test_repeat_pass_analysis_links_select_that_sample() -> None:
@@ -3738,3 +4001,19 @@ def test_runs_table_freezes_dataset_owner_and_date_with_identity_columns() -> No
     assert "gap: var(--space-xs);" in timestamp_rule
     date_cell_rule = _rule(styles, ".runs-table :is(th, td).col-time {")
     assert "padding-inline: var(--space-sm);" in date_cell_rule
+
+def test_per_metric_analysis_is_separate_from_output_card():
+    source = (DASHBOARD_DIR / "run.html").read_text(encoding="utf-8")
+    output = source.split("          let outputBlockHtml = '';", 1)[1].split(
+        "          // Collapsed header:", 1
+    )[0]
+    assert "perMetricAnalysisHtml" not in output
+    assert "outputBlockHtml +\n            perMetricAnalysisHtml +" in source
+    assert '<span>Per-metric root cause analysis</span></h3>' in source
+    assert 'No proposed solution yet.' not in source
+    assert 'metric-analysis-subcategory-tag">Subcategory</span>' in source
+    assert 'metric-analysis-finding-tag">Finding</span>' in source
+    issue_divider = _rule(source, ".metric-analysis-issue:not(:last-child) {")
+    assert "border-bottom: 1px solid var(--border-subtle);" in issue_divider
+    solution_rule = _rule(source, ".metric-analysis-issue-solution {")
+    assert "border-top:" not in solution_rule
