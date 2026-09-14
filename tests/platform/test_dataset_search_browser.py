@@ -1,4 +1,4 @@
-"""Search responses cannot overwrite a newer query or dataset version."""
+"""Dataset items load on entry and ignore stale search or version responses."""
 
 import re
 from pathlib import Path
@@ -21,7 +21,7 @@ def browser():
 
 
 @pytest.fixture()
-def page(browser):
+def dataset_page(browser):
     context = browser.new_context()
     page = context.new_page()
     page.set_default_timeout(5000)
@@ -30,14 +30,17 @@ def page(browser):
     page.route(
         "http://qym.test/**",
         lambda route: route.fulfill(
-            body='<main id="host"></main>', content_type="text/html"
+            body='<main id="dsx-root"><div id="host"></div></main>',
+            content_type="text/html",
         ),
     )
     page.goto("http://qym.test/projects/project/datasets/demo")
     page.evaluate("""() => {
       window.toasts = [];
       window.pendingSearches = [];
-      window.QymShell = {apiUrl: path => path, toast: message => toasts.push(message)};
+      window.QymShell = {apiUrl: path => path, toast: message => toasts.push(message),
+        getProject: () => ({slug: 'project', name: 'Project'}), setBreadcrumbs: () => {},
+        identicon: () => document.createElement('span')};
       window.QymAuth = {requireAuth: () => new Promise(() => {})};
       window.fetch = url => new Promise((resolve, reject) => pendingSearches.push({url, resolve, reject}));
     }""")
@@ -51,19 +54,33 @@ def page(browser):
         "window.__dsx = { state,", "window.__dsx = { renderItemsTab, state,"
     )
     page.add_script_tag(content=source)
+    yield page
+    assert errors == []
+    context.close()
+
+
+@pytest.fixture()
+def page(dataset_page):
+    page = dataset_page
     page.evaluate("""() => {
       Object.assign(__dsx.state, {mode: 'detail', slug: 'project', datasetRef: 'demo',
         tab: 'items', versionLabel: 'v1', activeVersion: {id: 'v1', version: 'v1', status: 'published'}});
       __dsx.renderItemsTab(document.querySelector('#host'));
     }""")
     respond(page, 0, "initial")
-    yield page
-    assert errors == []
-    context.close()
+    return page
+
+
+def respond_json(page, index, body, *, status=200):
+    page.wait_for_function("index => pendingSearches.length > index", arg=index)
+    page.evaluate(
+        """({index, body, status}) => pendingSearches[index].resolve(
+      new Response(JSON.stringify(body), {status, headers: {'content-type': 'application/json'}}))""",
+        {"index": index, "body": body, "status": status},
+    )
 
 
 def respond(page, index, item_id=None, *, status=200):
-    page.wait_for_function("index => pendingSearches.length > index", arg=index)
     items = (
         [
             {
@@ -77,15 +94,30 @@ def respond(page, index, item_id=None, *, status=200):
         if item_id
         else []
     )
-    page.evaluate(
-        """({index, body, status}) => pendingSearches[index].resolve(
-      new Response(JSON.stringify(body), {status, headers: {'content-type': 'application/json'}}))""",
-        {
-            "index": index,
-            "body": {"items": items, "total": len(items)},
-            "status": status,
-        },
+    respond_json(page, index, {"items": items, "total": len(items)}, status=status)
+
+
+@pytest.mark.parametrize("item_id", ["first-item", None])
+def test_items_load_on_initial_detail_render(dataset_page, item_id):
+    page = dataset_page
+    page.evaluate("() => { void __dsx.route(); }")
+    respond_json(page, 0, {"dataset": {"slug": "demo", "name": "Demo"}})
+    respond_json(
+        page,
+        1,
+        {"versions": [{"id": "v1", "version": "v1", "status": "published"}]},
     )
+    page.get_by_role("tab", name="Items", exact=True).wait_for()
+    respond(page, 2, item_id)
+    if item_id:
+        page.locator('tr[data-item-id="first-item"]').wait_for()
+    else:
+        page.get_by_text("This version has no items", exact=True).wait_for()
+    assert page.get_by_role("tab", name="Items", exact=True).get_attribute(
+        "aria-selected"
+    ) == "true"
+    assert page.evaluate("pendingSearches.length") == 3
+    assert page.evaluate("toasts") == []
 
 
 def search(page, query, count):

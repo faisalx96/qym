@@ -1301,6 +1301,8 @@
       }
       itemPageRenderSeq++;
       root.replaceChildren(detailView());
+      // Start tab loaders after mounting, so their connection guards allow the first request.
+      renderTabContent(root.querySelector('#dsx-tab-content'));
     }
     async function renderCompare(){
       itemPageRenderSeq++;
@@ -2016,8 +2018,6 @@
         style: { padding: 0 },
       });
       root.appendChild(tabContent);
-      // dispatch to tab
-      renderTabContent(tabContent);
       return root;
     }
 
