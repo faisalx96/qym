@@ -457,12 +457,13 @@ def test_first_history_rows_publish_before_every_run_is_scanned(database):
         db.commit()
         service.bootstrap_partitions(db)
         db.commit()
-    # Three bounded item batches plus the remaining source-stage transitions.
+    # Three bounded item batches plus one final cursor probe. Empty stages do
+    # not consume separate worker ticks.
     # The old round-robin schedule needed 80 ticks before publishing any run.
     worker = service.DashboardSummaryWorker(
         sessionmaker(bind=database, autoflush=False), max_partitions=4, max_events=2
     )
-    for _ in range(8):
+    for _ in range(4):
         worker.tick()
     with Session(database) as db:
         ready = list(db.scalars(select(Summary).where(Summary.projection_revision > 0)))
@@ -483,7 +484,7 @@ def test_first_history_rows_publish_before_every_run_is_scanned(database):
             == 99
         )
     # The first publication expands historical throughput to the normal limit.
-    for _ in range(8):
+    for _ in range(4):
         worker.tick()
     with Session(database) as db:
         assert (
@@ -657,3 +658,171 @@ def test_completed_empty_scan_recovers_missing_first_publication(database):
     with Session(database) as db:
         assert db.get(Summary, "r").projection_revision > 0
         assert db.get(Partition, "r").queue_state == "ready"
+
+
+def test_backfill_reads_numeric_fields_without_large_source_payloads(database):
+    from sqlalchemy import null
+    from test_dashboard_durable_summaries import assert_legacy_parity
+
+    with Session(database) as db:
+        db.info["dashboard_projection_worker"] = True
+        run(db, samples=2, status=RunWorkflowStatus.COMPLETED)
+        for identity, output, error in (
+            ("json-null", None, None),
+            ("sql-null", null(), None),
+            ("failed", "large output" * 10000, "large error" * 10000),
+        ):
+            item(
+                db,
+                item_id=identity,
+                input="large input" * 10000,
+                expected="large expected" * 10000,
+                output=output,
+                error=error,
+            )
+            db.add(
+                RunItemScore(
+                    run_id="r",
+                    item_id=identity,
+                    metric_name="score",
+                    score_numeric=0.5,
+                    score_raw="large raw" * 10000,
+                    explanation="large explanation" * 10000,
+                )
+            )
+            db.add(
+                RunItemPassScore(
+                    run_id="r",
+                    item_id=identity,
+                    metric_name="score",
+                    pass_number=1,
+                    score_numeric=0.5,
+                    meta={"status": "error"},
+                    explanation="large explanation" * 10000,
+                )
+            )
+            db.add(
+                RunItemAttempt(
+                    run_id="r",
+                    item_id=identity,
+                    pass_number=1,
+                    attempt_number=2,
+                    is_last_attempt=True,
+                    status="COMPLETED",
+                    output="large attempt output" * 10000,
+                    error="large attempt error" * 10000,
+                    latency_ms=12,
+                )
+            )
+        db.commit()
+        service.bootstrap_partitions(db)
+        db.commit()
+    statements = []
+
+    def capture(conn, cursor, sql, *args):
+        if sql.lstrip().upper().startswith("SELECT"):
+            statements.append(sql)
+
+    event.listen(database, "before_cursor_execute", capture)
+    try:
+        drain(database)
+    finally:
+        event.remove(database, "before_cursor_execute", capture)
+    assert not any(
+        field in sql
+        for sql in statements
+        for field in (
+            "run_items.input",
+            "run_items.expected",
+            "run_item_attempts.output",
+            "run_item_attempts.error",
+            "run_item_scores.score_raw",
+            "run_item_scores.explanation",
+            "run_item_pass_scores.explanation",
+        )
+    )
+    actual = projected(database)
+    assert actual["progress_completed"] == 2  # JSON null differs from SQL NULL.
+    assert actual["total_items"] == 3
+    assert actual["total_retries"] == 3
+    assert_legacy_parity(database)
+
+
+def test_live_insert_into_skipped_stage_is_published_from_outbox(database):
+    if database.dialect.name != "postgresql":
+        pytest.skip("Requires independent transactions and row locks")
+    with Session(database) as db:
+        db.info["dashboard_projection_worker"] = True
+        run(db, samples=2, status=RunWorkflowStatus.COMPLETED)
+        item(db)
+        db.commit()
+        service.bootstrap_partitions(db)
+        db.commit()
+    inserted = False
+
+    def insert_after_empty_probe(conn, cursor, sql, *args):
+        nonlocal inserted
+        if not inserted and sql.startswith("SELECT run_events.sequence"):
+            inserted = True
+            # The pass-score stage was probed empty. A writer commits into it
+            # before the worker locks the partition and marks the scan complete.
+            with Session(database) as writer:
+                writer.add(
+                    RunItemPassScore(
+                        run_id="r",
+                        item_id="i",
+                        metric_name="score",
+                        pass_number=2,
+                        score_numeric=0,
+                        meta={"status": "error"},
+                    )
+                )
+                writer.commit()
+
+    event.listen(database, "after_cursor_execute", insert_after_empty_probe)
+    try:
+        with Session(database) as db:
+            service.backfill_partition(db, "r")
+            service.process_partition(db, "r")
+            db.commit()
+    finally:
+        event.remove(database, "after_cursor_execute", insert_after_empty_probe)
+    assert inserted
+    result = projected(database)
+    assert result["total_items"] == 1
+    assert result["execution_error_count"] == 1
+    assert result["pass_summaries"][1]["error_count"] == 1
+
+
+def test_batch_publication_rolls_back_before_individual_retry(database, monkeypatch):
+    with Session(database) as db:
+        run(db)
+        item(db, item_id="a")
+        item(db, item_id="b")
+        db.commit()
+    original = service._flush_numeric_batch
+    failed = False
+
+    def fail_once(*args, **kwargs):
+        nonlocal failed
+        if not failed:
+            failed = True
+            raise RuntimeError("failure after batched publication update")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(service, "_flush_numeric_batch", fail_once)
+    drain(database)
+    assert failed
+    assert projected(database)["total_items"] == 2
+    with Session(database) as db:
+        assert (
+            db.scalar(
+                select(func.count())
+                .select_from(Change)
+                .where(Change.published_at.is_(None))
+            )
+            == 0
+        )
+        assert db.get(Partition, "r").queue_state == "ready"
+    drain(database)
+    assert projected(database)["total_items"] == 2

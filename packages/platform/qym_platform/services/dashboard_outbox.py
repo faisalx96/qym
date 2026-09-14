@@ -250,6 +250,9 @@ def _upsert_partition(connection, run_id, project_id, version, now, *, fresh=Fal
                     else_=table.c.oldest_pending_event,
                 ),
                 "queue_state": case(
+                    # A deleted run stays parked across source changes. The
+                    # worker detects restoration from the current Run row.
+                    (table.c.queue_state == "deleted", "deleted"),
                     (table.c.queue_state == "repair_required", "repair_required"),
                     else_="pending",
                 ),

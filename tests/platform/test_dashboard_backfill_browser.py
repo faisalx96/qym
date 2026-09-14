@@ -391,7 +391,7 @@ def test_real_unprojected_history_matches_after_backfill(
             worker = service.DashboardSummaryWorker(
                 sessionmaker(database, autoflush=False), max_partitions=4
             )
-            for _ in range(5):
+            for _ in range(2):
                 worker.tick()
             page.evaluate("__dashboardTest.fetchRuns()")
             page.wait_for_function("__dashboardTest.state.flatRuns.length===1")

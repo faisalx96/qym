@@ -245,6 +245,14 @@ def _apply_bucket_record(db, record, contribution, sign, version):
                 )
 
 
+def _publish_event(db, event, now):
+    batch = db.info.get("dashboard_numeric_batch")
+    if batch is not None:
+        batch["published_versions"].add(event.source_version)
+    else:
+        event.published_at = now
+
+
 def apply_event(db: Session, event: Change, *, now=None):
     """Apply one versioned numeric snapshot transactionally; return whether new."""
     db.info["dashboard_projection_worker"] = True
@@ -277,7 +285,7 @@ def apply_event(db: Session, event: Change, *, now=None):
             ),
             ["event_id"],
         )
-        event.published_at = now
+        _publish_event(db, event, now)
         partition = db.get(Partition, event.partition_key)
         if partition:
             partition.queue_state = "repair_required"
@@ -307,7 +315,7 @@ def apply_event(db: Session, event: Change, *, now=None):
         )
     )
     if record and event.source_version <= record.applied_source_version:
-        event.published_at = now
+        _publish_event(db, event, now)
         return False
     dimension = (
         batch["dimension"]
@@ -332,7 +340,11 @@ def apply_event(db: Session, event: Change, *, now=None):
         record = Record(
             **identity,
             run_key=event.partition_key,
-            bucket_key=_hour(dimension.timestamp if dimension else None),
+            bucket_key=(
+                batch["bucket_hour"]
+                if batch is not None
+                else _hour(dimension.timestamp if dimension else None)
+            ),
         )
         db.add(record)
         if batch is not None:
@@ -378,7 +390,7 @@ def apply_event(db: Session, event: Change, *, now=None):
                         for key in causes
                     ],
                 )
-    event.published_at = now
+    _publish_event(db, event, now)
     return True
 
 
@@ -422,13 +434,24 @@ def apply_events(db, events):
             ["run_key"],
         )
         summary = db.get(Summary, run_id)
+    from qym_platform.db.models import Run
+
+    dimension = db.get(Dimension, run_id)
+    source = db.get(Run, run_id) if dimension is None else None
+    now = datetime.utcnow()
     batch = {
         "records": {
             (row.record_key, row.metric_key, row.record_kind, row.pass_number): row
             for row in records
         },
         "summary": summary,
-        "dimension": db.get(Dimension, run_id),
+        "dimension": dimension,
+        "bucket_hour": _hour(
+            dimension.timestamp
+            if dimension
+            else (source.started_at or source.created_at) if source else None
+        ),
+        "published_versions": set(),
         "deltas": {},
         "histograms": defaultdict(int),
         "invalidated": defaultdict(lambda: defaultdict(set)),
@@ -438,9 +461,18 @@ def apply_events(db, events):
     try:
         with db.no_autoflush:
             for change in events:
-                apply_event(db, change)
+                apply_event(db, change, now=now)
     finally:
         db.info.pop("dashboard_numeric_batch", None)
+    if batch["published_versions"]:
+        # A batch shares one publication boundary. Avoid a round trip per event
+        # through ORM executemany; the surrounding savepoint remains atomic.
+        with db.no_autoflush:
+            db.execute(
+                update(Change)
+                .where(Change.source_version.in_(batch["published_versions"]))
+                .values(published_at=now)
+            )
     # ORM-generated integer IDs force one INSERT per record on SQLite when an
     # ordered RETURNING is requested. Identity-bearing RETURNING lets both
     # databases insert the bounded record batch in one statement instead.
@@ -680,19 +712,15 @@ def repair_extrema(db, project_key, bucket_key, granularity="hour"):
             Dimension.present.is_(True),
         )
     )
-    for kind, record_kind, column in (
-        ("latency", "item", Record.latency_ms),
-        ("score", "score", Record.score),
-    ):
-        values = base.with_only_columns(column).where(
-            Record.record_kind == record_kind, column.isnot(None)
-        )
-        setattr(
-            bucket, kind + "_min", db.scalar(values.order_by(column.asc()).limit(1))
-        )
-        setattr(
-            bucket, kind + "_max", db.scalar(values.order_by(column.desc()).limit(1))
-        )
+    latency = case((Record.record_kind == "item", Record.latency_ms))
+    score = case((Record.record_kind == "score", Record.score))
+    bucket.latency_min, bucket.latency_max, bucket.score_min, bucket.score_max = (
+        db.execute(
+            base.with_only_columns(
+                func.min(latency), func.max(latency), func.min(score), func.max(score)
+            ).where(Record.record_kind.in_(("item", "score")))
+        ).one()
+    )
     bucket.extrema_state = "valid"
     bucket.extrema_verified_version = bucket.applied_source_version
     bucket.dirty_since_version = None
@@ -854,8 +882,10 @@ def _sync_dimension(db, run_id, version):
             version,
         )
         db.flush()
-        for hour in {old_hour, new_hour}:
-            for _, _, bucket, granularity in _bucket_keys(run.project_id, hour):
+        # refresh_run_summary repairs the current buckets after publication.
+        # Only a timestamp move needs an additional repair of the old buckets.
+        if old_hour != new_hour:
+            for _, _, bucket, granularity in _bucket_keys(run.project_id, old_hour):
                 repair_extrema(db, run.project_id, bucket, granularity)
     return dimension, run
 
@@ -1077,6 +1107,8 @@ def refresh_run_summary(db, run_id, version):
 
 def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
     """Serialize one partition; commit snapshot, deltas and watermark together."""
+    from qym_platform.db.models import Run
+
     db.info["dashboard_projection_worker"] = True
     partition = db.scalar(
         select(Partition)
@@ -1094,6 +1126,23 @@ def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
     ):
         return 0
     partition.lease_owner, partition.lease_until = owner, now + timedelta(seconds=30)
+    run = db.get(Run, run_id, populate_existing=True)
+    if run is not None and run.deleted_at is not None:
+        # Deletion only removes an existing publication. Never rebuild hidden
+        # history or drain its item events; restoration will rebuild from source.
+        dimension = db.get(Dimension, run_id)
+        if dimension is not None and dimension.present:
+            refresh_run_summary(db, run_id, partition.last_applied_version)
+        partition.queue_state = "deleted"
+        partition.oldest_pending_event = None
+        partition.lease_owner = partition.lease_until = None
+        partition.updated_at = now
+        return 0
+    if partition.queue_state == "deleted" and run is not None:
+        # Restore can happen long after retained events exceed the late-event
+        # horizon. Rebuild current source state instead of replaying stale events.
+        request_dashboard_repair(db, run_id, publish=False)
+        return 0
     pending_query = (
         select(Change)
         .where(Change.partition_key == run_id, Change.published_at.is_(None))
@@ -1102,9 +1151,6 @@ def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
     )
     events = list(db.scalars(pending_query))
     if not events:
-        from qym_platform.db.models import Run
-
-        run = db.get(Run, run_id)
         summary = db.get(Summary, run_id)
         if (
             partition.backfill_complete
@@ -1132,9 +1178,6 @@ def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
             return 0
     # Source writes lock execution rows before the outbox partition. This worker
     # only reads source dimensions under MVCC; it never requests a source lock.
-    from qym_platform.db.models import Run
-
-    run = db.get(Run, run_id)
     dimension = db.get(Dimension, run_id)
     hours = {_hour(dimension.timestamp)} if dimension else set()
     if run:
@@ -1215,14 +1258,67 @@ def bootstrap_partitions(db, *, limit=100):
         db.execute(
             select(Run.id, Run.project_id)
             .outerjoin(Partition, Partition.partition_key == Run.id)
-            .where(Partition.partition_key.is_(None))
-            .order_by(Run.created_at.desc(), Run.id)
+            .where(Partition.partition_key.is_(None), Run.deleted_at.is_(None))
+            .order_by(func.coalesce(Run.started_at, Run.created_at).desc(), Run.id)
             .limit(limit)
         )
     )
     for run_id, project in runs:
         _upsert_partition(db.connection(), run_id, project, 0, datetime.utcnow())
     return len(runs)
+
+
+def _backfill_source_query(model):
+    """Select only the fields consumed by numeric snapshots."""
+    from qym_platform.db.models import (
+        RunEvent,
+        RunItem,
+        RunItemAttempt,
+        RunItemPassScore,
+    )
+
+    if model is RunEvent:
+        return execution_event_query()
+    columns = [model.id, model.run_id, model.item_id]
+    if model is RunItem:
+        columns.extend(
+            (
+                model.output.isnot(None).label("has_output"),
+                model.error.isnot(None).label("has_error"),
+                model.latency_ms,
+                model.retry_count,
+                model.item_metadata,
+            )
+        )
+    elif model is RunItemAttempt:
+        columns.extend(
+            (
+                model.pass_number,
+                model.attempt_number,
+                model.status,
+                model.latency_ms,
+                model.task_started_at_ms,
+                model.is_last_attempt,
+            )
+        )
+    else:
+        columns.extend((model.metric_name, model.score_numeric, model.meta))
+        if model is RunItemPassScore:
+            columns.append(model.pass_number)
+    return select(*columns)
+
+
+def _backfill_source_object(model, row):
+    from qym_platform.db.models import RunEvent, RunItem
+
+    if model is RunEvent:
+        return execution_event_object(row)
+    values = dict(row._mapping)
+    if model is RunItem:
+        # Preserve SQL NULL versus JSON null without materializing the output.
+        values["output"] = True if values.pop("has_output") else None
+        values["error"] = "error" if values.pop("has_error") else None
+    return model(**values)
 
 
 def backfill_partition(db, run_id, *, chunk_size=500):
@@ -1238,7 +1334,16 @@ def backfill_partition(db, run_id, *, chunk_size=500):
 
     db.info["dashboard_projection_worker"] = True
     partition = db.get(Partition, run_id)
-    if partition is None or partition.backfill_complete:
+    if partition is None:
+        return 0
+    deleted_at = db.scalar(select(Run.deleted_at).where(Run.id == run_id))
+    if deleted_at is not None:
+        return 0
+    if partition.queue_state == "deleted":
+        # Commit this reset before the next tick takes any source row locks.
+        request_dashboard_repair(db, run_id, publish=False)
+        return 0
+    if partition.backfill_complete:
         return 0
     source_types = [
         ("item", RunItem),
@@ -1256,7 +1361,7 @@ def backfill_partition(db, run_id, *, chunk_size=500):
         0,
     )
     kind, model = source_types[position]
-    query = execution_event_query() if model is RunEvent else select(model)
+    query = _backfill_source_query(model)
     # Reuse the existing (run_id, sequence) event index for bounded keyset scans.
     cursor_column = RunEvent.sequence if model is RunEvent else model.id
     query = (
@@ -1265,11 +1370,27 @@ def backfill_partition(db, run_id, *, chunk_size=500):
         .limit(chunk_size)
         .with_for_update()
     )
-    rows = (
-        [execution_event_object(row) for row in db.execute(query)]
-        if model is RunEvent
-        else list(db.scalars(query))
-    )
+    rows = [_backfill_source_object(model, row) for row in db.execute(query)]
+    next_position = position
+    if len(rows) < chunk_size:
+        next_position += 1
+        # Probe empty later stages before taking the partition lock. Never lock
+        # rows in another source table while holding that lock: live writes take
+        # source locks first. Concurrent inserts remain covered by their outbox.
+        while next_position < len(source_types):
+            _, following = source_types[next_position]
+            following_cursor = (
+                following.sequence if following is RunEvent else following.id
+            )
+            present = db.scalar(
+                select(following_cursor)
+                .where(following.run_id == run_id, following_cursor > 0)
+                .order_by(following_cursor)
+                .limit(1)
+            )
+            if present is not None:
+                break
+            next_position += 1
     expected_cursor, expected_kind = partition.backfill_cursor, partition.backfill_kind
     db.refresh(partition, with_for_update=True)
     if (
@@ -1296,8 +1417,8 @@ def backfill_partition(db, run_id, *, chunk_size=500):
             rows[-1].sequence if model is RunEvent else rows[-1].id
         )
     if len(rows) < chunk_size:
-        if position + 1 < len(source_types):
-            partition.backfill_kind = source_types[position + 1][0]
+        if next_position < len(source_types):
+            partition.backfill_kind = source_types[next_position][0]
             partition.backfill_cursor = 0
         else:
             run = db.get(Run, run_id)
@@ -1311,20 +1432,7 @@ def drain_dashboard_changes(db, *, max_partitions=20, max_events=500):
     """One bounded worker tick; no request handler calls this function."""
     db.info["dashboard_projection_worker"] = True
     db.flush()
-    partitions = list(
-        db.scalars(
-            select(Partition.partition_key)
-            .where(
-                Partition.queue_state.in_(["pending", "backfill"]),
-                or_(
-                    Partition.lease_until.is_(None),
-                    Partition.lease_until <= datetime.utcnow(),
-                ),
-            )
-            .order_by(Partition.updated_at, Partition.partition_key)
-            .limit(max_partitions)
-        )
-    )
+    partitions = scheduled_partitions(db, limit=max_partitions)
     processed = 0
     for run_id in partitions:
         backfill_partition(db, run_id, chunk_size=max_events)
@@ -1383,7 +1491,13 @@ def prune_dashboard_events(db, *, before=None, limit=1000):
 
 def dashboard_freshness(db, project_ids):
     """Return the durable revision and lag for the caller's authorized projects."""
+    from qym_platform.db.models import Run
+
     projects = list(project_ids)
+    publication_missing = or_(
+        func.coalesce(Summary.projection_revision, 0) == 0,
+        Dimension.present.is_(False),
+    )
     # Source sequence allocation is independent of commit order. A published
     # revision increments even when an older transaction arrives after a newer
     # record in the same run. Summing these monotonic counters also covers slow
@@ -1409,7 +1523,7 @@ def dashboard_freshness(db, project_ids):
                             # before the first complete summary is published.
                             and_(
                                 Partition.backfill_kind.in_(("attempt", "event")),
-                                func.coalesce(Summary.projection_revision, 0) == 0,
+                                publication_missing,
                             ),
                         ),
                         1,
@@ -1417,15 +1531,16 @@ def dashboard_freshness(db, project_ids):
                     else_=0,
                 )
             ),
-            func.sum(
-                case((func.coalesce(Summary.projection_revision, 0) == 0, 1), else_=0)
-            ),
+            func.sum(case((publication_missing, 1), else_=0)),
             func.sum(case((Partition.queue_state == "repair_required", 1), else_=0)),
         )
         .select_from(Partition)
+        .outerjoin(Run, Run.id == Partition.partition_key)
         .outerjoin(Summary, Summary.run_key == Partition.partition_key)
+        .outerjoin(Dimension, Dimension.run_key == Partition.partition_key)
         .where(
             Partition.project_key.in_(projects),
+            Run.deleted_at.is_(None),
             or_(
                 Partition.queue_state != "ready",
                 Partition.last_applied_version < Partition.last_enqueued_version,
@@ -1491,7 +1606,7 @@ def reconcile_expired_dashboard_runs(db, *, now=None, timeout_seconds=None, limi
     return changed
 
 
-def request_dashboard_repair(db, run_id):
+def request_dashboard_repair(db, run_id, *, publish=True):
     """Explicit operator repair: reset one partition, retain failure evidence.
 
     Tombstones and versions remain available to reject old redeliveries. The
@@ -1544,7 +1659,8 @@ def request_dashboard_repair(db, run_id):
     partition.lease_owner = partition.lease_until = None
     partition.oldest_pending_event = datetime.utcnow()
     db.flush()
-    refresh_run_summary(db, run_id, partition.last_applied_version)
+    if publish:
+        refresh_run_summary(db, run_id, partition.last_applied_version)
     return True
 
 
@@ -1556,7 +1672,14 @@ def scheduled_partitions(db, *, limit=20):
         select(Partition.partition_key)
         .outerjoin(Run, Run.id == Partition.partition_key)
         .where(
-            Partition.queue_state.in_(("pending", "backfill")),
+            or_(
+                Partition.queue_state.in_(("pending", "backfill")),
+                and_(Partition.queue_state == "deleted", Run.deleted_at.is_(None)),
+                and_(
+                    Partition.queue_state == "repair_required",
+                    Run.deleted_at.isnot(None),
+                ),
+            ),
             or_(
                 Partition.lease_until.is_(None),
                 Partition.lease_until <= datetime.utcnow(),
@@ -1565,7 +1688,7 @@ def scheduled_partitions(db, *, limit=20):
         .order_by(Partition.updated_at, Partition.partition_key)
     )
     urgent = or_(
-        Partition.backfill_complete.is_(True),
+        and_(Partition.backfill_complete.is_(True), Partition.queue_state != "deleted"),
         Run.status.in_(("RUNNING", "PENDING")),
         Run.deleted_at.isnot(None),
         Run.id.is_(None),
@@ -1576,7 +1699,10 @@ def scheduled_partitions(db, *, limit=20):
     # minutes. Within each project, prefer first publications, resumable work,
     # then recent runs. Interleave projects so one large history cannot monopolize
     # all historical slots.
-    in_progress = or_(Partition.backfill_kind != "item", Partition.backfill_cursor > 0)
+    in_progress = and_(
+        Partition.queue_state != "deleted",
+        or_(Partition.backfill_kind != "item", Partition.backfill_cursor > 0),
+    )
     published_projects = (
         select(Summary.project_key)
         .join(Dimension, Dimension.run_key == Summary.run_key)
@@ -1591,6 +1717,7 @@ def scheduled_partitions(db, *, limit=20):
     historical = (
         eligible.where(~urgent)
         .outerjoin(Summary, Summary.run_key == Partition.partition_key)
+        .outerjoin(Dimension, Dimension.run_key == Partition.partition_key)
         .outerjoin(
             published_projects,
             published_projects.c.project_key == Partition.project_key,
@@ -1604,10 +1731,17 @@ def scheduled_partitions(db, *, limit=20):
                 partition_by=Partition.project_key,
                 order_by=(
                     case(
-                        (func.coalesce(Summary.projection_revision, 0) == 0, 0), else_=1
+                        (
+                            or_(
+                                func.coalesce(Summary.projection_revision, 0) == 0,
+                                Dimension.present.is_(False),
+                            ),
+                            0,
+                        ),
+                        else_=1,
                     ),
                     case((in_progress, 0), else_=1),
-                    Run.created_at.desc(),
+                    func.coalesce(Run.started_at, Run.created_at).desc(),
                     Partition.partition_key,
                 ),
             )
@@ -1665,6 +1799,7 @@ class DashboardSummaryWorker:
         self._thread = None
         self._lock = threading.Lock()
         self._logger = logging.getLogger(__name__)
+        self._made_progress = False
 
     def start(self):
         with self._lock:
@@ -1684,6 +1819,7 @@ class DashboardSummaryWorker:
         return not thread or not thread.is_alive()
 
     def tick(self):
+        self._made_progress = False
         with self.session_factory() as db:
             reconcile_expired_dashboard_runs(db, limit=self.max_partitions)
             db.commit()
@@ -1693,18 +1829,20 @@ class DashboardSummaryWorker:
             db.commit()
             partitions = scheduled_partitions(db, limit=self.max_partitions)
         processed = 0
+        failed = False
         for run_id in partitions:
             if self._stop.is_set():
                 break
             try:
                 with self.session_factory() as db:
                     db.info["dashboard_projection_worker"] = True
-                    backfill_partition(db, run_id, chunk_size=self.max_events)
-                    processed += process_partition(
-                        db, run_id, max_events=self.max_events
-                    )
+                    scanned = backfill_partition(db, run_id, chunk_size=self.max_events)
+                    applied = process_partition(db, run_id, max_events=self.max_events)
                     db.commit()
+                    processed += applied
+                    self._made_progress |= bool(scanned or applied)
             except Exception as exc:
+                failed = True
                 self._logger.exception(
                     "Dashboard projection failed for partition %s", run_id
                 )
@@ -1721,7 +1859,7 @@ class DashboardSummaryWorker:
                         partition.updated_at = datetime.utcnow()
                         partition.lease_owner = partition.lease_until = None
                         if partition.retry_count >= MAX_EVENT_ATTEMPTS:
-                            failed = list(
+                            failed_events = list(
                                 db.scalars(
                                     select(Change)
                                     .where(
@@ -1732,7 +1870,7 @@ class DashboardSummaryWorker:
                                     .limit(self.max_events)
                                 )
                             )
-                            for change in failed:
+                            for change in failed_events:
                                 _upsert_ignore(
                                     db,
                                     DeadLetter,
@@ -1759,6 +1897,7 @@ class DashboardSummaryWorker:
             prune_dashboard_state(db, limit=self.max_events)
             prune_dashboard_events(db, limit=self.max_events)
             db.commit()
+        self._made_progress &= not failed
         return processed
 
     def _run(self):
@@ -1766,7 +1905,12 @@ class DashboardSummaryWorker:
             try:
                 self.tick()
             except Exception:
+                self._made_progress = False
                 # Startup before migrations or a transient DB outage must not
                 # lose the durable queue or terminate the background worker.
                 self._logger.exception("Dashboard summary worker tick failed")
-            self._stop.wait(self.interval)
+            # Keep draining committed work; retain the normal interval when idle
+            # or failing. A short pause leaves capacity for API and live writes.
+            self._stop.wait(
+                min(self.interval, 0.05) if self._made_progress else self.interval
+            )
