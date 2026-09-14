@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Auto-analysis</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=rule-history-bottom-20260816-1">
+  <link rel="stylesheet" href="/static/dashboard.css?v=metric-errors-20260914-1">
   <link rel="stylesheet" href="/static/shell.css">
   <script src="/static/auth.js"></script>
   <script src="/static/shell.js?v=accessibility-responsive-20260806"></script>
-  <script src="/static/metrics.js?v=metric-errors-20260907-3"></script>
+  <script src="/static/metrics.js?v=metric-errors-20260914-1"></script>
   <script src="/static/qym_table.js"></script>
-  <script src="/static/playground.js?v=rule-history-bottom-20260816-1"></script>
+  <script src="/static/playground.js?v=metric-errors-20260914-1"></script>
   <style>
     /* Typography and color roles follow docs/DESIGN_LANGUAGE.md. */
     .analysis-page {
@@ -5707,6 +5707,10 @@
               solution_note: result.solution_note || '',
               warning: warning,
               error: result.error || '',
+              error_code: result.error_code || '',
+              retry_count: Number(result.retry_count || 0),
+              retry_reason: result.retry_reason || '',
+              request_timeout_seconds: result.request_timeout_seconds,
             };
             if (Array.isArray(result.root_cause_issues)) {
               analysis.root_cause_issues = result.root_cause_issues;
@@ -5733,7 +5737,14 @@
               : 'Raw diagnoses were preserved. Open the run and use Aggregate results to retry.'
           );
         } else {
-          showStatus('success', 'Analysis complete', 'Created ' + categoryCount + ' ' + categoryLabel + '. Open the run to review the results.');
+          const retryCount = Number(data.retries || 0);
+          showStatus(
+            'success',
+            'Analysis complete',
+            'Created ' + categoryCount + ' ' + categoryLabel + '.' +
+              (retryCount > 0 ? ' Timeout retries: ' + retryCount + '.' : '') +
+              ' Open the run to review the results.'
+          );
         }
       }
 

@@ -27,10 +27,12 @@ function isTaskErrorRow(row) {
  */
 function isMetricErrorMeta(meta) {
   if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return false;
-  // Labels are judge verdicts, including custom choices such as "failed".
-  const status = String(meta.status || '').toLowerCase();
+  // A metric label such as "failed" can be an ordinary judge verdict, and a
+  // task exception creates zero-filled pass scores labelled "error". Only the
+  // explicit execution metadata emitted for a raised metric is authoritative.
+  const status = String(meta.status || '').trim().toLowerCase();
   if (status === 'error' || status === 'failed' || status === 'timeout') return true;
-  return meta.error !== undefined && meta.error !== null && String(meta.error).trim() !== '';
+  return Boolean(meta.error) && String(meta.error).trim() !== '';
 }
 
 /**

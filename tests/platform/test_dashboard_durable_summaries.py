@@ -198,6 +198,54 @@ def test_transactional_rollback_and_numeric_only_events(database):
         assert db.scalar(select(func.count()).select_from(Change)) == 2
 
 
+def test_execution_errors_include_metrics_and_deduplicate_each_repeat_pass(database):
+    with Session(database) as db:
+        run(
+            db,
+            metrics=["accuracy", "valid_sql"],
+            samples=2,
+            status=RunWorkflowStatus.COMPLETED,
+            run_metadata={"total_items": 1, "last_completed_pass": 2},
+        )
+        item(db)
+        for pass_number, status in ((1, "FAILED"), (2, "COMPLETED")):
+            db.add(
+                RunItemAttempt(
+                    run_id="r",
+                    item_id="i",
+                    pass_number=pass_number,
+                    attempt_number=1,
+                    status=status,
+                    is_last_attempt=True,
+                )
+            )
+        # Pass 1 has both a task and metric exception. Pass 2 has exceptions
+        # in two metrics. Each item/pass execution must still count only once.
+        for pass_number, metric_name in (
+            (1, "accuracy"),
+            (2, "accuracy"),
+            (2, "valid_sql"),
+        ):
+            db.add(
+                RunItemPassScore(
+                    run_id="r",
+                    item_id="i",
+                    metric_name=metric_name,
+                    pass_number=pass_number,
+                    score_numeric=0.0,
+                    meta={"status": "error", "error": "metric crashed"},
+                )
+            )
+        db.commit()
+
+    drain(database)
+    expected, actual = legacy(database), projected(database)
+    assert expected["execution_error_count"] == 2
+    assert actual["execution_error_count"] == 2
+    assert [entry["error_count"] for entry in actual["pass_summaries"]] == [1, 1]
+    assert_legacy_parity(database)
+
+
 def test_exact_legacy_means_median_errors_nulls_progress_and_metadata(database):
     with Session(database) as db:
         run(
@@ -787,6 +835,60 @@ def test_migration_frozen_schema_and_existing_history_seed(database):
         assert not db.get(Partition, "r").backfill_complete
     drain(database, max_events=1)
     assert_legacy_parity(database)
+
+
+def test_execution_error_migration_refreshes_existing_numeric_records(database):
+    import importlib.util
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    with Session(database) as db:
+        for run_id, samples in (("classic", 1), ("repeat", 2)):
+            run(db, run_id, metrics=["accuracy"], samples=samples)
+            item(db, run_id=run_id)
+            score_model = RunItemScore if samples == 1 else RunItemPassScore
+            score_args = {} if samples == 1 else {"pass_number": 1}
+            db.add(score_model(
+                run_id=run_id, item_id="i", metric_name="accuracy",
+                score_numeric=0, meta={"status": "error", "error": "Judge failed"},
+                **score_args,
+            ))
+            if samples > 1:
+                db.add(RunItemAttempt(
+                    run_id=run_id, item_id="i", pass_number=1, attempt_number=3,
+                    status="completed", is_last_attempt=True, latency_ms=10,
+                ))
+        db.commit()
+    drain(database)
+    before = {run_id: projected(database, run_id) for run_id in ("classic", "repeat")}
+    with Session(database) as db:
+        # Before this PR, score snapshots did not retain execution errors and
+        # attempts did not retain retry_count. Reproduce those stored records.
+        db.execute(update(Record).values(error=0, retry_count=0))
+        for run_id in before:
+            service.refresh_run_summary(db, run_id, db.get(Partition, run_id).last_applied_version)
+        db.commit()
+    assert projected(database, "classic")["execution_error_count"] == 0
+    assert projected(database, "repeat")["total_retries"] == 0
+
+    path = Path(__file__).parents[2] / (
+        "packages/platform/qym_platform/migrations/versions/"
+        "0049_refresh_dashboard_execution_errors.py"
+    )
+    spec = importlib.util.spec_from_file_location("error_count_migration", path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    with database.begin() as connection:
+        migration.op = Operations(MigrationContext.configure(connection))
+        migration.upgrade()
+    drain(database, max_events=1)
+    for run_id, expected in before.items():
+        actual = projected(database, run_id)
+        assert actual["execution_error_count"] == expected["execution_error_count"] == 1
+        for key in ("total_items", "metric_averages", "total_retries", "error_count"):
+            assert actual[key] == expected[key]
+    assert projected(database, "repeat")["total_retries"] == 2
 
 
 def test_concurrent_backfill_and_live_update_preserve_lock_order(database):

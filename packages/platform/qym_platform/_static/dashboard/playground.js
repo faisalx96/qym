@@ -113,6 +113,79 @@ window.QymPlayground = (function () {
     return Object.keys(categories).length;
   }
 
+  function _nonNegativeAnalysisCount(value) {
+    var count = Number(value);
+    return Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
+  }
+
+  function _analysisCompletionState(data) {
+    data = data || {};
+    var results = Array.isArray(data.results) ? data.results : [];
+    var errorResults = results.filter(function (result) {
+      return result && String(result.error || '').trim();
+    });
+    var errorCount = Math.max(
+      _nonNegativeAnalysisCount(data.errors),
+      _nonNegativeAnalysisCount(data.total_analysis_failed),
+      errorResults.length
+    );
+    var attemptedCount = Math.max(
+      _nonNegativeAnalysisCount(data.total_attempted),
+      _nonNegativeAnalysisCount(data.total_analyzed),
+      errorCount
+    );
+    // "Persisted" is not the same as "analyzed successfully": a valid
+    // diagnosis may intentionally be skipped to protect a human review.
+    // The success count is therefore the attempted analyses minus failures.
+    var successfulCount = Math.max(0, attemptedCount - errorCount);
+    return {
+      attemptedCount: attemptedCount,
+      successfulCount: successfulCount,
+      errorCount: errorCount,
+      errorResults: errorResults,
+      hasAnalysisErrors: errorCount > 0,
+      allAnalysisFailed: attemptedCount > 0 && errorCount > 0 && successfulCount === 0,
+    };
+  }
+
+  function _analysisErrorSummaryMarkup(errorResults, errorCount, attemptedCount) {
+    var errors = Array.isArray(errorResults) ? errorResults : [];
+    var groups = [];
+    var groupsByCode = Object.create(null);
+    errors.forEach(function (result) {
+      var code = String(result && result.error_code || 'analysis_error').trim() || 'analysis_error';
+      if (!groupsByCode[code]) {
+        groupsByCode[code] = { code: code, count: 0 };
+        groups.push(groupsByCode[code]);
+      }
+      groupsByCode[code].count += 1;
+    });
+    var totalErrors = Math.max(_nonNegativeAnalysisCount(errorCount), errors.length);
+    var groupedErrors = groups.reduce(function (total, group) { return total + group.count; }, 0);
+    if (totalErrors > groupedErrors) {
+      if (!groupsByCode.analysis_error) {
+        groupsByCode.analysis_error = { code: 'analysis_error', count: 0 };
+        groups.push(groupsByCode.analysis_error);
+      }
+      groupsByCode.analysis_error.count += totalErrors - groupedErrors;
+    }
+    if (!groups.length) return '';
+    var totalAttempts = Math.max(_nonNegativeAnalysisCount(attemptedCount), totalErrors);
+    var oneErrorForEveryAttempt = groups.length === 1 && totalErrors === totalAttempts &&
+      groups[0].count === totalErrors;
+    return '<div class="pg-runall-error-list" aria-label="Analysis errors">' +
+      groups.map(function (group) {
+        var countLabel = group.count + ' ' + (group.count === 1 ? 'error' : 'errors');
+        return '<div class="pg-runall-error-summary">' +
+          '<span class="pg-runall-error-code">' + _esc(group.code) + '</span>' +
+          (oneErrorForEveryAttempt
+            ? ''
+            : '<span class="pg-runall-error-count">' + countLabel + '</span>') +
+        '</div>';
+      }).join('') +
+    '</div>';
+  }
+
   function _runLinkMarkup() {
     var href = _opts.getRunUrl ? _opts.getRunUrl() : '';
     if (!href) return '';
@@ -126,6 +199,7 @@ window.QymPlayground = (function () {
     var total = Number(state.total || 0);
     var completed = Number(state.completed || 0);
     var errors = Number(state.errors || 0);
+    var retries = Number(state.retries || 0);
     var pct = total > 0 ? Math.round((completed / total) * 100) : 0;
     if (nodes.progress) nodes.progress.style.display = 'block';
     if (nodes.fill) {
@@ -137,12 +211,29 @@ window.QymPlayground = (function () {
       pct,
       total > 0 ? completed + ' of ' + total + ' items analyzed (' + pct + '%)' : 'Preparing analysis'
     );
+    if (state.phase === 'retrying') {
+      var retryAttempt = Number(state.retry_attempt || 2);
+      var retryMaxAttempts = Number(state.retry_max_attempts || 2);
+      var retryTimeout = Number(state.retry_timeout_seconds || 0);
+      var retryTarget = state.item_id
+        ? 'Item ' + String(state.item_id).slice(0, 32) + (state.metric_name ? ' · ' + state.metric_name : '')
+        : 'Analyzer request';
+      if (nodes.button) nodes.button.textContent = 'Retrying…';
+      if (nodes.progressText) nodes.progressText.textContent = 'Retrying timed-out analysis…';
+      if (nodes.subtext) {
+        nodes.subtext.textContent = retryTarget + ' timed out. Retrying attempt ' + retryAttempt +
+          ' of ' + retryMaxAttempts + (retryTimeout > 0 ? ' with a ' + retryTimeout + '-second timeout.' : '.') +
+          ' Timeout retries: ' + retries;
+      }
+      return;
+    }
     if (state.phase === 'aggregating') {
       if (nodes.button) nodes.button.textContent = 'Aggregating…';
       if (nodes.progressText) nodes.progressText.textContent = 'Aggregating root causes…';
       if (nodes.subtext) {
         nodes.subtext.textContent = 'Analysis complete. Consolidating related categories, details, and solutions.' +
-          (errors > 0 ? ' Errors: ' + errors : '');
+          (errors > 0 ? ' Errors: ' + errors : '') +
+          (retries > 0 ? ' Timeout retries: ' + retries : '');
       }
       return;
     }
@@ -156,55 +247,110 @@ window.QymPlayground = (function () {
       var itemText = state.item_id
         ? 'Last: ' + String(state.item_id).slice(0, 32) + (state.metric_name ? ' · ' + state.metric_name : '')
         : 'Running in the background. You can leave this page and return later.';
-      nodes.subtext.textContent = itemText + (errors > 0 ? ' | Errors: ' + errors : '');
+      nodes.subtext.textContent = itemText + (errors > 0 ? ' | Errors: ' + errors : '') +
+        (retries > 0 ? ' | Timeout retries: ' + retries : '');
     }
   }
 
   function _finishRunAll(data) {
     data = data || {};
     var nodes = _analysisProgressNodes();
-    var analyzed = Number(data.total_analyzed || 0);
+    var completionState = _analysisCompletionState(data);
+    var analyzed = completionState.successfulCount;
+    var attempted = completionState.attemptedCount;
+    var errorCount = completionState.errorCount;
+    var hasAnalysisErrors = completionState.hasAnalysisErrors;
+    var allAnalysisFailed = completionState.allAnalysisFailed;
+    var retryCount = Number(data.retries || 0);
     var categoryCount = _analysisCategoryCount(data);
     var categoryLabel = categoryCount === 1 ? 'category' : 'categories';
+    var attemptedLabel = attempted === 1 ? 'metric analysis' : 'metric analyses';
     var aggregationError = String(data.aggregation_error || '').trim();
     var runLink = _runLinkMarkup();
-    var completionText = analyzed > 0
-      ? 'Analyzed <strong>' + analyzed + '</strong> metric failures successfully'
-      : 'Existing root-cause analysis checked successfully';
-    if (!aggregationError) {
+    var completionText;
+    if (hasAnalysisErrors) {
+      completionText = '<div class="pg-runall-status-title">' +
+        (allAnalysisFailed ? 'Analysis failed' : 'Analysis completed with errors') +
+        '</div><div><strong>' + analyzed + '</strong> of <strong>' + attempted +
+        '</strong> ' + attemptedLabel + ' succeeded</div>';
+    } else {
+      completionText = analyzed > 0
+        ? 'Analyzed <strong>' + analyzed + '</strong> metric ' +
+          (analyzed === 1 ? 'failure' : 'failures') + ' successfully'
+        : 'Existing root-cause analysis checked successfully';
+    }
+    if (!aggregationError && !allAnalysisFailed) {
       completionText += '<div>Created <strong>' + categoryCount + '</strong> ' + categoryLabel + '</div>';
     }
+    if (retryCount > 0) {
+      completionText += '<div>Timeout retries: <strong>' + retryCount + '</strong></div>';
+    }
+    var resultStateClass = allAnalysisFailed
+      ? ' pg-runall-failed'
+      : ((hasAnalysisErrors || aggregationError) ? ' pg-runall-partial' : '');
+    var resultIcon = allAnalysisFailed ? '✕' : ((hasAnalysisErrors || aggregationError) ? '⚠️' : '✨');
+    var analysisErrorLabel = errorCount + ' metric ' +
+      (errorCount === 1 ? 'analysis failed' : 'analyses failed');
+    var errorSummary = _analysisErrorSummaryMarkup(
+      completionState.errorResults,
+      errorCount,
+      attempted
+    );
     if (nodes.fill) {
       nodes.fill.style.transition = 'width 0.3s ease-out';
+      nodes.fill.style.background = allAnalysisFailed
+        ? 'var(--error)'
+        : ((hasAnalysisErrors || aggregationError) ? 'var(--warning)' : '');
     }
-    _setAnalysisProgressValue(nodes, 100, aggregationError ? 'Analysis saved with an aggregation error' : 'Analysis complete');
+    _setAnalysisProgressValue(
+      nodes,
+      100,
+      allAnalysisFailed
+        ? 'Analysis failed'
+        : ((hasAnalysisErrors || aggregationError) ? 'Analysis completed with errors' : 'Analysis complete')
+    );
     if (nodes.progressText) {
-      nodes.progressText.textContent = aggregationError
+      nodes.progressText.textContent = allAnalysisFailed
+        ? 'Analysis failed'
+        : (hasAnalysisErrors
+          ? 'Analysis completed with errors'
+          : (aggregationError
         ? 'Analysis saved; aggregation failed'
-        : 'Analysis Complete!';
+        : 'Analysis Complete!'));
     }
     if (nodes.subtext) {
-      nodes.subtext.textContent = aggregationError
+      nodes.subtext.textContent = hasAnalysisErrors
+        ? analysisErrorLabel + '. See the error details below.'
+        : (aggregationError
         ? 'Raw diagnoses were saved without consolidation. You can retry from the run page.'
-        : 'Finalizing results...';
+        : 'Finalizing results...');
     }
     var resultsEl = document.getElementById('pg-runall-results');
     if (resultsEl) {
-      resultsEl.innerHTML = '<div class="pg-runall-done' + (aggregationError ? ' pg-runall-partial' : '') + '">' +
-        '<div class="pg-runall-done-icon">' + (aggregationError ? '⚠️' : '✨') + '</div>' +
+      resultsEl.innerHTML = '<div class="pg-runall-done' + resultStateClass + '"' +
+        (hasAnalysisErrors ? ' role="alert"' : ' role="status"') + '>' +
+        '<div class="pg-runall-done-icon">' + resultIcon + '</div>' +
         '<div class="pg-runall-done-text">' + completionText +
-        (data.errors > 0 ? '<div class="pg-runall-done-error">⚠️ ' + data.errors + ' metric analyses failed</div>' : '') +
+        (hasAnalysisErrors ? '<div class="pg-runall-done-error">' + analysisErrorLabel + '</div>' : '') +
+        errorSummary +
         (aggregationError ? '<div class="pg-runall-aggregation-error">Aggregation failed: ' + _esc(aggregationError) + '</div>' : '') +
         '</div>' +
         (runLink ? '<div class="pg-runall-done-actions">' + runLink + '</div>' : '') +
         '</div></div>';
     }
     if (_opts.showToast) {
-      if (aggregationError) {
+      if (hasAnalysisErrors) {
+        _opts.showToast(
+          'error',
+          allAnalysisFailed ? 'Analysis Failed' : 'Analysis Completed with Errors',
+          analyzed + ' of ' + attempted + ' ' + attemptedLabel + ' succeeded · ' + analysisErrorLabel
+        );
+      } else if (aggregationError) {
         _opts.showToast('error', 'Aggregation Failed', 'Analysis was saved without label consolidation.');
       } else {
         var toastText = analyzed + ' metric failures analyzed';
         toastText += ' · Created ' + categoryCount + ' ' + categoryLabel;
+        if (retryCount > 0) toastText += ' · Timeout retries ' + retryCount;
         _opts.showToast('success', 'Analysis Complete', toastText);
       }
     }
@@ -385,6 +531,8 @@ window.QymPlayground = (function () {
 
     _running = true;
     _analysisCancelRequested = false;
+    var priorResults = document.getElementById('pg-runall-results');
+    if (priorResults) priorResults.innerHTML = '';
     var nodes = _analysisProgressNodes();
     if (nodes.button) { nodes.button.disabled = true; nodes.button.textContent = 'Starting…'; }
     if (nodes.progress) nodes.progress.style.display = 'block';
@@ -1632,6 +1780,13 @@ window.QymPlayground = (function () {
     return !legacyMetric || legacyMetric === String(metricName || '').trim();
   }
 
+  function _isMetricExecutionError(meta) {
+    if (!meta || typeof meta !== 'object') return false;
+    var status = String(meta.status || '').trim().toLowerCase();
+    if (status === 'error' || status === 'failed' || status === 'timeout') return true;
+    return Boolean(meta.error) && String(meta.error).trim() !== '';
+  }
+
   function _getMatchedItems() {
     var rows = _getRows();
     var maxScoreEl = document.getElementById('pg-max-score');
@@ -1652,12 +1807,16 @@ window.QymPlayground = (function () {
       var isError = !!r.error;
       var score = r.metric_score;
       var metricScores = r.metric_scores && typeof r.metric_scores === 'object' ? r.metric_scores : null;
+      var metricMetadata = r.metric_metadata_by_metric && typeof r.metric_metadata_by_metric === 'object'
+        ? r.metric_metadata_by_metric : {};
       var metricThresholds = r.metric_thresholds && typeof r.metric_thresholds === 'object' ? r.metric_thresholds : {};
       var metricDirections = r.metric_directions && typeof r.metric_directions === 'object' ? r.metric_directions : {};
       var failedMetrics = [];
+      if (isError) return false;
       if (metricScores) {
         Object.keys(metricScores).forEach(function (metricName) {
           if (selectedMetrics && selectedMetrics.indexOf(metricName) === -1) return;
+          if (_isMetricExecutionError(metricMetadata[metricName])) return;
           var metricScore = metricScores[metricName];
           var metricThreshold = metricThresholds[metricName] == null ? threshold : Number(metricThresholds[metricName]);
           var direction = String(metricDirections[metricName] || 'maximize').toLowerCase();
@@ -1666,13 +1825,13 @@ window.QymPlayground = (function () {
               ? Number(metricScore) <= metricThreshold
               : Number(metricScore) >= metricThreshold
           );
-          if ((isError || !metricPassed) &&
+          if (!metricPassed &&
               (allowHumanOverwrite || !_isHumanMetricAnalysis(md, metricName))) {
             failedMetrics.push(metricName);
           }
         });
       }
-      if (!metricScores && (isError || score == null || score < threshold)) {
+      if (!metricScores && !_isMetricExecutionError(r.metric_metadata) && (score == null || score < threshold)) {
         var fallbackMetric = _opts.getMetric ? (_opts.getMetric() || 'metric') : 'metric';
         if (allowHumanOverwrite || !_isHumanMetricAnalysis(md, fallbackMetric)) {
           failedMetrics.push(fallbackMetric);
@@ -1904,21 +2063,6 @@ window.QymPlayground = (function () {
     return (_config && _config.analysis_limits) || {};
   }
 
-  function _documentPromptCharacterLimit() {
-    var limits = _analysisLimits();
-    return Number(limits.documents_prompt_characters || 80000);
-  }
-
-  function _documentPerFilePromptLimit() {
-    var limits = _analysisLimits();
-    return Number(limits.document_prompt_characters || 40000);
-  }
-
-  function _documentCountLimit() {
-    var limits = _analysisLimits();
-    return Number(limits.max_reference_documents || 8);
-  }
-
   function _writerDocumentCharacterLimit() {
     var limits = _analysisLimits();
     return Number(limits.rule_writer_document_characters || 256000);
@@ -2018,8 +2162,6 @@ window.QymPlayground = (function () {
       selectedExamples: selectedExamples,
       selectedDocumentCharacters: selectedDocumentCharacters,
       selectedApprovedExampleCharacters: _selectedApprovedExampleCharacters,
-      documentCharacterLimit: _documentPromptCharacterLimit(),
-      documentCountLimit: _documentCountLimit(),
       writerDocumentCharacterLimit: _writerDocumentCharacterLimit(),
       writerExampleCharacterLimit: _writerExampleCharacterLimit(),
       hasUsableSource: hasUsableSource,
@@ -2297,10 +2439,10 @@ window.QymPlayground = (function () {
       var meta = _formatCharacterCount(document.characters || document.content.length);
       if (document.content_over_limit || document.content_was_cut) {
         meta += ' · content capped at storage limit';
-      } else if (document.truncated && Number(document.characters || 0) <= _documentPerFilePromptLimit()) {
-        meta += ' · shortened to prompt-safe limit';
-      } else if (Number(document.characters || 0) > _documentPerFilePromptLimit()) {
-        meta += ' · full content retained; writer will patch it';
+      } else if (document.truncated) {
+        meta += ' · content was shortened when uploaded';
+      } else {
+        meta += ' · sent to analyzer in full';
       }
       var selected = document.selected !== false;
       return '<div class="pg-document-item' + (selected ? '' : ' pg-document-item-excluded') + '" data-document-index="' + index + '">' +
@@ -2992,10 +3134,10 @@ window.QymPlayground = (function () {
 
     // ── Reference Documents ──
     var documentsBody = '';
-    documentsBody += '<div class="pg-instructions-hint">Choose which documents belong in project analysis. The run workspace can then include or exclude all enabled documents with one switch. A document over ' + Number(_documentPerFilePromptLimit()).toLocaleString() + ' characters is called out before it is saved.</div>';
+    documentsBody += '<div class="pg-instructions-hint">Choose which documents belong in project analysis. The analyzer sends all retained content without shortening. If the selected provider cannot accept the complete prompt, Qym reports <code>context_limit_exceeded</code>.</div>';
     documentsBody += '<label class="pg-document-dropzone" id="pg-document-dropzone" for="pg-document-input" role="button" tabindex="0" aria-controls="pg-document-input" aria-label="Upload project documents">' +
       '<span class="pg-document-upload-title">Choose documents or drop them here</span>' +
-      '<span class="pg-document-upload-help">PDF, DOCX, TXT, Markdown, HTML, CSV, JSON, or YAML · up to 10 MB each · larger text requires a decision</span>' +
+      '<span class="pg-document-upload-help">PDF, DOCX, TXT, Markdown, HTML, CSV, JSON, or YAML · up to 10 MB each · text above 40,000 characters requires confirmation</span>' +
     '</label>';
     documentsBody += '<input class="pg-document-input" id="pg-document-input" type="file" multiple accept=".pdf,.docx,.txt,.text,.md,.markdown,.html,.htm,.csv,.json,.yaml,.yml,.log,.rst" aria-label="Choose project documents" />';
     documentsBody += '<div class="pg-document-upload-status" id="pg-document-upload-status" role="status" aria-live="polite"></div>';
@@ -3072,6 +3214,7 @@ window.QymPlayground = (function () {
         '<div class="qym-pagination" id="pg-target-pagination" role="navigation" aria-label="Analysis target pagination" hidden></div>' +
       '</div></div>';
     filterBody += '</div>';
+    filterBody += '<div class="pg-instructions-hint">Task exceptions and metric exceptions are operational errors, so they are excluded and never receive root-cause analysis. Normal failed scores remain eligible.</div>';
     filterBody += '<div id="pg-matched-section">';
     filterBody += _buildMatchedItemsTable();
     filterBody += '</div>';
@@ -3080,7 +3223,7 @@ window.QymPlayground = (function () {
     // ── Prompt Preview ──
     var previewBody = '';
     previewBody += '<div class="pg-preview-loading" id="pg-preview-loading" hidden>Generating preview\u2026</div>';
-    previewBody += '<div id="pg-prompt-budget" class="pg-prompt-budget" role="status" aria-live="polite">Final prompt budget is enforced before each provider request.</div>';
+    previewBody += '<div id="pg-prompt-budget" class="pg-prompt-budget" role="status" aria-live="polite">The complete prompt is sent without shortening. Provider context rejection is reported as context_limit_exceeded.</div>';
     previewBody += '<div id="pg-preview-content" class="pg-prompt-preview-content">Loading prompt preview\u2026</div>';
     previewBody += '<div class="pg-preview-actions">' +
       '<button class="pg-toggle-expand qym-icon-action" id="pg-preview-toggle" type="button" hidden title="Expand prompt preview" aria-label="Expand prompt preview">' + _icon('expand') + '</button>' +
@@ -3482,31 +3625,32 @@ window.QymPlayground = (function () {
       return Promise.reject(new Error('Confirmation is unavailable, so the large document was not added.'));
     }
     var sourceCharacters = Number(detail && detail.source_characters || 0);
-    var promptLimit = Number(detail && detail.prompt_limit || _documentPerFilePromptLimit());
-    var contentLimit = Number(detail && detail.content_limit || 200000);
-    var contentWillBeCut = !!(detail && detail.content_will_be_cut);
+    var reviewThreshold = Number(detail && detail.review_threshold || 40000);
     return window.QymShell.openConfirmDialog({
       mount: _overlay || document.body,
-      title: 'Large document needs a decision',
+      title: 'Confirm large document',
       description: [
-        file.name + ' is about ' + sourceCharacters.toLocaleString() + ' characters, above the ' + promptLimit.toLocaleString() + '-character prompt-safe limit.',
-        (contentWillBeCut
-          ? 'This upload also exceeds the absolute content limit. Even the full option will retain only the first ' + contentLimit.toLocaleString() + ' extracted characters.'
-          : 'Use the shortened version for normal analysis, or add up to ' + contentLimit.toLocaleString() + ' characters in full.'),
-        'Full content is the evaluator owner’s responsibility and the rule writer will process it in patches.',
+        file.name + ' is about ' + sourceCharacters.toLocaleString() + ' characters, above the ' + reviewThreshold.toLocaleString() + '-character review threshold.',
+        'The full extracted document will be retained and every retained character can be sent to the configured external analyzer.',
+        'Qym will not shorten the document to fit a model context window. If the provider cannot accept the complete prompt, Qym reports context_limit_exceeded.',
       ],
-      cancelLabel: 'Use shortened version',
-      confirmLabel: 'Add full content',
+      cancelLabel: 'Cancel upload',
+      confirmLabel: 'Add full retained content',
       confirmClass: 'shell-btn-danger',
     }).then(function (result) {
-      return result && result.confirmed ? 'full' : 'truncate';
+      return result && result.confirmed ? 'full' : null;
     });
   }
 
   function _uploadOneReferenceDocument(file) {
     return _uploadReferenceDocument(file, 'ask').catch(function (error) {
-      if (error.code !== 'DOCUMENT_CONTENT_LIMIT') throw error;
+      if (error.code !== 'DOCUMENT_CONTENT_CONFIRMATION') throw error;
       return _confirmLargeReferenceDocument(file, error.detail).then(function (action) {
+        if (!action) {
+          var cancelled = new Error('Upload cancelled');
+          cancelled.cancelled = true;
+          throw cancelled;
+        }
         return _uploadReferenceDocument(file, action);
       });
     });
@@ -3588,6 +3732,8 @@ window.QymPlayground = (function () {
         if (result.document) {
           _referenceDocuments.push(result.document);
           added++;
+        } else if (result.error && result.error.cancelled) {
+          return;
         } else {
           failed++;
           if (_opts.showToast) _opts.showToast('error', 'Document Upload Failed', result.filename + ': ' + result.error.message);
@@ -3598,6 +3744,8 @@ window.QymPlayground = (function () {
       if (added > 0) {
         _setDocumentUploadStatus(added + ' project document' + (added === 1 ? '' : 's') + ' saved.' + (failed ? ' ' + failed + ' failed.' : ''), false);
         _scheduleAutoPreview(0);
+      } else if (failed === 0) {
+        _setDocumentUploadStatus('Upload cancelled.', false);
       } else {
         _setDocumentUploadStatus('No documents were added.', true);
       }
@@ -3860,16 +4008,11 @@ window.QymPlayground = (function () {
     var documentBudget = document.getElementById('pg-document-budget');
     if (documentBudget) {
       var documentCharacters = Number(state.selectedDocumentCharacters || 0);
-      var documentLimit = Number(state.documentCharacterLimit || 0);
       var documentCount = Number(state.selectedDocuments || 0);
-      var documentCountLimit = Number(state.documentCountLimit || 0);
       documentBudget.textContent = 'Selected document content: ' + documentCharacters.toLocaleString() +
-        ' / ' + documentLimit.toLocaleString() + ' prompt characters · ' + documentCount +
-        ' / ' + documentCountLimit + ' documents in the final prompt. ' +
-        (documentCharacters > documentLimit || documentCount > documentCountLimit
-          ? 'The rule writer will divide this into patches; the final analyzer prompt will disclose any bounded documents.'
-          : 'This selection fits the final analyzer document budget.');
-      documentBudget.classList.toggle('pg-budget-over', documentCharacters > documentLimit);
+        ' characters across ' + documentCount + ' document' + (documentCount === 1 ? '' : 's') +
+        '. The analyzer sends all retained content without shortening; the rule writer processes large sources in patches.';
+      documentBudget.classList.remove('pg-budget-over');
     }
     return state;
   }
@@ -5724,10 +5867,8 @@ window.QymPlayground = (function () {
         if (!data) return;
         if (budget && data.prompt_characters != null) {
           var promptCharacters = Number(data.prompt_characters || 0);
-          var promptLimit = Number(data.prompt_limit || 0);
-          budget.textContent = 'Final prompt: ' + promptCharacters.toLocaleString() + ' / ' + promptLimit.toLocaleString() + ' characters' +
-            (data.prompt_at_limit ? ' · safety shortening applied before the request' : ' · within limit');
-          budget.classList.toggle('pg-budget-over', !!data.prompt_at_limit);
+          budget.textContent = 'Final prompt: ' + promptCharacters.toLocaleString() + ' characters';
+          budget.classList.remove('pg-budget-over');
         }
         if (data.messages && data.messages.length > 0) {
           var html = data.messages.map(function (m) {
@@ -5835,7 +5976,15 @@ window.QymPlayground = (function () {
       var useLegacyResultLayout = !hasCanonicalIssues && !issues.length;
       var color = _rootCauseColor(categories[0] || r.root_cause);
       var confPct = Math.round((r.confidence || 0) * 100);
-      var errorHtml = r.error ? '<div class="pg-result-error">' + _esc(r.error) + '</div>' : '';
+      var errorCode = String(r.error_code || '').trim();
+      var errorHtml = r.error ? '<div class="pg-result-error">' +
+        (errorCode ? '<strong>' + _esc(errorCode) + '</strong><br>' : '') +
+        _esc(r.error) + '</div>' : '';
+      var retryCount = Number(r.retry_count || 0);
+      var retryHtml = retryCount > 0
+        ? '<div class="pg-result-note">Timeout retries: ' + retryCount +
+          (r.request_timeout_seconds ? ' · final timeout ' + Number(r.request_timeout_seconds) + ' seconds' : '') + '</div>'
+        : '';
       var issuesHtml = issues.length ? '<div class="pg-result-issues" role="list" aria-label="Root-cause issues">' + issues.map(function (issue, issueIndex) {
         var issueColor = _rootCauseColor(issue.category);
         var issueConfidence = issue.confidence == null ? '' : Math.round(issue.confidence * 100) + '%';
@@ -5904,6 +6053,7 @@ window.QymPlayground = (function () {
         (useLegacyResultLayout && r.root_cause_reason ? '<details class="pg-result-note pg-result-reason"><summary>Why this category</summary><div class="pg-result-reason-copy">' + _esc(r.root_cause_reason) + '</div></details>' : '') +
         (useLegacyResultLayout ? '<div class="pg-result-note">' + _esc(r.root_cause_note || '') + '</div>' : '') +
         errorHtml +
+        retryHtml +
         fieldsBadgesHtml +
         inputSectionHtml +
       '</div>';

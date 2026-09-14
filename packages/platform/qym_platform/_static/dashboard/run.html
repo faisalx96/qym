@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/static/shell.css">
   <script src="/static/auth.js"></script>
   <script src="/static/shell.js?v=ui-consistency-20260730-15"></script>
-  <script src="/static/metrics.js?v=metric-errors-20260907-3"></script>
+  <script src="/static/metrics.js?v=metric-errors-20260914-1"></script>
   <script src="/static/run_details.js"></script>
   <script src="/static/trace_viewer.js?v=merge-20260804-1"></script>
   <script src="/static/step_latency.js?v=empty-sections-20260911-2"></script>
@@ -2547,9 +2547,6 @@
       background: var(--bg-hover);
       border-color: var(--border-default);
     }
-    .item-card.item-execution-error {
-      border-color: var(--error);
-    }
     .item-card.item-collapsed.item-execution-error {
       border-color: var(--error);
     }
@@ -2670,6 +2667,23 @@
     .metric-det-chips .det-toggle { width: auto; }
     .det-toggle:hover { background: var(--bg-hover); border-color: var(--border-strong); }
     .det-toggle.open { background: var(--bg-elevated); border-color: var(--border-strong); }
+    /* A metric exception belongs to the metric, not to the whole item. Keep
+       the item boundary neutral and mark only the affected metric surface. */
+    .metric-det-chips > .det-toggle.metric-execution-error,
+    .metric-det-chips > .det-toggle.metric-execution-error:hover,
+    .metric-det-chips > .det-toggle.metric-execution-error.open,
+    .metric-det-chips > .det-toggle.metric-execution-error:has(> .metric-compare-trigger.active) {
+      border-color: var(--error);
+    }
+    .qym-item-metric-cell.metric-execution-error {
+      border: 1px solid var(--error);
+      padding: 1px 7px;
+    }
+    .metric-error-indicator {
+      flex: 0 0 auto;
+      min-width: var(--badge-height);
+      padding: 0;
+    }
     /* Same stroked-chevron language as the item control, scaled down */
     .det-caret {
       display: inline-flex;
@@ -2857,6 +2871,13 @@
       background: var(--bg-elevated);
       border-radius: 0 4px 4px 0;
       padding: var(--space-sm);
+    }
+    /* Once an errored item is open, put the red boundary on the exact
+       execution that raised instead of keeping it around the whole item. */
+    .item-run-output.item-execution-error {
+      border: 1px solid var(--error);
+      border-left-width: 3px;
+      border-radius: 6px;
     }
     .item-run-output .output-header {
       display: flex;
@@ -3074,21 +3095,132 @@
       display: flex;
       flex-direction: column;
       gap: var(--space-sm);
-      margin-top: var(--space-md);
+      min-width: 0;
+      margin-top: var(--space-sm);
+      padding: var(--space-md);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-md);
+      background: var(--bg-base);
     }
     .metric-analysis-heading {
-      color: var(--text-muted);
-      font-size: var(--font-sm);
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      font-family: var(--font-sans);
+      line-height: 1.4;
+      color: var(--text-primary);
+      font-size: var(--font-lg);
       font-weight: 650;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
+      margin: 0;
     }
-    .metric-analysis-card {
+    .metric-analysis-heading svg {
+      flex: 0 0 var(--space-lg);
+      width: var(--space-lg);
+      height: var(--space-lg);
+      color: var(--accent-primary);
+    }
+    .metric-analysis-intro > .metric-analysis-help { font-size: var(--font-sm); }
+    .metric-analysis-toolbar {
+      display: flex;
+      align-items: end;
+      flex-wrap: wrap;
+      gap: var(--space-md);
+      padding-bottom: var(--space-sm);
+    }
+    .metric-analysis-intro { flex: 1 1 220px; }
+    .metric-analysis-help {
+      margin: var(--space-xs) 0 0;
+      color: var(--text-muted);
+      font-size: var(--font-base);
+      line-height: 1.5;
+    }
+    .metric-issue-dialog {
+      margin: auto;
+      width: min(1080px, calc(100vw - var(--space-xl)));
+      max-width: none;
+      height: min(760px, calc(100dvh - var(--space-xl)));
+      max-height: none;
+      padding: 0;
+      border: 1px solid var(--border-default);
+      border-radius: var(--space-md);
+      background: var(--bg-surface);
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      font-size: var(--font-base);
+      overflow: hidden;
+    }
+    .metric-issue-dialog[open] { display: flex; flex-direction: column; }
+    .metric-issue-dialog::backdrop { background: color-mix(in srgb, var(--bg-void) 75%, transparent); }
+    .metric-issue-dialog__header, .metric-issue-dialog__footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      flex: 0 0 auto;
+      gap: var(--space-md);
+      padding: var(--space-lg) var(--space-xl);
+    }
+    .metric-issue-dialog__header { border-bottom: 1px solid var(--border-subtle); }
+    .metric-issue-dialog__header h2 { margin: 0; color: var(--text-primary); font-size: var(--font-xl); font-weight: 650; }
+    .metric-issue-dialog__header p { margin: var(--space-xs) 0 0; color: var(--text-muted); }
+    .metric-issue-dialog__navigation { display: flex; flex-basis: 100%; gap: var(--space-sm); }
+    .metric-issue-dialog__body { display: grid; grid-template-columns: minmax(260px, 38%) minmax(0, 1fr); flex: 1; min-height: 0; }
+    .metric-issue-dialog__categories { display: flex; flex-direction: column; gap: var(--space-md); padding: var(--space-lg); border-right: 1px solid var(--border-subtle); min-height: 0; }
+    .metric-issue-dialog__category-list { overflow-y: auto; min-height: 0; display: grid; align-content: start; gap: var(--space-sm); }
+    .metric-issue-dialog__category {
+      display: grid;
+      gap: var(--space-sm);
+      width: 100%;
       padding: var(--space-md);
       border: 1px solid var(--border-subtle);
-      border-left: 3px solid var(--metric-analysis-color, var(--accent-tertiary));
-      border-radius: 8px;
-      background: var(--bg-surface);
+      border-radius: var(--control-radius);
+      background: var(--bg-base);
+      color: var(--text-secondary);
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+      overflow-wrap: anywhere;
+    }
+    .metric-issue-dialog__category:hover { background: var(--bg-hover); border-color: var(--border-default); }
+    .metric-issue-dialog__category[aria-pressed="true"] { border-color: var(--accent-primary); background: color-mix(in srgb, var(--accent-primary) 8%, var(--bg-base)); }
+    .metric-issue-dialog__category-name { color: var(--text-primary); font-size: var(--font-md); font-weight: 600; }
+    .metric-issue-dialog__category-hint { color: var(--text-muted); font-size: var(--font-sm); line-height: 1.55; }
+    .metric-issue-dialog__form { display: grid; align-content: start; gap: var(--space-lg); padding: var(--space-xl); overflow-y: auto; min-width: 0; }
+    .metric-issue-dialog__form .qym-input { width: 100%; min-width: 0; }
+    .metric-issue-dialog__guidance { padding: var(--space-md); border-left: 2px solid var(--accent-primary); background: var(--bg-base); line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .metric-issue-dialog__guidance p { margin: 0; }
+    .metric-issue-dialog__guidance p + p { margin-top: var(--space-sm); }
+    .metric-issue-dialog__guidance strong { color: var(--text-primary); font-weight: 600; }
+    .metric-issue-dialog .metric-issue-dialog__form textarea { width: 100%; min-height: 180px; box-sizing: border-box; }
+    .metric-issue-dialog__footer { border-top: 1px solid var(--border-subtle); }
+    .metric-issue-dialog__footer-start { display: flex; min-width: 0; flex: 1 1 auto; align-items: center; flex-wrap: wrap; gap: var(--space-md); }
+    .metric-issue-dialog__delete svg { width: var(--space-md); height: var(--space-md); flex: 0 0 auto; }
+    .metric-issue-dialog .qym-icon-action svg { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+    .metric-issue-dialog :focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+    @media (max-width: 700px) {
+      .metric-issue-dialog { width: calc(100vw - var(--space-md)); height: calc(100dvh - var(--space-md)); }
+      .metric-issue-dialog__body { display: block; overflow-y: auto; }
+      .metric-issue-dialog__categories { height: 240px; box-sizing: border-box; border-right: 0; border-bottom: 1px solid var(--border-subtle); }
+      .metric-issue-dialog__header, .metric-issue-dialog__footer, .metric-issue-dialog__form { padding: var(--space-md); }
+      .metric-issue-dialog__form { overflow-y: visible; }
+    }
+    .metric-issue-dialog__issues { display: grid; gap: var(--space-xl); }
+    .metric-issue-dialog__issue { display: grid; gap: var(--space-md); min-width: 0; margin: 0; padding: 0; border: 0; }
+    .metric-issue-dialog__issue + .metric-issue-dialog__issue { padding-top: var(--space-lg); border-top: 1px solid var(--border-subtle); }
+    .metric-issue-dialog__issue-heading { display: flex; align-items: center; gap: var(--space-sm); width: 100%; margin-bottom: var(--space-md); color: var(--text-primary); font-size: var(--font-md); font-weight: 600; }
+    .metric-issue-dialog__form > [data-add-issue] { justify-self: start; }
+    .metric-issue-dialog__solution { display: grid; gap: var(--space-md); padding-top: var(--space-lg); border-top: 1px solid var(--border-subtle); }
+    .metric-issue-dialog__solution h3 { margin: 0; color: var(--text-primary); font-size: var(--font-lg); font-weight: 600; }
+    .metric-issue-dialog__solution .metric-analysis-help { margin-top: calc(-1 * var(--space-sm)); }
+    .metric-issue-dialog__form .rdi-issues-editor__field { min-width: 0; }
+    .metric-issue-dialog__form select { width: 100%; min-width: 0; }
+    .metric-issue-dialog__status { color: var(--text-muted); font-size: var(--font-base); }
+    .metric-issue-dialog__status.is-error { color: var(--error); }
+    .metric-analysis-card {
+      padding: var(--space-md) 0;
+      border-top: 1px solid var(--border-subtle);
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
     .metric-analysis-head {
       display: flex;
@@ -3210,8 +3342,7 @@
     }
     .metric-analysis-note,
     .metric-analysis-reason,
-    .metric-analysis-solution,
-    .metric-analysis-error {
+    .metric-analysis-solution {
       margin-top: var(--space-sm);
       color: var(--text-secondary);
       font-size: var(--font-base);
@@ -3252,17 +3383,41 @@
     .metric-analysis-issue-list {
       display: grid;
       gap: var(--space-sm);
+      margin-top: var(--space-md);
     }
     .metric-analysis-issue {
+      min-width: 0;
       padding: var(--space-sm) var(--space-md);
-      border: 1px solid var(--border-subtle);
-      border-left: 3px solid var(--metric-analysis-category-color, var(--accent-tertiary));
-      border-radius: var(--control-radius);
-      background: var(--bg-elevated);
+      border-left: 2px solid var(--metric-analysis-category-color, var(--accent-tertiary));
+    }
+    .metric-analysis-issue:not(:last-child) {
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .metric-analysis-issue-head > .metric-analysis-actions { margin-left: auto; flex-wrap: wrap; }
+    .qym-tag.metric-analysis-problem-tag {
+      background: color-mix(in srgb, var(--metric-analysis-category-color, var(--warning)) 12%, var(--bg-base));
+      color: var(--metric-analysis-category-color, var(--warning));
+    }
+    .metric-analysis-issue-solution {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: start;
+      gap: var(--space-sm);
+      margin-top: var(--space-sm);
+      padding-top: var(--space-sm);
+      color: var(--text-secondary);
+      font-size: var(--font-base);
+    }
+    .metric-analysis-issue-solution-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+    .metric-analysis-issue-solution-notes { display: grid; grid-column: 2; gap: var(--space-xs); white-space: pre-wrap; overflow-wrap: anywhere; }
+    .metric-analysis-issue-solution-notes strong { font-size: var(--font-sm); font-weight: 600; color: var(--text-muted); }
+    @media (max-width: 600px) {
+      .metric-analysis-issue-head > .metric-analysis-actions { flex-basis: 100%; margin-left: 0; justify-content: flex-start; }
     }
     .metric-analysis-issue-head {
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: var(--space-sm);
       margin-bottom: var(--space-xs);
     }
@@ -3276,17 +3431,43 @@
       font-size: var(--font-md);
       font-weight: 600;
     }
+    .metric-analysis-issue-detail {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-sm);
+      margin-top: var(--space-xs);
+    }
     .metric-analysis-issue-subcategory {
       color: var(--text-primary);
       font-size: var(--font-base);
       font-weight: 600;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
     }
     .metric-analysis-issue-finding {
-      margin-top: var(--space-xs);
       color: var(--text-secondary);
       font-size: var(--font-base);
       line-height: 1.5;
       white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    @media (max-width: 600px) {
+      .metric-analysis-list { padding: var(--space-xs); }
+      .metric-analysis-issue { padding-inline: 0; }
+      .metric-analysis-issue-detail {
+        display: grid;
+        gap: var(--space-xs);
+      }
+      .metric-analysis-issue-detail > .qym-tag {
+        justify-self: start;
+        padding-inline: var(--space-xs);
+      }
+      .metric-analysis-issue-solution {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--space-xs);
+      }
+      .metric-analysis-issue-solution > .qym-tag { justify-self: start; }
+      .metric-analysis-issue-solution-notes { grid-column: 1; }
     }
     .metric-analysis-issue-reason {
       margin-top: var(--space-xs);
@@ -3302,19 +3483,6 @@
     .metric-analysis-solution strong {
       color: var(--text-primary);
       font-weight: 600;
-    }
-    .metric-analysis-error {
-      color: var(--error);
-    }
-    .metric-analysis-recovery {
-      margin-top: var(--space-md);
-      padding-top: var(--space-md);
-      border-top: 1px solid var(--border-subtle);
-    }
-    .metric-analysis-recovery-copy {
-      color: var(--text-secondary);
-      font-size: var(--font-sm);
-      line-height: 1.5;
     }
     .rc-sol-label {
       display: block;
@@ -4550,7 +4718,9 @@
       gap: 6px;
     }
     .sankey-header-icon { color: #a78bfa; }
+    .sankey-scroll { max-width: 100%; overflow-x: auto; }
     .sankey-body {
+      min-width: 600px;
       position: relative;
       width: 100%;
     }
@@ -5949,6 +6119,8 @@
         'Expand Training Data', 'Fix Tool Configuration', 'Add Output Validation',
         'Restructure Chain-of-Thought', 'Update Knowledge Base',
       ];
+      const ADD_NEW_SOLUTION_VALUE = '__qym_add_new_solution__';
+      const UNASSIGNED_SOLUTION_LABEL = 'No solution assigned';
       const SOLUTION_COLORS = {
         'Improve Retrieval Context': '#3b82f6', 'Add Guardrails': '#10b981',
         'Refine Prompt Instructions': '#f97316', 'Expand Training Data': '#0ea5e9',
@@ -5962,7 +6134,13 @@
       const SAVE_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8.5 3.5 3.5 6.5-7"/></svg>';
       const CLOSE_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg>';
       const CLOCK_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M8 4.5V8l2.5 1.5"/></svg>';
+      const FAILURE_ICON = '<svg class="item-failure-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="m5.75 5.75 4.5 4.5m0-4.5-4.5 4.5"/></svg>';
       const FILTER_TRASH_ICON = '<svg class="qym-filter-trash-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+
+      function renderMetricErrorIndicator(metricName) {
+        const title = 'Metric execution failed: ' + metricName;
+        return '<span class="qym-tag qym-tag--danger metric-error-indicator" title="' + escapeAttr(title) + '" role="img" aria-label="' + escapeAttr(title) + '">' + FAILURE_ICON + '</span>';
+      }
 
       const formatPercent = window.QymMetrics.formatPercent;
       const formatLatency = window.QymMetrics.formatLatency;
@@ -6620,7 +6798,8 @@
       function scopedPassItemMetadata(metadata, row, metricNames, passNumber) {
         const scoped = { ...((metadata && typeof metadata === 'object') ? metadata : {}) };
         [
-          'root_cause', 'root_causes', 'root_cause_issues', 'root_cause_detail', 'root_cause_note', 'root_cause_reason',
+          'root_cause', 'root_causes', 'root_cause_categories', 'root_cause_issues',
+          'root_cause_detail', 'root_cause_note', 'root_cause_reason',
           'root_cause_source', 'root_cause_confidence', 'root_cause_metric_name',
           'solution', 'solution_note', 'solution_source',
           'metric_analyses', 'analysis_error', 'analysis_warning',
@@ -8427,7 +8606,12 @@
           : (state.snapshot.rows || []);
         const total = rows.length;
         const completed = rows.filter(r => r.status === 'completed' || r.__has_output || r.output != null || r.output_full != null || r.error).length;
-        const failed = rows.filter(r => window.QymMetrics.isErrorRow(r)).length;
+        const failed = rows.reduce((sum, row) => {
+          const rowError = window.QymMetrics.isErrorRow(row) ? 1 : 0;
+          if (!isRepeatAggregateView()) return sum + rowError;
+          const executionErrors = Number(row.execution_error_count);
+          return sum + (Number.isFinite(executionErrors) ? Math.max(0, executionErrors) : rowError);
+        }, 0);
         const latencies = rows.filter(r => Number.isFinite(r.latency_ms) && r.latency_ms >= 0 && r.status === 'completed').map(r => r.latency_ms);
         const summaryItem = (kind, label, valueHtml, iconHtml) =>
           '<div class="overview-summary-pill qym-stat-strip__item ' + kind + '">' +
@@ -8911,6 +9095,9 @@
               finding: String(issue.finding || issue.root_cause_note || '').trim(),
               category_reason: String(issue.category_reason || issue.root_cause_reason || '').trim(),
             };
+            ['issue_id', 'solution', 'solution_note', 'review_status', 'source', 'reviewed_at'].forEach(key => {
+              if (Object.prototype.hasOwnProperty.call(issue, key)) normalized[key] = String(issue[key] || '');
+            });
             if (Number.isFinite(confidence)) normalized.confidence = Math.min(1, Math.max(0, confidence));
             else delete normalized.confidence;
             return normalized.category || normalized.subcategory || normalized.finding ? normalized : null;
@@ -8972,19 +9159,77 @@
         };
       }
 
-      function renderMetricRootCauseIssues(analysis) {
+      function shouldRenderMetricAnalysis(row, metricName, metricValue, hasTaskError = false) {
+        // A task exception means the judges did not produce meaningful
+        // verdicts, so task diagnosis belongs to Error Distribution instead.
+        if (hasTaskError || window.QymMetrics.isTaskErrorRow(row)) return false;
+
+        // Saved diagnoses stay visible even when this metric scored as passing.
+        const storedAnalysis = row?.item_metadata?.metric_analyses?.[metricName];
+        if (storedAnalysis && !storedAnalysis.error && rootCauseIssues(storedAnalysis).length) return true;
+
+        // A raised metric is still a failed execution that needs diagnosis,
+        // even though its stored aggregate value is zero.
+        if (window.QymMetrics.hasMetricError(row, metricName)) return true;
+
+        // Numeric metrics are observations rather than pass/fail judges.
+        const metricType = state.metricTypes[metricName] || 'score';
+        if (metricType === 'numeric') return false;
+
+        const score = window.QymMetrics.parseScoreValue(metricValue);
+        if (score === null) return false;
+        const passThreshold = state.metricIsBoolean[metricName]
+          ? 0.9999
+          : (state.metricThresholds[metricName] ?? 0.8);
+        return score < passThreshold;
+      }
+
+      function renderMetricAnalysisCard(itemId, metricName, storedAnalysis, legacyReview = {}) {
+        // Display failed analysis like an untouched metric. Keep the stored
+        // failure available to Error Distribution and the diagnosis editor.
+        const analysis = storedAnalysis && typeof storedAnalysis === 'object' && !storedAnalysis.error
+          ? storedAnalysis : {};
+        const issueCount = rootCauseIssues(analysis).length;
+        const cardData = ' data-metric-analysis-key="' + escapeAttr(metricAnalysisKey(itemId, metricName)) + '" data-analysis-metric="' + escapeAttr(metricName) + '"';
+        const countHtml = '<span class="qym-tag qym-tag--count">' + issueCount + ' issue' + (issueCount === 1 ? '' : 's') + '</span>';
+        const editButton = '<button type="button" class="qym-inline-action qym-inline-action--accent" data-metric-add-issue="' + escapeAttr(itemId) + '" data-metric-name="' + escapeAttr(metricName) + '">+ Add issue</button>';
+        const confidence = analysis.source === 'human'
+          ? 'Human edited'
+          : (analysis.confidence == null ? '' : Math.round(Number(analysis.confidence) * 100) + '% confidence');
+        return '<div class="metric-analysis-card"' + cardData + '>' +
+          '<div class="metric-analysis-head">' +
+            '<span class="metric-analysis-name">' + escapeHtml(metricName) + '</span>' + countHtml +
+            (confidence ? '<span class="metric-analysis-confidence">' + escapeHtml(confidence) + '</span>' : '') +
+            '<div class="metric-analysis-actions">' + editButton + '</div>' +
+          '</div>' +
+          renderMetricRootCauseIssues(analysis, itemId, metricName, legacyReview) +
+        '</div>';
+      }
+
+      function renderMetricRootCauseIssues(analysis, itemId = '', metricName = '', legacyReview = {}) {
         const issues = rootCauseIssues(analysis);
         if (!issues.length) return '<div class="metric-analysis-empty">No root-cause issues assigned.</div>';
         return '<div class="metric-analysis-issue-list" role="list" aria-label="Root-cause issues">' + issues.map((issue, index) => {
           const color = rootCauseColor(issue.category);
+          const hasSolution = Boolean(String(issue.solution || '').trim());
           const confidence = issue.confidence == null ? '' : Math.round(issue.confidence * 100) + '%';
-          return '<article class="metric-analysis-issue" role="listitem" style="--metric-analysis-category-color:' + color + ';">' +
+          const status = String(issue.review_status || analysis.review_status || legacyReview.status || 'pending').toLowerCase();
+          const data = ' data-metric-issues-item="' + escapeAttr(itemId) + '" data-metric-name="' + escapeAttr(metricName) + '" data-issue-index="' + index + '"';
+          const approval = status === 'approved'
+            ? '<span class="qym-badge rc-status-pill approved">Approved</span>'
+            : '<span class="qym-badge rc-status-pill pending">' + (status === 'rejected' ? 'Rejected' : 'Pending review') + '</span>' +
+              (IS_EXPORT ? '' : '<button type="button" class="qym-inline-action qym-inline-action--accent" data-approve-issue="' + index + '" data-issue-item="' + escapeAttr(itemId) + '" data-metric-name="' + escapeAttr(metricName) + '" aria-label="Approve issue ' + (index + 1) + '">✓ Approve</button>');
+          return '<article class="metric-analysis-issue" role="listitem" data-root-cause-issue="' + index + '" style="--metric-analysis-category-color:' + color + ';">' +
             '<div class="metric-analysis-issue-head"><span class="metric-analysis-issue-number">Issue ' + (index + 1) + '</span>' +
-              (issue.category ? '<span class="metric-analysis-issue-category">' + escapeHtml(issue.category) + '</span>' : '') +
-              (confidence ? '<span class="metric-analysis-confidence">' + escapeHtml(confidence) + '</span>' : '') + '</div>' +
-            (issue.subcategory ? '<div class="metric-analysis-issue-subcategory">' + escapeHtml(issue.subcategory) + '</div>' : '') +
-            (issue.finding ? '<div class="metric-analysis-issue-finding">' + escapeHtml(issue.finding) + '</div>' : '') +
+              '<span class="qym-tag metric-analysis-problem-tag">Problem</span>' +
+              '<span class="metric-analysis-issue-category">' + escapeHtml(issue.category) + '</span>' +
+              (confidence ? '<span class="metric-analysis-confidence" title="Saved AI confidence">' + escapeHtml(confidence) + '</span>' : '') +
+              '<div class="metric-analysis-actions">' + approval + '<button type="button" class="qym-inline-action qym-inline-action--neutral"' + data + ' aria-label="Edit issue ' + (index + 1) + '">Edit</button></div></div>' +
+            (issue.subcategory ? '<div class="metric-analysis-issue-detail"><span class="qym-tag metric-analysis-subcategory-tag">Subcategory</span><div class="metric-analysis-issue-subcategory">' + escapeHtml(issue.subcategory) + '</div></div>' : '') +
+            (issue.finding ? '<div class="metric-analysis-issue-detail"><span class="qym-tag metric-analysis-finding-tag">Finding</span><div class="metric-analysis-issue-finding">' + escapeHtml(issue.finding) + '</div></div>' : '') +
             (issue.category_reason ? '<details class="metric-analysis-issue-reason"><summary>Why this category</summary><div>' + escapeHtml(issue.category_reason) + '</div></details>' : '') +
+            (hasSolution ? '<div class="metric-analysis-issue-solution"><span class="qym-tag qym-tag--accent">Solution</span><div class="metric-analysis-issue-solution-text">' + escapeHtml(issue.solution) + '</div>' +
+              (issue.solution_note ? '<div class="metric-analysis-issue-solution-notes"><strong>Solution notes</strong><div>' + escapeHtml(issue.solution_note) + '</div></div>' : '') + '</div>' : '') +
           '</article>';
         }).join('') + '</div>';
       }
@@ -9201,17 +9446,20 @@
         if (!container) return;
 
         // Compute root cause -> solution mapping
-        const links = {};
-        const rcCounts = {};
-        const solCounts = {};
+        const links = Object.create(null);
+        const rcCounts = Object.create(null);
+        const solCounts = Object.create(null);
         for (const row of rows) {
           const itemId = row.item_id || String(row.index);
           if (!filteredItemIds.has(itemId)) continue;
           for (const analysis of getRowRootCauseAnalyses(row, metricFilter)) {
-            const sol = analysis.solution || '';
-            if (!sol) continue;
-            for (const rc of rootCauseCategories(analysis)) {
-              const key = rc + '|||' + sol;
+            // Every issue belongs in the flow. An unresolved issue connects to
+            // the explicit unassigned node until its own solution is saved.
+            for (const issue of rootCauseIssues(analysis, false)) {
+              const rc = issue.category;
+              const sol = String(issue.solution || '').trim() || UNASSIGNED_SOLUTION_LABEL;
+              if (!rc) continue;
+              const key = JSON.stringify([rc, sol]);
               links[key] = (links[key] || 0) + 1;
               rcCounts[rc] = (rcCounts[rc] || 0) + 1;
               solCounts[sol] = (solCounts[sol] || 0) + 1;
@@ -9248,8 +9496,9 @@
         });
 
         // Build HTML
-        let html = '<div class="breakdown-header" style="color:var(--text-primary);margin-top:var(--space-md);"><span class="breakdown-icon">\u2666</span> Failure to Fix Flow</div>';
-        html += '<div class="sankey-body" style="height:' + diagramH + 'px;">';
+        const issueTotal = Object.values(rcCounts).reduce((sum, count) => sum + count, 0);
+        let html = '<div class="breakdown-header" style="color:var(--text-primary);margin-top:var(--space-md);"><span class="breakdown-icon">\u2666</span> Failure to Fix Flow <span class="breakdown-metric">' + issueTotal + ' issue' + (issueTotal === 1 ? '' : 's') + '</span></div>';
+        html += '<div class="sankey-scroll" role="region" aria-label="Failure to Fix Flow; scroll horizontally on small screens" tabindex="0"><div class="sankey-body" style="height:' + diagramH + 'px;">';
 
         // SVG paths placeholder
         html += '<svg class="sankey-svg" viewBox="0 0 100 ' + diagramH + '" preserveAspectRatio="none" id="sankey-svg"></svg>';
@@ -9266,13 +9515,20 @@
         // Right column (solutions)
         html += '<div class="sankey-col sankey-col-sol" style="width:' + colWidth + 'px;">';
         solList.forEach(([sol, count], i) => {
+          const isUnassigned = sol === UNASSIGNED_SOLUTION_LABEL;
           const color = SOLUTION_COLORS[sol] || '#60a5fa';
           const y = rightOffsetY + i * (nodeH + nodeGap);
-          html += '<div class="sankey-node" data-sankey-sol="' + escapeAttr(sol) + '" style="background:' + color + '15;border-color:' + color + '40;color:' + color + ';" title="' + escapeAttr(sol) + ' (' + count + ')"><span class="sankey-node-label">' + escapeHtml(sol) + '</span><span class="sankey-node-count" style="background:' + color + '30;">' + count + '</span></div>';
+          const nodeStyle = isUnassigned
+            ? 'background:color-mix(in srgb,var(--warning) 12%,transparent);border-color:color-mix(in srgb,var(--warning) 28%,transparent);color:var(--warning);'
+            : 'background:' + color + '15;border-color:' + color + '40;color:' + color + ';';
+          const countStyle = isUnassigned
+            ? 'background:color-mix(in srgb,var(--warning) 20%,transparent);'
+            : 'background:' + color + '30;';
+          html += '<div class="sankey-node' + (isUnassigned ? ' sankey-node-unassigned' : '') + '" data-sankey-sol="' + escapeAttr(sol) + '" style="' + nodeStyle + '" title="' + escapeAttr(sol) + ' (' + count + ')"><span class="sankey-node-label">' + escapeHtml(sol) + '</span><span class="sankey-node-count" style="' + countStyle + '">' + count + '</span></div>';
         });
         html += '</div>';
 
-        html += '</div>'; // .sankey-body
+        html += '</div></div>'; // .sankey-body and .sankey-scroll
         container.innerHTML = html;
 
         // Now draw SVG paths after DOM insertion
@@ -9315,7 +9571,7 @@
 
         let paths = '';
         for (const [key, count] of linkEntries) {
-          const [rc, sol] = key.split('|||');
+          const [rc, sol] = JSON.parse(key);
           const y1 = rcActual[rc];
           const y2 = solActual[sol];
           if (y1 == null || y2 == null) continue;
@@ -9423,7 +9679,7 @@
                 const existingPaths = container.querySelectorAll('[data-sankey-link-rc]');
                 const entries = [];
                 existingPaths.forEach(p => {
-                  entries.push([p.dataset.sankeyLinkRc + '|||' + p.dataset.sankeyLinkSol, parseInt(p.dataset.sankeyCount) || 1]);
+                  entries.push([JSON.stringify([p.dataset.sankeyLinkRc, p.dataset.sankeyLinkSol]), parseInt(p.dataset.sankeyCount) || 1]);
                 });
                 if (entries.length > 0) {
                   drawSankeyPaths(container, entries, {}, {}, 190);
@@ -9804,7 +10060,19 @@
       function collectRowErrors(row, buckets) {
         if (!row) return;
         const itemId = row.item_id || String(row.index || '');
-        if ((row.status || '') === 'error') {
+        const passTaskErrors = isRepeatAggregateView() && Array.isArray(row.pass_attempts)
+          ? row.pass_attempts.filter(attempt => {
+              if (!attempt) return false;
+              const status = String(attempt.status || '').toLowerCase();
+              return window.QymMetrics.isTaskErrorRow(attempt) || status === 'timeout';
+            })
+          : [];
+        if (passTaskErrors.length) {
+          for (const attempt of passTaskErrors) {
+            const executionError = attempt.error || attempt.output || '';
+            addErrorBucket(buckets, 'Task error', normalizeErrorLabel(executionError, 'Task failed'), 1, itemId);
+          }
+        } else if (window.QymMetrics.isTaskErrorRow(row)) {
           const executionError = row.error || row.__execution_error || row.output_full || row.output || '';
           addErrorBucket(buckets, 'Task error', normalizeErrorLabel(executionError, 'Task failed'), 1, itemId);
         }
@@ -9817,8 +10085,14 @@
         ]);
         metricNames.forEach(metricName => {
           const perPass = passMetricMeta[metricName];
-          const candidates = Array.isArray(perPass) && perPass.some(Boolean)
-            ? perPass
+          const passErrors = Array.isArray(perPass)
+            ? perPass.filter(meta => window.QymMetrics.isMetricErrorMeta(meta))
+            : [];
+          // Prefer concrete per-pass errors. If none exist, retain an
+          // aggregate-only metric error instead of hiding it just because
+          // non-error pass metadata happens to be present.
+          const candidates = passErrors.length
+            ? passErrors
             : [aggregateMetricMeta[metricName]];
           candidates.forEach(meta => {
             if (!window.QymMetrics.isMetricErrorMeta(meta)) return;
@@ -9851,6 +10125,7 @@
       function renderErrorDistributionSection() {
         const section = el('error-distribution-section');
         if (!section) return;
+        section.hidden = false;
 
         const buckets = {};
         const filteredItems = getFilteredItems();
@@ -9861,10 +10136,12 @@
 
         if (totalErrors === 0) {
           section.innerHTML = '';
+          section.hidden = true;
           return;
         }
 
         function renderErrorCards(entries) {
+          if (!entries.length) return '';
           let cards = '<div class="breakdown-grid">';
           for (const entry of entries) {
             const labelParts = splitErrorLabel(entry.label);
@@ -9886,20 +10163,20 @@
           return cards + '</div>';
         }
 
-      function renderErrorGroup(title, icon, entries) {
-        if (entries.length === 0) return '';
-        const groupTotal = entries.reduce((sum, entry) => sum + entry.count, 0);
+        function renderErrorGroup(title, icon, entries) {
+          if (entries.length === 0) return '';
+          const groupTotal = entries.reduce((sum, entry) => sum + entry.count, 0);
           const iconHtml = icon === 'task'
             ? '<svg class="breakdown-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>'
             : (icon === 'metric'
                 ? '<svg class="breakdown-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></svg>'
                 : '<svg class="breakdown-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h4l2-7 4 14 2-7h4"/></svg>');
           const groupClass = icon === 'trace' ? 'trace-error-group' : 'task-error-group';
-        return '<div class="breakdown-section breakdown-errors ' + groupClass + '">' +
+          return '<div class="breakdown-section breakdown-errors ' + groupClass + '">' +
             '<div class="breakdown-header">' + iconHtml + ' ' + escapeHtml(title) + ' <span class="breakdown-metric">' + groupTotal + '</span></div>' +
             renderErrorCards(entries) +
           '</div>';
-      }
+        }
 
         const taskStats = stats.filter(entry => entry.kind === 'Task error');
         const metricStats = stats.filter(entry => entry.kind === 'Metric error');
@@ -10684,6 +10961,11 @@
           return Array.isArray(scores) ? scores[passNo - 1] : null;
         };
         const scoreFor = (name, passNo) => window.QymMetrics.parseScoreValue(rawScoreFor(name, passNo));
+        const metaFor = (name, passNo) => {
+          const values = passMeta[name];
+          const meta = Array.isArray(values) ? values[passNo - 1] : null;
+          return meta && typeof meta === 'object' ? meta : {};
+        };
         const passIdentityFor = (att) => {
           const label = 'Pass ' + att.pass_number;
           if (IS_EXPORT) return '<span class="qym-output-card__name">' + label + '</span>';
@@ -10692,21 +10974,22 @@
         };
         const verdictFor = (att) => {
           let verdict = '';
-          if (att.status === 'error') {
-            verdict = 'fail';
+          if (window.QymMetrics.isTaskErrorRow(att)) {
+            verdict = 'error';
           } else if (metric && (state.metricTypes[metric] || 'score') !== 'numeric') {
+            // A metric exception is shown on that metric row below. Do not
+            // mislabel the whole pass as an ordinary judged failure.
+            if (window.QymMetrics.isMetricErrorMeta(metaFor(metric, att.pass_number))) return '';
             const value = scoreFor(metric, att.pass_number);
             if (value !== null) verdict = value >= threshold ? 'pass' : 'fail';
           }
           if (!verdict) return '';
+          if (verdict === 'error') {
+            return '<span class="qym-tag qym-tag--danger item-error-indicator" title="Task execution failed" role="img" aria-label="Task execution failed">' + FAILURE_ICON + '</span>';
+          }
           const label = verdict === 'pass' ? 'Pass' : 'Fail';
-          const title = att.status === 'error' ? 'Execution error' : label + ' on ' + metric;
+          const title = label + ' on ' + metric;
           return '<span class="qym-tag ' + (verdict === 'pass' ? 'qym-tag--success' : 'qym-tag--danger') + '" title="' + escapeAttr(title) + '">' + label + '</span>';
-        };
-        const metaFor = (name, passNo) => {
-          const values = passMeta[name];
-          const meta = Array.isArray(values) ? values[passNo - 1] : null;
-          return meta && typeof meta === 'object' ? meta : {};
         };
         const metricDisplayFor = (name, passNo) => {
           const v = scoreFor(name, passNo);
@@ -10720,18 +11003,21 @@
           const buttons = state.allMetrics.map(name => {
             const value = metricDisplayFor(name, att.pass_number);
             const passMetricMeta = metaFor(name, att.pass_number);
+            const hasMetricExecutionError = window.QymMetrics.isMetricErrorMeta(passMetricMeta);
             const hasMeta = Object.keys(passMetricMeta).some(key =>
               !['modified', 'original_score'].includes(key)
               && state.visibleMetricMetaFields[key] !== false
               && passMetricMeta[key] !== undefined
               && passMetricMeta[key] !== null
               && passMetricMeta[key] !== '');
-            if (value.display === '\u2014' && !hasMeta) return '';
+            if (value.display === '\u2014' && !hasMeta && !hasMetricExecutionError) return '';
             const isActive = activeMetric === name;
             const raw = rawScoreFor(name, att.pass_number);
             const edited = String(passMetricMeta.modified || '').toLowerCase() === 'true';
-            return '<div class="det-toggle metric-compare-row' + (isActive ? ' active' : '') + '">' +
-              '<button type="button" class="metric-compare-trigger' + (isActive ? ' active' : '') + '" data-output-metric="' + escapeAttr(name) + '" aria-expanded="' + isActive + '"><span class="det-caret"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 3.5 5 4.5-5 4.5"/></svg></span><span class="det-metric">' + escapeHtml(name) + '</span><span class="metric-score-value ' + value.cls + '">' + value.display + '</span></button>' +
+            const metricErrorClass = hasMetricExecutionError ? ' metric-execution-error' : '';
+            const metricErrorIndicator = hasMetricExecutionError ? renderMetricErrorIndicator(name) : '';
+            return '<div class="det-toggle metric-compare-row' + metricErrorClass + (isActive ? ' active' : '') + '">' +
+              '<button type="button" class="metric-compare-trigger' + (isActive ? ' active' : '') + '" data-output-metric="' + escapeAttr(name) + '" aria-expanded="' + isActive + '"><span class="det-caret"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 3.5 5 4.5-5 4.5"/></svg></span><span class="det-metric">' + escapeHtml(name) + '</span><span class="metric-score-value ' + value.cls + '">' + value.display + '</span>' + metricErrorIndicator + '</button>' +
               '<span class="metric-edit-controls qym-metric-edit-controls hidden"><input class="metric-edit-input" type="text" value="' + escapeAttr(raw == null ? '' : String(raw)) + '" data-row-index="' + escapeAttr(String(baseRow.index ?? 0)) + '" data-metric="' + escapeAttr(name) + '" data-pass-number="' + att.pass_number + '" aria-label="New Pass ' + att.pass_number + ' ' + escapeAttr(name) + ' score"><button class="metric-edit-save qym-metric-edit-action" data-row-index="' + escapeAttr(String(baseRow.index ?? 0)) + '" data-metric="' + escapeAttr(name) + '" data-pass-number="' + att.pass_number + '" title="Save" aria-label="Save Pass ' + att.pass_number + ' ' + escapeAttr(name) + '">' + SAVE_ICON + '</button><button class="metric-edit-cancel qym-metric-edit-action" type="button" title="Cancel" aria-label="Cancel editing">' + CLOSE_ICON + '</button><span class="metric-edit-status" aria-live="polite"></span></span>' +
               '<button class="metric-edit-open qym-icon-action" type="button" aria-label="Edit Pass ' + att.pass_number + ' ' + escapeAttr(name) + '" title="Edit">' + EDIT_ICON + '</button>' +
               (edited ? '<span class="metric-edit-badge">Edited</span>' : '') + '</div>';
@@ -10755,7 +11041,10 @@
           const color = colors[index % colors.length];
           const outputId = 'pass-' + att.pass_number;
           const actions = traceBtnFor(att) + copyBtnFor(att);
-          return '<article class="item-run-output qym-output-card' + (hidden.has(att.pass_number) ? ' is-hidden' : '') + '" data-output-card="' + outputId + '" style="border-left-color:' + color + '">' +
+          const passHasTaskError = window.QymMetrics.isTaskErrorRow(att);
+          const passExecutionErrorClass = passHasTaskError ? ' item-execution-error' : '';
+          const borderColor = passHasTaskError ? 'var(--error)' : color;
+          return '<article class="item-run-output qym-output-card' + passExecutionErrorClass + (hidden.has(att.pass_number) ? ' is-hidden' : '') + '" data-output-card="' + outputId + '" style="border-left-color:' + borderColor + '">' +
             '<div class="qym-output-card__header"><span class="qym-output-card__identity"><span class="qym-output-swatch" style="background:' + color + '"></span>' + passIdentityFor(att) + verdictFor(att) + '</span>' +
             (att.latency_ms ? '<span class="qym-output-card__duration">' + CLOCK_ICON + '<span>' + formatLatency(att.latency_ms) + '</span></span>' : '<span class="qym-output-card__duration">\u2014</span>') +
             '<span class="qym-output-card__actions">' + actions + '</span></div>' +
@@ -10847,11 +11136,13 @@
         const rows = state.allMetrics.map((name, i) => {
           const v = window.QymMetrics.parseScoreValue((metricVals || [])[i]);
           const meta = (detailMeta || {})[name] || {};
+          const fullMetricMeta = (fullMeta || {})[name] || {};
+          const hasMetricExecutionError = window.QymMetrics.isMetricErrorMeta(fullMetricMeta);
           const metaKeys = Object.keys(meta).filter(k =>
             !['modified', 'original_score'].includes(k)
             && state.visibleMetricMetaFields[k] !== false
             && meta[k] !== undefined && meta[k] !== null && meta[k] !== '');
-          if (v === null && !metaKeys.length) return '';
+          if (v === null && !metaKeys.length && !hasMetricExecutionError) return '';
           let badge = '';
           if (v !== null) {
             const mType = state.metricTypes[name] || 'score';
@@ -10875,6 +11166,8 @@
             + '<span class="metric-edit-status"></span></span>';
           const modified = String(((fullMeta || {})[name] || {}).modified || '').toLowerCase() === 'true';
           const editedBadge = modified ? '<span class="metric-edit-badge">Edited</span>' : '';
+          const metricErrorClass = hasMetricExecutionError ? ' metric-execution-error' : '';
+          const metricErrorIndicator = hasMetricExecutionError ? renderMetricErrorIndicator(name) : '';
           const bid = 'det_' + safeId + '_' + i;
           let bodyHtml = '';
           let caret = '<span class="det-caret det-caret-none"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 3.5 5 4.5-5 4.5"/></svg></span>';
@@ -10886,9 +11179,9 @@
             caret = '<span class="det-caret"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 3.5 5 4.5-5 4.5"/></svg></span>';
             triggerAttrs = ' data-det-target="' + bid + '" aria-expanded="false"';
           }
-          const chip = '<div class="det-toggle metric-compare-row' + (metaKeys.length ? '' : ' static') + '">'
+          const chip = '<div class="det-toggle metric-compare-row' + metricErrorClass + (metaKeys.length ? '' : ' static') + '">'
             + '<button type="button" class="metric-compare-trigger"' + triggerAttrs + '>'
-            + caret + '<span class="det-metric">' + escapeHtml(name) + '</span>' + badge + '</button>'
+            + caret + '<span class="det-metric">' + escapeHtml(name) + '</span>' + badge + metricErrorIndicator + '</button>'
             + inlineEdit + editBtn + editedBadge
             + '</div>';
           return { chip: chip, body: bodyHtml };
@@ -11010,43 +11303,43 @@
           // The verdict belongs to the expanded execution, not the aggregate row.
           const pfMType = metric ? (state.metricTypes[metric] || 'score') : 'score';
           const hasTaskError = window.QymMetrics.isTaskErrorRow(row);
-          const metricErrorNames = state.allMetrics.filter(name =>
-            window.QymMetrics.hasMetricError(row, name)
-          );
-          const hasMetricError = metricErrorNames.length > 0;
-          const hasExecutionError = hasTaskError || hasMetricError;
+          const taskErrorAttempts = isRepeatItem
+            ? passAttempts.filter(Boolean).filter(att => window.QymMetrics.isTaskErrorRow(att))
+            : [];
+          const hasAnyTaskError = hasTaskError || taskErrorAttempts.length > 0;
+          const selectedMetricHasError = metric
+            ? window.QymMetrics.hasMetricError(row, metric)
+            : false;
           let pfClass = '';
-          if (hasExecutionError) {
+          if (hasAnyTaskError) {
             pfClass = 'error';
-          } else if (metric && mIdx >= 0 && pfMType !== 'numeric') {
+          } else if (!selectedMetricHasError && metric && mIdx >= 0 && pfMType !== 'numeric') {
             const pfVal = window.QymMetrics.parseScoreValue(metricVals[mIdx]);
             if (pfVal !== null) {
               pfClass = pfVal >= threshold ? 'pass' : 'fail';
             }
           }
           const statusLabel = pfClass === 'pass' ? 'Pass' : 'Fail';
-          const statusTitle = hasTaskError
-            ? 'Task execution failed'
-            : (hasMetricError
-                ? 'Metric execution failed: ' + metricErrorNames.join(', ')
-                : statusLabel + ' on ' + metric);
+          const statusTitle = hasAnyTaskError
+            ? (taskErrorAttempts.length
+                ? 'Task execution failed in ' + taskErrorAttempts.length + ' pass' + (taskErrorAttempts.length === 1 ? '' : 'es')
+                : 'Task execution failed')
+            : statusLabel + ' on ' + metric;
           const statusTagClass = pfClass === 'pass'
             ? 'qym-tag--success'
             : 'qym-tag--danger';
           const statusIconOnlyClass = pfClass === 'error' ? ' item-error-indicator' : '';
-          const failureIcon = pfClass === 'error'
-            ? '<svg class="item-failure-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="m5.75 5.75 4.5 4.5m0-4.5-4.5 4.5"/></svg>'
-            : '';
-          const statusContent = pfClass === 'error' ? failureIcon : statusLabel;
+          const statusContent = pfClass === 'error' ? FAILURE_ICON : statusLabel;
           const statusAccessibility = pfClass === 'error'
             ? ' role="img" aria-label="' + escapeAttr(statusTitle) + '"'
             : '';
           const statusIndicator = pfClass
             ? '<span class="qym-tag ' + statusTagClass + statusIconOnlyClass + '" title="' + escapeAttr(statusTitle) + '"' + statusAccessibility + '>' + statusContent + '</span>'
             : '';
-          const executionErrorClass = hasExecutionError ? ' item-execution-error' : '';
+          const executionErrorClass = hasAnyTaskError ? ' item-execution-error' : '';
 
-          // Detailed AI analysis for every failed metric on this item.
+          // Diagnosis is failure-driven: passing metrics stay in the score
+          // strip but do not create root-cause cards.
           const aggregateRepeatView = isRepeatAggregateView();
           const metricAnalyses = !aggregateRepeatView && row.item_metadata?.metric_analyses &&
             typeof row.item_metadata.metric_analyses === 'object'
@@ -11061,86 +11354,35 @@
               itemAnalysisWarnings.push(warning);
             }
           };
-          addItemAnalysisWarning(row.item_metadata?.analysis_warning);
-          Object.values(metricAnalyses).forEach(analysis => addItemAnalysisWarning(analysis?.warning));
+          // Do not repeat warnings belonging to failed analysis in the item.
+          // The item-level summary can contain warnings from failed metrics.
+          const hasFailedAnalysis = row.item_metadata?.analysis_error ||
+            Object.values(metricAnalyses).some(analysis => analysis?.error);
+          if (!hasFailedAnalysis) addItemAnalysisWarning(row.item_metadata?.analysis_warning);
+          Object.values(metricAnalyses).forEach(analysis => {
+            if (analysis && !analysis.error) addItemAnalysisWarning(analysis.warning);
+          });
           const itemAnalysisWarning = itemAnalysisWarnings.join('; ');
           const itemAnalysisWarningLabel = /(taxonomy|taxonom)/i.test(itemAnalysisWarning) ? 'No taxonomy' : 'Analysis warning';
           const itemAnalysisWarningHtml = itemAnalysisWarning
             ? '<div class="rdi-analysis-warning" role="status"><span class="rdi-analysis-warning__label">' + itemAnalysisWarningLabel + '</span><span>' + escapeHtml(itemAnalysisWarning) + '</span></div>'
             : '';
           let perMetricAnalysisHtml = '';
-          {
-            const analysisCards = state.allMetrics.map((metricName, metricIndex) => {
-              const storedAnalysis = metricAnalyses[metricName];
-              const hasStoredAnalysis = storedAnalysis && typeof storedAnalysis === 'object';
-              const metricValue = window.QymMetrics.parseScoreValue(metricVals[metricIndex]);
-              const metricType = state.metricTypes[metricName] || 'score';
-              const metricThreshold = metricType === 'boolean'
-                ? 0.9999
-                : (state.metricThresholds[metricName] || 0.8);
-              const metricFailed = metricType !== 'numeric' &&
-                metricValue !== null && metricValue < metricThreshold;
-              if (!hasStoredAnalysis && !metricFailed) return '';
-              const analysis = hasStoredAnalysis ? storedAnalysis : {};
-              const metricEditData = ' data-metric-issues-item="' + escapeAttr(itemId) + '" data-metric-name="' + escapeAttr(metricName) + '"';
-              const analysisWarning = itemAnalysisWarning ? '' : String(analysis.warning || '').trim();
-              const analysisWarningHtml = analysisWarning
-                ? '<div class="rdi-analysis-warning" role="status"><span class="rdi-analysis-warning__label">' + (/(taxonomy|taxonom)/i.test(analysisWarning) ? 'No taxonomy' : 'Analysis warning') + '</span><span>' + escapeHtml(analysisWarning) + '</span></div>'
-                : '';
-              if (analysis.error) {
-                return '<div class="metric-analysis-card" style="--metric-analysis-color:var(--error);">' +
-                  '<div class="metric-analysis-head"><span class="metric-analysis-name">' + escapeHtml(metricName) + '</span>' +
-                    '<button type="button" class="metric-analysis-edit"' + metricEditData + '>Edit issues</button></div>' +
-                  '<div class="metric-analysis-error" role="alert">Analysis failed: ' + escapeHtml(String(analysis.error)) + '</div>' +
-                  analysisWarningHtml +
-                  '<div class="metric-analysis-recovery">' +
-                    '<div class="metric-analysis-recovery-copy">AI analysis did not produce a usable diagnosis. Add one or more issues manually.</div>' +
-                    renderMetricRootCauseIssues(analysis) +
-                    '<button type="button" class="metric-analysis-solution" data-metric-sol-item="' + escapeAttr(itemId) + '" data-metric-name="' + escapeAttr(metricName) + '" title="Add recommended solution">' +
-                      ([analysis.solution, analysis.solution_note].filter(Boolean).join(' — ') ? '<strong>Recommended solution:</strong> ' + escapeHtml([analysis.solution, analysis.solution_note].filter(Boolean).join(' — ')) : '<span class="metric-analysis-empty">+ Add recommended solution</span>') + '</button>' +
-                  '</div>' +
-                '</div>';
-              }
-              const analysisCategories = rootCauseCategories(analysis);
-              const hasCategories = analysisCategories.length > 0;
-              const analysisColor = rootCauseColor(analysisCategories[0]);
-              const confidence = analysis.source === 'human'
-                ? 'Human edited'
-                : (analysis.confidence == null ? '' : Math.round(Number(analysis.confidence) * 100) + '% confidence');
-              const solutionText = [analysis.solution, analysis.solution_note].filter(Boolean).join(' — ');
-              const metricReview = row.review_corrections?.[metricName] || {};
-              const reviewCorrectionId = metricReview.id;
-              const reviewStatus = hasStoredAnalysis
-                ? String(metricReview.status || 'pending').toLowerCase()
-                : '';
-              let reviewActionsHtml = '';
-              if (reviewStatus === 'approved') {
-                reviewActionsHtml = '<div class="metric-analysis-actions"><div class="rc-status-pill qym-badge approved">Approved</div>';
-              } else if (reviewStatus === 'pending') {
-                const correctionData = reviewCorrectionId ? ' data-approve-correction="' + escapeAttr(String(reviewCorrectionId)) + '"' : '';
-                reviewActionsHtml = '<div class="metric-analysis-actions"><div class="rc-status-pill qym-badge pending">Pending Review</div><button class="rc-approve-btn"' + correctionData + ' data-approve-item="' + escapeAttr(itemId) + '" data-approve-metric="' + escapeAttr(metricName) + '">✓ Approve</button>';
-              }
-              if (reviewActionsHtml) {
-                reviewActionsHtml += '</div>';
-              }
-              return '<div class="metric-analysis-card" style="--metric-analysis-color:' + analysisColor + ';">' +
-                '<div class="metric-analysis-head">' +
-                  '<span class="metric-analysis-name">' + escapeHtml(metricName) + '</span>' +
-                  (confidence ? '<span class="metric-analysis-confidence">' + escapeHtml(confidence) + '</span>' : '') +
-                  reviewActionsHtml +
-                  '<button type="button" class="metric-analysis-edit"' + metricEditData + '>Edit issues</button>' +
-                '</div>' +
-                analysisWarningHtml +
-                renderMetricRootCauseIssues(analysis) +
-                '<button type="button" class="metric-analysis-solution" data-metric-sol-item="' + escapeAttr(itemId) + '" data-metric-name="' + escapeAttr(metricName) + '" title="Change recommended solution">' +
-                  (solutionText ? '<strong>Recommended solution:</strong> ' + escapeHtml(solutionText) : '<span class="metric-analysis-empty">+ Add recommended solution</span>') + '</button>' +
-              '</div>';
+          if (!aggregateRepeatView) {
+            const analysisCards = state.allMetrics.filter((metricName, metricIndex) => {
+              return shouldRenderMetricAnalysis(
+                row,
+                metricName,
+                metricVals[metricIndex],
+                hasAnyTaskError,
+              );
+            }).map(metricName => {
+              return renderMetricAnalysisCard(itemId, metricName, metricAnalyses[metricName], row.review_corrections?.[metricName]);
             }).filter(Boolean).join('');
             if (analysisCards) {
-              perMetricAnalysisHtml = '<div class="metric-analysis-list"><div class="metric-analysis-heading">Per-metric root cause analysis</div>' + analysisCards + '</div>';
+              perMetricAnalysisHtml = '<section class="metric-analysis-list" aria-label="Per-metric root cause analysis"><div class="metric-analysis-toolbar"><div class="metric-analysis-intro"><h3 class="metric-analysis-heading"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 5 5M7 10h6M10 7v6"/></svg><span>Per-metric root cause analysis</span></h3><p class="metric-analysis-help">Review the problem and proposed fix for each metric.</p></div></div>' + analysisCards + '</section>';
             }
           }
-          if (aggregateRepeatView) perMetricAnalysisHtml = '';
 
 
           // The metrics strip: ONE row per metric doing all three jobs —
@@ -11189,10 +11431,10 @@
           let outputBlockHtml = '';
           if (isRepeatItem) {
             outputBlockHtml = renderAnswerColumns(baseRow, itemId, displayItemId, metric, threshold)
-              + _renderTraceChips(row.trace_stats, row.retry_count) + perMetricAnalysisHtml;
+              + _renderTraceChips(row.trace_stats, row.retry_count);
           }
           if (!outputBlockHtml) {
-            outputBlockHtml = '<div class="item-run-output"><div class="output-header"><span class="output-status-cluster"><span class="run-label">' + outputLabel + '</span>' + statusIndicator + durationPart + timePart + '</span><span class="output-actions">' + traceChip + copyBtn + '</span></div><div class="output-text ' + (status === 'error' ? 'score-1' : '') + '">' + renderMarkdownSafe(output) + '</div>' + _renderTraceChips(row.trace_stats, row.retry_count) + metricStripHtml + perMetricAnalysisHtml + '</div>';
+            outputBlockHtml = '<div class="item-run-output' + executionErrorClass + '"><div class="output-header"><span class="output-status-cluster"><span class="run-label">' + outputLabel + '</span>' + statusIndicator + durationPart + timePart + '</span><span class="output-actions">' + traceChip + copyBtn + '</span></div><div class="output-text ' + (status === 'error' ? 'score-1' : '') + '">' + renderMarkdownSafe(output) + '</div>' + _renderTraceChips(row.trace_stats, row.retry_count) + metricStripHtml + '</div>';
           }
 
           // Collapsed header: the input itself is the title; aggregates live
@@ -11202,16 +11444,21 @@
           // open, the metrics strip in the body is the single source.
           const aggPills = isExpanded ? '' : state.allMetrics.map((name, i) => {
             const v = window.QymMetrics.parseScoreValue(metricVals[i]);
-            if (v === null) return '<span class="item-agg-pill qym-item-metric-cell qym-item-metric-cell--empty" data-qym-metric-column="' + i + '" aria-hidden="true"></span>';
+            const hasMetricExecutionError = window.QymMetrics.hasMetricError(row, name);
+            if (v === null && !hasMetricExecutionError) return '<span class="item-agg-pill qym-item-metric-cell qym-item-metric-cell--empty" data-qym-metric-column="' + i + '" aria-hidden="true"></span>';
             const mType = state.metricTypes[name] || 'score';
-            const cls = window.QymMetrics.getMetricColorClass(v, mType);
+            const cls = v === null ? '' : window.QymMetrics.getMetricColorClass(v, mType);
             const isReducedBoolean = mType === 'boolean'
               && Number(state.run?.samples || 1) > 1
               && !state.viewPass;
-            const display = isReducedBoolean
-              ? window.QymMetrics.formatMetricValue(v, 'score')
-              : window.QymMetrics.formatMetricObservation(v, mType, state.metricSpecs?.[name]);
-            return '<span class="item-agg-pill qym-item-metric-cell' + (name === metric ? ' qym-item-metric-cell--selected' : '') + '" data-qym-metric-column="' + i + '"><span class="metric-score-name">' + escapeHtml(name) + '</span><span class="metric-score-value ' + cls + '">' + display + '</span></span>';
+            const display = v === null
+              ? '\u2014'
+              : (isReducedBoolean
+                  ? window.QymMetrics.formatMetricValue(v, 'score')
+                  : window.QymMetrics.formatMetricObservation(v, mType, state.metricSpecs?.[name]));
+            const metricErrorClass = hasMetricExecutionError ? ' metric-execution-error' : '';
+            const metricErrorIndicator = hasMetricExecutionError ? renderMetricErrorIndicator(name) : '';
+            return '<span class="item-agg-pill qym-item-metric-cell' + metricErrorClass + (name === metric ? ' qym-item-metric-cell--selected' : '') + '" data-qym-metric-column="' + i + '"><span class="metric-score-name">' + escapeHtml(name) + '</span><span class="metric-score-value ' + cls + '">' + display + '</span>' + metricErrorIndicator + '</span>';
           }).join('');
           const passNote = isRepeatItem
             ? '<span class="item-pass-note">' + passAttempts.filter(Boolean).length + ' passes</span>'
@@ -11220,7 +11467,7 @@
           const headerHtml = '<div class="item-header item-header-expand"' + (isExpanded ? expandAttrs : '') + '>' +
             '<span class="item-chevron' + (isExpanded ? ' open' : '') + '"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 3.5 5 4.5-5 4.5"/></svg></span>' +
             '<span class="item-index" title="ID: ' + escapeHtml(itemId) + '">#' + (row.index + 1) + '</span>' +
-            (!isExpanded && !isRepeatItem ? statusIndicator : '') +
+            (!isExpanded && (!isRepeatItem || hasAnyTaskError) ? statusIndicator : '') +
             (isExpanded
               ? '<span class="item-header-spacer"></span>'
               : '<span class="item-title" title="' + escapeAttr(displayItemId) + '">' + escapeHtml(titleText) + '</span>') +
@@ -11234,13 +11481,14 @@
             return '<div class="item-card item-collapsed item-header-expand' + executionErrorClass + '" data-item-id="' + escapeAttr(itemId) + '"' + expandAttrs + '>' + headerHtml + '</div>';
           }
 
-          return '<div class="item-card' + executionErrorClass + '" data-item-id="' + escapeAttr(itemId) + '">' +
+          return '<div class="item-card" data-item-id="' + escapeAttr(itemId) + '">' +
             headerHtml +
             '<div class="item-input-row"><div class="input-label">INPUT <button class="copy-btn qym-icon-action" data-copy-text="' + escapeAttr(typeof input === 'object' ? JSON.stringify(input,null,2) : String(input)) + '" title="Copy input">' + COPY_ICON + '</button></div><div class="input-text">' + renderMarkdownSafe(input) + '</div></div>' +
             (expected ? '<div class="item-expected-row"><div class="expected-label">EXPECTED OUTPUT <button class="copy-btn qym-icon-action" data-copy-text="' + escapeAttr(typeof expected === 'object' ? JSON.stringify(expected,null,2) : String(expected)) + '" title="Copy expected">' + COPY_ICON + '</button></div><div class="expected-text collapsed">' + renderMarkdownSafe(expected) + '</div><button class="expected-toggle" onclick="this.previousElementSibling.classList.toggle(\'collapsed\'); this.textContent = this.previousElementSibling.classList.contains(\'collapsed\') ? \'Show more \u25BC\' : \'Show less \u25B2\';">Show more \u25BC</button></div>' : '') +
             itemMetadataHtml +
             itemAnalysisWarningHtml +
             outputBlockHtml +
+            perMetricAnalysisHtml +
           '</div>';
         }).join('');
 
@@ -11591,10 +11839,36 @@
       }
 
       function wireMetricAnalysisHandlers() {
+        document.querySelectorAll('[data-approve-issue]').forEach(button => {
+          button.addEventListener('click', async event => {
+            event.stopPropagation();
+            if (button.disabled) return;
+            const itemId = button.dataset.issueItem, metricName = button.dataset.metricName;
+            const index = Number(button.dataset.approveIssue);
+            const row = (state.snapshot.rows || []).find(row => (row.item_id || String(row.index)) === itemId);
+            const issue = rootCauseIssues(row?.item_metadata?.metric_analyses?.[metricName])[index];
+            if (!issue) return;
+            button.disabled = true;
+            button.textContent = 'Approving…';
+            try {
+              await saveMetricIssueAction(itemId, metricName, { action: 'approve', issue_id: issue.issue_id || null, issue_index: index, expected_issue: metricIssueContent(issue) });
+              renderItems();
+            } catch (error) {
+              showToast('error', 'Could not approve issue', error.message);
+              button.disabled = false;
+              button.textContent = '✓ Approve';
+            }
+          });
+        });
+        document.querySelectorAll('[data-metric-add-issue]').forEach(button => {
+          button.addEventListener('click', () => {
+            showMetricIssueDialog(button.dataset.metricAddIssue, button.dataset.metricName);
+          });
+        });
         document.querySelectorAll('[data-metric-issues-item]').forEach(trigger => {
           trigger.addEventListener('click', (e) => {
             e.stopPropagation();
-            showRootCauseIssuesEditor(trigger.dataset.metricIssuesItem, trigger.dataset.metricName);
+            showMetricIssueDialog(trigger.dataset.metricIssuesItem, trigger.dataset.metricName, { mode: 'edit', issueIndex: Number(trigger.dataset.issueIndex) });
           });
         });
         document.querySelectorAll('[data-metric-rcdetail-item]').forEach(trigger => {
@@ -11610,11 +11884,7 @@
         document.querySelectorAll('[data-metric-sol-item]').forEach(trigger => {
           trigger.addEventListener('click', (e) => {
             e.stopPropagation();
-            showSolutionDropdown(
-              trigger.dataset.metricSolItem,
-              trigger,
-              trigger.dataset.metricName
-            );
+            showRootCauseIssuesEditor(trigger.dataset.metricSolItem, trigger.dataset.metricName, 'solution');
           });
         });
         document.querySelectorAll('[data-metric-feedback-item]').forEach(trigger => {
@@ -11765,7 +12035,7 @@
           if (value) analysis.solution_note = value;
           else delete analysis.solution_note;
         }
-        // Keep an AI failure visible until a human category is supplied. This
+        // Keep an AI failure recorded until a human category is supplied. This
         // lets reviewers add context first without falsely presenting an
         // incomplete manual note as a resolved diagnosis.
         if (rootCauseCategories(analysis).length) delete analysis.error;
@@ -11781,6 +12051,7 @@
 
       async function saveMetricAnalysisPatch(itemId, metricName, patch, options = {}) {
         const silent = options.silent === true;
+        const editingScope = metricAnalysisKey(itemId, metricName);
         const rows = state.snapshot.rows || [];
         const row = rows.find(r => (r.item_id || String(r.index)) === itemId);
 
@@ -11822,6 +12093,8 @@
             showToast('error', 'Could not save diagnosis', message);
             return false;
           }
+          // A response from a previous pass must not replace the current pass.
+          if (editingScope !== metricAnalysisKey(itemId, metricName)) return true;
           if (data.row) {
             applyUpdatedRow(data.row);
             rootCauseCategories(patch).forEach(category => {
@@ -11887,99 +12160,365 @@
         }
       }
 
-      function showRootCauseIssuesEditor(itemId, metricName) {
-        document.querySelectorAll('.rdi-category-picker, .root-cause-dropdown').forEach(node => node.remove());
-        const rows = state.snapshot.rows || [];
-        const row = rows.find(candidate => (candidate.item_id || String(candidate.index)) === itemId);
-        const analysis = metricName
-          ? row?.item_metadata?.metric_analyses?.[metricName]
-          : row?.item_metadata;
-        let issues = rootCauseIssues(analysis).map(issue => ({ ...issue }));
-        if (!issues.length) issues = [{}];
-        const categories = categoryPickerOptions();
-        const subcategories = [];
-        Object.values(state.categoryCatalog?.category_details_map || {}).forEach(values => {
-          (Array.isArray(values) ? values : []).forEach(value => {
-            const label = String(value || '').trim();
-            if (label && !subcategories.includes(label)) subcategories.push(label);
-          });
-        });
+      function metricAnalysisKey(itemId, metricName = '') {
+        return JSON.stringify([state.run?.file_path, state.viewPass || null, itemId, metricName]);
+      }
 
-        const editor = document.createElement('div');
-        editor.className = 'rdi-category-picker rdi-issues-editor';
-        editor.setAttribute('role', 'presentation');
-        editor.innerHTML = '<div class="rdi-category-picker__panel" role="dialog" aria-modal="true" aria-labelledby="rdi-issues-editor-title">' +
-          '<div class="rdi-category-picker__header"><div><p class="rdi-category-picker__eyebrow">Diagnosis</p><h2 class="rdi-category-picker__title" id="rdi-issues-editor-title">Edit root-cause issues</h2><p class="rdi-category-picker__lead">Keep each independent cause in its own issue.</p></div><button type="button" class="rdi-category-picker__close qym-icon-action" aria-label="Close issue editor" title="Close">×</button></div>' +
-          '<div class="rdi-category-picker__body"><div class="rdi-issues-editor__list" data-issue-list></div></div>' +
-          '<div class="rdi-category-picker__footer"><span class="rdi-category-picker__status" data-issue-status role="status" aria-live="polite"></span><div class="rdi-category-picker__footer-actions"><button type="button" class="qym-inline-action qym-inline-action--neutral" data-add-issue>Add issue</button><button type="button" class="qym-inline-action qym-inline-action--accent" data-save-issues>Save</button></div></div>' +
-          '</div>' +
-          '<datalist id="rdi-issue-categories">' + categories.map(category => '<option value="' + escapeAttr(category) + '"></option>').join('') + '</datalist>' +
-          '<datalist id="rdi-issue-subcategories">' + subcategories.sort().map(subcategory => '<option value="' + escapeAttr(subcategory) + '"></option>').join('') + '</datalist>';
-        const list = editor.querySelector('[data-issue-list]');
-        const status = editor.querySelector('[data-issue-status]');
-        const renderRows = () => {
-          list.innerHTML = issues.map((issue, index) => '<article class="rdi-issues-editor__row" data-issue-row>' +
-            '<div class="rdi-issues-editor__row-head"><span class="rdi-issues-editor__number">Issue ' + (index + 1) + '</span><button type="button" class="qym-icon-action" data-remove-issue="' + index + '" title="Remove issue" aria-label="Remove issue">×</button></div>' +
-            '<div class="rdi-issues-editor__fields">' +
-              '<label class="rdi-issues-editor__field"><span>Category</span><input class="qym-control qym-input" data-issue-field="category" list="rdi-issue-categories" value="' + escapeAttr(issue.category || '') + '" placeholder="Root-cause category" /></label>' +
-              '<label class="rdi-issues-editor__field"><span>Subcategory</span><input class="qym-control qym-input" data-issue-field="subcategory" list="rdi-issue-subcategories" value="' + escapeAttr(issue.subcategory || '') + '" placeholder="Reusable failure mechanism" /></label>' +
-              '<label class="rdi-issues-editor__field rdi-issues-editor__field--finding"><span>Finding</span><textarea data-issue-field="finding" placeholder="Item-specific diagnosis">' + escapeHtml(issue.finding || '') + '</textarea></label>' +
-            '</div></article>').join('');
+      function metricAnalysisPanel(itemId, metricName) {
+        const key = metricAnalysisKey(itemId, metricName);
+        return Array.from(document.querySelectorAll('[data-metric-analysis-key]'))
+          .find(panel => panel.dataset.metricAnalysisKey === key);
+      }
+
+      function metricIssueContent(issue) {
+        return Object.fromEntries(['category', 'subcategory', 'finding', 'solution', 'solution_note']
+          .map(key => [key, String(issue?.[key] || '').trim()]));
+      }
+
+      function createMetricDiagnosisDraft(itemId, metricName, mode = 'edit', issueIndex = 0) {
+        const row = (state.snapshot.rows || []).find(candidate => (candidate.item_id || String(candidate.index)) === itemId);
+        if (!row) return null;
+        const issues = rootCauseIssues(row.item_metadata?.metric_analyses?.[metricName] || {});
+        const original = mode === 'edit' ? issues[issueIndex] : null;
+        if (mode === 'edit' && !original) return null;
+        return {
+          scope: metricAnalysisKey(itemId, metricName), mode, issueIndex,
+          issueId: original?.issue_id || null, newIssueId: mode === 'add' ? globalThis.crypto?.randomUUID?.() : null,
+          issues: [{ ...(original || {}) }], originalIssue: original ? { ...original } : null,
+          solution: String(original?.solution || ''), solution_note: String(original?.solution_note || ''),
+          addingNewSolution: false, saving: false, error: false, message: '', invalidIndex: null, invalidSolution: false,
         };
-        const readRows = () => {
-          issues = Array.from(list.querySelectorAll('[data-issue-row]')).map((issueRow, index) => {
-            const issue = { ...(issues[index] || {}) };
-            issueRow.querySelectorAll('[data-issue-field]').forEach(field => {
-              issue[field.dataset.issueField] = field.value.trim();
-            });
-            return issue;
+      }
+
+      function metricDiagnosisSolutionOptions() {
+        const options = new Set(SOLUTION_PRESETS);
+        (state.snapshot.rows || []).forEach(row => {
+          if (row.item_metadata?.solution) options.add(row.item_metadata.solution);
+          Object.values(row.item_metadata?.metric_analyses || {}).forEach(analysis => {
+            if (analysis?.solution) options.add(analysis.solution);
+            rootCauseIssues(analysis).forEach(issue => { if (issue.solution) options.add(issue.solution); });
           });
+        });
+        return Array.from(options);
+      }
+
+      function selectMetricDiagnosisSolution(draft, value) {
+        const selected = String(value ?? '');
+        const originalSolution = String(draft.originalIssue?.solution || '');
+        draft.addingNewSolution = selected === ADD_NEW_SOLUTION_VALUE;
+        draft.solution = draft.addingNewSolution ? '' : selected;
+        draft.solution_note = draft.solution && draft.solution === originalSolution
+          ? String(draft.originalIssue?.solution_note || '')
+          : '';
+        draft.invalidSolution = false;
+      }
+
+      async function saveMetricIssueAction(itemId, metricName, request) {
+        const scope = metricAnalysisKey(itemId, metricName);
+        if (IS_EXPORT) {
+          if (request.action === 'approve') throw new Error('Approve issues on the website, not in an exported file.');
+          const row = (state.snapshot.rows || []).find(row => (row.item_id || String(row.index)) === itemId);
+          if (!row) throw new Error('Sample no longer available.');
+          row.item_metadata = row.item_metadata || {};
+          row.item_metadata.metric_analyses = row.item_metadata.metric_analyses || {};
+          const analysis = row.item_metadata.metric_analyses[metricName] || {};
+          const issues = rootCauseIssues(analysis);
+          const index = request.issue_id ? issues.findIndex(issue => issue.issue_id === request.issue_id) : request.issue_index;
+          if (request.action === 'add') issues.push({ ...request.issue, issue_id: crypto.randomUUID(), source: 'human', review_status: 'pending' });
+          else if (!issues[index] || JSON.stringify(metricIssueContent(issues[index])) !== JSON.stringify(metricIssueContent(request.expected_issue))) throw new Error('This issue changed. Reopen it before saving.');
+          else if (request.action === 'delete') issues.splice(index, 1);
+          else issues[index] = { ...issues[index], ...request.issue, source: 'human', review_status: 'pending' };
+          row.item_metadata.metric_analyses[metricName] = { ...analysis, ...rootCauseIssuePatch(issues), root_cause_issues: issues, source: 'human', review_status: 'pending' };
+          autoSaveExport();
+          return true;
+        }
+        const res = await fetch(apiUrl('api/runs/update_root_cause_issue'), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(addCurrentPassToPayload({
+            run_id: state.run?.file_path || RUN_ID, item_id: itemId, metric_name: metricName, ...request,
+          })),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok || !data.row) throw new Error(data.detail || data.error || 'Could not save. Your draft is still here; try again.');
+        if (scope !== metricAnalysisKey(itemId, metricName)) return true;
+        applyUpdatedRow(data.row);
+        if (request.issue?.category && !state.rootCauseValues.includes(request.issue.category)) {
+          state.rootCauseValues.push(request.issue.category);
+          state.rootCauseValues.sort();
+          buildCategoryDropdowns();
+        }
+        return true;
+      }
+
+      async function saveMetricDiagnosisDraft(itemId, metricName, draft) {
+        if (!draft || draft.saving) return false;
+        draft.error = false;
+        draft.invalidIndex = null;
+        draft.invalidSolution = false;
+        if (draft.scope !== metricAnalysisKey(itemId, metricName)) {
+          draft.error = true;
+          draft.message = 'The viewed run or pass changed. Close this popup and edit the correct pass.';
+          return false;
+        }
+        const issue = metricIssueContent({ ...draft.issues[0], solution: draft.solution, solution_note: draft.solution_note });
+        const deleting = draft.mode === 'edit' && !draft.issues.length;
+        if (!deleting && !issue.category) {
+          draft.error = true;
+          draft.invalidIndex = 0;
+          draft.message = 'Every issue needs a category. Choose or type one above.';
+          return false;
+        }
+        if (!deleting && draft.addingNewSolution && !issue.solution) {
+          draft.error = true;
+          draft.invalidSolution = true;
+          draft.message = 'Enter the new solution, or choose an existing solution.';
+          return false;
+        }
+        if (draft.mode === 'edit' && !deleting && JSON.stringify(issue) === JSON.stringify(metricIssueContent(draft.originalIssue))) return true;
+        const request = { action: deleting ? 'delete' : draft.mode, issue };
+        if (draft.mode === 'add' && draft.newIssueId) request.client_issue_id = draft.newIssueId;
+        if (draft.mode === 'edit') Object.assign(request, {
+          issue_id: draft.issueId, issue_index: draft.issueIndex, expected_issue: metricIssueContent(draft.originalIssue),
+        });
+        draft.saving = true;
+        draft.message = 'Saving issue…';
+        try {
+          return await saveMetricIssueAction(itemId, metricName, request);
+        } catch (error) {
+          draft.error = true;
+          draft.message = (error.message || 'Could not save.') + ' Your draft is still here.';
+          return false;
+        } finally {
+          draft.saving = false;
+        }
+      }
+
+      function metricIssueGuidanceHtml(category) {
+        const taxonomy = categoryCatalogEntry(category);
+        if (!String(category || '').trim()) return '<p>Choose a category to see its meaning and when to use it.</p>';
+        return (taxonomy.description ? '<p><strong>What it means</strong><br>' + escapeHtml(taxonomy.description) + '</p>' : '') +
+          '<p><strong>Use when</strong><br>' + escapeHtml(taxonomy.when_to_use || 'Usage guidance is not configured for this category.') + '</p>';
+      }
+
+      function renderMetricDiagnosisFields(draft) {
+        const currentSolution = String(draft.solution || '').trim();
+        const solutionOptions = metricDiagnosisSolutionOptions()
+          .map(value => String(value || '').trim())
+          .filter(Boolean);
+        if (currentSolution && !draft.addingNewSolution && !solutionOptions.includes(currentSolution)) {
+          solutionOptions.push(currentSolution);
+        }
+        const solutionOptionHtml = solutionOptions.map(value =>
+          '<option value="' + escapeAttr(value) + '"' +
+            (!draft.addingNewSolution && value === currentSolution ? ' selected' : '') + '>' +
+            escapeHtml(value) + '</option>'
+        ).join('');
+        const issues = draft.issues.map((issue, index) => {
+          const guidanceId = 'metric-issue-guidance-' + index;
+          const detailsId = 'metric-issue-subcategories-' + index;
+          return '<fieldset class="metric-issue-dialog__issue" data-issue-row="' + index + '">' +
+            '<legend class="metric-issue-dialog__issue-heading"><span>Issue ' + (draft.mode === 'edit' ? draft.issueIndex + 1 : 1) + '</span>' +
+              (issue.confidence == null ? '' : '<span class="qym-tag qym-tag--count" title="Saved AI confidence">' + Math.round(issue.confidence * 100) + '% confidence</span>') + '</legend>' +
+            '<label class="rdi-issues-editor__field"><span>Category</span><input class="qym-control qym-input" data-issue-field="category" value="' + escapeAttr(issue.category || '') + '" placeholder="Choose from the category guide, or type one" aria-required="true" aria-describedby="' + guidanceId + '" autocomplete="off"></label>' +
+            '<div id="' + guidanceId + '" class="metric-issue-dialog__guidance" data-category-guidance aria-live="polite">' + metricIssueGuidanceHtml(issue.category) + '</div>' +
+            '<label class="rdi-issues-editor__field"><span>Subcategory (optional)</span><input class="qym-control qym-input" data-issue-field="subcategory" value="' + escapeAttr(issue.subcategory || '') + '" list="' + detailsId + '" placeholder="A more specific failure mechanism"></label>' +
+            '<label class="rdi-issues-editor__field"><span>Finding</span><textarea data-issue-field="finding" placeholder="Describe what went wrong in this sample and the evidence for it.">' + escapeHtml(issue.finding || '') + '</textarea></label>' +
+            (issue.category_reason ? '<details class="metric-analysis-issue-reason"><summary>Why this category · saved AI explanation</summary><div>' + escapeHtml(issue.category_reason) + '</div></details>' : '') +
+            '<datalist id="' + detailsId + '">' + categoryCatalogDetails(issue.category).map(value => '<option value="' + escapeAttr(String(value)) + '"></option>').join('') + '</datalist></fieldset>';
+        }).join('');
+        return '<div class="metric-issue-dialog__issues" data-issue-list>' + (issues || '<p class="metric-analysis-help">This issue will be removed when you save. Other issues will be kept.</p>') + '</div>' +
+          (!draft.issues.length ? '<button type="button" class="qym-inline-action qym-inline-action--neutral" data-add-issue>Restore issue</button>' : '') +
+          '<section class="metric-issue-dialog__solution" aria-label="Proposed solution"><h3>Proposed solution</h3><p class="metric-analysis-help">Choose a saved solution, or add a new one for this issue.</p>' +
+            '<label class="rdi-issues-editor__field"><span>Preset or saved solution</span><select class="qym-control qym-select" data-solution-preset>' +
+              '<option value=""' + (!currentSolution && !draft.addingNewSolution ? ' selected' : '') + '>No solution</option>' +
+              solutionOptionHtml +
+              '<option value="' + escapeAttr(ADD_NEW_SOLUTION_VALUE) + '"' + (draft.addingNewSolution ? ' selected' : '') + '>+ Add new solution</option>' +
+            '</select></label>' +
+            (draft.addingNewSolution
+              ? '<label class="rdi-issues-editor__field"><span>New solution</span><input class="qym-control qym-input" data-new-solution value="' + escapeAttr(draft.solution) + '" placeholder="Describe the new solution" aria-required="true" autocomplete="off"></label>'
+              : '') + '</section>';
+      }
+
+      function showMetricIssueDialog(itemId, metricName, options = {}) {
+        if (document.querySelector('.metric-issue-dialog[open]')) return;
+        const mode = options.mode === 'edit' ? 'edit' : 'add';
+        let draft = createMetricDiagnosisDraft(itemId, metricName, mode, options.issueIndex ?? 0);
+        if (!draft) return;
+        const scope = draft.scope;
+        const row = (state.snapshot.rows || []).find(candidate => (candidate.item_id || String(candidate.index)) === itemId);
+        const returnFocus = document.activeElement;
+        const title = mode === 'edit' ? 'Edit issue ' + (draft.issueIndex + 1) : 'Add issue';
+        const saveLabel = mode === 'edit' ? 'Save changes' : 'Add issue';
+        const dialog = document.createElement('dialog');
+        dialog.className = 'metric-issue-dialog';
+        dialog.setAttribute('aria-labelledby', 'metric-issue-dialog-title');
+        dialog.innerHTML = '<div class="metric-issue-dialog__header"><div><h2 id="metric-issue-dialog-title">' + title + '</h2><p>For <span class="metric-analysis-name">' + escapeHtml(metricName) + '</span> · Sample #' + (Number(row.index) + 1) + (state.viewPass ? ' · Pass ' + state.viewPass : '') + '</p></div><button type="button" class="qym-icon-action" data-close-diagnosis aria-label="Close ' + title + '">' + CLOSE_ICON + '</button>' +
+          '<nav class="metric-issue-dialog__navigation" aria-label="Diagnosis fields"><button type="button" class="qym-inline-action qym-inline-action--neutral" data-jump-issues>Issue fields</button><button type="button" class="qym-inline-action qym-inline-action--neutral" data-jump-solution>Solution</button></nav></div>' +
+          '<div class="metric-issue-dialog__body"><aside class="metric-issue-dialog__categories" aria-label="Category guide"><label class="rdi-issues-editor__field"><span>Find a category</span><input type="search" class="qym-control qym-search" data-category-search placeholder="Search by name or when to use it" autocomplete="off"></label><p class="metric-analysis-help" data-category-target aria-live="polite"></p><div class="metric-issue-dialog__category-list" data-issue-categories role="group" aria-label="Root-cause categories"></div></aside>' +
+          '<form id="metric-issue-dialog-form" class="metric-issue-dialog__form" novalidate></form></div>' +
+          '<div class="metric-issue-dialog__footer"><div class="metric-issue-dialog__footer-start">' +
+          (mode === 'edit' ? '<button type="button" class="qym-inline-action qym-inline-action--danger metric-issue-dialog__delete" data-delete-diagnosis-issue>' + FILTER_TRASH_ICON + '<span>Delete issue</span></button>' : '') +
+          '<span class="metric-issue-dialog__status" data-diagnosis-status role="status" aria-live="polite"></span></div><div class="metric-analysis-actions"><button type="button" class="qym-inline-action qym-inline-action--neutral" data-close-diagnosis>Cancel</button>' +
+          (mode === 'add' ? '<button type="submit" form="metric-issue-dialog-form" class="qym-inline-action qym-inline-action--neutral" data-add-another="true">Save and add another</button>' : '') +
+          '<button type="submit" form="metric-issue-dialog-form" class="qym-inline-action qym-inline-action--accent" data-save-diagnosis>' + saveLabel + '</button></div></div>';
+        const form = dialog.querySelector('form');
+        const search = dialog.querySelector('[data-category-search]');
+        const list = dialog.querySelector('[data-issue-categories]');
+        const status = dialog.querySelector('[data-diagnosis-status]');
+        const saveButton = dialog.querySelector('[data-save-diagnosis]');
+        const deleteButton = dialog.querySelector('[data-delete-diagnosis-issue]');
+        let activeIndex = draft.issues.length ? 0 : -1;
+        const setStatus = (message, error = false) => {
+          status.textContent = message;
+          status.classList.toggle('is-error', error);
         };
+        const activeRow = () => form.querySelector('[data-issue-row="' + activeIndex + '"]');
+        const renderCategories = () => {
+          const query = search.value.trim().toLocaleLowerCase();
+          const currentCategory = String(draft.issues[activeIndex]?.category || '').trim().toLocaleLowerCase();
+          dialog.querySelector('[data-category-target]').textContent = activeIndex < 0
+            ? 'Add an issue to choose its category.' : 'Choose a category for Issue ' + (draft.mode === 'edit' ? draft.issueIndex + 1 : 1) + '.';
+          const categories = categoryPickerOptions().filter(category => {
+            const taxonomy = categoryCatalogEntry(category);
+            return [category, taxonomy.description, taxonomy.when_to_use].filter(Boolean).join(' ').toLocaleLowerCase().includes(query);
+          });
+          list.innerHTML = categories.length ? categories.map(category => {
+            const taxonomy = categoryCatalogEntry(category);
+            return '<button type="button" class="metric-issue-dialog__category" data-issue-category="' + escapeAttr(category) + '" aria-pressed="' + (category.trim().toLocaleLowerCase() === currentCategory) + '"' + (activeIndex < 0 ? ' disabled' : '') + '><span class="metric-issue-dialog__category-name">' + escapeHtml(category) + '</span><span class="metric-issue-dialog__category-hint">' + escapeHtml(taxonomy.when_to_use || taxonomy.description || 'Usage guidance is not configured for this category.') + '</span></button>';
+          }).join('') : '<p class="metric-analysis-help">No categories match. You can also type a category in the form.</p>';
+        };
+        const renderForm = () => {
+          form.innerHTML = renderMetricDiagnosisFields(draft);
+          renderCategories();
+          if (deleteButton) deleteButton.hidden = !draft.issues.length;
+        };
+        const updateIssueGuidance = issueRow => {
+          const category = draft.issues[Number(issueRow.dataset.issueRow)].category;
+          issueRow.querySelector('[data-category-guidance]').innerHTML = metricIssueGuidanceHtml(category);
+          issueRow.querySelector('datalist').innerHTML = categoryCatalogDetails(category).map(value => '<option value="' + escapeAttr(String(value)) + '"></option>').join('');
+        };
+        const clearError = () => {
+          draft.error = false;
+          draft.invalidIndex = null;
+          draft.invalidSolution = false;
+          form.querySelectorAll('[aria-invalid="true"]').forEach(input => input.removeAttribute('aria-invalid'));
+          setStatus(mode === 'add' ? 'Existing issues will be kept.' : 'Only this issue will change. Other issues keep their approval.');
+        };
+        dialog.querySelector('[data-jump-issues]').addEventListener('click', () => {
+          (form.querySelector('[data-issue-field="category"]') || form.querySelector('[data-add-issue]')).focus();
+        });
+        dialog.querySelector('[data-jump-solution]').addEventListener('click', () => {
+          form.querySelector('[data-solution-preset]').focus();
+        });
+        search.addEventListener('input', renderCategories);
+        form.addEventListener('focusin', event => {
+          const issueRow = event.target.closest('[data-issue-row]');
+          if (issueRow && activeIndex !== Number(issueRow.dataset.issueRow)) {
+            activeIndex = Number(issueRow.dataset.issueRow);
+            renderCategories();
+          }
+        });
+        form.addEventListener('input', event => {
+          const field = event.target;
+          if (field.dataset.issueField) {
+            const issueRow = field.closest('[data-issue-row]');
+            activeIndex = Number(issueRow.dataset.issueRow);
+            draft.issues[activeIndex][field.dataset.issueField] = field.value;
+            if (field.dataset.issueField === 'category') { updateIssueGuidance(issueRow); renderCategories(); }
+          } else if (field.matches('[data-new-solution]')) {
+            draft.solution = field.value;
+          }
+          clearError();
+        });
         list.addEventListener('click', event => {
-          const remove = event.target.closest('[data-remove-issue]');
-          if (!remove) return;
-          readRows();
-          issues.splice(Number(remove.dataset.removeIssue), 1);
-          if (!issues.length) issues.push({});
-          renderRows();
+          const button = event.target.closest('[data-issue-category]');
+          if (!button || draft.saving || activeIndex < 0) return;
+          const input = activeRow().querySelector('[data-issue-field="category"]');
+          input.value = button.dataset.issueCategory;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.focus();
         });
-        editor.querySelector('[data-add-issue]').addEventListener('click', () => {
-          readRows();
-          issues.push({});
-          renderRows();
-          const category = list.lastElementChild?.querySelector('[data-issue-field="category"]');
-          if (category) category.focus();
+        form.addEventListener('change', event => {
+          if (!event.target.matches('[data-solution-preset]')) return;
+          selectMetricDiagnosisSolution(draft, event.target.value);
+          renderForm();
+          clearError();
+          (draft.addingNewSolution
+            ? form.querySelector('[data-new-solution]')
+            : form.querySelector('[data-solution-preset]'))?.focus();
         });
-        const cleanup = () => editor.remove();
-        editor.querySelector('.rdi-category-picker__close').addEventListener('click', cleanup);
-        editor.addEventListener('click', event => { if (event.target === editor) cleanup(); });
-        editor.querySelector('[data-save-issues]').addEventListener('click', async event => {
-          readRows();
-          const nextIssues = issues.filter(issue => issue.category || issue.subcategory || issue.finding);
-          const incompleteIndex = nextIssues.findIndex(issue => !issue.category);
-          if (incompleteIndex >= 0) {
-            status.textContent = 'Every issue needs a category.';
-            status.classList.add('is-error');
+        deleteButton?.addEventListener('click', () => {
+          if (draft.saving || !draft.issues.length) return;
+          draft.issues = [];
+          activeIndex = -1;
+          renderForm();
+          clearError();
+          setStatus('Deletion staged. Save changes to delete this issue, or restore it.');
+          form.querySelector('[data-add-issue]')?.focus();
+        });
+        form.addEventListener('click', event => {
+          if (draft.saving) return;
+          if (event.target.closest('[data-add-issue]')) {
+            draft.issues.push({ ...(draft.originalIssue || {}) });
+            activeIndex = draft.issues.length - 1;
+          } else return;
+          renderForm();
+          clearError();
+          (activeRow()?.querySelector('[data-issue-field="category"]') || form.querySelector('[data-add-issue]')).focus();
+        });
+        dialog.querySelectorAll('[data-close-diagnosis]').forEach(button => button.addEventListener('click', () => { if (!draft.saving) dialog.close(); }));
+        dialog.addEventListener('cancel', event => { if (draft.saving) event.preventDefault(); });
+        dialog.addEventListener('close', () => {
+          dialog.remove();
+          if (scope !== metricAnalysisKey(itemId, metricName)) return;
+          const fallback = metricAnalysisPanel(itemId, metricName)?.querySelector(mode === 'add' ? '[data-metric-add-issue]' : '[data-metric-issues-item], [data-metric-sol-item]');
+          (returnFocus?.isConnected ? returnFocus : fallback)?.focus({ preventScroll: true });
+        });
+        form.addEventListener('submit', async event => {
+          event.preventDefault();
+          if (draft.saving) return;
+          const addAnother = event.submitter?.dataset.addAnother === 'true';
+          dialog.querySelectorAll('input, textarea, select, button').forEach(control => { control.disabled = true; });
+          saveButton.textContent = 'Saving…';
+          setStatus('Saving diagnosis…');
+          const saved = await saveMetricDiagnosisDraft(itemId, metricName, draft);
+          dialog.querySelectorAll('input, textarea, select, button').forEach(control => { control.disabled = false; });
+          saveButton.textContent = saveLabel;
+          if (!saved) {
+            setStatus(draft.message, true);
+            if (Number.isInteger(draft.invalidIndex) && draft.invalidIndex >= 0) {
+              const input = form.querySelector('[data-issue-row="' + draft.invalidIndex + '"] [data-issue-field="category"]');
+              input?.setAttribute('aria-invalid', 'true');
+              (input || form.querySelector('[data-add-issue]')).focus();
+            } else if (draft.invalidSolution) {
+              const input = form.querySelector('[data-new-solution]');
+              input?.setAttribute('aria-invalid', 'true');
+              input?.focus();
+            }
             return;
           }
-          const saveButton = event.currentTarget;
-          saveButton.disabled = true;
-          status.classList.remove('is-error');
-          status.textContent = 'Saving issues…';
-          try {
-            const saved = await saveRootCauseIssues(itemId, nextIssues, metricName);
-            if (!saved) throw new Error('Issue save failed');
-            cleanup();
-          } catch (error) {
-            status.textContent = 'Could not save these issues.';
-            status.classList.add('is-error');
-          } finally {
-            saveButton.disabled = false;
-          }
+          renderItems();
+          renderRootCauseSection();
+          if (addAnother && scope === metricAnalysisKey(itemId, metricName)) {
+            draft = createMetricDiagnosisDraft(itemId, metricName, 'add');
+            activeIndex = 0;
+            search.value = '';
+            renderForm();
+            form.scrollTop = 0;
+            setStatus('Issue saved. Add the next issue for this metric.');
+            search.focus();
+          } else dialog.close();
         });
-        renderRows();
-        document.body.appendChild(editor);
-        setTimeout(() => list.querySelector('[data-issue-field="category"]')?.focus(), 0);
+        renderForm();
+        clearError();
+        document.body.appendChild(dialog);
+        dialog.showModal();
+        if (options.focusField === 'solution') form.querySelector('[data-solution-preset]').focus();
+        else search.focus();
+      }
+
+      function showRootCauseIssuesEditor(itemId, metricName, focusField = 'category') {
+        showMetricIssueDialog(itemId, metricName, { mode: 'edit', focusField });
       }
 
       function showRootCauseCategoryPicker(itemId, anchorEl, metricName) {

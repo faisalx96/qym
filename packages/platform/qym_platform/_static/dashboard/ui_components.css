@@ -327,6 +327,29 @@ button:is(.qym-select, .multi-select-btn)[aria-expanded="true"] {
   color: var(--accent-primary);
 }
 
+.qym-inline-action.qym-inline-action--danger {
+  gap: var(--space-xs);
+  padding-right: var(--space-md);
+  padding-left: var(--space-md);
+  border: 0;
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+  color: var(--error);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.qym-inline-action.qym-inline-action--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--error) 20%, transparent);
+  color: var(--error);
+}
+
+.qym-inline-action[hidden] {
+  display: none;
+}
+
 :is(
   .add-bar > .btn,
   .bootstrap-form > .btn,

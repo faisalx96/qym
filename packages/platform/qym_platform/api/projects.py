@@ -47,7 +47,6 @@ from qym_platform.security import api_key_prefix, hash_api_key
 from qym_platform.settings import PlatformSettings
 from qym_platform.services.analysis_prompts import (
     DEFAULT_ANALYSIS_PROMPTS,
-    PROMPT_MAX_CHARS,
     serialize_analysis_prompt_settings,
 )
 from qym_platform.services.root_cause_categories import DEFAULT_ROOT_CAUSE_TAXONOMY
@@ -394,15 +393,15 @@ class LlmConnectionRequest(BaseModel):
 class AnalysisPromptSettingsRequest(BaseModel):
     """Editable system prompts for the three analysis agents."""
 
-    llm_analyzer: str = Field(..., min_length=1, max_length=PROMPT_MAX_CHARS)
-    aggregator: str = Field(..., min_length=1, max_length=PROMPT_MAX_CHARS)
-    rules_writer: str = Field(..., min_length=1, max_length=PROMPT_MAX_CHARS)
+    llm_analyzer: str = Field(..., min_length=1)
+    aggregator: str = Field(..., min_length=1)
+    rules_writer: str = Field(..., min_length=1)
 
 
 class AnalysisPromptUpdateRequest(BaseModel):
     """A single prompt update used by the prompt editor."""
 
-    value: str = Field(..., min_length=1, max_length=PROMPT_MAX_CHARS)
+    value: str = Field(..., min_length=1)
 
 
 ANALYSIS_PROMPT_FIELDS = {
@@ -416,11 +415,6 @@ def _normalise_analysis_prompt(value: str, label: str) -> str:
     prompt = str(value or "").strip()
     if not prompt:
         raise HTTPException(status_code=422, detail=f"{label} prompt cannot be empty")
-    if len(prompt) > PROMPT_MAX_CHARS:
-        raise HTTPException(
-            status_code=422,
-            detail=f"{label} prompt must be {PROMPT_MAX_CHARS} characters or fewer",
-        )
     return prompt
 
 

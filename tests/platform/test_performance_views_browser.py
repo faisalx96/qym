@@ -712,23 +712,29 @@ def test_source_issue_records_keep_full_compact_pass_filter_export_and_edit_pari
             fixture = fixtures[1]
             page = fixture.page
             if kind == "run":
-                trigger = page.locator(
-                    '[data-metric-issues-item="item-60"][data-metric-name="accuracy"]'
-                )
+                page.locator(
+                    '[data-metric-issues-item="item-60"][data-metric-name="accuracy"][data-issue-index="1"]'
+                ).first.click()
+                editor = page.get_by_role("dialog", name="Edit issue 2")
+                fields = editor.locator('[data-issue-field="finding"]')
+                assert fields.count() == 1
+                assert fields.first.input_value() == "pass-2 second finding 60"
+                fields.first.fill("Reviewed second issue")
+                with page.expect_response("**/api/runs/update_root_cause_issue") as saved:
+                    editor.locator("[data-save-diagnosis]").click()
             else:
                 run_index = page.evaluate(
                     "__viewTest.state.runs.findIndex(run => run.run.file_path === 'run-1::pass2')"
                 )
-                trigger = page.locator(
+                page.locator(
                     f'[data-rc-issues-run-idx="{run_index}"][data-rc-issues-metric="accuracy"]'
-                )
-            trigger.first.click()
-            editor = page.get_by_role("dialog", name="Edit root-cause issues")
-            fields = editor.locator('[data-issue-field="finding"]')
-            assert fields.count() == 2
-            fields.nth(1).fill("Reviewed second issue")
-            with page.expect_response("**/api/runs/update_root_cause") as saved:
-                editor.locator("[data-save-issues]").click()
+                ).first.click()
+                editor = page.get_by_role("dialog", name="Edit root-cause issues")
+                fields = editor.locator('[data-issue-field="finding"]')
+                assert fields.count() == 2
+                fields.nth(1).fill("Reviewed second issue")
+                with page.expect_response("**/api/runs/update_root_cause") as saved:
+                    editor.locator("[data-save-issues]").click()
             assert saved.value.status == 200
             editor.wait_for(state="hidden")
             fixture.settled()

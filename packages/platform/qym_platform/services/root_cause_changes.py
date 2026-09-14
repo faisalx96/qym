@@ -450,6 +450,25 @@ def replace_metric_review_candidate(
         if approved_candidate is not None:
             return approved_candidate
 
+    # New issue-owned diagnoses use independent review candidates. Keep the
+    # legacy grouped path for old records until their first issue-level edit.
+    from qym_platform.services.issue_reviews import (
+        correction_issue_id,
+        sync_issue_candidates,
+    )
+
+    issue_owned = any(
+        "issue_id" in issue or "solution" in issue
+        for issue in analysis_root_cause_issues(analysis)
+    )
+    if issue_owned or any(correction_issue_id(c) for c in active_candidates):
+        candidates = sync_issue_candidates(
+            db, run=run, item=item, metric_name=metric_name, analysis=analysis,
+            actor_user_id=actor_user_id, actor_source=actor_source,
+            active_candidates=active_candidates,
+        )
+        return candidates[0] if candidates else None
+
     ai_baseline = next(
         (
             candidate
