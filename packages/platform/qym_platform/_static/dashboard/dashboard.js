@@ -3264,7 +3264,7 @@
       tbody.innerHTML = `
         <tr>
           <td colspan="${colCount}" style="text-align:center;padding:2rem;color:var(--text-muted);">
-            No runs match current filters
+            ${Number(state.dashboardOverview?.freshness?.unpublished_runs || 0) > 0 ? 'Run history is preparing. Available runs will appear automatically.' : 'No runs match current filters'}
           </td>
         </tr>
       `;
@@ -4457,6 +4457,7 @@
       filterText = countText + (parts.length > 0 ? ` — ${parts.join(', ')}` : '');
     }
 
+    if (Number(state.dashboardOverview?.freshness?.unpublished_runs || 0) > 0) filterText += ' · ready runs only';
     if (el('status-filter')) el('status-filter').textContent = filterText;
   }
 
@@ -4601,7 +4602,7 @@
     const modelsView = el('models-view');
     const selectionAvailable = !!state.runs && (usesDashboardSummary() ? state.dashboardOverview.total_count > 0 : state.flatRuns.length > 0);
 
-    if (!selectionAvailable) {
+    if (!selectionAvailable && !state.dashboardOverview?.freshness?.updating) {
       state.selectMode = false;
       state.selectedRuns.clear();
       state.cohortAnchorRuns = null;
@@ -4645,17 +4646,9 @@
       state.focusedIndex = -1;
     }
 
-    if (usesDashboardSummary() && state.dashboardOverview.freshness?.updating && state.dashboardOverview.total_count === 0) {
-      loading.innerHTML = '<span>Preparing run history…</span>';
-      loading.style.display = 'flex';
-      empty.style.display = 'none';
-      if (tableView) tableView.style.display = 'none';
-      if (chartsView) chartsView.style.display = 'none';
-      if (modelsView) modelsView.style.display = 'none';
-      return;
-    }
+    const historyPreparing = Number(state.dashboardOverview?.freshness?.unpublished_runs || 0) > 0;
 
-    if (usesDashboardSummary() ? state.dashboardOverview.total_count === 0 : state.flatRuns.length === 0) {
+    if (!historyPreparing && (usesDashboardSummary() ? state.dashboardOverview.total_count === 0 : state.flatRuns.length === 0)) {
       const tbody = el('runs-tbody');
       if (tbody) tbody.innerHTML = '';
       renderTablePagination({ totalRuns: 0, pageCount: 1, start: 0, end: 0 });
@@ -6360,6 +6353,7 @@
     populateMetricVisibility();
     el('last-updated').textContent = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     render();
+    renderDashboardFreshness(state.dashboardOverview?.freshness);
   }
 
   async function _fetchRemainingPages(data, totalCount) {
@@ -6650,10 +6644,6 @@
       project_slug: state.currentProject?.slug || getProjectSlugFromPath() || '',
       filters: dashboardFilters(), sort: state.sortKey, collation: dashboardCollation(state.dashboardOverview, state.sortKey),
     });
-    if (overview.freshness?.backfilling) {
-      await fetchDashboardBackfill(key);
-      return;
-    }
     if (!dashboardActive || key !== dashboardPageRequestKey()) { queueRunsFetch({}); return; }
     const revisions = new Map((overview.chart_data?.combos || []).map(combo => [JSON.stringify([combo.task, combo.dataset]), combo.revision]));
     const previousRevisions = new Map((state.dashboardOverview?.chart_data?.combos || []).map(combo => [JSON.stringify([combo.task, combo.dataset]), combo.revision]));
@@ -6664,7 +6654,7 @@
       }
     }
     state.chartHistoryQueue = state.chartHistoryQueue.filter(entry => !entry.controller.signal.aborted);
-    state.dashboardBackfilling = false;
+    state.dashboardBackfilling = Boolean(overview.freshness?.backfilling);
     state.dashboardOverview = overview;
     state.dashboardOverviewFilterKey = getTableFilterKey();
     state.dashboardRequestKey = key;
@@ -6675,6 +6665,7 @@
       for (const row of entry.rows) ((tasks[row.task_name] ||= {})[row.model_name || ''] ||= []).push(row);
     }
     _applyRunsData({ tasks, project: state.currentProject, total_count: overview.total_count });
+    renderDashboardFreshness(overview.freshness);
   }
 
   function observeChartHistory() {
@@ -6750,25 +6741,33 @@
     }
   }
 
+  const dashboardRequests = new Set();
+
   async function dashboardQuery(path, payload, options = {}) {
     payload = { ...payload };
     if (payload.collation == null) delete payload.collation;
-    const response = await fetch(apiUrl(`api/dashboard/${path}`), {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload), ...options,
-    });
-    if (response.status === 401) {
-      if (dashboardActive) {
-        showAuthError();
-        teardownDashboard();
+    const controller = options.signal ? null : new AbortController();
+    if (controller) dashboardRequests.add(controller);
+    try {
+      const response = await fetch(apiUrl(`api/dashboard/${path}`), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload), signal: controller?.signal, ...options,
+      });
+      if (response.status === 401) {
+        if (dashboardActive) {
+          showAuthError();
+          teardownDashboard();
+        }
+        const error = new Error('Authentication required');
+        error.status = 401;
+        throw error;
       }
-      const error = new Error('Authentication required');
-      error.status = 401;
-      throw error;
+      if (response.status === 404) throw new Error('Project not found');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } finally {
+      if (controller) dashboardRequests.delete(controller);
     }
-    if (response.status === 404) throw new Error('Project not found');
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return response.json();
   }
 
   function dashboardCollation(overview, sortKey) {
@@ -6780,68 +6779,21 @@
     );
   }
 
-  async function fetchDashboardBackfill(key, retry = true) {
-    // A migrating project's projection omits unfinished historical runs. Use
-    // the established source-backed view until its complete history is ready.
-    // Publish all pages together so totals, filters and charts stay complete.
-    const project = state.currentProject?.slug || getProjectSlugFromPath() || '';
-    const readPage = async offset => {
-      const response = await fetch(apiUrl(`api/runs?limit=${PAGE_SIZE}&offset=${offset}&include_total=${offset === 0}&project_slug=${encodeURIComponent(project)}`));
-      if (response.status === 401) {
-        if (dashboardActive) { showAuthError(); teardownDashboard(); }
-        throw new Error('Authentication required');
-      }
-      if (response.status === 404) throw new Error('Project not found');
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return response.json();
-    };
-    const data = await readPage(0);
-    const total = Number(data.total_count || 0);
-    let offset = PAGE_SIZE;
-    let failure = null;
-    const drain = async () => {
-      try {
-        while (!failure && dashboardActive && key === dashboardPageRequestKey() && offset < total) {
-          const next = offset;
-          offset += PAGE_SIZE;
-          _mergeTasksData(data, await readPage(next));
-        }
-      } catch (error) {
-        failure = error;
-      }
-    };
-    await Promise.all(Array.from({ length: PAGE_CONCURRENCY }, drain));
-    if (failure) throw failure;
-    if (!dashboardActive || key !== dashboardPageRequestKey()) {
-      if (dashboardActive) queueRunsFetch({});
-      return;
-    }
-    const rows = Object.values(data.tasks || {}).flatMap(models => Object.values(models).flat());
-    const ids = new Set(rows.map(row => row.run_id));
-    if (rows.length !== total || ids.size !== total) {
-      // Concurrent inserts/deletes can shift offset pages. Retry once rather
-      // than display missing runs or double-count duplicates in aggregates.
-      if (retry) return fetchDashboardBackfill(key, false);
-      throw new Error('Run history changed while loading');
-    }
-    // Clear any earlier partial projection only after a successful full read.
-    state.dashboardBackfilling = true;
-    state.dashboardOverview = null;
-    state.dashboardPage = null;
-    state.dashboardOverviewFilterKey = null;
-    for (const entry of state.chartHistory.values()) entry.controller?.abort();
-    state.chartHistory.clear();
-    state.chartHistoryQueue = [];
-    state.dashboardRequestKey = null;
-    state.runsFetchMeta.totalCount = total;
-    state.runsFetchMeta.hasLoadedAllPages = true;
-    el('table-view')?.setAttribute('aria-busy', 'false');
-    // The legacy response has identity only; keep the authorized project role.
-    data.project = { ...state.currentProject, ...(data.project || {}) };
-    _applyRunsData(data);
+  function renderDashboardFreshness(freshness) {
     const updated = el('last-updated');
-    if (updated) { updated.textContent = 'Updating summaries…'; updated.setAttribute('role', 'status'); }
-    try { updateRunsRefreshCadence && updateRunsRefreshCadence(); } catch {}
+    if (!updated) return;
+    if (freshness?.failed_partitions > 0) {
+      updated.textContent = 'Some summaries need attention · showing available results';
+      updated.setAttribute('role', 'status');
+    } else if (freshness?.updating) {
+      const unpublished = Number(freshness.unpublished_runs || 0);
+      updated.textContent = unpublished > 0
+        ? `${unpublished} runs preparing · totals cover ready runs`
+        : 'Updating summaries…';
+      updated.setAttribute('role', 'status');
+    } else {
+      updated.removeAttribute('role');
+    }
   }
 
   async function fetchDashboardPage() {
@@ -6864,20 +6816,12 @@
     }
     if (collation !== null) payload.collation = collation;
     let page = await dashboardQuery('runs', payload);
-    if (page.freshness?.backfilling) {
-      await fetchDashboardBackfill(key);
-      return;
-    }
     let overview = page.overview;
     const latestCollation = dashboardCollation(overview, state.sortKey);
     if (latestCollation !== null && JSON.stringify(latestCollation) !== JSON.stringify(collation)) {
       payload.collation = latestCollation;
       page = await dashboardQuery('runs', payload);
       overview = page.overview;
-    }
-    if (page.freshness?.backfilling) {
-      await fetchDashboardBackfill(key);
-      return;
     }
     const pinnedRows = [...(page.pinned_rows || [])];
     // Additional requests follow only explicit retained selections, in batches.
@@ -6929,7 +6873,7 @@
       const models = mergedTasks[run.task_name] ||= {};
       (models[run.model_name || ''] ||= []).push(run);
     }
-    state.dashboardBackfilling = false;
+    state.dashboardBackfilling = Boolean(overview.freshness?.backfilling);
     state.dashboardOverview = overview;
     state.dashboardOverviewFilterKey = filterKey;
     state.dashboardPage = { ...page, total_runs: total, offset, rows: pageRows };
@@ -6939,12 +6883,7 @@
     state.runsFetchMeta.hasLoadedAllPages = false;
     el('table-view')?.setAttribute('aria-busy', 'false');
     _applyRunsData({ ...pageData, tasks: mergedTasks });
-    const freshness = page.freshness || overview.freshness;
-    const updated = el('last-updated');
-    if (updated && freshness?.updating) {
-      updated.textContent = 'Updating summaries…';
-      updated.setAttribute('role', 'status');
-    }
+    renderDashboardFreshness(page.freshness || overview.freshness);
     try { updateRunsRefreshCadence && updateRunsRefreshCadence(); } catch {}
   }
 
@@ -6957,11 +6896,15 @@
     };
 
     if (state.runsFetchMeta.inFlight) {
+      if (state.runsFetchMeta.requestKey !== dashboardPageRequestKey()) {
+        for (const controller of dashboardRequests) controller.abort();
+      }
       queueRunsFetch(fetchOptions);
       return;
     }
 
     state.runsFetchMeta.inFlight = true;
+    state.runsFetchMeta.requestKey = dashboardPageRequestKey();
     try {
       // Use shell's cached user if available, otherwise fetch
       if (window.__QYM_USER__) {
@@ -7042,7 +6985,7 @@
         state.runsFetchMeta.hasLoadedAllPages = state.flatRuns.length >= totalCount;
       }
     } catch (err) {
-      if (!dashboardActive) return;
+      if (!dashboardActive || err?.name === 'AbortError') return;
       console.error('Failed to fetch runs:', err);
       if (err && err.message === 'Project not found') {
         showProjectNotFound();
@@ -7764,6 +7707,7 @@
   window.addEventListener('pagehide', saveDashboardState);
   function teardownDashboard() {
     dashboardActive = false;
+    for (const controller of dashboardRequests) controller.abort();
     state.chartHistoryObserver?.disconnect();
     for (const entry of state.chartHistory.values()) entry.controller?.abort();
     state.chartHistoryQueue.length = 0;

@@ -46,6 +46,68 @@ def _metric_execution_error(value: Any) -> bool:
     return bool(error)
 
 
+EXECUTION_EVENT_TYPES = {
+    "item_failed",
+    "item_completed",
+    "item_attempt_started",
+    "item_attempt_finished",
+}
+
+
+def execution_event_numbers(event_type, payload):
+    """Reduce legacy event evidence to immutable, deduplicated numeric facts."""
+    payload = payload if isinstance(payload, dict) else {}
+
+    def integer(value, default):
+        try:
+            return max(default, int(value or default))
+        except (TypeError, ValueError, OverflowError):
+            return default
+
+    return {
+        "item_id": str(payload.get("item_id") or ""),
+        "pass_number": integer(payload.get("pass_number"), 1),
+        "error": int(event_type == "item_failed"),
+        "retry_count": max(
+            integer(payload.get("retry_count"), 0),
+            integer(payload.get("attempt_number"), 1) - 1,
+        ),
+    }
+
+
+def execution_event_query():
+    """Read event identity and counters without fetching task outputs."""
+    from qym_platform.db.models import RunEvent
+
+    return select(
+        RunEvent.id,
+        RunEvent.run_id,
+        RunEvent.event_id,
+        RunEvent.sequence,
+        RunEvent.type,
+        RunEvent.payload["item_id"].as_string().label("item_id"),
+        RunEvent.payload["pass_number"].as_string().label("pass_number"),
+        RunEvent.payload["retry_count"].as_string().label("retry_count"),
+        RunEvent.payload["attempt_number"].as_string().label("attempt_number"),
+    ).where(RunEvent.type.in_(EXECUTION_EVENT_TYPES))
+
+
+def execution_event_object(row):
+    from qym_platform.db.models import RunEvent
+
+    return RunEvent(
+        id=row.id,
+        run_id=row.run_id,
+        event_id=row.event_id,
+        sequence=row.sequence,
+        type=row.type,
+        payload={
+            key: getattr(row, key)
+            for key in ("item_id", "pass_number", "retry_count", "attempt_number")
+        },
+    )
+
+
 def _causes(value: Any, *, pass_score=False):
     from qym_platform.services.root_cause_categories import analysis_root_causes
 
@@ -66,6 +128,7 @@ def _causes(value: Any, *, pass_score=False):
 def snapshot(obj, deleted=False):
     from qym_platform.db.models import (
         Run,
+        RunEvent,
         RunItem,
         RunItemAttempt,
         RunItemPassScore,
@@ -95,6 +158,18 @@ def snapshot(obj, deleted=False):
         data["project_key"] = obj.project_id
         if obj.deleted_at is not None:
             data["operation"] = "DELETE"
+    elif isinstance(obj, RunEvent):
+        numbers = execution_event_numbers(obj.type, obj.payload)
+        data.update(
+            # Keep the existing attempt record format. Non-final, latency-free
+            # evidence cannot alter attempt timing or completion totals.
+            record_kind="attempt",
+            record_key=run_id + ":" + numbers["item_id"],
+            metric_key="legacy_event:" + obj.event_id,
+            pass_number=numbers["pass_number"],
+            error=numbers["error"],
+            retry_count=numbers["retry_count"],
+        )
     elif isinstance(obj, (RunItem, RunItemScore, RunItemPassScore, RunItemAttempt)):
         data["record_key"] = run_id + ":" + obj.item_id
         if isinstance(obj, RunItem):
@@ -280,6 +355,7 @@ def _source_types():
     from qym_platform.db.models import (
         Approval,
         Run,
+        RunEvent,
         RunItem,
         RunItemAttempt,
         RunItemPassScore,
@@ -289,6 +365,7 @@ def _source_types():
 
     return (
         Run,
+        RunEvent,
         RunItem,
         RunItemScore,
         RunItemPassScore,
@@ -307,7 +384,17 @@ def _before_flush(session, flush_context, instances):
     # membership checks inside a large flush must stay linear overall.
     new, deleted = session.new, session.deleted
     changed = new.union(session.dirty).union(deleted)
+    from qym_platform.db.models import RunEvent
+
     for obj in changed:
+        if isinstance(obj, RunEvent) and obj in new:
+            numbers = execution_event_numbers(obj.type, obj.payload)
+            if (
+                obj.type not in EXECUTION_EVENT_TYPES
+                or not numbers["item_id"]
+                or not (numbers["error"] or numbers["retry_count"])
+            ):
+                continue
         if isinstance(obj, source) and (
             obj in new
             or obj in deleted
@@ -390,10 +477,19 @@ def _bulk_source_mutation(state):
     model = mapper.class_
     statement = state.statement
     where = statement.whereclause
-    query = select(model)
+    from qym_platform.db.models import RunEvent
+
+    query = execution_event_query() if model is RunEvent else select(model)
     if where is not None:
         query = query.where(where)
-    objects = list(state.session.scalars(query.with_for_update()))
+    objects = (
+        [
+            execution_event_object(row)
+            for row in state.session.execute(query.with_for_update())
+        ]
+        if model is RunEvent
+        else list(state.session.scalars(query.with_for_update()))
+    )
     if not objects:
         return
     snapshots = [snapshot(obj, True) for obj in objects]
@@ -401,10 +497,17 @@ def _bulk_source_mutation(state):
     result = state.invoke_statement()
     if state.is_update:
         state.session.expire_all()
-        snapshots = [
-            snapshot(obj)
-            for obj in state.session.scalars(select(model).where(model.id.in_(ids)))
-        ]
+        objects = (
+            [
+                execution_event_object(row)
+                for row in state.session.execute(
+                    execution_event_query().where(model.id.in_(ids))
+                )
+            ]
+            if model is RunEvent
+            else state.session.scalars(select(model).where(model.id.in_(ids)))
+        )
+        snapshots = [snapshot(obj) for obj in objects]
     enqueue_snapshots(state.session.connection(), snapshots)
     return result
 

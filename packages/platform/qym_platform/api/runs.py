@@ -13,7 +13,7 @@ from urllib.parse import parse_qsl, quote, urlencode
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import Text, case, cast, func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from qym_platform.auth import Principal, require_ui_principal
 from qym_platform.auth_oidc import (
@@ -195,8 +195,12 @@ def _execution_error_pairs_for_runs(
         error_pairs[run_id].add((str(item_id), max(1, int(pass_number or 1))))
 
     # Legacy SDKs can emit item_failed without a final-attempt row.
-    for run_id, payload in (
-        db.query(RunEvent.run_id, RunEvent.payload)
+    for run_id, event_item_id, event_pass in (
+        db.query(
+            RunEvent.run_id,
+            RunEvent.payload["item_id"].as_string(),
+            RunEvent.payload["pass_number"].as_string(),
+        )
         .filter(RunEvent.run_id.in_(run_ids), RunEvent.type == "item_failed")
         .filter(
             RunEvent.payload["item_id"].as_string().in_(item_ids)
@@ -205,8 +209,7 @@ def _execution_error_pairs_for_runs(
         )
         .yield_per(1000)
     ):
-        if not isinstance(payload, dict):
-            continue
+        payload = {"item_id": event_item_id, "pass_number": event_pass}
         item_id = str(payload.get("item_id") or "")
         if not item_id:
             continue
@@ -216,26 +219,28 @@ def _execution_error_pairs_for_runs(
             pass_number = 1
         error_pairs[run_id].add((item_id, pass_number))
 
+    classic_run_ids = [rid for rid in run_ids if sample_counts.get(rid, 1) <= 1]
     aggregate_score_candidates = (
         db.query(
             RunItemScore.run_id,
             RunItemScore.item_id,
-            RunItemScore.meta,
+            RunItemScore.meta["status"].as_string(),
+            RunItemScore.meta["error"],
         )
         .filter(
-            RunItemScore.run_id.in_(run_ids),
+            RunItemScore.run_id.in_(classic_run_ids),
             or_(
-                cast(RunItemScore.meta, Text).like('%"error"%'),
-                cast(RunItemScore.meta, Text).like('%"status"%'),
+                func.lower(
+                    func.trim(cast(RunItemScore.meta["status"].as_string(), Text))
+                ).in_(tuple(_EXECUTION_ERROR_STATUSES)),
+                RunItemScore.meta["error"].as_string().isnot(None),
             ),
         )
         .filter(RunItemScore.item_id.in_(item_ids) if item_ids is not None else True)
         .yield_per(1000)
     )
-    for run_id, item_id, meta in aggregate_score_candidates:
-        if sample_counts.get(run_id, 1) > 1:
-            continue
-        if _is_metric_execution_error(meta):
+    for run_id, item_id, status, error in aggregate_score_candidates:
+        if _is_metric_execution_error({"status": status, "error": error}):
             error_pairs[run_id].add((str(item_id), 1))
 
     pass_score_candidates = (
@@ -243,27 +248,26 @@ def _execution_error_pairs_for_runs(
             RunItemPassScore.run_id,
             RunItemPassScore.item_id,
             RunItemPassScore.pass_number,
-            RunItemPassScore.meta,
+            RunItemPassScore.meta["status"].as_string(),
+            RunItemPassScore.meta["error"],
         )
         .filter(
             RunItemPassScore.run_id.in_(run_ids),
             or_(
-                cast(RunItemPassScore.meta, Text).like('%"error"%'),
-                cast(RunItemPassScore.meta, Text).like('%"status"%'),
+                func.lower(
+                    func.trim(cast(RunItemPassScore.meta["status"].as_string(), Text))
+                ).in_(tuple(_EXECUTION_ERROR_STATUSES)),
+                RunItemPassScore.meta["error"].as_string().isnot(None),
             ),
         )
         .filter(
-            RunItemPassScore.item_id.in_(item_ids)
-            if item_ids is not None
-            else True
+            RunItemPassScore.item_id.in_(item_ids) if item_ids is not None else True
         )
         .yield_per(1000)
     )
-    for run_id, item_id, pass_number, meta in pass_score_candidates:
-        if _is_metric_execution_error(meta):
-            error_pairs[run_id].add(
-                (str(item_id), max(1, int(pass_number or 1)))
-            )
+    for run_id, item_id, pass_number, status, error in pass_score_candidates:
+        if _is_metric_execution_error({"status": status, "error": error}):
+            error_pairs[run_id].add((str(item_id), max(1, int(pass_number or 1))))
 
     return dict(error_pairs)
 
@@ -520,16 +524,26 @@ def _repeat_attempt_summaries(
         "item_completed",
         "item_failed",
     }
-    for run_id, payload in (
-        db.query(RunEvent.run_id, RunEvent.payload)
+    for run_id, event_item_id, event_pass, event_retries, event_attempt in (
+        db.query(
+            RunEvent.run_id,
+            RunEvent.payload["item_id"].as_string(),
+            RunEvent.payload["pass_number"].as_string(),
+            RunEvent.payload["retry_count"].as_string(),
+            RunEvent.payload["attempt_number"].as_string(),
+        )
         .filter(
             RunEvent.run_id.in_(run_ids),
             RunEvent.type.in_(retry_event_types),
         )
         .yield_per(1000)
     ):
-        if not isinstance(payload, dict):
-            continue
+        payload = {
+            "item_id": event_item_id,
+            "pass_number": event_pass,
+            "retry_count": event_retries,
+            "attempt_number": event_attempt,
+        }
         item_id = str(payload.get("item_id") or "")
         if not item_id:
             continue
@@ -1632,18 +1646,25 @@ def _summarize_runs_for_admin(db: Session, runs: List[Run]) -> List[Dict[str, An
         }
         for row in item_agg_rows
     }
+    published = _published_run_rows(db, run_ids)
     execution_error_pairs = _execution_error_pairs_for_runs(
         db,
-        run_ids,
-        samples_by_run={
-            run.id: int(getattr(run, "samples", 1) or 1) for run in runs
-        },
+        [rid for rid in run_ids if rid not in published],
+        samples_by_run={run.id: int(getattr(run, "samples", 1) or 1) for run in runs},
     )
     for run_id in run_ids:
         item_agg.setdefault(
             run_id,
             {"total": 0, "error_count": 0, "completed": 0},
-        )["execution_error_count"] = len(execution_error_pairs.get(run_id, set()))
+        )["execution_error_count"] = (
+            int(
+                published[run_id].get(
+                    "execution_error_count", published[run_id].get("error_count", 0)
+                )
+            )
+            if run_id in published
+            else len(execution_error_pairs.get(run_id, set()))
+        )
     project_ids = {run.project_id for run in runs}
     owner_ids = {run.owner_user_id for run in runs}
     projects = (
@@ -1921,6 +1942,29 @@ def project_run_ui(
     return run_ui(run_id=run_id, request=request, db=db)
 
 
+def _published_run_rows(db: Session, run_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+    """Reuse the last complete publication during background summary refreshes."""
+    from qym_platform.db.dashboard_models import (
+        DashboardRunDimension,
+        DashboardRunSummary,
+    )
+
+    return {
+        dimension.run_key: {**(dimension.descriptor or {}), **(summary.data or {})}
+        for dimension, summary in db.query(DashboardRunDimension, DashboardRunSummary)
+        .join(
+            DashboardRunSummary,
+            DashboardRunSummary.run_key == DashboardRunDimension.run_key,
+        )
+        .filter(
+            DashboardRunDimension.run_key.in_(run_ids),
+            DashboardRunDimension.present.is_(True),
+            DashboardRunSummary.projection_revision > 0,
+        )
+        .all()
+    }
+
+
 @router.get("/api/runs")
 def legacy_list_runs(
     limit: int = Query(default=100, le=500),
@@ -2039,7 +2083,22 @@ def legacy_list_runs(
     total_count = q.count() if include_total else None
 
     # Apply pagination
-    runs: List[Run] = q.offset(offset).limit(limit).all()
+    runs: List[Run] = (
+        q.options(
+            load_only(
+                Run.id,
+                Run.project_id,
+                Run.status,
+                Run.last_event_at,
+                Run.started_at,
+                Run.created_at,
+                Run.updated_at,
+            )
+        )
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     _reconcile_run_liveness(db, runs)
 
     if not runs:
@@ -2054,6 +2113,28 @@ def legacy_list_runs(
             },
         }
 
+    from qym_platform.api.dashboard import _tasks as projected_tasks
+    from qym_platform.services.dashboard_summaries import dashboard_freshness
+
+    page_runs = runs
+    cached = _published_run_rows(db, [r.id for r in page_runs])
+    runs = [r for r in page_runs if r.id not in cached]
+    if not runs:
+        return {
+            "tasks": projected_tasks([cached[r.id] for r in page_runs]),
+            "last_updated": to_api_timestamp(utc_now_naive()),
+            "total_count": total_count,
+            "project": {
+                "id": selected_project.id,
+                "slug": selected_project.slug,
+                "name": selected_project.name,
+            },
+            **dashboard_freshness(db, [selected_project.id]),
+        }
+
+    # Load source configuration/metadata only for unpublished runs, in one
+    # query. Published history must not deserialize large saved configurations.
+    db.query(Run).filter(Run.id.in_([r.id for r in runs])).all()
     run_ids = [r.id for r in runs]
     metric_specs_by_run = _metric_specs_for_runs(db, run_ids)
     samples_by_run = {
@@ -2521,6 +2602,17 @@ def legacy_list_runs(
         task = summary["task_name"]
         model = summary["model_name"] or "nomodel"
         tasks.setdefault(task, {}).setdefault(model, []).append(summary)
+
+    if cached:
+        source_rows = {
+            row["run_id"]: row
+            for models in tasks.values()
+            for rows in models.values()
+            for row in rows
+        }
+        tasks = projected_tasks(
+            [cached.get(r.id) or source_rows[r.id] for r in page_runs]
+        )
 
     return {
         "tasks": tasks,

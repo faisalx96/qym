@@ -1,0 +1,18 @@
+{"runs": 10, "items_per_run": 200, "passes": 3, "backend": "isolated in-memory SQLite", "all_successful": true}
+{"case": "base_without_events", "median_ms": 39.83, "sql": {"selects": 14}, "response_kib": 12.9}
+{"case": "pr44_without_events", "median_ms": 57.69, "sql": {"selects": 20, "event_selects": 2}, "response_kib": 13.7}
+{"event_rows": 18000, "output_bytes": 0, "total_output_mib": 0.0}
+{"case": "base_0_byte_outputs", "median_ms": 30.77, "sql": {"selects": 14}, "response_kib": 12.9}
+{"case": "pr44_0_byte_outputs", "median_ms": 112.39, "sql": {"selects": 20, "event_selects": 2}, "response_kib": 13.7}
+{"case": "pr44_without_new_retry_scan_0_byte_outputs", "median_ms": 56.26, "sql": {"selects": 19, "event_selects": 1}, "response_kib": 13.7}
+{"event_rows": 18000, "output_bytes": 16384, "total_output_mib": 187.5}
+{"case": "base_16384_byte_outputs", "median_ms": 31.58, "sql": {"selects": 14}, "response_kib": 12.9}
+{"case": "pr44_16384_byte_outputs", "median_ms": 382.97, "sql": {"selects": 20, "event_selects": 2}, "response_kib": 13.7}
+{"case": "pr44_without_new_retry_scan_16384_byte_outputs", "median_ms": 74.99, "sql": {"selects": 19, "event_selects": 1}, "response_kib": 13.7}
+EVENT QUERIES
+SELECT run_events.run_id AS run_events_run_id, run_events.payload AS run_events_payload
+FROM run_events
+WHERE run_events.run_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) AND run_events.type = ?
+SELECT run_events.run_id AS run_events_run_id, run_events.payload AS run_events_payload
+FROM run_events
+WHERE run_events.run_id IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) AND run_events.type IN (?, ?, ?, ?)

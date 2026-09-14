@@ -275,10 +275,15 @@ def build_overview_data(
     filtered_rows: Iterable[Row],
     *,
     now: datetime | None = None,
+    global_data: Row | None = None,
 ) -> Row:
     """Return global header facts and full-filter chart/column summaries."""
     current = _date(now or datetime.now(timezone.utc))
-    data = _global_data(unfiltered_rows, current)
+    data = (
+        dict(global_data)
+        if global_data is not None
+        else _global_data(unfiltered_rows, current)
+    )
     chart = _chart_data(filtered_rows)
     data.update(
         chart_data=chart,

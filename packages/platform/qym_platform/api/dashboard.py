@@ -21,6 +21,11 @@ from qym_platform.db.models import Project, ProjectMembership, UserRole
 from qym_platform.deps import get_db
 from qym_platform.permissions import has_project_access
 from qym_platform.settings import PlatformSettings
+from qym_platform.services.dashboard_cache import DashboardSnapshotCache
+
+_overview_cache = DashboardSnapshotCache()
+_page_cache = DashboardSnapshotCache()
+_catalog_cache = DashboardSnapshotCache(max_entries=4, max_bytes=16 * 1024 * 1024)
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 _FILTER_COLUMNS = {
@@ -177,7 +182,7 @@ def _query(*columns):
     )
 
 
-def _ordered_query(conditions):
+def _ordered_query(conditions, *columns):
     # First-seen groups are established before dropdown/time filtering in the UI.
     raw_model = Dimension.descriptor["model_name"].as_string()
     task_first = (
@@ -199,7 +204,7 @@ def _ordered_query(conditions):
         .subquery()
     )
     query = (
-        _query()
+        _query(*columns)
         .join(task_first, task_first.c.task == Dimension.task)
         .join(
             model_first,
@@ -237,7 +242,9 @@ def _sort_columns():
         "owner": func.coalesce(
             Dimension.descriptor["owner"]["display_name"].as_string(), ""
         ),
-        "status": errors,
+        "status": func.coalesce(
+            Summary.data["execution_error_count"].as_float(), errors
+        ),
         "run": Dimension.run_key,
         "latency": Summary.avg_latency_ms,
         "median-latency": Summary.median_latency_ms,
@@ -310,10 +317,25 @@ def _tasks(rows):
 
 
 def _stream(db, conditions, sort=None, collation=None):
-    query, order = _ordered_query(conditions)
+    # The overview uses display payloads only. Avoid hydrating two ORM objects
+    # and all internal accumulator columns for every historical run.
+    query, order = _ordered_query(
+        conditions,
+        Dimension.descriptor,
+        Summary.data,
+        Dimension.model,
+        Summary.projection_revision,
+    )
     query = query.order_by(*(_sort(sort, collation) if sort else []), *order)
-    for dimension, summary in db.execute(query.execution_options(yield_per=200)):
-        yield _row(dimension, summary)
+    for descriptor, data, model, revision in db.execute(
+        query.execution_options(yield_per=200)
+    ):
+        yield {
+            **(descriptor or {}),
+            **(data or {}),
+            "model_key": model,
+            "_revision": revision,
+        }
 
 
 def _freshness(db, project):
@@ -341,12 +363,62 @@ def _facets(db, base, filters):
 
 
 def _overview(db, project, filters, sort="time-desc", collation=None):
-    from qym_platform.services.dashboard_views import build_overview_data
+    freshness = _freshness(db, project)
+    if not project or not freshness["revision"]:
+        return _build_overview(db, project, filters, sort, collation)
+    # The revision is read in the same repeatable-read transaction as the page.
+    # Never reuse filters, hidden-task policy or permissions across scopes.
+    key = (
+        db.get_bind().engine,
+        project["id"],
+        freshness["revision"],
+        PlatformSettings().hidden_tasks,
+        json.dumps(filters, sort_keys=True, default=str),
+        sort,
+        tuple(collation or ()),
+    )
+
+    def compute():
+        value = _build_overview(db, project, filters, sort, collation)
+        return {
+            k: v
+            for k, v in value.items()
+            if k not in {"project", "revision", "freshness"}
+        }
+
+    cached = _overview_cache.get_or_compute(key, compute)
+    return {**cached, "project": project, **freshness}
+
+
+def _build_overview(db, project, filters, sort="time-desc", collation=None):
+    from qym_platform.services.dashboard_views import build_overview_data, _global_data
 
     base = _base_conditions(project)
     filtered = base + _filter_conditions(filters)
+    freshness = _freshness(db, project)
+    now = datetime.now(timezone.utc)
+
+    def catalog():
+        all_rows = list(_stream(db, base))
+        return {row["run_id"]: row for row in all_rows}, _global_data(
+            iter(all_rows), now
+        )
+
+    if project and freshness["revision"]:
+        key = (
+            db.get_bind().engine,
+            project["id"],
+            freshness["revision"],
+            PlatformSettings().hidden_tasks,
+            now.date(),
+        )
+        by_id, global_data = _catalog_cache.get_or_compute(key, catalog)
+    else:
+        by_id, global_data = catalog()
+    ordered, order = _ordered_query(filtered, Dimension.run_key)
+    filtered_ids = db.scalars(ordered.order_by(*_sort(sort, collation), *order))
     result = build_overview_data(
-        _stream(db, base), _stream(db, filtered, sort, collation)
+        (), (by_id[run_id] for run_id in filtered_ids), global_data=global_data
     )
     result.update(
         total_count=db.scalar(_query(func.count()).where(*base)) or 0,
@@ -517,6 +589,55 @@ def _config_groups(db, conditions):
 
 
 def _page(
+    db,
+    project,
+    filters,
+    *,
+    limit,
+    offset,
+    sort,
+    ids=None,
+    task=None,
+    dataset=None,
+    include_config_groups=False,
+    include_neighbors=True,
+    collation=None,
+):
+    freshness = _freshness(db, project)
+    kwargs = dict(
+        limit=limit,
+        offset=offset,
+        sort=sort,
+        ids=ids,
+        task=task,
+        dataset=dataset,
+        include_config_groups=include_config_groups,
+        include_neighbors=include_neighbors,
+        collation=collation,
+    )
+    if not project or not freshness["revision"]:
+        return _build_page(db, project, filters, **kwargs)
+    key = (
+        db.get_bind().engine,
+        project["id"],
+        freshness["revision"],
+        PlatformSettings().hidden_tasks,
+        json.dumps(filters, sort_keys=True, default=str),
+        json.dumps(kwargs, sort_keys=True, default=str),
+    )
+
+    def compute():
+        value = _build_page(db, project, filters, **kwargs)
+        return {
+            k: v
+            for k, v in value.items()
+            if k not in {"project", "revision", "freshness"}
+        }
+
+    return {**_page_cache.get_or_compute(key, compute), "project": project, **freshness}
+
+
+def _build_page(
     db,
     project,
     filters,

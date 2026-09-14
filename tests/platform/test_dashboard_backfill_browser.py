@@ -1,10 +1,9 @@
-"""Historical runs remain complete while a newly migrated projection warms up."""
+"""Backfill serves published pages immediately; missing history is explicit."""
 
 import re
 from urllib.parse import parse_qs, urlparse
 
 import pytest
-
 from test_dashboard_paging_browser import DashboardFixture, STATIC, browser, nested
 from test_dashboard_durable_summaries import database
 
@@ -14,11 +13,10 @@ pytestmark = pytest.mark.browser
 class BackfillFixture(DashboardFixture):
     def __init__(self, browser, view="table"):
         self.backfilling = True
+        self.published = 123
         self.global_role = "ADMIN"
         self.project_role = "MANAGER"
-        self.published = 12
-        self.source_status = 200
-        self.fail_offset = None
+        self.response_status = 200
         self.hold_offset = None
         self.held = []
         super().__init__(browser, view=view)
@@ -44,42 +42,46 @@ class BackfillFixture(DashboardFixture):
             )
             return
         if url.path == "/api/runs":
-            query = parse_qs(url.query)
-            self.requests.append((url.path, query))
-            offset = int(query["offset"][0])
-            limit = int(query["limit"][0])
-            status = 503 if offset == self.fail_offset else self.source_status
-            payload = dict(
-                tasks=nested(self.runs[offset : offset + limit]),
-                total_count=len(self.runs) if offset == 0 else None,
-                project={"slug": "demo", "name": "Demo", "id": "project"},
-            )
-            if offset == self.hold_offset:
-                self.held.append((route, payload))
-            else:
-                route.fulfill(status=status, json=payload)
-            return
-        if url.path.startswith("/api/dashboard/") and self.backfilling:
             self.requests.append((url.path, {}))
-            rows = self.runs[: self.published]
-            overview = self.overview(rows)
-            overview.update(
-                total_count=len(rows),
-                total_runs=len(rows),
-                freshness={"updating": True, "backfilling": True},
-            )
-            payload = (
-                overview
-                if url.path.endswith("/overview")
-                else dict(
-                    rows=rows,
-                    tasks=nested(rows),
-                    total_runs=len(rows),
-                    overview=overview,
-                    freshness=overview["freshness"],
-                )
-            )
-            route.fulfill(json=payload)
+            # Any use of raw history is a regression, including for an empty projection.
+            route.fulfill(status=503, json={"detail": "raw history unavailable"})
+            return
+        if url.path.startswith("/api/dashboard/"):
+            fixture = self
+
+            class ProjectedRoute:
+                request = route.request
+
+                def fulfill(self, **kwargs):
+                    if fixture.response_status != 200:
+                        route.fulfill(
+                            status=fixture.response_status,
+                            json={"detail": "Unavailable"},
+                        )
+                        return
+                    payload = kwargs["json"]
+                    freshness = {
+                        "updating": fixture.backfilling,
+                        "backfilling": fixture.backfilling,
+                        "unpublished_runs": max(0, len(all_runs) - fixture.published),
+                    }
+                    payload["freshness"] = freshness
+                    if "overview" in payload:
+                        payload["overview"]["freshness"] = freshness
+                    query = route.request.post_data_json or {}
+                    if query.get(
+                        "offset", 0
+                    ) == fixture.hold_offset and url.path.endswith("/runs"):
+                        fixture.held.append((route, payload))
+                    else:
+                        route.fulfill(json=payload)
+
+            all_runs = self.runs
+            self.runs = all_runs[: self.published]
+            try:
+                super().route(ProjectedRoute())
+            finally:
+                self.runs = all_runs
             return
         if url.path == "/projects/demo/models":
             source = (STATIC / "models.html").read_text()
@@ -95,36 +97,54 @@ class BackfillFixture(DashboardFixture):
         self.page.goto("https://qym.test/projects/demo" + suffix)
         self.page.wait_for_function("__dashboardTest.state.dashboardBackfilling")
 
-    def wait_for_held_page(self):
-        for _ in range(200):
-            if self.held:
-                return
-            self.page.wait_for_timeout(25)
-        raise AssertionError("The second history page was never requested")
-
 
 @pytest.mark.parametrize("view", ["table", "charts", "models"])
-def test_backfill_uses_complete_history_and_global_facets(browser, view):
-    fixture = BackfillFixture(browser, view=view)
+def test_backfill_keeps_published_history_global_facets_and_bounded_pages(
+    browser, view
+):
+    fixture = BackfillFixture(browser, view)
     try:
         fixture.open()
         page = fixture.page
-        assert page.evaluate("__dashboardTest.state.flatRuns.length") == 123
         assert page.evaluate("__dashboardTest.state.aggregations.totalItems") == 1230
         assert "Rare task" in page.locator("#filter-task-dropdown").inner_text()
         assert "late-version" in page.locator("#filter-version-dropdown").inner_text()
-        assert page.evaluate('sessionStorage.getItem("qym:runs-cache:demo")') is None
-        source = [q for path, q in fixture.requests if path == "/api/runs"]
-        assert [q["offset"] for q in source] == [["0"], ["100"]]
-        assert all(q["project_slug"] == ["demo"] for q in source)
-        assert source[1]["include_total"] == ["false"]
+        assert not any(path == "/api/runs" for path, _ in fixture.requests)
+        assert "Updating summaries" in page.locator("#last-updated").inner_text()
         if view == "table":
             assert page.locator("#runs-tbody tr[data-idx]").count() == 50
+            assert page.evaluate("__dashboardTest.state.flatRuns.length") == 50
             assert page.locator("#status-filter").inner_text() == "123 runs"
-        # Publishing a few more summaries must never shrink the full history.
-        fixture.published = 15
+            assert (
+                len([path for path, _ in fixture.requests if path.endswith("/runs")])
+                == 1
+            )
+    finally:
+        fixture.close()
+
+
+@pytest.mark.parametrize("published", [0, 12])
+def test_initial_import_discloses_partial_totals_and_renders_available_rows(
+    browser, published
+):
+    fixture = BackfillFixture(browser)
+    fixture.published = published
+    try:
+        fixture.open()
+        page = fixture.page
+        assert page.evaluate("__dashboardTest.state.flatRuns.length") == published
+        assert page.locator("#table-view").is_visible()
+        assert (
+            str(123 - published) + " runs preparing"
+            in page.locator("#last-updated").inner_text()
+        )
+        assert "ready runs only" in page.locator("#status-filter").inner_text()
+        fixture.published = 123
+        fixture.backfilling = False
         page.evaluate("__dashboardTest.fetchRuns()")
-        assert page.evaluate("__dashboardTest.state.flatRuns.length") == 123
+        assert page.evaluate("__dashboardTest.state.flatRuns.length") == 50
+        assert page.locator("#status-filter").inner_text() == "123 runs"
+        assert not any(path == "/api/runs" for path, _ in fixture.requests)
     finally:
         fixture.close()
 
@@ -144,174 +164,95 @@ def test_backfill_preserves_project_management_actions(browser, role, can_manage
             page.evaluate("__dashboardTest.fetchRuns()")
             assert page.evaluate("__dashboardTest.state.currentProject.role") == role
             assert page.locator(".approve-run").count() == int(can_manage)
-            page.evaluate("""() => {
-              const t = __dashboardTest;
-              t.state.selectMode = true;
-              if (!t.state.selectedRuns.has('run-000')) t.toggleSelect('run-000');
-            }""")
+            page.evaluate(
+                "() => { const t=__dashboardTest; t.state.selectMode=true; if (!t.state.selectedRuns.has('run-000')) t.toggleSelect('run-000'); }"
+            )
             assert page.locator("#delete-selected").is_enabled() == can_manage
     finally:
         fixture.close()
 
 
-def test_backfill_waits_for_all_pages_before_rendering(browser):
-    fixture = BackfillFixture(browser)
-    fixture.hold_offset = 100
-    try:
-        page = fixture.page
-        page.goto("https://qym.test/projects/demo")
-        page.wait_for_function("__dashboardTest.state.runsFetchMeta.inFlight")
-        # Let the first page finish and the held second request reach its route.
-        fixture.wait_for_held_page()
-        assert page.evaluate("__dashboardTest.state.flatRuns.length") == 0
-        assert page.locator("#table-view").is_hidden()
-        for route, payload in fixture.held:
-            route.fulfill(json=payload)
-        page.wait_for_function("__dashboardTest.state.flatRuns.length === 123")
-        assert page.locator("#status-filter").inner_text() == "123 runs"
-    finally:
-        fixture.close()
-
-
-def test_backfill_transition_preserves_page_filter_and_selection(browser):
+def test_backfill_transition_preserves_pagination_filters_and_selections(browser):
     fixture = BackfillFixture(browser)
     try:
         fixture.open()
         page = fixture.page
-        page.evaluate("""() => {
-          const t = __dashboardTest;
-          t.state.selectMode = true;
-          t.toggleSelect('run-000');
-          t.setTablePage(3); t.render();
-          t.toggleSelect('run-122');
-        }""")
-        assert page.locator("#runs-tbody tr[data-idx]").count() == 23
+        page.evaluate(
+            "() => {const t=__dashboardTest; t.state.selectMode=true; t.toggleSelect('run-000'); t.setTablePage(3); t.render();}"
+        )
+        page.wait_for_function("__dashboardTest.state.dashboardPage.offset===100")
+        page.evaluate("__dashboardTest.toggleSelect('run-122')")
         fixture.backfilling = False
         page.evaluate("__dashboardTest.fetchRuns()")
         assert page.evaluate("__dashboardTest.state.dashboardPage.offset") == 100
-        assert page.evaluate("__dashboardTest.state.flatRuns.length") == 24
         assert page.evaluate("[...__dashboardTest.state.selectedRuns]") == [
             "run-000",
             "run-122",
         ]
         assert page.locator("#compare-view").is_enabled()
-        assert page.locator("#status-filter").inner_text() == "123 runs"
-        before = len([r for r in fixture.requests if r[0] == "/api/runs"])
-        page.evaluate("__dashboardTest.fetchRuns()")
-        assert len([r for r in fixture.requests if r[0] == "/api/runs"]) == before
+        page.evaluate(
+            "() => {const t=__dashboardTest; t.state.filterTasks=new Set(['Rare task']); t.state.sortKey='metric-accuracy-desc'; t.render();}"
+        )
+        page.wait_for_function(
+            "__dashboardTest.state.dashboardPage.rows[0]?.run_id==='run-122'"
+        )
+        assert page.evaluate(
+            "__dashboardTest.state.dashboardPage.rows.map(r=>r.run_id)"
+        ) == [f"run-{i:03}" for i in range(122, 99, -1)]
     finally:
         fixture.close()
 
 
-def test_backfill_filters_and_sort_include_unpublished_runs(browser):
+def test_failed_refresh_preserves_displayed_data_and_can_retry(browser):
     fixture = BackfillFixture(browser)
     try:
         fixture.open()
         page = fixture.page
-        page.evaluate("""() => {
-          const t = __dashboardTest;
-          t.state.filterTasks = new Set(['Rare task']);
-          t.state.sortKey = 'metric-accuracy-desc';
-          t.render();
-        }""")
-        assert page.locator("#runs-tbody tr[data-idx]").count() == 23
-        expected = page.evaluate(
-            "__dashboardTest.state.filteredRuns.map(r => r.run_id)"
-        )
-        assert expected == [f"run-{i:03}" for i in range(122, 99, -1)]
-        fixture.backfilling = False
-        page.evaluate("__dashboardTest.fetchRuns()")
-        assert (
-            page.evaluate("__dashboardTest.state.dashboardPage.rows.map(r => r.run_id)")
-            == expected
-        )
-        assert page.locator("#runs-tbody tr[data-idx]").count() == 23
-    finally:
-        fixture.close()
-
-
-def test_history_changes_between_pages_retry_without_duplicates(browser):
-    fixture = BackfillFixture(browser)
-    fixture.hold_offset = 100
-    try:
-        page = fixture.page
-        page.goto("https://qym.test/projects/demo")
-        fixture.wait_for_held_page()
-        # A new run inserted before page two shifts an already fetched run into
-        # that page. The next complete attempt must include the new run once.
-        new = {**fixture.runs[0], "run_id": "new-run", "file_path": "new-run"}
-        fixture.runs.insert(0, new)
-        fixture.hold_offset = None
-        for route, payload in fixture.held:
-            payload["tasks"] = nested(fixture.runs[100:])
-            route.fulfill(json=payload)
-        page.wait_for_function("__dashboardTest.state.flatRuns.length === 124")
-        assert (
-            page.evaluate(
-                "new Set(__dashboardTest.state.flatRuns.map(r => r.run_id)).size"
-            )
-            == 124
-        )
-        assert page.locator("#status-filter").inner_text() == "124 runs"
-        assert len([r for r in fixture.requests if r[0] == "/api/runs"]) == 4
-    finally:
-        fixture.close()
-
-
-def test_failed_backfill_page_preserves_previous_complete_data_and_retries(browser):
-    fixture = BackfillFixture(browser)
-    try:
-        fixture.open()
-        fixture.fail_offset = 100
+        fixture.response_status = 503
         fixture.runs[0] = {**fixture.runs[0], "run_name": "Changed"}
-        page = fixture.page
         page.evaluate("__dashboardTest.fetchRuns()")
-        assert page.evaluate("__dashboardTest.state.flatRuns.length") == 123
-        assert (
-            page.evaluate(
-                "__dashboardTest.state.flatRuns.find(r => r.run_id === 'run-000').run_name"
-            )
-            == "Run 0"
-        )
-        fixture.fail_offset = None
+        assert page.evaluate("__dashboardTest.state.flatRuns[0].run_name") == "Run 0"
+        fixture.response_status = 200
         page.evaluate("__dashboardTest.fetchRuns()")
-        assert (
-            page.evaluate(
-                "__dashboardTest.state.flatRuns.find(r => r.run_id === 'run-000').run_name"
-            )
-            == "Changed"
-        )
+        assert page.evaluate("__dashboardTest.state.flatRuns[0].run_name") == "Changed"
     finally:
         fixture.close()
 
 
-@pytest.mark.parametrize("offset", [0, 100])
-def test_expired_backfill_session_clears_data_and_stops_reads(browser, offset):
+def test_expired_session_stops_summary_reads(browser):
     fixture = BackfillFixture(browser)
     try:
         fixture.open()
-        if offset == 0:
-            fixture.source_status = 401
-        else:
-            original = fixture.route
-
-            def expire_second(route):
-                if (
-                    "/api/runs?" in route.request.url
-                    and "offset=100&" in route.request.url
-                ):
-                    route.fulfill(status=401, json={"detail": "Expired"})
-                else:
-                    original(route)
-
-            fixture.page.unroute("**/*")
-            fixture.page.route("**/*", expire_second)
+        fixture.response_status = 401
         fixture.page.evaluate("__dashboardTest.fetchRuns()")
         fixture.page.get_by_role("link", name="Sign in", exact=True).wait_for()
         before = len(fixture.requests)
         fixture.page.evaluate("__dashboardTest.fetchRuns()")
         assert len(fixture.requests) == before
         assert fixture.page.locator("#runs-tbody").count() == 0
+    finally:
+        fixture.close()
+
+
+def test_new_page_does_not_wait_for_obsolete_slow_page(browser):
+    fixture = BackfillFixture(browser)
+    try:
+        fixture.open()
+        page = fixture.page
+        fixture.hold_offset = 50
+        page.evaluate(
+            "() => {__dashboardTest.setTablePage(2); __dashboardTest.render();}"
+        )
+        for _ in range(100):
+            if fixture.held:
+                break
+            page.wait_for_timeout(20)
+        assert fixture.held
+        page.evaluate(
+            "() => {__dashboardTest.setTablePage(3); __dashboardTest.render();}"
+        )
+        page.wait_for_function("__dashboardTest.state.dashboardPage.offset===100")
+        assert page.locator("#runs-tbody tr[data-idx]").count() == 23
     finally:
         fixture.close()
 
@@ -428,18 +369,25 @@ def test_real_unprojected_history_matches_after_backfill(
         try:
             page = fixture.page
             page.goto("https://qym.test/projects/demo")
-            page.wait_for_function(
-                "count => __dashboardTest.state.flatRuns.length === count",
-                arg=run_count,
-            )
-            assert page.evaluate("__dashboardTest.state.dashboardBackfilling")
-            before = page.evaluate("__dashboardTest.state.flatRuns")
-            assert page.locator("#status-filter").inner_text() == f"{run_count} runs"
-            assert all(
-                row["total_items"] == 2 and row["error_count"] == 1 for row in before
-            )
-            expected = {row["run_id"]: row for row in before}
-            assert len(expected) == run_count
+            page.wait_for_function("__dashboardTest.state.dashboardBackfilling")
+            assert page.evaluate("__dashboardTest.state.flatRuns.length") == 0
+            assert str(run_count) in page.locator("#last-updated").inner_text()
+            assert "ready runs only" in page.locator("#status-filter").inner_text()
+            assert not any(path == "/api/runs" for path, _ in fixture.requests)
+            expected = {}
+            for offset in range(0, run_count, 100):
+                response = client.get(
+                    "/api/runs",
+                    params={"project_slug": "demo", "limit": 100, "offset": offset},
+                )
+                expected.update(
+                    {
+                        row["run_id"]: row
+                        for models in response.json()["tasks"].values()
+                        for group in models.values()
+                        for row in group
+                    }
+                )
             drain(database, max_partitions=50)
             assert not client.get(
                 "/api/dashboard/runs", params={"project_slug": "demo"}

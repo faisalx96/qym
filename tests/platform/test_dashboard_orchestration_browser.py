@@ -25,7 +25,15 @@ class ReviewFixture(DashboardFixture):
                 route.fulfill(status=401, json={"detail": "Expired session"})
                 return
             overview = self.overview([])
-            overview.update(total_count=0, total_runs=0, freshness={"updating": True})
+            overview.update(
+                total_count=0,
+                total_runs=0,
+                freshness={
+                    "updating": True,
+                    "unpublished_runs": 123,
+                    "backfilling": True,
+                },
+            )
             overview["aggregations"].update(totalRuns=0, totalModels=0, totalItems=0)
             route.fulfill(
                 json={
@@ -34,7 +42,11 @@ class ReviewFixture(DashboardFixture):
                     "pinned_rows": [],
                     "total_runs": 0,
                     "overview": overview,
-                    "freshness": {"updating": True},
+                    "freshness": {
+                        "updating": True,
+                        "unpublished_runs": 123,
+                        "backfilling": True,
+                    },
                 }
             )
             return
@@ -47,9 +59,13 @@ def test_initial_projection_is_loading_until_history_arrives(browser):
     try:
         page = fixture.page
         page.goto("https://qym.test/projects/demo")
-        page.get_by_text("Preparing run history…", exact=True).wait_for()
+        page.get_by_text(
+            "Run history is preparing. Available runs will appear automatically.",
+            exact=True,
+        ).wait_for()
         assert page.locator("#empty").is_hidden()
-        assert page.locator("#table-view").is_hidden()
+        assert page.locator("#table-view").is_visible()
+        assert "ready runs only" in page.locator("#status-filter").inner_text()
         fixture.pending = False
         page.evaluate("__dashboardTest.fetchRuns()")
         page.wait_for_function("__dashboardTest.state.dashboardPage.rows.length === 50")
