@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -53,10 +54,16 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
         # use app.state.dashboard_summary_worker or run a worker for that factory.
         if get_db not in app.dependency_overrides:
             dashboard_worker.start()
+            logging.getLogger("uvicorn.error").info("Dashboard summary worker started")
 
     @app.on_event("shutdown")
     def stop_dashboard_summary_worker() -> None:
-        dashboard_worker.stop()
+        if dashboard_worker.stop():
+            logging.getLogger("uvicorn.error").info("Dashboard summary worker stopped")
+        else:
+            logging.getLogger("uvicorn.error").warning(
+                "Dashboard summary worker did not stop within the shutdown timeout"
+            )
 
     if session_auth_enabled(settings):
         if not settings.auth_session_secret:

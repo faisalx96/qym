@@ -215,21 +215,41 @@ def test_postgres_full_chain_upgrade_p1_downgrade_reupgrade(postgres, populated)
         assert source_snapshot(engine) == expected
 
 
+@pytest.mark.parametrize("prefix", ["", "/qym", "/qym/"])
 def test_real_application_starts_projects_restarts_and_stops_worker(
-    postgres, monkeypatch
+    postgres, monkeypatch, prefix
 ):
     engine, config = postgres
     command.upgrade(config, "head")
-    from qym_platform.app import create_app
+    from qym_platform import deps, main
+    from qym_platform.auth import Principal, require_ui_principal
     from qym_platform.db import session as db_session
     from qym_platform.settings import PlatformSettings
 
+    factory = sessionmaker(bind=engine, autoflush=False)
+    monkeypatch.setattr(db_session, "SessionLocal", factory)
+    monkeypatch.setattr(deps, "SessionLocal", factory)
     monkeypatch.setattr(
-        db_session, "SessionLocal", sessionmaker(bind=engine, autoflush=False)
+        main,
+        "PlatformSettings",
+        lambda: PlatformSettings(
+            environment="test", auth_mode="none", root_path=prefix
+        ),
     )
-    seed(engine)
-    app = create_app(PlatformSettings(environment="test", auth_mode="none"))
-    worker = app.state.dashboard_summary_worker
+    # Historical source rows have no prebuilt summaries or outbox registration.
+    seed(engine, before_dashboard=True)
+    app = main.build_app()
+    path = prefix.rstrip("/")
+    inner = (
+        next(route.app for route in app.routes if route.path == path) if path else app
+    )
+    with Session(engine) as db:
+        owner = db.get(User, "owner")
+        db.expunge(owner)
+    inner.dependency_overrides[require_ui_principal] = lambda: Principal(
+        user=owner, auth_type="none"
+    )
+    worker = inner.state.dashboard_summary_worker
     worker.interval = 0.02
 
     def wait_for_output(expected):
@@ -250,17 +270,113 @@ def test_real_application_starts_projects_restarts_and_stops_worker(
         raise AssertionError("application worker did not publish source change")
 
     with TestClient(app) as client:
-        assert client.get("/healthz").status_code == 200
+        assert client.get(path + "/healthz").status_code == 200
         assert worker._thread is not None and worker._thread.is_alive()
         wait_for_output(0.75)
+        response = client.get(
+            path + "/api/dashboard/runs", params={"project_slug": "project"}
+        )
+        assert response.status_code == 200
+        assert response.json()["rows"][0]["metric_averages"]["quality"] == 0.75
+        assert response.json()["freshness"]["unpublished_runs"] == 0
         first_thread = worker._thread
     assert not first_thread.is_alive()
     # A stopped process leaves durable queued changes for its replacement.
     with Session(engine) as db:
         db.scalar(select(RunItemScore)).score_numeric = 0.25
         db.commit()
-    with TestClient(app):
+    with TestClient(app) as client:
         assert worker._thread is not first_thread and worker._thread.is_alive()
         wait_for_output(0.25)
+        response = client.get(
+            path + "/api/dashboard/runs", params={"project_slug": "project"}
+        )
+        assert response.json()["rows"][0]["metric_averages"]["quality"] == 0.25
     assert not worker._thread.is_alive()
     assert engine.pool.checkedout() == 0
+
+
+def test_uvicorn_entrypoint_publishes_history_under_production_prefix(
+    postgres, tmp_path
+):
+    import signal
+    import socket
+    import subprocess
+    import sys
+
+    import httpx
+
+    engine, config = postgres
+    command.upgrade(config, "head")
+    seed(engine, before_dashboard=True)
+    root = Path(__file__).resolve().parents[2]
+    env = dict(
+        os.environ,
+        QYM_DATABASE_URL=engine.url.render_as_string(hide_password=False),
+        QYM_ROOT_PATH="/qym",
+        QYM_ENVIRONMENT="test",
+        QYM_AUTH_MODE="none",
+        QYM_AUTH_LOCAL_ENABLED="false",
+        PYTHONPATH=os.pathsep.join(
+            str(root / "packages" / package) for package in ("sdk", "platform")
+        ),
+    )
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+    logfile = tmp_path / "uvicorn.log"
+    with logfile.open("w") as output:
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "uvicorn",
+                "qym_platform.main:app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(port),
+            ],
+            cwd=tmp_path,
+            env=env,
+            stdout=output,
+            stderr=subprocess.STDOUT,
+        )
+        try:
+            with httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=2) as client:
+                deadline = time.monotonic() + 30
+                while time.monotonic() < deadline:
+                    assert process.poll() is None, logfile.read_text()
+                    try:
+                        response = client.get(
+                            "/qym/api/dashboard/runs",
+                            params={"project_slug": "project"},
+                        )
+                    except httpx.TransportError:
+                        time.sleep(0.1)
+                        continue
+                    assert response.status_code == 200, response.text
+                    payload = response.json()
+                    if payload["rows"]:
+                        row = payload["rows"][0]
+                        assert row["run_id"] == "run"
+                        assert row["total_items"] == 1
+                        assert row["metric_averages"]["quality"] == 0.75
+                        assert payload["freshness"]["unpublished_runs"] == 0
+                        break
+                    time.sleep(0.1)
+                else:
+                    pytest.fail(
+                        "Uvicorn did not publish history:\n" + logfile.read_text()
+                    )
+        finally:
+            process.terminate()
+            try:
+                process.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+    assert process.returncode in (0, -signal.SIGTERM), logfile.read_text()
+    logs = logfile.read_text()
+    assert "Dashboard summary worker started" in logs
+    assert "Dashboard summary worker stopped" in logs
