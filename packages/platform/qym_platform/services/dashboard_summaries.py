@@ -27,6 +27,9 @@ from qym_platform.services.dashboard_outbox import (
     _upsert_partition,
     enqueue_snapshots,
     snapshot,
+    execution_event_numbers,
+    execution_event_query,
+    execution_event_object,
 )
 from sqlalchemy import and_, case, delete, func, insert, or_, select, tuple_, update
 from sqlalchemy.orm import Session, aliased
@@ -597,40 +600,47 @@ def _median(db, query, column):
 
 
 def _execution_error_counts(db, run_id, samples):
-    """Count unique item/pass executions with a task or metric exception."""
-    if int(samples or 1) > 1:
-        error_scope = or_(
-            and_(
-                Record.record_kind == "attempt",
-                Record.is_last.is_(True),
+    """Count each failed item/pass once across task, metric and legacy evidence."""
+    error_scope = or_(
+        and_(
+            Record.record_kind == "attempt",
+            or_(
+                Record.is_last.is_(True), Record.metric_key.startswith("legacy_event:")
             ),
-            Record.record_kind == "pass_score",
-        )
-    else:
-        error_scope = Record.record_kind.in_(("item", "score"))
-    pairs = db.execute(
-        select(Record.record_key, Record.pass_number)
+        ),
+        (
+            Record.record_kind == "pass_score"
+            if int(samples or 1) > 1
+            else Record.record_kind.in_(("item", "score"))
+        ),
+    )
+    pass_number = case((Record.pass_number < 1, 1), else_=Record.pass_number)
+    pairs = (
+        select(Record.record_key, pass_number.label("pass_number"))
         .where(
             Record.run_key == run_id,
             Record.present.is_(True),
             Record.error > 0,
             error_scope,
         )
-        .group_by(Record.record_key, Record.pass_number)
-    ).all()
-    by_pass = defaultdict(int)
-    for _record_key, pass_number in pairs:
-        by_pass[max(1, int(pass_number or 1))] += 1
-    return len(pairs), dict(by_pass)
+        .group_by(Record.record_key, pass_number)
+        .subquery()
+    )
+    by_pass = dict(
+        db.execute(
+            select(pairs.c.pass_number, func.count()).group_by(pairs.c.pass_number)
+        ).all()
+    )
+    return sum(by_pass.values()), by_pass
 
 
 def _repeat_retry_counts(db, run_id):
-    """Sum the highest retry number for every item/pass execution."""
-    rows = db.execute(
+    """Deduplicate retries across retained attempts and legacy SDK events."""
+    executions = (
         select(
             Record.record_key,
             Record.pass_number,
-            func.max(Record.retry_count),
+            func.max(Record.retry_count).label("retries"),
         )
         .where(
             Record.run_key == run_id,
@@ -638,11 +648,16 @@ def _repeat_retry_counts(db, run_id):
             Record.present.is_(True),
         )
         .group_by(Record.record_key, Record.pass_number)
-    ).all()
-    by_pass = defaultdict(int)
-    for _record_key, pass_number, retry_count in rows:
-        by_pass[max(1, int(pass_number or 1))] += max(0, int(retry_count or 0))
-    return sum(by_pass.values()), dict(by_pass), bool(rows)
+        .subquery()
+    )
+    by_pass = dict(
+        db.execute(
+            select(executions.c.pass_number, func.sum(executions.c.retries)).group_by(
+                executions.c.pass_number
+            )
+        ).all()
+    )
+    return sum(by_pass.values()), by_pass, bool(by_pass)
 
 
 def repair_extrema(db, project_key, bucket_key, granularity="hour"):
@@ -1189,6 +1204,7 @@ def backfill_partition(db, run_id, *, chunk_size=500):
     """Resume a bounded source partition while live transactional events continue."""
     from qym_platform.db.models import (
         Run,
+        RunEvent,
         RunItem,
         RunItemAttempt,
         RunItemPassScore,
@@ -1204,6 +1220,7 @@ def backfill_partition(db, run_id, *, chunk_size=500):
         ("score", RunItemScore),
         ("pass_score", RunItemPassScore),
         ("attempt", RunItemAttempt),
+        ("event", RunEvent),
     ]
     position = next(
         (
@@ -1214,14 +1231,19 @@ def backfill_partition(db, run_id, *, chunk_size=500):
         0,
     )
     kind, model = source_types[position]
-    rows = list(
-        db.scalars(
-            select(model)
-            .where(model.run_id == run_id, model.id > partition.backfill_cursor)
-            .order_by(model.id)
-            .limit(chunk_size)
-            .with_for_update()
-        )
+    query = execution_event_query() if model is RunEvent else select(model)
+    # Reuse the existing (run_id, sequence) event index for bounded keyset scans.
+    cursor_column = RunEvent.sequence if model is RunEvent else model.id
+    query = (
+        query.where(model.run_id == run_id, cursor_column > partition.backfill_cursor)
+        .order_by(cursor_column)
+        .limit(chunk_size)
+        .with_for_update()
+    )
+    rows = (
+        [execution_event_object(row) for row in db.execute(query)]
+        if model is RunEvent
+        else list(db.scalars(query))
     )
     expected_cursor, expected_kind = partition.backfill_cursor, partition.backfill_kind
     db.refresh(partition, with_for_update=True)
@@ -1234,8 +1256,20 @@ def backfill_partition(db, run_id, *, chunk_size=500):
     if partition.backfill_kind == "item" and partition.backfill_cursor == 0:
         partition.backfill_source_version = partition.last_enqueued_version
     if rows:
-        enqueue_snapshots(db.connection(), [snapshot(row) for row in rows])
-        partition.backfill_cursor = rows[-1].id
+        selected = rows
+        if model is RunEvent:
+            selected = [
+                row
+                for row in rows
+                if (numbers := execution_event_numbers(row.type, row.payload))[
+                    "item_id"
+                ]
+                and (numbers["error"] or numbers["retry_count"])
+            ]
+        enqueue_snapshots(db.connection(), [snapshot(row) for row in selected])
+        partition.backfill_cursor = (
+            rows[-1].sequence if model is RunEvent else rows[-1].id
+        )
     if len(rows) < chunk_size:
         if position + 1 < len(source_types):
             partition.backfill_kind = source_types[position + 1][0]
@@ -1337,7 +1371,7 @@ def dashboard_freshness(db, project_ids):
         )
         or 0
     )
-    pending, oldest, backfilling = db.execute(
+    pending, oldest, backfilling, unpublished, failed = db.execute(
         select(
             func.count(),
             func.min(Partition.oldest_pending_event),
@@ -1349,7 +1383,7 @@ def dashboard_freshness(db, project_ids):
                             # Finishing the source scan can leave events to drain
                             # before the first complete summary is published.
                             and_(
-                                Partition.backfill_kind == "attempt",
+                                Partition.backfill_kind.in_(("attempt", "event")),
                                 func.coalesce(Summary.projection_revision, 0) == 0,
                             ),
                         ),
@@ -1358,6 +1392,10 @@ def dashboard_freshness(db, project_ids):
                     else_=0,
                 )
             ),
+            func.sum(
+                case((func.coalesce(Summary.projection_revision, 0) == 0, 1), else_=0)
+            ),
+            func.sum(case((Partition.queue_state == "repair_required", 1), else_=0)),
         )
         .select_from(Partition)
         .outerjoin(Summary, Summary.run_key == Partition.partition_key)
@@ -1375,6 +1413,8 @@ def dashboard_freshness(db, project_ids):
             "updating": bool(pending),
             "pending_partitions": int(pending),
             "backfilling": bool(backfilling),
+            "unpublished_runs": int(unpublished or 0),
+            "failed_partitions": int(failed or 0),
             "oldest_pending_at": oldest.isoformat() + "Z" if oldest else None,
         },
     }
@@ -1483,6 +1523,42 @@ def request_dashboard_repair(db, run_id):
     return True
 
 
+def scheduled_partitions(db, *, limit=20):
+    """Keep live runs responsive while reserving capacity for historical repair."""
+    from qym_platform.db.models import Run
+
+    eligible = (
+        select(Partition.partition_key)
+        .outerjoin(Run, Run.id == Partition.partition_key)
+        .where(
+            Partition.queue_state.in_(("pending", "backfill")),
+            or_(
+                Partition.lease_until.is_(None),
+                Partition.lease_until <= datetime.utcnow(),
+            ),
+        )
+        .order_by(Partition.updated_at, Partition.partition_key)
+    )
+    urgent = or_(
+        Partition.backfill_complete.is_(True),
+        Run.status.in_(("RUNNING", "PENDING")),
+        Run.deleted_at.isnot(None),
+        Run.id.is_(None),
+    )
+    live = list(db.scalars(eligible.where(urgent).limit(max(1, limit * 3 // 4))))
+    history = list(db.scalars(eligible.where(~urgent).limit(max(0, limit - len(live)))))
+    selected = live + history
+    if len(selected) < limit:
+        selected += list(
+            db.scalars(
+                eligible.where(Partition.partition_key.notin_(selected)).limit(
+                    limit - len(selected)
+                )
+            )
+        )
+    return selected
+
+
 class DashboardSummaryWorker:
     """A restart-safe polling worker with bounded transactions and owned sessions.
 
@@ -1524,20 +1600,7 @@ class DashboardSummaryWorker:
         with self.session_factory() as db:
             reconcile_expired_dashboard_runs(db, limit=self.max_partitions)
             db.commit()
-            partitions = list(
-                db.scalars(
-                    select(Partition.partition_key)
-                    .where(
-                        Partition.queue_state.in_(["pending", "backfill"]),
-                        or_(
-                            Partition.lease_until.is_(None),
-                            Partition.lease_until <= datetime.utcnow(),
-                        ),
-                    )
-                    .order_by(Partition.updated_at, Partition.partition_key)
-                    .limit(self.max_partitions)
-                )
-            )
+            partitions = scheduled_partitions(db, limit=self.max_partitions)
         processed = 0
         for run_id in partitions:
             if self._stop.is_set():

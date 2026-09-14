@@ -1,0 +1,5 @@
+{"endpoint": "dashboard", "runs": 5000, "concurrency": 20, "requests": 60, "cold_ms": 1440.4, "warm_serial_median_ms": 36.7, "concurrent_p50_ms": 326.1, "concurrent_p95_ms": 364.7, "max_ms": 367.3, "response_bytes": 173550, "source_payload_queries": 0}
+{"endpoint": "legacy", "runs": 5000, "concurrency": 20, "requests": 60, "cold_ms": 60.3, "warm_serial_median_ms": 26.2, "concurrent_p50_ms": 179.8, "concurrent_p95_ms": 249.8, "max_ms": 256.8, "response_bytes": 108962, "source_payload_queries": 0}
+{"endpoint": "dashboard", "case": "cold_same_query", "runs": 5000, "concurrency": 20, "p50_ms": 1052.8, "p95_ms": 1083.9, "source_payload_queries": 0}
+{"endpoint": "dashboard", "case": "cold_distinct_filters", "runs": 5000, "concurrency": 20, "p50_ms": 1383.2, "p95_ms": 1738.7, "source_payload_queries": 0}
+{"endpoint": "dashboard", "case": "live_publications", "runs": 5000, "concurrency": 20, "requests": 200, "elapsed_seconds": 9.7, "publications": 8, "p50_ms": 824.5, "p95_ms": 1417.9, "source_payload_queries": 0}

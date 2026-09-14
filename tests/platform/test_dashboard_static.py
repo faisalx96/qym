@@ -338,7 +338,7 @@ def test_runs_badge_totals_execution_errors_without_changing_item_math() -> None
     assert "run.samples > 1 ? ' across all passes' : ''" in source
     assert "const retryScope = run.samples > 1 ? ' across all passes' : ' across all items';" in source
     assert "${retryScope}" in source
-    assert "dashboard.js?v=repeat-error-count-" in index
+    assert "dashboard.js?v=runs-performance-" in index
 
 
 def test_repeat_run_rows_show_each_pass_retry_count() -> None:
@@ -426,7 +426,7 @@ def test_repeat_parent_checkbox_selects_its_current_scope() -> None:
     assert "isPartiallySelected" not in source
     assert "state.selectedRuns.delete(filePath);" in source
     assert "if (!allSelected) refs.forEach(ref => state.selectedRuns.add(ref));" in source
-    assert "dashboard.js?v=repeat-error-count-" in index
+    assert "dashboard.js?v=runs-performance-" in index
 
 
 def test_repeat_comparison_selection_expands_to_exact_passes() -> None:

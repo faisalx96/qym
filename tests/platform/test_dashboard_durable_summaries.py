@@ -151,7 +151,12 @@ def projected(engine, run_id="r"):
 
 
 def legacy(engine, run_id="r"):
-    with Session(engine) as db:
+    # Keep this oracle independent of the projected response under test.
+    from unittest.mock import patch
+
+    with Session(engine) as db, patch.object(
+        runs_api, "_published_run_rows", return_value={}
+    ):
         result = runs_api.legacy_list_runs(
             limit=500,
             offset=0,

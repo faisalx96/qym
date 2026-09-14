@@ -1,0 +1,20 @@
+Validation on 2026-09-14; local Python 3.13, PostgreSQL and SQLite, Chromium browser.
+Base: merged main 4f11b1f. QYM_TEST_POSTGRES_URL points to an isolated test database; schemas are created and dropped per fixture.
+
+pytest tests/platform -m 'not browser' -q --disable-warnings
+1080 passed, 6 skipped, 74 deselected, 18865 warnings in 189.75s (0:03:09)
+
+pytest tests/platform/test_dashboard_orchestration_browser.py tests/platform/test_dashboard_backfill_browser.py tests/platform/test_design_language.py tests/sdk/test_error_capture_contract.py tests/sdk/test_non_retryable_error.py -q --disable-warnings
+40 passed, 48827 warnings in 81.71s (0:01:21)
+
+pytest tests/platform/test_dashboard_projection_api.py tests/platform/test_dashboard_static.py tests/platform/test_p1_migrations_lifecycle.py tests/platform/test_runs_list_performance.py tests/platform/test_dashboard_snapshot_cache.py -q --disable-warnings
+213 passed, 1 skipped, 5232 warnings in 38.74s
+
+Load: PYTHONPATH=packages/sdk:packages/platform python artifacts/runs-performance/benchmark.py
+All load scenarios completed successfully; zero source-history queries. See postgres-results.jsonl.
+
+git diff --check: passed.
+The focused run precedes the two added downgrade cases; both passed in the final full platform suite.
+Warnings are primarily existing datetime.utcnow deprecations on Python 3.13. PostgreSQL cases were enabled, not skipped for a missing database URL.
+
+Platform wheel built successfully; packaged cache, migration and dashboard assets match source.

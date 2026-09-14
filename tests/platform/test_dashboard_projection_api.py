@@ -722,8 +722,8 @@ def test_overview_filtered_stream_honors_requested_sort(dataset, monkeypatch):
     seed(engine, count=6)
     captured = {}
 
-    def capture(unfiltered, filtered):
-        captured["unfiltered"] = [row["run_id"] for row in unfiltered]
+    def capture(unfiltered, filtered, *, global_data=None):
+        captured["global"] = global_data
         captured["filtered"] = [row["run_id"] for row in filtered]
         return {}
 
@@ -733,7 +733,7 @@ def test_overview_filtered_stream_honors_requested_sort(dataset, monkeypatch):
     )
     assert response.status_code == 200, response.text
     assert captured["filtered"] == [f"run-{index:04}" for index in range(6)]
-    assert captured["unfiltered"] != captured["filtered"]
+    assert captured["global"]["aggregations"]["totalRuns"] == 6
     points = client.post(
         "/api/dashboard/points",
         json={"project_slug": "project", "sort": "time-asc", "limit": 2},

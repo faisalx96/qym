@@ -1,0 +1,2 @@
+{"endpoint": "dashboard", "runs": 5000, "concurrency": 20, "requests": 60, "cold_ms": 1543.9, "warm_serial_median_ms": 999.8, "concurrent_p50_ms": 6972.9, "concurrent_p95_ms": 9572.5, "max_ms": 9725.3, "response_bytes": 173506, "source_payload_queries": 0}
+{"endpoint": "legacy", "runs": 5000, "concurrency": 20, "requests": 60, "cold_ms": 67.4, "warm_serial_median_ms": 24.4, "concurrent_p50_ms": 181.8, "concurrent_p95_ms": 256.1, "max_ms": 263.0, "response_bytes": 108940, "source_payload_queries": 0}
