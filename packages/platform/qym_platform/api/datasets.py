@@ -13,7 +13,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Body, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from sqlalchemy import String, cast, func, or_
+from sqlalchemy import String, cast, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -38,6 +38,7 @@ from qym_platform.deps import get_db
 from qym_platform.item_identity import build_identity_fingerprint
 from qym_platform.permissions import has_project_access
 from qym_platform.security import api_key_prefix, verify_api_key
+from qym_platform.services.dataset_search import filter_dataset_item_search
 
 
 router = APIRouter()
@@ -1347,15 +1348,7 @@ def list_items(
     dataset = _get_dataset(db, project, dataset_ref)
     version = _resolve_version(db, dataset, version_ref)
     query = db.query(DatasetItem).filter(DatasetItem.dataset_version_id == version.id)
-    if search:
-        needle = f"%{search.strip().lower()}%"
-        query = query.filter(
-            or_(
-                func.lower(DatasetItem.item_id).like(needle),
-                func.lower(cast(DatasetItem.input, String)).like(needle),
-                func.lower(cast(DatasetItem.expected_output, String)).like(needle),
-            )
-        )
+    query = filter_dataset_item_search(db, query, search)
     if label:
         query = query.filter(cast(DatasetItem.labels, String).like(f"%{label}%"))
 
@@ -1850,15 +1843,7 @@ def item_neighbors(
     dataset = _get_dataset(db, project, dataset_ref)
     version = _resolve_version(db, dataset, version_ref)
     query = db.query(DatasetItem).filter(DatasetItem.dataset_version_id == version.id)
-    if search:
-        needle = f"%{search.strip().lower()}%"
-        query = query.filter(
-            or_(
-                func.lower(DatasetItem.item_id).like(needle),
-                func.lower(cast(DatasetItem.input, String)).like(needle),
-                func.lower(cast(DatasetItem.expected_output, String)).like(needle),
-            )
-        )
+    query = filter_dataset_item_search(db, query, search)
     if label:
         query = query.filter(cast(DatasetItem.labels, String).like(f"%{label}%"))
     sort_key = (sort or "index_asc").lower()

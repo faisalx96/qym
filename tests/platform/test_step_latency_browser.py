@@ -227,6 +227,110 @@ def test_reselected_comparison_lane_keeps_the_current_result(panel):
     panel.expect_latency(222)
 
 
+@pytest.mark.parametrize("pooled", [False, True])
+def test_empty_step_latency_panel_hides_and_returns_on_refresh(panel, pooled):
+    empty = {"groups": [], "passes": [1, 2], "trace_count": 0}
+    panel.mount(opts={"pooled": pooled})
+    panel.respond_since(0, empty)
+    assert not panel.page.locator("#panel").is_visible()
+    assert panel.page.locator("#panel").inner_html() == ""
+
+    next_request = len(panel.requests())
+    panel.mount(opts={"pooled": pooled})
+    panel.respond_since(next_request)
+    panel.expect_latency(222)
+    assert panel.page.locator("#panel").is_visible()
+
+    next_request = len(panel.requests())
+    panel.mount(opts={"pooled": pooled})
+    panel.respond_since(next_request, empty)
+    assert not panel.page.locator("#panel").is_visible()
+
+
+@pytest.mark.parametrize("pooled", [False, True])
+def test_obsolete_data_cannot_restore_an_empty_panel(panel, pooled):
+    panel.mount(["old-run"], {"pooled": pooled})
+    old_count = 2 if pooled else 1
+    panel.wait_requests(old_count)
+    panel.mount(["new-run"], {"pooled": pooled})
+    panel.respond_since(old_count, {"groups": [], "passes": []})
+    assert not panel.page.locator("#panel").is_visible()
+    for index in range(old_count):
+        panel.respond(index)
+    assert not panel.page.locator("#panel").is_visible()
+    assert panel.page.locator("#panel").inner_html() == ""
+
+
+@pytest.mark.parametrize("pooled", [False, True])
+@pytest.mark.parametrize("observation", ["zero-latency", "errors-only", "no-samples"])
+def test_step_latency_requires_observations_but_preserves_zero_and_errors(
+    panel, pooled, observation
+):
+    data = payload(0)
+    if observation != "zero-latency":
+        data["groups"][0]["n"] = 0
+        data["groups"][0]["error_count"] = 3 if observation == "errors-only" else 0
+    panel.mount(opts={"pooled": pooled})
+    panel.respond_since(0, data)
+    if observation == "no-samples":
+        assert not panel.page.locator("#panel").is_visible()
+    else:
+        assert panel.page.locator(".sl-plot").is_visible()
+        expected = "err=3" if observation == "errors-only" else "mean 0"
+        assert expected in panel.page.locator(".sl-plot").text_content()
+
+
+@pytest.mark.parametrize("pooled", [False, True])
+def test_empty_phase_keeps_only_filters_and_can_restore_report(panel, pooled):
+    panel.mount(opts={"pooled": pooled})
+    panel.respond_since(0)
+    panel.expect_latency(222)
+    panel.select("phase", "eval")
+    assert panel.page.locator("#panel").is_visible()
+    assert panel.page.locator(".sl-card, .sl-plot, .section-title, .sl-empty").count() == 0
+    assert panel.page.locator("#panel a[download]").count() == 0
+    panel.select("phase", "all")
+    panel.expect_latency(222)
+
+
+def test_empty_repeat_pass_keeps_filters_and_can_restore_report(panel):
+    panel.mount()
+    panel.respond_since(0)
+    panel.expect_latency(222)
+    next_request = len(panel.requests())
+    panel.select("passNum", "1")
+    panel.respond_since(next_request, {"groups": [], "passes": [1, 2]})
+    assert panel.page.locator(".sl-card, .sl-plot, .section-title, .sl-empty").count() == 0
+    next_request = len(panel.requests())
+    panel.select("passNum", "")
+    panel.respond_since(next_request)
+    panel.expect_latency(222)
+
+
+def test_empty_locked_pass_hides_panel(panel):
+    panel.page.evaluate("history.replaceState(null, '', '?pass=2')")
+    panel.mount()
+    panel.respond_since(0, {"groups": [], "passes": [1, 2]})
+    assert not panel.page.locator("#panel").is_visible()
+
+
+def test_deselecting_comparison_lanes_keeps_controls_for_reselection(panel):
+    panel.mount(["run-1"], {"pooled": True})
+    panel.respond_since(0)
+    panel.expect_latency(222)
+    panel.page.locator('[data-sl-run="run-1"]').click()
+    assert panel.page.locator(".sl-card, .sl-plot, .section-title, .sl-empty").count() == 0
+    panel.page.locator('[data-sl-run="run-1"]').click()
+    panel.expect_latency(222)
+
+
+def test_step_latency_load_failure_remains_visible(panel):
+    panel.mount()
+    panel.respond(0, outcome="http-error")
+    assert panel.page.locator("#panel").is_visible()
+    assert "Failed to load step latency" in panel.page.locator("#panel").inner_text()
+
+
 @pytest.mark.parametrize("replace_strip", [False, True])
 def test_trace_accordions_survive_remount_without_duplicates(panel, replace_strip):
     panel.page.locator("#stats").evaluate(
@@ -249,6 +353,91 @@ def test_trace_accordions_survive_remount_without_duplicates(panel, replace_stri
     panel.tile("Avg Trace Latency").click()
     names = panel.page.locator(".sl-ts-inset .sl-ts-name").all_text_contents()
     assert names == ["Task", "Evaluator"]
+
+
+@pytest.mark.parametrize("empty_scope", [False, True])
+def test_trace_tile_without_breakdown_does_not_open_an_empty_inset(panel, empty_scope):
+    panel.page.locator("#stats").evaluate(
+        "(el, markup) => el.innerHTML = markup", trace_strip()
+    )
+    data = payload(tokens=0)
+    data["groups"][0].update(tokens_prompt=0, tokens_completion=0)
+    if empty_scope:
+        data["groups"] = []
+    panel.mount()
+    panel.respond_since(0, data)
+    tile = panel.tile("Avg Tokens")
+    tile.wait_for(state="visible")
+    assert "sl-ts-expandable" not in tile.get_attribute("class")
+    assert not tile.locator(".sl-ts-chev").is_visible()
+    tile.click()
+    assert panel.page.locator(".sl-ts-inset").count() == 0
+    assert tile.is_visible()
+
+
+def test_open_trace_breakdown_collapses_after_empty_pass_and_can_return(panel):
+    panel.page.locator("#stats").evaluate(
+        "(el, markup) => el.innerHTML = markup", trace_strip()
+    )
+    panel.mount()
+    panel.respond_since(0)
+    panel.tile("Avg Tokens").click()
+    assert panel.page.locator(".sl-ts-inset").is_visible()
+    next_request = len(panel.requests())
+    panel.select("passNum", "1")
+    assert "Loading" in panel.page.locator(".sl-ts-inset").inner_text()
+    panel.respond_since(next_request, {"groups": [], "passes": [1, 2]})
+    assert panel.page.locator(".sl-ts-inset, .sl-ts-active").count() == 0
+    assert "sl-ts-expandable" not in panel.tile("Avg Tokens").get_attribute("class")
+
+    next_request = len(panel.requests())
+    panel.select("passNum", "")
+    panel.respond_since(next_request)
+    panel.tile("Avg Tokens").click()
+    assert "llm:test" in panel.page.locator(".sl-ts-inset").inner_text()
+
+
+def test_trace_breakdown_fetch_failure_preserves_feedback(panel):
+    panel.page.locator("#stats").evaluate(
+        "(el, markup) => el.innerHTML = markup", trace_strip()
+    )
+    panel.mount()
+    panel.tile("Avg Tokens").click()
+    assert "Loading" in panel.page.locator(".sl-ts-inset").inner_text()
+    panel.respond(0, outcome="http-error")
+    assert "Breakdown unavailable" in panel.page.locator(".sl-ts-inset").inner_text()
+
+
+def test_trace_latency_without_folded_values_does_not_expand(panel):
+    panel.page.locator("#stats").evaluate(
+        "(el, markup) => el.innerHTML = markup", trace_strip().replace("100ms", "—")
+    )
+    panel.mount()
+    panel.respond_since(0)
+    tile = panel.tile("Avg Trace Latency")
+    tile.wait_for(state="visible")
+    assert "sl-ts-expandable" not in tile.get_attribute("class")
+    tile.click()
+    assert panel.page.locator(".sl-ts-inset").count() == 0
+
+
+@pytest.mark.parametrize("errors_only", [False, True])
+def test_trace_latency_breakdown_requires_timings_and_keeps_zero(panel, errors_only):
+    panel.page.locator("#stats").evaluate(
+        "(el, markup) => el.innerHTML = markup",
+        trace_strip().replace("Avg Tokens", "Avg LLM Latency"),
+    )
+    data = payload(0)
+    if errors_only:
+        data["groups"][0].update(n=0, error_count=2, median_ms=None, mean_ms=None)
+    panel.mount()
+    panel.respond_since(0, data)
+    panel.tile("Avg LLM Latency").click()
+    if errors_only:
+        assert panel.page.locator(".sl-ts-inset").count() == 0
+        assert "err=2" in panel.page.locator(".sl-plot").text_content()
+    else:
+        assert "median 0" in panel.page.locator(".sl-ts-inset").inner_text()
 
 
 def test_pass_change_in_kind_view_reloads_trace_breakdown_names(panel):

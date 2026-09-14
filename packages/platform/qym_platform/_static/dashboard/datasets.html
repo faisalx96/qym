@@ -2358,8 +2358,19 @@
       const pager = el('div', { className: 'dsx-pager qym-pagination', id: 'dsx-pager', 'aria-label': 'Dataset items pagination' });
       host.appendChild(pager);
 
-      const debouncedSearch = debounce(() => { state.search = searchInput.value; state.page = 0; navigate({ search: state.search, page: 0 }, { replace: true, silent: true }); loadItems(); }, 200);
-      searchInput.addEventListener('input', debouncedSearch);
+      let itemsLoadSeq = 0;
+      const debouncedSearch = debounce(() => {
+        if (!tableWrap.isConnected) return;
+        state.search = searchInput.value;
+        state.page = 0;
+        navigate({ search: state.search, page: 0 }, { replace: true, silent: true });
+        loadItems();
+      }, 200);
+      searchInput.addEventListener('input', () => {
+        // Invalidate earlier requests immediately, including during the debounce.
+        itemsLoadSeq += 1;
+        debouncedSearch();
+      });
 
       loadItems();
 
@@ -2382,6 +2393,11 @@
       };
 
       async function loadItems(options){
+        if (!tableWrap.isConnected) return;
+        const requestSeq = ++itemsLoadSeq;
+        const requestSearch = state.search;
+        const isCurrentRequest = () => requestSeq === itemsLoadSeq
+          && tableWrap.isConnected && searchInput.value === requestSearch;
         const keepTable = !!(options && options.keepTable);
         const scrollLeft = tableWrap.scrollLeft;
         if (keepTable) {
@@ -2403,6 +2419,7 @@
           if (state.sort) params.set('sort', state.sort);
           if (state.label) params.set('label', state.label);
           const resp = await apiFetch('/v1/datasets/' + encodeURIComponent(state.datasetRef) + '/versions/' + encodeURIComponent(v.version) + '/items?' + params.toString());
+          if (!isCurrentRequest()) return;
           const items = resp.items || [];
           const metricNames = (resp.metric_names && resp.metric_names.length)
             ? resp.metric_names
@@ -2411,10 +2428,11 @@
           renderItemsTable({ scrollLeft: keepTable ? scrollLeft : null });
           renderPager();
         } catch(e) {
+          if (!isCurrentRequest()) return;
           Shell.toast(e.message || 'Failed to load items', 'error');
           if (!keepTable) tableWrap.innerHTML = '';
         } finally {
-          tableWrap.removeAttribute('aria-busy');
+          if (isCurrentRequest()) tableWrap.removeAttribute('aria-busy');
         }
       }
 
@@ -2424,8 +2442,11 @@
         const items = state.itemsList.items;
         if (items.length === 0) {
           const e = el('div', { className: 'dsx-empty' });
-          e.appendChild(el('h3', null, isDraft ? 'This draft is empty' : 'This version has no items'));
-          if (isDraft) {
+          const filtered = !!(state.search.trim() || state.label);
+          e.appendChild(el('h3', null, filtered ? 'No items match these filters' : (isDraft ? 'This draft is empty' : 'This version has no items')));
+          if (filtered) {
+            e.appendChild(el('p', null, 'Try another search or clear the filters.'));
+          } else if (isDraft) {
             e.appendChild(el('p', null, 'Add items one at a time, or import a file.'));
             const acts = el('div', { className: 'dsx-empty-actions' });
             acts.appendChild(el('button', { className: 'shell-btn shell-btn-primary', onclick: () => openNewItemFlow() }, '+ Add item'));
