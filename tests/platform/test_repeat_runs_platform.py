@@ -1075,7 +1075,18 @@ def test_runs_list_payload_includes_pass_summaries_for_dot_strip():
         assert [p["error_count"] for p in pass_payload["passes"]] == [0, 1, 1]
 
 
-def test_runs_list_counts_metric_only_execution_error_without_task_failure():
+@pytest.mark.parametrize("metric_meta, expected_errors", [
+    ({"status": "error", "error": "metric exploded"}, 1),
+    ({"status": "timeout", "error": False}, 1),
+    ({"error": "metric exploded"}, 1),
+    ({"error": False}, 0),
+    ({"error": 0}, 0),
+    ({"error": None}, 0),
+    ({"error": "   "}, 0),
+])
+def test_runs_list_counts_metric_only_execution_error_without_task_failure(
+    metric_meta, expected_errors,
+):
     """A metric exception appears in the Runs badge without changing task math."""
     _app, SessionLocal = _make_env()
     with SessionLocal() as session:
@@ -1099,7 +1110,7 @@ def test_runs_list_counts_metric_only_execution_error_without_task_failure():
                 metric_name="accuracy",
                 score_numeric=0.0,
                 score_raw=0.0,
-                meta={"status": "error", "error": "metric exploded"},
+                meta=metric_meta,
             )
         )
         session.commit()
@@ -1128,7 +1139,7 @@ def test_runs_list_counts_metric_only_execution_error_without_task_failure():
         )
 
         assert summary["error_count"] == 0
-        assert summary["execution_error_count"] == 1
+        assert summary["execution_error_count"] == expected_errors
         assert summary["success_count"] == 1
         assert summary["success_rate"] == pytest.approx(1.0)
         assert summary["metric_averages"]["accuracy"] == pytest.approx(0.0)

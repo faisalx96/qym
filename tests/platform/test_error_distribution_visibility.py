@@ -119,8 +119,11 @@ def test_error_groups_appear_only_when_the_filtered_results_contain_them(page):
     """ + (r"""
         rows = []; renderItems();
         aligned = false; renderItems();
-        assert.equal(section.hidden, false);
-        assert.ok(section.innerHTML.includes('Error Distribution Unavailable'));
+        assert.equal(section.hidden, true);
+        assert.equal(section.innerHTML, '');
         aligned = true; renderItems();
         assert.equal(section.hidden, true);
+        rows = [task]; renderItems();
+        assert.equal(section.hidden, false);
+        assert.deepEqual(groups(), ['Task']);
     """ if page == "compare" else ""))

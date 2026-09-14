@@ -2117,8 +2117,12 @@ def test_analysis_targets_include_every_failed_metric_and_skip_each_completed_me
     ]
 
 
+@pytest.mark.parametrize("normal_label", [None, "failed", "error", "timeout"])
+@pytest.mark.parametrize("normal_error", [None, False, 0, "", "   "])
 def test_analysis_targets_skip_task_and_metric_execution_errors(
     db_session: Session,
+    normal_label,
+    normal_error,
 ) -> None:
     _, _, run, normal_failure = _seed_run(db_session)
     task_error = RunItem(
@@ -2164,6 +2168,8 @@ def test_analysis_targets_skip_task_and_metric_execution_errors(
         )
         .one()
     )
+    normal_score.label = normal_label
+    normal_score.meta = {"error": normal_error}
     targets = _filter_analysis_targets(
         run,
         AnalyzeRequest(item_filter="failed", only_unanalyzed=False),

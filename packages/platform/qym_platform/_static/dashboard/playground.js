@@ -1782,9 +1782,9 @@ window.QymPlayground = (function () {
 
   function _isMetricExecutionError(meta) {
     if (!meta || typeof meta !== 'object') return false;
-    var status = String(meta.status || meta.label || '').trim().toLowerCase();
+    var status = String(meta.status || '').trim().toLowerCase();
     if (status === 'error' || status === 'failed' || status === 'timeout') return true;
-    return meta.error != null && String(meta.error).trim() !== '';
+    return Boolean(meta.error) && String(meta.error).trim() !== '';
   }
 
   function _getMatchedItems() {

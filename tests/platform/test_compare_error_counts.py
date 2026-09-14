@@ -142,11 +142,13 @@ def test_metric_error_marks_only_its_own_surfaces(metric_type, score, error_meta
 @pytest.mark.parametrize(("metric_type", "expected"), [
     ("boolean", "False"), ("score", "0.0%"), ("numeric", "0"),
 ])
-def test_judged_zero_without_exception_keeps_its_display(metric_type, expected) -> None:
+@pytest.mark.parametrize("error_value", [None, False, 0, "", "   "])
+def test_judged_zero_without_exception_keeps_its_display(metric_type, expected, error_value) -> None:
     run_compare_js(
         "state.metricTypes.accuracy=" + json.dumps(metric_type) + ";\n"
-        + "const expected=" + json.dumps(expected) + ";\n" + r"""
-        const rows=[row({metric_meta:{accuracy:{label:'failed'}}})];
+        + "const expected=" + json.dumps(expected) + ";\n"
+        + "const errorValue=" + json.dumps(error_value) + ";\n" + r"""
+        const rows=[row({metric_meta:{accuracy:{label:'failed',error:errorValue}}})];
         configureRuns(rows);
         const collapsed=renderItemComparisonCard('item_2',rows);
         assert.match(collapsed,new RegExp('metric-score-value[^>]*>'+expected+'<'));

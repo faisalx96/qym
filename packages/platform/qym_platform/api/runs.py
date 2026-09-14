@@ -129,8 +129,7 @@ def _is_metric_execution_error(meta: Any) -> bool:
         if status in _EXECUTION_ERROR_STATUSES:
             return True
         error = meta.get("error")
-        if error is not None and str(error).strip():
-            return True
+        return bool(error.strip()) if isinstance(error, str) else bool(error)
     return False
 
 

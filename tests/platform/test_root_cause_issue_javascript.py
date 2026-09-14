@@ -53,6 +53,31 @@ def _playground_with_test_exports(*names: str) -> str:
     return source.replace(marker, "  return {\n" + exports + "    init: init,", 1)
 
 
+def test_playground_keeps_failed_verdicts_available_for_analysis() -> None:
+    playground = _playground_with_test_exports("_getMatchedItems").replace(
+        "  var _opts = {};", "  var _opts = {getRows: () => rows};", 1
+    )
+    _run_javascript(
+        """
+        const document = {getElementById: () => null};
+        const window = {};
+        const rows = [null, false, 0, '', '   '].map((error, index) => ({
+          item_id: String(index), metric_scores: {accuracy: 0},
+          metric_metadata_by_metric: {accuracy: {label: 'failed', error}},
+        }));
+        rows.push({item_id:'metric-error', metric_scores:{accuracy:0},
+          metric_metadata_by_metric:{accuracy:{status:'error'}}});
+        rows.push({item_id:'task-error', error:'Task failed', metric_scores:{accuracy:0}});
+        """
+        + f"eval({json.dumps(playground)});\n"
+        + """
+        const matched = window.QymPlayground.__test__getMatchedItems();
+        assert.deepEqual(matched.map(row => row.item_id), ['0','1','2','3','4']);
+        assert.ok(matched.every(row => row._matched_metric_names.join() === 'accuracy'));
+        """
+    )
+
+
 def test_auto_analysis_completion_reports_errors_instead_of_success() -> None:
     playground = _playground_with_test_exports(
         "_analysisCompletionState",

@@ -3626,9 +3626,8 @@ def _metric_score_has_execution_error(score: Any) -> bool:
     """Return whether a metric score represents an exception, not a bad answer."""
     if score is None:
         return False
-    label = str(getattr(score, "label", "") or "").strip().lower()
-    if label in _EXECUTION_ERROR_STATUSES:
-        return True
+    # Labels are judge verdicts. Only explicit execution metadata identifies
+    # an exception; task failures are filtered using the item's error field.
     meta = getattr(score, "meta", None)
     if not isinstance(meta, dict):
         return False
@@ -3636,7 +3635,7 @@ def _metric_score_has_execution_error(score: Any) -> bool:
     if status in _EXECUTION_ERROR_STATUSES:
         return True
     error = meta.get("error")
-    return error is not None and bool(str(error).strip())
+    return bool(error.strip()) if isinstance(error, str) else bool(error)
 
 
 def _analysis_metric_names(

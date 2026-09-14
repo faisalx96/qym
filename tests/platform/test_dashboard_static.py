@@ -175,7 +175,7 @@ def test_run_item_scopes_task_and_metric_errors_to_the_right_surface() -> None:
 
     assert "function isTaskErrorRow(row)" in metrics_source
     assert "function isMetricErrorMeta(meta)" in metrics_source
-    assert "const status = String(meta.status || '').toLowerCase();" in metrics_source
+    assert "const status = String(meta.status || '').trim().toLowerCase();" in metrics_source
     assert "meta.status || meta.label" not in metrics_source
     assert "function hasMetricError(row, metricName = null)" in metrics_source
     assert "return isTaskErrorRow(row) || hasMetricError(row);" in metrics_source
@@ -2180,8 +2180,8 @@ def test_clear_filter_control_has_aligned_label_and_soft_count_pill() -> None:
     for page in DASHBOARD_DIR.glob("*.html"):
         source = page.read_text(encoding="utf-8")
         if page.name == "analyzer.html":
-            assert "dashboard.css?v=auto-analyzer-context-20260908-7" in source
-            assert "playground.js?v=auto-analyzer-context-20260908-7" in source
+            assert "dashboard.css?v=metric-errors-20260914-1" in source
+            assert "playground.js?v=metric-errors-20260914-1" in source
             assert "ui_components.css?v=auto-analysis-selectors-20260811-1" in source
             assert "ui_components.js?v=auto-analysis-selectors-20260811-1" in source
             continue
@@ -3373,7 +3373,7 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert '"type": "retrying"' in analysis_api
     assert "state.phase === 'retrying'" in playground
     assert "Retrying timed-out analysis…" in playground
-    assert "playground.js?v=auto-analyzer-context-20260908-7" in (
+    assert "playground.js?v=metric-errors-20260914-1" in (
         DASHBOARD_DIR / "analyzer.html"
     ).read_text(encoding="utf-8")
     assert "Timeout retries: <strong>" in playground

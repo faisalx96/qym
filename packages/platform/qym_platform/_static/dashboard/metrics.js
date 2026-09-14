@@ -30,9 +30,9 @@ function isMetricErrorMeta(meta) {
   // A metric label such as "failed" can be an ordinary judge verdict, and a
   // task exception creates zero-filled pass scores labelled "error". Only the
   // explicit execution metadata emitted for a raised metric is authoritative.
-  const status = String(meta.status || '').toLowerCase();
+  const status = String(meta.status || '').trim().toLowerCase();
   if (status === 'error' || status === 'failed' || status === 'timeout') return true;
-  return meta.error !== undefined && meta.error !== null && String(meta.error).trim() !== '';
+  return Boolean(meta.error) && String(meta.error).trim() !== '';
 }
 
 /**
