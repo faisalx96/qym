@@ -1,0 +1,4 @@
+{"phase": "seeded", "runs": 1894, "items": 28760, "repeat_runs": 20, "source_output_bytes_per_item": 16384, "seconds": 8.9}
+{"phase": "rebuilding", "tick": 5, "seconds": 6.6}
+{"phase": "rebuilding", "tick": 10, "seconds": 13.3}
+{"phase": "result", "runs": 1894, "users": 20, "requests": 540, "request_p50_ms": 124.7, "request_p95_ms": 274.7, "first_history_seconds": 18.3, "live_publish_latency_seconds": 1.5, "restarted_after_tick": 2, "unpublished_remaining": 1893, "revision": 2, "request_source_history_queries": 0, "verified": "complete item/error/retry/pass counts"}

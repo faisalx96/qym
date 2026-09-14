@@ -442,3 +442,218 @@ def test_downgrade_removes_only_derived_legacy_evidence(database, monkeypatch):
         part = db.get(Partition, "r")
         assert part.backfill_kind == "item" and part.backfill_cursor == 0
         assert not part.backfill_complete
+
+
+def test_first_history_rows_publish_before_every_run_is_scanned(database):
+    from sqlalchemy.orm import sessionmaker
+
+    with Session(database) as db:
+        db.info["dashboard_projection_worker"] = True
+        for n in range(100):
+            rid = f"history-{n:03}"
+            run(db, run_id=rid, status=RunWorkflowStatus.COMPLETED)
+            for i in range(6):
+                item(db, item_id=str(i), run_id=rid)
+        db.commit()
+        service.bootstrap_partitions(db)
+        db.commit()
+    # Three bounded item batches plus the remaining source-stage transitions.
+    # The old round-robin schedule needed 80 ticks before publishing any run.
+    worker = service.DashboardSummaryWorker(
+        sessionmaker(bind=database, autoflush=False), max_partitions=4, max_events=2
+    )
+    for _ in range(8):
+        worker.tick()
+    with Session(database) as db:
+        ready = list(db.scalars(select(Summary).where(Summary.projection_revision > 0)))
+        assert len(ready) == 1
+        assert all(summary.data["total_items"] == 6 for summary in ready)
+        freshness = service.dashboard_freshness(db, ["p"])
+        assert freshness["revision"] > 0
+        assert freshness["freshness"]["unpublished_runs"] == 99
+        assert freshness["freshness"]["failed_partitions"] == 0
+        assert (
+            db.scalar(
+                select(func.count())
+                .select_from(Partition)
+                .where(
+                    Partition.backfill_kind == "item", Partition.backfill_cursor == 0
+                )
+            )
+            == 99
+        )
+    # The first publication expands historical throughput to the normal limit.
+    for _ in range(8):
+        worker.tick()
+    with Session(database) as db:
+        assert (
+            db.scalar(
+                select(func.count())
+                .select_from(Summary)
+                .where(Summary.projection_revision > 0)
+            )
+            == 5
+        )
+
+
+def test_history_scheduler_interleaves_projects_and_resumes_checkpoints(database):
+    from qym_platform.db.models import Project
+
+    with Session(database) as db:
+        db.info["dashboard_projection_worker"] = True
+        db.add(Project(id="other", name="Other", slug="other", created_by_user_id="u"))
+        db.flush()
+        for project in ("p", "other"):
+            for n in range(8):
+                rid = f"{project}-{n}"
+                run(
+                    db,
+                    run_id=rid,
+                    project_id=project,
+                    status=RunWorkflowStatus.COMPLETED,
+                )
+                db.add(
+                    Partition(
+                        partition_key=rid,
+                        project_key=project,
+                        queue_state="backfill",
+                        backfill_complete=False,
+                        backfill_kind="item",
+                        backfill_cursor=500 if n == 7 else 0,
+                    )
+                )
+        db.commit()
+        selected = service.scheduled_partitions(db, limit=2)
+        assert set(selected) == {"p-7", "other-7"}
+        # Resume the same two checkpoints after they were recently processed;
+        # an untouched project history must not push them to the back of the queue.
+        for rid in selected:
+            db.get(Partition, rid).updated_at = datetime.utcnow()
+        db.commit()
+        assert set(service.scheduled_partitions(db, limit=2)) == set(selected)
+
+
+def test_history_scheduler_prioritizes_missing_publications(database):
+    with Session(database) as db:
+        db.info["dashboard_projection_worker"] = True
+        for rid in ("published", "missing"):
+            run(db, run_id=rid, status=RunWorkflowStatus.COMPLETED)
+            db.add(
+                Partition(
+                    partition_key=rid,
+                    project_key="p",
+                    queue_state="backfill",
+                    backfill_complete=False,
+                    backfill_kind="event" if rid == "published" else "item",
+                    backfill_cursor=500 if rid == "published" else 0,
+                )
+            )
+        db.add(
+            Summary(
+                run_key="published",
+                project_key="p",
+                projection_revision=1,
+                data={"total_items": 10},
+            )
+        )
+        db.commit()
+        assert service.scheduled_partitions(db, limit=1) == ["missing"]
+
+
+def test_live_publication_does_not_expand_first_history_batch(database):
+    with Session(database) as db:
+        run(db, run_id="live")
+        item(db, run_id="live")
+        db.commit()
+    drain(database)
+    with Session(database) as db:
+        assert db.get(Summary, "live").projection_revision > 0
+        db.info["dashboard_projection_worker"] = True
+        for n in range(8):
+            run(db, run_id=f"history-{n}", status=RunWorkflowStatus.COMPLETED)
+        db.commit()
+        service.bootstrap_partitions(db)
+        db.commit()
+        selected = service.scheduled_partitions(db, limit=4)
+        assert len(selected) == 1 and selected[0].startswith("history-")
+
+
+def test_worker_recovers_unregistered_bulk_history_and_resumes_after_restart(database):
+    from sqlalchemy.orm import sessionmaker
+
+    with Session(database) as db:
+        db.info["dashboard_projection_worker"] = True
+        run(db, status=RunWorkflowStatus.COMPLETED)
+        for n in range(6):
+            item(db, item_id=str(n))
+        db.commit()
+        assert db.get(Partition, "r") is None
+    factory = sessionmaker(bind=database, autoflush=False)
+    worker = service.DashboardSummaryWorker(factory, max_events=2)
+    worker.tick()
+    with Session(database) as db:
+        assert db.get(Partition, "r").backfill_cursor > 0
+    worker = service.DashboardSummaryWorker(factory, max_events=2)
+    for _ in range(8):
+        worker.tick()
+    assert projected(database)["total_items"] == 6
+
+
+def test_empty_orphan_queue_entries_cannot_starve_live_runs(database):
+    from datetime import timedelta
+    from sqlalchemy.orm import sessionmaker
+
+    with Session(database) as db:
+        for n in range(8):
+            db.add(
+                Partition(
+                    partition_key=f"removed-{n}",
+                    project_key="p",
+                    queue_state="pending",
+                    backfill_complete=True,
+                    updated_at=datetime.utcnow() - timedelta(days=1),
+                )
+            )
+        run(db)
+        item(db)
+        db.commit()
+    worker = service.DashboardSummaryWorker(
+        sessionmaker(bind=database, autoflush=False), max_partitions=4
+    )
+    for _ in range(3):
+        worker.tick()
+    assert projected(database)["total_items"] == 1
+    with Session(database) as db:
+        assert all(
+            p.queue_state == "ready"
+            for p in db.scalars(
+                select(Partition).where(Partition.partition_key.like("removed-%"))
+            )
+        )
+        assert not service.dashboard_freshness(db, ["p"])["freshness"]["updating"]
+
+
+def test_completed_empty_scan_recovers_missing_first_publication(database):
+    from sqlalchemy.orm import sessionmaker
+
+    with Session(database) as db:
+        db.info["dashboard_projection_worker"] = True
+        run(db, status=RunWorkflowStatus.COMPLETED)
+        db.add(
+            Partition(
+                partition_key="r",
+                project_key="p",
+                queue_state="pending",
+                backfill_complete=True,
+                backfill_kind="event",
+            )
+        )
+        db.commit()
+    worker = service.DashboardSummaryWorker(
+        sessionmaker(bind=database, autoflush=False)
+    )
+    worker.tick()
+    assert projected(database)["total_items"] == 0
+    with Session(database) as db:
+        assert db.get(Summary, "r").projection_revision > 0
+        assert db.get(Partition, "r").queue_state == "ready"

@@ -1094,17 +1094,42 @@ def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
     ):
         return 0
     partition.lease_owner, partition.lease_until = owner, now + timedelta(seconds=30)
-    events = list(
-        db.scalars(
-            select(Change)
-            .where(Change.partition_key == run_id, Change.published_at.is_(None))
-            .order_by(Change.source_version)
-            .limit(max_events)
-        )
+    pending_query = (
+        select(Change)
+        .where(Change.partition_key == run_id, Change.published_at.is_(None))
+        .order_by(Change.source_version)
+        .limit(max_events)
     )
+    events = list(db.scalars(pending_query))
     if not events:
-        partition.lease_owner = partition.lease_until = None
-        return 0
+        from qym_platform.db.models import Run
+
+        run = db.get(Run, run_id)
+        summary = db.get(Summary, run_id)
+        if (
+            partition.backfill_complete
+            and partition.queue_state != "repair_required"
+            and run is not None
+            and (summary is None or summary.projection_revision == 0)
+        ):
+            # Recover a completed scan whose initial publication is missing.
+            # Use the normal outbox path so empty runs also get a summary.
+            enqueue_snapshots(db.connection(), [snapshot(run)])
+            events = list(db.scalars(pending_query))
+        if not events:
+            # Empty stages and removed source runs must not monopolize the
+            # oldest queue slots indefinitely. Existing publications stay intact.
+            if partition.backfill_complete:
+                if run is None:
+                    refresh_run_summary(db, run_id, partition.last_applied_version)
+                if partition.queue_state != "repair_required":
+                    partition.queue_state = "ready"
+            elif partition.queue_state != "repair_required":
+                partition.queue_state = "backfill"
+            partition.oldest_pending_event = None
+            partition.updated_at = now
+            partition.lease_owner = partition.lease_until = None
+            return 0
     # Source writes lock execution rows before the outbox partition. This worker
     # only reads source dimensions under MVCC; it never requests a source lock.
     from qym_platform.db.models import Run
@@ -1191,7 +1216,7 @@ def bootstrap_partitions(db, *, limit=100):
             select(Run.id, Run.project_id)
             .outerjoin(Partition, Partition.partition_key == Run.id)
             .where(Partition.partition_key.is_(None))
-            .order_by(Run.created_at, Run.id)
+            .order_by(Run.created_at.desc(), Run.id)
             .limit(limit)
         )
     )
@@ -1546,12 +1571,74 @@ def scheduled_partitions(db, *, limit=20):
         Run.id.is_(None),
     )
     live = list(db.scalars(eligible.where(urgent).limit(max(1, limit * 3 // 4))))
-    history = list(db.scalars(eligible.where(~urgent).limit(max(0, limit - len(live)))))
+    # Finish a small group before opening more historical runs. Cycling every
+    # run after each source chunk can leave an entire project unpublished for
+    # minutes. Within each project, prefer first publications, resumable work,
+    # then recent runs. Interleave projects so one large history cannot monopolize
+    # all historical slots.
+    in_progress = or_(Partition.backfill_kind != "item", Partition.backfill_cursor > 0)
+    published_projects = (
+        select(Summary.project_key)
+        .join(Dimension, Dimension.run_key == Summary.run_key)
+        .where(
+            Summary.projection_revision > 0,
+            Dimension.present.is_(True),
+            Dimension.status.notin_(("RUNNING", "PENDING")),
+        )
+        .distinct()
+        .subquery()
+    )
+    historical = (
+        eligible.where(~urgent)
+        .outerjoin(Summary, Summary.run_key == Partition.partition_key)
+        .outerjoin(
+            published_projects,
+            published_projects.c.project_key == Partition.project_key,
+        )
+        .order_by(None)
+        .add_columns(
+            Partition.updated_at.label("queued_at"),
+            published_projects.c.project_key.label("published_project"),
+            func.row_number()
+            .over(
+                partition_by=Partition.project_key,
+                order_by=(
+                    case(
+                        (func.coalesce(Summary.projection_revision, 0) == 0, 0), else_=1
+                    ),
+                    case((in_progress, 0), else_=1),
+                    Run.created_at.desc(),
+                    Partition.partition_key,
+                ),
+            )
+            .label("project_rank"),
+        )
+        .subquery()
+    )
+    history = list(
+        db.scalars(
+            select(historical.c.partition_key)
+            # An empty project needs its first completed run before a larger
+            # batch. Expand to normal throughput once that publication commits.
+            .where(
+                or_(
+                    historical.c.published_project.isnot(None),
+                    historical.c.project_rank == 1,
+                )
+            )
+            .order_by(
+                historical.c.project_rank,
+                historical.c.queued_at,
+                historical.c.partition_key,
+            )
+            .limit(max(0, limit - len(live)))
+        )
+    )
     selected = live + history
     if len(selected) < limit:
         selected += list(
             db.scalars(
-                eligible.where(Partition.partition_key.notin_(selected)).limit(
+                eligible.where(urgent, Partition.partition_key.notin_(selected)).limit(
                     limit - len(selected)
                 )
             )
@@ -1599,6 +1686,10 @@ class DashboardSummaryWorker:
     def tick(self):
         with self.session_factory() as db:
             reconcile_expired_dashboard_runs(db, limit=self.max_partitions)
+            db.commit()
+            # Bulk imports can bypass ORM outbox hooks. Discover a bounded
+            # number of unregistered runs instead of leaving them invisible.
+            bootstrap_partitions(db, limit=self.max_partitions * 5)
             db.commit()
             partitions = scheduled_partitions(db, limit=self.max_partitions)
         processed = 0

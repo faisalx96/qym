@@ -269,7 +269,7 @@ def test_real_unprojected_history_matches_after_backfill(
 
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
-    from sqlalchemy.orm import Session
+    from sqlalchemy.orm import Session, sessionmaker
 
     from qym_platform.api import dashboard, runs
     from qym_platform.auth import Principal, require_ui_principal
@@ -388,6 +388,21 @@ def test_real_unprojected_history_matches_after_backfill(
                         for row in group
                     }
                 )
+            worker = service.DashboardSummaryWorker(
+                sessionmaker(database, autoflush=False), max_partitions=4
+            )
+            for _ in range(5):
+                worker.tick()
+            page.evaluate("__dashboardTest.fetchRuns()")
+            page.wait_for_function("__dashboardTest.state.flatRuns.length===1")
+            assert page.evaluate("__dashboardTest.state.dashboardBackfilling")
+            assert "1 run" in page.locator("#status-filter").inner_text()
+            first = page.evaluate("__dashboardTest.state.flatRuns[0]")
+            assert first["total_items"] == 2
+            assert first["error_count"] == 1
+            assert (
+                first["metric_averages"] == expected[first["run_id"]]["metric_averages"]
+            )
             drain(database, max_partitions=50)
             assert not client.get(
                 "/api/dashboard/runs", params={"project_slug": "demo"}
