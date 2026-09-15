@@ -1,0 +1,17 @@
+{
+  "qym-1.6.0-py3-none-any.whl": {
+    "bytes": 1727965,
+    "sha256": "95f7bbed063db98d41086630e3b8225a559afdadb675f69acbcb7084c60ae461",
+    "checked_python_served_assets_and_migrations": 63,
+    "missing": [],
+    "source_mismatches": []
+  },
+  "qym_platform-0.2.6-py3-none-any.whl": {
+    "bytes": 4635424,
+    "sha256": "374cf71c80e1db79622bb5fbcb67a0f70353054bd0217135d79243159ed88a3c",
+    "checked_python_served_assets_and_migrations": 217,
+    "missing": [],
+    "source_mismatches": []
+  },
+  "scope": "Every package Python source file, all assets in the mounted dashboard/ui directories, and all platform migrations. The unused, unmounted _static/app bundle is outside the existing wheel package-data and was not changed."
+}

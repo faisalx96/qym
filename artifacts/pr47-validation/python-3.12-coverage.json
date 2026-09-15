@@ -1,0 +1,136 @@
+{
+  "collection": "python-3.12-collected.txt",
+  "collected": 1762,
+  "passed": 1748,
+  "skipped": 14,
+  "failed": 0,
+  "errors": 0,
+  "missing": [],
+  "unexpected": [],
+  "failures": [],
+  "skipped_cases": [
+    {
+      "node": "tests/platform/test_dashboard_deleted_backfill.py::test_restore_committing_during_deletion_cleanup_is_not_lost[sqlite]",
+      "status": "skipped",
+      "message": "Concurrent source and partition locks require PostgreSQL",
+      "phase": "sqlite-final-312.xml"
+    },
+    {
+      "node": "tests/platform/test_dashboard_durable_summaries.py::test_concurrent_same_bucket_atomic_deltas[sqlite]",
+      "status": "skipped",
+      "message": "SQLite single-connection fixture is intentionally serial",
+      "phase": "sqlite-final-312.xml"
+    },
+    {
+      "node": "tests/platform/test_dashboard_durable_summaries.py::test_concurrent_backfill_and_live_update_preserve_lock_order[sqlite]",
+      "status": "skipped",
+      "message": "requires independent row-level locks",
+      "phase": "sqlite-final-312.xml"
+    },
+    {
+      "node": "tests/platform/test_dashboard_durable_summaries.py::test_concurrent_opposite_timestamp_moves_do_not_deadlock[sqlite]",
+      "status": "skipped",
+      "message": "requires independent row-level locks",
+      "phase": "sqlite-final-312.xml"
+    },
+    {
+      "node": "tests/platform/test_dashboard_projection_api.py::test_postgresql_repeatable_read_does_not_mix_page_and_overview[sqlite]",
+      "status": "skipped",
+      "message": "PostgreSQL snapshot isolation test",
+      "phase": "sqlite-final-312.xml"
+    },
+    {
+      "node": "tests/platform/test_incremental_ingestion.py::test_force_stop_serializes_with_ingestion[sqlite-stop]",
+      "status": "skipped",
+      "message": "Requires independent transactions and PostgreSQL row locks",
+      "phase": "sqlite-final-312.xml"
+    },
+    {
+      "node": "tests/platform/test_incremental_ingestion.py::test_force_stop_serializes_with_ingestion[sqlite-item]",
+      "status": "skipped",
+      "message": "Requires independent transactions and PostgreSQL row locks",
+      "phase": "sqlite-final-312.xml"
+    },
+    {
+      "node": "tests/platform/test_incremental_ingestion.py::test_force_stop_serializes_with_ingestion[sqlite-completion]",
+      "status": "skipped",
+      "message": "Requires independent transactions and PostgreSQL row locks",
+      "phase": "sqlite-final-312.xml"
+    },
+    {
+      "node": "tests/platform/test_incremental_ingestion.py::test_concurrent_force_stops_record_one_decision[sqlite]",
+      "status": "skipped",
+      "message": "Requires independent transactions and PostgreSQL row locks",
+      "phase": "sqlite-final-312.xml"
+    },
+    {
+      "node": "tests/platform/test_incremental_ingestion.py::test_postgres_concurrent_identical_batches_apply_once[sqlite]",
+      "status": "skipped",
+      "message": "requires PostgreSQL row locks",
+      "phase": "sqlite-final-312.xml"
+    },
+    {
+      "node": "tests/platform/test_incremental_ingestion.py::test_auth_connection_is_returned_before_ingest_checkout[sqlite]",
+      "status": "skipped",
+      "message": "requires a real connection pool",
+      "phase": "sqlite-final-312.xml"
+    },
+    {
+      "node": "tests/platform/test_runs_list_performance.py::test_live_insert_into_skipped_stage_is_published_from_outbox[sqlite]",
+      "status": "skipped",
+      "message": "Requires independent transactions and row locks",
+      "phase": "sqlite-final-312.xml"
+    },
+    {
+      "node": "tests/sdk/test_otel_integration.py::TestTraceStructure::test_parent_child_nesting",
+      "status": "skipped",
+      "message": "traceloop-sdk not available",
+      "phase": "sqlite-final-312.xml"
+    },
+    {
+      "node": "tests/sdk/test_otel_integration.py::TestTraceStructure::test_no_noise_spans",
+      "status": "skipped",
+      "message": "traceloop-sdk not available",
+      "phase": "sqlite-final-312.xml"
+    }
+  ],
+  "phases": [
+    {
+      "file": "sqlite-final-312.xml",
+      "passed": 1524,
+      "skipped": 228,
+      "failed": 4,
+      "errors": 0
+    },
+    {
+      "file": "postgres-native-312.xml",
+      "passed": 139,
+      "skipped": 0,
+      "failed": 1,
+      "errors": 0
+    },
+    {
+      "file": "postgres-lz4-312.xml",
+      "passed": 75,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "pass-ui-final.xml",
+      "passed": 151,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    },
+    {
+      "file": "numeric-review-affected-final.xml",
+      "passed": 69,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0
+    }
+  ],
+  "policy": "For a repeated node, the last explicitly supplied phase is its final result. Earlier failures remain visible in phase counts.",
+  "combined_junit": "artifacts/pr47-validation/python-3.12-final.xml"
+}
