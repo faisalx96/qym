@@ -109,5 +109,16 @@
     "native_postgres": "stopped after validation",
     "native_api_and_workers": "stopped",
     "docker_task_resources": "Pending OrbStack recovery; see docker-backend-stall.md."
+  },
+  "local_handoff": {
+    "completed_at_utc": "2026-09-15T12:26:52.308037+00:00",
+    "active_directory": "/Users/faisalbh/qym",
+    "active_branch": "codex/merge-pr47-local-fixes",
+    "transferred_commit": "c1bbf40b7928fb53cceb255b39968fde017dbba4",
+    "recovery_branch": "codex/recovery-before-pr47-return-20260915-122542",
+    "recovery_commit": "7af5b7113453fd5206d3af94f44fe1016feb17fa",
+    "original_file_hashes_verified_in_recovery_commit": 28,
+    "package_docker_test_ci_files_matching_tested_copy": 637,
+    "note": "The original_checkout verification above records the pre-handoff state. Those original edits now live in the recovery commit."
   }
 }

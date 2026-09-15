@@ -3,8 +3,11 @@
 ## Scope
 
 The integration branch combines PR 47 at `90070ec37a8f2d3b7e15788bdee8a132722176ea`
-with the original checkout's force-stop and pass-review changes. The original
-checkout's 28 changed files still match their captured SHA-256 hashes.
+with the original checkout's force-stop and pass-review changes. At the user's
+request, the combined branch is now checked out in `/Users/faisalbh/qym`.
+The original 28 edited files are preserved in recovery commit `7af5b71`, with
+every file verified against its captured SHA-256 hash. All 637 tracked package,
+Docker, test and CI files match the tested integration copy byte-for-byte.
 
 The [merge plan](PR47_MERGE_PLAN.md) describes publication, CI and deployment.
 The branch has not been pushed, merged or deployed to production.

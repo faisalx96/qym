@@ -4,9 +4,9 @@
 
 - PR 47: `perf/storage-worker-overhaul` at `90070ec37a8f2d3b7e15788bdee8a132722176ea`.
 - Local changes: snapshot of the original main checkout at `eb975b2d4c6d6b518283834fb94a41fbef26689e`.
-- Integration branch: `codex/merge-pr47-local-fixes` in `/Users/faisalbh/qym-pr47-integration`.
+- Integration branch: `codex/merge-pr47-local-fixes`, now checked out in `/Users/faisalbh/qym` at the user's request. The validation copy remains in `/Users/faisalbh/qym-pr47-integration` at detached commit `c1bbf40`.
 - Local integration commit: `ec7718b`. Fixes and regression tests: `bded819`.
-- Keep the original checkout and its databases intact. Use disposable databases for every migration and destructive-operation test.
+- The original 28 edited files are preserved in recovery commit `7af5b71` on `codex/recovery-before-pr47-return-20260915-122542`. Use disposable databases for every migration and destructive-operation test.
 
 ## Merge order
 
@@ -49,7 +49,7 @@
 1. Review the final integration diff and its validation report. Recheck both remote commit IDs against the inputs above.
 2. Fast-forward PR 47's branch to the tested integration branch with a normal push, without force. This puts the local changes and fixes into the same PR. A remote divergence must be integrated and tested first.
 3. Require fresh GitHub checks for Python 3.9, 3.11 and 3.12 and a successful smoke test of the final Docker image before merging PR 47. OrbStack recovery is still needed for the Docker check. The old PR's checks do not validate these local commits. The updated workflow installs Node browser tools so the admin browser contract runs in CI.
-4. Preserve the original checkout's 28-file snapshot on a separate local branch before updating its main checkout. Compare it against the integrated files, then switch back to main and fast-forward to the merged remote main. Do not discard the uncommitted snapshot or reapply it wholesale over the integrated fixes.
+4. The original 28-file snapshot is already preserved in recovery commit `7af5b71`. After PR 47 is merged, switch `/Users/faisalbh/qym` back to main and fast-forward to the merged remote main. Keep the recovery branch; its changes are already integrated and must not be reapplied wholesale.
 5. Deploy separately using the updated operations runbook: rehearse a full backup restore, enable maintenance on both roles, migrate to 0057, start the worker, copy legacy spans, verify exact keys and remove legacy storage, then reopen writes.
 
 A rollback after destructive removal requires restoring the backup or a compatible forward fix; an old image alone is insufficient. This task prepares and validates the branch. Publishing, merging and production deployment remain separate actions.
