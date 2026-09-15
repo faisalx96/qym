@@ -75,11 +75,18 @@ from qym_platform.item_identity import (
     looks_like_positional_item_id,
 )
 from qym_platform.services.run_lifecycle import (
+    is_run_force_stopped,
     mark_run_running,
     mark_run_terminal,
     touch_run_event,
 )
 from qym_platform.settings import PlatformSettings
+from qym_platform.services.event_storage import (
+    ingest_settings,
+    oversized_span_attributes,
+    span_columns_from_attributes,
+    structural_event_payload,
+)
 
 router = APIRouter(prefix="/v1", tags=["ingestion"])
 
@@ -730,11 +737,22 @@ def _store_metric_specs(
         )
 
 
+def require_ingest_open() -> None:
+    """During a maintenance window SDK clients buffer and retry; tell them to."""
+    if ingest_settings().maintenance_mode:
+        raise HTTPException(
+            status_code=503,
+            detail="Platform is in maintenance mode; retry later",
+            headers={"Retry-After": "60"},
+        )
+
+
 @router.post("/runs")
 def create_run(
     req: CreateRunRequest,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_api_key_principal),
+    _open: None = Depends(require_ingest_open),
 ) -> Dict[str, Any]:
     require_api_key_scope(principal, "runs:write")
     if not principal.project_id:
@@ -812,6 +830,7 @@ async def ingest_events(
     request: Request,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_api_key_principal),
+    _open: None = Depends(require_ingest_open),
 ) -> JSONResponse:
     body = await request.body()
     # Authentication has already completed. Only immutable identity data crosses
@@ -857,14 +876,22 @@ def _ingest_events_sync(
     )
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
-    if run.deleted_at is not None:
-        raise HTTPException(
-            status_code=410, detail=f"Run was deleted on {run.deleted_at.isoformat()}"
-        )
     if run.owner_user_id != principal.user.id:
         raise HTTPException(status_code=403, detail="Forbidden")
     if principal.project_id and run.project_id != principal.project_id:
         raise HTTPException(status_code=403, detail="Forbidden")
+    if is_run_force_stopped(run):
+        raise HTTPException(
+            status_code=410,
+            detail="Run was force stopped by an administrator; further updates are rejected",
+            headers={"X-Qym-Run-State": "force_stopped"},
+        )
+    if run.deleted_at is not None:
+        raise HTTPException(
+            status_code=410,
+            detail=f"Run was deleted on {run.deleted_at.isoformat()}",
+            headers={"X-Qym-Run-State": "deleted"},
+        )
 
     try:
         text = body.decode("utf-8")
@@ -884,6 +911,7 @@ def _ingest_events_sync(
         if str(evt.run_id) != run_id:
             logger.warning("Skipping event with run_id mismatch for run %s", run_id)
             continue
+        raw["__bytes"] = len(line)
         parsed.append((raw, evt))
 
     # Fetch identities once per bounded chunk, including IDs absent from the DB.
@@ -915,6 +943,40 @@ def _ingest_events_sync(
             else evt.payload
         )
         accepted.append((raw, evt, payload))
+
+    # Spans are stored once, in ``spans``; ``run_events`` keeps the run's
+    # structural history only. A redelivered span therefore dedupes on
+    # (run_id, span_id) rather than on event_id.
+    span_ids = {
+        payload.span_id
+        for _, _, payload in accepted
+        if isinstance(payload, SpanCompletedPayload)
+    }
+    known_spans = set()
+    if span_ids:
+        try:
+            with db.begin_nested():
+                for chunk in _chunks(span_ids):
+                    known_spans.update(
+                        row[0]
+                        for row in db.query(Span.span_id).filter(
+                            Span.run_id == run_id, Span.span_id.in_(chunk)
+                        )
+                    )
+        except Exception:
+            # Missing span migrations must not reject item/score events.
+            logger.warning("Could not prefetch spans for run %s", run_id, exc_info=True)
+    if known_spans:
+        deduped = []
+        for entry in accepted:
+            payload = entry[2]
+            if isinstance(payload, SpanCompletedPayload) and payload.span_id in known_spans:
+                skipped += 1
+                continue
+            deduped.append(entry)
+        accepted = deduped
+
+    storage = ingest_settings()
     event_rows = [
         dict(
             run_id=run_id,
@@ -922,9 +984,14 @@ def _ingest_events_sync(
             sequence=evt.sequence,
             type=evt.type,
             sent_at=evt.sent_at,
-            payload=_sanitize_for_json(raw.get("payload") or {}),
+            payload=_sanitize_for_json(
+                structural_event_payload(evt.type, raw.get("payload") or {})
+                if storage.event_log_mode == "structural"
+                else (raw.get("payload") or {})
+            ),
         )
         for raw, evt, _ in accepted
+        if evt.type != "span_completed"
     ]
     for chunk in _chunks(event_rows):
         db.execute(insert(RunEvent), chunk)
@@ -969,30 +1036,13 @@ def _ingest_events_sync(
             ):
                 dataset_item_cache[(row.dataset_version_id, row.item_id)] = row
 
-    span_ids = {
-        payload.span_id
-        for _, _, payload in accepted
-        if isinstance(payload, SpanCompletedPayload)
-    }
-    known_spans = set()
-    if span_ids:
-        try:
-            with db.begin_nested():
-                for chunk in _chunks(span_ids):
-                    known_spans.update(
-                        row[0]
-                        for row in db.query(Span.span_id).filter(
-                            Span.run_id == run_id, Span.span_id.in_(chunk)
-                        )
-                    )
-        except Exception:
-            # Missing span migrations must not reject item/score events.
-            logger.warning("Could not prefetch spans for run %s", run_id, exc_info=True)
     pending_spans = []
-    # Older SDKs emitted item_completed before item_attempt_finished.  Keep
-    # outputs seen in this request so the later attempt row can still receive
-    # its pass output.  New SDKs also carry output on the attempt event itself.
+    # Some legacy payloads omit retry_count on the item outcome. Preserve the
+    # current batch's output when a later event identifies another final retry.
     completed_output_cache: Dict[tuple[str, int], Any] = {}
+    attempts_by_pass = defaultdict(dict)
+    for (item_id, pass_number, attempt_number), attempt in attempt_cache.items():
+        attempts_by_pass[(item_id, pass_number)][attempt_number] = attempt
     metric_spec_cache = {
         spec.metric_name: spec
         for spec in db.query(RunMetricSpec).filter(RunMetricSpec.run_id == run_id).all()
@@ -1067,7 +1117,65 @@ def _ingest_events_sync(
         attempt_cache[
             (attempt.item_id, attempt.pass_number, attempt.attempt_number)
         ] = attempt
+        attempts_by_pass[(attempt.item_id, attempt.pass_number)][
+            attempt.attempt_number
+        ] = attempt
         return attempt
+
+    def _store_pass_completion(
+        payload: ItemCompletedPayload, task_started_at_ms: Optional[int]
+    ) -> None:
+        # SDK <=1.5.2 sends the item outcome before the final attempt. Persist
+        # its output now: those two events can arrive in different requests,
+        # and structural event storage discards the redundant output body.
+        attempts = attempts_by_pass[(payload.item_id, payload.pass_number)]
+        attempt_number = max(max(attempts, default=1), payload.retry_count + 1)
+        attempt = attempts.get(attempt_number)
+        if attempt is None:
+            attempt = _remember_attempt(
+                RunItemAttempt(
+                    run_id=run_id,
+                    item_id=payload.item_id,
+                    pass_number=payload.pass_number,
+                    attempt_number=attempt_number,
+                )
+            )
+            db.add(attempt)
+        if not attempt.is_last_attempt:
+            attempt.status = "completed"
+            attempt.latency_ms = payload.latency_ms
+            if task_started_at_ms is not None:
+                attempt.task_started_at_ms = task_started_at_ms
+            if payload.trace_id is not None:
+                attempt.trace_id = payload.trace_id
+            if payload.trace_url is not None:
+                attempt.trace_url = payload.trace_url
+            attempt.error = None
+            attempt.is_last_attempt = True
+        attempt.output = _sanitize_for_json(payload.output)
+        for other in attempts.values():
+            if other is not attempt:
+                other.is_last_attempt = False
+
+    def _finish_unfinished_pass(payload: ItemFailedPayload) -> None:
+        # Cancellation has no attempt-finished event, and older SDKs report
+        # retry_count=0 even when a later retry is the one interrupted.
+        attempts = attempts_by_pass[(payload.item_id, payload.pass_number)]
+        if not attempts:
+            return
+        attempt = attempts[max(attempts)]
+        if attempt.is_last_attempt:
+            return
+        attempt.status = "failed"
+        attempt.error = payload.error
+        attempt.is_last_attempt = True
+        for name in ("latency_ms", "task_started_at_ms", "trace_id", "trace_url"):
+            value = getattr(payload, name)
+            if value is not None:
+                setattr(attempt, name, value)
+        for other in attempts.values():
+            if other is not attempt:
+                other.is_last_attempt = False
 
     def _get_pass_score(
         item_id: str, metric_name: str, pass_number: int
@@ -1229,6 +1337,23 @@ def _ingest_events_sync(
                     md["task_started_at_ms"] = payload.task_started_at_ms
                 if md != (item.item_metadata or {}):
                     item.item_metadata = _sanitize_for_json(md)
+            # A RUNNING attempt row lets pass pages show in-flight work without
+            # replaying the event log; item_attempt_finished completes the row.
+            if _get_attempt(payload.item_id, payload.pass_number, payload.attempt_number) is None:
+                started_attempt = _remember_attempt(
+                    RunItemAttempt(
+                        run_id=run_id,
+                        item_id=payload.item_id,
+                        pass_number=payload.pass_number,
+                        attempt_number=payload.attempt_number,
+                        status="RUNNING",
+                        task_started_at_ms=payload.task_started_at_ms,
+                        trace_id=payload.trace_id,
+                        trace_url=payload.trace_url,
+                        is_last_attempt=False,
+                    )
+                )
+                db.add(started_attempt)
             # Item -> trace mapping changed; refresh stats once after the loop.
             trace_stats_dirty = True
 
@@ -1262,10 +1387,10 @@ def _ingest_events_sync(
                 db.add(attempt)
             else:
                 attempt.status = payload.status
-                attempt.latency_ms = payload.latency_ms
-                attempt.task_started_at_ms = payload.task_started_at_ms
-                attempt.trace_id = payload.trace_id
-                attempt.trace_url = payload.trace_url
+                for name in ("latency_ms", "task_started_at_ms", "trace_id", "trace_url"):
+                    value = getattr(payload, name)
+                    if value is not None:
+                        setattr(attempt, name, value)
                 if attempt_output is not None:
                     attempt.output = attempt_output
                 attempt.error = payload.error
@@ -1417,16 +1542,7 @@ def _ingest_events_sync(
                 if md != (item.item_metadata or {}):
                     item.item_metadata = _sanitize_for_json(md)
             if run.samples > 1:
-                # Repeat runs: keep this pass's output on its final attempt
-                # row so the UI can show every pass's output (RunItem keeps
-                # only the latest pass as the representative row).
-                for (iid, pass_no, _), attempt in attempt_cache.items():
-                    if (
-                        iid == payload.item_id
-                        and pass_no == payload.pass_number
-                        and attempt.is_last_attempt
-                    ):
-                        attempt.output = _sanitize_for_json(payload.output)
+                _store_pass_completion(payload, ts_ms)
             trace_stats_dirty = True
 
         elif isinstance(payload, PassCompletedPayload):
@@ -1479,6 +1595,7 @@ def _ingest_events_sync(
                 if md != (item.item_metadata or {}):
                     item.item_metadata = _sanitize_for_json(md)
             if run.samples > 1:
+                _finish_unfinished_pass(payload)
                 # A failed pass scores 0 for every metric (mirrors the SDK's
                 # reduction rule) so Pass^k and the reduced mean stay honest.
                 for metric_name in list(run.metrics or []):
@@ -1638,9 +1755,19 @@ def _ingest_events_sync(
             mark_run_running(run)
             if payload.span_id not in known_spans:
                 known_spans.add(payload.span_id)
+                attributes, events, links = payload.attributes, payload.events, payload.links
+                if int(raw.get("__bytes") or 0) > storage.span_max_bytes:
+                    attributes = oversized_span_attributes(attributes, int(raw["__bytes"]))
+                    events, links = [], []
+                    logger.warning(
+                        "Span %s for run %s exceeds %d bytes; stored without bulk attributes",
+                        payload.span_id, run_id, storage.span_max_bytes,
+                    )
                 pending_spans.append(
                     dict(
                         run_id=run_id,
+                        run_created_at=run.created_at,
+                        **span_columns_from_attributes(attributes),
                         trace_id=payload.trace_id,
                         span_id=payload.span_id,
                         parent_span_id=payload.parent_span_id,
@@ -1650,9 +1777,9 @@ def _ingest_events_sync(
                         end_time_ns=payload.end_time_ns,
                         duration_ms=payload.duration_ms,
                         status=payload.status,
-                        attributes=_sanitize_for_json(payload.attributes),
-                        events=_sanitize_for_json(payload.events),
-                        links=_sanitize_for_json(payload.links),
+                        attributes=_sanitize_for_json(attributes),
+                        events=_sanitize_for_json(events),
+                        links=_sanitize_for_json(links),
                     )
                 )
 

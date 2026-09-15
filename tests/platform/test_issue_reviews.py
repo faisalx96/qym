@@ -32,6 +32,7 @@ def act(session, run, item, principal, action, index=0, issue=None, pass_number=
         request["issue"] = issue
     if pass_number:
         request["pass_number"] = pass_number
+        request["expected_pass_version"] = (run.run_metadata or {}).get("pass_revision", 0)
     result = runs_api.update_root_cause_issue(request, db=session, principal=principal)
     session.expire_all()
     assert result["ok"] and result["row"]

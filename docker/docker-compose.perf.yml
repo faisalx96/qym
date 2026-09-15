@@ -1,0 +1,50 @@
+# Local performance lab: a prod-shaped Postgres you can seed with
+# `python -m qym_platform.tools.perf.synth` and benchmark against.
+#
+#   docker compose -f docker/docker-compose.perf.yml up -d db-perf
+#   export QYM_TEST_POSTGRES_URL=postgresql+psycopg2://qym:qym@localhost:15433/qym_perf
+#
+# `db-perf-stock` runs the same image with Postgres defaults (what production
+# runs today) on port 5434 so before/after numbers can be compared fairly.
+services:
+  db-perf:
+    image: postgres:16
+    container_name: qym-db-perf
+    shm_size: 1g
+    environment:
+      POSTGRES_USER: qym
+      POSTGRES_PASSWORD: qym
+      POSTGRES_DB: qym_perf
+    command: ["postgres", "-c", "config_file=/etc/postgresql/perf.conf"]
+    ports:
+      - "15433:5432"
+    volumes:
+      - pgdata-perf:/var/lib/postgresql/data
+      - ./postgres/perf.conf:/etc/postgresql/perf.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qym -d qym_perf"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  db-perf-stock:
+    image: postgres:16
+    container_name: qym-db-perf-stock
+    profiles: ["stock"]
+    environment:
+      POSTGRES_USER: qym
+      POSTGRES_PASSWORD: qym
+      POSTGRES_DB: qym_perf
+    ports:
+      - "15434:5432"
+    volumes:
+      - pgdata-perf-stock:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qym -d qym_perf"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  pgdata-perf:
+  pgdata-perf-stock:

@@ -1,0 +1,22 @@
+{
+  "label": "baseline-1.0-part2",
+  "generated_at": "2026-09-14T18:03:29.072837",
+  "seed": 1,
+  "scale": 1.0,
+  "legacy_dup_spans": true,
+  "projects": 11,
+  "users": 12,
+  "repeat_share": 0.15,
+  "start_index": 1525,
+  "totals": {
+    "runs": 1475,
+    "items": 111549,
+    "spans": 4282336,
+    "events": 5942699,
+    "span_attr_bytes": 33935126474,
+    "repeat_runs": 207
+  },
+  "api_tokens": {},
+  "elapsed_seconds": 2359.3,
+  "url": "localhost:15433/qym_perf"
+}

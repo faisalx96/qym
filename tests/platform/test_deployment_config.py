@@ -14,6 +14,11 @@ def test_base_compose_is_production_safe() -> None:
     assert "QYM_LLM_CONFIG_ENCRYPTION_KEY" in compose
     # production image must not bind-mount source
     assert "../packages/platform" not in compose
+    # the api container runs the background loops by default; the split
+    # layout is opt-in via the worker profile
+    assert "QYM_ROLE: ${QYM_ROLE:-all}" in compose
+    assert "QYM_ROLE: ${QYM_ROLE:-api}" not in compose
+    assert 'profiles: ["worker"]' in compose
 
 
 def test_dev_override_restores_reload_and_bind_mounts() -> None:

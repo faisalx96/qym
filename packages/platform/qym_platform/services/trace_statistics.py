@@ -95,7 +95,9 @@ def refresh_trace_statistics(
             for row in db.query(RunTraceAggregate).filter_by(run_id=run.id)
         }
         if touched_trace_ids is None:
-            spans = db.query(Span).filter_by(run_id=run.id).all()
+            # Explicit arrival order: named outer-scope buckets are position-sensitive
+            # and must not depend on which index the planner walks.
+            spans = db.query(Span).filter_by(run_id=run.id).order_by(Span.id).all()
             rebuild_traces = set(aggregates) | {span.trace_id for span in spans}
         else:
             # Existing installations can have cached historical aggregates
@@ -111,6 +113,7 @@ def refresh_trace_statistics(
                 spans.extend(
                     db.query(Span)
                     .filter(Span.run_id == run.id, Span.trace_id.in_(chunk))
+                    .order_by(Span.id)
                     .all()
                 )
         rebuilt = _build_trace_buckets_from_spans(spans)
@@ -168,6 +171,7 @@ def refresh_trace_statistics(
             spans.extend(
                 db.query(Span)
                 .filter(Span.run_id == run.id, Span.trace_id.in_(chunk))
+                .order_by(Span.id)
                 .all()
             )
         rebuilt = _build_trace_buckets_from_spans(spans)

@@ -1,0 +1,124 @@
+{
+  "recorded_at_utc": "2026-09-15T12:03:14.460882+00:00",
+  "status": "Implementation and local test coverage complete; final Docker validation blocked by unresponsive OrbStack.",
+  "source_commit": "bded819a3093fe2a8487dbf597ecdb073eaec5c0",
+  "branch": "codex/merge-pr47-local-fixes",
+  "worktree": "/Users/faisalbh/qym-pr47-integration",
+  "inputs": {
+    "pr_url": "https://github.com/faisalx96/qym/pull/47",
+    "pr_head": "90070ec37a8f2d3b7e15788bdee8a132722176ea",
+    "main_head": "eb975b2d4c6d6b518283834fb94a41fbef26689e"
+  },
+  "original_checkout": {
+    "path": "/Users/faisalbh/qym",
+    "head": "eb975b2d4c6d6b518283834fb94a41fbef26689e",
+    "unchanged_files": 28,
+    "hashes_verified": true,
+    "evidence": "original-checkout.json"
+  },
+  "python_matrix": {
+    "3.9": {
+      "collected": 1762,
+      "passed": 1748,
+      "skipped": 14,
+      "failed": 0,
+      "errors": 0,
+      "coverage_report": "python-3.9-coverage.json",
+      "junit": "python-3.9-final.xml",
+      "mode": "Complete collected-node coverage across recorded phases; latest affected-case reruns supersede earlier results."
+    },
+    "3.11": {
+      "collected": 1762,
+      "passed": 1748,
+      "skipped": 14,
+      "failed": 0,
+      "errors": 0,
+      "coverage_report": "python-3.11-coverage.json",
+      "junit": "python-3.11-final.xml",
+      "mode": "Complete collected-node coverage across recorded phases; latest affected-case reruns supersede earlier results."
+    },
+    "3.12": {
+      "collected": 1762,
+      "passed": 1748,
+      "skipped": 14,
+      "failed": 0,
+      "errors": 0,
+      "coverage_report": "python-3.12-coverage.json",
+      "junit": "python-3.12-final.xml",
+      "mode": "Complete collected-node coverage across recorded phases; latest affected-case reruns supersede earlier results."
+    }
+  },
+  "skips": {
+    "sqlite_only_concurrency_cases": 12,
+    "all_have_passing_postgres_counterparts": true,
+    "optional_traceloop_sdk_cases": 2
+  },
+  "automation_tests": {
+    "passed": 15,
+    "failed": 0,
+    "command": "node --test tests/automation/*.test.cjs"
+  },
+  "packaging": {
+    "status": "passed",
+    "verified_package_files": 280,
+    "evidence": "wheel-assets.json"
+  },
+  "packaged_runtime": {
+    "status": "passed",
+    "python": "Python 3.11.14",
+    "postgres": "PostgreSQL 16.15 on aarch64-apple-darwin24.3.0, compiled by Apple clang version 17.0.0 (clang-1700.0.13.5), 64-bit",
+    "migration_head": "0057",
+    "cold_workers": 3,
+    "evidence": "native-wheel-runtime.json"
+  },
+  "mypy": {
+    "status": "existing_baseline_errors",
+    "errors": 111,
+    "files": 20,
+    "new_errors": 0,
+    "comparison": "Normalized diagnostics identical on main base, PR head and integration SDK."
+  },
+  "docker": {
+    "status": "blocked",
+    "reason": "OrbStack Docker socket and container ports time out. Restart would affect pre-existing containers and awaits user approval.",
+    "earlier_smoke_is_final_source_validation": false,
+    "task_resource_cleanup": "Pending backend recovery; exact resources documented in docker-backend-stall.md."
+  },
+  "github": {
+    "pushed": false,
+    "merged": false,
+    "fresh_checks_required": true,
+    "verified_pr_head_unchanged": true
+  },
+  "production_deployed": false,
+  "limits": [
+    "Controlled fixtures do not establish production capacity or migration duration.",
+    "Production rollout requires the documented full backup and restore rehearsal.",
+    "Performance timings collected during other work are diagnostic; query-budget and bounded-read tests passed."
+  ],
+  "evidence_policy": "Raw phase logs and manifests remain in this worktree. Committed composite JUnit and coverage reports preserve final node outcomes, skip reasons, and earlier phase failure counts.",
+  "evidence_sha256": {
+    "python-3.11-final.xml": "a174acbd428291571fb9f864529526ca28489b076bbfd751d9b53b8f0967eb6f",
+    "python-3.12-final.xml": "f4cb223a1fdd994e8f4d676e727170d487f123f239f9efd612247f9971a6e2ce",
+    "python-3.9-final.xml": "1edb8f21c49e58a49e1c5d74b69619572ed7bbb5d72537de01edb7599d8ae217",
+    "native-wheel-runtime.json": "232e955ea7b5f0ee33a42b57e38304e810ef8e30931e9d313a830b0a628f0a3e",
+    "wheel-assets.json": "b2135d0a9e816b5f3ae798d594001eb252db0c59ebba1f7207e4cd017ef200f8",
+    "original-checkout.json": "00f1e481bf31f0a1bbc64f07182129171750a122ed9c0b51f434f06b57a2c2e0"
+  },
+  "cleanup": {
+    "native_postgres": "stopped after validation",
+    "native_api_and_workers": "stopped",
+    "docker_task_resources": "Pending OrbStack recovery; see docker-backend-stall.md."
+  },
+  "local_handoff": {
+    "completed_at_utc": "2026-09-15T12:26:52.308037+00:00",
+    "active_directory": "/Users/faisalbh/qym",
+    "active_branch": "codex/merge-pr47-local-fixes",
+    "transferred_commit": "c1bbf40b7928fb53cceb255b39968fde017dbba4",
+    "recovery_branch": "codex/recovery-before-pr47-return-20260915-122542",
+    "recovery_commit": "7af5b7113453fd5206d3af94f44fe1016feb17fa",
+    "original_file_hashes_verified_in_recovery_commit": 28,
+    "package_docker_test_ci_files_matching_tested_copy": 637,
+    "note": "The original_checkout verification above records the pre-handoff state. Those original edits now live in the recovery commit."
+  }
+}

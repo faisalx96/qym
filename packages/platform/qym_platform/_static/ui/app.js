@@ -855,11 +855,13 @@
     }).catch(()=>{});
   }
 
+  let dashboardPageClosed = false;
   function bootstrapDashboard(filePath) {
     // Dashboard mode: fetch historical run data from dashboard API
     fetch(apiUrl('api/runs/' + encodeURIComponent(filePath)))
       .then(r => r.json())
       .then(data => {
+        if (dashboardPageClosed) return;
         if (data.error) {
           console.error('Failed to load run:', data.error);
           return;
@@ -905,32 +907,45 @@
           state.rowByIndex = map;
         } catch {}
 
-        // Poll while running (simple approach; replace with SSE/WS later)
+        // Serialize polls: a delayed RUNNING reply must never overwrite a
+        // terminal status, and stopped runs must not retain a polling timer.
         try {
           if (isRunning) {
-            if (state._pollId) clearInterval(state._pollId);
+            stopDashboardPolling();
+            const controller = new AbortController();
+            state._pollAbort = controller;
             startRunTimer();
-            state._pollId = setInterval(() => {
-              fetch(apiUrl('api/runs/' + encodeURIComponent(filePath)))
-                .then(r => r.json())
-                .then(d2 => {
-                  const r2 = d2.run || {};
-                  const s2 = d2.snapshot || { rows: [], stats: {} };
-                  state.run = r2;
-                  state.snapshot = s2;
-                  syncMetricNamesFromSnapshot(s2);
-                  updateMetricSeriesFromSnapshot(s2);
-                  renderAll();
-                  const st = String(r2.status || '').toUpperCase();
-                  if (st && st !== 'RUNNING' && st !== 'PENDING') {
-                    clearInterval(state._pollId);
-                    state._pollId = null;
-                    state.runEndMs = Date.now();
-                    stopRunTimer();
-                  }
-                })
-                .catch(() => {});
-            }, 500);
+            const poll = async () => {
+              if (controller.signal.aborted) return;
+              try {
+                const response = await fetch(apiUrl('api/runs/' + encodeURIComponent(filePath)), { signal: controller.signal });
+                if ([401, 403, 404, 410].includes(response.status)) {
+                  stopDashboardPolling();
+                  return;
+                }
+                if (!response.ok) throw new Error('Could not refresh run');
+                const d2 = await response.json();
+                if (controller.signal.aborted) return;
+                if (d2.error) { stopDashboardPolling(); return; }
+                const r2 = d2.run || {};
+                const s2 = d2.snapshot || { rows: [], stats: {} };
+                state.run = r2;
+                state.snapshot = s2;
+                syncMetricNamesFromSnapshot(s2);
+                updateMetricSeriesFromSnapshot(s2);
+                renderAll();
+                const st = String(r2.status || '').toUpperCase();
+                if (st && st !== 'RUNNING' && st !== 'PENDING') {
+                  stopDashboardPolling();
+                  state.runEndMs = Date.now();
+                }
+              } catch (err) {
+                // Transient failures retry on the next cadence.
+              } finally {
+                if (!controller.signal.aborted) state._pollId = setTimeout(poll, 2000);
+              }
+            };
+            state._pollId = setTimeout(poll, 2000);
           }
         } catch {}
       })
@@ -938,6 +953,20 @@
         console.error('Failed to fetch run data:', err);
       });
   }
+
+  function stopDashboardPolling() {
+    if (state._pollAbort) state._pollAbort.abort();
+    state._pollAbort = null;
+    clearTimeout(state._pollId);
+    state._pollId = null;
+    stopRunTimer();
+  }
+  function closeDashboardPolling() {
+    dashboardPageClosed = true;
+    stopDashboardPolling();
+  }
+  window.addEventListener('pagehide', closeDashboardPolling);
+  document.addEventListener('qym:before-navigate', closeDashboardPolling);
 
   // Choose bootstrap mode
   if (isDashboardMode && dashboardRunFile) {

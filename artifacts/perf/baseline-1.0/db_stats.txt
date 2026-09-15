@@ -1,0 +1,62 @@
+database qym_perf  pg 16.11 (Debian 16.11-1.pgdg13+1)  size 58.0 GB  shared_buffers=2GB work_mem=32MB
+
+table                                        total        heap       toast     indexes    live rows  dead rows
+run_events                                 29.2 GB     10.2 GB     16.8 GB      1.9 GB   11,845,254      1,180
+spans                                      23.1 GB      6.6 GB     15.5 GB    828.6 MB    8,595,696        504
+run_item_pass_scores                        2.8 GB      2.6 GB         0 B    173.7 MB    1,593,804          0
+run_item_scores                             1.5 GB      1.4 GB         0 B     84.5 MB      863,402          0
+run_item_attempts                         555.1 MB    498.5 MB         0 B     56.5 MB      411,618          0
+run_items                                 553.1 MB    369.4 MB    133.2 MB     46.9 MB      221,619          0
+run_trace_aggregates                      404.8 MB    322.0 MB         0 B     82.7 MB      411,743          0
+runs                                        3.8 MB      2.7 MB         0 B      1.0 MB        3,000        325
+run_metric_specs                            2.9 MB      1.4 MB         0 B      1.5 MB       11,983          3
+project_memberships                       136.0 KB      8.0 KB         0 B     96.0 KB           64          0
+dashboard_run_dimensions                   96.0 KB         0 B         0 B     88.0 KB            0          0
+projects                                   96.0 KB      8.0 KB         0 B     80.0 KB           11         11
+
+run_events by type                  rows     payload
+  span_completed                8,589,400     20.4 GB
+  metric_scored                 1,593,568      1.5 GB
+  item_started                    412,158    534.4 MB
+  item_completed                  399,656    501.8 MB
+  item_attempt_finished           412,158    469.4 MB
+  item_attempt_started            412,158     60.5 MB
+  run_heartbeat                    73,748      3.2 MB
+  item_failed                      12,502      2.6 MB
+  run_started                       3,000      1.7 MB
+  pass_completed                    5,398    228.2 KB
+  run_completed                     2,855    228.1 KB
+
+spans by scope/kind (5.0% sample)        rows   attr bytes
+  task     LLM                      154,600     597.7 MB
+  metric   LLM                       79,789     194.2 MB
+  task     TOOL                     133,894     137.5 MB
+  task     CHAIN                     61,134      25.4 MB
+
+index                                          table                           size      scans
+uq_run_event_event_id                          run_events                    1.1 GB          0
+uq_span                                        spans                       533.2 MB          0
+uq_run_event_sequence                          run_events                  461.6 MB          0
+run_events_pkey                                run_events                  255.3 MB          0
+spans_pkey                                     spans                       184.0 MB          0
+uq_run_item_metric_pass                        run_item_pass_scores        113.5 MB          0
+ix_run_events_run_id                           run_events                  113.0 MB          9
+ix_span_run_trace                              spans                       111.3 MB          9
+uq_run_item_metric                             run_item_scores              47.5 MB          0
+ix_run_trace_aggregate_run_trace               run_trace_aggregates         35.4 MB          0
+uq_run_trace_aggregate                         run_trace_aggregates         35.4 MB          0
+run_item_pass_scores_pkey                      run_item_pass_scores         34.1 MB          0
+
+top statements by total time       calls   total ms   mean ms
+      6,372  1,377,925     216.2  COPY run_events ("run_id", "event_id", "sequence", "type", "sent_at", "payload") FROM STDIN WITH (FORMAT csv, NULL '\N')
+      4,611  1,206,120     261.6  COPY spans ("run_id", "trace_id", "span_id", "parent_span_id", "name", "kind", "start_time_ns", "end_time_ns", "duration_ms", "status", "attributes", "events", "links") FROM STDIN WITH (FORMAT csv, NULL '\N')
+          3    195,634   65211.3  SELECT COALESCE(attributes ->> $1, $2) AS usage_scope, COALESCE(attributes ->> $3, $4) AS oi_kind, count(*) AS rows, sum(pg_column_size(attributes))::bigint AS attr_bytes FROM spans TABLESAMPLE SYSTEM ($5) GROUP BY 1, 2 
+          3     47,619   15873.0  SELECT type, count(*) AS rows, sum(pg_column_size(payload))::bigint AS payload_bytes FROM run_events GROUP BY type ORDER BY payload_bytes DESC
+  24,086,008     45,593       0.0  SELECT $2 FROM ONLY "public"."runs" x WHERE "id"::pg_catalog.text OPERATOR(pg_catalog.=) $1::pg_catalog.text FOR KEY SHARE OF x
+        407     40,713     100.0  COPY run_item_pass_scores ("run_id", "item_id", "metric_name", "pass_number", "score_numeric", "label", "meta", "explanation") FROM STDIN WITH (FORMAT csv, NULL '\N')
+        247     38,997     157.9  COPY run_item_scores ("run_id", "item_id", "metric_name", "score_numeric", "score_raw", "meta", "label", "explanation") FROM STDIN WITH (FORMAT csv, NULL '\N')
+        127     17,347     136.6  COPY run_items ("run_id", "item_id", "index", "input", "expected", "output", "error", "item_metadata", "latency_ms", "retry_count", "trace_id", "trace_url") FROM STDIN WITH (FORMAT csv, NULL '\N')
+        135     14,207     105.2  COPY run_item_attempts ("run_id", "item_id", "pass_number", "attempt_number", "status", "latency_ms", "task_started_at_ms", "trace_id", "trace_url", "error", "is_last_attempt", "output") FROM STDIN WITH (FORMAT csv, NULL
+        135      8,488      62.9  COPY run_trace_aggregates ("run_id", "trace_id", "span_count", "tokens", "cost", "llm_calls", "tool_calls", "tool_errors", "malformed_tool_calls", "noisy_reasoning", "provider_errors", "has_reasoning", "has_reasoning_tok
+          1      1,039    1038.9  SELECT count(*) FROM spans WHERE attributes ->> $1 = $2
+      3,010        965       0.3  INSERT INTO runs (id, project_id, external_run_id, created_by_user_id, owner_user_id, task, dataset, dataset_id, dataset_version_id, model, metrics, run_metadata, run_config, samples, status, started_at, ended_at, last_e

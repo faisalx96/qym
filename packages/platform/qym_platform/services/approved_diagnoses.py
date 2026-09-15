@@ -143,17 +143,19 @@ def load_approved_diagnoses(
         )
         # Keep independently approved siblings. Within the same issue (or an
         # old grouped scope), the newest active approved snapshot wins.
-        issue_scope = (*scope, correction_issue_id(correction))
+        issue_scope = (*scope, correction.pass_number, correction_issue_id(correction))
         if issue_scope in seen_scopes:
             continue
         seen_scopes.add(issue_scope)
-        approved_scopes.add(scope)
+        if correction.pass_number is None:
+            approved_scopes.add(scope)
         issues, source = _correction_issues(correction)
         if not issues:
             continue
         result[(correction.run_id, correction.item_id)].extend(
             {
                 "metric_name": scope[2],
+                "pass_number": correction.pass_number,
                 "category": _clean(issue.get("category")),
                 "detail": _clean(issue.get("subcategory")),
                 "note": _clean(issue.get("finding")),

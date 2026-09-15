@@ -4,12 +4,10 @@ import re
 from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import func
-from sqlalchemy.orm import Session
-
 from qym_platform.datetime_utils import utc_now_naive
 from qym_platform.db.models import (
     AuditLog,
+    ReviewCorrection,
     Run,
     RunEvent,
     RunItem,
@@ -21,6 +19,9 @@ from qym_platform.db.models import (
     RunWorkflowStatus,
     Span,
 )
+from sqlalchemy import Integer, cast, func
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Session
 
 
 class RepeatPassDeletionError(ValueError):
@@ -28,6 +29,85 @@ class RepeatPassDeletionError(ValueError):
         self.status_code = status_code
         self.detail = detail
         super().__init__(detail)
+
+
+def has_repeat_pass_context(run: Run) -> bool:
+    """Keep a surviving repeat pass addressable after its siblings are removed."""
+    metadata = run.run_metadata if isinstance(run.run_metadata, dict) else {}
+    return int(run.samples or 1) > 1 or bool(metadata.get("has_repeat_pass_context"))
+
+
+def pass_revision(run: Run) -> int:
+    """Version the mapping from visible pass numbers to stored executions."""
+    metadata = run.run_metadata if isinstance(run.run_metadata, dict) else {}
+    value = metadata.get("pass_revision", 0)
+    return value if type(value) is int and value >= 0 else 0
+
+
+def pass_revision_matches(run: Run, expected: Any) -> bool:
+    current = pass_revision(run)
+    # Older clients may omit the token until pass numbers have changed.
+    return (expected is None and current == 0) or (
+        type(expected) is int and expected == current
+    )
+
+
+def lock_repeat_run(db: Session, run_id: str) -> Run:
+    """Serialize pass deletion and recheck the current run before validation."""
+    # A bulk request calls the deletion service repeatedly in one transaction.
+    # Persist its previous pass removal before refreshing the locked run.
+    db.flush()
+    run = (
+        Run.active(db)
+        .filter(Run.id == run_id)
+        .populate_existing()
+        .with_for_update()
+        .one_or_none()
+    )
+    if run is None:
+        raise RepeatPassDeletionError(404, "Run not found")
+    return run
+
+
+def _lock_run_items(db: Session, run_id: str) -> None:
+    # Issue edits and review actions lock the item before its pass score. Take
+    # the same boundary, in bulk-review order, before deleting or renumbering
+    # any source rows. A waiting review then reloads its inactive correction.
+    (
+        db.query(RunItem.id)
+        .filter(RunItem.run_id == run_id)
+        .order_by(RunItem.item_id)
+        .with_for_update()
+        .all()
+    )
+
+
+def _remap_pass_reviews(db: Session, run_id: str, deleted_pass: int) -> int:
+    """Retain deleted-pass evidence and move surviving review references."""
+    source_scope = (
+        ReviewCorrection.run_id == run_id,
+        ReviewCorrection.pass_deleted_at.is_(None),
+    )
+    retired = (
+        db.query(ReviewCorrection)
+        .filter(*source_scope, ReviewCorrection.pass_number == deleted_pass)
+        .update(
+            {
+                ReviewCorrection.is_active: False,
+                ReviewCorrection.pass_deleted_at: utc_now_naive(),
+            },
+            synchronize_session=False,
+        )
+    )
+    # Include superseded history of surviving passes. Changing the locator
+    # must not alter its evidence, verdict, reviewer, or review timestamp.
+    db.query(ReviewCorrection).filter(
+        *source_scope, ReviewCorrection.pass_number > deleted_pass
+    ).update(
+        {ReviewCorrection.pass_number: ReviewCorrection.pass_number - 1},
+        synchronize_session=False,
+    )
+    return int(retired or 0)
 
 
 _PASS_META_KEY_RE = re.compile(r"^pass_(\d+)(_.+)$")
@@ -165,15 +245,62 @@ def _renumber_rows(db: Session, run_id: str, deleted_pass: int) -> None:
         db.flush()
 
 
+_RUN_LEVEL_EVENT_TYPES = ("run_started", "run_completed")
+
+
+def _rewrite_events_sql(db: Session, run: Run, deleted_pass: int) -> int:
+    """PostgreSQL: renumber pass_number inside JSON payloads without loading them.
+
+    ORM bulk statements are used (not raw SQL) so the dashboard outbox hook can
+    snapshot the affected rows and keep the projection consistent.
+    """
+    pass_text = RunEvent.payload.op("->>")("pass_number")
+    numbered = pass_text.op("~")("^[0-9]+$")
+    pass_int = cast(pass_text, Integer)
+    scoped = (
+        RunEvent.run_id == run.id,
+        ~RunEvent.type.in_(_RUN_LEVEL_EVENT_TYPES),
+        numbered,
+    )
+    deleted = (
+        db.query(RunEvent)
+        .filter(*scoped, pass_int == deleted_pass)
+        .delete(synchronize_session=False)
+    )
+    db.query(RunEvent).filter(*scoped, pass_int > deleted_pass).update(
+        {
+            RunEvent.payload: func.jsonb_set(
+                # Migration 0052 can defer large tables, leaving payload as JSON.
+                cast(RunEvent.payload, JSONB),
+                "{pass_number}",
+                func.to_jsonb(pass_int - 1),
+            )
+        },
+        synchronize_session=False,
+    )
+    return int(deleted or 0)
+
+
 def _rewrite_events(
     db: Session,
     run: Run,
     deleted_pass: int,
     new_samples: int,
-    exclusive_trace_ids: set[str],
 ) -> int:
-    deleted_events = 0
-    for event in db.query(RunEvent).filter(RunEvent.run_id == run.id).all():
+    if db.get_bind().dialect.name == "postgresql":
+        deleted_events = _rewrite_events_sql(db, run, deleted_pass)
+        # Only the two run-level rows carry nested samples/run_metadata fields.
+        rows = (
+            db.query(RunEvent)
+            .filter(
+                RunEvent.run_id == run.id, RunEvent.type.in_(_RUN_LEVEL_EVENT_TYPES)
+            )
+            .all()
+        )
+    else:
+        deleted_events = 0
+        rows = db.query(RunEvent).filter(RunEvent.run_id == run.id).all()
+    for event in rows:
         payload = dict(event.payload) if isinstance(event.payload, dict) else {}
         try:
             event_pass = (
@@ -184,10 +311,7 @@ def _rewrite_events(
         except (TypeError, ValueError):
             event_pass = None
 
-        event_trace_id = str(payload.get("trace_id") or "")
-        if event_pass == deleted_pass or (
-            event.type == "span_completed" and event_trace_id in exclusive_trace_ids
-        ):
+        if event_pass == deleted_pass:
             db.delete(event)
             deleted_events += 1
             continue
@@ -350,6 +474,7 @@ def delete_repeat_pass(
     actor_user_id: Optional[str],
 ) -> Dict[str, Any]:
     """Delete one complete pass and repair all derived repeat-run state."""
+    run = lock_repeat_run(db, run.id)
     samples = int(run.samples or 1)
     if samples <= 1:
         raise RepeatPassDeletionError(400, "A run must retain at least one pass")
@@ -360,8 +485,10 @@ def delete_repeat_pass(
             409, "Cannot delete a pass while the run is active"
         )
 
+    _lock_run_items(db, run.id)
+
     selected_attempts = (
-        db.query(RunItemAttempt)
+        db.query(RunItemAttempt.trace_id)
         .filter(
             RunItemAttempt.run_id == run.id,
             RunItemAttempt.pass_number == pass_number,
@@ -369,7 +496,7 @@ def delete_repeat_pass(
         .all()
     )
     selected_scores = (
-        db.query(RunItemPassScore)
+        db.query(RunItemPassScore.item_id, RunItemPassScore.metric_name)
         .filter(
             RunItemPassScore.run_id == run.id,
             RunItemPassScore.pass_number == pass_number,
@@ -380,10 +507,10 @@ def delete_repeat_pass(
         raise RepeatPassDeletionError(404, "Pass has no stored data")
 
     selected_score_keys = {
-        (score.item_id, score.metric_name) for score in selected_scores
+        (item_id, metric_name) for item_id, metric_name in selected_scores
     }
     selected_trace_ids = {
-        str(attempt.trace_id) for attempt in selected_attempts if attempt.trace_id
+        str(trace_id) for (trace_id,) in selected_attempts if trace_id
     }
 
     remaining_final_attempts = (
@@ -421,19 +548,29 @@ def delete_repeat_pass(
     }
     exclusive_trace_ids = selected_trace_ids - remaining_trace_ids
 
-    deleted_attempts = len(selected_attempts)
-    deleted_scores = len(selected_scores)
-    for attempt in selected_attempts:
-        db.delete(attempt)
-    for score in selected_scores:
-        db.delete(score)
+    # Set-based deletes: the dashboard outbox hook snapshots bulk statements in
+    # one query instead of one flush per row.
+    deleted_attempts = (
+        db.query(RunItemAttempt)
+        .filter(
+            RunItemAttempt.run_id == run.id, RunItemAttempt.pass_number == pass_number
+        )
+        .delete(synchronize_session=False)
+    )
+    deleted_scores = (
+        db.query(RunItemPassScore)
+        .filter(
+            RunItemPassScore.run_id == run.id,
+            RunItemPassScore.pass_number == pass_number,
+        )
+        .delete(synchronize_session=False)
+    )
     db.flush()
 
     new_samples = samples - 1
+    retired_reviews = _remap_pass_reviews(db, run.id, pass_number)
     _renumber_rows(db, run.id, pass_number)
-    deleted_events = _rewrite_events(
-        db, run, pass_number, new_samples, exclusive_trace_ids
-    )
+    deleted_events = _rewrite_events(db, run, pass_number, new_samples)
     if exclusive_trace_ids:
         (
             db.query(Span)
@@ -452,6 +589,11 @@ def delete_repeat_pass(
         synchronize_session=False
     )
 
+    # Bulk updates also affect objects a caller may already have loaded.
+    # Rereduction must use the new pass numbers, and review serialization must
+    # see the tombstones before it can act on a shifted pass.
+    db.flush()
+    db.expire_all()
     _rereduce_scores(db, run.id, pass_number, selected_score_keys)
     _refresh_representative_items(db, run.id)
 
@@ -467,6 +609,8 @@ def delete_repeat_pass(
     run_metadata = dict(run.run_metadata) if isinstance(run.run_metadata, dict) else {}
     run_metadata["samples"] = new_samples
     run_metadata["last_completed_pass"] = new_samples
+    run_metadata["has_repeat_pass_context"] = True
+    run_metadata["pass_revision"] = pass_revision(run) + 1
     run.run_metadata = run_metadata
     run.updated_at = utc_now_naive()
 
@@ -483,6 +627,15 @@ def delete_repeat_pass(
                 "deleted_attempts": deleted_attempts,
                 "deleted_scores": deleted_scores,
                 "deleted_events": deleted_events,
+                "retired_reviews": retired_reviews,
+                "pass_number_map": {
+                    str(number): (
+                        None
+                        if number == pass_number
+                        else number - 1 if number > pass_number else number
+                    )
+                    for number in range(1, samples + 1)
+                },
             },
         )
     )

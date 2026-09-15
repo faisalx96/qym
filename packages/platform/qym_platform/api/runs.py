@@ -61,11 +61,20 @@ from qym_platform.permissions import (
     has_project_access,
 )
 from qym_platform.services.issue_reviews import change_metric_issue, reconcile_issue_edits
-from qym_platform.services.run_lifecycle import reconcile_stale_running_run
+from qym_platform.services.run_lifecycle import (
+    RUN_STATUS_REASON_ADMIN_FORCE_STOP,
+    can_force_stop_run,
+    is_run_force_stopped,
+    is_stale_running_run,
+    reconcile_stale_running_run,
+)
 from qym_platform.services.run_payloads import compact_row, detail_item_ids, search_conditions
 from qym_platform.services.repeat_passes import (
     RepeatPassDeletionError,
     delete_repeat_pass,
+    has_repeat_pass_context,
+    lock_repeat_run,
+    pass_revision_matches,
 )
 from qym_platform.services.root_cause_changes import (
     PASS_ANALYSIS_META_KEY,
@@ -652,7 +661,196 @@ def _completed_pass_outputs(
     return recovered
 
 
+def _set_dashboard_visibility(db: Session, run_id: str, visible: bool) -> None:
+    """Hide/show the run in projection-backed lists immediately.
+
+    ``present`` stays owned by the summary worker (it drives the numeric bucket
+    moves); ``hidden_at`` is the operator-facing flag lists filter on.
+    """
+    from qym_platform.db.dashboard_models import (
+        DashboardPartitionState, DashboardRunDimension, DashboardRunSummary,
+    )
+
+    # Source writes already hold the Run lock. Match the worker's partition
+    # then projection lock order before changing any cached projection rows.
+    with db.no_autoflush:
+        db.get(DashboardPartitionState, run_id, populate_existing=True, with_for_update=True)
+        dimension = db.get(DashboardRunDimension, run_id, populate_existing=True, with_for_update=True)
+        if dimension is None or (dimension.hidden_at is None) == visible:
+            return
+        dimension.hidden_at = None if visible else utc_now_naive()
+        summary = db.get(DashboardRunSummary, run_id, populate_existing=True, with_for_update=True)
+        if summary is not None:
+            summary.projection_revision = int(summary.projection_revision or 0) + 1
+
+
+def _lock_pass_mutation_run(db: Session, run_id: str, expected_version: Any) -> Run:
+    """Reject a stale pass number before acquiring any item or score locks."""
+    try:
+        run = lock_repeat_run(db, run_id)
+    except RepeatPassDeletionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    if not pass_revision_matches(run, expected_version):
+        raise HTTPException(
+            status_code=409,
+            detail="Passes changed; reload the run before editing",
+        )
+    return run
+
+
 def _repeat_pass_event_state(
+    db: Session, run_id: str, *, item_ids: Optional[List[str]] = None
+) -> Dict[str, Any]:
+    """Per-pass lifecycle state from ``run_item_attempts`` (no event replay).
+
+    Every finished attempt is a row; since ingest also records a RUNNING row at
+    attempt start, in-flight work is visible without reading ``run_events``.
+    Runs ingested before attempt rows existed fall back to the event log.
+    """
+    query = db.query(
+        RunItemAttempt.item_id,
+        RunItemAttempt.pass_number,
+        RunItemAttempt.attempt_number,
+        RunItemAttempt.status,
+        RunItemAttempt.latency_ms,
+        RunItemAttempt.task_started_at_ms,
+        RunItemAttempt.trace_id,
+        RunItemAttempt.trace_url,
+        RunItemAttempt.error,
+        RunItemAttempt.is_last_attempt,
+        RunItemAttempt.output,
+    ).filter(RunItemAttempt.run_id == run_id)
+    if item_ids is not None:
+        query = query.filter(RunItemAttempt.item_id.in_(list(item_ids)))
+    rows = query.order_by(RunItemAttempt.pass_number, RunItemAttempt.item_id, RunItemAttempt.attempt_number).all()
+    if not rows:
+        has_events = db.query(RunEvent.id).filter(RunEvent.run_id == run_id).first() is not None
+        if has_events:
+            return _repeat_pass_event_state_from_events(db, run_id, item_ids=item_ids)
+        return {"outcomes": {}, "active_attempts": {}, "starts_by_pass": defaultdict(list), "completed_passes": set()}
+
+    outcomes: Dict[tuple[str, int], Dict[str, Any]] = {}
+    active_attempts: Dict[tuple[str, int], Dict[str, Any]] = {}
+    starts_by_pass: Dict[int, List[int]] = defaultdict(list)
+    for row in rows:
+        item_id, pass_number, attempt_number, status, latency_ms, start_ms, trace_id, trace_url, error, is_last, output = row
+        pass_number = max(1, int(pass_number or 1))
+        key = (item_id, pass_number)
+        if start_ms is not None:
+            starts_by_pass[pass_number].append(int(start_ms))
+            if latency_ms is not None:
+                starts_by_pass[pass_number].append(int(start_ms + latency_ms))
+        status_l = str(status or "").upper()
+        if status_l == "RUNNING" or not is_last:
+            # A non-final failure is still active during retry backoff. It
+            # must not win over the next RUNNING attempt as a pass outcome.
+            active_attempts[key] = {
+                "pass_number": pass_number,
+                "status": "running",
+                "output": None,
+                "error": "",
+                "latency_ms": None,
+                "task_started_at_ms": int(start_ms) if start_ms is not None else None,
+                "trace_id": trace_id or "",
+                "trace_url": trace_url or "",
+                "retry_count": max(0, int(attempt_number or 1) - 1),
+            }
+            continue
+        failed = status_l == "FAILED"
+        err = str(error or "")
+        outcomes[key] = {
+            "pass_number": pass_number,
+            "status": "error" if failed else "completed",
+            "output": f"ERROR: {err}" if failed and err else _stringify(output),
+            "error": err,
+            "latency_ms": float(latency_ms) if latency_ms is not None else None,
+            "task_started_at_ms": int(start_ms) if start_ms is not None else None,
+            "trace_id": trace_id or "",
+            "trace_url": trace_url or "",
+            "retry_count": max(0, int(attempt_number or 1) - 1),
+        }
+        active_attempts.pop(key, None)
+
+    run = db.get(Run, run_id)
+    metadata = run.run_metadata if run is not None and isinstance(run.run_metadata, dict) else {}
+    try:
+        last_completed = int(metadata.get("last_completed_pass") or 0)
+    except (TypeError, ValueError):
+        last_completed = 0
+    completed_passes = set(range(1, last_completed + 1))
+
+    # Legacy gaps: passes with no attempt rows at all (old SDKs emitted only an
+    # item outcome), or a live run ingested before RUNNING attempt rows existed.
+    samples = int(getattr(run, "samples", 1) or 1) if run is not None else 1
+    passes_seen = {key[1] for key in outcomes} | {key[1] for key in active_attempts}
+    status = str(getattr(getattr(run, "status", None), "value", getattr(run, "status", "")) or "").upper()
+    live = status in {"RUNNING", "PENDING"}
+    had_active_attempts = bool(active_attempts)
+    if active_attempts:
+        # Older ingests left cancellation as an unfinished attempt plus an
+        # item_failed event. Read only failures for these items, not the full
+        # event history, and reconcile the matching unfinished pass.
+        active_item_ids = sorted({key[0] for key in active_attempts})
+        for offset in range(0, len(active_item_ids), 400):
+            failures = (
+                db.query(RunEvent.payload)
+                .filter(
+                    RunEvent.run_id == run_id,
+                    RunEvent.type == "item_failed",
+                    RunEvent.payload["item_id"].as_string().in_(
+                        active_item_ids[offset : offset + 400]
+                    ),
+                )
+                .order_by(RunEvent.sequence)
+            )
+            for (payload,) in failures:
+                if not isinstance(payload, dict):
+                    continue
+                try:
+                    pass_number = max(1, int(payload.get("pass_number") or 1))
+                except (TypeError, ValueError):
+                    pass_number = 1
+                key = (str(payload.get("item_id") or ""), pass_number)
+                active = active_attempts.get(key)
+                if active is None:
+                    continue
+                error = str(payload.get("error") or "")
+                outcomes[key] = {
+                    **active,
+                    "status": "error",
+                    "error": error,
+                    "output": f"ERROR: {error}" if error else "",
+                    **{
+                        name: payload[name]
+                        for name in (
+                            "latency_ms", "task_started_at_ms", "trace_id", "trace_url"
+                        )
+                        if payload.get(name) is not None
+                    },
+                }
+        for key in outcomes:
+            active_attempts.pop(key, None)
+    missing_passes = [p for p in range(1, samples + 1) if p not in passes_seen]
+    if missing_passes or (live and not active_attempts and not had_active_attempts):
+        legacy = _repeat_pass_event_state_from_events(db, run_id, item_ids=item_ids)
+        for key, value in legacy["outcomes"].items():
+            outcomes.setdefault(key, value)
+        for key, value in legacy["active_attempts"].items():
+            if key not in outcomes:
+                active_attempts.setdefault(key, value)
+        for pass_number, values in legacy["starts_by_pass"].items():
+            if pass_number in missing_passes or not starts_by_pass.get(pass_number):
+                starts_by_pass[pass_number].extend(values)
+        completed_passes |= set(legacy["completed_passes"])
+    return {
+        "outcomes": outcomes,
+        "active_attempts": active_attempts,
+        "starts_by_pass": starts_by_pass,
+        "completed_passes": completed_passes,
+    }
+
+
+def _repeat_pass_event_state_from_events(
     db: Session, run_id: str, *, item_ids: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """Recover per-pass lifecycle state that is not represented by final attempts.
@@ -1210,14 +1408,34 @@ def _reconcile_run_liveness(db: Session, runs: List[Run]) -> None:
     if not runs:
         return
     timeout_seconds = PlatformSettings().run_stale_timeout_seconds
+    running_ids = [
+        run.id
+        for run in runs
+        if is_stale_running_run(run, timeout_seconds=timeout_seconds)
+    ]
+    if not running_ids:
+        return
+    # A GET may have loaded RUNNING before an admin stop or a fresh heartbeat.
+    # Refresh under the same lock as ingestion before inferring a timeout.
+    locked_runs = (
+        db.query(Run)
+        .filter(Run.id.in_(running_ids))
+        .order_by(Run.id)
+        .with_for_update()
+        .populate_existing()
+        .all()
+    )
     changed = False
-    for run in runs:
+    for run in locked_runs:
         if reconcile_stale_running_run(run, timeout_seconds=timeout_seconds):
             changed = True
     if changed:
         db.commit()
         for run in runs:
             db.refresh(run)
+    else:
+        # Release liveness locks before building potentially large run payloads.
+        db.commit()
 
 
 def _serialize_span(span: Span) -> Dict[str, Any]:
@@ -1598,6 +1816,9 @@ def _live_run_summary(
         "status": run.status.value
         if hasattr(run.status, "value")
         else str(run.status or ""),
+        "status_reason": run.status_reason,
+        "can_force_stop": can_force_stop_run(run),
+        "ended_at": _iso(run.ended_at) if run.ended_at else None,
         "timestamp": _iso(run.started_at or run.created_at),
         "started_at": _iso(run.started_at) if run.started_at else None,
         "last_event_at": _iso(run.last_event_at or run.updated_at or run.created_at),
@@ -3030,7 +3251,8 @@ def _build_run_data(
     metric_specs = _metric_specs_for_runs(db, [run.id]).get(run.id, {})
     corrections = (
         db.query(ReviewCorrection)
-        .filter(ReviewCorrection.run_id == run.id, ReviewCorrection.is_active.is_(True))
+        .filter(ReviewCorrection.run_id == run.id, ReviewCorrection.is_active.is_(True),
+                ReviewCorrection.pass_number.is_(None))
         .filter(
             ReviewCorrection.item_id.in_(item_ids) if item_ids is not None else True
         )
@@ -3069,6 +3291,7 @@ def _build_run_data(
 
     # Repeat runs: per-pass scores power the dot strips in the items table.
     run_samples = int(getattr(run, "samples", 1) or 1)
+    repeat_context = has_repeat_pass_context(run)
     execution_error_pairs = _execution_error_pairs_for_runs(
         db,
         [run.id],
@@ -3082,7 +3305,7 @@ def _build_run_data(
     pass_meta_by_item: Dict[str, Dict[str, Dict[int, Dict[str, Any]]]] = {}
     pass_analysis_by_item: Dict[str, Dict[str, Dict[int, Dict[str, Any]]]] = {}
     pass_attempts_by_item: Dict[str, Dict[int, Dict[str, Any]]] = {}
-    if run_samples > 1:
+    if repeat_context:
         for ps in (
             db.query(RunItemPassScore)
             .filter(RunItemPassScore.run_id == run.id)
@@ -3281,14 +3504,14 @@ def _build_run_data(
                 val = sc.score_numeric
             metric_values.append(val)
             pass_values = (pass_scores_by_item.get(it.item_id) or {}).get(m)
-            if run_samples > 1 and pass_values:
+            if repeat_context and pass_values:
                 metric_meta[m] = _repeat_aggregate_metric_meta(
                     pass_values,
                     dict(sc.meta) if isinstance(sc.meta, dict) else None,
                 )
             elif sc.meta:
                 metric_meta[m] = dict(sc.meta)
-            if run_samples <= 1 and (sc.label or sc.explanation):
+            if not repeat_context and (sc.label or sc.explanation):
                 if m not in metric_meta:
                     metric_meta[m] = {}
                 if sc.label:
@@ -3383,7 +3606,7 @@ def _build_run_data(
                             pass_scores_by_item.get(it.item_id) or {}
                         ).items()
                     }
-                    if run_samples > 1
+                    if repeat_context
                     else None
                 ),
                 # Repeat runs: metric -> [meta per pass, index 0 = pass 1] —
@@ -3395,7 +3618,7 @@ def _build_run_data(
                             pass_meta_by_item.get(it.item_id) or {}
                         ).items()
                     }
-                    if run_samples > 1 and pass_meta_by_item.get(it.item_id)
+                    if repeat_context and pass_meta_by_item.get(it.item_id)
                     else None
                 ),
                 # Repeat runs: metric -> [root-cause analysis per pass].  This
@@ -3408,7 +3631,7 @@ def _build_run_data(
                             pass_analysis_by_item.get(it.item_id) or {}
                         ).items()
                     }
-                    if run_samples > 1 and pass_analysis_by_item.get(it.item_id)
+                    if repeat_context and pass_analysis_by_item.get(it.item_id)
                     else None
                 ),
                 # Repeat runs: [attempt per pass, index 0 = pass 1] — each
@@ -3418,7 +3641,7 @@ def _build_run_data(
                         (pass_attempts_by_item.get(it.item_id) or {}).get(p)
                         for p in range(1, run_samples + 1)
                     ]
-                    if run_samples > 1
+                    if repeat_context
                     else None
                 ),
             }
@@ -3476,6 +3699,7 @@ def _build_run_data(
                 "config": run_config,
                 "metadata": run_metadata,
                 "status": run.status,
+                "status_reason": run.status_reason,
                 "owner": owner_info,
                 "team_name": project.name if project else None,
                 "project": project_info,
@@ -3961,11 +4185,10 @@ def delete_run_pass(
     pass_number: int,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
+    expected_pass_version: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Delete one full pass from a completed repeat run."""
-    run = Run.active(db).filter(Run.id == run_id).first()
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found")
+    run = _lock_pass_mutation_run(db, run_id, expected_pass_version)
     if not can_modify_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -3992,9 +4215,7 @@ def delete_run_passes(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     """Delete several passes atomically, using their original pass numbers."""
-    run = Run.active(db).filter(Run.id == run_id).first()
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found")
+    run = _lock_pass_mutation_run(db, run_id, payload.get("expected_pass_version"))
     if not can_modify_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -4303,13 +4524,18 @@ def update_metric(
             status_code=400, detail="file_path, row_index, and metric_name required"
         )
 
-    run = Run.active(db).filter(Run.id == file_path).first()
+    run = (
+        _lock_pass_mutation_run(db, file_path, request.get("expected_pass_version"))
+        if pass_number is not None
+        else Run.active(db).filter(Run.id == file_path).first()
+    )
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     if not can_modify_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
 
     run_samples = int(run.samples or 1)
+    repeat_context = has_repeat_pass_context(run)
     if pass_number is not None:
         try:
             pass_number = int(pass_number)
@@ -4317,7 +4543,7 @@ def update_metric(
             raise HTTPException(
                 status_code=400, detail="pass_number must be an integer"
             )
-        if run_samples <= 1 or pass_number < 1 or pass_number > run_samples:
+        if not repeat_context or pass_number < 1 or pass_number > run_samples:
             raise HTTPException(
                 status_code=400, detail="pass_number out of range for this run"
             )
@@ -4331,6 +4557,11 @@ def update_metric(
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
+    if pass_number is not None:
+        # Correction-ID review actions use Item -> Pass locks without taking
+        # the Run lock. Serialize with them before reading shared score meta.
+        item = lock_run_item(db, run=run, item=item)
+
     # Find or create the score record
     score_record = (
         db.query(RunItemScore)
@@ -4339,6 +4570,7 @@ def update_metric(
             RunItemScore.item_id == item.item_id,
             RunItemScore.metric_name == metric_name,
         )
+        .populate_existing()
         .first()
     )
 
@@ -4377,6 +4609,8 @@ def update_metric(
                 RunItemPassScore.metric_name == metric_name,
                 RunItemPassScore.pass_number == pass_number,
             )
+            .populate_existing()
+            .with_for_update()
             .first()
         )
         if not pass_record:
@@ -4452,7 +4686,7 @@ def update_metric(
     pass_metric_meta: Optional[Dict[str, list]] = None
     pass_metric_analyses: Optional[Dict[str, list]] = None
     pass_attempts: Optional[list] = None
-    if run_samples > 1:
+    if repeat_context:
         by_metric: Dict[str, Dict[int, Optional[float]]] = {}
         by_metric_meta: Dict[str, Dict[int, Dict[str, Any]]] = {}
         by_metric_analysis: Dict[str, Dict[int, Dict[str, Any]]] = {}
@@ -4625,7 +4859,11 @@ def update_root_cause_issue(
     metric_name = str(request.get("metric_name") or "").strip()
     if not run_id or not item_id or not metric_name:
         raise HTTPException(400, "run_id, item_id, and metric_name required")
-    run = Run.active(db).filter(Run.id == run_id).first()
+    run = (
+        _lock_pass_mutation_run(db, run_id, request.get("expected_pass_version"))
+        if request.get("pass_number") is not None
+        else Run.active(db).filter(Run.id == run_id).first()
+    )
     if run is None:
         raise HTTPException(404, "Run not found")
     permission = can_review_run if request.get("action") == "approve" else can_modify_run
@@ -4641,9 +4879,10 @@ def update_root_cause_issue(
         raise HTTPException(400, "Unknown metric_name")
     pass_number = request.get("pass_number")
     samples = int(run.samples or 1)
-    if samples > 1 and pass_number is None:
+    repeat_context = has_repeat_pass_context(run)
+    if repeat_context and pass_number is None:
         raise HTTPException(400, "pass_number is required for a repeat-run diagnosis")
-    if pass_number is not None and (type(pass_number) is not int or samples <= 1 or not 1 <= pass_number <= samples):
+    if pass_number is not None and (type(pass_number) is not int or not repeat_context or not 1 <= pass_number <= samples):
         raise HTTPException(400, "pass_number is outside this run")
     pass_score = None
     if pass_number is not None:
@@ -4695,7 +4934,11 @@ def update_root_cause(
     if not item_id or not run_id:
         raise HTTPException(status_code=400, detail="item_id and run_id required")
 
-    run = Run.active(db).filter(Run.id == run_id).first()
+    run = (
+        _lock_pass_mutation_run(db, run_id, request.get("expected_pass_version"))
+        if request.get("pass_number") is not None
+        else Run.active(db).filter(Run.id == run_id).first()
+    )
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     if not can_modify_run(db, principal, run):
@@ -4737,13 +4980,14 @@ def update_root_cause(
         if pass_number < 1:
             raise HTTPException(status_code=400, detail="pass_number must be positive")
     run_samples = int(getattr(run, "samples", 1) or 1)
-    if run_samples > 1 and pass_number is None:
+    repeat_context = has_repeat_pass_context(run)
+    if repeat_context and pass_number is None:
         raise HTTPException(
             status_code=400,
             detail="pass_number is required when editing a repeat-run diagnosis",
         )
     if pass_number is not None and (
-        run_samples <= 1 or pass_number > run_samples
+        not repeat_context or pass_number > run_samples
     ):
         raise HTTPException(status_code=400, detail="pass_number is outside this run")
 
@@ -4779,8 +5023,23 @@ def update_root_cause(
             else {}
         )
         after_analysis = _apply_metric_analysis_patch(before_analysis, patch)
-        if after_analysis:
+        from qym_platform.services.issue_reviews import sync_issue_candidates
+
+        existing_reviews = db.query(ReviewCorrection).filter(
+            ReviewCorrection.run_id == run.id, ReviewCorrection.item_id == item.item_id,
+            ReviewCorrection.metric_name == metric_name, ReviewCorrection.pass_number == pass_number,
+            ReviewCorrection.is_active.is_(True),
+        ).all()
+        if existing_reviews:
+            sync_issue_candidates(
+                db, run=run, item=item, metric_name=metric_name,
+                analysis=after_analysis, actor_user_id=(
+                    principal.user.id if principal.auth_type != "none" else None
+                ), actor_source="human", pass_number=pass_number, active_candidates=existing_reviews,
+            )
+        elif after_analysis:
             after_analysis["review_status"] = "pending"
+        if after_analysis:
             pass_meta[PASS_ANALYSIS_META_KEY] = after_analysis
         else:
             pass_meta.pop(PASS_ANALYSIS_META_KEY, None)
@@ -4917,6 +5176,64 @@ def update_root_cause(
     return {"ok": True, "row": updated_row}
 
 
+@router.post("/api/runs/{run_id}/force-stop")
+def force_stop_run(
+    run_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Permanently close an SDK run to ingestion, without deleting its results."""
+    if principal.user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    # Ingestion holds this row lock for its entire transaction. Once this stop
+    # commits, no later batch can change the run or any of its event data.
+    run = (
+        db.query(Run)
+        .filter(Run.id == run_id)
+        .with_for_update()
+        .populate_existing()
+        .first()
+    )
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    stopped = False
+    if not is_run_force_stopped(run):
+        if not can_force_stop_run(run):
+            raise HTTPException(status_code=409, detail="Run has already finished")
+        before = run.audit_snapshot()
+        before["status_reason"] = run.status_reason
+        run.status = RunWorkflowStatus.STOPPED
+        run.status_reason = RUN_STATUS_REASON_ADMIN_FORCE_STOP
+        run.ended_at = utc_now_naive()
+        # Preserve last_event_at: stopping is an admin action, not runner activity.
+        db.add(
+            AuditLog(
+                actor_user_id=principal.user.id,
+                action="run.force_stopped",
+                entity_type="run",
+                entity_id=run.id,
+                before=before,
+                after={
+                    "status": run.status.value,
+                    "status_reason": run.status_reason,
+                    "ended_at": to_api_timestamp(run.ended_at),
+                },
+            )
+        )
+        stopped = True
+    result = {
+        "ok": True,
+        "run_id": run.id,
+        "stopped": stopped,
+        "status": run.status.value,
+        "status_reason": run.status_reason,
+        "ended_at": to_api_timestamp(run.ended_at),
+        "can_force_stop": False,
+    }
+    db.commit()
+    return result
+
+
 @router.post("/api/runs/delete")
 def delete_run(
     request: Dict[str, Any],
@@ -4928,7 +5245,10 @@ def delete_run(
     if not file_path:
         raise HTTPException(status_code=400, detail="file_path required")
 
-    run = Run.active(db).filter(Run.id == file_path).first()
+    run = (
+        Run.active(db).filter(Run.id == file_path)
+        .populate_existing().with_for_update().first()
+    )
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     if not can_delete_run(db, principal, run):
@@ -4939,6 +5259,7 @@ def delete_run(
     snapshot = run.audit_snapshot()
     run.deleted_at = utc_now_naive()
     run.deleted_by_user_id = principal.user.id
+    _set_dashboard_visibility(db, run.id, False)
 
     audit = AuditLog(
         actor_user_id=principal.user.id,
@@ -4970,11 +5291,18 @@ def restore_run(
     if not run_id:
         raise HTTPException(status_code=400, detail="run_id required")
 
-    run = db.query(Run).filter(Run.id == run_id, Run.deleted_at.isnot(None)).first()
+    run = (
+        db.query(Run)
+        .filter(Run.id == run_id, Run.deleted_at.isnot(None))
+        .with_for_update()
+        .populate_existing()
+        .first()
+    )
     if not run:
         raise HTTPException(status_code=404, detail="Deleted run not found")
 
     run.deleted_at = None
+    _set_dashboard_visibility(db, run.id, True)
     run.deleted_by_user_id = None
 
     audit = AuditLog(

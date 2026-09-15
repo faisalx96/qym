@@ -1,0 +1,1 @@
+import{a as e}from"./chunk-Icon--kDOIs7m.js";import{t}from"./chunk-ColumnChooser-B7BkGszz.js";var n=e();function r(e){return(0,n.jsx)(t,{...e})}export{r as RunsColumnChooserRuntime};

@@ -1,8 +1,7 @@
 """Before/after tests for parallel metric execution (Fix #2).
 
-Each test runs the SAME workload through both the old sequential path
-and the new gather-based path, comparing wall-clock ratios to prove
-the fix improved throughput without relying on absolute thresholds.
+Compare the old sequential path with the gather-based path. Concurrency is
+asserted directly; wall-clock measurements remain diagnostic benchmarks.
 """
 
 import asyncio
@@ -73,10 +72,20 @@ async def _run_metrics_sequentially(evaluator, output, expected_output, item_inp
 class TestParallelMetrics:
 
     @pytest.mark.asyncio
-    async def test_three_async_metrics_sequential_vs_parallel(self):
-        """Three 0.5s async metrics: parallel must be >1.5x faster than sequential."""
+    async def test_three_async_metrics_sequential_vs_parallel(self, record_property):
+        """All three metrics must start before any may finish."""
+
+        parallel_phase = False
+        started = 0
+        all_started = asyncio.Event()
 
         async def slow_metric(output, expected):
+            nonlocal started
+            if parallel_phase:
+                started += 1
+                if started == 3:
+                    all_started.set()
+                await all_started.wait()
             await asyncio.sleep(0.5)
             return 1.0
 
@@ -93,21 +102,25 @@ class TestParallelMetrics:
         sequential_time = time.monotonic() - t0
 
         # NEW path — parallel via _evaluate_item's gather
+        parallel_phase = True
         t0 = time.monotonic()
-        result = await evaluator._evaluate_item(0, item, tracker)
+        # A serial implementation cannot release the barrier. The timeout is
+        # only a deadlock guard, independent of the benchmark's speed ratio.
+        result = await asyncio.wait_for(evaluator._evaluate_item(0, item, tracker), 10)
         parallel_time = time.monotonic() - t0
+        assert started == 3 and all_started.is_set()
 
         # Correctness: both paths produce the same scores
         assert set(seq_scores.keys()) == set(result["scores"].keys())
         for k in seq_scores:
             assert seq_scores[k] == result["scores"][k]
 
-        # Performance: parallel must be meaningfully faster (ratio-based)
+        # Runner load and task setup can dominate a short wall-clock sample.
+        # Keep the benchmark in test reports, but gate on actual concurrency.
         speedup = sequential_time / parallel_time
-        assert speedup > 1.5, (
-            f"Speedup only {speedup:.2f}x (sequential={sequential_time:.2f}s, "
-            f"parallel={parallel_time:.2f}s) — expected >1.5x for 3 concurrent metrics"
-        )
+        record_property("sequential_seconds", sequential_time)
+        record_property("parallel_seconds", parallel_time)
+        record_property("speedup", speedup)
 
     @pytest.mark.asyncio
     async def test_mixed_async_sync_metrics_produce_same_scores(self):
@@ -211,8 +224,8 @@ class TestParallelMetrics:
 
         assert result["success"] is True
         assert len(result["scores"]) == 6
-        assert peak_concurrent <= 2, (
-            f"Peak concurrency was {peak_concurrent} — semaphore should cap at 2"
+        assert peak_concurrent == 2, (
+            f"Peak concurrency was {peak_concurrent} — expected two concurrent metrics"
         )
 
 

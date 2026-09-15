@@ -88,9 +88,19 @@ from qym_platform.services.llm_analyzer import (
     MAX_RULE_WRITER_EXAMPLE_CHARS,
     MAX_RULE_WRITER_PROMPT_CHARS,
 )
+from qym_platform.services.approved_categories import (
+    category_catalog_hash as _category_catalog_hash, publish_approved_categories,
+)
 from qym_platform.services.issue_reviews import (
     change_metric_issue, correction_issue_id, correction_issues, issue_content,
-    sync_correction_issue_metadata, lock_issue_correction,
+    sync_correction_issue_metadata, lock_issue_correction, lock_correction_pass,
+    sync_issue_candidates,
+)
+from qym_platform.services.repeat_passes import (
+    RepeatPassDeletionError,
+    has_repeat_pass_context,
+    lock_repeat_run,
+    pass_revision_matches,
 )
 from qym_platform.services.root_cause_changes import (
     PASS_ANALYSIS_META_KEY,
@@ -923,6 +933,7 @@ class AnalyzeRequest(BaseModel):
     config: Optional[PlaygroundConfig] = None
     category_catalog_version_id: Optional[str] = Field(default=None, max_length=80)
     pass_number: Optional[int] = Field(default=None, ge=1)
+    expected_pass_version: Optional[int] = Field(default=None, ge=0, strict=True)
     connection_id: Optional[str] = (
         None  # which project LLM connection to use; default if omitted
     )
@@ -934,6 +945,7 @@ class AggregateAnalysisRequest(BaseModel):
     metric: Optional[str] = None
     category_catalog_version_id: Optional[str] = Field(default=None, max_length=80)
     pass_number: Optional[int] = Field(default=None, ge=1)
+    expected_pass_version: Optional[int] = Field(default=None, ge=0, strict=True)
     connection_id: Optional[str] = None
 
 
@@ -945,6 +957,7 @@ class PreviewRequest(BaseModel):
     config: Optional[PlaygroundConfig] = None
     category_catalog_version_id: Optional[str] = Field(default=None, max_length=80)
     pass_number: Optional[int] = Field(default=None, ge=1)
+    expected_pass_version: Optional[int] = Field(default=None, ge=0, strict=True)
     connection_id: Optional[str] = None
 
 
@@ -956,6 +969,7 @@ class TestRequest(BaseModel):
     config: Optional[PlaygroundConfig] = None
     category_catalog_version_id: Optional[str] = Field(default=None, max_length=80)
     pass_number: Optional[int] = Field(default=None, ge=1)
+    expected_pass_version: Optional[int] = Field(default=None, ge=0, strict=True)
     connection_id: Optional[str] = None
 
 
@@ -1286,7 +1300,7 @@ def _load_run_items_and_scores(
         return all_items, scores_by_item
 
     run_samples = int(getattr(run, "samples", 1) or 1)
-    if run_samples <= 1 or pass_number > run_samples:
+    if not has_repeat_pass_context(run) or pass_number < 1 or pass_number > run_samples:
         raise HTTPException(status_code=400, detail="pass_number is outside this run")
 
     pass_scores = (
@@ -1426,13 +1440,31 @@ def _load_run_items_and_scores(
 def _require_selected_pass_for_repeat_run(run: Run, pass_number: int | None) -> None:
     """Keep all analyzer writes scoped to one sample on repeat runs."""
     samples = int(getattr(run, "samples", 1) or 1)
-    if samples > 1 and pass_number is None:
+    if has_repeat_pass_context(run) and pass_number is None:
         raise HTTPException(
             status_code=400,
             detail="Select a sample before running analysis for a repeat run",
         )
-    if pass_number is not None and (samples <= 1 or pass_number > samples):
+    if pass_number is not None and (not has_repeat_pass_context(run) or pass_number < 1 or pass_number > samples):
         raise HTTPException(status_code=400, detail="pass_number is outside this run")
+
+
+def _check_pass_version(db: Session, run: Run, selected_pass: int | None,
+                        expected: int | None, *, lock: bool = False) -> None:
+    if selected_pass is None:
+        return
+    try:
+        selected_pass = int(selected_pass)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(400, "Invalid pass_number") from exc
+    if lock:
+        try:
+            run = lock_repeat_run(db, run.id)
+        except RepeatPassDeletionError as exc:
+            raise HTTPException(exc.status_code, exc.detail) from exc
+    if not pass_revision_matches(run, expected):
+        raise HTTPException(409, "Pass numbers changed. Reload before editing this pass.")
+    _require_selected_pass_for_repeat_run(run, selected_pass)
 
 
 def _ordered_unique(values: List[str]) -> List[str]:
@@ -1768,32 +1800,6 @@ def _catalog_entries_for_categories(
         }
     result.extend(archived.values())
     return result
-
-
-def _category_catalog_hash(
-    *,
-    categories: list[str],
-    category_entries: list[dict[str, str]],
-    category_details_map: dict[str, list[str]],
-    category_taxonomy: dict[str, dict[str, str]],
-    max_root_cause_categories: int,
-    subcategory_taxonomy: dict[str, dict[str, dict[str, str]]] | None = None,
-) -> str:
-    payload = {
-        "categories": categories,
-        "category_entries": category_entries,
-        "category_details_map": category_details_map,
-        "category_taxonomy": category_taxonomy,
-        "max_root_cause_categories": max_root_cause_categories,
-    }
-    # Empty maps are omitted to preserve hashes created before this field.
-    if subcategory_taxonomy:
-        payload["subcategory_taxonomy"] = subcategory_taxonomy
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
-            "utf-8"
-        )
-    ).hexdigest()
 
 
 def _synthetic_category_catalog(
@@ -2393,13 +2399,15 @@ def _is_protected_pass_analysis(analysis: dict[str, Any]) -> bool:
     source = str(
         analysis.get("source") or analysis.get("root_cause_source") or ""
     ).strip().lower()
-    review_status = str(analysis.get("review_status") or "").strip().lower()
-    return source == "human" or review_status == "approved"
+    return source == "human" or _is_approved_analysis(analysis)
 
 
 def _is_approved_analysis(analysis: dict[str, Any]) -> bool:
     """Return whether an analysis carries an explicit approval marker."""
-    return str(analysis.get("review_status") or "").strip().lower() == "approved"
+    return str(analysis.get("review_status") or "").strip().lower() == "approved" or any(
+        issue.get("review_status") == "approved"
+        for issue in analysis_root_cause_issues(analysis)
+    )
 
 
 def _active_approved_review_keys(
@@ -2421,6 +2429,7 @@ def _active_approved_review_keys(
             ReviewCorrection.item_id.in_(normalized_item_ids),
             ReviewCorrection.status == CorrectionStatus.APPROVED,
             ReviewCorrection.is_active.is_(True),
+            ReviewCorrection.pass_number.is_(None),
         )
         .all()
     )
@@ -2689,6 +2698,7 @@ def _persist_aggregated_bindings(
             ReviewCorrection.item_id.in_(changed_item_ids),
             ReviewCorrection.metric_name.in_(changed_metric_names),
             ReviewCorrection.is_active.is_(True),
+            ReviewCorrection.pass_number.is_(None),
         )
         .all()
         if changed_item_ids and changed_metric_names
@@ -2801,6 +2811,7 @@ async def _aggregate_pass_analysis_results(
     model: str,
     analyzer_config: dict[str, Any] | None,
     metric_scope: set[str] | None = None,
+    expected_pass_version: int | None = None,
 ) -> tuple[dict[str, int], int]:
     """Canonicalize saved diagnoses for one pass without touching the run row."""
     pass_scores = (
@@ -2932,12 +2943,20 @@ async def _aggregate_pass_analysis_results(
     if not changed_bindings:
         return categories, 0
 
+    _check_pass_version(db, run, pass_number, expected_pass_version, lock=True)
+    # Approval may have committed while the LLM was working. Follow the review
+    # lock order and reload score metadata before deciding what can be changed.
+    item_ids = sorted({binding.score.item_id for binding in changed_bindings})
+    db.query(RunItem).filter(
+        RunItem.run_id == run.id, RunItem.item_id.in_(item_ids)
+    ).order_by(RunItem.item_id).populate_existing().with_for_update().all()
     locked_scores = (
         db.query(RunItemPassScore)
         .filter(
             RunItemPassScore.run_id == run.id,
             RunItemPassScore.pass_number == pass_number,
         )
+        .populate_existing()
         .with_for_update()
         .all()
     )
@@ -3223,6 +3242,7 @@ def _save_analysis_results(
             ReviewCorrection.run_id == run.id,
             ReviewCorrection.item_id.in_(target_item_ids),
             ReviewCorrection.is_active.is_(True),
+            ReviewCorrection.pass_number.is_(None),
         )
         .all()
         if target_item_ids
@@ -3477,11 +3497,17 @@ def _save_pass_analysis_results(
     analyzer_rule_version_id: str | None = None,
     category_catalog_version: int | None = None,
     category_catalog_version_id: str | None = None,
+    expected_pass_version: int | None = None,
 ) -> tuple[list[Dict[str, Any]], int]:
     """Persist diagnoses on the selected pass score, never on the aggregate item."""
+    _check_pass_version(db, run, pass_number, expected_pass_version, lock=True)
     response_results: list[Dict[str, Any]] = []
     error_count = 0
     item_ids = sorted({result.item_id for result in results})
+    items = db.query(RunItem).filter(
+        RunItem.run_id == run.id, RunItem.item_id.in_(item_ids),
+    ).order_by(RunItem.item_id).populate_existing().with_for_update().all() if item_ids else []
+    items_by_id = {item.item_id: item for item in items}
     score_rows = (
         db.query(RunItemPassScore)
         .filter(
@@ -3489,7 +3515,7 @@ def _save_pass_analysis_results(
             RunItemPassScore.pass_number == pass_number,
             RunItemPassScore.item_id.in_(item_ids),
         )
-        .with_for_update()
+        .populate_existing().with_for_update()
         .all()
         if item_ids
         else []
@@ -3497,6 +3523,21 @@ def _save_pass_analysis_results(
     scores_by_key = {
         (score.item_id, score.metric_name): score for score in score_rows
     }
+    review_rows = (
+        db.query(ReviewCorrection)
+        .filter(
+            ReviewCorrection.run_id == run.id,
+            ReviewCorrection.item_id.in_(item_ids),
+            ReviewCorrection.pass_number == pass_number,
+            ReviewCorrection.is_active.is_(True),
+        )
+        .populate_existing()
+        .all()
+        if item_ids else []
+    )
+    reviews_by_key: dict[tuple[str, str], list[ReviewCorrection]] = {}
+    for candidate in review_rows:
+        reviews_by_key.setdefault((candidate.item_id, candidate.metric_name), []).append(candidate)
 
     for result in results:
         payload = _analysis_result_payload(result)
@@ -3577,10 +3618,20 @@ def _save_pass_analysis_results(
                 "analyzed_at": to_api_timestamp(utc_now_naive()),
             }
         if not result.error:
-            # Repeat-run diagnoses are reviewed independently per pass.  A
-            # fresh AI result is therefore a new pending review candidate,
-            # even when an earlier analysis for this pass was approved.
+            # Approved passes were protected above. A replacement for an
+            # unapproved diagnosis starts pending on this pass.
             analysis["review_status"] = "pending"
+        item = items_by_id.get(result.item_id)
+        if item is not None:
+            # Only reconcile existing reviews here. Fresh AI analyses remain
+            # legacy-compatible until a reviewer first opens an issue.
+            existing = reviews_by_key.get((item.item_id, result.metric_name), [])
+            if existing:
+                sync_issue_candidates(
+                    db, run=run, item=item, metric_name=result.metric_name,
+                    analysis=analysis, actor_user_id=None, actor_source="ai",
+                    pass_number=pass_number, active_candidates=existing,
+                )
         score_meta[PASS_ANALYSIS_META_KEY] = analysis
         score.meta = score_meta
         response_results.append(payload)
@@ -3873,6 +3924,7 @@ async def _run_analysis_job(
         if not _can_operate_analyzer(db, principal, run):
             raise RuntimeError("Analysis access is no longer available.")
 
+        _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
         llm_config = _get_llm_config(db, run.project_id, request.connection_id)
         all_items, scores_by_item = _load_run_items_and_scores(
             db, run, request.pass_number
@@ -4097,6 +4149,7 @@ async def _run_analysis_job(
                 run,
                 results,
                 request.pass_number,
+                expected_pass_version=request.expected_pass_version,
                 allow_human_overwrite=request.allow_human_overwrite,
                 analyzer_connection_id=llm_config.get("connection_id"),
                 analyzer_rule_version_id=(analyzer_config or {}).get(
@@ -4281,6 +4334,7 @@ async def aggregate_saved_analysis_results(
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
     _require_selected_pass_for_repeat_run(run, request.pass_number)
+    _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
 
     all_items, scores_by_item = _load_run_items_and_scores(
         db, run, request.pass_number
@@ -4307,6 +4361,7 @@ async def aggregate_saved_analysis_results(
                 db=db,
                 run=run,
                 pass_number=request.pass_number,
+                expected_pass_version=request.expected_pass_version,
                 client=build_client(llm_config),
                 model=llm_config.get("llm_model", "gpt-4o-mini"),
                 analyzer_config=analyzer_config,
@@ -4372,6 +4427,7 @@ async def start_analysis_job(
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
     _require_selected_pass_for_repeat_run(run, request.pass_number)
+    _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
 
     # Validate the request before creating a background task so malformed
     # filters and missing connections are reported to the initiating page.
@@ -4501,6 +4557,7 @@ async def analyze_run_items(
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
     _require_selected_pass_for_repeat_run(run, request.pass_number)
+    _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
     llm_config = _get_llm_config(db, run.project_id, request.connection_id)
 
     all_items, scores_by_item = _load_run_items_and_scores(
@@ -4638,6 +4695,7 @@ async def analyze_run_items(
             run,
             results,
             request.pass_number,
+            expected_pass_version=request.expected_pass_version,
             allow_human_overwrite=request.allow_human_overwrite,
             analyzer_connection_id=llm_config.get("connection_id"),
             analyzer_rule_version_id=(analyzer_config or {}).get(
@@ -4696,6 +4754,7 @@ async def analyze_run_items_stream(
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
     _require_selected_pass_for_repeat_run(run, request.pass_number)
+    _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
     llm_config = _get_llm_config(db, run.project_id, request.connection_id)
 
     all_items, scores_by_item = _load_run_items_and_scores(
@@ -4958,6 +5017,7 @@ async def analyze_run_items_stream(
                                 run,
                                 results,
                                 request.pass_number,
+                                expected_pass_version=request.expected_pass_version,
                                 allow_human_overwrite=request.allow_human_overwrite,
                                 analyzer_connection_id=llm_config.get("connection_id"),
                                 analyzer_rule_version_id=(analyzer_config or {}).get(
@@ -5440,6 +5500,7 @@ def _analysis_example_row(
         "id": correction.id,
         "item_id": correction.item_id,
         "metric_name": correction.metric_name,
+        "pass_number": correction.pass_number,
         "task": correction.task,
         "dataset": run.dataset if run else "",
         "model": _strip_model_provider(run.model or "") if run else "",
@@ -6806,6 +6867,7 @@ def analyze_preview(
     if not can_view_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
     _require_selected_pass_for_repeat_run(run, request.pass_number)
+    _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
 
     all_items, scores_by_item = _load_run_items_and_scores(
         db, run, request.pass_number
@@ -6897,6 +6959,7 @@ async def analyze_test(
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
     _require_selected_pass_for_repeat_run(run, request.pass_number)
+    _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
     llm_config = _get_llm_config(db, run.project_id, request.connection_id)
 
     all_items, all_scores_by_item = _load_run_items_and_scores(
@@ -7264,6 +7327,7 @@ def get_analysis_config(
                     "id": correction.id,
                     "item_id": correction.item_id,
                     "metric_name": correction.metric_name,
+                    "pass_number": correction.pass_number,
                     "run_name": _run_display_name(example_run),
                     "dataset": example_run.dataset if example_run else "",
                     "model": (
@@ -7392,6 +7456,8 @@ def _project_category_catalog_scope(
         _project_analysis_scope_key(project_slug),
         modify=modify,
     )
+    if modify:
+        db.query(Project.id).filter(Project.id == scope.project_id).with_for_update().one()
     return scope.project_id, is_project_manager(db, principal, scope.project_id)
 
 
@@ -8090,6 +8156,8 @@ def _serialize_review_fields(
         "run_id": c.run_id,
         "item_id": c.item_id,
         "metric_name": c.metric_name,
+        "pass_number": c.pass_number,
+        "pass_deleted_at": to_api_timestamp(c.pass_deleted_at),
         "issue_id": correction_issue_id(c) or None,
         "task": c.task,
         "dataset": run.dataset if run else "",
@@ -8295,7 +8363,9 @@ def _serialize_correction(
     )
     issue_id = correction_issue_id(c)
     payload["history"] = [entry for entry in (history or [])
-                          if not issue_id or (entry.get("review") or {}).get("issue_id") in (None, issue_id)]
+                          if (entry.get("review") or {}).get("pass_number") == c.pass_number
+                          and (entry.get("review") or {}).get("pass_deleted_at") == to_api_timestamp(c.pass_deleted_at)
+                          and (not issue_id or (entry.get("review") or {}).get("issue_id") in (None, issue_id))]
     return payload
 
 
@@ -8382,6 +8452,7 @@ def _approve_candidate(
             ReviewCorrection.item_id == correction.item_id,
             metric_scope,
             ReviewCorrection.id != correction.id,
+            ReviewCorrection.pass_number == correction.pass_number,
             ReviewCorrection.status == CorrectionStatus.APPROVED,
         )
         .all()
@@ -8398,6 +8469,8 @@ def _approve_candidate(
     correction.reviewed_at = reviewed_at
     correction.review_comment = comment
     sync_correction_issue_metadata(db, correction)
+    run = db.get(Run, correction.run_id)
+    publish_approved_categories(db, run.project_id, [correction], reviewer_id)
 
 
 def _reject_candidate(
@@ -8509,6 +8582,8 @@ def _delete_active_candidate(
     if not item:
         raise HTTPException(status_code=404, detail="Run item not found")
     item = lock_run_item(db, run=run, item=item)
+    db.refresh(correction)
+    _require_active_candidate(correction)
 
     if correction_issue_id(correction):
         sync_correction_issue_metadata(db, correction, remove=True)
@@ -8954,20 +9029,30 @@ def update_correction(
                                   ("root_cause_note", "finding"), ("solution", "solution"), ("solution_note", "solution_note")):
             if field in patch:
                 content[target_key] = str(patch[field] or "")
-        meta = dict(item.item_metadata or {})
+        db.refresh(c)
+        _require_active_candidate(c)
+        pass_score = lock_correction_pass(db, c) if c.pass_number is not None else None
+        meta = dict(pass_score.meta or {}) if pass_score is not None else dict(item.item_metadata or {})
         analyses = dict(meta.get("metric_analyses") or {})
-        analyses[c.metric_name] = change_metric_issue(
+        analysis = change_metric_issue(
             db, run=run, item=item, metric_name=c.metric_name,
-            analysis=analyses.get(c.metric_name) or {},
+            analysis=(meta.get(PASS_ANALYSIS_META_KEY) if pass_score is not None else analyses.get(c.metric_name)) or {},
             request={"action": "edit", "issue_id": correction_issue_id(c), "expected_issue": current, "issue": content},
             actor_user_id=principal.user.id if principal.auth_type != "none" else None,
+            pass_number=c.pass_number,
         )
-        meta["metric_analyses"] = analyses
-        item.item_metadata = meta
+        if pass_score is not None:
+            meta[PASS_ANALYSIS_META_KEY] = analysis
+            pass_score.meta = meta
+        else:
+            analyses[c.metric_name] = analysis
+            meta["metric_analyses"] = analyses
+            item.item_metadata = meta
         db.commit()
         targets = db.query(ReviewCorrection).filter(
             ReviewCorrection.run_id == run.id, ReviewCorrection.item_id == item.item_id,
             ReviewCorrection.metric_name == c.metric_name, ReviewCorrection.is_active.is_(True),
+            ReviewCorrection.pass_number == c.pass_number,
         ).all()
         target = next((row for row in targets if correction_issue_id(row) == correction_issue_id(c)), c)
         return _serialize_corrections_with_history(db, [target])[0]
@@ -9084,6 +9169,7 @@ def approve_correction(
             .filter(
                 ReviewCorrection.run_id == correction.run_id,
                 ReviewCorrection.item_id == correction.item_id,
+                ReviewCorrection.pass_number == correction.pass_number,
                 metric_scope,
                 ReviewCorrection.is_active.is_(True),
             )
@@ -9125,6 +9211,9 @@ def approve_metric_analysis(
     run = Run.active(db).filter(Run.id == run_id).first()
     if not run or not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    _check_pass_version(db, run, request.get("pass_number"),
+                        request.get("expected_pass_version"), lock=True)
+
     item = (
         db.query(RunItem)
         .filter(RunItem.run_id == run.id, RunItem.item_id == item_id)
@@ -9145,7 +9234,7 @@ def approve_metric_analysis(
         except (TypeError, ValueError) as exc:
             raise HTTPException(status_code=400, detail="Invalid pass_number") from exc
         samples = int(getattr(run, "samples", 1) or 1)
-        if samples <= 1 or pass_number < 1 or pass_number > samples:
+        if not has_repeat_pass_context(run) or pass_number < 1 or pass_number > samples:
             raise HTTPException(status_code=400, detail="pass_number is outside this run")
 
         pass_score = (
@@ -9172,15 +9261,25 @@ def approve_metric_analysis(
         ):
             raise HTTPException(status_code=404, detail="Metric analysis not found")
 
-        reviewed_at = utc_now_naive()
         analysis = dict(analysis)
-        analysis["review_status"] = "approved"
-        analysis["reviewed_at"] = to_api_timestamp(reviewed_at)
+        reviewer_id = principal.user.id if principal.auth_type != "none" else None
+        candidates = sync_issue_candidates(
+            db, run=run, item=item, metric_name=metric_name, analysis=analysis,
+            actor_user_id=reviewer_id, actor_source=str(analysis.get("source") or "ai"),
+            pass_number=pass_number,
+        )
         pass_meta[PASS_ANALYSIS_META_KEY] = analysis
         pass_score.meta = pass_meta
+        db.flush()
+        for candidate in candidates:
+            _approve_candidate(
+                db, correction=candidate, reviewer_id=reviewer_id,
+                comment=str(request.get("comment") or "").strip(), reviewed_at=utc_now_naive(),
+            )
+            db.flush()
         db.commit()
         return {
-            "id": None,
+            "id": candidates[0].id if candidates else None,
             "status": "approved",
             "pass_number": pass_number,
         }
@@ -9205,6 +9304,7 @@ def approve_metric_analysis(
             ReviewCorrection.run_id == run.id,
             ReviewCorrection.item_id == item.item_id,
             ReviewCorrection.metric_name == metric_name,
+            ReviewCorrection.pass_number.is_(None),
             ReviewCorrection.is_active.is_(True),
         )
         .order_by(ReviewCorrection.created_at.desc(), ReviewCorrection.id.desc())
@@ -9341,6 +9441,11 @@ def bulk_correction_action(
     # Match issue edit lock order for multi-item review actions.
     for candidate in sorted(corrections, key=lambda row: (row.run_id, row.item_id, row.id)):
         lock_issue_correction(db, candidate)
+    if request.action == "approve":
+        # Bulk requests can span projects. Acquire catalog locks in a stable
+        # order before publishing any category versions.
+        for project_id in sorted({run.project_id for run in runs_by_id.values()}):
+            db.query(Project.id).filter(Project.id == project_id).with_for_update().one()
     for c in corrections:
         if request.action == "approve":
             _approve_candidate(
@@ -9377,6 +9482,10 @@ def bulk_correction_action(
                 reviewed_at=now,
             )
             affected += 1
+
+        # The next candidate reloads its item/pass under a lock. Preserve
+        # earlier changes to the same JSON metadata before that reload.
+        db.flush()
 
     db.commit()
     return {"ok": True, "affected": affected}

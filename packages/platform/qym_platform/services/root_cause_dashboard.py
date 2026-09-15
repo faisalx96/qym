@@ -212,6 +212,7 @@ def _latest_review_statuses(
         .filter(
             ReviewCorrection.run_id.in_(run_ids),
             ReviewCorrection.is_active.is_(True),
+            ReviewCorrection.pass_number.is_(None),
         )
         .order_by(ReviewCorrection.created_at.desc(), ReviewCorrection.id.desc())
         .all()

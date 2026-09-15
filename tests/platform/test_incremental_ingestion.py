@@ -8,7 +8,7 @@ import json
 import os
 import random
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from uuid import uuid4
 
 import pytest
@@ -34,6 +34,7 @@ from qym_platform.db.models import (
     RunTraceContribution,
     RunTraceSummary,
     RunWorkflowStatus,
+    AuditLog,
     Span,
     User,
     UserRole,
@@ -115,9 +116,120 @@ def _apply(db, run, principal, events):
     return json.loads(ingest._ingest_events_sync(run.id, body, db, principal).body)
 
 
+@pytest.mark.parametrize("first", ["stop", "item", "completion"])
+def test_force_stop_serializes_with_ingestion(database, first):
+    from qym_platform.api.runs import force_stop_run
+
+    engine, db, run, _ = database
+    if engine.dialect.name != "postgresql":
+        pytest.skip("Requires independent transactions and PostgreSQL row locks")
+    run_id = run.id
+    kind = "run_completed" if first == "completion" else "item_completed"
+    payload = (
+        {"ended_at": "2026-09-14T00:00:00Z", "final_status": "COMPLETED", "summary": {}}
+        if kind == "run_completed"
+        else {"item_id": "saved", "output": "keep", "latency_ms": 1}
+    )
+    body = json.dumps(_event(run, 1, kind, payload)).encode()
+    db.commit()
+    locked, release, second_started = (
+        threading.Event(),
+        threading.Event(),
+        threading.Event(),
+    )
+
+    def execute(action, hold=False):
+        with Session(engine, autoflush=False) as session:
+            if hold:
+
+                def before_commit(_session):
+                    locked.set()
+                    assert release.wait(5)
+
+                event.listen(session, "before_commit", before_commit, once=True)
+            else:
+                second_started.set()
+            principal = Principal(
+                user=User(id="owner", role=UserRole.ADMIN),
+                auth_type="api_key" if action == "ingest" else "proxy_headers",
+                project_id="project",
+                scopes=("runs:write",),
+            )
+            try:
+                if action == "stop":
+                    return 200, force_stop_run(run_id, session, principal)
+                result = ingest._ingest_events_sync(run_id, body, session, principal)
+                return result.status_code, json.loads(result.body)
+            except HTTPException as exc:
+                return exc.status_code, {}
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first_action = "stop" if first == "stop" else "ingest"
+        second_action = "ingest" if first == "stop" else "stop"
+        first_future = pool.submit(execute, first_action, True)
+        try:
+            assert locked.wait(5)
+            second_future = pool.submit(execute, second_action)
+            assert second_started.wait(2)
+            with pytest.raises(FutureTimeout):
+                second_future.result(timeout=0.1)
+        finally:
+            release.set()
+        assert first_future.result(timeout=5)[0] == 200
+        second_code, _ = second_future.result(timeout=5)
+    assert second_code == {"stop": 410, "item": 200, "completion": 409}[first]
+    with Session(engine) as check:
+        current = check.get(Run, run_id)
+        if first == "completion":
+            assert current.status == RunWorkflowStatus.COMPLETED
+            assert (
+                check.query(AuditLog).filter_by(action="run.force_stopped").count() == 0
+            )
+        else:
+            assert current.status_reason == "admin_force_stopped"
+            assert current.status == RunWorkflowStatus.STOPPED
+            assert check.query(RunItem).count() == (1 if first == "item" else 0)
+            assert check.query(RunEvent).count() == (1 if first == "item" else 0)
+            assert execute("ingest")[0] == 410  # Includes a duplicate retry.
+
+
+def test_concurrent_force_stops_record_one_decision(database):
+    from qym_platform.api.runs import force_stop_run
+
+    engine, db, run, _ = database
+    if engine.dialect.name != "postgresql":
+        pytest.skip("Requires independent transactions and PostgreSQL row locks")
+    run_id = run.id
+    db.commit()
+    barrier = threading.Barrier(2)
+
+    def stop():
+        with Session(engine) as session:
+            barrier.wait(timeout=5)
+            return force_stop_run(
+                run_id,
+                session,
+                Principal(
+                    user=User(id="owner", role=UserRole.ADMIN),
+                    auth_type="proxy_headers",
+                ),
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = [
+            future.result(timeout=5)
+            for future in [pool.submit(stop), pool.submit(stop)]
+        ]
+    assert sorted(result["stopped"] for result in results) == [False, True]
+    assert results[0]["ended_at"] == results[1]["ended_at"]
+    with Session(engine) as check:
+        assert check.query(AuditLog).filter_by(action="run.force_stopped").count() == 1
+
+
 def _canonical(db, run):
     buckets = ingest._build_trace_buckets_from_spans(
-        db.query(Span).filter_by(run_id=run.id).all()
+        # Arrival order, like the service: named outer-scope order is position-sensitive.
+        db.query(Span).filter_by(run_id=run.id).order_by(Span.id).all()
     )
     included = []
     for item in db.query(RunItem).filter_by(run_id=run.id).order_by(RunItem.id):
@@ -250,9 +362,11 @@ def test_duplicate_events_and_span_identities_do_not_double_apply(database):
     snapshot = copy.deepcopy(run.run_metadata)
     assert _apply(db, run, principal, events)["skipped"] == 2
     second_span = _event(run, 3, "span_completed", events[1]["payload"])
-    _apply(db, run, principal, [second_span])
+    assert _apply(db, run, principal, [second_span])["skipped"] == 1
     assert db.query(Span).count() == 1
-    assert db.query(RunEvent).count() == 3
+    # Spans are stored once, in ``spans``; run_events keeps only structural history.
+    assert db.query(RunEvent).count() == 1
+    assert db.query(RunEvent).filter(RunEvent.type == "span_completed").count() == 0
     assert run.run_metadata == snapshot
 
 
@@ -596,7 +710,7 @@ def test_postgres_concurrent_identical_batches_apply_once(database):
         results = [future.result(timeout=10) for future in futures]
     db.expire_all()
     assert sorted(result["applied"] for result in results) == [0, 2]
-    assert db.query(RunEvent).count() == 2
+    assert db.query(RunEvent).count() == 1
     assert db.query(Span).count() == 1
     assert run.run_metadata["trace_stats"]["avg_tokens"] == 10
 

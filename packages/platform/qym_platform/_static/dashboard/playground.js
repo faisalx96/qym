@@ -524,10 +524,7 @@ window.QymPlayground = (function () {
       body.metric = null;
       body.metrics = _getSelectedMetrics();
     }
-    if (_opts.getPassNumber) {
-      var passNumber = _opts.getPassNumber();
-      if (passNumber != null) body.pass_number = Number(passNumber);
-    }
+    _addPassContext(body);
 
     _running = true;
     _analysisCancelRequested = false;
@@ -834,7 +831,7 @@ window.QymPlayground = (function () {
       return '<div class="pg-category-examples-empty">No approved examples in this category yet.</div>';
     }
     return '<div class="pg-category-example-list">' + rows.map(function (example) {
-      var meta = [example.metric_name, example.run_name].filter(Boolean).join(' \u00b7 ');
+      var meta = [example.metric_name, example.pass_number != null ? 'Pass ' + example.pass_number : '', example.run_name].filter(Boolean).join(' \u00b7 ');
       return '<details class="pg-category-example">' +
         '<summary class="pg-category-example-summary">' +
           '<span class="pg-category-example-title">Item ' + _esc(example.item_id || '\u2014') + '</span>' +
@@ -2623,7 +2620,7 @@ window.QymPlayground = (function () {
         '<span class="pg-document-check" aria-hidden="true"></span></label></div>' +
       '<div class="pg-example-picker-main" role="cell"><strong>#' + _esc(id) + ' · ' + _esc(example.item_id || 'item') + '</strong><span>' + _esc(categories || example.detail || 'Approved correction') + '</span></div>' +
       '<div class="pg-example-picker-context" role="cell"><span>' + _esc(example.task || '—') + '</span><span>' + _esc(example.dataset || '—') + ' · ' + _esc(example.model || '—') + '</span></div>' +
-      '<div class="pg-example-picker-user" role="cell"><span>' + _esc(userText) + '</span><span>' + _esc(example.run_name || '—') + '</span></div>' +
+      '<div class="pg-example-picker-user" role="cell"><span>' + _esc(userText) + '</span><span>' + _esc([example.run_name, example.pass_number != null ? 'Pass ' + example.pass_number : ''].filter(Boolean).join(' · ') || '—') + '</span></div>' +
       '<div class="pg-example-picker-confidence-value" role="cell">' + _esc(confidence) + '</div>' +
       '<div class="pg-example-picker-source-value" role="cell"><span class="qym-tag qym-tag--' + sourceTone + '">' + _esc(source) + '</span></div>' +
       '<div class="pg-example-picker-size" role="cell">' + Number(example.source_characters || 0).toLocaleString() + ' chars</div>' +
@@ -5809,6 +5806,15 @@ window.QymPlayground = (function () {
 
   // ── Auto Preview (debounced) ──
 
+  function _addPassContext(body) {
+    var passNumber = _opts.getPassNumber ? _opts.getPassNumber() : null;
+    if (passNumber != null) {
+      body.pass_number = Number(passNumber);
+      body.expected_pass_version = Number(_opts.getPassVersion ? _opts.getPassVersion() : 0);
+    }
+    return body;
+  }
+
   function _scheduleAutoPreview(delayMs) {
     if (_previewTimer) clearTimeout(_previewTimer);
     _previewTimer = setTimeout(_autoPreview, delayMs || 500);
@@ -5850,7 +5856,7 @@ window.QymPlayground = (function () {
       fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_id: itemId, metric: metricName || null, config: cfg, connection_id: _connectionId, pass_number: _opts.getPassNumber ? _opts.getPassNumber() : null }),
+        body: JSON.stringify(_addPassContext({ item_id: itemId, metric: metricName || null, config: cfg, connection_id: _connectionId })),
       })
       .then(function (r) {
         if (!r.ok) {
@@ -5936,7 +5942,7 @@ window.QymPlayground = (function () {
     fetch(base('api/runs/' + runId + '/analyze-test'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item_ids: [testTarget.item_id], metric: testTarget.metric_name || null, config: cfg, connection_id: _connectionId, pass_number: _opts.getPassNumber ? _opts.getPassNumber() : null }),
+      body: JSON.stringify(_addPassContext({ item_ids: [testTarget.item_id], metric: testTarget.metric_name || null, config: cfg, connection_id: _connectionId })),
     })
     .then(function (r) {
       if (!r.ok) return r.json().then(function (d) { throw new Error(d.detail || 'Test failed'); });

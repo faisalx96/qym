@@ -1,0 +1,21 @@
+# Retain raw runs locally. Commit the final evidence and reproducible checks.
+*
+!.gitignore
+!results.json
+!python-3.9-coverage.json
+!python-3.9-final.xml
+!python-3.11-coverage.json
+!python-3.11-final.xml
+!python-3.12-coverage.json
+!python-3.12-final.xml
+!original-checkout.json
+!wheel-assets.json
+!dashboard-public.jsonl
+!native-wheel-runtime.json
+!native-postgres.md
+!storage-release-smoke.md
+!docker-backend-stall.md
+!merge_junit.py
+!live_results.py
+!check_wheel_assets.py
+!check_native_wheel_runtime.py

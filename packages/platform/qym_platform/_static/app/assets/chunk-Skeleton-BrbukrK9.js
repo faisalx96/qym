@@ -1,0 +1,1 @@
+import{a as e,n as t}from"./chunk-Icon--kDOIs7m.js";var n={skeleton:`_skeleton_3bxts_1`,"qym-skeleton-sweep":`_qym-skeleton-sweep_3bxts_1`,line:`_line_3bxts_17`,block:`_block_3bxts_22`,circle:`_circle_3bxts_27`},r=e();function i({"aria-hidden":e=!0,className:i,shape:a=`block`,...o}){return(0,r.jsx)(`div`,{...o,"aria-hidden":e,className:t(n.skeleton,n[a],i)})}export{i as t};

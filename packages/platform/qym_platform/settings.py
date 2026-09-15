@@ -36,6 +36,19 @@ class PlatformSettings(BaseSettings):
 
     # Database (required - no SQLite fallback)
     database_url: str = Field(description="PostgreSQL connection string (required)")
+    # Connection pool (PostgreSQL only). API: request handlers; worker: background loops.
+    db_pool_size: int = Field(default=10, ge=1)
+    db_max_overflow: int = Field(default=10, ge=0)
+    db_worker_pool_size: int = Field(default=3, ge=1)
+    db_worker_max_overflow: int = Field(default=2, ge=0)
+    db_pool_timeout_seconds: int = Field(default=10, ge=1)
+    db_pool_recycle_seconds: int = Field(default=1800, ge=60)
+    # Server-side guards (ms). A runaway statement or lock wait fails fast
+    # instead of holding a pooled connection for minutes.
+    db_statement_timeout_ms: int = Field(default=30_000, ge=1000)
+    db_worker_statement_timeout_ms: int = Field(default=300_000, ge=1000)
+    db_lock_timeout_ms: int = Field(default=5_000, ge=100)
+    db_idle_in_transaction_timeout_ms: int = Field(default=60_000, ge=1000)
 
     # Secrets
     llm_config_encryption_key: str = Field(default="")
@@ -54,6 +67,35 @@ class PlatformSettings(BaseSettings):
 
     # Storage (raw artifacts)
     artifact_store_path: str = Field(default="./artifacts")
+
+    # Process role: "all" runs the API and the background summary worker in one
+    # process (single-container default); "api" serves requests only; "worker"
+    # runs only the background loop (separate Deployment/pod).
+    role: str = Field(default="all", pattern="^(all|api|worker)$")
+
+    # Observability
+    request_timing: bool = Field(
+        default=False,
+        description="Emit Server-Timing headers and per-request timing logs",
+    )
+    request_timing_slow_ms: float = Field(default=1000.0, ge=0)
+
+    # Maintenance window: ingest answers 503 + Retry-After (SDKs buffer and
+    # retry), the UI stays readable, admin endpoints keep working.
+    maintenance_mode: bool = Field(default=False)
+    # Retention (days). 0 disables. Derived tables are never pruned.
+    span_retention_days: int = Field(default=60, ge=0)
+    deleted_run_grace_days: int = Field(default=30, ge=0)
+
+    # Ingest storage policy
+    # Spans are stored in full. The ceiling only guards against a runaway
+    # payload (a single span above it keeps its scalar attributes and is
+    # marked ``qym.span_oversized``) so one bad client cannot wedge ingest.
+    span_max_bytes: int = Field(default=1_048_576, ge=65_536)
+    # "full" keeps every event payload verbatim in run_events (legacy);
+    # "structural" drops item/metric bodies that already live in run_items,
+    # run_item_attempts and run_item_scores, keeping ids, numbers and status.
+    event_log_mode: str = Field(default="full", pattern="^(full|structural)$")
 
     # Run lifecycle
     run_stale_timeout_seconds: int = Field(default=60, ge=5)

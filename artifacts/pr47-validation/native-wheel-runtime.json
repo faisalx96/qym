@@ -1,0 +1,100 @@
+{
+  "source_commit": "bded819a3093fe2a8487dbf597ecdb073eaec5c0",
+  "runtime_python": "Python 3.11.14",
+  "runtime_target": "/tmp/qym-pr47-wheel-runtime-om17jegj",
+  "cwd": "/tmp/qym-pr47-wheel-smoke-cwd-106z15uq",
+  "wheels": {
+    "qym-1.6.0-py3-none-any.whl": "95f7bbed063db98d41086630e3b8225a559afdadb675f69acbcb7084c60ae461",
+    "qym_platform-0.2.6-py3-none-any.whl": "374cf71c80e1db79622bb5fbcb67a0f70353054bd0217135d79243159ed88a3c"
+  },
+  "worker_starts": [
+    {
+      "cycle": 1,
+      "pid": 5257,
+      "job_id": "92463110-df7d-48da-ba0b-87dc9daccbd0",
+      "status": "succeeded",
+      "rows_deleted": 2,
+      "exit_code": 0
+    },
+    {
+      "cycle": 2,
+      "pid": 5264,
+      "job_id": "d4f376c3-b10b-4a34-b855-7148b55a6fe5",
+      "status": "succeeded",
+      "rows_deleted": 2,
+      "exit_code": 0
+    },
+    {
+      "cycle": 3,
+      "pid": 5285,
+      "job_id": "91dec609-9b8f-4e60-a941-4e1f383cb692",
+      "status": "succeeded",
+      "rows_deleted": 2,
+      "exit_code": 0
+    }
+  ],
+  "http": {
+    "/healthz": {
+      "status": 200,
+      "bytes": 49
+    },
+    "/static/run.html": {
+      "status": 200,
+      "bytes": 651602,
+      "matches_installed_wheel": true
+    },
+    "/static/analyzer.html": {
+      "status": 200,
+      "bytes": 252654,
+      "matches_installed_wheel": true
+    },
+    "/static/compare.html": {
+      "status": 200,
+      "bytes": 616008,
+      "matches_installed_wheel": true
+    },
+    "/static/dashboard.css": {
+      "status": 200,
+      "bytes": 275422,
+      "matches_installed_wheel": true
+    },
+    "/static/dashboard.js": {
+      "status": 200,
+      "bytes": 352021,
+      "matches_installed_wheel": true
+    },
+    "/static/shell.js": {
+      "status": 200,
+      "bytes": 75207,
+      "matches_installed_wheel": true
+    },
+    "/ui/app.js": {
+      "status": 200,
+      "bytes": 49246,
+      "matches_installed_wheel": true
+    },
+    "/api/admin/maintenance": {
+      "status": 200,
+      "bytes": 16801
+    }
+  },
+  "migration_head": "0057",
+  "import_paths": {
+    "qym": "/private/tmp/qym-pr47-wheel-runtime-om17jegj/qym/__init__.py",
+    "qym_platform": "/private/tmp/qym-pr47-wheel-runtime-om17jegj/qym_platform/__init__.py",
+    "qym_platform.worker": "/private/tmp/qym-pr47-wheel-runtime-om17jegj/qym_platform/worker.py",
+    "qym_platform.services.maintenance": "/private/tmp/qym-pr47-wheel-runtime-om17jegj/qym_platform/services/maintenance.py"
+  },
+  "postgres_version": "PostgreSQL 16.15 on aarch64-apple-darwin24.3.0, compiled by Apple clang version 17.0.0 (clang-1700.0.13.5), 64-bit",
+  "maintenance_ingest": {
+    "status": 503,
+    "retry_after": "60",
+    "body": "{\"detail\":\"Platform is in maintenance mode; retry later\"}"
+  },
+  "api_exit_code": -15,
+  "api_graceful_shutdown": true,
+  "status": "passed",
+  "processes_stopped": true,
+  "api_port_released": true,
+  "remaining_smoke_database_connections": 0
+}

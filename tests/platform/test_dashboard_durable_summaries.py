@@ -831,10 +831,19 @@ def test_migration_frozen_schema_and_existing_history_seed(database):
         run(db)
         item(db)
         db.commit()
+    # 0056 adds a column to a table 0048 owns; replay it so the rebuilt schema is current.
+    later = importlib.util.spec_from_file_location(
+        "dashboard_hidden_at",
+        path.parent / "0056_dimension_hidden_at.py",
+    )
+    later_migration = importlib.util.module_from_spec(later)
+    later.loader.exec_module(later_migration)
     with database.begin() as connection:
         migration.op = Operations(MigrationContext.configure(connection))
         migration.downgrade()
         migration.upgrade()
+        later_migration.op = migration.op
+        later_migration.upgrade()
     with Session(database) as db:
         assert db.get(Partition, "r").queue_state == "backfill"
         assert not db.get(Partition, "r").backfill_complete
@@ -1008,7 +1017,9 @@ def test_new_terminal_backfill_waits_until_consistent_publication(database):
         service.backfill_partition(db, "r", chunk_size=3)
         service.process_partition(db, "r", max_events=1)
         db.commit()
-        assert db.get(Dimension, "r") is None
+        # Listed immediately with a pending summary; numbers arrive once consistent.
+        assert db.get(Dimension, "r") is not None
+        assert db.get(Summary, "r").projection_revision == 0
     drain(database, max_events=3)
     assert projected(database)["total_items"] == 12
     assert_legacy_parity(database)
@@ -1107,7 +1118,9 @@ def test_worker_historical_terminal_waits_for_all_source_kinds(database, status)
         with Session(database) as db:
             partition = db.get(Partition, "r")
             if not partition.backfill_complete:
-                assert db.get(Dimension, "r") is None
+                # Listed immediately with a pending summary; numbers arrive once consistent.
+                assert db.get(Dimension, "r") is not None
+                assert db.get(Summary, "r").projection_revision == 0
                 assert service.dashboard_freshness(db, ["p"])["freshness"]["updating"]
             elif partition.queue_state == "ready":
                 break

@@ -35,6 +35,7 @@ from qym_platform.db.models import (
     ReviewCorrection,
     RootCauseRevision,
     Run,
+    RunEvent,
     RunItem,
     RunItemScore,
     RunMetricSpec,
@@ -50,6 +51,7 @@ from qym_platform.security import api_key_prefix, hash_api_key
 def session_factory(monkeypatch):
     monkeypatch.setenv("QYM_DATABASE_URL", "sqlite:///:memory:")
     monkeypatch.setenv("QYM_AUTH_MODE", "proxy_headers")
+    monkeypatch.setenv("QYM_AUTH_LOCAL_ENABLED", "false")
     monkeypatch.setenv("QYM_ALLOW_LEGACY_EMPTY_API_KEY_SCOPES", "true")
     monkeypatch.setenv("QYM_RUN_STALE_TIMEOUT_SECONDS", "60")
     engine = create_engine(
@@ -810,3 +812,205 @@ def test_heartbeat_reopens_run_stopped_by_lease_timeout(client, session_factory)
         assert run.status == RunWorkflowStatus.RUNNING
         assert run.status_reason is None
         assert run.ended_at is None
+
+
+def test_force_stop_is_admin_only_and_preserves_results(client, session_factory):
+    run_id = "00000000-0000-0000-0000-000000000201"
+    with session_factory() as db:
+        run = _seed_run(db, run_id=run_id)
+        last_seen = run.last_event_at
+        db.add(
+            RunItem(run_id=run_id, item_id="saved", index=0, input={}, output="keep")
+        )
+        db.commit()
+    path = f"/api/runs/{run_id}/force-stop"
+    denied = client.post(path, headers=_ui_headers("owner@example.com"))
+    assert denied.status_code == 403
+    response = client.post(path, headers=_ui_headers("admin@example.com"))
+    assert response.status_code == 200
+    assert response.json()["status"] == "STOPPED"
+    assert response.json()["status_reason"] == "admin_force_stopped"
+    assert response.json()["stopped"] is True
+    again = client.post(path, headers=_ui_headers("admin@example.com"))
+    assert again.status_code == 200
+    assert again.json()["stopped"] is False
+    assert again.json()["ended_at"] == response.json()["ended_at"]
+    with session_factory() as db:
+        run = db.get(Run, run_id)
+        assert run.last_event_at == last_seen
+        assert run.deleted_at is None
+        assert db.query(RunItem).filter_by(run_id=run_id).one().output == "keep"
+        audit = db.query(AuditLog).filter_by(action="run.force_stopped").one()
+        assert audit.actor_user_id.startswith("admin-")
+        assert audit.before["status"] == "RUNNING"
+        assert audit.after["status_reason"] == "admin_force_stopped"
+    live = client.get(
+        "/api/runs/live?all_projects=true", headers=_ui_headers("admin@example.com")
+    ).json()
+    assert live["total_count"] == 0
+    recent = client.get(
+        "/api/runs/recent?all_projects=true", headers=_ui_headers("admin@example.com")
+    ).json()
+    assert recent["runs"][0]["status"] == "STOPPED"
+    assert recent["runs"][0]["can_force_stop"] is False
+    detail = client.get(
+        f"/api/runs/{run_id}", headers=_ui_headers("admin@example.com")
+    ).json()
+    assert detail["run"]["status_reason"] == "admin_force_stopped"
+
+
+@pytest.mark.parametrize(
+    "status", [RunWorkflowStatus.PENDING, RunWorkflowStatus.STOPPED]
+)
+def test_force_stop_can_seal_pending_and_expired_runs(client, session_factory, status):
+    with session_factory() as db:
+        run = _seed_run(db)
+        run.status = status
+        run.status_reason = (
+            "lease_timeout" if status == RunWorkflowStatus.STOPPED else None
+        )
+        db.commit()
+    response = client.post(
+        "/api/runs/run-1/force-stop", headers=_ui_headers("admin@example.com")
+    )
+    assert response.status_code == 200
+    assert response.json()["status_reason"] == "admin_force_stopped"
+
+
+@pytest.mark.parametrize(
+    "status",
+    [RunWorkflowStatus.COMPLETED, RunWorkflowStatus.FAILED, RunWorkflowStatus.APPROVED],
+)
+def test_force_stop_does_not_overwrite_finished_runs(client, session_factory, status):
+    with session_factory() as db:
+        run = _seed_run(db)
+        run.status = status
+        db.commit()
+    response = client.post(
+        "/api/runs/run-1/force-stop", headers=_ui_headers("admin@example.com")
+    )
+    assert response.status_code == 409
+    with session_factory() as db:
+        assert db.get(Run, "run-1").status == status
+        assert db.query(AuditLog).count() == 0
+    assert (
+        client.post(
+            "/api/runs/missing/force-stop", headers=_ui_headers("admin@example.com")
+        ).status_code
+        == 404
+    )
+
+
+def test_force_stop_rejects_all_events_before_any_mutation_even_after_restore(
+    client, session_factory
+):
+    from uuid import uuid4
+    from typing import get_args
+    from qym_platform.events import RunEventType
+
+    run_id = "00000000-0000-0000-0000-000000000202"
+    with session_factory() as db:
+        _seed_run(db, run_id=run_id)
+    assert (
+        client.post(
+            f"/api/runs/{run_id}/force-stop", headers=_ui_headers("admin@example.com")
+        ).status_code
+        == 200
+    )
+    with session_factory() as db:
+        run = db.get(Run, run_id)
+        stopped_at, last_seen = run.ended_at, run.last_event_at
+    for restored in (False, True):
+        if restored:
+            assert (
+                client.post(
+                    "/api/runs/delete",
+                    headers=_ui_headers("admin@example.com"),
+                    json={"file_path": run_id},
+                ).status_code
+                == 200
+            )
+            assert (
+                client.post(
+                    "/api/runs/restore",
+                    headers=_ui_headers("admin@example.com"),
+                    json={"run_id": run_id},
+                ).status_code
+                == 200
+            )
+        # Includes heartbeat, start, completion, items, scores, passes and spans.
+        events = [
+            _event(
+                event_id=str(uuid4()), sequence=i, run_id=run_id, type_=kind, payload={}
+            )
+            for i, kind in enumerate(get_args(RunEventType), 1)
+        ]
+        response = client.post(
+            f"/v1/runs/{run_id}/events",
+            headers=_auth_headers("test-token"),
+            content="\n".join(json.dumps(event) for event in events),
+        )
+        assert response.status_code == 410
+        assert response.headers["X-Qym-Run-State"] == "force_stopped"
+        with session_factory() as db:
+            run = db.get(Run, run_id)
+            assert (run.status, run.status_reason, run.ended_at, run.last_event_at) == (
+                RunWorkflowStatus.STOPPED,
+                "admin_force_stopped",
+                stopped_at,
+                last_seen,
+            )
+            assert db.query(RunEvent).filter_by(run_id=run_id).count() == 0
+            assert db.query(RunItem).filter_by(run_id=run_id).count() == 0
+            assert db.query(RunItemScore).filter_by(run_id=run_id).count() == 0
+
+
+def test_force_stop_survives_stale_readers_and_lifecycle_helpers(session_factory):
+    from qym_platform.api.runs import _reconcile_run_liveness, force_stop_run
+    from qym_platform.auth import Principal
+    from qym_platform.services.run_lifecycle import (
+        mark_run_running,
+        mark_run_terminal,
+        touch_run_event,
+    )
+
+    with session_factory() as db:
+        run = _seed_run(db)
+        run.last_event_at = utc_now_naive() - timedelta(days=3)
+        db.commit()
+    with session_factory() as reader, session_factory() as writer:
+        stale = reader.get(Run, "run-1")
+        admin = writer.query(User).filter_by(email="admin@example.com").one()
+        force_stop_run(
+            "run-1", writer, Principal(user=admin, auth_type="proxy_headers")
+        )
+        _reconcile_run_liveness(reader, [stale])
+        assert stale.status_reason == "admin_force_stopped"
+        ended_at, last_seen = stale.ended_at, stale.last_event_at
+        mark_run_running(stale)
+        for status in (
+            RunWorkflowStatus.COMPLETED,
+            RunWorkflowStatus.FAILED,
+            RunWorkflowStatus.STOPPED,
+        ):
+            mark_run_terminal(stale, status, ended_at=utc_now_naive())
+        touch_run_event(stale, utc_now_naive())
+        reader.commit()
+        assert stale.status == RunWorkflowStatus.STOPPED
+        assert stale.status_reason == "admin_force_stopped"
+        assert (stale.ended_at, stale.last_event_at) == (ended_at, last_seen)
+
+
+def test_force_stop_can_seal_an_already_deleted_run(client, session_factory):
+    with session_factory() as db:
+        run = _seed_run(db)
+        run.deleted_at = utc_now_naive()
+        db.commit()
+    response = client.post(
+        "/api/runs/run-1/force-stop", headers=_ui_headers("admin@example.com")
+    )
+    assert response.status_code == 200
+    with session_factory() as db:
+        run = db.get(Run, "run-1")
+        assert run.status_reason == "admin_force_stopped"
+        assert run.deleted_at is not None

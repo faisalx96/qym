@@ -6,6 +6,7 @@ import bisect
 import hashlib
 import json
 import logging
+import time
 import math
 import threading
 from collections import defaultdict
@@ -700,27 +701,49 @@ def repair_extrema(db, project_key, bucket_key, granularity="hour"):
     if bucket is None:
         return
     bucket.extrema_state = "rebuilding"
-    width = 3600 if granularity == "hour" else 86400
-    base = (
-        select(Record)
-        .join(Dimension, Dimension.run_key == Record.run_key)
-        .where(
-            Record.project_key == project_key,
-            Record.bucket_key >= bucket_key,
-            Record.bucket_key < bucket_key + width,
-            Record.present.is_(True),
-            Dimension.present.is_(True),
+    if granularity == "day":
+        # A day is the union of its hours: repair any stale hour bucket (each a
+        # one-hour index range) and fold their extrema instead of scanning every
+        # record of the project-day.
+        hours = list(
+            db.scalars(
+                select(Bucket).where(
+                    Bucket.project_key == project_key,
+                    Bucket.slice_key == "all",
+                    Bucket.granularity == "hour",
+                    Bucket.bucket_key >= bucket_key,
+                    Bucket.bucket_key < bucket_key + 86400,
+                )
+            )
         )
-    )
-    latency = case((Record.record_kind == "item", Record.latency_ms))
-    score = case((Record.record_kind == "score", Record.score))
-    bucket.latency_min, bucket.latency_max, bucket.score_min, bucket.score_max = (
-        db.execute(
-            base.with_only_columns(
-                func.min(latency), func.max(latency), func.min(score), func.max(score)
-            ).where(Record.record_kind.in_(("item", "score")))
-        ).one()
-    )
+        for hour in hours:
+            if hour.extrema_state != "valid":
+                repair_extrema(db, project_key, hour.bucket_key, "hour")
+        def _fold(attr, pick):
+            values = [getattr(h, attr) for h in hours if getattr(h, attr) is not None]
+            return pick(values) if values else None
+        bucket.latency_min, bucket.latency_max = _fold("latency_min", min), _fold("latency_max", max)
+        bucket.score_min, bucket.score_max = _fold("score_min", min), _fold("score_max", max)
+    else:
+        # Soft deletion preserves records for restore. Only records whose run
+        # is currently visible may contribute to the bucket's extrema.
+        def _extremes(kind, column):
+            return db.execute(
+                select(func.min(column), func.max(column))
+                .join(Dimension, Dimension.run_key == Record.run_key)
+                .where(
+                    Dimension.present.is_(True),
+                    Record.project_key == project_key,
+                    Record.bucket_key >= bucket_key,
+                    Record.bucket_key < bucket_key + 3600,
+                    Record.present.is_(True),
+                    Record.record_kind == kind,
+                    column.isnot(None),
+                )
+            ).one()
+
+        bucket.latency_min, bucket.latency_max = _extremes("item", Record.latency_ms)
+        bucket.score_min, bucket.score_max = _extremes("score", Record.score)
     bucket.extrema_state = "valid"
     bucket.extrema_verified_version = bucket.applied_source_version
     bucket.dirty_since_version = None
@@ -760,6 +783,10 @@ def _sync_dimension(db, run_id, version):
             dimension.present = False
             db.flush()
         return dimension, None
+    # Previous visibility comes from the numeric records themselves: the delete
+    # and restore endpoints flip ``Dimension.present`` synchronously so the list
+    # reacts instantly, and the records must still be moved out of (or back into)
+    # the buckets here.
     old_visible = dimension.present if dimension else False
     old_hour = (
         _hour(dimension.timestamp)
@@ -835,6 +862,7 @@ def _sync_dimension(db, run_id, version):
         run.created_at,
     )
     dimension.present = run.deleted_at is None
+    dimension.hidden_at = dimension.hidden_at if run.deleted_at is not None else None
     dimension.descriptor = {
         "run_id": run.id,
         "run_name": config.get("run_name") or run.external_run_id or "",
@@ -852,6 +880,8 @@ def _sync_dimension(db, run_id, version):
         "metric_specs": _metric_specs_for_runs(db, [run.id]).get(run.id, {}),
         "run_config": {},
         "samples": int(run.samples or 1),
+        "pass_revision": int(metadata.get("pass_revision") or 0),
+        "has_repeat_pass_context": bool(metadata.get("has_repeat_pass_context")),
         "report_k": config.get("report_k"),
         "last_completed_pass": metadata.get("last_completed_pass"),
         "git_branch": config.get("git_branch"),
@@ -888,6 +918,24 @@ def _sync_dimension(db, run_id, version):
             for _, _, bucket, granularity in _bucket_keys(run.project_id, old_hour):
                 repair_extrema(db, run.project_id, bucket, granularity)
     return dimension, run
+
+
+def ensure_pending_summary(db, run_id, version):
+    """List a run before its numbers are consistent.
+
+    The dimension row (task/model/dataset/owner/status) is cheap and exact from
+    the start; the summary stays at projection_revision 0 so readers render it
+    as ``summary_state="pending"`` instead of hiding the run for the whole
+    backfill (which is what made history disappear after migrations 0049/0050).
+    """
+    if db.get(Dimension, run_id) is not None:
+        return
+    dimension, run = _sync_dimension(db, run_id, version)
+    if run is None or dimension is None:
+        return
+    if db.get(Summary, run_id) is None:
+        db.add(Summary(run_key=run_id, project_key=run.project_id, data={}, projection_revision=0))
+        db.flush()
 
 
 def refresh_run_summary(db, run_id, version):
@@ -1099,8 +1147,11 @@ def refresh_run_summary(db, run_id, version):
     summary.score_min = db.scalar(scores.order_by(Record.score).limit(1))
     summary.score_max = db.scalar(scores.order_by(Record.score.desc()).limit(1))
     summary.updated_at = datetime.utcnow()
-    for _, _, bucket, granularity in _bucket_keys(
-        run.project_id, _hour(dimension.timestamp)
+    # Repair this run's hour bucket (one-hour index range) and fold the day from
+    # its hours; both are cheap, so publication keeps extrema exact.
+    for _, _, bucket, granularity in sorted(
+        _bucket_keys(run.project_id, _hour(dimension.timestamp)),
+        key=lambda entry: 0 if entry[3] == "hour" else 1,
     ):
         repair_extrema(db, run.project_id, bucket, granularity)
 
@@ -1237,6 +1288,8 @@ def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
         # events are applied. Source commits wait on our partition row lock.
         if (remaining is None and partition.backfill_complete) or not terminal:
             refresh_run_summary(db, run_id, version)
+        else:
+            ensure_pending_summary(db, run_id, version)
         partition.last_applied_version = max(partition.last_applied_version, version)
     partition.oldest_pending_event = remaining
     if partition.queue_state != "repair_required":
@@ -1368,6 +1421,9 @@ def backfill_partition(db, run_id, *, chunk_size=500):
         query.where(model.run_id == run_id, cursor_column > partition.backfill_cursor)
         .order_by(cursor_column)
         .limit(chunk_size)
+        # Row locks keep a concurrent live update from being versioned behind
+        # this snapshot (test_concurrent_backfill_and_live_update_preserve_lock_order).
+        # The cost is bounded: 500 rows per chunk, once per historical run.
         .with_for_update()
     )
     rows = [_backfill_source_object(model, row) for row in db.execute(query)]
@@ -1498,18 +1554,22 @@ def dashboard_freshness(db, project_ids):
         func.coalesce(Summary.projection_revision, 0) == 0,
         Dimension.present.is_(False),
     )
-    # Source sequence allocation is independent of commit order. A published
-    # revision increments even when an older transaction arrives after a newer
-    # record in the same run. Summing these monotonic counters also covers slow
-    # partitions without evicting unrelated projects.
-    revision = (
-        db.scalar(
-            select(func.sum(Summary.projection_revision)).where(
-                Summary.project_key.in_(projects)
-            )
+    # Include membership, including revision-zero pending runs. A sum alone
+    # misses their insertion and can collide after a purge and publication.
+    # Read only identity/revision columns, streamed in deterministic order.
+    revision = 0
+    catalog_hash = hashlib.sha256()
+    for run_key, published_revision, present in db.execute(
+        select(Summary.run_key, Summary.projection_revision, Dimension.present)
+        .outerjoin(Dimension, Dimension.run_key == Summary.run_key)
+        .where(Summary.project_key.in_(projects))
+        .order_by(Summary.run_key)
+        .execution_options(yield_per=1000)
+    ):
+        revision += int(published_revision or 0)
+        catalog_hash.update(
+            json.dumps([run_key, published_revision, present], separators=(",", ":")).encode()
         )
-        or 0
-    )
     pending, oldest, backfilling, unpublished, failed = db.execute(
         select(
             func.count(),
@@ -1549,6 +1609,7 @@ def dashboard_freshness(db, project_ids):
     ).one()
     return {
         "revision": int(revision),
+        "catalog_revision": catalog_hash.hexdigest(),
         "freshness": {
             "updating": bool(pending),
             "pending_partitions": int(pending),
@@ -1560,18 +1621,28 @@ def dashboard_freshness(db, project_ids):
     }
 
 
-def repair_dirty_buckets(db, *, limit=20):
+def repair_dirty_buckets(db, *, limit=20, budget_seconds=0.2):
     keys = list(
         db.execute(
             select(Bucket.project_key, Bucket.bucket_key, Bucket.granularity)
             .where(Bucket.extrema_state.in_(["dirty_known", "unknown", "rebuilding"]))
-            .order_by(Bucket.project_key, Bucket.bucket_key, Bucket.granularity)
+            .order_by(
+                case((Bucket.extrema_state == "dirty_known", 0), else_=1),
+                Bucket.bucket_key.desc(),
+                Bucket.project_key,
+                Bucket.granularity,
+            )
             .limit(limit)
         )
     )
+    deadline = time.monotonic() + budget_seconds if budget_seconds else None
+    repaired = 0
     for project, bucket, granularity in keys:
         repair_extrema(db, project, bucket, granularity)
-    return len(keys)
+        repaired += 1
+        if deadline is not None and time.monotonic() >= deadline:
+            break
+    return repaired
 
 
 def reconcile_expired_dashboard_runs(db, *, now=None, timeout_seconds=None, limit=100):
@@ -1595,6 +1666,7 @@ def reconcile_expired_dashboard_runs(db, *, now=None, timeout_seconds=None, limi
             .order_by(last_seen, Run.id)
             .limit(limit)
             .with_for_update(skip_locked=True)
+            .execution_options(populate_existing=True)
         )
     )
     changed = sum(
@@ -1800,6 +1872,9 @@ class DashboardSummaryWorker:
         self._lock = threading.Lock()
         self._logger = logging.getLogger(__name__)
         self._made_progress = False
+        # Discovery/reconcile scans are cheap but need not run 20x per second.
+        self._next_reconcile = 0.0
+        self._next_bootstrap = 0.0
 
     def start(self):
         with self._lock:
@@ -1811,6 +1886,10 @@ class DashboardSummaryWorker:
             )
             self._thread.start()
 
+    def is_alive(self):
+        thread = self._thread
+        return bool(thread and thread.is_alive())
+
     def stop(self, *, timeout=10.0):
         self._stop.set()
         thread = self._thread
@@ -1820,13 +1899,19 @@ class DashboardSummaryWorker:
 
     def tick(self):
         self._made_progress = False
+        now = time.monotonic()
         with self.session_factory() as db:
-            reconcile_expired_dashboard_runs(db, limit=self.max_partitions)
-            db.commit()
+            if now >= self._next_reconcile:
+                self._next_reconcile = now + 5.0
+                reconcile_expired_dashboard_runs(db, limit=self.max_partitions)
+                db.commit()
             # Bulk imports can bypass ORM outbox hooks. Discover a bounded
             # number of unregistered runs instead of leaving them invisible.
-            bootstrap_partitions(db, limit=self.max_partitions * 5)
-            db.commit()
+            if now >= self._next_bootstrap:
+                found = bootstrap_partitions(db, limit=self.max_partitions * 5)
+                db.commit()
+                # Keep discovering quickly while there is a backlog; otherwise every 30 s.
+                self._next_bootstrap = now + (0.0 if found else 30.0)
             partitions = scheduled_partitions(db, limit=self.max_partitions)
         processed = 0
         failed = False

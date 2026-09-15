@@ -490,6 +490,27 @@ def test_edit_opens_only_selected_issue_with_own_fields_and_does_not_mutate_sibl
     """)
 
 
+def test_open_issue_draft_is_rejected_when_refresh_renumbers_the_same_pass() -> None:
+    _run_javascript(_diagnosis_functions() + """
+        const state={run:{file_path:'run-1',metadata:{pass_revision:0}},viewPass:2,
+          snapshot:{rows:[{item_id:'item-1',item_metadata:{metric_analyses:{accuracy:{root_cause_issues:[]}}}}]}};
+        const draft=createMetricDiagnosisDraft('item-1','accuracy','add');
+        draft.issues=[{category:'Agent',finding:'Draft for the original second pass'}];
+        let writes=0;
+        const saveMetricIssueAction=async()=>{writes++;return true;};
+        // The post-aggregation GET refreshes the run, while the popup remains open.
+        state.run={file_path:'run-1',metadata:{pass_revision:1}};
+        assert.equal(state.viewPass,2);
+        assert.equal(await saveMetricDiagnosisDraft('item-1','accuracy',draft),false);
+        assert.equal(writes,0);
+        assert.match(draft.message,/run or pass changed/);
+        const fresh=createMetricDiagnosisDraft('item-1','accuracy','add');
+        fresh.issues=[{category:'Agent',finding:'Fresh draft for the current second pass'}];
+        assert.equal(await saveMetricDiagnosisDraft('item-1','accuracy',fresh),true);
+        assert.equal(writes,1);
+    """)
+
+
 def test_issue_solution_only_and_noop_save_preserve_other_issue_evidence() -> None:
     _run_javascript(_diagnosis_functions() + """
         const ADD_NEW_SOLUTION_VALUE='__qym_add_new_solution__';
@@ -590,15 +611,16 @@ def test_add_new_solution_requires_a_value_and_saves_without_notes() -> None:
 
 @pytest.mark.parametrize("switch_pass", [False, True])
 def test_issue_action_request_targets_the_correct_pass_and_ignores_late_reply(switch_pass: bool) -> None:
-    functions="\n".join(_function("run",name) for name in ("metricAnalysisKey","addCurrentPassToPayload","saveMetricIssueAction"))
+    functions="\n".join(_function("run",name) for name in ("metricAnalysisKey","currentPassVersion","addCurrentPassToPayload","saveMetricIssueAction"))
     _run_javascript(functions + f"\nconst switchPass={str(switch_pass).lower()};\n" + """
         const IS_EXPORT=false,RUN_ID='run-1';
-        const state={run:{file_path:'run-1'},viewPass:2,rootCauseValues:[]};
+        const state={run:{file_path:'run-1',metadata:{pass_revision:7}},viewPass:2,rootCauseValues:[]};
         const apiUrl=String;let body,finish,applied=0;
         const applyUpdatedRow=()=>applied++;
         const fetch=async(url,options)=>{assert.equal(url,'api/runs/update_root_cause_issue');body=JSON.parse(options.body);return new Promise(resolve=>{finish=()=>resolve({ok:true,json:async()=>({ok:true,row:{item_id:'item-1'}})});});};
         const result=saveMetricIssueAction('item-1','accuracy',{action:'approve',issue_id:'two',expected_issue:{category:'Agent'}});
         assert.equal(body.pass_number,2);assert.equal(body.issue_id,'two');assert.equal(body.metric_name,'accuracy');
+        assert.equal(body.expected_pass_version,7);
         if(switchPass)state.viewPass=1;finish();assert.equal(await result,true);assert.equal(applied,switchPass?0:1);
     """)
 
@@ -606,10 +628,10 @@ def test_issue_action_request_targets_the_correct_pass_and_ignores_late_reply(sw
 @pytest.mark.parametrize("switch_pass", [False, True])
 def test_metric_save_targets_viewed_pass_without_overwriting_a_new_view(switch_pass: bool) -> None:
     functions = "\n".join(_function("run", name) for name in (
-        "metricAnalysisKey", "addCurrentPassToPayload", "saveMetricAnalysisPatch"))
+        "metricAnalysisKey", "currentPassVersion", "addCurrentPassToPayload", "saveMetricAnalysisPatch"))
     _run_javascript(functions + f"\nconst switchPass = {str(switch_pass).lower()};\n" + """
         const IS_EXPORT = false;
-        const state = {run: {file_path: 'run-1'}, viewPass: 2,
+        const state = {run: {file_path: 'run-1', metadata: {pass_revision: 7}}, viewPass: 2,
           snapshot: {rows: [{item_id: 'item-1'}]}, rootCauseValues: []};
         const apiUrl = value => value;
         const rootCauseCategories = () => [];
@@ -624,6 +646,7 @@ def test_metric_save_targets_viewed_pass_without_overwriting_a_new_view(switch_p
         };
         const pending = saveMetricAnalysisPatch('item-1', 'accuracy', {solution:'Use a date filter'}, {silent:true});
         assert.equal(request.pass_number, 2);
+        assert.equal(request.expected_pass_version, 7);
         assert.equal(request.metric_name, 'accuracy');
         assert.equal(request.item_id, 'item-1');
         assert.equal(request.run_id, 'run-1');

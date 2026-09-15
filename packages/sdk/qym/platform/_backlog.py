@@ -113,7 +113,7 @@ class EventBacklog:
         deadline = None if timeout is None else time.monotonic() + timeout
         with self._cv:
             while not self._memory and not self._disk_count:
-                if not block:
+                if not block or self._disposed:
                     raise Empty
                 remaining = None if deadline is None else deadline - time.monotonic()
                 if remaining is not None and remaining <= 0:
@@ -176,3 +176,36 @@ class EventBacklog:
                 os.unlink(self.spool_path)
                 self.spool_path = None
             self._cv.notify_all()
+
+    def discard(self) -> int:
+        """Close admission and discard queued events after a terminal rejection.
+
+        In-flight events still require task_done() from their consumer. Wake
+        blocked producers so a stopped run cannot strand the evaluator.
+        """
+        with self._cv:
+            count = len(self._memory) + self._disk_count
+            self._disposed = True
+            self.unfinished_tasks -= count
+            self._memory.clear()
+            self.memory_bytes = self.disk_bytes = self._disk_count = 0
+            self._read_offset = 0
+            if self._file is not None:
+                try:
+                    self._file.close()
+                except OSError:
+                    pass
+                self._file = None
+            if self.spool_path is not None:
+                try:
+                    os.unlink(self.spool_path)
+                except FileNotFoundError:
+                    self.spool_path = None
+                except OSError:
+                    # Retain the path for diagnostics, but always wake blocked
+                    # producers even when the filesystem refuses cleanup.
+                    pass
+                else:
+                    self.spool_path = None
+            self._cv.notify_all()
+            return count

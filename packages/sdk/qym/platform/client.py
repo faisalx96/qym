@@ -177,6 +177,7 @@ class PlatformEventStream:
         self._accepting = True
         self._delivery_error: Optional[BaseException] = None
         self._stop = threading.Event()
+        self._remote_closed = threading.Event()
         self._closing = False
         self._closed = False
         # Daemonize so a stuck flush cannot pin the CLI after the run has finished.
@@ -202,9 +203,13 @@ class PlatformEventStream:
         }
 
     def _send_event_sync(self, evt: Dict[str, Any], *, reason: str) -> None:
+        if self._remote_closed.is_set():
+            return
         ndjson = json.dumps(evt, ensure_ascii=False) + "\n"
         _debug(f"direct emit ({reason}): {evt.get('type', '?')}")
         for attempt in range(self.SYNC_SEND_RETRIES):
+            if self._remote_closed.is_set():
+                return
             try:
                 _post_ndjson(
                     f"{self.platform_url}/v1/runs/{self.run_id}/events",
@@ -216,6 +221,10 @@ class PlatformEventStream:
                 self.sent_events += 1
                 return
             except Exception as e:
+                if getattr(e, "code", None) == 410:
+                    self.dropped_events += 1
+                    self._disable_uploads()
+                    return
                 _debug(
                     f"direct emit error (attempt {attempt + 1}/{self.SYNC_SEND_RETRIES}): {e}"
                 )
@@ -232,8 +241,26 @@ class PlatformEventStream:
             f"direct emit FAILED after {self.SYNC_SEND_RETRIES} attempt(s): {evt.get('type', '?')}"
         )
 
+    def _disable_uploads(self) -> None:
+        """Latch a permanent server rejection across every delivery path."""
+        with self._state_lock:
+            if self._remote_closed.is_set():
+                return
+            self._remote_closed.set()
+            self._accepting = False
+            self._delivery_error = RuntimeError("Platform run is closed to updates")
+            self._stop.set()
+        self.dropped_events += self._q.discard()
+        print(
+            f"qym: platform run {self.run_id} is closed to updates (HTTP 410). "
+            "Uploads and heartbeats stopped. Local evaluation may continue.",
+            file=sys.stderr,
+        )
+
     def _enqueue(self, evt: Dict[str, Any], *, block=True, timeout=None) -> None:
         with self._state_lock:
+            if self._remote_closed.is_set():
+                return
             if not self._accepting:
                 direct = True
             else:
@@ -249,6 +276,8 @@ class PlatformEventStream:
         except Full:
             raise
         except Exception as exc:
+            if self._remote_closed.is_set():
+                return
             self._delivery_error = exc
             print(
                 f"qym: ERROR: platform event {evt.get('event_id')} could not be buffered "
@@ -268,6 +297,8 @@ class PlatformEventStream:
         When both budgets are full this applies producer backpressure. Async
         callers should use aemit(), which offloads spill and capacity waits.
         """
+        if self._remote_closed.is_set():
+            return
         evt = self._build_event(type_, payload)
         if sync:
             self._send_event_sync(evt, reason="sync")
@@ -278,6 +309,8 @@ class PlatformEventStream:
         self, type_: str, payload: Dict[str, Any], *, sync: bool = False
     ) -> None:
         """Queue without disk/network waits on the caller's event loop."""
+        if self._remote_closed.is_set():
+            return
         evt = self._build_event(type_, payload)
         if sync:
             await asyncio.to_thread(self._send_event_sync, evt, reason="sync")
@@ -426,7 +459,9 @@ class PlatformEventStream:
                 )
             else:
                 _debug("flush thread joined successfully")
-                if self.dropped_events:
+                if self._remote_closed.is_set():
+                    pass  # The terminal rejection was already reported once.
+                elif self.dropped_events:
                     print(
                         f"qym: WARNING: {self.dropped_events} platform events failed to upload "
                         "and were dropped — the run page may be missing items. "
@@ -452,13 +487,23 @@ class PlatformEventStream:
         """
         url = f"{self.platform_url}/v1/runs/{self.run_id}/events"
         _debug(f"falling back to per-event send for {len(entries)} events")
-        for evt, line, _, _ in entries:
+        for index, (evt, line, _, _) in enumerate(entries):
+            if self._remote_closed.is_set():
+                self.dropped_events += len(entries) - index
+                return
             for attempt in range(2):
+                if self._remote_closed.is_set():
+                    self.dropped_events += len(entries) - index
+                    return
                 try:
                     _post_ndjson(url, line + "\n", self.api_key)
                     self.sent_events += 1
                     break
                 except Exception as e2:
+                    if getattr(e2, "code", None) == 410:
+                        self.dropped_events += len(entries) - index
+                        self._disable_uploads()
+                        return
                     if _is_poison_error(e2) or attempt == 1:
                         self.dropped_events += 1
                         _debug(
@@ -509,6 +554,10 @@ class PlatformEventStream:
             )
 
         while True:
+            if self._remote_closed.is_set():
+                self.dropped_events += len(batch)
+                _clear_batch()
+                break
             if not _batch_full():
                 try:
                     _append(self._q.get(timeout=0.1), True)
@@ -540,6 +589,8 @@ class PlatformEventStream:
                     _debug(f"final flush: {len(batch)} events")
             if not should_flush and not self._stop.is_set():
                 continue
+            if self._remote_closed.is_set():
+                continue
             if should_flush:
                 try:
                     ndjson = "\n".join(line for _, line, _, _ in batch) + "\n"
@@ -561,7 +612,11 @@ class PlatformEventStream:
                 except Exception as e:
                     retry_count += 1
                     self._consecutive_failures += 1
-                    if _is_poison_error(e):
+                    if getattr(e, "code", None) == 410:
+                        self.dropped_events += len(batch)
+                        self._disable_uploads()
+                        _clear_batch()
+                    elif _is_poison_error(e):
                         # Deterministic 4xx: retrying the batch verbatim can
                         # never succeed — isolate per event instead.
                         _debug(f"batch rejected ({e}); isolating per event")

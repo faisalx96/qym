@@ -101,6 +101,18 @@
     .edit-user-body .form-select { padding-right: 30px; }
     .edit-user-checkbox { display: flex; align-items: center; gap: var(--space-sm); font-size: var(--font-sm); color: var(--text-secondary); cursor: pointer; }
     .edit-user-error { color: var(--error); font-size: var(--font-sm); min-height: 16px; }
+    .maint-meta { color: var(--text-muted); font-size: var(--font-sm); margin: var(--space-sm) 0; }
+    .maint-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
+    @media (max-width: 1100px) { .maint-grid { grid-template-columns: minmax(0, 1fr); } }
+    .maint-num, #maint-tables td:not(:first-child), #maint-event-types td:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    #maint-jobs td { vertical-align: top; }
+    .maint-actions { display: flex; gap: var(--space-xs); white-space: nowrap; }
+    .maint-form { display: flex; flex-wrap: wrap; gap: var(--space-md); align-items: flex-end; margin: 0 0 var(--space-md); }
+    .maint-field { display: flex; flex-direction: column; gap: var(--space-xs); font-size: var(--font-sm); color: var(--text-secondary); min-width: 220px; }
+    .maint-log { background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 6px; padding: var(--space-md); font-size: var(--font-xs); max-height: 320px; overflow: auto; white-space: pre-wrap; }
+    .maint-status--running { color: var(--warning); }
+    .maint-status--failed { color: var(--error); }
+    .maint-status--succeeded { color: var(--success); }
     .self-warning { background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 6px; padding: var(--space-sm) var(--space-md); font-size: var(--font-sm); color: var(--text-muted); }
   </style>
   <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60">
@@ -123,18 +135,20 @@
       <button class="admin-tab-btn qym-tabs__tab active" id="admin-tab-runs" type="button" role="tab" aria-selected="true" aria-controls="admin-panel-runs" data-admin-tab="runs">Runs</button>
       <button class="admin-tab-btn qym-tabs__tab" id="admin-tab-projects" type="button" role="tab" aria-selected="false" aria-controls="admin-panel-projects" data-admin-tab="projects">Projects</button>
       <button class="admin-tab-btn qym-tabs__tab" id="admin-tab-users" type="button" role="tab" aria-selected="false" aria-controls="admin-panel-users" data-admin-tab="users">Users</button>
+      <button class="admin-tab-btn qym-tabs__tab" id="admin-tab-maintenance" type="button" role="tab" aria-selected="false" aria-controls="admin-panel-maintenance" data-admin-tab="maintenance">Maintenance</button>
     </div>
 
     <section class="admin-tab-panel active" id="admin-panel-runs" role="tabpanel" aria-labelledby="admin-tab-runs" data-admin-panel="runs">
+      <div class="message" id="run-message" role="status" aria-live="polite"></div>
       <div class="card">
         <div class="card-header">
           <div><div class="card-title">Live Runs</div><div class="card-subtitle" id="live-runs-count-label">Running across all qym projects</div></div>
         </div>
         <div class="card-body">
           <table class="data-table">
-            <thead><tr><th>Project</th><th>Run</th><th>Owner</th><th>Status</th><th>Progress</th><th>Updated</th></tr></thead>
+            <thead><tr><th>Project</th><th>Run</th><th>Owner</th><th>Status</th><th>Progress</th><th>Updated</th><th>Actions</th></tr></thead>
             <tbody id="live-runs-tbody">
-              <tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Loading...</td></tr>
+              <tr><td colspan="7" style="text-align:center;color:var(--text-muted)">Loading...</td></tr>
             </tbody>
           </table>
         </div>
@@ -146,9 +160,9 @@
         </div>
         <div class="card-body">
           <table class="data-table">
-            <thead><tr><th>Project</th><th>Run</th><th>Owner</th><th>Status</th><th>Items</th><th>Created</th></tr></thead>
+            <thead><tr><th>Project</th><th>Run</th><th>Owner</th><th>Status</th><th>Items</th><th>Created</th><th>Actions</th></tr></thead>
             <tbody id="recent-runs-tbody">
-              <tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Loading...</td></tr>
+              <tr><td colspan="7" style="text-align:center;color:var(--text-muted)">Loading...</td></tr>
             </tbody>
           </table>
         </div>
@@ -168,6 +182,36 @@
             <thead><tr><th>Project</th><th>Slug</th><th>Status</th><th>Members</th><th style="text-align:right">Actions</th></tr></thead>
             <tbody id="projects-tbody"></tbody>
           </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="admin-tab-panel" id="admin-panel-maintenance" role="tabpanel" aria-labelledby="admin-tab-maintenance" data-admin-panel="maintenance" hidden>
+      <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">Database</div><div class="card-subtitle" id="maint-settings">Loading…</div></div>
+          <button class="btn btn-secondary" type="button" id="maint-refresh" style="padding:var(--space-sm) var(--space-md);font-size:var(--font-sm)">Refresh</button>
+        </div>
+        <div class="card-body maint-grid">
+          <table class="data-table" id="maint-tables"><thead><tr><th>Table</th><th class="maint-num">Total</th><th class="maint-num">Heap</th><th class="maint-num">TOAST</th><th class="maint-num">Indexes</th><th class="maint-num">Live rows</th><th class="maint-num">Dead rows</th></tr></thead><tbody><tr><td colspan="7" style="text-align:center;color:var(--text-muted)">Loading...</td></tr></tbody></table>
+          <table class="data-table" id="maint-event-types"><thead><tr><th>run_events type</th><th class="maint-num">Rows</th><th class="maint-num">Payload</th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">Maintenance jobs</div><div class="card-subtitle">Run in the worker in small committed steps; they survive restarts. Irreversible jobs require typing their name.</div></div>
+        </div>
+        <div class="card-body">
+          <form class="maint-form" id="maint-form">
+            <label class="maint-field"><span>Job</span><select class="form-select" id="maint-kind"></select></label>
+            <label class="maint-field"><span>Params (JSON)</span><input class="form-input" id="maint-params" type="text" value="{}" spellcheck="false"></label>
+            <label class="maint-field" id="maint-confirm-field" hidden><span>Type the job name to confirm</span><input class="form-input" id="maint-confirm" type="text" autocomplete="off"></label>
+            <button class="btn btn-primary" type="submit" style="padding:var(--space-sm) var(--space-md);font-size:var(--font-sm)">Queue job</button>
+          </form>
+          <p class="maint-meta" id="maint-kind-help">—</p>
+          <p class="edit-user-error" id="maint-error"></p>
+          <table class="data-table" id="maint-jobs"><thead><tr><th>Kind</th><th>Status</th><th>Progress</th><th>Created</th><th>Finished</th><th></th></tr></thead><tbody><tr><td colspan="6" style="text-align:center;color:var(--text-muted)">No jobs yet</td></tr></tbody></table>
+          <pre class="maint-log" id="maint-log" hidden></pre>
         </div>
       </div>
     </section>
@@ -243,11 +287,19 @@
           .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
       }
 
-      let state = { users: [], projects: [], liveRuns: [], recentRuns: [], recentRunsPage: 0, recentRunsPageSize: 6, recentRunsTotal: 0, me: null, editingUserId: null };
+      let state = { users: [], projects: [], liveRuns: [], liveRunsTotal: 0, recentRuns: [], recentRunsPage: 0, recentRunsPageSize: 6, recentRunsTotal: 0, me: null, editingUserId: null };
+      const stoppingRuns = new Set();
+      const forceStoppedRuns = new Map();
+      let liveRequest = 0;
+      let recentRequest = 0;
+      let adminClosed = false;
 
       async function fetchJson(path, options) {
         const res = await fetch(apiUrl(path), options);
-        if (window.QymAuth && window.QymAuth.handle401(res)) return null;
+        if (window.QymAuth && window.QymAuth.handle401(res)) {
+          adminClosed = true;
+          throw new Error('Session expired. Sign in again.');
+        }
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.detail || 'Request failed');
         return data;
@@ -302,6 +354,58 @@
         return `<span class="status-pill qym-badge status-${escapeHtml(value)}">${escapeHtml(value)}</span>`;
       }
 
+      function forceStopAction(run) {
+        if (!run.can_force_stop || forceStoppedRuns.has(run.run_id)) return '';
+        const pending = stoppingRuns.has(run.run_id);
+        return `<button type="button" class="qym-inline-action qym-inline-action--danger" data-force-stop="${escapeHtml(run.run_id)}" aria-label="Force stop ${escapeHtml(runName(run))}" ${pending ? 'disabled' : ''}>${pending ? 'Stopping...' : 'Force stop'}</button>`;
+      }
+
+      async function forceStopRun(runId) {
+        if (stoppingRuns.has(runId) || forceStoppedRuns.has(runId)) return;
+        const run = [...state.liveRuns, ...state.recentRuns].find(item => item.run_id === runId);
+        if (!run || !run.can_force_stop) return;
+        stoppingRuns.add(runId);
+        const message = document.getElementById('run-message');
+        try {
+          const description = [
+            `Permanently stop recording "${runName(run)}"? Existing results will remain available.`,
+            'All further updates will be rejected, including if the runner reconnects. The process in Coder may continue until stopped there.',
+          ];
+          const confirmation = window.QymShell?.openConfirmDialog
+            ? await window.QymShell.openConfirmDialog({ title: 'Force stop run', description, confirmLabel: 'Force stop', confirmClass: 'shell-btn-danger' })
+            : { confirmed: window.confirm(description.join('\n\n')) };
+          if (!confirmation.confirmed || adminClosed) return;
+          renderLiveRuns();
+          renderRecentRuns();
+          message.style.color = '';
+          message.textContent = `Stopping "${runName(run)}"...`;
+          const stopped = await fetchJson(`api/runs/${encodeURIComponent(runId)}/force-stop`, { method: 'POST' });
+          if (adminClosed) return;
+          // Reject stale list responses that began before the stop completed.
+          liveRequest++;
+          recentRequest++;
+          forceStoppedRuns.set(runId, stopped);
+          if (state.liveRuns.some(item => item.run_id === runId)) state.liveRunsTotal = Math.max(0, state.liveRunsTotal - 1);
+          state.liveRuns = state.liveRuns.filter(item => item.run_id !== runId);
+          state.recentRuns = state.recentRuns.map(item => item.run_id === runId ? { ...item, ...stopped } : item);
+          renderLiveRuns();
+          renderRecentRuns();
+          message.textContent = `"${runName(run)}" was force stopped. Further updates are blocked.`;
+          await Promise.all([loadLiveRuns(), loadRecentRuns()]);
+        } catch (err) {
+          message.style.color = 'var(--error)';
+          message.textContent = 'Could not force stop run: ' + (err.message || 'Unknown error');
+        } finally {
+          stoppingRuns.delete(runId);
+          if (!adminClosed) { renderLiveRuns(); renderRecentRuns(); }
+        }
+      }
+
+      document.getElementById('admin-panel-runs').addEventListener('click', event => {
+        const button = event.target.closest('[data-force-stop]');
+        if (button && !button.disabled) forceStopRun(button.dataset.forceStop);
+      });
+
       function runUrl(run) {
         const root = (window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '');
         const project = run.project || {};
@@ -348,29 +452,35 @@
             <td>${statusPill(run.status)}</td>
             <td><span class="row-meta">${escapeHtml(itemLabel)}</span></td>
             <td><span class="row-meta">${escapeHtml(relativeTime(run.timestamp || run.last_event_at))}</span></td>
+            <td>${forceStopAction(run)}</td>
           </tr>`;
         }).join('');
       }
 
       async function loadLiveRuns() {
         const tbody = document.getElementById('live-runs-tbody');
-        if (!tbody) return;
+        if (!tbody || adminClosed) return;
+        const request = ++liveRequest;
         try {
           const data = await fetchJson('api/runs/live?all_projects=true&limit=100');
-          state.liveRuns = data && data.runs ? data.runs : [];
-          renderLiveRuns(data && data.total_count);
+          if (adminClosed || request !== liveRequest) return;
+          state.liveRuns = (data?.runs || []).filter(run => !forceStoppedRuns.has(run.run_id));
+          const filteredCount = (data?.runs || []).length - state.liveRuns.length;
+          state.liveRunsTotal = Math.max(0, (data?.total_count ?? state.liveRuns.length) - filteredCount);
+          renderLiveRuns();
         } catch (err) {
-          tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--error)">Failed to load live runs</td></tr>`;
+          if (adminClosed || request !== liveRequest) return;
+          tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--error)">Failed to load live runs</td></tr>`;
         }
       }
 
-      function renderLiveRuns(totalCount) {
+      function renderLiveRuns(totalCount = state.liveRunsTotal) {
         const label = document.getElementById('live-runs-count-label');
         if (label) label.textContent = `${totalCount == null ? state.liveRuns.length : totalCount} running across all qym projects`;
         const tbody = document.getElementById('live-runs-tbody');
         if (!tbody) return;
         if (!state.liveRuns.length) {
-          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">No live runs</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">No live runs</td></tr>';
           return;
         }
         const root = (window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '');
@@ -386,21 +496,25 @@
             <td><span class="live-status"><span class="live-status-dot"></span>${escapeHtml(run.status || 'RUNNING')}</span></td>
             <td><span class="live-progress">${escapeHtml(progressLabel(run))}</span></td>
             <td><span class="row-meta">${escapeHtml(relativeTime(run.last_event_at || run.timestamp))}</span></td>
+            <td>${forceStopAction(run)}</td>
           </tr>`;
         }).join('');
       }
 
       async function loadRecentRuns() {
         const tbody = document.getElementById('recent-runs-tbody');
-        if (!tbody) return;
+        if (!tbody || adminClosed) return;
+        const request = ++recentRequest;
         try {
           const offset = state.recentRunsPage * state.recentRunsPageSize;
           const data = await fetchJson(`api/runs/recent?all_projects=true&include_projects=false&global_limit=${state.recentRunsPageSize}&global_offset=${offset}`);
-          state.recentRuns = data && data.runs ? data.runs : [];
+          if (adminClosed || request !== recentRequest) return;
+          state.recentRuns = (data?.runs || []).map(run => ({ ...run, ...forceStoppedRuns.get(run.run_id) }));
           state.recentRunsTotal = data && data.total_count ? data.total_count : 0;
           renderRecentRuns(data && data.total_count);
         } catch (err) {
-          tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--error)">Failed to load recent runs</td></tr>`;
+          if (adminClosed || request !== recentRequest) return;
+          tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--error)">Failed to load recent runs</td></tr>`;
         }
       }
 
@@ -427,7 +541,7 @@
         const tbody = document.getElementById('recent-runs-tbody');
         if (!tbody) return;
         if (!state.recentRuns.length) {
-          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">No recent eval runs</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">No recent eval runs</td></tr>';
           return;
         }
         tbody.innerHTML = renderRunRows(state.recentRuns, true);
@@ -568,8 +682,103 @@
         }
       });
 
+      // ---- Maintenance tab -------------------------------------------------
+      const maint = { kinds: {}, jobs: [], selected: null, timer: null };
+      function fmtBytes(n) {
+        n = Number(n || 0);
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        let i = 0;
+        while (n >= 1024 && i < units.length - 1) { n /= 1024; i += 1; }
+        return `${n.toFixed(i ? 1 : 0)} ${units[i]}`;
+      }
+      function renderMaintenance(data) {
+        const st = data.settings || {};
+        const w = data.workers || {};
+        const dbSize = data.db_stats && data.db_stats.database ? fmtBytes(data.db_stats.database.size_bytes) : '—';
+        document.getElementById('maint-settings').textContent =
+          `${dbSize} total · role ${st.role} · maintenance mode ${st.maintenance_mode ? 'ON' : 'off'} · event log ${st.event_log_mode} · ` +
+          `span retention ${st.span_retention_days} d · deleted-run grace ${st.deleted_run_grace_days} d · ` +
+          `workers: summary ${w.summary_worker_alive ? 'running' : 'stopped'}, maintenance ${w.maintenance_worker_alive ? 'running' : 'stopped'} · refreshed ${Math.round(data.db_stats_age_seconds)} s ago`;
+        const stats = data.db_stats || {};
+        const tb = document.querySelector('#maint-tables tbody');
+        tb.innerHTML = (stats.tables || []).slice(0, 12).map(t => `<tr><td>${escapeHtml(t.table)}</td><td>${fmtBytes(t.total_bytes)}</td><td>${fmtBytes(t.heap_bytes)}</td><td>${fmtBytes(t.toast_bytes)}</td><td>${fmtBytes(t.index_bytes)}</td><td>${Number(t.live_rows).toLocaleString()}</td><td>${Number(t.dead_rows).toLocaleString()}</td></tr>`).join('')
+          || `<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">${escapeHtml(stats.error || 'no statistics')}</td></tr>`;
+        const et = document.querySelector('#maint-event-types tbody');
+        et.innerHTML = (stats.run_events_by_type || []).map(r => `<tr><td>${escapeHtml(r.type)}</td><td>${Number(r.rows).toLocaleString()}</td><td>${fmtBytes(r.payload_bytes)}</td></tr>`).join('');
+        maint.kinds = data.job_kinds || {};
+        const sel = document.getElementById('maint-kind');
+        const current = sel.value;
+        sel.innerHTML = Object.keys(maint.kinds).sort().map(k => `<option value="${escapeHtml(k)}">${escapeHtml(k)}${maint.kinds[k].irreversible ? ' (irreversible)' : ''}</option>`).join('');
+        if (current && maint.kinds[current]) sel.value = current;
+        updateKindHelp();
+        maint.jobs = data.jobs || [];
+        const jb = document.querySelector('#maint-jobs tbody');
+        jb.innerHTML = maint.jobs.map(j => {
+          const p = j.progress || {};
+          const active = j.status === 'queued' || j.status === 'running' || j.status === 'paused';
+          const startBtn = j.status === 'paused' ? `<button class="btn btn-primary" type="button" data-job-start="${escapeHtml(j.id)}">Start</button>` : '';
+          return `<tr data-job="${escapeHtml(j.id)}"><td>${escapeHtml(j.kind)}</td><td class="maint-status--${escapeHtml(j.status)}">${escapeHtml(j.status)}</td><td>${escapeHtml(p.message || '')}</td><td>${escapeHtml((j.created_at || '').replace('T', ' ').slice(0, 19))}</td><td>${escapeHtml((j.finished_at || '').replace('T', ' ').slice(0, 19))}</td><td><div class="maint-actions"><button class="btn btn-secondary" type="button" data-job-log="${escapeHtml(j.id)}">Log</button>${startBtn}${active ? `<button class="btn btn-danger" type="button" data-job-cancel="${escapeHtml(j.id)}">Cancel</button>` : ''}</div></td></tr>`;
+        }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">No jobs yet</td></tr>';
+        jb.querySelectorAll('[data-job-log]').forEach(btn => btn.addEventListener('click', () => {
+          const job = maint.jobs.find(x => x.id === btn.dataset.jobLog);
+          const pre = document.getElementById('maint-log');
+          pre.hidden = false;
+          pre.textContent = job ? `${job.kind} ${job.status}\n${job.error ? 'ERROR: ' + job.error + '\n' : ''}${JSON.stringify(job.progress, null, 2)}\n\n${job.log || ''}` : '';
+        }));
+        jb.querySelectorAll('[data-job-start]').forEach(btn => btn.addEventListener('click', async () => {
+          await fetchJson(`api/admin/maintenance/jobs/${btn.dataset.jobStart}/start`, { method: 'POST' });
+          await loadMaintenance(false);
+        }));
+        jb.querySelectorAll('[data-job-cancel]').forEach(btn => btn.addEventListener('click', async () => {
+          await fetchJson(`api/admin/maintenance/jobs/${btn.dataset.jobCancel}/cancel`, { method: 'POST' });
+          await loadMaintenance(false);
+        }));
+        const running = maint.jobs.some(j => j.status === 'queued' || j.status === 'running' || j.status === 'cancel_requested');
+        clearTimeout(maint.timer);
+        if (running && document.getElementById('admin-panel-maintenance').hidden === false) {
+          maint.timer = setTimeout(() => loadMaintenance(false), 3000);
+        }
+      }
+      function updateKindHelp() {
+        const kind = document.getElementById('maint-kind').value;
+        const info = maint.kinds[kind] || {};
+        document.getElementById('maint-kind-help').textContent = info.description || '';
+        document.getElementById('maint-confirm-field').hidden = !info.irreversible;
+      }
+      async function loadMaintenance(refresh) {
+        try {
+          const data = await fetchJson(`api/admin/maintenance${refresh ? '?refresh=1' : ''}`);
+          if (data) renderMaintenance(data);
+        } catch (err) {
+          document.getElementById('maint-error').textContent = err.message || String(err);
+        }
+      }
+      document.getElementById('maint-refresh').addEventListener('click', () => loadMaintenance(true));
+      document.getElementById('maint-kind').addEventListener('change', updateKindHelp);
+      document.getElementById('maint-form').addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const errEl = document.getElementById('maint-error');
+        errEl.textContent = '';
+        let params;
+        try { params = JSON.parse(document.getElementById('maint-params').value || '{}'); }
+        catch (e) { errEl.textContent = 'Params must be valid JSON'; return; }
+        const kind = document.getElementById('maint-kind').value;
+        const body = { kind, params };
+        if (maint.kinds[kind]?.irreversible) body.confirm = document.getElementById('maint-confirm').value.trim();
+        try {
+          await fetchJson('api/admin/maintenance/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          document.getElementById('maint-confirm').value = '';
+          await loadMaintenance(false);
+        } catch (err) {
+          errEl.textContent = err.message || String(err);
+        }
+      });
+
       document.querySelectorAll('[data-admin-tab]').forEach(btn => {
-        btn.addEventListener('click', () => setAdminTab(btn.dataset.adminTab));
+        btn.addEventListener('click', () => {
+          setAdminTab(btn.dataset.adminTab);
+          if (btn.dataset.adminTab === 'maintenance') loadMaintenance(false);
+        });
       });
       try {
         setAdminTab(window.sessionStorage.getItem('qym:admin-tab') || 'runs');
@@ -608,9 +817,23 @@
       load().catch(err => {
         document.querySelector('main').innerHTML = `<div class="admin-page"><div class="card"><div style="padding:var(--space-lg);color:var(--error)">${escapeHtml(err.message)}</div></div></div>`;
       });
-      setInterval(() => {
-        if (state.me && state.me.role === 'ADMIN') loadLiveRuns();
-      }, 10000);
+      // Discover other live runs without overlapping requests. Stopped runs are
+      // removed by the API; there is no per-run polling for them in this page.
+      let liveTimer;
+      async function pollLiveRuns() {
+        if (adminClosed) return;
+        if (state.me?.role === 'ADMIN') await loadLiveRuns();
+        if (!adminClosed) liveTimer = setTimeout(pollLiveRuns, 10000);
+      }
+      liveTimer = setTimeout(pollLiveRuns, 10000);
+      function closeAdmin() {
+        adminClosed = true;
+        clearTimeout(liveTimer);
+        liveRequest++;
+        recentRequest++;
+      }
+      document.addEventListener('qym:before-navigate', closeAdmin, { once: true });
+      window.addEventListener('pagehide', closeAdmin, { once: true });
     })();
   </script>
 </body>

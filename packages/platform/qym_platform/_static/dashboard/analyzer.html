@@ -3843,7 +3843,7 @@
         const metrics = snapshot.metric_names || [];
         const metricIndex = metrics.indexOf(state.metric);
         const specs = snapshot.metric_specs || {};
-        const repeatRun = Number(state.data?.run?.samples || 1) > 1;
+        const repeatRun = (Number(state.data?.run?.samples || 1) > 1 || !!state.data?.run?.metadata?.has_repeat_pass_context);
         const passNumber = repeatRun ? state.passNumber : null;
 
         function passAttempt(row) {
@@ -4865,7 +4865,7 @@
 
       function createRunCard() {
         const run = state.data.run;
-        const passSelectorHtml = Number(run.samples || 1) > 1
+        const passSelectorHtml = (Number(run.samples || 1) > 1 || !!run.metadata?.has_repeat_pass_context)
           ? '<label class="analysis-pass-selector">Sample<select id="analysis-pass-select" class="qym-control qym-select" aria-label="Analysis sample">' +
             state.passSummaries.map(pass => '<option value="' + escapeAttr(pass.pass_number) + '"' + (Number(pass.pass_number) === state.passNumber ? ' selected' : '') + '>' + escapeHtml(passSummaryLabel(pass)) + '</option>').join('') +
             '</select></label>'
@@ -5786,6 +5786,7 @@
               : (state.contextRunId ? selectedRunUrl(state.contextRunId) : '');
           },
           getPassNumber: projectScoped ? () => null : () => state.passNumber,
+          getPassVersion: () => Number(state.data?.run?.metadata?.pass_revision || 0),
           getRows: projectScoped ? () => [] : analyzerRows,
           getMetric: projectScoped ? () => null : () => state.metric || null,
           getMetrics: projectScoped ? () => [] : () => state.selectedMetrics.slice(),
@@ -5863,7 +5864,7 @@
         state.selectedMetrics = requestedMetric && state.metrics.includes(requestedMetric) ? [requestedMetric] : state.metrics.slice();
         state.metric = state.selectedMetrics[0] || '';
         const sampleCount = Number(data.run.samples || 1);
-        if (sampleCount > 1) {
+        if (sampleCount > 1 || data.run.metadata?.has_repeat_pass_context) {
           const passesResponse = await fetch(apiUrl('api/runs/' + encodeURIComponent(runId) + '/passes'));
           if (!passesResponse.ok) throw new Error('Could not load the run samples (HTTP ' + passesResponse.status + ').');
           const passData = await passesResponse.json();

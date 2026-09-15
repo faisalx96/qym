@@ -56,6 +56,11 @@ jobs:
           pytest pytest-asyncio hypothesis playwright axe-playwright-python build
       - name: Install Chromium
         run: python -m playwright install --with-deps chromium
+      - name: Install matching Node browser test tools
+        run: |
+          qym_playwright_version=$(python -c "from importlib.metadata import version; print(version('playwright'))")
+          npm install --prefix "$RUNNER_TEMP/qym-node-tests" "playwright@$qym_playwright_version"
+          echo "NODE_PATH=$RUNNER_TEMP/qym-node-tests/node_modules" >> "$GITHUB_ENV"
       - name: Test SDK, platform, PostgreSQL and browser workflows
         run: python -m pytest -q --junitxml=test-results.xml
       - name: Build both distributions
