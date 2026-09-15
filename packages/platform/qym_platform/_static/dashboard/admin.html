@@ -139,15 +139,16 @@
     </div>
 
     <section class="admin-tab-panel active" id="admin-panel-runs" role="tabpanel" aria-labelledby="admin-tab-runs" data-admin-panel="runs">
+      <div class="message" id="run-message" role="status" aria-live="polite"></div>
       <div class="card">
         <div class="card-header">
           <div><div class="card-title">Live Runs</div><div class="card-subtitle" id="live-runs-count-label">Running across all qym projects</div></div>
         </div>
         <div class="card-body">
           <table class="data-table">
-            <thead><tr><th>Project</th><th>Run</th><th>Owner</th><th>Status</th><th>Progress</th><th>Updated</th></tr></thead>
+            <thead><tr><th>Project</th><th>Run</th><th>Owner</th><th>Status</th><th>Progress</th><th>Updated</th><th>Actions</th></tr></thead>
             <tbody id="live-runs-tbody">
-              <tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Loading...</td></tr>
+              <tr><td colspan="7" style="text-align:center;color:var(--text-muted)">Loading...</td></tr>
             </tbody>
           </table>
         </div>
@@ -159,9 +160,9 @@
         </div>
         <div class="card-body">
           <table class="data-table">
-            <thead><tr><th>Project</th><th>Run</th><th>Owner</th><th>Status</th><th>Items</th><th>Created</th></tr></thead>
+            <thead><tr><th>Project</th><th>Run</th><th>Owner</th><th>Status</th><th>Items</th><th>Created</th><th>Actions</th></tr></thead>
             <tbody id="recent-runs-tbody">
-              <tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Loading...</td></tr>
+              <tr><td colspan="7" style="text-align:center;color:var(--text-muted)">Loading...</td></tr>
             </tbody>
           </table>
         </div>
@@ -286,11 +287,19 @@
           .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
       }
 
-      let state = { users: [], projects: [], liveRuns: [], recentRuns: [], recentRunsPage: 0, recentRunsPageSize: 6, recentRunsTotal: 0, me: null, editingUserId: null };
+      let state = { users: [], projects: [], liveRuns: [], liveRunsTotal: 0, recentRuns: [], recentRunsPage: 0, recentRunsPageSize: 6, recentRunsTotal: 0, me: null, editingUserId: null };
+      const stoppingRuns = new Set();
+      const forceStoppedRuns = new Map();
+      let liveRequest = 0;
+      let recentRequest = 0;
+      let adminClosed = false;
 
       async function fetchJson(path, options) {
         const res = await fetch(apiUrl(path), options);
-        if (window.QymAuth && window.QymAuth.handle401(res)) return null;
+        if (window.QymAuth && window.QymAuth.handle401(res)) {
+          adminClosed = true;
+          throw new Error('Session expired. Sign in again.');
+        }
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.detail || 'Request failed');
         return data;
@@ -345,6 +354,58 @@
         return `<span class="status-pill qym-badge status-${escapeHtml(value)}">${escapeHtml(value)}</span>`;
       }
 
+      function forceStopAction(run) {
+        if (!run.can_force_stop || forceStoppedRuns.has(run.run_id)) return '';
+        const pending = stoppingRuns.has(run.run_id);
+        return `<button type="button" class="qym-inline-action qym-inline-action--danger" data-force-stop="${escapeHtml(run.run_id)}" aria-label="Force stop ${escapeHtml(runName(run))}" ${pending ? 'disabled' : ''}>${pending ? 'Stopping...' : 'Force stop'}</button>`;
+      }
+
+      async function forceStopRun(runId) {
+        if (stoppingRuns.has(runId) || forceStoppedRuns.has(runId)) return;
+        const run = [...state.liveRuns, ...state.recentRuns].find(item => item.run_id === runId);
+        if (!run || !run.can_force_stop) return;
+        stoppingRuns.add(runId);
+        const message = document.getElementById('run-message');
+        try {
+          const description = [
+            `Permanently stop recording "${runName(run)}"? Existing results will remain available.`,
+            'All further updates will be rejected, including if the runner reconnects. The process in Coder may continue until stopped there.',
+          ];
+          const confirmation = window.QymShell?.openConfirmDialog
+            ? await window.QymShell.openConfirmDialog({ title: 'Force stop run', description, confirmLabel: 'Force stop', confirmClass: 'shell-btn-danger' })
+            : { confirmed: window.confirm(description.join('\n\n')) };
+          if (!confirmation.confirmed || adminClosed) return;
+          renderLiveRuns();
+          renderRecentRuns();
+          message.style.color = '';
+          message.textContent = `Stopping "${runName(run)}"...`;
+          const stopped = await fetchJson(`api/runs/${encodeURIComponent(runId)}/force-stop`, { method: 'POST' });
+          if (adminClosed) return;
+          // Reject stale list responses that began before the stop completed.
+          liveRequest++;
+          recentRequest++;
+          forceStoppedRuns.set(runId, stopped);
+          if (state.liveRuns.some(item => item.run_id === runId)) state.liveRunsTotal = Math.max(0, state.liveRunsTotal - 1);
+          state.liveRuns = state.liveRuns.filter(item => item.run_id !== runId);
+          state.recentRuns = state.recentRuns.map(item => item.run_id === runId ? { ...item, ...stopped } : item);
+          renderLiveRuns();
+          renderRecentRuns();
+          message.textContent = `"${runName(run)}" was force stopped. Further updates are blocked.`;
+          await Promise.all([loadLiveRuns(), loadRecentRuns()]);
+        } catch (err) {
+          message.style.color = 'var(--error)';
+          message.textContent = 'Could not force stop run: ' + (err.message || 'Unknown error');
+        } finally {
+          stoppingRuns.delete(runId);
+          if (!adminClosed) { renderLiveRuns(); renderRecentRuns(); }
+        }
+      }
+
+      document.getElementById('admin-panel-runs').addEventListener('click', event => {
+        const button = event.target.closest('[data-force-stop]');
+        if (button && !button.disabled) forceStopRun(button.dataset.forceStop);
+      });
+
       function runUrl(run) {
         const root = (window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '');
         const project = run.project || {};
@@ -391,29 +452,35 @@
             <td>${statusPill(run.status)}</td>
             <td><span class="row-meta">${escapeHtml(itemLabel)}</span></td>
             <td><span class="row-meta">${escapeHtml(relativeTime(run.timestamp || run.last_event_at))}</span></td>
+            <td>${forceStopAction(run)}</td>
           </tr>`;
         }).join('');
       }
 
       async function loadLiveRuns() {
         const tbody = document.getElementById('live-runs-tbody');
-        if (!tbody) return;
+        if (!tbody || adminClosed) return;
+        const request = ++liveRequest;
         try {
           const data = await fetchJson('api/runs/live?all_projects=true&limit=100');
-          state.liveRuns = data && data.runs ? data.runs : [];
-          renderLiveRuns(data && data.total_count);
+          if (adminClosed || request !== liveRequest) return;
+          state.liveRuns = (data?.runs || []).filter(run => !forceStoppedRuns.has(run.run_id));
+          const filteredCount = (data?.runs || []).length - state.liveRuns.length;
+          state.liveRunsTotal = Math.max(0, (data?.total_count ?? state.liveRuns.length) - filteredCount);
+          renderLiveRuns();
         } catch (err) {
-          tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--error)">Failed to load live runs</td></tr>`;
+          if (adminClosed || request !== liveRequest) return;
+          tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--error)">Failed to load live runs</td></tr>`;
         }
       }
 
-      function renderLiveRuns(totalCount) {
+      function renderLiveRuns(totalCount = state.liveRunsTotal) {
         const label = document.getElementById('live-runs-count-label');
         if (label) label.textContent = `${totalCount == null ? state.liveRuns.length : totalCount} running across all qym projects`;
         const tbody = document.getElementById('live-runs-tbody');
         if (!tbody) return;
         if (!state.liveRuns.length) {
-          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">No live runs</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">No live runs</td></tr>';
           return;
         }
         const root = (window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '');
@@ -429,21 +496,25 @@
             <td><span class="live-status"><span class="live-status-dot"></span>${escapeHtml(run.status || 'RUNNING')}</span></td>
             <td><span class="live-progress">${escapeHtml(progressLabel(run))}</span></td>
             <td><span class="row-meta">${escapeHtml(relativeTime(run.last_event_at || run.timestamp))}</span></td>
+            <td>${forceStopAction(run)}</td>
           </tr>`;
         }).join('');
       }
 
       async function loadRecentRuns() {
         const tbody = document.getElementById('recent-runs-tbody');
-        if (!tbody) return;
+        if (!tbody || adminClosed) return;
+        const request = ++recentRequest;
         try {
           const offset = state.recentRunsPage * state.recentRunsPageSize;
           const data = await fetchJson(`api/runs/recent?all_projects=true&include_projects=false&global_limit=${state.recentRunsPageSize}&global_offset=${offset}`);
-          state.recentRuns = data && data.runs ? data.runs : [];
+          if (adminClosed || request !== recentRequest) return;
+          state.recentRuns = (data?.runs || []).map(run => ({ ...run, ...forceStoppedRuns.get(run.run_id) }));
           state.recentRunsTotal = data && data.total_count ? data.total_count : 0;
           renderRecentRuns(data && data.total_count);
         } catch (err) {
-          tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--error)">Failed to load recent runs</td></tr>`;
+          if (adminClosed || request !== recentRequest) return;
+          tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--error)">Failed to load recent runs</td></tr>`;
         }
       }
 
@@ -470,7 +541,7 @@
         const tbody = document.getElementById('recent-runs-tbody');
         if (!tbody) return;
         if (!state.recentRuns.length) {
-          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">No recent eval runs</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">No recent eval runs</td></tr>';
           return;
         }
         tbody.innerHTML = renderRunRows(state.recentRuns, true);
@@ -746,9 +817,23 @@
       load().catch(err => {
         document.querySelector('main').innerHTML = `<div class="admin-page"><div class="card"><div style="padding:var(--space-lg);color:var(--error)">${escapeHtml(err.message)}</div></div></div>`;
       });
-      setInterval(() => {
-        if (state.me && state.me.role === 'ADMIN') loadLiveRuns();
-      }, 10000);
+      // Discover other live runs without overlapping requests. Stopped runs are
+      // removed by the API; there is no per-run polling for them in this page.
+      let liveTimer;
+      async function pollLiveRuns() {
+        if (adminClosed) return;
+        if (state.me?.role === 'ADMIN') await loadLiveRuns();
+        if (!adminClosed) liveTimer = setTimeout(pollLiveRuns, 10000);
+      }
+      liveTimer = setTimeout(pollLiveRuns, 10000);
+      function closeAdmin() {
+        adminClosed = true;
+        clearTimeout(liveTimer);
+        liveRequest++;
+        recentRequest++;
+      }
+      document.addEventListener('qym:before-navigate', closeAdmin, { once: true });
+      window.addEventListener('pagehide', closeAdmin, { once: true });
     })();
   </script>
 </body>

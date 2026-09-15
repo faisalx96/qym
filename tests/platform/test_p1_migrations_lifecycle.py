@@ -103,8 +103,8 @@ def seed(engine, *, before_dashboard=False):
                 },
             )
         )
-        db.add(
-            ReviewCorrection(
+        db.execute(
+            ReviewCorrection.__table__.insert().values(
                 run_id="run",
                 item_id="item",
                 task="test",
@@ -176,7 +176,7 @@ def test_postgres_full_chain_upgrade_p1_downgrade_reupgrade(postgres, populated)
     command.upgrade(config, "head")
     with engine.connect() as connection:
         assert (
-            connection.scalar(text("select version_num from alembic_version")) == "0056"
+            connection.scalar(text("select version_num from alembic_version")) == "0057"
         )
         inspector = inspect(connection)
         assert "ix_dashboard_event_retention" in {

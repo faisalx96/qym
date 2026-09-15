@@ -426,6 +426,7 @@ def replace_metric_review_candidate(
                 ReviewCorrection.run_id == run.id,
                 ReviewCorrection.item_id == item.item_id,
                 ReviewCorrection.metric_name == metric_name,
+                ReviewCorrection.pass_number.is_(None),
                 ReviewCorrection.is_active.is_(True),
             )
             .all()
@@ -441,6 +442,7 @@ def replace_metric_review_candidate(
                 ReviewCorrection.run_id == run.id,
                 ReviewCorrection.item_id == item.item_id,
                 ReviewCorrection.metric_name == metric_name,
+                ReviewCorrection.pass_number.is_(None),
                 ReviewCorrection.status == CorrectionStatus.APPROVED,
                 ReviewCorrection.is_active.is_(True),
             )
@@ -484,6 +486,7 @@ def replace_metric_review_candidate(
                 ReviewCorrection.run_id == run.id,
                 ReviewCorrection.item_id == item.item_id,
                 ReviewCorrection.metric_name == metric_name,
+                ReviewCorrection.pass_number.is_(None),
                 ReviewCorrection.ai_root_cause.is_not(None),
                 ReviewCorrection.ai_root_cause != "",
             )

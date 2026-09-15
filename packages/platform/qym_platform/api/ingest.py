@@ -75,6 +75,7 @@ from qym_platform.item_identity import (
     looks_like_positional_item_id,
 )
 from qym_platform.services.run_lifecycle import (
+    is_run_force_stopped,
     mark_run_running,
     mark_run_terminal,
     touch_run_event,
@@ -875,14 +876,22 @@ def _ingest_events_sync(
     )
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
-    if run.deleted_at is not None:
-        raise HTTPException(
-            status_code=410, detail=f"Run was deleted on {run.deleted_at.isoformat()}"
-        )
     if run.owner_user_id != principal.user.id:
         raise HTTPException(status_code=403, detail="Forbidden")
     if principal.project_id and run.project_id != principal.project_id:
         raise HTTPException(status_code=403, detail="Forbidden")
+    if is_run_force_stopped(run):
+        raise HTTPException(
+            status_code=410,
+            detail="Run was force stopped by an administrator; further updates are rejected",
+            headers={"X-Qym-Run-State": "force_stopped"},
+        )
+    if run.deleted_at is not None:
+        raise HTTPException(
+            status_code=410,
+            detail=f"Run was deleted on {run.deleted_at.isoformat()}",
+            headers={"X-Qym-Run-State": "deleted"},
+        )
 
     try:
         text = body.decode("utf-8")

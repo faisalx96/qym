@@ -15,7 +15,10 @@ from sqlalchemy.orm import Session
 from qym_platform.datetime_utils import to_api_timestamp, utc_now_naive
 from qym_platform.db.models import (
     AuditLog, CorrectionStatus, ReviewCorrection, Run, RunItem, RunItemScore,
+    RunItemAttempt, RunItemPassScore,
 )
+from qym_platform.services.approved_categories import publish_approved_categories
+from qym_platform.services.root_cause_changes import PASS_ANALYSIS_META_KEY
 from qym_platform.services.root_cause_categories import (
     analysis_root_cause_issues, normalize_category_taxonomy,
     normalize_root_cause_issues, project_root_cause_issues,
@@ -135,6 +138,7 @@ def sync_issue_candidates(
     db: Session, *, run: Run, item: RunItem, metric_name: str,
     analysis: dict[str, Any], actor_user_id: str | None, actor_source: str,
     active_candidates: list[ReviewCorrection] | None = None,
+    pass_number: int | None = None,
 ) -> list[ReviewCorrection]:
     """Reconcile one candidate per issue; unchanged approvals remain active.
 
@@ -146,6 +150,7 @@ def sync_issue_candidates(
             ReviewCorrection.run_id == run.id,
             ReviewCorrection.item_id == item.item_id,
             ReviewCorrection.metric_name == metric_name,
+            ReviewCorrection.pass_number == pass_number,
             ReviewCorrection.is_active.is_(True),
         ).order_by(ReviewCorrection.created_at.desc(), ReviewCorrection.id.desc()).all()
     )
@@ -158,9 +163,22 @@ def sync_issue_candidates(
             issues[0]["confidence"] = analysis["confidence"]
         if not issues[0].get("category_reason") and analysis.get("root_cause_reason"):
             issues[0]["category_reason"] = analysis["root_cause_reason"]
+    score_model = RunItemScore if pass_number is None else RunItemPassScore
+    score_query = db.query(score_model).filter(
+        score_model.run_id == run.id, score_model.item_id == item.item_id)
+    if pass_number is not None:
+        score_query = score_query.filter(RunItemPassScore.pass_number == pass_number)
     scores = {score.metric_name: score.score_numeric if score.score_numeric is not None else score.score_raw
-              for score in db.query(RunItemScore).filter(
-                  RunItemScore.run_id == run.id, RunItemScore.item_id == item.item_id).all()}
+              for score in score_query.all()}
+    output = item.output
+    if pass_number is not None:
+        attempt = db.query(RunItemAttempt).filter(
+            RunItemAttempt.run_id == run.id, RunItemAttempt.item_id == item.item_id,
+            RunItemAttempt.pass_number == pass_number,
+            RunItemAttempt.is_last_attempt.is_(True),
+        ).order_by(RunItemAttempt.attempt_number.desc()).first()
+        # Never use another pass's reduced output as this pass's evidence.
+        output = attempt.output if attempt is not None else None
     candidates = []
     retained = set()
     ids = set()
@@ -192,8 +210,9 @@ def sync_issue_candidates(
             status = legacy.status if unchanged_legacy else CorrectionStatus.PENDING
             candidate = ReviewCorrection(
                 run_id=run.id, item_id=item.item_id, metric_name=metric_name, task=run.task,
+                pass_number=pass_number,
                 input_snapshot=item.input, expected_snapshot=item.expected,
-                output_snapshot=item.output, scores_snapshot=scores,
+                output_snapshot=output, scores_snapshot=scores,
                 ai_root_cause=ai_projection["root_cause"], ai_root_causes=ai_projection["root_causes"],
                 ai_root_cause_issues=ai_issues, ai_root_cause_detail=ai_projection["root_cause_detail"],
                 ai_root_cause_note=ai_projection["root_cause_note"],
@@ -271,11 +290,11 @@ def change_metric_issue(
     analysis["root_cause_issues"] = issues
     # Split any legacy grouped review before changing content. This transfers
     # legitimate old approvals to the original siblings, never to a new issue.
-    if pass_number is None:
-        sync_issue_candidates(db, run=run, item=item, metric_name=metric_name,
-                              analysis=analysis, actor_user_id=actor_user_id,
-                              actor_source=str(analysis.get("source") or "ai"))
-        db.flush()
+    sync_issue_candidates(db, run=run, item=item, metric_name=metric_name,
+                          analysis=analysis, actor_user_id=actor_user_id,
+                          actor_source=str(analysis.get("source") or "ai"),
+                          pass_number=pass_number)
+    db.flush()
     issues = analysis["root_cause_issues"]
     if action in {"add", "edit"}:
         raw_issue = request.get("issue")
@@ -298,25 +317,21 @@ def change_metric_issue(
     elif action == "delete":
         issues.pop(index)
         analysis["source"] = "human"
-    if pass_number is None:
-        candidates = sync_issue_candidates(
-            db, run=run, item=item, metric_name=metric_name, analysis=analysis,
-            actor_user_id=actor_user_id, actor_source="human",
-        )
-        if action == "approve":
-            candidate = candidates[index]
-            if not candidate.human_root_cause_issues and candidate.ai_root_cause_issues:
-                candidate.human_root_cause_issues = deepcopy(candidate.ai_root_cause_issues)
-                for suffix in ("root_cause", "root_causes", "root_cause_detail", "root_cause_note", "category_taxonomy", "solution", "solution_note"):
-                    setattr(candidate, "human_" + suffix, deepcopy(getattr(candidate, "ai_" + suffix)))
-            candidate.status = CorrectionStatus.APPROVED
-            candidate.reviewed_by_user_id = actor_user_id
-            candidate.reviewed_at = utc_now_naive()
-            apply_issue_review(analysis["root_cause_issues"][index], candidate)
-    elif action == "approve":
-        issues[index].update(review_status="approved", reviewed_at=to_api_timestamp(utc_now_naive()))
-        if actor_user_id:
-            issues[index]["reviewed_by_user_id"] = actor_user_id
+    candidates = sync_issue_candidates(
+        db, run=run, item=item, metric_name=metric_name, analysis=analysis,
+        actor_user_id=actor_user_id, actor_source="human", pass_number=pass_number,
+    )
+    if action == "approve":
+        candidate = candidates[index]
+        if not candidate.human_root_cause_issues and candidate.ai_root_cause_issues:
+            candidate.human_root_cause_issues = deepcopy(candidate.ai_root_cause_issues)
+            for suffix in ("root_cause", "root_causes", "root_cause_detail", "root_cause_note", "category_taxonomy", "solution", "solution_note"):
+                setattr(candidate, "human_" + suffix, deepcopy(getattr(candidate, "ai_" + suffix)))
+        candidate.status = CorrectionStatus.APPROVED
+        candidate.reviewed_by_user_id = actor_user_id
+        candidate.reviewed_at = utc_now_naive()
+        apply_issue_review(analysis["root_cause_issues"][index], candidate)
+        publish_approved_categories(db, run.project_id, [candidate], actor_user_id)
     refresh_issue_summary(analysis)
     if before != analysis:
         db.add(AuditLog(
@@ -338,8 +353,14 @@ def sync_correction_issue_metadata(db: Session, correction: ReviewCorrection, *,
     ).populate_existing().with_for_update().one_or_none()
     if item is None:
         return
-    meta = deepcopy(item.item_metadata or {})
-    analysis = meta.get("metric_analyses", {}).get(correction.metric_name, {})
+    pass_score = None
+    if correction.pass_number is not None:
+        pass_score = lock_correction_pass(db, correction)
+        meta = deepcopy(pass_score.meta or {})
+        analysis = meta.get(PASS_ANALYSIS_META_KEY, {})
+    else:
+        meta = deepcopy(item.item_metadata or {})
+        analysis = meta.get("metric_analyses", {}).get(correction.metric_name, {})
     issues = analysis_root_cause_issues(analysis)
     if remove:
         issues = [issue for issue in issues if issue.get("issue_id") != issue_id]
@@ -349,4 +370,21 @@ def sync_correction_issue_metadata(db: Session, correction: ReviewCorrection, *,
                 apply_issue_review(issue, correction)
     analysis["root_cause_issues"] = issues
     refresh_issue_summary(analysis)
-    item.item_metadata = meta
+    if pass_score is not None:
+        meta[PASS_ANALYSIS_META_KEY] = analysis
+        pass_score.meta = meta
+    else:
+        item.item_metadata = meta
+
+
+def lock_correction_pass(db: Session, correction: ReviewCorrection) -> RunItemPassScore:
+    """Lock the pass after the caller has locked its parent item."""
+    score = db.query(RunItemPassScore).filter(
+        RunItemPassScore.run_id == correction.run_id,
+        RunItemPassScore.item_id == correction.item_id,
+        RunItemPassScore.metric_name == correction.metric_name,
+        RunItemPassScore.pass_number == correction.pass_number,
+    ).populate_existing().with_for_update().one_or_none()
+    if score is None:
+        raise HTTPException(404, "Pass score not found")
+    return score

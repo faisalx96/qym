@@ -2149,6 +2149,7 @@
             ${c.task ? `<span class="context-chip" title="${escapeHtml(c.task)}"><strong>Task</strong><span>${escapeHtml(c.task)}</span></span>` : ''}
             ${c.metric_name ? `<span class="context-chip" title="${escapeHtml(c.metric_name)}"><strong>Metric</strong><span>${escapeHtml(c.metric_name)}</span></span>` : ''}
             ${c.run_name ? `<span class="context-chip" title="${escapeHtml(c.run_name)}"><strong>Run</strong><span>${escapeHtml(c.run_name)}</span></span>` : ''}
+            ${c.pass_number != null ? `<span class="context-chip"><strong>Pass</strong><span>${escapeHtml(String(c.pass_number))}</span></span>` : ''}
             ${c.dataset ? `<span class="context-chip" title="${escapeHtml(c.dataset)}"><strong>Dataset</strong><span>${escapeHtml(c.dataset)}</span></span>` : ''}
             ${c.model ? `<span class="context-chip" title="${escapeHtml(c.model)}"><strong>Model</strong><span>${renderModelLabel(c.model, !!c.has_reasoning)}</span></span>` : ''}
           </div>

@@ -1658,6 +1658,7 @@ def reconcile_expired_dashboard_runs(db, *, now=None, timeout_seconds=None, limi
             .order_by(last_seen, Run.id)
             .limit(limit)
             .with_for_update(skip_locked=True)
+            .execution_options(populate_existing=True)
         )
     )
     changed = sum(

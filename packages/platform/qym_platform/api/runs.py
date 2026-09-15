@@ -61,7 +61,13 @@ from qym_platform.permissions import (
     has_project_access,
 )
 from qym_platform.services.issue_reviews import change_metric_issue, reconcile_issue_edits
-from qym_platform.services.run_lifecycle import reconcile_stale_running_run
+from qym_platform.services.run_lifecycle import (
+    RUN_STATUS_REASON_ADMIN_FORCE_STOP,
+    can_force_stop_run,
+    is_run_force_stopped,
+    is_stale_running_run,
+    reconcile_stale_running_run,
+)
 from qym_platform.services.run_payloads import compact_row, detail_item_ids, search_conditions
 from qym_platform.services.repeat_passes import (
     RepeatPassDeletionError,
@@ -1339,14 +1345,34 @@ def _reconcile_run_liveness(db: Session, runs: List[Run]) -> None:
     if not runs:
         return
     timeout_seconds = PlatformSettings().run_stale_timeout_seconds
+    running_ids = [
+        run.id
+        for run in runs
+        if is_stale_running_run(run, timeout_seconds=timeout_seconds)
+    ]
+    if not running_ids:
+        return
+    # A GET may have loaded RUNNING before an admin stop or a fresh heartbeat.
+    # Refresh under the same lock as ingestion before inferring a timeout.
+    locked_runs = (
+        db.query(Run)
+        .filter(Run.id.in_(running_ids))
+        .order_by(Run.id)
+        .with_for_update()
+        .populate_existing()
+        .all()
+    )
     changed = False
-    for run in runs:
+    for run in locked_runs:
         if reconcile_stale_running_run(run, timeout_seconds=timeout_seconds):
             changed = True
     if changed:
         db.commit()
         for run in runs:
             db.refresh(run)
+    else:
+        # Release liveness locks before building potentially large run payloads.
+        db.commit()
 
 
 def _serialize_span(span: Span) -> Dict[str, Any]:
@@ -1727,6 +1753,9 @@ def _live_run_summary(
         "status": run.status.value
         if hasattr(run.status, "value")
         else str(run.status or ""),
+        "status_reason": run.status_reason,
+        "can_force_stop": can_force_stop_run(run),
+        "ended_at": _iso(run.ended_at) if run.ended_at else None,
         "timestamp": _iso(run.started_at or run.created_at),
         "started_at": _iso(run.started_at) if run.started_at else None,
         "last_event_at": _iso(run.last_event_at or run.updated_at or run.created_at),
@@ -3159,7 +3188,8 @@ def _build_run_data(
     metric_specs = _metric_specs_for_runs(db, [run.id]).get(run.id, {})
     corrections = (
         db.query(ReviewCorrection)
-        .filter(ReviewCorrection.run_id == run.id, ReviewCorrection.is_active.is_(True))
+        .filter(ReviewCorrection.run_id == run.id, ReviewCorrection.is_active.is_(True),
+                ReviewCorrection.pass_number.is_(None))
         .filter(
             ReviewCorrection.item_id.in_(item_ids) if item_ids is not None else True
         )
@@ -3605,6 +3635,7 @@ def _build_run_data(
                 "config": run_config,
                 "metadata": run_metadata,
                 "status": run.status,
+                "status_reason": run.status_reason,
                 "owner": owner_info,
                 "team_name": project.name if project else None,
                 "project": project_info,
@@ -4908,8 +4939,23 @@ def update_root_cause(
             else {}
         )
         after_analysis = _apply_metric_analysis_patch(before_analysis, patch)
-        if after_analysis:
+        from qym_platform.services.issue_reviews import sync_issue_candidates
+
+        existing_reviews = db.query(ReviewCorrection).filter(
+            ReviewCorrection.run_id == run.id, ReviewCorrection.item_id == item.item_id,
+            ReviewCorrection.metric_name == metric_name, ReviewCorrection.pass_number == pass_number,
+            ReviewCorrection.is_active.is_(True),
+        ).all()
+        if existing_reviews:
+            sync_issue_candidates(
+                db, run=run, item=item, metric_name=metric_name,
+                analysis=after_analysis, actor_user_id=(
+                    principal.user.id if principal.auth_type != "none" else None
+                ), actor_source="human", pass_number=pass_number, active_candidates=existing_reviews,
+            )
+        elif after_analysis:
             after_analysis["review_status"] = "pending"
+        if after_analysis:
             pass_meta[PASS_ANALYSIS_META_KEY] = after_analysis
         else:
             pass_meta.pop(PASS_ANALYSIS_META_KEY, None)
@@ -5044,6 +5090,64 @@ def update_root_cause(
         (row for row in updated_rows if row.get("item_id") == item.item_id), None
     )
     return {"ok": True, "row": updated_row}
+
+
+@router.post("/api/runs/{run_id}/force-stop")
+def force_stop_run(
+    run_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Permanently close an SDK run to ingestion, without deleting its results."""
+    if principal.user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    # Ingestion holds this row lock for its entire transaction. Once this stop
+    # commits, no later batch can change the run or any of its event data.
+    run = (
+        db.query(Run)
+        .filter(Run.id == run_id)
+        .with_for_update()
+        .populate_existing()
+        .first()
+    )
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    stopped = False
+    if not is_run_force_stopped(run):
+        if not can_force_stop_run(run):
+            raise HTTPException(status_code=409, detail="Run has already finished")
+        before = run.audit_snapshot()
+        before["status_reason"] = run.status_reason
+        run.status = RunWorkflowStatus.STOPPED
+        run.status_reason = RUN_STATUS_REASON_ADMIN_FORCE_STOP
+        run.ended_at = utc_now_naive()
+        # Preserve last_event_at: stopping is an admin action, not runner activity.
+        db.add(
+            AuditLog(
+                actor_user_id=principal.user.id,
+                action="run.force_stopped",
+                entity_type="run",
+                entity_id=run.id,
+                before=before,
+                after={
+                    "status": run.status.value,
+                    "status_reason": run.status_reason,
+                    "ended_at": to_api_timestamp(run.ended_at),
+                },
+            )
+        )
+        stopped = True
+    result = {
+        "ok": True,
+        "run_id": run.id,
+        "stopped": stopped,
+        "status": run.status.value,
+        "status_reason": run.status_reason,
+        "ended_at": to_api_timestamp(run.ended_at),
+        "can_force_stop": False,
+    }
+    db.commit()
+    return result
 
 
 @router.post("/api/runs/delete")

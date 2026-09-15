@@ -426,7 +426,7 @@ def _stop_product_eval_runs(
 
     now = utc_now_naive()
     stopped = 0
-    for run in query.all():
+    for run in query.order_by(Run.id).with_for_update().populate_existing().all():
         if run.status in {
             RunWorkflowStatus.COMPLETED,
             RunWorkflowStatus.FAILED,
@@ -445,7 +445,8 @@ def _stop_product_eval_runs(
 def _stop_runs(db: Session, runs: List[Run]) -> int:
     now = utc_now_naive()
     stopped = 0
-    for run in runs:
+    for run in sorted(runs, key=lambda value: value.id):
+        db.refresh(run, with_for_update=True)
         if run.status in {
             RunWorkflowStatus.COMPLETED,
             RunWorkflowStatus.FAILED,
@@ -462,6 +463,7 @@ def _stop_runs(db: Session, runs: List[Run]) -> int:
 
 
 def _mark_run_stopped(db: Session, run: Run) -> bool:
+    db.refresh(run, with_for_update=True)
     if run.status in {
         RunWorkflowStatus.COMPLETED,
         RunWorkflowStatus.FAILED,

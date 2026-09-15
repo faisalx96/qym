@@ -6,6 +6,7 @@ import os
 import threading
 import time
 from queue import Full
+from urllib.error import HTTPError
 
 import pytest
 
@@ -14,6 +15,118 @@ from qym.core.evaluator import Evaluator
 from qym.platform import client as client_module
 from qym.platform._backlog import EventBacklog
 from qym.platform.client import PlatformEventStream, PlatformRunHandle
+
+
+@pytest.mark.parametrize("delivery", ["batch", "sync", "fallback"])
+def test_gone_stops_every_delivery_path_and_reports_once(monkeypatch, capsys, delivery):
+    calls = []
+
+    def post(url, body, key, **kwargs):
+        calls.append(body)
+        code = 422 if delivery == "fallback" and len(calls) == 1 else 410
+        raise HTTPError(url, code, "Rejected", {}, None)
+
+    stream = configure_stream(monkeypatch, post)
+    try:
+        stream.emit("run_completed", {}, sync=delivery == "sync")
+        stream.close()
+        assert stream._remote_closed.is_set()
+        assert not stream._thread.is_alive()
+        assert not stream.flush(0)
+        expected = 2 if delivery == "fallback" else 1
+        assert len(calls) == expected
+        stream.emit("run_heartbeat", {})
+        stream.emit("run_completed", {}, sync=True)
+        assert len(calls) == expected
+        assert stream._q.unfinished_tasks == 0
+        stream.close()
+        output = capsys.readouterr().err
+        assert output.count("HTTP 410") == 1
+        assert "gave up" not in output
+    finally:
+        stream.close()
+
+
+@pytest.mark.asyncio
+async def test_gone_releases_backpressured_producers_and_discards_spool(monkeypatch):
+    entered, release = threading.Event(), threading.Event()
+    calls = []
+
+    def post(url, body, key, **kwargs):
+        calls.append(body)
+        entered.set()
+        assert release.wait(3)
+        raise HTTPError(url, 410, "Gone", {}, None)
+
+    stream = configure_stream(monkeypatch, post, memory=1, disk=900)
+    monkeypatch.setattr(stream, "MAX_BATCH_EVENTS", 1)
+    payload = {"text": "x" * 450}
+    producer = None
+    try:
+        await stream.aemit("item_completed", payload)
+        assert await asyncio.to_thread(entered.wait, 2)
+        await stream.aemit("item_completed", payload)
+        path = stream._q.spool_path
+        assert path and os.path.exists(path)
+        producer = asyncio.create_task(stream.aemit("item_completed", payload))
+        await asyncio.sleep(0.05)
+        assert not producer.done()
+        release.set()
+        await asyncio.wait_for(producer, 2)
+        await asyncio.wait_for(stream.aclose(), 2)
+        assert len(calls) == 1
+        assert not os.path.exists(path)
+        assert stream._q.unfinished_tasks == 0
+        assert stream._active_emitters == 0
+        assert not await stream.aflush(0)
+        await stream.aemit("run_heartbeat", {})
+        await stream.aemit("run_completed", {}, sync=True)
+        assert len(calls) == 1
+    finally:
+        release.set()
+        if producer and not producer.done():
+            producer.cancel()
+            await asyncio.gather(producer, return_exceptions=True)
+        await stream.aclose()
+
+
+def test_gone_heartbeat_terminates_idle_stream(monkeypatch):
+    calls = []
+
+    def post(url, body, key, **kwargs):
+        calls.append(body)
+        raise HTTPError(url, 410, "Gone", {}, None)
+
+    monkeypatch.setattr(PlatformEventStream, "HEARTBEAT_INTERVAL", 0.01)
+    stream = configure_stream(monkeypatch, post)
+    try:
+        stream._thread.join(2)
+        assert not stream._thread.is_alive()
+        assert len(calls) == 1
+        assert json.loads(calls[0])["type"] == "run_heartbeat"
+    finally:
+        stream.close()
+
+
+def test_discard_wakes_producer_even_if_spool_was_removed():
+    queue = EventBacklog(1, 100)
+    queue.put({"text": "a" * 70})
+    outcomes = []
+
+    def append():
+        try:
+            queue.put({"text": "b" * 70})
+        except RuntimeError as exc:
+            outcomes.append(str(exc))
+
+    producer = threading.Thread(target=append, daemon=True)
+    producer.start()
+    os.unlink(queue.spool_path)
+    assert queue.discard() == 1
+    producer.join(2)
+    assert not producer.is_alive()
+    assert outcomes == ["Platform event backlog is closed"]
+    assert queue.unfinished_tasks == 0
 
 
 def test_backlog_spills_fifo_unicode_with_strict_caps_and_private_file():
