@@ -20,6 +20,7 @@ from qym_platform.db.models import (
     Span,
 )
 from sqlalchemy import Integer, cast, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
 
@@ -248,7 +249,7 @@ _RUN_LEVEL_EVENT_TYPES = ("run_started", "run_completed")
 
 
 def _rewrite_events_sql(db: Session, run: Run, deleted_pass: int) -> int:
-    """PostgreSQL: renumber pass_number inside jsonb payloads without loading them.
+    """PostgreSQL: renumber pass_number inside JSON payloads without loading them.
 
     ORM bulk statements are used (not raw SQL) so the dashboard outbox hook can
     snapshot the affected rows and keep the projection consistent.
@@ -269,7 +270,10 @@ def _rewrite_events_sql(db: Session, run: Run, deleted_pass: int) -> int:
     db.query(RunEvent).filter(*scoped, pass_int > deleted_pass).update(
         {
             RunEvent.payload: func.jsonb_set(
-                RunEvent.payload, "{pass_number}", func.to_jsonb(pass_int - 1)
+                # Migration 0052 can defer large tables, leaving payload as JSON.
+                cast(RunEvent.payload, JSONB),
+                "{pass_number}",
+                func.to_jsonb(pass_int - 1),
             )
         },
         synchronize_session=False,
