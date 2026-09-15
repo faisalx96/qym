@@ -479,6 +479,10 @@ async def test_t21_shared_client_reused_across_task_invocations():
     except Exception as e:
         pytest.skip(f"task_v2_async import failed: {e}")
 
+    # The sibling project may expose this task through a compatibility wrapper.
+    # Patch the defining module, where the function actually resolves globals.
+    task_v2_async = sys.modules[task_v2_async.sql_agent_task_async.__module__]
+
     # Patch at task_v2_async's own bound reference to AsyncOpenAI so we don't
     # depend on the real `openai` package having a class-level `close` method.
     # The test_judges.py module in this directory installs a MagicMock for

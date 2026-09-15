@@ -524,10 +524,7 @@ window.QymPlayground = (function () {
       body.metric = null;
       body.metrics = _getSelectedMetrics();
     }
-    if (_opts.getPassNumber) {
-      var passNumber = _opts.getPassNumber();
-      if (passNumber != null) body.pass_number = Number(passNumber);
-    }
+    _addPassContext(body);
 
     _running = true;
     _analysisCancelRequested = false;
@@ -5809,6 +5806,15 @@ window.QymPlayground = (function () {
 
   // ── Auto Preview (debounced) ──
 
+  function _addPassContext(body) {
+    var passNumber = _opts.getPassNumber ? _opts.getPassNumber() : null;
+    if (passNumber != null) {
+      body.pass_number = Number(passNumber);
+      body.expected_pass_version = Number(_opts.getPassVersion ? _opts.getPassVersion() : 0);
+    }
+    return body;
+  }
+
   function _scheduleAutoPreview(delayMs) {
     if (_previewTimer) clearTimeout(_previewTimer);
     _previewTimer = setTimeout(_autoPreview, delayMs || 500);
@@ -5850,7 +5856,7 @@ window.QymPlayground = (function () {
       fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_id: itemId, metric: metricName || null, config: cfg, connection_id: _connectionId, pass_number: _opts.getPassNumber ? _opts.getPassNumber() : null }),
+        body: JSON.stringify(_addPassContext({ item_id: itemId, metric: metricName || null, config: cfg, connection_id: _connectionId })),
       })
       .then(function (r) {
         if (!r.ok) {
@@ -5936,7 +5942,7 @@ window.QymPlayground = (function () {
     fetch(base('api/runs/' + runId + '/analyze-test'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item_ids: [testTarget.item_id], metric: testTarget.metric_name || null, config: cfg, connection_id: _connectionId, pass_number: _opts.getPassNumber ? _opts.getPassNumber() : null }),
+      body: JSON.stringify(_addPassContext({ item_ids: [testTarget.item_id], metric: testTarget.metric_name || null, config: cfg, connection_id: _connectionId })),
     })
     .then(function (r) {
       if (!r.ok) return r.json().then(function (d) { throw new Error(d.detail || 'Test failed'); });

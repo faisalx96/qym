@@ -725,13 +725,14 @@ def repair_extrema(db, project_key, bucket_key, granularity="hour"):
         bucket.latency_min, bucket.latency_max = _fold("latency_min", min), _fold("latency_max", max)
         bucket.score_min, bucket.score_max = _fold("score_min", min), _fold("score_max", max)
     else:
-        # Records of hidden runs are flipped present=False by _move_numeric_records,
-        # so no dimension join is needed. One plain MIN/MAX per kind lets the
-        # partial indexes ix_dashboard_record_item_latency / _score_value answer
-        # each query from a one-hour index range.
+        # Soft deletion preserves records for restore. Only records whose run
+        # is currently visible may contribute to the bucket's extrema.
         def _extremes(kind, column):
             return db.execute(
-                select(func.min(column), func.max(column)).where(
+                select(func.min(column), func.max(column))
+                .join(Dimension, Dimension.run_key == Record.run_key)
+                .where(
+                    Dimension.present.is_(True),
                     Record.project_key == project_key,
                     Record.bucket_key >= bucket_key,
                     Record.bucket_key < bucket_key + 3600,
@@ -879,6 +880,8 @@ def _sync_dimension(db, run_id, version):
         "metric_specs": _metric_specs_for_runs(db, [run.id]).get(run.id, {}),
         "run_config": {},
         "samples": int(run.samples or 1),
+        "pass_revision": int(metadata.get("pass_revision") or 0),
+        "has_repeat_pass_context": bool(metadata.get("has_repeat_pass_context")),
         "report_k": config.get("report_k"),
         "last_completed_pass": metadata.get("last_completed_pass"),
         "git_branch": config.get("git_branch"),
@@ -1551,18 +1554,22 @@ def dashboard_freshness(db, project_ids):
         func.coalesce(Summary.projection_revision, 0) == 0,
         Dimension.present.is_(False),
     )
-    # Source sequence allocation is independent of commit order. A published
-    # revision increments even when an older transaction arrives after a newer
-    # record in the same run. Summing these monotonic counters also covers slow
-    # partitions without evicting unrelated projects.
-    revision = (
-        db.scalar(
-            select(func.sum(Summary.projection_revision)).where(
-                Summary.project_key.in_(projects)
-            )
+    # Include membership, including revision-zero pending runs. A sum alone
+    # misses their insertion and can collide after a purge and publication.
+    # Read only identity/revision columns, streamed in deterministic order.
+    revision = 0
+    catalog_hash = hashlib.sha256()
+    for run_key, published_revision, present in db.execute(
+        select(Summary.run_key, Summary.projection_revision, Dimension.present)
+        .outerjoin(Dimension, Dimension.run_key == Summary.run_key)
+        .where(Summary.project_key.in_(projects))
+        .order_by(Summary.run_key)
+        .execution_options(yield_per=1000)
+    ):
+        revision += int(published_revision or 0)
+        catalog_hash.update(
+            json.dumps([run_key, published_revision, present], separators=(",", ":")).encode()
         )
-        or 0
-    )
     pending, oldest, backfilling, unpublished, failed = db.execute(
         select(
             func.count(),
@@ -1602,6 +1609,7 @@ def dashboard_freshness(db, project_ids):
     ).one()
     return {
         "revision": int(revision),
+        "catalog_revision": catalog_hash.hexdigest(),
         "freshness": {
             "updating": bool(pending),
             "pending_partitions": int(pending),

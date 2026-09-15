@@ -113,6 +113,12 @@ async function failure(browser) {
 
 async function runPolling(browser, terminalCode) {
   const page = await browser.newPage();
+  await page.addInitScript(() => {
+    const schedule = window.setTimeout;
+    // The checks below must span several polling intervals. Keep the actual
+    // scheduling code, but accelerate its two-second interval for this test.
+    window.setTimeout = (fn, ms, ...args) => schedule(fn, ms === 2000 ? 100 : ms, ...args);
+  });
   const uiDir = path.join(root, 'packages/platform/qym_platform/_static/ui');
   let reads = 0;
   let release;

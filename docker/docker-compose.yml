@@ -27,6 +27,10 @@ services:
       QYM_ROOT_PATH: ${QYM_ROOT_PATH:-}
       QYM_DATABASE_URL: ${QYM_DATABASE_URL}
       QYM_ROLE: ${QYM_ROLE:-api}
+      QYM_MAINTENANCE_MODE: ${QYM_MAINTENANCE_MODE:-false}
+      QYM_EVENT_LOG_MODE: ${QYM_EVENT_LOG_MODE:-full}
+      QYM_SPAN_RETENTION_DAYS: ${QYM_SPAN_RETENTION_DAYS:-60}
+      QYM_DELETED_RUN_GRACE_DAYS: ${QYM_DELETED_RUN_GRACE_DAYS:-30}
       QYM_ADMIN_BOOTSTRAP_TOKEN: ${QYM_ADMIN_BOOTSTRAP_TOKEN}
       QYM_AUTH_MODE: ${QYM_AUTH_MODE}
       QYM_AUTH_SESSION_SECRET: ${QYM_AUTH_SESSION_SECRET}
@@ -47,7 +51,7 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/healthz\").read()'"]
+      test: ["CMD-SHELL", "python -c 'import os, urllib.request; urllib.request.urlopen(\"http://localhost:8000\" + os.getenv(\"QYM_ROOT_PATH\", \"\").rstrip(\"/\") + \"/healthz\").read()'"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -80,6 +84,10 @@ services:
       QYM_ROLE: worker
       QYM_SKIP_MIGRATIONS: "1"
       QYM_ENVIRONMENT: ${QYM_ENVIRONMENT:-dev}
+      QYM_MAINTENANCE_MODE: ${QYM_MAINTENANCE_MODE:-false}
+      QYM_EVENT_LOG_MODE: ${QYM_EVENT_LOG_MODE:-full}
+      QYM_SPAN_RETENTION_DAYS: ${QYM_SPAN_RETENTION_DAYS:-60}
+      QYM_DELETED_RUN_GRACE_DAYS: ${QYM_DELETED_RUN_GRACE_DAYS:-30}
     depends_on:
       api:
         condition: service_healthy

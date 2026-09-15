@@ -96,6 +96,12 @@ from qym_platform.services.issue_reviews import (
     sync_correction_issue_metadata, lock_issue_correction, lock_correction_pass,
     sync_issue_candidates,
 )
+from qym_platform.services.repeat_passes import (
+    RepeatPassDeletionError,
+    has_repeat_pass_context,
+    lock_repeat_run,
+    pass_revision_matches,
+)
 from qym_platform.services.root_cause_changes import (
     PASS_ANALYSIS_META_KEY,
     apply_root_cause_change,
@@ -927,6 +933,7 @@ class AnalyzeRequest(BaseModel):
     config: Optional[PlaygroundConfig] = None
     category_catalog_version_id: Optional[str] = Field(default=None, max_length=80)
     pass_number: Optional[int] = Field(default=None, ge=1)
+    expected_pass_version: Optional[int] = Field(default=None, ge=0, strict=True)
     connection_id: Optional[str] = (
         None  # which project LLM connection to use; default if omitted
     )
@@ -938,6 +945,7 @@ class AggregateAnalysisRequest(BaseModel):
     metric: Optional[str] = None
     category_catalog_version_id: Optional[str] = Field(default=None, max_length=80)
     pass_number: Optional[int] = Field(default=None, ge=1)
+    expected_pass_version: Optional[int] = Field(default=None, ge=0, strict=True)
     connection_id: Optional[str] = None
 
 
@@ -949,6 +957,7 @@ class PreviewRequest(BaseModel):
     config: Optional[PlaygroundConfig] = None
     category_catalog_version_id: Optional[str] = Field(default=None, max_length=80)
     pass_number: Optional[int] = Field(default=None, ge=1)
+    expected_pass_version: Optional[int] = Field(default=None, ge=0, strict=True)
     connection_id: Optional[str] = None
 
 
@@ -960,6 +969,7 @@ class TestRequest(BaseModel):
     config: Optional[PlaygroundConfig] = None
     category_catalog_version_id: Optional[str] = Field(default=None, max_length=80)
     pass_number: Optional[int] = Field(default=None, ge=1)
+    expected_pass_version: Optional[int] = Field(default=None, ge=0, strict=True)
     connection_id: Optional[str] = None
 
 
@@ -1290,7 +1300,7 @@ def _load_run_items_and_scores(
         return all_items, scores_by_item
 
     run_samples = int(getattr(run, "samples", 1) or 1)
-    if run_samples <= 1 or pass_number > run_samples:
+    if not has_repeat_pass_context(run) or pass_number < 1 or pass_number > run_samples:
         raise HTTPException(status_code=400, detail="pass_number is outside this run")
 
     pass_scores = (
@@ -1430,13 +1440,31 @@ def _load_run_items_and_scores(
 def _require_selected_pass_for_repeat_run(run: Run, pass_number: int | None) -> None:
     """Keep all analyzer writes scoped to one sample on repeat runs."""
     samples = int(getattr(run, "samples", 1) or 1)
-    if samples > 1 and pass_number is None:
+    if has_repeat_pass_context(run) and pass_number is None:
         raise HTTPException(
             status_code=400,
             detail="Select a sample before running analysis for a repeat run",
         )
-    if pass_number is not None and (samples <= 1 or pass_number > samples):
+    if pass_number is not None and (not has_repeat_pass_context(run) or pass_number < 1 or pass_number > samples):
         raise HTTPException(status_code=400, detail="pass_number is outside this run")
+
+
+def _check_pass_version(db: Session, run: Run, selected_pass: int | None,
+                        expected: int | None, *, lock: bool = False) -> None:
+    if selected_pass is None:
+        return
+    try:
+        selected_pass = int(selected_pass)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(400, "Invalid pass_number") from exc
+    if lock:
+        try:
+            run = lock_repeat_run(db, run.id)
+        except RepeatPassDeletionError as exc:
+            raise HTTPException(exc.status_code, exc.detail) from exc
+    if not pass_revision_matches(run, expected):
+        raise HTTPException(409, "Pass numbers changed. Reload before editing this pass.")
+    _require_selected_pass_for_repeat_run(run, selected_pass)
 
 
 def _ordered_unique(values: List[str]) -> List[str]:
@@ -2783,6 +2811,7 @@ async def _aggregate_pass_analysis_results(
     model: str,
     analyzer_config: dict[str, Any] | None,
     metric_scope: set[str] | None = None,
+    expected_pass_version: int | None = None,
 ) -> tuple[dict[str, int], int]:
     """Canonicalize saved diagnoses for one pass without touching the run row."""
     pass_scores = (
@@ -2914,12 +2943,20 @@ async def _aggregate_pass_analysis_results(
     if not changed_bindings:
         return categories, 0
 
+    _check_pass_version(db, run, pass_number, expected_pass_version, lock=True)
+    # Approval may have committed while the LLM was working. Follow the review
+    # lock order and reload score metadata before deciding what can be changed.
+    item_ids = sorted({binding.score.item_id for binding in changed_bindings})
+    db.query(RunItem).filter(
+        RunItem.run_id == run.id, RunItem.item_id.in_(item_ids)
+    ).order_by(RunItem.item_id).populate_existing().with_for_update().all()
     locked_scores = (
         db.query(RunItemPassScore)
         .filter(
             RunItemPassScore.run_id == run.id,
             RunItemPassScore.pass_number == pass_number,
         )
+        .populate_existing()
         .with_for_update()
         .all()
     )
@@ -3460,8 +3497,10 @@ def _save_pass_analysis_results(
     analyzer_rule_version_id: str | None = None,
     category_catalog_version: int | None = None,
     category_catalog_version_id: str | None = None,
+    expected_pass_version: int | None = None,
 ) -> tuple[list[Dict[str, Any]], int]:
     """Persist diagnoses on the selected pass score, never on the aggregate item."""
+    _check_pass_version(db, run, pass_number, expected_pass_version, lock=True)
     response_results: list[Dict[str, Any]] = []
     error_count = 0
     item_ids = sorted({result.item_id for result in results})
@@ -3885,6 +3924,7 @@ async def _run_analysis_job(
         if not _can_operate_analyzer(db, principal, run):
             raise RuntimeError("Analysis access is no longer available.")
 
+        _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
         llm_config = _get_llm_config(db, run.project_id, request.connection_id)
         all_items, scores_by_item = _load_run_items_and_scores(
             db, run, request.pass_number
@@ -4109,6 +4149,7 @@ async def _run_analysis_job(
                 run,
                 results,
                 request.pass_number,
+                expected_pass_version=request.expected_pass_version,
                 allow_human_overwrite=request.allow_human_overwrite,
                 analyzer_connection_id=llm_config.get("connection_id"),
                 analyzer_rule_version_id=(analyzer_config or {}).get(
@@ -4293,6 +4334,7 @@ async def aggregate_saved_analysis_results(
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
     _require_selected_pass_for_repeat_run(run, request.pass_number)
+    _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
 
     all_items, scores_by_item = _load_run_items_and_scores(
         db, run, request.pass_number
@@ -4319,6 +4361,7 @@ async def aggregate_saved_analysis_results(
                 db=db,
                 run=run,
                 pass_number=request.pass_number,
+                expected_pass_version=request.expected_pass_version,
                 client=build_client(llm_config),
                 model=llm_config.get("llm_model", "gpt-4o-mini"),
                 analyzer_config=analyzer_config,
@@ -4384,6 +4427,7 @@ async def start_analysis_job(
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
     _require_selected_pass_for_repeat_run(run, request.pass_number)
+    _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
 
     # Validate the request before creating a background task so malformed
     # filters and missing connections are reported to the initiating page.
@@ -4513,6 +4557,7 @@ async def analyze_run_items(
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
     _require_selected_pass_for_repeat_run(run, request.pass_number)
+    _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
     llm_config = _get_llm_config(db, run.project_id, request.connection_id)
 
     all_items, scores_by_item = _load_run_items_and_scores(
@@ -4650,6 +4695,7 @@ async def analyze_run_items(
             run,
             results,
             request.pass_number,
+            expected_pass_version=request.expected_pass_version,
             allow_human_overwrite=request.allow_human_overwrite,
             analyzer_connection_id=llm_config.get("connection_id"),
             analyzer_rule_version_id=(analyzer_config or {}).get(
@@ -4708,6 +4754,7 @@ async def analyze_run_items_stream(
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
     _require_selected_pass_for_repeat_run(run, request.pass_number)
+    _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
     llm_config = _get_llm_config(db, run.project_id, request.connection_id)
 
     all_items, scores_by_item = _load_run_items_and_scores(
@@ -4970,6 +5017,7 @@ async def analyze_run_items_stream(
                                 run,
                                 results,
                                 request.pass_number,
+                                expected_pass_version=request.expected_pass_version,
                                 allow_human_overwrite=request.allow_human_overwrite,
                                 analyzer_connection_id=llm_config.get("connection_id"),
                                 analyzer_rule_version_id=(analyzer_config or {}).get(
@@ -6819,6 +6867,7 @@ def analyze_preview(
     if not can_view_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
     _require_selected_pass_for_repeat_run(run, request.pass_number)
+    _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
 
     all_items, scores_by_item = _load_run_items_and_scores(
         db, run, request.pass_number
@@ -6910,6 +6959,7 @@ async def analyze_test(
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
     _require_selected_pass_for_repeat_run(run, request.pass_number)
+    _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
     llm_config = _get_llm_config(db, run.project_id, request.connection_id)
 
     all_items, all_scores_by_item = _load_run_items_and_scores(
@@ -8107,6 +8157,7 @@ def _serialize_review_fields(
         "item_id": c.item_id,
         "metric_name": c.metric_name,
         "pass_number": c.pass_number,
+        "pass_deleted_at": to_api_timestamp(c.pass_deleted_at),
         "issue_id": correction_issue_id(c) or None,
         "task": c.task,
         "dataset": run.dataset if run else "",
@@ -8313,6 +8364,7 @@ def _serialize_correction(
     issue_id = correction_issue_id(c)
     payload["history"] = [entry for entry in (history or [])
                           if (entry.get("review") or {}).get("pass_number") == c.pass_number
+                          and (entry.get("review") or {}).get("pass_deleted_at") == to_api_timestamp(c.pass_deleted_at)
                           and (not issue_id or (entry.get("review") or {}).get("issue_id") in (None, issue_id))]
     return payload
 
@@ -9159,6 +9211,9 @@ def approve_metric_analysis(
     run = Run.active(db).filter(Run.id == run_id).first()
     if not run or not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    _check_pass_version(db, run, request.get("pass_number"),
+                        request.get("expected_pass_version"), lock=True)
+
     item = (
         db.query(RunItem)
         .filter(RunItem.run_id == run.id, RunItem.item_id == item_id)
@@ -9179,7 +9234,7 @@ def approve_metric_analysis(
         except (TypeError, ValueError) as exc:
             raise HTTPException(status_code=400, detail="Invalid pass_number") from exc
         samples = int(getattr(run, "samples", 1) or 1)
-        if samples <= 1 or pass_number < 1 or pass_number > samples:
+        if not has_repeat_pass_context(run) or pass_number < 1 or pass_number > samples:
             raise HTTPException(status_code=400, detail="pass_number is outside this run")
 
         pass_score = (

@@ -8,9 +8,9 @@ shell on the database host, so every operation below is driven from **values.yam
 
 | Component | What it does | Where |
 |---|---|---|
-| API pod(s) | Serve HTTP; apply Alembic migrations on start (instant DDL only) | `QYM_ROLE=api` |
+| API pod(s) | Serve HTTP; apply Alembic migrations on start | `QYM_ROLE=api` |
 | Worker pod | Dashboard summary backfill + maintenance jobs + hourly retention | `QYM_ROLE=worker`, `QYM_SKIP_MIGRATIONS=1`, command `python -m qym_platform.worker` |
-| Maintenance jobs | Long operations (reclaim, index builds, span copy, purges) in small committed steps, resumable after a pod restart | `Admin → Maintenance`, `GET/POST /api/admin/maintenance/jobs` |
+| Maintenance jobs | Reclaim, index builds, span copy, and purges. Progress is saved between steps. Final legacy verification and DROP share one transaction | `Admin → Maintenance`, `GET/POST /api/admin/maintenance/jobs` |
 | Maintenance mode | Ingest answers `503 Retry-After: 60`; SDKs buffer (16 MiB RAM + 256 MiB disk) and retry; UI stays readable | `QYM_MAINTENANCE_MODE=1` |
 
 A single-container deployment keeps working unchanged: `QYM_ROLE=all` (default) runs
@@ -38,50 +38,92 @@ the API and both loops in one process.
   Retention = drop partition. Scalar columns (`oi_kind`, `usage_scope`, `model_name`,
   `tool_name`, `token_*`) serve statistics without touching the JSON.
 - `run_events` — structural history only (no `span_completed` rows). bigint id, jsonb.
-- Deleting a run: soft delete as before; the worker purges it (cascade) after the grace period.
+- Deleting a run hides it immediately. After the grace period, purge locks and
+  rechecks the run before deleting it. A restore that commits first prevents purge;
+  a restore after purge returns 404. Purge waits for dashboard deletion publication
+  and for `spans_legacy` to be removed. It resumes after those steps finish.
 
 ## Migrations and large tables
 
-Migrations run in the API pod's entrypoint before readiness, so they only perform
-instant DDL. Anything that would scan or rewrite a large table is **queued as a
-maintenance job** by the migration itself; you will see it in Admin → Maintenance
-after the deploy:
+The combined migration chain has one head, `0057`, following `0050` through
+`0051`–`0056`. Migrations run before API readiness. Large storage rewrites and index
+builds are deferred to maintenance jobs. Migration `0057` also backfills existing
+pass approvals in bounded batches within its migration transaction; measure its
+startup time on a populated copy before setting deployment readiness deadlines.
 
-| Migration | Instant part | Deferred job (if table is large) |
+| Migration | Work during startup | Deferred job (if table is large) |
 |---|---|---|
 | 0051 | `maintenance_jobs` table; drops 3 redundant indexes | `create_deferred_indexes` — `ix_run_events_run_type_seq` |
 | 0052 | — | `alter_column_types` — bigint/jsonb rewrite (run in maintenance mode) |
 | 0053 | new partitioned `spans`, old table → `spans_legacy` | `migrate_spans` (you queue it), then `drop_legacy_spans` |
 | 0054 | cascading FKs `NOT VALID` | `validate_foreign_keys` |
 | 0055 | — | `create_deferred_indexes` — extrema partial indexes |
+| 0056 | `dashboard_run_dimensions.hidden_at` | None |
+| 0057 | Pass review scope, deleted-pass marker, index, and approval/catalog backfill | Runs during migration |
 
 ## Recovery runbook (database near its volume limit)
 
-Rehearsed end-to-end on the perf lab (`docs/internal/PERF_LAB.md`) before running in production.
+### Before the window
 
-**Before the window**
-1. Admin → Maintenance → *Refresh*: note `run_events` / `spans` sizes and `span_completed` payload bytes.
-2. Confirm Helm values are ready: worker Deployment added, `QYM_ROLE=api` on the API, image tag of this release.
+1. Rehearse the combined release on a populated disposable copy. Check pass
+   approvals, migration duration, free disk during rewrites, and actual job results.
+2. Take a complete database backup or storage snapshot, including raw spans,
+   events, approvals, and catalogs. Restore it into a separate database and verify
+   it before proceeding. Record the database revision and previous image digest.
+3. Build and identify the tested image. Record current table sizes and available
+   disk space. The previous performance report is an estimate, not a capacity guarantee.
+4. Set `QYM_MAINTENANCE_MODE=1` on every API and worker, keep
+   `QYM_EVENT_LOG_MODE=full`, and use the same retention settings for both roles.
+   If the currently deployed image does not support maintenance mode, pause ingress
+   or stop ingestion before the rollout. Confirm ingest actually returns 503.
 
-**Window (2–4 h, mostly waiting)**
-1. values.yaml: `QYM_MAINTENANCE_MODE=1` on the current API → sync. Running evals pause (SDK retries).
-2. Deploy the new image. Migrations 0051–0055 run at pod start (seconds). Deferred jobs appear queued.
-3. Admin → Maintenance, in order (each finishes before the next):
-   1. `drop_redundant_indexes` — only if 0051 could not (already done otherwise). Frees GBs instantly.
-   2. `reclaim_run_events` — deletes the duplicated `span_completed` rows in batches with periodic `VACUUM`.
-      Watch *rows deleted*; the table stops growing immediately, its file shrinks after the rewrite below.
-   3. `alter_column_types` — rewrites `run_events` (and any other large table) to bigint/jsonb. Needs
-      free space ≈ the live size of `run_events` after reclaim (~10 GB). This also returns the reclaimed space.
-   4. `migrate_spans` — copies the last `QYM_SPAN_RETENTION_DAYS` of spans into the partitioned table.
-   5. Verify: `spans` row count ≈ `spans_legacy` rows in the window (the `drop_legacy_spans` job refuses otherwise).
-   6. `drop_legacy_spans` (type the name to confirm) — returns ~25 GB.
-   7. `create_deferred_indexes`, `validate_foreign_keys` — can run after reopening.
-4. values.yaml: `QYM_MAINTENANCE_MODE=0`, `QYM_EVENT_LOG_MODE=structural` → sync. Start the worker Deployment.
-5. Runs appear immediately with a *pending* badge and fill in as the worker publishes (no more hidden history).
+### Deploy and run maintenance
 
-**Rollback**: redeploy the previous image any time before `drop_legacy_spans`; the old code
-tolerates the new columns and the missing duplicate rows. After 0053, `alembic downgrade 0052`
-restores `spans_legacy` as `spans`.
+1. Stop the old worker. Deploy one API migration runner with `QYM_ROLE=api`.
+   Wait for migration head `0057` and a healthy API before starting the new worker.
+   Start one worker using the same image and configuration with `QYM_ROLE=worker`
+   and `QYM_SKIP_MIGRATIONS=1`. The worker is required to execute every queued job.
+2. Inspect auto-queued jobs. Index creation and FK validation can run automatically;
+   `alter_column_types` stays paused until space has been reclaimed. A failed job
+   must be investigated and completed before relying on its schema change.
+3. Run `reclaim_run_events` to remove duplicate `span_completed` events in batches.
+   Ordinary VACUUM reuses dead space; a subsequent rewrite may be needed to return
+   that space to the filesystem.
+4. Start `alter_column_types` when there is enough free space for its largest table
+   rewrite. If needed, finish span copy and legacy drop first to free space. Keep
+   maintenance mode enabled while any table rewrite runs.
+5. Run `migrate_spans`. Each job freezes its retention cutoff across batches and
+   restarts. It copies all retained runs, including soft-deleted runs that remain
+   restorable. `retention_days=0` copies all history. Record any explicit override
+   and use the same retention policy for the drop.
+6. After copy succeeds, queue `drop_legacy_spans` with its typed confirmation.
+   It requires maintenance mode and verifies every eligible legacy key against
+   `(run_id, span_id, run_created_at)` in the destination. Unrelated row counts and
+   `force=true` cannot bypass missing data. Verification and DROP hold database
+   locks in one transaction, so concurrent writes and retention cannot invalidate
+   the check. Run mutations can wait during this step. An uncopied key or failed
+   DROP leaves the legacy table intact. Resolve the failure and rerun the copy.
+7. Confirm required jobs succeeded, the worker remains healthy, and representative
+   runs retain outputs, traces, scores, and approved pass reviews. Then set
+   `QYM_MAINTENANCE_MODE=0` and `QYM_EVENT_LOG_MODE=structural` on API and worker.
+   Keep the worker running. Confirm buffered SDK events resume and finish.
+8. Check pending dashboard runs become ready, live retries remain active, force
+   stop finishes, delete/restore works, and pass deletion preserves review scope.
+   Record final sizes and compare them with the rehearsal.
+
+### Rollback
+
+Prefer a forward fix once the new release has accepted writes. Before rollback,
+stop API mutations and all workers, and retain a fresh backup of the current state.
+Rehearse restoring the complete pre-deployment backup with the matching old image
+in a separate database, then switch services to the verified recovery database.
+Any writes after that backup must be reconciled before switching.
+
+An image-only rollback after `0053` is not a data-preserving recovery plan. The
+old span writer does not supply the new partition key. `alembic downgrade 0052`
+drops the new partitioned table; it also reverses `0057`, deleting pass-scoped
+review records. Once `spans_legacy` is dropped, downgrade cannot reconstruct it.
+Do not drop it until the complete backup has passed a restore check.
 
 ## Postgres settings (16 GB host)
 
@@ -99,13 +141,17 @@ ALTER TABLE run_events, dashboard_change_events, dashboard_record_state SET (aut
 
 ## Backups
 
-`pg_dump` of raw tables is the largest, least valuable part of a backup. Exclude them and rely on
-retention + derived tables: `pg_dump -Fd -j2 --exclude-table-data='spans*' --exclude-table-data=run_events
---exclude-table-data=dashboard_change_events`. Keep backups off the database volume.
+A deployment recovery backup must include all table data. A dump that excludes
+`spans*`, `run_events`, or dashboard events cannot restore the original database
+after destructive maintenance. Use a full `pg_dump` or a consistent storage
+snapshot, keep it off the database volume, and test the restore in isolation.
+Smaller exports of derived data can supplement that backup but do not replace it.
 
 ## Worker Deployment (Helm/Kubernetes sketch)
 
 Same image as the API; only the command and two variables differ. One replica.
+Inherit maintenance mode and retention settings from the same configuration as
+the API. Start this deployment only after the API has migrated to `0057`.
 
 ```yaml
 apiVersion: apps/v1

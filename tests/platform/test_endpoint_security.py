@@ -795,6 +795,7 @@ def test_correction_review_permissions_and_filtering(client, session_factory) ->
             "id": 1,
             "item_id": "item-1",
             "metric_name": None,
+            "pass_number": None,
             "run_name": "run-1",
                 "dataset": "dataset-1",
                 "model": "",

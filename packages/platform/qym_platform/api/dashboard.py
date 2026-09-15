@@ -373,7 +373,7 @@ def _overview(db, project, filters, sort="time-desc", collation=None):
     key = (
         db.get_bind().engine,
         project["id"],
-        freshness["revision"],
+        freshness["catalog_revision"],
         PlatformSettings().hidden_tasks,
         json.dumps(filters, sort_keys=True, default=str),
         sort,
@@ -385,7 +385,7 @@ def _overview(db, project, filters, sort="time-desc", collation=None):
         return {
             k: v
             for k, v in value.items()
-            if k not in {"project", "revision", "freshness"}
+            if k not in {"project", "revision", "catalog_revision", "freshness"}
         }
 
     cached = _overview_cache.get_or_compute(key, compute)
@@ -410,7 +410,7 @@ def _build_overview(db, project, filters, sort="time-desc", collation=None):
         key = (
             db.get_bind().engine,
             project["id"],
-            freshness["revision"],
+            freshness["catalog_revision"],
             PlatformSettings().hidden_tasks,
             now.date(),
         )
@@ -622,7 +622,7 @@ def _page(
     key = (
         db.get_bind().engine,
         project["id"],
-        freshness["revision"],
+        freshness["catalog_revision"],
         PlatformSettings().hidden_tasks,
         json.dumps(filters, sort_keys=True, default=str),
         json.dumps(kwargs, sort_keys=True, default=str),
@@ -633,7 +633,7 @@ def _page(
         return {
             k: v
             for k, v in value.items()
-            if k not in {"project", "revision", "freshness"}
+            if k not in {"project", "revision", "catalog_revision", "freshness"}
         }
 
     return {**_page_cache.get_or_compute(key, compute), "project": project, **freshness}

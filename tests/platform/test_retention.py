@@ -1,5 +1,8 @@
 import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
+from threading import Event, get_ident
+from unittest.mock import patch
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite://")
 os.environ.setdefault("QYM_ENVIRONMENT", "test")
@@ -7,7 +10,7 @@ os.environ.setdefault("QYM_ENVIRONMENT", "test")
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 
 from qym_platform.services import retention
 
@@ -112,3 +115,302 @@ def test_purge_cascades_children_after_grace(migrated_postgres):
         assert conn.execute(text("SELECT count(*) FROM spans WHERE run_id = 'gone'")).scalar() == 0
         assert conn.execute(text("SELECT count(*) FROM dashboard_partition_state WHERE partition_key = 'gone'")).scalar() == 0
         assert conn.execute(text("SELECT count(*) FROM run_items WHERE run_id = 'fresh'")).scalar() == 1
+
+
+def _restore_client(engine):
+    from fastapi.testclient import TestClient
+    from sqlalchemy.orm import Session, sessionmaker
+
+    from qym_platform.app import create_app
+    from qym_platform.auth import Principal, require_ui_principal
+    from qym_platform.db.models import User
+    from qym_platform.deps import get_db
+    from qym_platform.settings import PlatformSettings
+
+    factory = sessionmaker(bind=engine, autoflush=False)
+    app = create_app(PlatformSettings(database_url="sqlite://", role="api"))
+
+    def database():
+        with factory() as db:
+            yield db
+
+    with Session(engine) as db:
+        user = db.get(User, "u")
+        db.expunge(user)
+    app.dependency_overrides[get_db] = database
+    app.dependency_overrides[require_ui_principal] = lambda: Principal(
+        user=user, auth_type="none"
+    )
+    return TestClient(app)
+
+
+def test_restore_after_candidate_selection_survives_purge(migrated_postgres):
+    engine = migrated_postgres
+    now = datetime.utcnow()
+    with engine.begin() as conn:
+        _seed_run(conn, "restore", now - timedelta(days=5), now - timedelta(days=40))
+    selected, resume = Event(), Event()
+
+    def pause_selection(conn, cursor, statement, parameters, context, executemany):
+        if statement.startswith("SELECT id FROM runs WHERE deleted_at"):
+            selected.set()
+            assert resume.wait(10)
+
+    event.listen(engine, "after_cursor_execute", pause_selection)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pending = pool.submit(
+                retention.purge_soft_deleted_runs, engine, grace_days=30, now=now
+            )
+            assert selected.wait(10)
+            try:
+                response = _restore_client(engine).post(
+                    "/api/runs/restore", json={"run_id": "restore"}
+                )
+                assert response.status_code == 200, response.text
+            finally:
+                resume.set()
+            assert pending.result(timeout=15) == []
+    finally:
+        resume.set()
+        event.remove(engine, "after_cursor_execute", pause_selection)
+    with engine.connect() as conn:
+        assert conn.execute(
+            text("SELECT deleted_at IS NULL FROM runs WHERE id = 'restore'")
+        ).scalar()
+        assert (
+            conn.execute(
+                text("SELECT count(*) FROM run_items WHERE run_id = 'restore'")
+            ).scalar()
+            == 1
+        )
+        assert (
+            conn.execute(
+                text(
+                    "SELECT count(*) FROM audit_logs WHERE entity_id = 'restore' AND action = 'run.restored'"
+                )
+            ).scalar()
+            == 1
+        )
+
+
+def test_restore_waiting_for_purge_returns_404(migrated_postgres):
+    engine = migrated_postgres
+    now = datetime.utcnow()
+    with engine.begin() as conn:
+        _seed_run(conn, "purge", now - timedelta(days=5), now - timedelta(days=40))
+    locked, restore_started, resume = Event(), Event(), Event()
+
+    def observe(conn, cursor, statement, parameters, context, executemany):
+        if (
+            statement.startswith("SELECT id FROM runs WHERE id =")
+            and "FOR UPDATE" in statement
+        ):
+            locked.set()
+            assert resume.wait(10)
+
+    def before_restore(conn, cursor, statement, parameters, context, executemany):
+        if "runs.deleted_at IS NOT NULL" in statement and "FOR UPDATE" in statement:
+            restore_started.set()
+
+    event.listen(engine, "after_cursor_execute", observe)
+    event.listen(engine, "before_cursor_execute", before_restore)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            purge = pool.submit(
+                retention.purge_soft_deleted_runs, engine, grace_days=30, now=now
+            )
+            assert locked.wait(10)
+            client = _restore_client(engine)
+            restore = pool.submit(
+                client.post, "/api/runs/restore", json={"run_id": "purge"}
+            )
+            try:
+                assert restore_started.wait(10)
+            finally:
+                resume.set()
+            assert purge.result(timeout=15) == ["purge"]
+            response = restore.result(timeout=15)
+            assert response.status_code == 404, response.text
+    finally:
+        resume.set()
+        event.remove(engine, "after_cursor_execute", observe)
+        event.remove(engine, "before_cursor_execute", before_restore)
+    with engine.connect() as conn:
+        assert (
+            conn.execute(text("SELECT count(*) FROM runs WHERE id = 'purge'")).scalar()
+            == 0
+        )
+        assert (
+            conn.execute(
+                text(
+                    "SELECT count(*) FROM audit_logs WHERE entity_id = 'purge' AND action = 'run.restored'"
+                )
+            ).scalar()
+            == 0
+        )
+
+
+def test_purge_waits_for_dashboard_deletion_publication(migrated_postgres):
+    from sqlalchemy.orm import Session, sessionmaker
+
+    from qym_platform.db.models import Run
+    from qym_platform.services.dashboard_outbox import install_dashboard_outbox_hooks
+    from qym_platform.services.dashboard_summaries import DashboardSummaryWorker
+
+    engine = migrated_postgres
+    now = datetime.utcnow()
+    with engine.begin() as conn:
+        _seed_run(conn, "pending", now - timedelta(days=5))
+    worker = DashboardSummaryWorker(sessionmaker(bind=engine))
+    for _ in range(10):
+        worker.tick()
+    with engine.begin() as conn:
+        assert conn.execute(
+            text(
+                "SELECT present FROM dashboard_run_dimensions WHERE run_key = 'pending'"
+            )
+        ).scalar()
+        assert (
+            conn.execute(
+                text(
+                    "SELECT sum(count) FROM dashboard_bucket_rollups WHERE granularity = 'hour'"
+                )
+            ).scalar()
+            == 1
+        )
+    install_dashboard_outbox_hooks()
+    with Session(engine) as db:
+        db.get(Run, "pending").deleted_at = now - timedelta(days=40)
+        db.commit()
+    assert retention.purge_soft_deleted_runs(engine, grace_days=30, now=now) == []
+    worker.tick()
+    with engine.connect() as conn:
+        assert (
+            conn.execute(
+                text(
+                    "SELECT sum(count) FROM dashboard_bucket_rollups WHERE granularity = 'hour'"
+                )
+            ).scalar()
+            == 0
+        )
+    assert retention.purge_soft_deleted_runs(engine, grace_days=30, now=now) == [
+        "pending"
+    ]
+    assert worker.tick() == 0
+
+
+def test_concurrent_purge_workers_delete_only_once(migrated_postgres):
+    engine = migrated_postgres
+    now = datetime.utcnow()
+    with engine.begin() as conn:
+        _seed_run(conn, "once", now - timedelta(days=5), now - timedelta(days=40))
+    locked, resume = Event(), Event()
+
+    def pause(conn, cursor, statement, parameters, context, executemany):
+        if (
+            statement.startswith("SELECT id FROM runs WHERE id =")
+            and not locked.is_set()
+        ):
+            locked.set()
+            assert resume.wait(10)
+
+    event.listen(engine, "after_cursor_execute", pause)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            first = pool.submit(
+                retention.purge_soft_deleted_runs, engine, grace_days=30, now=now
+            )
+            assert locked.wait(10)
+            try:
+                assert (
+                    retention.purge_soft_deleted_runs(engine, grace_days=30, now=now)
+                    == []
+                )
+            finally:
+                resume.set()
+            assert first.result(timeout=15) == ["once"]
+    finally:
+        resume.set()
+        event.remove(engine, "after_cursor_execute", pause)
+
+
+def test_public_restore_during_dashboard_cleanup_preserves_lock_order(
+    migrated_postgres,
+):
+    from sqlalchemy.orm import Session, sessionmaker
+
+    from qym_platform.services import dashboard_summaries as service
+
+    engine = migrated_postgres
+    now = datetime.utcnow()
+    with engine.begin() as conn:
+        _seed_run(conn, "restore-dashboard", now - timedelta(days=5))
+    worker = service.DashboardSummaryWorker(sessionmaker(bind=engine))
+    for _ in range(10):
+        worker.tick()
+    client = _restore_client(engine)
+    assert (
+        client.post(
+            "/api/runs/delete", json={"file_path": "restore-dashboard"}
+        ).status_code
+        == 200
+    )
+    locked, restoration_waiting = Event(), Event()
+    cleanup_thread = []
+    refresh = service.refresh_run_summary
+
+    def hold_cleanup(*args, **kwargs):
+        locked.set()
+        assert restoration_waiting.wait(10)
+        return refresh(*args, **kwargs)
+
+    def before_statement(conn, cursor, statement, parameters, context, executemany):
+        if (
+            cleanup_thread
+            and get_ident() != cleanup_thread[0]
+            and "dashboard_partition_state" in statement
+        ):
+            restoration_waiting.set()
+
+    def cleanup():
+        cleanup_thread.append(get_ident())
+        with Session(engine) as db:
+            service.process_partition(db, "restore-dashboard")
+            db.commit()
+
+    def restore():
+        return client.post("/api/runs/restore", json={"run_id": "restore-dashboard"})
+
+    event.listen(engine, "before_cursor_execute", before_statement)
+    try:
+        with patch.object(service, "refresh_run_summary", side_effect=hold_cleanup):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                deletion = pool.submit(cleanup)
+                assert locked.wait(10)
+                restoration = pool.submit(restore)
+                deletion.result(timeout=15)
+                response = restoration.result(timeout=15)
+                assert response.status_code == 200, response.text
+    finally:
+        restoration_waiting.set()
+        event.remove(engine, "before_cursor_execute", before_statement)
+    for _ in range(10):
+        worker.tick()
+    with engine.connect() as conn:
+        assert conn.execute(
+            text("SELECT deleted_at IS NULL FROM runs WHERE id = 'restore-dashboard'")
+        ).scalar()
+        assert conn.execute(
+            text(
+                "SELECT present FROM dashboard_run_dimensions WHERE run_key = 'restore-dashboard'"
+            )
+        ).scalar()
+        assert (
+            conn.execute(
+                text(
+                    "SELECT sum(count) FROM dashboard_bucket_rollups WHERE granularity = 'hour'"
+                )
+            ).scalar()
+            == 1
+        )

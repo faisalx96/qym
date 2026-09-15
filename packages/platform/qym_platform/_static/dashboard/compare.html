@@ -9732,6 +9732,7 @@
         return {
           runId,
           passNumber,
+          passVersion: Number(state.runs[runIdx]?.run?.metadata?.pass_revision || 0),
           metricName: isMetricScoped ? metricName : '',
           analysis: isMetricScoped ? (analyses[metricName] || {}) : md,
         };
@@ -11088,7 +11089,7 @@
           if (!rd) return;
           if (ref === base) {
             const samples = Number(rd.run?.samples) || 1;
-            if (samples > 1) {
+            if (samples > 1 || rd.run?.metadata?.has_repeat_pass_context) {
               for (let passNo = 1; passNo <= samples; passNo += 1) {
                 out.push(`${base}${PASS_REF_SEP}${passNo}`);
               }
@@ -12110,8 +12111,14 @@
       }
 
       function showToast(type, title, message) {
-          const container = el('toast-container');
-          if (!container) return;
+          let container = el('toast-container');
+          if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            container.className = 'toast-container';
+            container.setAttribute('role', 'status');
+            document.body.appendChild(container);
+          }
           const toast = document.createElement('div');
           toast.className = `toast toast-${type}`;
           toast.innerHTML = `
@@ -12226,7 +12233,7 @@
         });
       }
 
-      async function updateMetricScore(filePath, rowIndex, metricName, newScore) {
+      async function updateMetricScore(filePath, rowIndex, metricName, newScore, passVersion) {
         const baseFilePath = passRefBase(filePath);
         const passNumber = baseFilePath === filePath
           ? null
@@ -12239,12 +12246,12 @@
             row_index: rowIndex,
             metric_name: metricName,
             new_score: newScore,
-            ...(Number.isFinite(passNumber) ? { pass_number: passNumber } : {}),
+            ...(Number.isFinite(passNumber) ? { pass_number: passNumber, expected_pass_version: passVersion } : {}),
           }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || data.error) {
-          throw new Error(data.error || 'Failed to update metric');
+          throw new Error(data.detail || data.error || 'Failed to update metric');
         }
         return data;
       }
@@ -12382,7 +12389,7 @@
             btn.disabled = true;
             if (status) status.textContent = 'Saving...';
             try {
-              const result = await updateMetricScore(filePath, rowIndex, metricName, input.value);
+              const result = await updateMetricScore(filePath, rowIndex, metricName, input.value, Number(run?.run?.metadata?.pass_revision || 0));
               if (result && result.row) {
                 applyUpdatedRowToRun(runIdx, result.row);
                 refreshComparisonStatsAfterEdit();
@@ -12390,6 +12397,7 @@
               }
             } catch (err) {
               if (status) status.textContent = 'Error';
+              showToast('error', 'Could not update score', err.message);
             } finally {
               btn.disabled = false;
               if (status && status.textContent === 'Saving...') status.textContent = '';
@@ -12474,12 +12482,13 @@
               run_id: runId,
               ...patch,
               ...(scope.metricName ? { metric_name: scope.metricName } : {}),
-              ...(Number.isFinite(scope.passNumber) ? { pass_number: scope.passNumber } : {}),
+              ...(Number.isFinite(scope.passNumber) ? { pass_number: scope.passNumber, expected_pass_version: scope.passVersion } : {}),
             }),
           });
           const data = await response.json().catch(() => ({}));
           if (!response.ok || data.error || data.detail) {
             console.error('Failed to save root-cause issues:', data.detail || data.error);
+            showToast('error', 'Could not save diagnosis', data.detail || data.error || 'Request failed');
             return false;
           }
           if (data.row) applyUpdatedRowToRun(runIdx, data.row);

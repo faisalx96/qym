@@ -1037,10 +1037,12 @@ def _ingest_events_sync(
                 dataset_item_cache[(row.dataset_version_id, row.item_id)] = row
 
     pending_spans = []
-    # Older SDKs emitted item_completed before item_attempt_finished.  Keep
-    # outputs seen in this request so the later attempt row can still receive
-    # its pass output.  New SDKs also carry output on the attempt event itself.
+    # Some legacy payloads omit retry_count on the item outcome. Preserve the
+    # current batch's output when a later event identifies another final retry.
     completed_output_cache: Dict[tuple[str, int], Any] = {}
+    attempts_by_pass = defaultdict(dict)
+    for (item_id, pass_number, attempt_number), attempt in attempt_cache.items():
+        attempts_by_pass[(item_id, pass_number)][attempt_number] = attempt
     metric_spec_cache = {
         spec.metric_name: spec
         for spec in db.query(RunMetricSpec).filter(RunMetricSpec.run_id == run_id).all()
@@ -1115,7 +1117,65 @@ def _ingest_events_sync(
         attempt_cache[
             (attempt.item_id, attempt.pass_number, attempt.attempt_number)
         ] = attempt
+        attempts_by_pass[(attempt.item_id, attempt.pass_number)][
+            attempt.attempt_number
+        ] = attempt
         return attempt
+
+    def _store_pass_completion(
+        payload: ItemCompletedPayload, task_started_at_ms: Optional[int]
+    ) -> None:
+        # SDK <=1.5.2 sends the item outcome before the final attempt. Persist
+        # its output now: those two events can arrive in different requests,
+        # and structural event storage discards the redundant output body.
+        attempts = attempts_by_pass[(payload.item_id, payload.pass_number)]
+        attempt_number = max(max(attempts, default=1), payload.retry_count + 1)
+        attempt = attempts.get(attempt_number)
+        if attempt is None:
+            attempt = _remember_attempt(
+                RunItemAttempt(
+                    run_id=run_id,
+                    item_id=payload.item_id,
+                    pass_number=payload.pass_number,
+                    attempt_number=attempt_number,
+                )
+            )
+            db.add(attempt)
+        if not attempt.is_last_attempt:
+            attempt.status = "completed"
+            attempt.latency_ms = payload.latency_ms
+            if task_started_at_ms is not None:
+                attempt.task_started_at_ms = task_started_at_ms
+            if payload.trace_id is not None:
+                attempt.trace_id = payload.trace_id
+            if payload.trace_url is not None:
+                attempt.trace_url = payload.trace_url
+            attempt.error = None
+            attempt.is_last_attempt = True
+        attempt.output = _sanitize_for_json(payload.output)
+        for other in attempts.values():
+            if other is not attempt:
+                other.is_last_attempt = False
+
+    def _finish_unfinished_pass(payload: ItemFailedPayload) -> None:
+        # Cancellation has no attempt-finished event, and older SDKs report
+        # retry_count=0 even when a later retry is the one interrupted.
+        attempts = attempts_by_pass[(payload.item_id, payload.pass_number)]
+        if not attempts:
+            return
+        attempt = attempts[max(attempts)]
+        if attempt.is_last_attempt:
+            return
+        attempt.status = "failed"
+        attempt.error = payload.error
+        attempt.is_last_attempt = True
+        for name in ("latency_ms", "task_started_at_ms", "trace_id", "trace_url"):
+            value = getattr(payload, name)
+            if value is not None:
+                setattr(attempt, name, value)
+        for other in attempts.values():
+            if other is not attempt:
+                other.is_last_attempt = False
 
     def _get_pass_score(
         item_id: str, metric_name: str, pass_number: int
@@ -1327,10 +1387,10 @@ def _ingest_events_sync(
                 db.add(attempt)
             else:
                 attempt.status = payload.status
-                attempt.latency_ms = payload.latency_ms
-                attempt.task_started_at_ms = payload.task_started_at_ms
-                attempt.trace_id = payload.trace_id
-                attempt.trace_url = payload.trace_url
+                for name in ("latency_ms", "task_started_at_ms", "trace_id", "trace_url"):
+                    value = getattr(payload, name)
+                    if value is not None:
+                        setattr(attempt, name, value)
                 if attempt_output is not None:
                     attempt.output = attempt_output
                 attempt.error = payload.error
@@ -1482,16 +1542,7 @@ def _ingest_events_sync(
                 if md != (item.item_metadata or {}):
                     item.item_metadata = _sanitize_for_json(md)
             if run.samples > 1:
-                # Repeat runs: keep this pass's output on its final attempt
-                # row so the UI can show every pass's output (RunItem keeps
-                # only the latest pass as the representative row).
-                for (iid, pass_no, _), attempt in attempt_cache.items():
-                    if (
-                        iid == payload.item_id
-                        and pass_no == payload.pass_number
-                        and attempt.is_last_attempt
-                    ):
-                        attempt.output = _sanitize_for_json(payload.output)
+                _store_pass_completion(payload, ts_ms)
             trace_stats_dirty = True
 
         elif isinstance(payload, PassCompletedPayload):
@@ -1544,6 +1595,7 @@ def _ingest_events_sync(
                 if md != (item.item_metadata or {}):
                     item.item_metadata = _sanitize_for_json(md)
             if run.samples > 1:
+                _finish_unfinished_pass(payload)
                 # A failed pass scores 0 for every metric (mirrors the SDK's
                 # reduction rule) so Pass^k and the reduced mean stay honest.
                 for metric_name in list(run.metrics or []):

@@ -395,7 +395,7 @@ def test_repeat_passes_use_runs_view_bulk_delete_action() -> None:
     assert 'data-delete-pass="' not in source
     assert 'class="pass-checkbox"' in dashboard
     assert "const passGroups = new Map();" in dashboard
-    assert "body: JSON.stringify({ pass_numbers: group.passNumbers })" in dashboard
+    assert "body: JSON.stringify({ pass_numbers: group.passNumbers, expected_pass_version: group.passVersion })" in dashboard
     assert 'class="pass-delete-action qym-icon-action action-icon delete-run"' in dashboard
     assert "data-can-delete-pass=" in dashboard
     assert "await fetchRuns({ refreshAllPages: true });" in dashboard
@@ -659,7 +659,7 @@ def test_run_page_supports_single_pass_scope() -> None:
     # edits are allowed and routed to the viewed pass
     assert "const passNumber = Number(btn.dataset.passNumber) || state.viewPass || null;" in source
     assert "updateMetricScore(filePath, rowIndex, metricName, input.value, passNumber)" in source
-    assert "...(passNumber ? { pass_number: passNumber } : {})," in source
+    assert "...(passNumber ? { pass_number: passNumber, expected_pass_version: currentPassVersion() } : {})," in source
     # applying the server row keeps per-pass fields and re-applies the lens
     assert "let next = { ...rows[pos], ...updatedRow };" in source
     assert "function scopedPassAttempt(row, passNumber)" in source
@@ -698,12 +698,12 @@ def test_run_page_supports_single_pass_scope() -> None:
     assert "pass_metric_analyses" in source
     assert "status: String(analysis.review_status || 'pending').toLowerCase()" in source
     assert "issue.review_status || analysis.review_status || legacyReview.status" in source
-    assert "if (state.viewPass) approvalBody.pass_number = state.viewPass;" in source
+    assert "addCurrentPassToPayload(approvalBody);" in source
     assert "id: data.id || correctionId || null" in source
     assert "if (IS_EXPORT || isRepeatAggregateView()) return '';" in source
     assert "window.QymShell?.openConfirmDialog" in source
     assert "Only this sample will be changed." in source
-    assert "...(passNumber ? { pass_number: passNumber } : {})" in source
+    assert "...(passNumber ? { pass_number: passNumber, expected_pass_version: currentPassVersion() } : {})" in source
 
     # the lens and its All/pass dot switcher are gone: expanded repeat items
     # use independently visible output cards and one synchronized detail band
@@ -791,7 +791,7 @@ def test_repeat_and_compare_share_grouped_output_interaction() -> None:
     # Comparing repeat passes preserves pass-aware editing instead of writing
     # the aggregate run score or replacing the sliced row with aggregate data.
     assert "const baseFilePath = passRefBase(filePath);" in compare
-    assert "...(Number.isFinite(passNumber) ? { pass_number: passNumber } : {})," in compare
+    assert "...(Number.isFinite(passNumber) ? { pass_number: passNumber, expected_pass_version: passVersion } : {})," in compare
     assert "updatedRow.pass_scores?.[name]" in compare
 
     for selector in (
@@ -3337,7 +3337,8 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert "getMetrics: projectScoped ? () => [] : () => state.selectedMetrics.slice()" in analyzer
     assert "body.metrics = _getSelectedMetrics()" in playground
     assert "body.pass_number = Number(passNumber)" in playground
-    assert "pass_number: _opts.getPassNumber ? _opts.getPassNumber() : null" in playground
+    assert "body.pass_number = Number(passNumber);" in playground
+    assert "body.expected_pass_version = Number(_opts.getPassVersion ? _opts.getPassVersion() : 0);" in playground
     assert "var _selectedTarget = null;" in playground
     assert 'data-metric-name="' in playground
     assert "var targetMetricNames = failedMetricNames.length ? failedMetricNames : [_getPrimaryMetric(r) || 'metric'];" in playground

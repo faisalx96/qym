@@ -36,6 +36,14 @@ def _factory(engine):
     return sessionmaker(bind=engine, autoflush=False)
 
 
+def test_workers_in_same_process_have_distinct_lease_owners(sqlite_engine):
+    factory = _factory(sqlite_engine)
+    first = maintenance.MaintenanceWorker(factory, sqlite_engine)
+    second = maintenance.MaintenanceWorker(factory, sqlite_engine)
+    assert first.owner != second.owner
+    assert len(first.owner) <= 64
+
+
 def test_job_runs_in_steps_and_persists_progress(sqlite_engine):
     calls = []
 

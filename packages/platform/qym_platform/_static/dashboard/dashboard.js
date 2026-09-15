@@ -4023,6 +4023,7 @@
 
     function insertSamplesDetail(runId, row, panelId, animate) {
       const runFilePath = decodeURIComponent(row?.dataset?.file || '');
+      const passVersion = Number(runs.find(run => run.run_id === runId)?.pass_revision || 0);
       samplesDetailRows(runId).forEach(detail => detail.remove());
       const runStatus = row.querySelector('.samples-toggle')?.dataset.status || '';
       row.insertAdjacentHTML('afterend', buildSamplesDetailMarkup(
@@ -4120,7 +4121,7 @@
           deleteButton.setAttribute('aria-busy', 'true');
           try {
             const response = await fetch(apiUrl(
-              `api/runs/${encodeURIComponent(runId)}/passes/${passNumber}`
+              `api/runs/${encodeURIComponent(runId)}/passes/${passNumber}?expected_pass_version=${passVersion}`
             ), { method: 'DELETE' });
             const payload = await response.json().catch(() => ({}));
             if (!response.ok || payload.error) {
@@ -4202,6 +4203,7 @@
     async function loadSamplesData(runId, row, panelId, animate) {
       if (state._samplesLoads[runId]) return;
       state._samplesLoads[runId] = true;
+      const passVersion = state._passVersions?.[runId] || 0;
       try {
         const thr = state._samplesThreshold[runId];
         const metric = state._samplesMetric[runId];
@@ -4219,16 +4221,21 @@
         const passes = await passesRes.json();
         const group = await groupRes.json();
         if (passes.error || group.error) throw new Error(passes.error || group.error);
-        state._samplesData[runId] = {
-          passes,
-          group,
-        };
+        if (passVersion === (state._passVersions?.[runId] || 0)) {
+          state._samplesData[runId] = { passes, group };
+        }
       } catch (err) {
-        state._samplesData[runId] = {
-          error: 'Could not load pass details. Check the connection and try again.',
-        };
+        if (passVersion === (state._passVersions?.[runId] || 0)) {
+          state._samplesData[runId] = {
+            error: 'Could not load pass details. Check the connection and try again.',
+          };
+        }
       } finally {
         delete state._samplesLoads[runId];
+      }
+      if (passVersion !== (state._passVersions?.[runId] || 0)) {
+        render();
+        return;
       }
 
       const currentToggle = findSamplesToggle(runId);
@@ -4892,7 +4899,7 @@
     });
     const traceSourceRuns = modelSelections.flatMap(({ selectedRuns }) => selectedRuns);
     const requestKey = [
-      String(candidates?.filtered_revision ?? candidates?.revision ?? state.dashboardOverview?.revision ?? ''),
+      String(candidates?.filtered_revision ?? candidates?.revision ?? (state.dashboardOverview?.catalog_revision ?? state.dashboardOverview?.revision) ?? ''),
       getTableFilterKey(),
       selectedTask,
       selectedDataset,
@@ -5048,7 +5055,7 @@
       selected: mvs.modelRunSelections,
     };
     const key = [getProjectSlugFromPath(), getTableFilterKey(), mvs.globalK,
-      JSON.stringify(mvs.modelRunSelections), state.dashboardOverview?.filtered_revision ?? state.dashboardOverview?.revision].join('|');
+      JSON.stringify(mvs.modelRunSelections), state.dashboardOverview?.filtered_revision ?? (state.dashboardOverview?.catalog_revision ?? state.dashboardOverview?.revision)].join('|');
     if (modelCandidatesCache?.key === key) return modelCandidatesCache.promise;
     const entry = { key, promise: null };
     entry.promise = (async () => {
@@ -5078,7 +5085,7 @@
   // Cache for fetched Models run data to avoid re-fetching
   let modelsRunDataCache = null;
 
-  async function fetchModelRunsData(filePaths, revision = state.dashboardOverview?.revision) {
+  async function fetchModelRunsData(filePaths, revision = (state.dashboardOverview?.catalog_revision ?? state.dashboardOverview?.revision)) {
     if (filePaths.length === 0) return { runs: [], cacheHit: true };
 
     // Check cache first
@@ -6008,6 +6015,24 @@
     const confirmBtn = el('confirm-delete-btn');
     const passRefs = selectedRefs.filter(isPassRef);
     const runRefs = selectedRefs.filter(ref => !isPassRef(ref));
+    // Keep each pass number paired with the version the user selected, even
+    // if polling replaces the run list while the confirmation stays open.
+    const passGroups = new Map();
+    const selectionErrors = [];
+    for (const ref of passRefs) {
+      const parsed = parsePassRef(ref);
+      const run = parsed && state.flatRuns.find(candidate => candidate.file_path === parsed.base);
+      if (!parsed || !run || !run.run_id) {
+        selectionErrors.push('A selected pass no longer maps to a run');
+        continue;
+      }
+      if (!passGroups.has(run.run_id)) {
+        passGroups.set(run.run_id, { refs: [], passNumbers: [], passVersion: Number(run.pass_revision || 0) });
+      }
+      const group = passGroups.get(run.run_id);
+      group.refs.push(ref);
+      group.passNumbers.push(parsed.passNumber);
+    }
     const selectionParts = [];
     if (runRefs.length) selectionParts.push(`${runRefs.length} run${runRefs.length === 1 ? '' : 's'}`);
     if (passRefs.length) selectionParts.push(`${passRefs.length} pass${passRefs.length === 1 ? '' : 'es'}`);
@@ -6026,32 +6051,15 @@
       newConfirmBtn.textContent = 'Deleting...';
 
       let successCount = 0;
-      let errorCount = 0;
-      const errors = [];
-
-      const passGroups = new Map();
-      for (const ref of passRefs) {
-        const parsed = parsePassRef(ref);
-        const run = parsed && state.flatRuns.find(candidate => candidate.file_path === parsed.base);
-        if (!parsed || !run || !run.run_id) {
-          errorCount++;
-          errors.push('A selected pass no longer maps to a run');
-          continue;
-        }
-        if (!passGroups.has(run.run_id)) {
-          passGroups.set(run.run_id, { refs: [], passNumbers: [] });
-        }
-        const group = passGroups.get(run.run_id);
-        group.refs.push(ref);
-        group.passNumbers.push(parsed.passNumber);
-      }
+      let errorCount = selectionErrors.length;
+      const errors = [...selectionErrors];
 
       for (const [runId, group] of passGroups) {
         try {
           const response = await fetch(apiUrl(`api/runs/${encodeURIComponent(runId)}/passes`), {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pass_numbers: group.passNumbers }),
+            body: JSON.stringify({ pass_numbers: group.passNumbers, expected_pass_version: group.passVersion }),
           });
           const payload = await response.json().catch(() => ({}));
           if (!response.ok || payload.error) {
@@ -6317,6 +6325,23 @@
     return merged;
   }
 
+  function reconcilePassVersions(runs) {
+    state._passVersions = state._passVersions || {};
+    for (const run of runs) {
+      const revision = Number(run.pass_revision || 0);
+      const previous = state._passVersions[run.run_id];
+      if (previous !== undefined && previous !== revision) {
+        // A checked pass and its cached details refer to the old mapping.
+        // Require the user to select again after the refreshed rows render.
+        for (const ref of state.selectedRuns) {
+          if (isPassRef(ref) && passRefBase(ref) === run.file_path) state.selectedRuns.delete(ref);
+        }
+        if (state._samplesData) delete state._samplesData[run.run_id];
+      }
+      state._passVersions[run.run_id] = revision;
+    }
+  }
+
   function _applyRunsData(data) {
     if (!dashboardActive) return;
 
@@ -6342,6 +6367,7 @@
     } else {
       currentVersionKeys.forEach(v => state.knownVersions.add(v));
     }
+    reconcilePassVersions(runs);
     state.flatRuns = runs;
     state.allMetrics = usesDashboardSummary() ? (state.dashboardOverview.all_metrics || state.dashboardOverview.metrics || []) : metrics;
     state._metricTypes = usesDashboardSummary() ? (state.dashboardOverview.metric_types || {}) : metricTypes;
@@ -6726,7 +6752,9 @@
               state.chartHistory.delete(key);
             }
           }
-          state.flatRuns = Array.from(state.chartHistory.values()).filter(item => item.status === 'ready').flatMap(item => item.rows);
+          const loadedRuns = Array.from(state.chartHistory.values()).filter(item => item.status === 'ready').flatMap(item => item.rows);
+          reconcilePassVersions(loadedRuns);
+          state.flatRuns = loadedRuns;
           state.chartData = buildDashboardChartData();
           render();
         } catch (error) {

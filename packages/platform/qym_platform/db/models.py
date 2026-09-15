@@ -971,6 +971,8 @@ class ReviewCorrection(Base):
     metric_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True, index=True)
     # NULL identifies the aggregate/classic review; positive values identify a repeat pass.
     pass_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Preserve deleted-pass evidence without associating it with a renumbered pass.
+    pass_deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     task: Mapped[str] = mapped_column(String(200), index=True)
 
     input_snapshot: Mapped[Any] = mapped_column(JSON, nullable=True)

@@ -1,6 +1,6 @@
 """Retention: monthly span partitions and purge of soft-deleted runs.
 
-Derived data (items, attempts, scores, summaries, aggregates) is never pruned.
+Age-based span retention preserves items, attempts, scores, and summaries.
 Raw spans older than ``QYM_SPAN_RETENTION_DAYS`` are removed by dropping whole
 monthly partitions — instant, no dead tuples, disk returned immediately.
 Soft-deleted runs older than ``QYM_DELETED_RUN_GRACE_DAYS`` are hard-deleted
@@ -98,16 +98,85 @@ def purge_soft_deleted_runs(engine: Engine, *, grace_days: int, limit: int = 50,
     cutoff = now - timedelta(days=grace_days)
     purged: List[str] = []
     with engine.begin() as conn:
-        ids = [r[0] for r in conn.execute(text("SELECT id FROM runs WHERE deleted_at IS NOT NULL AND deleted_at < :c ORDER BY deleted_at LIMIT :n"), {"c": cutoff, "n": limit})]
+        # The legacy FK still prevents cascades while the span copy is pending.
+        # Keep restorable source data until that migration has finished.
+        if (
+            engine.dialect.name == "postgresql"
+            and conn.execute(text("SELECT to_regclass('spans_legacy')")).scalar()
+            is not None
+        ):
+            return []
+        ids = [
+            r[0]
+            for r in conn.execute(
+                text(
+                    "SELECT id FROM runs WHERE deleted_at IS NOT NULL AND deleted_at < :c ORDER BY deleted_at LIMIT :n"
+                ),
+                {"c": cutoff, "n": limit},
+            )
+        ]
     for run_id in ids:
         with engine.begin() as conn:
             if engine.dialect.name == "postgresql":
                 conn.execute(text("SET LOCAL lock_timeout = '5s'"))
-            for table in ("dashboard_run_summaries", "dashboard_run_dimensions", "dashboard_record_state", "dashboard_record_causes"):
-                conn.execute(text(f"DELETE FROM {table} WHERE run_key = :r"), {"r": run_id})
-            conn.execute(text("DELETE FROM dashboard_partition_state WHERE partition_key = :r"), {"r": run_id})
-            conn.execute(text("DELETE FROM dashboard_change_events WHERE partition_key = :r"), {"r": run_id})
-            conn.execute(text("DELETE FROM runs WHERE id = :r"), {"r": run_id})
+            candidate = "SELECT id FROM runs WHERE id = :r AND deleted_at < :c"
+            if engine.dialect.name == "postgresql":
+                candidate += " FOR UPDATE SKIP LOCKED"
+            if (
+                conn.execute(text(candidate), {"r": run_id, "c": cutoff}).scalar()
+                is None
+            ):
+                continue
+            # The dashboard worker must remove this run's bucket contributions
+            # before its numeric source records disappear. It can catch up on a
+            # later tick even if it was stopped for the entire grace period.
+            visible = text(
+                "SELECT present FROM dashboard_run_dimensions WHERE run_key = :r"
+            )
+            if conn.execute(visible, {"r": run_id}).scalar():
+                continue
+            # Cascade source rows before taking the partition lock: backfill
+            # and normal writes also lock source rows before their partition.
+            deleted = conn.execute(
+                text("DELETE FROM runs WHERE id = :r AND deleted_at < :c"),
+                {"r": run_id, "c": cutoff},
+            ).rowcount
+            if not deleted:
+                continue
+            partition = "SELECT partition_key FROM dashboard_partition_state WHERE partition_key = :r"
+            if engine.dialect.name == "postgresql":
+                partition += " FOR UPDATE"
+            conn.execute(text(partition), {"r": run_id}).first()
+            if conn.execute(visible, {"r": run_id}).scalar():
+                conn.rollback()
+                continue
+            conn.execute(
+                text(
+                    "DELETE FROM dashboard_event_causes WHERE source_version IN (SELECT source_version FROM dashboard_change_events WHERE partition_key = :r)"
+                ),
+                {"r": run_id},
+            )
+            for table in (
+                "dashboard_run_summaries",
+                "dashboard_run_dimensions",
+                "dashboard_record_state",
+                "dashboard_record_causes",
+            ):
+                conn.execute(
+                    text(f"DELETE FROM {table} WHERE run_key = :r"), {"r": run_id}
+                )
+            conn.execute(
+                text("DELETE FROM dashboard_partition_state WHERE partition_key = :r"),
+                {"r": run_id},
+            )
+            conn.execute(
+                text("DELETE FROM dashboard_change_events WHERE partition_key = :r"),
+                {"r": run_id},
+            )
+            conn.execute(
+                text("DELETE FROM dashboard_dead_letters WHERE partition_key = :r"),
+                {"r": run_id},
+            )
         purged.append(run_id)
     if purged:
         logger.info("purged %d soft-deleted runs", len(purged))

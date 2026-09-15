@@ -3,6 +3,7 @@
 Revision ID: 0057
 Revises: 0056
 """
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -45,6 +46,45 @@ def _backfill(bind: sa.Connection) -> None:
     catalogs = table("project_analysis_category_catalog_versions")
     users = set(bind.execute(sa.select(table("users").c.id)).scalars())
     now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    # Earlier pass deletion already retained pass-score rows when only one
+    # sample remained, but did not mark the run as having pass-scoped data.
+    # Classic single-sample ingestion never creates these rows. Recover their
+    # scope before recovering approvals, including runs with no approvals yet.
+    cursor = None
+    while True:
+        retained = sa.select(runs.c.id, runs.c.run_metadata).where(
+            sa.func.coalesce(runs.c.samples, 1) <= 1,
+            sa.exists(
+                sa.select(scores.c.id).where(
+                    scores.c.run_id == runs.c.id, scores.c.pass_number == 1
+                )
+            ),
+        )
+        if cursor is not None:
+            retained = retained.where(runs.c.id > cursor)
+        rows = bind.execute(retained.order_by(runs.c.id).limit(200)).mappings().all()
+        if not rows:
+            break
+        for row in rows:
+            cursor = row["id"]
+            metadata = (
+                deepcopy(row["run_metadata"])
+                if isinstance(row["run_metadata"], dict)
+                else {}
+            )
+            if metadata.get("has_repeat_pass_context") is True:
+                continue
+            metadata["has_repeat_pass_context"] = True
+            prior_revision = metadata.get("pass_revision")
+            metadata["pass_revision"] = (
+                max(1, prior_revision) if type(prior_revision) is int else 1
+            )
+            bind.execute(
+                runs.update()
+                .where(runs.c.id == row["id"])
+                .values(run_metadata=metadata)
+            )
 
     def timestamp(value):
         if not value:
@@ -89,7 +129,10 @@ def _backfill(bind: sa.Connection) -> None:
                 .mappings()
                 .one()
             )
-            if (run["samples"] or 1) <= 1:
+            if (run["samples"] or 1) <= 1 and not (
+                isinstance(run["run_metadata"], dict)
+                and run["run_metadata"].get("has_repeat_pass_context")
+            ):
                 continue
             scope = (
                 reviews.c.run_id == score["run_id"],
@@ -134,9 +177,11 @@ def _backfill(bind: sa.Connection) -> None:
                 .all()
             )
             snapshots = {
-                row["metric_name"]: row["score_numeric"]
-                if row["score_numeric"] is not None
-                else row["score_raw"]
+                row["metric_name"]: (
+                    row["score_numeric"]
+                    if row["score_numeric"] is not None
+                    else row["score_raw"]
+                )
                 for row in pass_scores
             }
             seen_ids = set()
@@ -325,6 +370,9 @@ def upgrade() -> None:
     op.add_column(
         "review_corrections", sa.Column("pass_number", sa.Integer(), nullable=True)
     )
+    op.add_column(
+        "review_corrections", sa.Column("pass_deleted_at", sa.DateTime(), nullable=True)
+    )
     op.create_index(
         "ix_review_corrections_pass_scope",
         "review_corrections",
@@ -338,3 +386,4 @@ def downgrade() -> None:
     op.execute("DELETE FROM review_corrections WHERE pass_number IS NOT NULL")
     op.drop_index("ix_review_corrections_pass_scope", table_name="review_corrections")
     op.drop_column("review_corrections", "pass_number")
+    op.drop_column("review_corrections", "pass_deleted_at")

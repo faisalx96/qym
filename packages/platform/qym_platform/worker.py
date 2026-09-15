@@ -12,7 +12,7 @@ import logging
 import signal
 import threading
 
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import configure_mappers, sessionmaker
 
 from qym_platform.db.session import build_engine
 from qym_platform.services.dashboard_summaries import DashboardSummaryWorker
@@ -22,6 +22,11 @@ from qym_platform.settings import PlatformSettings
 
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    # Register every model and its outbox hooks before either thread can issue
+    # an ORM query. Concurrent lazy imports can expose half-defined mappings.
+    from qym_platform.db import models  # noqa: F401
+
+    configure_mappers()
     settings = PlatformSettings()
     engine = build_engine(settings, role="worker")
     sessions = sessionmaker(bind=engine, autoflush=False, autocommit=False)

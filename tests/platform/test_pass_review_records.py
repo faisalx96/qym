@@ -80,6 +80,7 @@ def repeat(db_session):
                 item_id=item.item_id,
                 pass_number=number,
                 attempt_number=1,
+                status="completed",
                 is_last_attempt=True,
                 output={"answer": f"Pass {number}"},
             )
@@ -314,6 +315,7 @@ def test_migration_recovers_existing_approval_and_is_idempotent(
     connection = db_session.connection()
     connection.execute(text("DROP INDEX ix_review_corrections_pass_scope"))
     connection.execute(text("ALTER TABLE review_corrections DROP COLUMN pass_number"))
+    connection.execute(text("ALTER TABLE review_corrections DROP COLUMN pass_deleted_at"))
     monkeypatch.setattr(
         migration, "op", Operations(MigrationContext.configure(connection))
     )

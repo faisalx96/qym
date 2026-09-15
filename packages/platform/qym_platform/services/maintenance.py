@@ -19,8 +19,9 @@ import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Iterator, List, Optional
+from uuid import uuid4
 
-from sqlalchemy import select, text, update
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -36,11 +37,16 @@ class JobCancelled(Exception):
     pass
 
 
+class JobLeaseLost(Exception):
+    pass
+
+
 class JobContext:
     """What a handler gets: the job row's params/progress, a logger, and DB access."""
 
     def __init__(self, job: MaintenanceJob, session_factory: Callable[[], Session], engine: Engine):
         self.job_id = job.id
+        self.lease_owner = job.lease_owner
         self.kind = job.kind
         self.params: Dict[str, Any] = dict(job.params or {})
         self.progress: Dict[str, Any] = dict(job.progress or {})
@@ -197,6 +203,8 @@ def run_job(job_id: str, session_factory: Callable[[], Session], engine: Engine,
         job = db.get(MaintenanceJob, job_id)
         if not job:
             return "missing"
+        if job.lease_owner != owner:
+            return "lease_lost"
         handler = _REGISTRY[job.kind]["handler"]
         ctx = JobContext(job, session_factory, engine)
         db.expunge(job)
@@ -214,6 +222,8 @@ def run_job(job_id: str, session_factory: Callable[[], Session], engine: Engine,
                 done = bool(handler(ctx))
                 if done or (time.perf_counter() - started) >= step_budget_seconds:
                     break
+        except JobLeaseLost:
+            return "lease_lost"
         except JobCancelled:
             status = "cancelled"
         except Exception as exc:  # noqa: BLE001 - recorded on the job row
@@ -222,9 +232,15 @@ def run_job(job_id: str, session_factory: Callable[[], Session], engine: Engine,
             error = f"{type(exc).__name__}: {exc}"[:4000]
             ctx.log(f"FAILED: {error}")
         with session_factory() as db:
-            job = db.get(MaintenanceJob, job_id)
+            job = db.scalar(
+                select(MaintenanceJob)
+                .where(MaintenanceJob.id == job_id)
+                .with_for_update()
+            )
             if job is None:
                 return "missing"
+            if job.lease_owner != owner:
+                return "lease_lost"
             _append_log(job, ctx.drain_log())
             job.progress = dict(ctx.progress)
             job.lease_until = datetime.utcnow() + timedelta(seconds=LEASE_SECONDS)
@@ -253,7 +269,7 @@ class MaintenanceWorker:
         self.interval = interval
         self.retention_interval = retention_interval
         self._next_retention = time.monotonic() + 60.0  # first pass a minute after start
-        self.owner = f"{socket.gethostname()}:{threading.get_ident()}"
+        self.owner = f"{socket.gethostname()[:24]}:{uuid4().hex}"
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self.current_job_id: Optional[str] = None
@@ -433,26 +449,54 @@ def _vacuum_analyze(ctx: JobContext) -> bool:
     return True
 
 
-@register("prune_dashboard_events", description="Delete already-published dashboard outbox rows older than N days.")
+@register(
+    "prune_dashboard_events",
+    description="Delete already-published dashboard outbox rows older than N days.",
+)
 def _prune_dashboard_events(ctx: JobContext) -> bool:
+    from qym_platform.db.dashboard_models import (
+        DashboardChangeEvent,
+        DashboardEventCause,
+    )
+
     days = int(ctx.params.get("days", 7))
     batch = int(ctx.params.get("batch", 20000))
     cutoff = datetime.utcnow() - timedelta(days=days)
     with ctx.session() as db:
-        if ctx.is_postgres():
+        candidates = (
+            select(DashboardChangeEvent.source_version)
+            .where(
+                DashboardChangeEvent.published_at.isnot(None),
+                DashboardChangeEvent.published_at < cutoff,
+            )
+            .order_by(DashboardChangeEvent.source_version)
+            .limit(batch)
+        )
+        versions = list(db.scalars(candidates))
+        deleted = 0
+        if versions:
+            db.execute(
+                delete(DashboardEventCause).where(
+                    DashboardEventCause.source_version.in_(versions)
+                )
+            )
             deleted = db.execute(
-                text("DELETE FROM dashboard_change_events WHERE id IN (SELECT id FROM dashboard_change_events WHERE published_at IS NOT NULL AND published_at < :cutoff LIMIT :n)"),
-                {"cutoff": cutoff, "n": batch},
+                delete(DashboardChangeEvent).where(
+                    DashboardChangeEvent.source_version.in_(versions)
+                )
             ).rowcount
-        else:
-            deleted = db.execute(text("DELETE FROM dashboard_change_events WHERE published_at IS NOT NULL AND published_at < :cutoff"), {"cutoff": cutoff}).rowcount
         db.commit()
-    ctx.progress["rows_deleted"] = int(ctx.progress.get("rows_deleted") or 0) + int(deleted or 0)
+    ctx.progress["rows_deleted"] = int(ctx.progress.get("rows_deleted") or 0) + int(
+        deleted or 0
+    )
     ctx.progress["message"] = f"{ctx.progress['rows_deleted']:,} rows deleted"
     return (deleted or 0) < batch
 
 
-@register("alter_column_types", description="Rewrite large tables to bigint ids / jsonb (migration 0052, deferred). Run in maintenance mode.")
+@register(
+    "alter_column_types",
+    description="Rewrite large tables to bigint ids / jsonb (migration 0052, deferred). Run in maintenance mode.",
+)
 def _alter_column_types(ctx: JobContext) -> bool:
     """One table per step; each ALTER rewrites the table under an exclusive lock."""
     from qym_platform.db.migration_helpers import column_type_statements
@@ -514,9 +558,25 @@ SELECT r.created_at, s.run_id, s.trace_id, s.span_id, s.parent_span_id, s.name, 
        NULLIF(regexp_replace(COALESCE(s.attributes::jsonb ->> 'llm.token_count.prompt', ''), '[^0-9]', '', 'g'), '')::bigint,
        NULLIF(regexp_replace(COALESCE(s.attributes::jsonb ->> 'llm.token_count.completion', ''), '[^0-9]', '', 'g'), '')::bigint
 FROM spans_legacy s JOIN runs r ON r.id = s.run_id
-WHERE s.run_id = ANY(:ids) AND r.deleted_at IS NULL AND r.created_at >= :cutoff
+WHERE s.run_id = ANY(:ids) AND r.created_at >= :cutoff
 ON CONFLICT ON CONSTRAINT uq_span DO NOTHING
 """
+
+
+def _span_copy_cutoff(ctx: JobContext) -> datetime:
+    """Keep the retention boundary fixed across batches and worker restarts."""
+    if ctx.progress.get("cutoff"):
+        return datetime.fromisoformat(ctx.progress["cutoff"])
+    days = int(
+        ctx.params.get(
+            "retention_days", ingest_settings_for_maintenance().span_retention_days
+        )
+    )
+    if days < 0:
+        raise ValueError("retention_days must be non-negative")
+    cutoff = datetime.utcnow() - timedelta(days=days) if days else datetime.min
+    ctx.progress.update(cutoff=cutoff.isoformat(), retention_days=days)
+    return cutoff
 
 
 @register("migrate_spans", description="Copy spans_legacy into the partitioned spans table (retention-aware, per-run batches).")
@@ -527,18 +587,16 @@ def _migrate_spans(ctx: JobContext) -> bool:
     if ctx.scalar("SELECT to_regclass('spans_legacy')") is None:
         ctx.log("spans_legacy does not exist; nothing to migrate")
         return True
-    settings = ingest_settings_for_maintenance()
-    retention_days = int(ctx.params.get("retention_days", settings.span_retention_days))
-    cutoff = datetime.utcnow() - timedelta(days=retention_days) if retention_days > 0 else datetime(1970, 1, 1)
+    cutoff = _span_copy_cutoff(ctx)
     batch_runs = int(ctx.params.get("batch_runs", 10))
     cursor = ctx.progress.get("cursor") or ""
     if "total_runs" not in ctx.progress:
         ctx.progress["total_runs"] = int(ctx.scalar("SELECT count(*) FROM runs"))
-        ctx.progress.update(runs_done=0, rows_copied=0, runs_skipped_by_retention=0, cutoff=cutoff.isoformat())
+        ctx.progress.update(runs_done=0, rows_copied=0, runs_skipped_by_retention=0)
         ctx.log(f"copying spans for runs created since {cutoff:%Y-%m-%d}; {ctx.progress['total_runs']:,} runs to scan")
         from qym_platform.services.retention import ensure_span_partitions
 
-        first = ctx.scalar("SELECT min(created_at) FROM runs WHERE deleted_at IS NULL")
+        first = ctx.scalar("SELECT min(created_at) FROM runs")
         if first and first < cutoff:
             first = cutoff
         if first:
@@ -556,7 +614,9 @@ def _migrate_spans(ctx: JobContext) -> bool:
             ctx.log(ctx.progress["message"])
             return True
         ids = [r[0] for r in rows]
-        eligible = [r[0] for r in rows if r[2] is None and r[1] >= cutoff]
+        # Soft deletion is reversible. Preserve traces for those runs until
+        # ordinary retention or an actual hard delete removes them.
+        eligible = [r[0] for r in rows if r[1] >= cutoff]
         copied = 0
         if eligible:
             db.execute(text("SET LOCAL lock_timeout = '10s'"))
@@ -570,21 +630,77 @@ def _migrate_spans(ctx: JobContext) -> bool:
     return False
 
 
-@register("drop_legacy_spans", irreversible=True, description="DROP spans_legacy after migrate_spans has been verified. Returns the disk immediately.")
+@register(
+    "drop_legacy_spans",
+    irreversible=True,
+    description="DROP spans_legacy after migrate_spans has been verified. Returns the disk immediately.",
+)
 def _drop_legacy_spans(ctx: JobContext) -> bool:
     if not ctx.is_postgres():
         return True
     if ctx.scalar("SELECT to_regclass('spans_legacy')") is None:
         ctx.log("spans_legacy already gone")
         return True
-    legacy = int(ctx.scalar("SELECT count(*) FROM spans_legacy s JOIN runs r ON r.id = s.run_id WHERE r.deleted_at IS NULL AND r.created_at >= :c", c=datetime.utcnow() - timedelta(days=int(ctx.params.get("retention_days", ingest_settings_for_maintenance().span_retention_days)) or 36500)) or 0)
-    current = int(ctx.scalar("SELECT count(*) FROM spans") or 0)
-    ctx.progress.update(legacy_rows_in_window=legacy, migrated_rows=current)
-    if current < legacy and not ctx.params.get("force"):
-        raise RuntimeError(f"spans has {current:,} rows but spans_legacy still holds {legacy:,} in the retention window; run migrate_spans first or pass force=true")
-    size = int(ctx.scalar("SELECT pg_total_relation_size('spans_legacy')") or 0)
-    with ctx.autocommit() as conn:
+    if not ingest_settings_for_maintenance().maintenance_mode:
+        raise RuntimeError(
+            "Enable QYM_MAINTENANCE_MODE before verifying and dropping spans_legacy"
+        )
+    cutoff = _span_copy_cutoff(ctx)
+    with ctx.engine.begin() as conn:
+        conn.execute(text("SET LOCAL statement_timeout = 0"))
+        conn.execute(text("SET LOCAL lock_timeout = '30s'"))
+        # Verification can exceed the worker lease. Keep another worker from
+        # claiming this job until the verification and DROP commit together.
+        job = conn.execute(
+            text(
+                "SELECT status, lease_owner FROM maintenance_jobs WHERE id = :id FOR UPDATE"
+            ),
+            {"id": ctx.job_id},
+        ).first()
+        if job is None or job.lease_owner != ctx.lease_owner:
+            raise JobLeaseLost()
+        if job.status == "cancel_requested":
+            raise JobCancelled()
+        # Freeze the eligibility set, the legacy source, and the destination.
+        # This also excludes concurrent retention and old-image span writers.
+        conn.execute(text("LOCK TABLE runs IN SHARE MODE"))
+        conn.execute(text("LOCK TABLE spans_legacy IN ACCESS EXCLUSIVE MODE"))
+        conn.execute(text("LOCK TABLE spans IN SHARE MODE"))
+        missing = conn.execute(
+            text("""
+                SELECT s.run_id, s.span_id
+                FROM spans_legacy s JOIN runs r ON r.id = s.run_id
+                WHERE r.created_at >= :cutoff AND NOT EXISTS (
+                    SELECT 1 FROM spans d
+                    WHERE d.run_id = s.run_id AND d.span_id = s.span_id
+                      AND d.run_created_at = r.created_at
+                )
+                LIMIT 1
+            """),
+            {"cutoff": cutoff},
+        ).first()
+        if missing is not None:
+            ctx.progress["missing_span"] = {
+                "run_id": missing.run_id,
+                "span_id": missing.span_id,
+            }
+            raise RuntimeError(
+                f"spans_legacy contains an uncopied span ({missing.run_id}, {missing.span_id}); run migrate_spans before dropping it"
+            )
+        ctx.progress.pop("missing_span", None)
+        size = int(
+            conn.execute(text("SELECT pg_total_relation_size('spans_legacy')")).scalar()
+            or 0
+        )
         conn.execute(text("DROP TABLE spans_legacy"))
+        # Cover the short gap before run_job persists its final result.
+        conn.execute(
+            text("UPDATE maintenance_jobs SET lease_until = :until WHERE id = :id"),
+            {
+                "until": datetime.utcnow() + timedelta(seconds=LEASE_SECONDS),
+                "id": ctx.job_id,
+            },
+        )
     ctx.progress["bytes_freed"] = size
     ctx.progress["message"] = f"dropped spans_legacy, freed {size:,} bytes"
     ctx.log(ctx.progress["message"])

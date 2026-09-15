@@ -6690,8 +6690,14 @@
       }
 
       function showToast(type, title, message) {
-          const container = el('toast-container');
-          if (!container) return;
+          let container = el('toast-container');
+          if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            container.className = 'toast-container';
+            container.setAttribute('role', 'status');
+            document.body.appendChild(container);
+          }
           const toast = document.createElement('div');
           toast.className = `toast toast-${type}`;
           toast.innerHTML = `
@@ -6892,7 +6898,7 @@
         // output/latency/status/trace for the viewed pass's slice, once, so
         // all downstream consumers follow.
         const samplesTotal = parseInt(run.samples, 10) || 1;
-        state.viewPass = (VIEW_PASS && samplesTotal > 1 && VIEW_PASS <= samplesTotal) ? VIEW_PASS : null;
+        state.viewPass = (VIEW_PASS && isRepeatRun() && VIEW_PASS <= samplesTotal) ? VIEW_PASS : null;
         const itemsViewToggle = document.querySelector('.items-view-toggle');
         if (itemsViewToggle) itemsViewToggle.hidden = samplesTotal <= 1;
         if (samplesTotal <= 1) state.itemDetailView = 'cards';
@@ -7230,7 +7236,9 @@
 
         const passPillHtml = state.viewPass
           ? '<a class="hero-pass-pill" href="' + escapeAttr(window.location.pathname) + '" title="Viewing pass ' + state.viewPass + ' of ' + samplesCount + '. Return to all passes.">Pass ' + state.viewPass + '/' + samplesCount + '</a>'
-          : '';
+          : (samplesCount === 1 && isRepeatRun()
+              ? '<a class="hero-pass-pill" href="' + escapeAttr(window.location.pathname + '?pass=1') + '" title="View the remaining pass and its reviews">Pass 1</a>'
+              : '');
 
         el('run-summary').innerHTML = '<div class="run-summary-card">' +
           '<div class="hero-top">' +
@@ -9235,7 +9243,12 @@
       }
 
       function isRepeatRun() {
-        return (parseInt(state.run?.samples, 10) || 1) > 1;
+        return (parseInt(state.run?.samples, 10) || 1) > 1
+          || !!state.run?.metadata?.has_repeat_pass_context;
+      }
+
+      function currentPassVersion() {
+        return Number(state.run?.metadata?.pass_revision || 0);
       }
 
       function isRepeatAggregateView() {
@@ -9396,7 +9409,7 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               metric: metric,
-              ...(passNumber ? { pass_number: passNumber } : {}),
+              ...(passNumber ? { pass_number: passNumber, expected_pass_version: currentPassVersion() } : {}),
             }),
           });
           const payload = await response.json().catch(() => ({}));
@@ -11645,11 +11658,11 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             file_path: filePath, row_index: rowIndex, metric_name: metricName, new_score: newScore,
-            ...(passNumber ? { pass_number: passNumber } : {}),
+            ...(passNumber ? { pass_number: passNumber, expected_pass_version: currentPassVersion() } : {}),
           }),
         });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok || data.error) throw new Error(data.error || 'Failed to update metric');
+        if (!res.ok || data.error) throw new Error(data.detail || data.error || 'Failed to update metric');
         return data;
       }
 
@@ -11726,6 +11739,7 @@
               }
             } catch (err) {
               if (statusEl) statusEl.textContent = 'Error';
+              showToast('error', 'Could not save score', err.message || 'The score was not saved.');
             } finally {
               btn.disabled = false;
               if (statusEl && statusEl.textContent === 'Saving...') statusEl.textContent = '';
@@ -11799,7 +11813,7 @@
                     metric_name: metricName,
                     comment: '',
                   };
-              if (state.viewPass) approvalBody.pass_number = state.viewPass;
+              addCurrentPassToPayload(approvalBody);
               const res = await fetch(apiUrl(approvalPath), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -11919,7 +11933,10 @@
       }
 
       function addCurrentPassToPayload(payload) {
-        if (state.viewPass) payload.pass_number = state.viewPass;
+        if (state.viewPass) {
+          payload.pass_number = state.viewPass;
+          payload.expected_pass_version = currentPassVersion();
+        }
         return payload;
       }
 
@@ -12161,7 +12178,8 @@
       }
 
       function metricAnalysisKey(itemId, metricName = '') {
-        return JSON.stringify([state.run?.file_path, state.viewPass || null, itemId, metricName]);
+        const passVersion = state.viewPass ? Number(state.run?.metadata?.pass_revision || 0) : null;
+        return JSON.stringify([state.run?.file_path, state.viewPass || null, passVersion, itemId, metricName]);
       }
 
       function metricAnalysisPanel(itemId, metricName) {
