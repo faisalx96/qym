@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from qym_platform.auth_oidc import origin_matches_base, session_auth_enabled
@@ -22,6 +23,7 @@ from qym_platform.api.product_evals import router as product_evals_router
 from qym_platform.api.datasets import router as datasets_router
 from qym_platform.api.insights import router as insights_router
 from qym_platform.api.dashboard import router as dashboard_router
+from qym_platform.api.admin import router as admin_router
 from qym_platform.services.analysis_jobs import (
     analysis_job_manager,
     rule_inference_job_manager,
@@ -42,28 +44,52 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
         openapi_url="/openapi.json",
     )
 
-    from qym_platform.db.session import SessionLocal
+    from qym_platform.db.session import SessionLocal, build_engine
     from qym_platform.deps import get_db
+    from qym_platform.services.maintenance import MaintenanceWorker
+    from sqlalchemy.orm import sessionmaker
 
-    dashboard_worker = DashboardSummaryWorker(SessionLocal)
+    # Background loops get their own small pool so a backfill cannot starve requests.
+    worker_engine = build_engine(settings, role="worker") if settings.role != "api" else None
+    worker_sessions = sessionmaker(bind=worker_engine, autoflush=False, autocommit=False) if worker_engine is not None else SessionLocal
+    dashboard_worker = DashboardSummaryWorker(worker_sessions)
     app.state.dashboard_summary_worker = dashboard_worker
+    maintenance_worker = MaintenanceWorker(worker_sessions, worker_engine if worker_engine is not None else SessionLocal.kw["bind"])
+    app.state.maintenance_worker = maintenance_worker
 
     @app.on_event("startup")
     def start_dashboard_summary_worker() -> None:
         # Dependency-overridden apps own their test/embedding database. They can
         # use app.state.dashboard_summary_worker or run a worker for that factory.
+        # API-only processes (QYM_ROLE=api) leave the loop to a worker process.
+        if settings.role == "api":
+            logging.getLogger("uvicorn.error").info("Dashboard summary worker disabled (QYM_ROLE=api)")
+            return
         if get_db not in app.dependency_overrides:
             dashboard_worker.start()
             logging.getLogger("uvicorn.error").info("Dashboard summary worker started")
+            maintenance_worker.start()
+            logging.getLogger("uvicorn.error").info("Maintenance worker started")
 
     @app.on_event("shutdown")
     def stop_dashboard_summary_worker() -> None:
+        maintenance_worker.stop()
         if dashboard_worker.stop():
             logging.getLogger("uvicorn.error").info("Dashboard summary worker stopped")
         else:
             logging.getLogger("uvicorn.error").warning(
                 "Dashboard summary worker did not stop within the shutdown timeout"
             )
+
+    # Run lists and detail payloads are large JSON; gzip cuts them ~5-10x.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+    if settings.request_timing:
+        from qym_platform.db.session import engine as _engine
+        from qym_platform.middleware.timing import RequestTimingMiddleware, install_engine_hooks
+
+        install_engine_hooks(_engine)
+        app.add_middleware(RequestTimingMiddleware, slow_ms=settings.request_timing_slow_ms)
 
     if session_auth_enabled(settings):
         if not settings.auth_session_secret:
@@ -122,6 +148,7 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     app.include_router(datasets_router)
     app.include_router(insights_router)
     app.include_router(dashboard_router)
+    app.include_router(admin_router)
     app.include_router(step_latency_router)
     app.include_router(runs_router)
     app.include_router(ingest_router)

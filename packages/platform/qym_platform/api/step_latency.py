@@ -359,7 +359,62 @@ def _load_spans(
             )
     if whole_runs:
         filters.append(Span.run_id.in_(whole_runs))
-    return db.query(Span).filter(or_(*filters)).all(), passes
+    return _project_spans(db, filters), passes
+
+
+class _SpanView:
+    """Narrow span row: scalar columns plus the few attributes this module reads.
+
+    Promoted columns (migration 0053) answer kind/scope/model/tool/tokens without
+    loading the attributes JSON; rows ingested before them fall back to the JSON.
+    """
+
+    __slots__ = ("run_id", "trace_id", "span_id", "parent_span_id", "name", "duration_ms", "status", "start_time_ns", "end_time_ns", "attributes")
+
+    def __init__(self, row, attributes):
+        (
+            self.run_id, self.trace_id, self.span_id, self.parent_span_id, self.name,
+            self.duration_ms, self.status, self.start_time_ns, self.end_time_ns,
+        ) = row[:9]
+        self.attributes = attributes
+
+
+def _project_spans(db: Session, filters) -> List[_SpanView]:
+    cols = (
+        Span.run_id, Span.trace_id, Span.span_id, Span.parent_span_id, Span.name,
+        Span.duration_ms, Span.status, Span.start_time_ns, Span.end_time_ns,
+        Span.oi_kind, Span.usage_scope, Span.model_name, Span.tool_name,
+        Span.token_total, Span.token_prompt, Span.token_completion, Span.id,
+    )
+    rows = db.query(*cols).filter(or_(*filters)).order_by(Span.start_time_ns.asc().nullslast(), Span.id.asc()).all()
+    legacy_ids = [row[16] for row in rows if row[9] is None and row[10] is None and row[13] is None]
+    legacy_attrs: Dict[int, Dict[str, Any]] = {}
+    for start in range(0, len(legacy_ids), 500):
+        chunk = legacy_ids[start : start + 500]
+        for span_id, attrs in db.query(Span.id, Span.attributes).filter(Span.id.in_(chunk)):
+            legacy_attrs[span_id] = attrs or {}
+    views: List[_SpanView] = []
+    for row in rows:
+        if row[16] in legacy_attrs:
+            attrs = legacy_attrs[row[16]]
+        else:
+            attrs = {}
+            if row[9]:
+                attrs["openinference.span.kind"] = row[9]
+            if row[10]:
+                attrs["qym.usage_scope"] = row[10]
+            if row[11]:
+                attrs["llm.model_name"] = row[11]
+            if row[12]:
+                attrs["tool.name"] = row[12]
+            if row[13] is not None:
+                attrs["llm.token_count.total"] = row[13]
+            if row[14] is not None:
+                attrs["llm.token_count.prompt"] = row[14]
+            if row[15] is not None:
+                attrs["llm.token_count.completion"] = row[15]
+        views.append(_SpanView(row, attrs))
+    return views
 
 
 def _csv_response(fieldnames: List[str], rows: Iterable[Dict[str, Any]], filename: str) -> PlainTextResponse:

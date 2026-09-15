@@ -826,3 +826,33 @@ def test_batch_publication_rolls_back_before_individual_retry(database, monkeypa
         assert db.get(Partition, "r").queue_state == "ready"
     drain(database)
     assert projected(database)["total_items"] == 2
+
+
+def test_soft_deleted_run_leaves_list_before_projection_catches_up(database):
+    """The row must vanish on the very next refresh, not after the worker flips it."""
+    from datetime import datetime
+
+    with Session(database) as db:
+        run(db, run_id="gone", status=RunWorkflowStatus.COMPLETED)
+        run(db, run_id="kept", status=RunWorkflowStatus.COMPLETED)
+        db.commit()
+    drain(database)
+    from unittest.mock import MagicMock
+
+    from qym_platform.db.models import Run
+    from qym_platform.db.dashboard_models import DashboardRunDimension as Dimension
+
+    with Session(database) as db:
+        principal = MagicMock(); principal.user.id = "u"
+        with patch.object(runs, "can_delete_run", return_value=True):
+            runs.delete_run({"file_path": "gone"}, db=db, principal=principal)
+        # worker has not run yet: the list must already exclude the run
+        ids = {row["run_id"] for row in rows(list_page(db))}
+        assert ids == {"kept"}
+        assert db.get(Run, "gone").deleted_at is not None
+    drain(database)
+    with Session(database) as db:
+        # ...and once the worker catches up it has unpublished the run itself
+        assert {row["run_id"] for row in rows(list_page(db))} == {"kept"}
+        assert db.get(Dimension, "gone").present is False
+        assert db.get(Dimension, "kept").present is True

@@ -26,6 +26,7 @@ services:
       QYM_BASE_URL: ${QYM_BASE_URL}
       QYM_ROOT_PATH: ${QYM_ROOT_PATH:-}
       QYM_DATABASE_URL: ${QYM_DATABASE_URL}
+      QYM_ROLE: ${QYM_ROLE:-api}
       QYM_ADMIN_BOOTSTRAP_TOKEN: ${QYM_ADMIN_BOOTSTRAP_TOKEN}
       QYM_AUTH_MODE: ${QYM_AUTH_MODE}
       QYM_AUTH_SESSION_SECRET: ${QYM_AUTH_SESSION_SECRET}
@@ -67,6 +68,21 @@ services:
       - ${QYM_BACKUP_PATH:-./backups}:/backups
       - ./backup.sh:/backup.sh:ro
     entrypoint: ["/bin/bash", "/backup.sh"]
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: ["python", "-m", "qym_platform.worker"]
+    environment:
+      QYM_DATABASE_URL: ${QYM_DATABASE_URL}
+      QYM_ROLE: worker
+      QYM_SKIP_MIGRATIONS: "1"
+      QYM_ENVIRONMENT: ${QYM_ENVIRONMENT:-dev}
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

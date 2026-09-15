@@ -4,7 +4,7 @@ import re
 from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import func
+from sqlalchemy import Integer, cast, func
 from sqlalchemy.orm import Session
 
 from qym_platform.datetime_utils import utc_now_naive
@@ -165,15 +165,47 @@ def _renumber_rows(db: Session, run_id: str, deleted_pass: int) -> None:
         db.flush()
 
 
+_RUN_LEVEL_EVENT_TYPES = ("run_started", "run_completed")
+
+
+def _rewrite_events_sql(db: Session, run: Run, deleted_pass: int) -> int:
+    """PostgreSQL: renumber pass_number inside jsonb payloads without loading them.
+
+    ORM bulk statements are used (not raw SQL) so the dashboard outbox hook can
+    snapshot the affected rows and keep the projection consistent.
+    """
+    pass_text = RunEvent.payload.op("->>")("pass_number")
+    numbered = pass_text.op("~")("^[0-9]+$")
+    pass_int = cast(pass_text, Integer)
+    scoped = (RunEvent.run_id == run.id, ~RunEvent.type.in_(_RUN_LEVEL_EVENT_TYPES), numbered)
+    deleted = (
+        db.query(RunEvent)
+        .filter(*scoped, pass_int == deleted_pass)
+        .delete(synchronize_session=False)
+    )
+    db.query(RunEvent).filter(*scoped, pass_int > deleted_pass).update(
+        {RunEvent.payload: func.jsonb_set(RunEvent.payload, "{pass_number}", func.to_jsonb(pass_int - 1))},
+        synchronize_session=False,
+    )
+    return int(deleted or 0)
+
+
 def _rewrite_events(
     db: Session,
     run: Run,
     deleted_pass: int,
     new_samples: int,
-    exclusive_trace_ids: set[str],
 ) -> int:
-    deleted_events = 0
-    for event in db.query(RunEvent).filter(RunEvent.run_id == run.id).all():
+    if db.get_bind().dialect.name == "postgresql":
+        deleted_events = _rewrite_events_sql(db, run, deleted_pass)
+        # Only the two run-level rows carry nested samples/run_metadata fields.
+        rows = db.query(RunEvent).filter(
+            RunEvent.run_id == run.id, RunEvent.type.in_(_RUN_LEVEL_EVENT_TYPES)
+        ).all()
+    else:
+        deleted_events = 0
+        rows = db.query(RunEvent).filter(RunEvent.run_id == run.id).all()
+    for event in rows:
         payload = dict(event.payload) if isinstance(event.payload, dict) else {}
         try:
             event_pass = (
@@ -184,10 +216,7 @@ def _rewrite_events(
         except (TypeError, ValueError):
             event_pass = None
 
-        event_trace_id = str(payload.get("trace_id") or "")
-        if event_pass == deleted_pass or (
-            event.type == "span_completed" and event_trace_id in exclusive_trace_ids
-        ):
+        if event_pass == deleted_pass:
             db.delete(event)
             deleted_events += 1
             continue
@@ -361,7 +390,7 @@ def delete_repeat_pass(
         )
 
     selected_attempts = (
-        db.query(RunItemAttempt)
+        db.query(RunItemAttempt.trace_id)
         .filter(
             RunItemAttempt.run_id == run.id,
             RunItemAttempt.pass_number == pass_number,
@@ -369,7 +398,7 @@ def delete_repeat_pass(
         .all()
     )
     selected_scores = (
-        db.query(RunItemPassScore)
+        db.query(RunItemPassScore.item_id, RunItemPassScore.metric_name)
         .filter(
             RunItemPassScore.run_id == run.id,
             RunItemPassScore.pass_number == pass_number,
@@ -379,12 +408,8 @@ def delete_repeat_pass(
     if not selected_attempts and not selected_scores:
         raise RepeatPassDeletionError(404, "Pass has no stored data")
 
-    selected_score_keys = {
-        (score.item_id, score.metric_name) for score in selected_scores
-    }
-    selected_trace_ids = {
-        str(attempt.trace_id) for attempt in selected_attempts if attempt.trace_id
-    }
+    selected_score_keys = {(item_id, metric_name) for item_id, metric_name in selected_scores}
+    selected_trace_ids = {str(trace_id) for (trace_id,) in selected_attempts if trace_id}
 
     remaining_final_attempts = (
         db.query(RunItemAttempt)
@@ -421,19 +446,23 @@ def delete_repeat_pass(
     }
     exclusive_trace_ids = selected_trace_ids - remaining_trace_ids
 
-    deleted_attempts = len(selected_attempts)
-    deleted_scores = len(selected_scores)
-    for attempt in selected_attempts:
-        db.delete(attempt)
-    for score in selected_scores:
-        db.delete(score)
+    # Set-based deletes: the dashboard outbox hook snapshots bulk statements in
+    # one query instead of one flush per row.
+    deleted_attempts = (
+        db.query(RunItemAttempt)
+        .filter(RunItemAttempt.run_id == run.id, RunItemAttempt.pass_number == pass_number)
+        .delete(synchronize_session=False)
+    )
+    deleted_scores = (
+        db.query(RunItemPassScore)
+        .filter(RunItemPassScore.run_id == run.id, RunItemPassScore.pass_number == pass_number)
+        .delete(synchronize_session=False)
+    )
     db.flush()
 
     new_samples = samples - 1
     _renumber_rows(db, run.id, pass_number)
-    deleted_events = _rewrite_events(
-        db, run, pass_number, new_samples, exclusive_trace_ids
-    )
+    deleted_events = _rewrite_events(db, run, pass_number, new_samples)
     if exclusive_trace_ids:
         (
             db.query(Span)

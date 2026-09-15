@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -105,6 +106,19 @@ class DashboardRecordState(NumericContribution, Base):
             name="uq_dashboard_record_identity",
         ),
         Index("ix_dashboard_record_retention", "present", "updated_at", "id"),
+        # Bucket extrema repair: MIN/MAX straight from an index (see repair_extrema).
+        Index(
+            "ix_dashboard_record_item_latency",
+            "project_key", "bucket_key", "latency_ms",
+            postgresql_where=text("present AND record_kind = 'item'"),
+            sqlite_where=text("present AND record_kind = 'item'"),
+        ),
+        Index(
+            "ix_dashboard_record_score_value",
+            "project_key", "bucket_key", "score",
+            postgresql_where=text("present AND record_kind = 'score'"),
+            sqlite_where=text("present AND record_kind = 'score'"),
+        ),
         Index(
             "ix_dashboard_record_latency",
             "run_key",
@@ -158,6 +172,9 @@ class DashboardRunDimension(Base):
     timestamp: Mapped[datetime] = mapped_column(DateTime, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, index=True)
     present: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    # Set synchronously by the delete endpoint (cleared by restore) so lists hide
+    # the run at once; the worker still owns ``present`` and the numeric moves.
+    hidden_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     # Labels and small display descriptors only. No item/score/span payloads.
     descriptor: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 

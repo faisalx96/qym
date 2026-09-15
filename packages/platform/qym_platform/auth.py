@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import time
+
+import threading
+
+import hashlib
+
 from dataclasses import dataclass
 from typing import Optional
 
@@ -80,6 +86,37 @@ def _bearer_token(authorization: Optional[str]) -> Optional[str]:
     return token.strip() or None
 
 
+# PBKDF2 verification costs ~100 ms of CPU; SDK clients send several batches per
+# second, so remember a successful verification for a short while. The cache key
+# is a digest of the token, never the token; revocation is still checked on every
+# request through the ``revoked_at IS NULL`` lookup above.
+_API_KEY_CACHE_TTL_SECONDS = 300.0
+_API_KEY_CACHE_MAX = 1024
+_api_key_cache: "dict[str, tuple[str, float]]" = {}
+_api_key_cache_lock = threading.Lock()
+
+
+def _verify_api_key_cached(token: str, key_id: str, key_hash: bytes) -> bool:
+    digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    now = time.monotonic()
+    with _api_key_cache_lock:
+        hit = _api_key_cache.get(digest)
+        if hit and hit[0] == key_id and hit[1] > now:
+            return True
+    if not verify_api_key(token, key_hash):
+        return False
+    with _api_key_cache_lock:
+        if len(_api_key_cache) >= _API_KEY_CACHE_MAX:
+            _api_key_cache.clear()
+        _api_key_cache[digest] = (key_id, now + _API_KEY_CACHE_TTL_SECONDS)
+    return True
+
+
+def clear_api_key_cache() -> None:
+    with _api_key_cache_lock:
+        _api_key_cache.clear()
+
+
 def require_api_key_principal(
     db: Session = Depends(get_db),
     authorization: Optional[str] = Header(default=None),
@@ -97,7 +134,7 @@ def require_api_key_principal(
     )
     if not row:
         raise HTTPException(status_code=401, detail="Invalid API key")
-    if not verify_api_key(token, row.key_hash):
+    if not _verify_api_key_cached(token, row.id, row.key_hash):
         raise HTTPException(status_code=401, detail="Invalid API key")
 
     user = db.query(User).filter(User.id == row.user_id).first()

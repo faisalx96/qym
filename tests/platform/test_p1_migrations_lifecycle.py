@@ -176,7 +176,7 @@ def test_postgres_full_chain_upgrade_p1_downgrade_reupgrade(postgres, populated)
     command.upgrade(config, "head")
     with engine.connect() as connection:
         assert (
-            connection.scalar(text("select version_num from alembic_version")) == "0050"
+            connection.scalar(text("select version_num from alembic_version")) == "0056"
         )
         inspector = inspect(connection)
         assert "ix_dashboard_event_retention" in {
@@ -357,7 +357,8 @@ def test_uvicorn_entrypoint_publishes_history_under_production_prefix(
                         continue
                     assert response.status_code == 200, response.text
                     payload = response.json()
-                    if payload["rows"]:
+                    # Runs are listed as "pending" before their numbers are consistent.
+                    if payload["rows"] and payload["rows"][0].get("summary_state") == "published":
                         row = payload["rows"][0]
                         assert row["run_id"] == "run"
                         assert row["total_items"] == 1

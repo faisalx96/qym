@@ -652,7 +652,136 @@ def _completed_pass_outputs(
     return recovered
 
 
+def _set_dashboard_visibility(db: Session, run_id: str, visible: bool) -> None:
+    """Hide/show the run in projection-backed lists immediately.
+
+    ``present`` stays owned by the summary worker (it drives the numeric bucket
+    moves); ``hidden_at`` is the operator-facing flag lists filter on.
+    """
+    from qym_platform.db.dashboard_models import DashboardRunDimension, DashboardRunSummary
+
+    dimension = db.get(DashboardRunDimension, run_id)
+    if dimension is None or (dimension.hidden_at is None) == visible:
+        return
+    dimension.hidden_at = None if visible else utc_now_naive()
+    # The dashboard page/overview caches key on the sum of projection
+    # revisions; bump this run's so the change is visible on the next poll.
+    summary = db.get(DashboardRunSummary, run_id)
+    if summary is not None:
+        summary.projection_revision = int(summary.projection_revision or 0) + 1
+
+
 def _repeat_pass_event_state(
+    db: Session, run_id: str, *, item_ids: Optional[List[str]] = None
+) -> Dict[str, Any]:
+    """Per-pass lifecycle state from ``run_item_attempts`` (no event replay).
+
+    Every finished attempt is a row; since ingest also records a RUNNING row at
+    attempt start, in-flight work is visible without reading ``run_events``.
+    Runs ingested before attempt rows existed fall back to the event log.
+    """
+    query = db.query(
+        RunItemAttempt.item_id,
+        RunItemAttempt.pass_number,
+        RunItemAttempt.attempt_number,
+        RunItemAttempt.status,
+        RunItemAttempt.latency_ms,
+        RunItemAttempt.task_started_at_ms,
+        RunItemAttempt.trace_id,
+        RunItemAttempt.trace_url,
+        RunItemAttempt.error,
+        RunItemAttempt.is_last_attempt,
+        RunItemAttempt.output,
+    ).filter(RunItemAttempt.run_id == run_id)
+    if item_ids is not None:
+        query = query.filter(RunItemAttempt.item_id.in_(list(item_ids)))
+    rows = query.order_by(RunItemAttempt.pass_number, RunItemAttempt.item_id, RunItemAttempt.attempt_number).all()
+    if not rows:
+        has_events = db.query(RunEvent.id).filter(RunEvent.run_id == run_id).first() is not None
+        if has_events:
+            return _repeat_pass_event_state_from_events(db, run_id, item_ids=item_ids)
+        return {"outcomes": {}, "active_attempts": {}, "starts_by_pass": defaultdict(list), "completed_passes": set()}
+
+    outcomes: Dict[tuple[str, int], Dict[str, Any]] = {}
+    active_attempts: Dict[tuple[str, int], Dict[str, Any]] = {}
+    starts_by_pass: Dict[int, List[int]] = defaultdict(list)
+    latest: Dict[tuple[str, int], tuple] = {}
+    for row in rows:
+        item_id, pass_number, attempt_number, status, latency_ms, start_ms, trace_id, trace_url, error, is_last, output = row
+        pass_number = max(1, int(pass_number or 1))
+        key = (item_id, pass_number)
+        if start_ms is not None:
+            starts_by_pass[pass_number].append(int(start_ms))
+            if latency_ms is not None:
+                starts_by_pass[pass_number].append(int(start_ms + latency_ms))
+        status_l = str(status or "").upper()
+        if status_l == "RUNNING":
+            active_attempts[key] = {
+                "pass_number": pass_number,
+                "status": "running",
+                "output": None,
+                "error": "",
+                "latency_ms": None,
+                "task_started_at_ms": int(start_ms) if start_ms is not None else None,
+                "trace_id": trace_id or "",
+                "trace_url": trace_url or "",
+                "retry_count": max(0, int(attempt_number or 1) - 1),
+            }
+            continue
+        prev = latest.get(key)
+        if prev is not None and prev[0] and not is_last:
+            continue  # a final attempt already represents this pass
+        latest[key] = (bool(is_last), attempt_number)
+        failed = status_l == "FAILED"
+        err = str(error or "")
+        outcomes[key] = {
+            "pass_number": pass_number,
+            "status": "error" if failed else "completed",
+            "output": f"ERROR: {err}" if failed and err else _stringify(output),
+            "error": err,
+            "latency_ms": float(latency_ms) if latency_ms is not None else None,
+            "task_started_at_ms": int(start_ms) if start_ms is not None else None,
+            "trace_id": trace_id or "",
+            "trace_url": trace_url or "",
+            "retry_count": max(0, int(attempt_number or 1) - 1),
+        }
+        active_attempts.pop(key, None)
+
+    run = db.get(Run, run_id)
+    metadata = run.run_metadata if run is not None and isinstance(run.run_metadata, dict) else {}
+    try:
+        last_completed = int(metadata.get("last_completed_pass") or 0)
+    except (TypeError, ValueError):
+        last_completed = 0
+    completed_passes = set(range(1, last_completed + 1))
+
+    # Legacy gaps: passes with no attempt rows at all (old SDKs emitted only an
+    # item outcome), or a live run ingested before RUNNING attempt rows existed.
+    samples = int(getattr(run, "samples", 1) or 1) if run is not None else 1
+    passes_seen = {key[1] for key in outcomes} | {key[1] for key in active_attempts}
+    status = str(getattr(getattr(run, "status", None), "value", getattr(run, "status", "")) or "").upper()
+    live = status in {"RUNNING", "PENDING"}
+    missing_passes = [p for p in range(1, samples + 1) if p not in passes_seen]
+    if missing_passes or (live and not active_attempts):
+        legacy = _repeat_pass_event_state_from_events(db, run_id, item_ids=item_ids)
+        for key, value in legacy["outcomes"].items():
+            outcomes.setdefault(key, value)
+        for key, value in legacy["active_attempts"].items():
+            if key not in outcomes:
+                active_attempts.setdefault(key, value)
+        for pass_number, values in legacy["starts_by_pass"].items():
+            if pass_number in missing_passes or not starts_by_pass.get(pass_number):
+                starts_by_pass[pass_number].extend(values)
+        completed_passes |= set(legacy["completed_passes"])
+    return {
+        "outcomes": outcomes,
+        "active_attempts": active_attempts,
+        "starts_by_pass": starts_by_pass,
+        "completed_passes": completed_passes,
+    }
+
+
+def _repeat_pass_event_state_from_events(
     db: Session, run_id: str, *, item_ids: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """Recover per-pass lifecycle state that is not represented by final attempts.
@@ -4939,6 +5068,7 @@ def delete_run(
     snapshot = run.audit_snapshot()
     run.deleted_at = utc_now_naive()
     run.deleted_by_user_id = principal.user.id
+    _set_dashboard_visibility(db, run.id, False)
 
     audit = AuditLog(
         actor_user_id=principal.user.id,
@@ -4975,6 +5105,7 @@ def restore_run(
         raise HTTPException(status_code=404, detail="Deleted run not found")
 
     run.deleted_at = None
+    _set_dashboard_visibility(db, run.id, True)
     run.deleted_by_user_id = None
 
     audit = AuditLog(

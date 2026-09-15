@@ -140,6 +140,7 @@ def _base_conditions(project):
     conditions = [
         Dimension.project_key == project["id"] if project else false(),
         Dimension.present.is_(True),
+        Dimension.hidden_at.is_(None),
     ]
     hidden = [
         task.strip().lower()
@@ -303,6 +304,7 @@ def _row(dimension, summary):
         **(dimension.descriptor or {}),
         **(summary.data or {}),
         "_revision": summary.projection_revision,
+        "summary_state": "published" if summary.projection_revision else "pending",
         "model_key": dimension.model,
     }
 

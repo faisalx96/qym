@@ -117,7 +117,8 @@ def _apply(db, run, principal, events):
 
 def _canonical(db, run):
     buckets = ingest._build_trace_buckets_from_spans(
-        db.query(Span).filter_by(run_id=run.id).all()
+        # Arrival order, like the service: named outer-scope order is position-sensitive.
+        db.query(Span).filter_by(run_id=run.id).order_by(Span.id).all()
     )
     included = []
     for item in db.query(RunItem).filter_by(run_id=run.id).order_by(RunItem.id):
@@ -250,9 +251,11 @@ def test_duplicate_events_and_span_identities_do_not_double_apply(database):
     snapshot = copy.deepcopy(run.run_metadata)
     assert _apply(db, run, principal, events)["skipped"] == 2
     second_span = _event(run, 3, "span_completed", events[1]["payload"])
-    _apply(db, run, principal, [second_span])
+    assert _apply(db, run, principal, [second_span])["skipped"] == 1
     assert db.query(Span).count() == 1
-    assert db.query(RunEvent).count() == 3
+    # Spans are stored once, in ``spans``; run_events keeps only structural history.
+    assert db.query(RunEvent).count() == 1
+    assert db.query(RunEvent).filter(RunEvent.type == "span_completed").count() == 0
     assert run.run_metadata == snapshot
 
 
@@ -596,7 +599,7 @@ def test_postgres_concurrent_identical_batches_apply_once(database):
         results = [future.result(timeout=10) for future in futures]
     db.expire_all()
     assert sorted(result["applied"] for result in results) == [0, 2]
-    assert db.query(RunEvent).count() == 2
+    assert db.query(RunEvent).count() == 1
     assert db.query(Span).count() == 1
     assert run.run_metadata["trace_stats"]["avg_tokens"] == 10
 

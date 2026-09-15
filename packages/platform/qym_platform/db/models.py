@@ -21,9 +21,15 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column, object_session, relationship
 
 from qym_platform.db.base import Base
+
+# PostgreSQL stores large JSON as jsonb (binary, compressible, indexable);
+# SQLite keeps the generic JSON type. Big ids use bigint on PostgreSQL.
+BIG_JSON = JSON().with_variant(JSONB(), "postgresql")
+BIG_ID = Integer().with_variant(BigInteger(), "postgresql")
 
 
 class UserRole(str, enum.Enum):
@@ -503,11 +509,11 @@ class RunItem(Base):
     item_id: Mapped[str] = mapped_column(String(200))
     index: Mapped[int] = mapped_column(Integer, default=0)
 
-    input: Mapped[Any] = mapped_column(JSON)
-    expected: Mapped[Any] = mapped_column(JSON, nullable=True)
-    output: Mapped[Any] = mapped_column(JSON, nullable=True)
+    input: Mapped[Any] = mapped_column(BIG_JSON)
+    expected: Mapped[Any] = mapped_column(BIG_JSON, nullable=True)
+    output: Mapped[Any] = mapped_column(BIG_JSON, nullable=True)
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    item_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    item_metadata: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict)
 
     latency_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -690,7 +696,7 @@ class RunItemAttempt(Base):
     is_last_attempt: Mapped[bool] = mapped_column(Boolean, default=False)
     # The pass's output — populated on the final attempt of each pass so the
     # UI can show per-pass outputs without bloating every retry row.
-    output: Mapped[Any] = mapped_column(JSON, nullable=True)
+    output: Mapped[Any] = mapped_column(BIG_JSON, nullable=True)
 
     __table_args__ = (
         UniqueConstraint(
@@ -712,8 +718,8 @@ class RunItemScore(Base):
     item_id: Mapped[str] = mapped_column(String(200), index=True)
     metric_name: Mapped[str] = mapped_column(String(200), index=True)
     score_numeric: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    score_raw: Mapped[Any] = mapped_column(JSON, nullable=True)
-    meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    score_raw: Mapped[Any] = mapped_column(BIG_JSON, nullable=True)
+    meta: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict)
     label: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     explanation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
@@ -763,7 +769,7 @@ class RunItemPassScore(Base):
     label: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     # Per-pass judge output (explanation, criteria, judge model, …) — the
     # same shape RunItemScore.meta holds for the reduced score.
-    meta: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    meta: Mapped[Optional[dict[str, Any]]] = mapped_column(BIG_JSON, nullable=True)
     explanation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
@@ -832,27 +838,45 @@ class AuditLog(Base):
 
 
 class RunEvent(Base):
+    """Structural run history. Bodies live in run_items/attempts/scores; spans in ``spans``."""
+
     __tablename__ = "run_events"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id"), index=True)
-    event_id: Mapped[str] = mapped_column(String(36), index=True)
+    id: Mapped[int] = mapped_column(BIG_ID, primary_key=True, autoincrement=True)
+    # (run_id, event_id) and (run_id, sequence) unique constraints already
+    # serve run_id lookups; no separate single-column indexes.
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id"))
+    event_id: Mapped[str] = mapped_column(String(36))
     sequence: Mapped[int] = mapped_column(Integer)
     type: Mapped[str] = mapped_column(String(50))
     sent_at: Mapped[datetime] = mapped_column(DateTime)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    payload: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict)
 
     __table_args__ = (
         UniqueConstraint("run_id", "event_id", name="uq_run_event_event_id"),
         UniqueConstraint("run_id", "sequence", name="uq_run_event_sequence"),
+        # Every reader filters by type; on production this index is built by a
+        # maintenance job (CONCURRENTLY), see migration 0051.
+        Index("ix_run_events_run_type_seq", "run_id", "type", "sequence"),
     )
 
 
 class Span(Base):
+    """One OTEL span. On PostgreSQL the table is RANGE-partitioned by
+    ``run_created_at`` (monthly) so raw-trace retention is a partition drop;
+    ``create_all`` (tests) builds a plain table with the same columns.
+    """
+
     __tablename__ = "spans"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id"), index=True)
+    id: Mapped[int] = mapped_column(BIG_ID, primary_key=True, autoincrement=True)
+    # Partition key, denormalized from runs.created_at at ingest. On PostgreSQL
+    # the physical primary key is (id, run_created_at) — migration 0053 — but the
+    # ORM identity stays ``id`` (globally unique via one identity sequence), which
+    # also keeps SQLite's single-column autoincrement happy.
+    run_created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    # uq_span (run_id, span_id) and ix_span_run_trace already lead with run_id.
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id"))
     trace_id: Mapped[str] = mapped_column(String(64))
     span_id: Mapped[str] = mapped_column(String(32))
     parent_span_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
@@ -862,13 +886,21 @@ class Span(Base):
     end_time_ns: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     duration_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="UNSET")
-    attributes: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    events: Mapped[list] = mapped_column(JSON, default=list)
-    links: Mapped[list] = mapped_column(JSON, default=list)
+    attributes: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict)
+    events: Mapped[list] = mapped_column(BIG_JSON, default=list)
+    links: Mapped[list] = mapped_column(BIG_JSON, default=list)
+    # Promoted from attributes at ingest so statistics/step-latency never load JSON.
+    oi_kind: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    usage_scope: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    model_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    tool_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    token_total: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    token_prompt: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    token_completion: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     __table_args__ = (
         Index("ix_span_run_trace", "run_id", "trace_id"),
-        UniqueConstraint("run_id", "span_id", name="uq_span"),
+        UniqueConstraint("run_id", "span_id", "run_created_at", name="uq_span"),
     )
 
 
@@ -892,6 +924,8 @@ class RunTraceAggregate(Base):
     reasoning_tokens: Mapped[int] = mapped_column(Integer, default=0)
     # Full span-derived bucket (incl. latency totals/counts) so live trace
     # stats can be rebuilt without reloading every span of the run.
+    # Plain JSON on purpose: named outer-scope buckets rely on insertion order,
+    # which jsonb does not preserve.
     raw_bucket: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
 
     __table_args__ = (
@@ -1031,6 +1065,7 @@ class RunTraceNamedContribution(Base):
     __table_args__ = (Index("ix_trace_named_first", "run_id", "name", "item_order", "name_position"),)
 
 # Import projection mappings so Base.metadata includes their durable tables.
+from qym_platform.db.maintenance_models import MaintenanceJob  # noqa: E402,F401
 from qym_platform.db.dashboard_models import (  # noqa: E402,F401
     DashboardChangeEvent, DashboardEventCause, DashboardRecordState,
     DashboardRecordCause, DashboardRunDimension, DashboardRunSummary,
