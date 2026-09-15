@@ -1,0 +1,33 @@
+{
+  "label": "smoke",
+  "generated_at": "2026-09-14T17:23:46.713587",
+  "seed": 1,
+  "scale": 0.003,
+  "legacy_dup_spans": true,
+  "projects": 11,
+  "users": 12,
+  "repeat_share": 0.15,
+  "totals": {
+    "runs": 9,
+    "items": 652,
+    "spans": 21632,
+    "events": 29711,
+    "span_attr_bytes": 171866077,
+    "repeat_runs": 2
+  },
+  "api_tokens": {
+    "perf-project-00": "qk00perf_524yng5by1a2rogubbb8ayn1",
+    "perf-project-01": "qk01perf_oo3sb09glshv616mts56zc4p",
+    "perf-project-02": "qk02perf_gk7zx5b4ctzkk6oam89oz6ww",
+    "perf-project-03": "qk03perf_6i79n1d4x9m605w0wa88v3bo",
+    "perf-project-04": "qk04perf_cefb2arprhlwsekkq7krs3u5",
+    "perf-project-05": "qk05perf_mqgq6n1bobzjck2618o72o7b",
+    "perf-project-06": "qk06perf_tindteettk0qia9cn3k6cymw",
+    "perf-project-07": "qk07perf_m5gys65buzsbkmuiv1nrgy9w",
+    "perf-project-08": "qk08perf_ikk8nrv6qxvvhsp5i9guc0ey",
+    "perf-project-09": "qk09perf_e9ofrxs8h3rgcsaaf0hcmp0k",
+    "perf-project-10": "qk10perf_kg1y8s9q4ugnucbasu2zuzee"
+  },
+  "elapsed_seconds": 11.0,
+  "url": "localhost:15433/qym_perf"
+}

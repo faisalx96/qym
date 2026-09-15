@@ -35,3 +35,37 @@ def mock_dataset():
 @pytest.fixture
 def mock_task():
     return MagicMock()
+
+
+@pytest.fixture
+def postgres_engine():
+    """Isolated PostgreSQL schema for one test; skips when QYM_TEST_POSTGRES_URL is unset.
+
+    Creates the current ORM schema with ``Base.metadata.create_all`` and drops the
+    schema on teardown. Use it for behaviour that SQLite cannot exercise
+    (partitioning, jsonb, FK enforcement, real query plans).
+    """
+    import os
+    from uuid import uuid4
+
+    from sqlalchemy import create_engine, text
+
+    url = os.environ.get("QYM_TEST_POSTGRES_URL")
+    if not url:
+        pytest.skip("QYM_TEST_POSTGRES_URL not configured")
+    from qym_platform.db.base import Base
+    import qym_platform.db.models  # noqa: F401 - registers every table on Base
+
+    schema = "qym_test_" + uuid4().hex
+    admin = create_engine(url)
+    with admin.begin() as conn:
+        conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+    engine = create_engine(url, connect_args={"options": f"-csearch_path={schema}"})
+    try:
+        Base.metadata.create_all(engine)
+        yield engine
+    finally:
+        engine.dispose()
+        with admin.begin() as conn:
+            conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        admin.dispose()
