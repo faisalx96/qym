@@ -1,0 +1,1 @@
+import{a as e}from"./chunk-Icon--kDOIs7m.js";import{o as t}from"./chunk-composition-Hh1MsX10.js";import"./chunk-TopbarSummary-BKjqDqrD.js";var n=e(),r={getTotalSize:()=>0,getVirtualItems:()=>[]},i=()=>r;function a(e){return(0,n.jsx)(t,{...e,useRowWindow:i})}export{a as t};

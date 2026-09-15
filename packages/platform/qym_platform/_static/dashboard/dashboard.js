@@ -5980,6 +5980,7 @@
           modal.style.display = 'none';
           // Remove from selection if selected
           state.selectedRuns.delete(filePath);
+          showToast('success', 'Run deleted', 'The run was moved to the trash.');
           // Refresh data
           await fetchRuns({ refreshAllPages: true });
         } else {
@@ -6804,10 +6805,16 @@
       ...state.selectedRuns, ...(state.cohortAnchorRuns || []),
     ].map(passRefBase));
     const retained = [...retainedIds];
+    // The overview (catalog + facets) is the expensive half of a poll; only ask
+    // for it again when the projection revision moved or the filter changed.
+    const overviewStale = !state.dashboardOverview
+      || state.dashboardOverviewFilterKey !== filterKey
+      || state.dashboardOverview?.freshness?.updating
+      || (Date.now() - (state._overviewFetchedAt || 0)) > 60000;
     const payload = {
       project_slug: state.currentProject?.slug || getProjectSlugFromPath() || '',
       filters: dashboardFilters(), sort: state.sortKey,
-      limit: TABLE_PAGE_SIZE, offset, ids: retained.slice(0, 100), include_overview: true,
+      limit: TABLE_PAGE_SIZE, offset, ids: retained.slice(0, 100), include_overview: overviewStale,
     };
     let collation = dashboardCollation(state.dashboardOverview, state.sortKey);
     if (collation !== null && state.dashboardOverviewFilterKey !== filterKey) {
@@ -6816,7 +6823,8 @@
     }
     if (collation !== null) payload.collation = collation;
     let page = await dashboardQuery('runs', payload);
-    let overview = page.overview;
+    let overview = page.overview || state.dashboardOverview;
+    if (page.overview) state._overviewFetchedAt = Date.now();
     const latestCollation = dashboardCollation(overview, state.sortKey);
     if (latestCollation !== null && JSON.stringify(latestCollation) !== JSON.stringify(collation)) {
       payload.collation = latestCollation;
@@ -7784,8 +7792,17 @@
   function updateRunsRefreshCadence() {
     if (!dashboardActive) return;
     try {
+      // While the summary worker is publishing, back off 2s -> 4s -> 8s -> 15s
+      // instead of hammering the server every 2s for the whole backfill.
+      const updating = !!state.dashboardOverview?.freshness?.updating;
+      if (updating) {
+        state._updatingPolls = (state._updatingPolls || 0) + 1;
+      } else {
+        state._updatingPolls = 0;
+      }
+      const backoffMs = Math.min(15000, 2000 * Math.pow(2, Math.max(0, (state._updatingPolls || 1) - 1)));
       const intervalMs = state.dashboardBackfilling ? LIVE_REFRESH_INTERVAL_MS
-        : state.dashboardOverview?.freshness?.updating ? 2000
+        : updating ? backoffMs
         : (state.dashboardOverview?.has_active_runs || hasActiveRuns()) ? LIVE_REFRESH_INTERVAL_MS : IDLE_REFRESH_INTERVAL_MS;
       if (window.__QYM_DASHBOARD_INTERVAL__) clearInterval(window.__QYM_DASHBOARD_INTERVAL__);
       window.__QYM_DASHBOARD_INTERVAL__ = setInterval(fetchRuns, intervalMs);

@@ -1,0 +1,1 @@
+var e=Object.freeze({locale:`en-US`,timeZone:`UTC`});export{e as t};

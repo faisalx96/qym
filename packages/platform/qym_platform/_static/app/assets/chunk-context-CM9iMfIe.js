@@ -1,0 +1,1 @@
+import{i as e,t}from"./chunk-react-B8IZ02wI.js";var n=e(t(),1),r=(0,n.createContext)(null);function i(){let e=(0,n.use)(r);if(e===null)throw Error(`useApiClient must be used inside AppProviders.`);return e}export{i as n,r as t};

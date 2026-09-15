@@ -1,0 +1,1 @@
+import{a as e}from"./chunk-Icon--kDOIs7m.js";import{v as t}from"./chunk-search-Dvg_-O9r.js";import{t as n}from"./chunk-LoginPage-rCRrQ8jF.js";var r=e();function i(){return(0,r.jsx)(n,{requestedNext:t({from:`/login`}).next})}export{i as LoginRoutePage};

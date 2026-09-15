@@ -1,0 +1,1 @@
+import{t as e}from"./chunk-errors-Bn2ktPsP.js";function t(t,n){let r=t.safeParse(n);if(r.success)return r.data;throw new e({code:`MALFORMED_RESPONSE`,kind:`unknown`,message:`Qym received an unexpected server response. Refresh and try again.`})}export{t};
