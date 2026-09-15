@@ -16,7 +16,7 @@ Root causes (all verified on a 58 GB prod-shaped copy, see `artifacts/perf/READM
 
 **Storage** — spans stored once; `spans` is a monthly range-partitioned table (jsonb, LZ4, scalar columns for kind/scope/model/tokens); `run_events` and large JSON columns are bigint/jsonb; redundant indexes dropped, `(run_id, type, sequence)` added; cascading FKs. **Retention**: raw spans older than 60 days are dropped by partition; soft-deleted runs are purged after 30 days. Age-based trace retention preserves derived data. Hard deletion of a soft-deleted run removes its associated items, outputs, scores, and summaries after the grace period.
 
-**Operations** — a maintenance-job framework (`maintenance_jobs` table, resumable, one job at a time) with an **Admin → Maintenance** tab: table sizes, queue/cancel/start jobs, typed confirmation for irreversible ones. Large storage rewrites are queued as jobs; the pass-review backfill in migration 0057 runs during startup. `QYM_MAINTENANCE_MODE=1` makes ingest answer `503 Retry-After` (SDKs buffer and retry). `QYM_ROLE=api|worker|all` + standalone worker process.
+**Operations** — a maintenance-job framework (`maintenance_jobs` table, resumable, one job at a time) with an **Admin → Maintenance** tab: table sizes, queue/cancel/start jobs, typed confirmation for irreversible ones. Large storage rewrites are queued as jobs; the pass-review backfill in migration 0057 runs during startup. `QYM_MAINTENANCE_MODE=1` makes ingest answer `503 Retry-After` (SDKs buffer and retry). `QYM_ROLE=api|worker|all`; the default `all` runs the loops in the API, and a standalone worker process is optional.
 
 **Worker** — cheap extrema repair (hour range, day folded from hours); runs are listed as *pending* instead of hidden during backfill; own connection pool; throttled discovery; instant hide/show on delete/restore.
 
@@ -59,14 +59,16 @@ on the existing data.
   above are from the earlier performance rehearsal, not guarantees for this merge.
 - Pause ingestion on every API. Use `QYM_MAINTENANCE_MODE=1` when the current image
   supports it; otherwise pause ingress first. Confirm ingest returns 503.
-- Give the API and worker the same database, maintenance, and retention settings.
+- If you use the optional separate worker, give it the same database, maintenance,
+  and retention settings as the API.
   Keep `QYM_EVENT_LOG_MODE=full` during migration.
 
 ### Apply migrations and run jobs
 
-1. Stop the old worker. Deploy the new API with `QYM_ROLE=api`; let one migration
-   runner upgrade to `0057`. Wait for a healthy API before starting one worker
-   using the same image, `QYM_ROLE=worker`, and `QYM_SKIP_MIGRATIONS=1`.
+1. Deploy the new API with the default `QYM_ROLE=all`; let one migration runner
+   upgrade to `0057`. The API process runs the queued jobs itself. Optional split
+   layout: set `QYM_ROLE=api` on the API and, after it is healthy, start one
+   worker using the same image, `QYM_ROLE=worker`, and `QYM_SKIP_MIGRATIONS=1`.
 2. Inspect auto-queued index and FK-validation jobs. Leave `alter_column_types`
    paused until there is enough disk for the rewrite. Investigate failed jobs.
 3. Run `reclaim_run_events` to delete duplicate `span_completed` events. VACUUM
@@ -82,10 +84,10 @@ on the existing data.
    the error and rerun the copy. Run mutations can wait during this final step.
 6. Complete `alter_column_types` while maintenance mode remains enabled. It may
    run before span copy if enough free space is available. Confirm required index
-   and FK-validation jobs succeeded and the worker remains healthy.
+   and FK-validation jobs succeeded and the maintenance worker reports running.
 7. Verify representative outputs, traces, scores, approved categories, and pass
    reviews. Then set `QYM_MAINTENANCE_MODE=0` and `QYM_EVENT_LOG_MODE=structural`
-   on both roles. Keep the worker running and confirm buffered SDK events resume.
+   on every role. Keep the process that runs the loops up and confirm buffered SDK events resume.
 
 Purge waits while `spans_legacy` exists and until dashboard deletion publication
 has removed the run's numeric contributions. Once both finish, eligible purges
@@ -99,7 +101,7 @@ a restore that loses to a completed purge returns 404.
 - Cancellation keeps per-pass error details and force stop finishes.
 - Deleting and restoring a run works. Deleting an earlier pass preserves the
   remaining pass's approved review and allows resetting it.
-- The API and worker remain healthy. Record final sizes against the rehearsal.
+- The API (and the worker, if used) remain healthy. Record final sizes against the rehearsal.
 
 ### Rollback
 

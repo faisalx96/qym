@@ -1,9 +1,11 @@
 """Standalone background worker: ``python -m qym_platform.worker``.
 
 Runs the dashboard summary loop and the maintenance loop without serving HTTP.
-Deploy it as its own pod/container with ``QYM_ROLE=worker``; the API pods then
-run with ``QYM_ROLE=api``. Migrations are applied by the API entrypoint, so the
-worker container sets ``QYM_SKIP_MIGRATIONS=1``.
+This process is optional. The default ``QYM_ROLE=all`` runs both loops inside
+the API process. To split them, deploy this as its own pod/container with
+``QYM_ROLE=worker`` and run the API pods with ``QYM_ROLE=api``. Migrations are
+applied by the API entrypoint, so the worker container sets
+``QYM_SKIP_MIGRATIONS=1``.
 """
 
 from __future__ import annotations

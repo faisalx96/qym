@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-# Worker containers (QYM_ROLE=worker) run alongside API pods that already
-# applied the schema; skip the migration step there.
+# Optional worker containers (QYM_ROLE=worker) run alongside API pods that
+# already applied the schema; skip the migration step there.
 if [ "${QYM_SKIP_MIGRATIONS:-0}" = "1" ]; then
   echo "Skipping migrations (QYM_SKIP_MIGRATIONS=1)"
 else

@@ -61,7 +61,8 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     def start_dashboard_summary_worker() -> None:
         # Dependency-overridden apps own their test/embedding database. They can
         # use app.state.dashboard_summary_worker or run a worker for that factory.
-        # API-only processes (QYM_ROLE=api) leave the loop to a worker process.
+        # The default role `all` runs the loops here. API-only processes
+        # (QYM_ROLE=api) leave them to an optional separate worker process.
         if settings.role == "api":
             logging.getLogger("uvicorn.error").info("Dashboard summary worker disabled (QYM_ROLE=api)")
             return

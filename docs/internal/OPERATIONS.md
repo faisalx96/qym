@@ -8,13 +8,16 @@ shell on the database host, so every operation below is driven from **values.yam
 
 | Component | What it does | Where |
 |---|---|---|
-| API pod(s) | Serve HTTP; apply Alembic migrations on start | `QYM_ROLE=api` |
-| Worker pod | Dashboard summary backfill + maintenance jobs + hourly retention | `QYM_ROLE=worker`, `QYM_SKIP_MIGRATIONS=1`, command `python -m qym_platform.worker` |
+| API pod(s) | Serve HTTP; apply Alembic migrations on start; run the dashboard summary backfill, maintenance jobs, and hourly retention | `QYM_ROLE=all` (default) |
+| Worker pod (optional) | Runs the background loops in a separate process | `QYM_ROLE=worker`, `QYM_SKIP_MIGRATIONS=1`, command `python -m qym_platform.worker`; set `QYM_ROLE=api` on the API |
 | Maintenance jobs | Reclaim, index builds, span copy, and purges. Progress is saved between steps. Final legacy verification and DROP share one transaction | `Admin → Maintenance`, `GET/POST /api/admin/maintenance/jobs` |
 | Maintenance mode | Ingest answers `503 Retry-After: 60`; SDKs buffer (16 MiB RAM + 256 MiB disk) and retry; UI stays readable | `QYM_MAINTENANCE_MODE=1` |
 
-A single-container deployment keeps working unchanged: `QYM_ROLE=all` (default) runs
-the API and both loops in one process.
+The default deployment is unchanged: `QYM_ROLE=all` runs the API and both loops in
+one process. The separate worker pod is an option for isolating long maintenance
+jobs from API restarts and probes, or for running several API replicas without
+duplicating the background loops. Both layouts are safe: database leases make
+sure one process runs a given job.
 
 ## Environment variables (new)
 
@@ -79,10 +82,13 @@ startup time on a populated copy before setting deployment readiness deadlines.
 
 ### Deploy and run maintenance
 
-1. Stop the old worker. Deploy one API migration runner with `QYM_ROLE=api`.
-   Wait for migration head `0057` and a healthy API before starting the new worker.
-   Start one worker using the same image and configuration with `QYM_ROLE=worker`
-   and `QYM_SKIP_MIGRATIONS=1`. The worker is required to execute every queued job.
+1. Deploy the new API with the default `QYM_ROLE=all`. Wait for migration head
+   `0057` and a healthy API. The API process then runs every queued job itself.
+   Do not restart the API while a job runs; the job resumes, but each restart
+   costs time. Optional split layout: set `QYM_ROLE=api` on the API and start
+   one worker with the same image and configuration, `QYM_ROLE=worker`, and
+   `QYM_SKIP_MIGRATIONS=1`, after the API is healthy. A process with the
+   `all` or `worker` role is required to execute every queued job.
 2. Inspect auto-queued jobs. Index creation and FK validation can run automatically;
    `alter_column_types` stays paused until space has been reclaimed. A failed job
    must be investigated and completed before relying on its schema change.
@@ -103,10 +109,10 @@ startup time on a populated copy before setting deployment readiness deadlines.
    locks in one transaction, so concurrent writes and retention cannot invalidate
    the check. Run mutations can wait during this step. An uncopied key or failed
    DROP leaves the legacy table intact. Resolve the failure and rerun the copy.
-7. Confirm required jobs succeeded, the worker remains healthy, and representative
-   runs retain outputs, traces, scores, and approved pass reviews. Then set
-   `QYM_MAINTENANCE_MODE=0` and `QYM_EVENT_LOG_MODE=structural` on API and worker.
-   Keep the worker running. Confirm buffered SDK events resume and finish.
+7. Confirm required jobs succeeded, the maintenance worker reports running, and
+   representative runs retain outputs, traces, scores, and approved pass reviews.
+   Then set `QYM_MAINTENANCE_MODE=0` and `QYM_EVENT_LOG_MODE=structural` on every
+   role. Confirm buffered SDK events resume and finish.
 8. Check pending dashboard runs become ready, live retries remain active, force
    stop finishes, delete/restore works, and pass deletion preserves review scope.
    Record final sizes and compare them with the rehearsal.
@@ -147,11 +153,14 @@ after destructive maintenance. Use a full `pg_dump` or a consistent storage
 snapshot, keep it off the database volume, and test the restore in isolation.
 Smaller exports of derived data can supplement that backup but do not replace it.
 
-## Worker Deployment (Helm/Kubernetes sketch)
+## Optional separate worker Deployment (Helm/Kubernetes sketch)
 
-Same image as the API; only the command and two variables differ. One replica.
-Inherit maintenance mode and retention settings from the same configuration as
-the API. Start this deployment only after the API has migrated to `0057`.
+Not required. The default `QYM_ROLE=all` API Deployment runs the background loops.
+Use this layout to keep long maintenance jobs away from API rollouts and probes,
+or to run several API replicas with one background process. Same image as the
+API; only the command and two variables differ. One replica. Inherit maintenance
+mode and retention settings from the same configuration as the API. Start this
+deployment only after the API has migrated to `0057`.
 
 ```yaml
 apiVersion: apps/v1
@@ -174,4 +183,5 @@ spec:
           resources: { requests: { cpu: "250m", memory: "512Mi" }, limits: { memory: "1Gi" } }
 ```
 
-And on the API Deployment add `QYM_ROLE=api` so it no longer runs the background loops.
+And on the API Deployment set `QYM_ROLE=api` so it no longer runs the background
+loops. Without that setting the API keeps running them, which is safe but redundant.

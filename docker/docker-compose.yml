@@ -26,7 +26,9 @@ services:
       QYM_BASE_URL: ${QYM_BASE_URL}
       QYM_ROOT_PATH: ${QYM_ROOT_PATH:-}
       QYM_DATABASE_URL: ${QYM_DATABASE_URL}
-      QYM_ROLE: ${QYM_ROLE:-api}
+      # Default `all`: this container serves HTTP and runs the background
+      # loops. Set QYM_ROLE=api and start the `worker` profile to split them.
+      QYM_ROLE: ${QYM_ROLE:-all}
       QYM_MAINTENANCE_MODE: ${QYM_MAINTENANCE_MODE:-false}
       QYM_EVENT_LOG_MODE: ${QYM_EVENT_LOG_MODE:-full}
       QYM_SPAN_RETENTION_DAYS: ${QYM_SPAN_RETENTION_DAYS:-60}
@@ -74,7 +76,10 @@ services:
     entrypoint: ["/bin/bash", "/backup.sh"]
     restart: unless-stopped
 
+  # Optional split layout: `docker compose --profile worker up` with
+  # QYM_ROLE=api in .env. Not started by default.
   worker:
+    profiles: ["worker"]
     build:
       context: ..
       dockerfile: docker/Dockerfile
