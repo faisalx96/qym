@@ -651,9 +651,12 @@ def test_project_diagnosis_catalog_restores_local_tools(analyzer_page: tuple[obj
     detail_selector = category_panel.locator(".pg-detail-review-selector")
     assert detail_selector.is_visible()
     assert detail_selector.evaluate("wrapper => wrapper.getBoundingClientRect().width >= 240")
+    # Subcategories are reviewer-approved only, so the old with/without
+    # examples filter is gone and the selector exposes a single option.
     detail_selector.locator(".multi-select-btn").click()
-    detail_selector.locator(".multi-select-option[data-value='without_examples']").click()
-    assert category_panel.locator("[data-detail-filter]").input_value() == "without_examples"
+    assert detail_selector.locator(".multi-select-option[data-value='without_examples']").count() == 0
+    detail_selector.locator(".multi-select-option[data-value='approved']").click()
+    assert category_panel.locator("[data-detail-filter]").input_value() == "approved"
 
     category_search = page.locator("#analysis-category-search")
     category_search.fill("not present")
