@@ -1714,7 +1714,7 @@
       margin-left: auto;
     }
     .analysis-page .pg-filter-row {
-      grid-template-columns: 260px max-content max-content;
+      grid-template-columns: 260px max-content max-content max-content;
       align-items: start;
       justify-content: start;
       gap: var(--space-md);
@@ -3682,6 +3682,10 @@
         metric: '',
         metrics: [],
         selectedMetrics: [],
+        approvalSignature: '',
+        approvalRefreshInFlight: false,
+        approvalRefreshPending: false,
+        approvalRefreshLastCheckedAt: 0,
         dashboard: {
           payload: null,
           filters: {},
@@ -3771,6 +3775,34 @@
         return escapeHtml(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
       }
 
+      function projectApprovalSignature(config) {
+        const examplesByCategory = config && config.category_examples && typeof config.category_examples === 'object'
+          ? config.category_examples
+          : {};
+        const examples = Object.keys(examplesByCategory).sort().map(category => {
+          const categoryExamples = Array.isArray(examplesByCategory[category])
+            ? examplesByCategory[category]
+            : [];
+          const normalizedExamples = categoryExamples.map(example => {
+            const issues = Array.isArray(example && example.root_cause_issues)
+              ? example.root_cause_issues
+              : [];
+            return {
+              id: String((example && example.id) || ''),
+              itemId: String((example && example.item_id) || ''),
+              metric: String((example && example.metric_name) || ''),
+              detail: String((example && example.detail) || ''),
+              issues: issues.map(issue => [
+                String((issue && issue.category) || ''),
+                String((issue && issue.subcategory) || ''),
+              ]).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))),
+            };
+          }).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+          return [category, normalizedExamples];
+        });
+        return JSON.stringify(examples);
+      }
+
       function iconMarkup(name) {
         const paths = {
           check: '<path d="m5 12 4 4L19 6"></path>',
@@ -3789,6 +3821,61 @@
         const node = document.getElementById('analysis-status');
         node.className = 'analysis-status visible ' + (type || '');
         node.textContent = (title ? title + ': ' : '') + (message || '');
+      }
+
+      function categoryEditorHasUnsavedChanges() {
+        const status = document.getElementById('analysis-category-save-status');
+        if (!status) return false;
+        const label = String(status.textContent || '').trim();
+        return Boolean(label && label !== 'Saved' && label !== 'No changes');
+      }
+
+      async function refreshProjectApprovals(options = {}) {
+        if (!projectSlug || state.currentView !== 'categories') return false;
+        if (!options.force && document.hidden) return false;
+        if (state.approvalRefreshInFlight) return false;
+        const now = Date.now();
+        if (!options.force && now - state.approvalRefreshLastCheckedAt < 1000) return false;
+        state.approvalRefreshLastCheckedAt = now;
+        state.approvalRefreshInFlight = true;
+        try {
+          const response = await fetch(apiUrl('api/projects/' + encodeURIComponent(projectSlug) + '/analysis-config'), {
+            cache: 'no-store',
+          });
+          if (!response.ok) throw new Error('Approval refresh failed (HTTP ' + response.status + ').');
+          const config = await response.json();
+          const signature = projectApprovalSignature(config);
+          if (!state.approvalSignature) {
+            state.approvalSignature = signature;
+            return false;
+          }
+          if (signature === state.approvalSignature) {
+            state.approvalRefreshPending = false;
+            return false;
+          }
+          if (categoryEditorHasUnsavedChanges() && !options.afterSave) {
+            state.approvalRefreshPending = true;
+            showStatus(
+              'info',
+              'New approvals available',
+              'Save or discard the category edits before Qym refreshes approved examples.'
+            );
+            return false;
+          }
+          const refreshed = window.QymPlayground && typeof window.QymPlayground.refreshCategoryCatalog === 'function'
+            ? window.QymPlayground.refreshCategoryCatalog(config)
+            : false;
+          if (!refreshed) return false;
+          state.approvalSignature = signature;
+          state.approvalRefreshPending = false;
+          showStatus('success', 'Approved examples updated', 'New project approvals are now visible.');
+          return true;
+        } catch (error) {
+          console.warn('Could not refresh project approvals', error);
+          return false;
+        } finally {
+          state.approvalRefreshInFlight = false;
+        }
       }
 
       function setAnalyzerView(view, options = {}) {
@@ -3828,6 +3915,9 @@
         if (nextView === 'dashboard' && dashboardAllowed) {
           loadDashboard().catch(error => showDashboardError(error));
         }
+        if (nextView === 'categories') {
+          window.setTimeout(() => { refreshProjectApprovals(); }, 0);
+        }
         if (options.updateUrl !== false) {
           const nextParams = new URLSearchParams(window.location.search);
           nextParams.set('scope', nextView);
@@ -3836,6 +3926,13 @@
       }
       document.querySelectorAll('[data-analysis-view]').forEach(tab => {
         tab.addEventListener('click', () => setAnalyzerView(tab.dataset.analysisView));
+      });
+      window.addEventListener('focus', () => { refreshProjectApprovals(); });
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) refreshProjectApprovals();
+      });
+      window.addEventListener('pageshow', event => {
+        if (event.persisted) refreshProjectApprovals({ force: true });
       });
 
       function analyzerRows() {
@@ -5506,6 +5603,9 @@
             categoryCatalogRevision = Number(catalog.version || categoryCatalogRevision);
             setCategorySaveState('success', body.created === false ? 'No changes' : 'Saved');
             showStatus('success', 'Categories saved', 'The project catalog is now available to future run analyses.');
+            if (state.approvalRefreshPending) {
+              await refreshProjectApprovals({ force: true, afterSave: true });
+            }
           } catch (error) {
             setCategorySaveState('danger', 'Save failed');
             showStatus('error', 'Category save failed', error.message || 'Could not save diagnosis categories.');
@@ -5796,7 +5896,10 @@
           showToast: showStatus,
           escapeHtml: escapeHtml,
         });
-        return window.QymPlayground.open();
+        return window.QymPlayground.open().then(() => {
+          const config = window.QymPlayground.getConfig ? window.QymPlayground.getConfig() : null;
+          state.approvalSignature = projectApprovalSignature(config);
+        });
       }
 
       function wirePassSelector() {

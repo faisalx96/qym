@@ -26,6 +26,9 @@ from qym_platform.llm_endpoint_security import (
     validate_llm_base_url,
 )
 from qym_platform.settings import PlatformSettings
+from qym_platform.services.issue_reviews import (
+    filter_explicitly_approved_issue_corrections,
+)
 from qym_platform.services.root_cause_categories import (
     DEFAULT_MAX_ROOT_CAUSE_CATEGORIES,
     DEFAULT_ROOT_CAUSE_TAXONOMY,
@@ -1711,7 +1714,7 @@ def get_few_shot_examples(
     requested_limit = MAX_FEW_SHOT_EXAMPLES if limit is None else max(0, limit)
     effective_limit = min(requested_limit, MAX_FEW_SHOT_EXAMPLES)
     if correction_ids is not None:
-        return (
+        corrections = (
             db.query(ReviewCorrection)
             .join(Run, Run.id == ReviewCorrection.run_id)
             .filter(
@@ -1723,9 +1726,11 @@ def get_few_shot_examples(
                 ReviewCorrection.is_active.is_(True),
             )
             .order_by(ReviewCorrection.created_at.desc())
-            .limit(effective_limit)
             .all()
         )
+        return filter_explicitly_approved_issue_corrections(
+            db, corrections
+        )[:effective_limit]
     query = (
         db.query(ReviewCorrection)
         .join(Run, Run.id == ReviewCorrection.run_id)
@@ -1738,8 +1743,9 @@ def get_few_shot_examples(
         )
         .order_by(ReviewCorrection.created_at.desc())
     )
-    query = query.limit(effective_limit)
-    return query.all()
+    return filter_explicitly_approved_issue_corrections(
+        db, query.all()
+    )[:effective_limit]
 
 
 def get_all_approved_examples(
@@ -1762,7 +1768,7 @@ def get_all_approved_examples(
     )
     if task is not None:
         query = query.filter(ReviewCorrection.task == task)
-    return query.all()
+    return filter_explicitly_approved_issue_corrections(db, query.all())
 
 
 def get_selected_approved_examples(
@@ -1789,7 +1795,9 @@ def get_selected_approved_examples(
     )
     if task is not None:
         query = query.filter(ReviewCorrection.task == task)
-    found = query.order_by(ReviewCorrection.created_at.desc()).all()
+    found = filter_explicitly_approved_issue_corrections(
+        db, query.order_by(ReviewCorrection.created_at.desc()).all()
+    )
     found_ids = {correction.id for correction in found}
     missing = [correction_id for correction_id in requested_ids if correction_id not in found_ids]
     return found, missing
@@ -2199,7 +2207,10 @@ def build_analysis_prompt(
         definitions = subcategory_taxonomy_by_fold.get(category.casefold(), {})
         labels: list[str] = []
         label_by_fold: dict[str, str] = {}
-        for raw_label in [*definitions, *approved_values]:
+        # The editable taxonomy can contain proposed labels. Only labels that
+        # appear on explicitly approved issues are eligible for the analyzer;
+        # taxonomy text merely explains an already-approved label.
+        for raw_label in approved_values:
             label = str(raw_label).strip()
             folded = label.casefold()
             if label and folded not in label_by_fold:
@@ -2741,6 +2752,8 @@ async def analyze_single_item(
     metric_name: str | None = None,
     temperature: float | None = None,
     max_tokens: int | None = None,
+    request_timeout_seconds: float | None = None,
+    max_timeout_retries: int = 1,
     retry_callback: (
         Callable[[dict[str, Any]], Awaitable[None] | None] | None
     ) = None,
@@ -2754,7 +2767,18 @@ async def analyze_single_item(
     ).hexdigest()
     retry_count = 0
     retry_reason = ""
-    request_timeout_seconds = LLM_REQUEST_TIMEOUT_SECONDS
+    initial_timeout_seconds = (
+        float(request_timeout_seconds)
+        if request_timeout_seconds is not None and request_timeout_seconds > 0
+        else LLM_REQUEST_TIMEOUT_SECONDS
+    )
+    timeout_multiplier = LLM_RETRY_TIMEOUT_SECONDS / LLM_REQUEST_TIMEOUT_SECONDS
+    configured_max_retries = max(0, int(max_timeout_retries))
+    timeout_schedule = [
+        initial_timeout_seconds * (timeout_multiplier**attempt_index)
+        for attempt_index in range(configured_max_retries + 1)
+    ]
+    effective_timeout_seconds = initial_timeout_seconds
 
     def _attach_provenance(
         result: AnalysisResult, response: Any = None
@@ -2763,11 +2787,13 @@ async def analyze_single_item(
         result.prompt_hash = prompt_hash
         result.retry_count = retry_count
         result.retry_reason = retry_reason
-        result.request_timeout_seconds = request_timeout_seconds
+        result.request_timeout_seconds = effective_timeout_seconds
         if retry_count and not result.error:
             retry_warning = (
-                "The analyzer timed out on the first request and succeeded on retry "
-                f"with a {LLM_RETRY_TIMEOUT_SECONDS:g}-second timeout."
+                f"The analyzer timed out {retry_count} "
+                f"{'time' if retry_count == 1 else 'times'} and succeeded on retry "
+                f"attempt {retry_count + 1} with a "
+                f"{effective_timeout_seconds:g}-second timeout."
             )
             existing_warning = str(result.warning or "").strip()
             if retry_warning not in existing_warning:
@@ -2807,7 +2833,9 @@ async def analyze_single_item(
                 timeout=timeout_seconds,
             )
 
-        async def _notify_timeout_retry() -> None:
+        async def _notify_timeout_retry(
+            *, retry_number: int, previous_timeout: float, retry_timeout: float
+        ) -> None:
             if retry_callback is None:
                 return
             callback_result = retry_callback(
@@ -2815,58 +2843,67 @@ async def analyze_single_item(
                     "item_id": item.item_id,
                     "metric_name": metric_name or "",
                     "reason": "timeout",
-                    "retry_count": 1,
-                    "attempt": 2,
-                    "max_attempts": 2,
-                    "previous_timeout_seconds": LLM_REQUEST_TIMEOUT_SECONDS,
-                    "timeout_seconds": LLM_RETRY_TIMEOUT_SECONDS,
+                    "retry_count": retry_number,
+                    "attempt": retry_number + 1,
+                    "max_attempts": configured_max_retries + 1,
+                    "previous_timeout_seconds": previous_timeout,
+                    "timeout_seconds": retry_timeout,
                 }
             )
             if asyncio.iscoroutine(callback_result):
                 await callback_result
 
-        try:
-            response = await _request(messages, LLM_REQUEST_TIMEOUT_SECONDS)
-        except Exception as exc:
-            if _is_prompt_size_error(exc):
-                raise AnalyzerContextLengthError(
-                    _context_length_error_message(
-                        model=model,
-                        messages=messages,
-                        provider_error=exc,
-                    )
-                ) from exc
-            if not _is_timeout_error(exc):
-                raise
-            retry_count = 1
-            retry_reason = "timeout"
-            request_timeout_seconds = LLM_RETRY_TIMEOUT_SECONDS
-            logger.warning(
-                "Analyzer request timed out for item %s; retrying once with a "
-                "%g-second timeout",
-                item.item_id,
-                LLM_RETRY_TIMEOUT_SECONDS,
-            )
-            await _notify_timeout_retry()
+        response = None
+        for attempt_index, timeout_seconds in enumerate(timeout_schedule):
+            effective_timeout_seconds = timeout_seconds
             try:
-                response = await _request(messages, LLM_RETRY_TIMEOUT_SECONDS)
-            except Exception as retry_exc:
-                if _is_prompt_size_error(retry_exc):
+                response = await _request(messages, timeout_seconds)
+                break
+            except Exception as exc:
+                if _is_prompt_size_error(exc):
                     raise AnalyzerContextLengthError(
                         _context_length_error_message(
                             model=model,
                             messages=messages,
-                            provider_error=retry_exc,
+                            provider_error=exc,
                         )
-                    ) from retry_exc
-                if _is_timeout_error(retry_exc):
+                    ) from exc
+                if not _is_timeout_error(exc):
+                    raise
+                if attempt_index >= configured_max_retries:
+                    if configured_max_retries == 1:
+                        raise AnalyzerTimeoutError(
+                            "Analyzer timed out on both attempts: the first used a "
+                            f"{timeout_schedule[0]:g}-second timeout and the retry "
+                            f"used a {timeout_schedule[1]:g}-second timeout. "
+                            "The complete prompt was sent without truncation."
+                        ) from exc
+                    timeout_values = ", ".join(
+                        f"{value:g}s" for value in timeout_schedule
+                    )
                     raise AnalyzerTimeoutError(
-                        "Analyzer timed out on both attempts: the first used a "
-                        f"{LLM_REQUEST_TIMEOUT_SECONDS:g}-second timeout and the retry "
-                        f"used a {LLM_RETRY_TIMEOUT_SECONDS:g}-second timeout. "
+                        "Analyzer timed out after "
+                        f"{len(timeout_schedule)} "
+                        f"{'attempt' if len(timeout_schedule) == 1 else 'attempts'} "
+                        f"using these timeouts: {timeout_values}. "
                         "The complete prompt was sent without truncation."
-                    ) from retry_exc
-                raise
+                    ) from exc
+                retry_count = attempt_index + 1
+                retry_reason = "timeout"
+                next_timeout_seconds = timeout_schedule[attempt_index + 1]
+                logger.warning(
+                    "Analyzer request timed out for item %s; retrying attempt %d/%d "
+                    "with a %g-second timeout",
+                    item.item_id,
+                    retry_count + 1,
+                    configured_max_retries + 1,
+                    next_timeout_seconds,
+                )
+                await _notify_timeout_retry(
+                    retry_number=retry_count,
+                    previous_timeout=timeout_seconds,
+                    retry_timeout=next_timeout_seconds,
+                )
         choice = response.choices[0] if response.choices else None
         if not choice:
             logger.warning("No choices in LLM response for item %s", item.item_id)
@@ -2972,6 +3009,8 @@ async def analyze_items_batch(
     metric_name: str | None = None,
     temperature: float | None = None,
     max_tokens: int | None = None,
+    request_timeout_seconds: float | None = None,
+    max_timeout_retries: int = 1,
     progress_callback: (
         Callable[[AnalysisResult, int, int], Awaitable[None] | None] | None
     ) = None,
@@ -3002,6 +3041,8 @@ async def analyze_items_batch(
                 metric_name=selected_metric,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                request_timeout_seconds=request_timeout_seconds,
+                max_timeout_retries=max_timeout_retries,
                 retry_callback=retry_callback,
             )
         result.metric_name = selected_metric or ""

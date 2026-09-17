@@ -508,6 +508,7 @@ window.QymPlayground = (function () {
     var maxScoreEl = document.getElementById('pg-max-score');
     var skipEl = document.getElementById('pg-skip-analyzed');
     var humanOverwriteEl = document.getElementById('pg-allow-human-overwrite');
+    var timeoutSeconds = _getAnalysisTimeoutSeconds();
     var body = {
       metric: _opts.getMetric ? _opts.getMetric() : null,
       item_filter: 'failed',
@@ -517,6 +518,7 @@ window.QymPlayground = (function () {
       threshold: _opts.getThreshold ? _opts.getThreshold() : 0.8,
       config: cfg,
       connection_id: _connectionId,
+      timeout_seconds: timeoutSeconds,
     };
     var requestedLimit = _getTargetLimit();
     if (requestedLimit != null && requestedLimit > 0) body.limit = requestedLimit;
@@ -914,7 +916,10 @@ window.QymPlayground = (function () {
     var normalized = String(detail || '').trim().toLocaleLowerCase();
     if (!normalized) return 0;
     return (Array.isArray(examples) ? examples : []).filter(function (example) {
-      return String((example && example.detail) || '').trim().toLocaleLowerCase() === normalized;
+      var issues = Array.isArray(example && example.root_cause_issues) ? example.root_cause_issues : [];
+      return String((example && example.detail) || '').trim().toLocaleLowerCase() === normalized || issues.some(function (issue) {
+        return String((issue && issue.subcategory) || '').trim().toLocaleLowerCase() === normalized;
+      });
     }).length;
   }
 
@@ -922,20 +927,38 @@ window.QymPlayground = (function () {
     return count + (count === 1 ? ' example' : ' examples');
   }
 
-  function _buildCategoryDetailItems(category, details, examples, subcategoryTaxonomy, isNew) {
+  function _approvedSubcategoriesFor(examples) {
+    var names = [];
+    var seen = {};
+    (Array.isArray(examples) ? examples : []).forEach(function (example) {
+      var issues = Array.isArray(example && example.root_cause_issues) ? example.root_cause_issues : [];
+      var labels = issues.map(function (issue) { return issue && issue.subcategory; });
+      if (!issues.length) labels.push(example && example.detail);
+      labels.forEach(function (label) {
+        var name = String(label || '').trim();
+        var key = name.toLocaleLowerCase();
+        if (key && !seen[key]) { seen[key] = true; names.push(name); }
+      });
+    });
+    return names;
+  }
+
+  function _buildCategoryDetailItems(category, details, examples, subcategoryTaxonomy, isNew, catalogDetails) {
     var catDetails = Array.isArray(details) ? details : [];
+    var catalog = Array.isArray(catalogDetails) ? catalogDetails : catDetails;
     return catDetails.map(function (detail) {
       var count = _detailExampleCount(examples, detail);
       var taxonomy = _subcategoryTaxonomyFor(subcategoryTaxonomy, category, detail);
       var hasTaxonomy = Object.keys(taxonomy).length > 0;
-      return '<div class="pg-detail-item" data-detail="' + _escAttr(detail) + '" data-detail-example-count="' + count + '" data-parent-cat="' + _escAttr(category) + '"' + (isNew ? ' data-new-subcategory="true"' : '') + (hasTaxonomy ? ' data-subcategory-taxonomy-defined="true"' : '') + '>' +
+      var exampleOnly = !catalog.some(function (entry) { return String(entry || '').trim().toLocaleLowerCase() === String(detail || '').trim().toLocaleLowerCase(); });
+      return '<div class="pg-detail-item" data-detail="' + _escAttr(detail) + '" data-detail-example-count="' + count + '" data-approved="' + (count > 0 ? 'true' : 'false') + '" data-example-only="' + (exampleOnly ? 'true' : 'false') + '" data-parent-cat="' + _escAttr(category) + '"' + (isNew ? ' data-new-subcategory="true"' : '') + (hasTaxonomy ? ' data-subcategory-taxonomy-defined="true"' : '') + '>' +
         '<div class="pg-detail-header"><span class="pg-detail-copy"><span class="pg-detail-name" dir="auto">' + _esc(detail) + '</span>' +
           '<span class="qym-tag qym-tag--count pg-detail-example-count">' + _detailCountLabel(count) + '</span></span>' +
-        '<button class="pg-detail-remove qym-icon-action" type="button" title="Remove detail" aria-label="Remove ' + _escAttr(detail) + ' detail">' + _icon('close') + '</button>' +
+        '<button class="pg-detail-remove qym-icon-action" type="button" title="Remove subcategory" aria-label="Remove ' + _escAttr(detail) + ' subcategory"' + (exampleOnly ? ' hidden' : '') + '>' + _icon('close') + '</button>' +
         '</div>' +
         '<div class="pg-detail-taxonomy-fields">' +
-          '<label class="pg-detail-taxonomy-field"><span>Description</span><textarea data-subcategory-taxonomy-field="description" rows="2" placeholder="What this subcategory means..." spellcheck="true">' + _esc(taxonomy.description || '') + '</textarea></label>' +
-          '<label class="pg-detail-taxonomy-field"><span>Use when</span><textarea data-subcategory-taxonomy-field="when_to_use" rows="2" placeholder="When the analyzer should use this subcategory..." spellcheck="true">' + _esc(taxonomy.when_to_use || '') + '</textarea></label>' +
+          '<label class="pg-detail-taxonomy-field"><span>Description</span><textarea data-subcategory-taxonomy-field="description" rows="2" placeholder="What this subcategory means..." spellcheck="true"' + (exampleOnly ? ' readonly' : '') + '>' + _esc(taxonomy.description || '') + '</textarea></label>' +
+          '<label class="pg-detail-taxonomy-field"><span>Use when</span><textarea data-subcategory-taxonomy-field="when_to_use" rows="2" placeholder="When the analyzer should use this subcategory..." spellcheck="true"' + (exampleOnly ? ' readonly' : '') + '>' + _esc(taxonomy.when_to_use || '') + '</textarea></label>' +
         '</div>' +
       '</div>';
     }).join('');
@@ -953,6 +976,11 @@ window.QymPlayground = (function () {
     var cat = String(category || '').trim();
     var catDetails = Array.isArray(details) ? details : [];
     var catExamples = Array.isArray(examples) ? examples : [];
+    var displayedDetails = catDetails.slice();
+    _approvedSubcategoriesFor(catExamples).forEach(function (detail) {
+      if (!displayedDetails.some(function (entry) { return String(entry || '').trim().toLocaleLowerCase() === detail.toLocaleLowerCase(); })) displayedDetails.push(detail);
+    });
+    var approvedSubcategoryCount = displayedDetails.filter(function (detail) { return _detailExampleCount(catExamples, detail) > 0; }).length;
     var approvedCount = Number(approvedExampleCount);
     if (!Number.isFinite(approvedCount)) approvedCount = catExamples.length;
     approvedCount = Math.max(0, Math.trunc(approvedCount));
@@ -969,7 +997,7 @@ window.QymPlayground = (function () {
     html += '<div class="pg-category-tabs-row">' +
       '<div class="pg-category-tabs qym-tabs" role="tablist" aria-label="Edit ' + _escAttr(cat) + ' category">' +
       _categoryTabMarkup(cat, domKey, 'guidance', 'Guidance') +
-      _categoryTabMarkup(cat, domKey, 'details', 'Details', String(catDetails.length)) +
+      _categoryTabMarkup(cat, domKey, 'details', 'Subcategories', String(approvedSubcategoryCount)) +
       _categoryTabMarkup(cat, domKey, 'examples', 'Examples', String(catExamples.length)) +
       '</div>' +
       '<div class="pg-category-panel-actions">' +
@@ -983,15 +1011,15 @@ window.QymPlayground = (function () {
       '<label class="pg-category-taxonomy-field"><span>Use when <abbr title="Required" aria-label="Required">*</abbr></span><textarea data-taxonomy-field="when_to_use" rows="3" placeholder="When the analyzer should use this category..." spellcheck="true" required aria-required="true">' + _esc(catTaxonomy.when_to_use || '') + '</textarea></label>' +
     '</section>';
     html += '<section class="pg-category-tab-panel pg-category-details" id="' + detailsPanelId + '" data-category-panel="details" role="tabpanel" aria-labelledby="pg-category-' + domKey + '-details-tab" hidden>' +
-      '<div class="pg-category-tab-heading"><div><h4>Category details</h4><p>Keep recurring issue patterns distinct enough for reliable diagnosis.</p></div><span class="qym-tag qym-tag--count pg-detail-total-count">' + catDetails.length + '</span></div>' +
-      '<div class="pg-category-details-tools"><label class="pg-detail-search-field"><span class="pg-filter-label">Search details</span><input class="pg-detail-search qym-control qym-input qym-search" type="search" data-detail-search placeholder="Filter by detail name" aria-label="Search ' + _escAttr(cat) + ' details" /></label>' +
-        '<div class="pg-detail-filter-field"><span class="pg-filter-label" id="pg-detail-filter-' + _escAttr(domKey) + '-label">Show</span><select class="pg-detail-filter qym-control qym-select" data-detail-filter aria-labelledby="pg-detail-filter-' + _escAttr(domKey) + '-label" aria-label="Filter ' + _escAttr(cat) + ' details"><option value="all">All details</option><option value="with_examples">With examples</option><option value="without_examples">Needs examples</option></select></div>' +
+      '<div class="pg-category-tab-heading"><div><h4>Approved subcategories</h4><p>Subcategories appear here after a reviewer approves a correction using them.</p></div><span class="qym-tag qym-tag--count pg-detail-total-count">' + approvedSubcategoryCount + '</span></div>' +
+      '<div class="pg-category-details-tools"><label class="pg-detail-search-field"><span class="pg-filter-label">Search subcategories</span><input class="pg-detail-search qym-control qym-input qym-search" type="search" data-detail-search placeholder="Filter by subcategory name" aria-label="Search ' + _escAttr(cat) + ' subcategories" /></label>' +
+        '<div class="pg-detail-filter-field"><span class="pg-filter-label" id="pg-detail-filter-' + _escAttr(domKey) + '-label">Show</span><select class="pg-detail-filter qym-control qym-select" data-detail-filter aria-labelledby="pg-detail-filter-' + _escAttr(domKey) + '-label" aria-label="Filter ' + _escAttr(cat) + ' subcategories"><option value="approved">Approved only</option></select></div>' +
         '<span class="pg-detail-result-count" data-detail-result-count aria-live="polite"></span></div>' +
-      '<div class="pg-details-sublist" data-cat="' + _escAttr(cat) + '">' + _buildCategoryDetailItems(cat, catDetails, catExamples, subcategoryTaxonomy) + '</div>' +
-      '<div class="qym-pagination pg-category-pagination" data-category-pagination="details" role="navigation" aria-label="' + _escAttr(cat) + ' details pagination" hidden></div>' +
-      '<p class="pg-category-details-empty" data-detail-empty hidden>No details match this filter.</p>' +
-      '<div class="pg-add-detail-row" data-cat="' + _escAttr(cat) + '"><input type="text" placeholder="Add detail..." aria-label="Add a detail to ' + _escAttr(cat) + '" class="pg-add-input pg-add-detail-input qym-control qym-input" />' +
-        '<button type="button" class="pg-add-detail-btn pg-add-btn qym-inline-action qym-inline-action--neutral">Add detail</button></div>' +
+      '<div class="pg-details-sublist" data-cat="' + _escAttr(cat) + '">' + _buildCategoryDetailItems(cat, displayedDetails, catExamples, subcategoryTaxonomy, false, catDetails) + '</div>' +
+      '<div class="qym-pagination pg-category-pagination" data-category-pagination="details" role="navigation" aria-label="' + _escAttr(cat) + ' subcategories pagination" hidden></div>' +
+      '<p class="pg-category-details-empty" data-detail-empty hidden>No approved subcategories match this search.</p>' +
+      '<div class="pg-add-detail-row" data-cat="' + _escAttr(cat) + '"><input type="text" placeholder="Add subcategory..." aria-label="Add a subcategory to ' + _escAttr(cat) + '" class="pg-add-input pg-add-detail-input qym-control qym-input" />' +
+        '<button type="button" class="pg-add-detail-btn pg-add-btn qym-inline-action qym-inline-action--neutral">Add subcategory</button></div>' +
     '</section>';
     html += '<section class="pg-category-tab-panel pg-category-examples" id="' + examplesPanelId + '" data-category-panel="examples" role="tabpanel" aria-labelledby="pg-category-' + domKey + '-examples-tab" hidden>' +
       '<div class="pg-category-tab-heading"><div><h4>Approved examples</h4><p>Use approved corrections as evidence for this category.</p></div><span class="qym-tag qym-tag--count">' + catExamples.length + '</span></div>' + _buildCategoryExamples(catExamples) +
@@ -1089,17 +1117,15 @@ window.QymPlayground = (function () {
     var search = panel.querySelector('[data-detail-search]');
     var filter = panel.querySelector('[data-detail-filter]');
     if (filter && window.QymUIComponents && typeof window.QymUIComponents.enhanceSelect === 'function') {
-      window.QymUIComponents.enhanceSelect(filter, { className: 'pg-detail-review-selector', label: 'Show details', search: false });
+      window.QymUIComponents.enhanceSelect(filter, { className: 'pg-detail-review-selector', label: 'Show subcategories', search: false });
     }
     var query = String(search && search.value || '').trim().toLocaleLowerCase();
-    var mode = String(filter && filter.value || 'all');
     var items = Array.prototype.slice.call(panel.querySelectorAll('.pg-detail-item'));
-    var matchingItems = items.filter(function (item) {
+    var approvedItems = items.filter(function (item) { return item.dataset.approved === 'true'; });
+    var matchingItems = approvedItems.filter(function (item) {
       var name = String(item.dataset.detail || '').toLocaleLowerCase();
-      var count = Number(item.dataset.detailExampleCount || 0);
       var matchesSearch = !query || name.indexOf(query) !== -1;
-      var matchesFilter = mode === 'all' || (mode === 'with_examples' && count > 0) || (mode === 'without_examples' && count === 0);
-      return matchesSearch && matchesFilter;
+      return matchesSearch;
     });
     var page = _setCategoryPage(group, 'details', _categoryPage(group, 'details'), matchingItems.length);
     var pageStart = page * _CATEGORY_PAGE_SIZE;
@@ -1111,13 +1137,13 @@ window.QymPlayground = (function () {
     var empty = panel.querySelector('[data-detail-empty]');
     if (empty) {
       empty.hidden = matchingItems.length > 0;
-      empty.textContent = items.length > 0 ? 'No details match this filter.' : 'No details configured yet.';
+      empty.textContent = approvedItems.length > 0 ? 'No approved subcategories match this search.' : 'No approved subcategories yet.';
     }
     var count = panel.querySelector('[data-detail-result-count]');
     if (count) {
       count.textContent = matchingItems.length
-        ? (pageStart + 1) + '–' + pageEnd + ' of ' + matchingItems.length + ' details'
-        : '0 of ' + items.length + ' details';
+        ? (pageStart + 1) + '–' + pageEnd + ' of ' + matchingItems.length + ' subcategories'
+        : '0 of ' + approvedItems.length + ' subcategories';
     }
     _renderCategoryPagination(group, 'details', matchingItems.length);
   }
@@ -1138,7 +1164,7 @@ window.QymPlayground = (function () {
 
   function _updateCategoryDetailCounts(group) {
     if (!group) return;
-    var items = Array.prototype.slice.call(group.querySelectorAll('.pg-detail-item'));
+    var items = Array.prototype.slice.call(group.querySelectorAll('.pg-detail-item[data-approved="true"]'));
     var total = group.querySelector('.pg-detail-total-count');
     if (total) total.textContent = String(items.length);
     var tabCount = group.querySelector('[data-category-tab="details"] .pg-category-tab-count');
@@ -1252,6 +1278,56 @@ window.QymPlayground = (function () {
     });
     var approvedGroups = _approvedCategoryGroups();
     _selectCategory(approvedGroups[0] && approvedGroups[0].dataset.cat, false);
+  }
+
+  function _categoryNames(config) {
+    return (config && config.default_categories) || [
+      'Hallucination', 'Incomplete Answer', 'Wrong Format', 'Context Missing',
+      'Reasoning Error', 'Tool Use Error', 'Instruction Following', 'Knowledge Gap',
+      'Dataset Issue',
+    ];
+  }
+
+  function _buildCategoryGroupsMarkup(config) {
+    var categories = _categoryNames(config);
+    var detailsMap = (config && config.category_details_map) || {};
+    var categoryTaxonomy = (config && (config.category_taxonomy || config.category_taxonomies)) || {};
+    var subcategoryTaxonomy = (config && config.subcategory_taxonomy) || {};
+    var categoryExamples = (config && config.category_examples) || {};
+    var categoryExampleCounts = (config && config.category_example_counts) || {};
+    return categories.map(function (category, index) {
+      var details = detailsMap[category] || [];
+      var examples = _categoryExamplesFor(categoryExamples, category);
+      var approvedExampleCount = _approvedExampleCountFor(
+        categoryExampleCounts,
+        category,
+        examples.length
+      );
+      return _buildCategoryGroup(
+        category,
+        details,
+        examples,
+        categoryTaxonomy,
+        subcategoryTaxonomy,
+        'category-' + index + '-' + _categoryDomKey(category),
+        approvedExampleCount
+      );
+    }).join('');
+  }
+
+  function _refreshCategoryCatalog(nextConfig) {
+    var categoryList = document.getElementById('pg-categories-list');
+    if (!categoryList || !nextConfig || typeof nextConfig !== 'object') return false;
+    var activeGroup = _approvedCategoryGroups().find(function (group) { return !group.hidden; });
+    var activeCategory = activeGroup && activeGroup.dataset.cat;
+    var activeTab = activeGroup && activeGroup.dataset.activeTab;
+    _config = Object.assign({}, _config || {}, nextConfig);
+    categoryList.innerHTML = _buildCategoryGroupsMarkup(_config);
+    _initializeCategoryWorkspace();
+    var refreshedGroup = _selectCategory(activeCategory, false);
+    if (refreshedGroup && activeTab) _setCategoryTab(refreshedGroup, activeTab, false);
+    _filterCategoryNavigation(_categoryNavigationQuery);
+    return true;
   }
 
   function _icon(name) {
@@ -3069,11 +3145,7 @@ window.QymPlayground = (function () {
   }
 
   function _buildScrollContent() {
-    var cats = (_config && _config.default_categories) || [
-      'Hallucination', 'Incomplete Answer', 'Wrong Format', 'Context Missing',
-      'Reasoning Error', 'Tool Use Error', 'Instruction Following', 'Knowledge Gap',
-      'Dataset Issue',
-    ];
+    var cats = _categoryNames(_config);
     var html = '<div class="pg-workspace">';
 
     var sourceState = _inferenceSourceState();
@@ -3150,11 +3222,7 @@ window.QymPlayground = (function () {
     html += _section('Additional Instructions', instrBody);
 
     // ── Root Cause Categories & Details ──
-    var detailsMap = (_config && _config.category_details_map) || {};
-    var categoryTaxonomy = (_config && (_config.category_taxonomy || _config.category_taxonomies)) || {};
-    var subcategoryTaxonomy = (_config && _config.subcategory_taxonomy) || {};
     var categoryExamples = (_config && _config.category_examples) || {};
-    var categoryExampleCounts = (_config && _config.category_example_counts) || {};
     var totalDetails = 0;
     var catDetBody = '';
     catDetBody += '<div class="pg-category-workspace" id="pg-category-workspace">';
@@ -3170,16 +3238,12 @@ window.QymPlayground = (function () {
       '<div class="pg-category-limit-field" data-category-limit-field role="group" aria-labelledby="pg-max-root-cause-categories-label"><label class="pg-category-limit-label" id="pg-max-root-cause-categories-label" for="pg-max-root-cause-categories">Max issues per item</label><button class="qym-help-marker" type="button" aria-label="How the issue limit works">i<span class="qym-help-tooltip" role="tooltip">Limits how many root-cause issues the analyzer can return for each item. Higher values allow multiple independent causes.</span></button><input class="qym-control qym-input" id="pg-max-root-cause-categories" type="number" min="1" max="10" step="1" inputmode="numeric" value="' + maxCategories + '" /></div></div>' +
       '<div id="pg-categories-list">';
     for (var i = 0; i < cats.length; i++) {
-      var cat = cats[i];
-      var catDets = detailsMap[cat] || [];
-      var catExamples = _categoryExamplesFor(categoryExamples, cat);
-      var approvedExampleCount = _approvedExampleCountFor(categoryExampleCounts, cat, catExamples.length);
-      totalDetails += catDets.length;
-      catDetBody += _buildCategoryGroup(cat, catDets, catExamples, categoryTaxonomy, subcategoryTaxonomy, 'category-' + i + '-' + _categoryDomKey(cat), approvedExampleCount);
+      totalDetails += _approvedSubcategoriesFor(_categoryExamplesFor(categoryExamples, cats[i])).length;
     }
+    catDetBody += _buildCategoryGroupsMarkup(_config);
     catDetBody += '</div>';
     catDetBody += '</div></div>';
-    html += _section('Root Cause Categories & Details', catDetBody, { open: false, badge: cats.length + ' / ' + totalDetails });
+    html += _section('Root Cause Categories & Subcategories', catDetBody, { open: false, badge: cats.length + ' / ' + totalDetails });
 
     // ── Variable Mapping ──
     html += _buildVariableMapping();
@@ -3199,6 +3263,17 @@ window.QymPlayground = (function () {
     filterBody += '<label class="pg-filter-check"><span class="custom-checkbox"><input type="checkbox" id="pg-skip-analyzed" checked /><span class="checkmark"></span></span><span>Skip analyzed</span></label>';
     filterBody += '<label class="pg-filter-check"><span class="custom-checkbox"><input type="checkbox" id="pg-allow-human-overwrite" /><span class="checkmark"></span></span><span>Re-analyze human labels</span></label>';
     filterBody += '</div></div>';
+    var analysisDefaults = (_config && _config.analysis_defaults) || {};
+    var defaultTimeout = Number(analysisDefaults.request_timeout_seconds || 120);
+    var maxTimeout = Number(analysisDefaults.max_timeout_seconds || 3600);
+    var maxTimeoutRetries = Math.max(0, Math.trunc(Number(analysisDefaults.max_timeout_retries || 0)));
+    var timeoutRetryHelp = maxTimeoutRetries === 0
+      ? 'Timeout retries are disabled by server configuration.'
+      : 'A timed-out request retries up to ' + maxTimeoutRetries + ' ' + (maxTimeoutRetries === 1 ? 'time' : 'times') + '; each retry doubles the previous timeout.';
+    filterBody += '<div class="pg-filter-limit"><label class="pg-filter-label" for="pg-analysis-timeout">Timeout (seconds)</label>' +
+      '<button class="qym-help-marker" type="button" aria-label="How the analysis timeout works">i<span class="qym-help-tooltip" role="tooltip">The first LLM attempt uses this timeout. ' + _esc(timeoutRetryHelp) + '</span></button>' +
+      '<input class="qym-control qym-input" type="number" id="pg-analysis-timeout" min="1" max="' + _escAttr(maxTimeout) + '" step="1" inputmode="numeric" value="' + _escAttr(defaultTimeout) + '" />' +
+      '</div>';
     filterBody += '<div class="pg-filter-limit pg-target-limit-group"><label class="pg-filter-label" for="pg-target-limit">Analyze limit</label>' +
       '<div class="pg-target-limit-row">' +
         '<div class="pg-target-limit-control">' +
@@ -3512,6 +3587,9 @@ window.QymPlayground = (function () {
         cats.push(cat);
         var dets = [];
         group.querySelectorAll('.pg-detail-item').forEach(function (el) {
+          // Approved examples can contribute read-only labels absent from the
+          // editable catalog. Do not silently add those labels on an unrelated save.
+          if (el.dataset.exampleOnly === 'true') return;
           var detail = el.dataset.detail;
           dets.push(detail);
           var subcategoryTaxonomy = {};
@@ -5583,6 +5661,12 @@ window.QymPlayground = (function () {
         _updateFooterCount();
       });
     }
+    var analysisTimeout = document.getElementById('pg-analysis-timeout');
+    if (analysisTimeout) {
+      analysisTimeout.addEventListener('blur', function () {
+        analysisTimeout.value = String(_getAnalysisTimeoutSeconds());
+      });
+    }
     ['pg-use-project-rules', 'pg-use-project-documents', 'pg-use-trace'].forEach(function (id) {
       var toggle = document.getElementById(id);
       if (toggle) toggle.addEventListener('change', function () {
@@ -5725,6 +5809,16 @@ window.QymPlayground = (function () {
     var requested = parseInt(limitEl.value, 10);
     if (!Number.isFinite(requested) || requested < 1) return 0;
     return requested;
+  }
+
+  function _getAnalysisTimeoutSeconds() {
+    var defaults = (_config && _config.analysis_defaults) || {};
+    var fallback = Number(defaults.request_timeout_seconds || 120);
+    var maximum = Number(defaults.max_timeout_seconds || 3600);
+    var input = document.getElementById('pg-analysis-timeout');
+    var requested = Number(input && input.value);
+    if (!Number.isFinite(requested) || requested < 1) requested = fallback;
+    return Math.min(maximum, Math.max(1, Math.trunc(requested)));
   }
 
   function _syncActionAvailability() {
@@ -5942,7 +6036,7 @@ window.QymPlayground = (function () {
     fetch(base('api/runs/' + runId + '/analyze-test'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(_addPassContext({ item_ids: [testTarget.item_id], metric: testTarget.metric_name || null, config: cfg, connection_id: _connectionId })),
+      body: JSON.stringify(_addPassContext({ item_ids: [testTarget.item_id], metric: testTarget.metric_name || null, config: cfg, connection_id: _connectionId, timeout_seconds: _getAnalysisTimeoutSeconds() })),
     })
     .then(function (r) {
       if (!r.ok) return r.json().then(function (d) { throw new Error(d.detail || 'Test failed'); });
@@ -6106,6 +6200,9 @@ window.QymPlayground = (function () {
     },
     filterCategories: function (query) {
       if (_overlay) _filterCategoryNavigation(query);
+    },
+    refreshCategoryCatalog: function (config) {
+      return _refreshCategoryCatalog(config);
     },
     refreshFilters: function () {
       if (_overlay) _onFilterChange();

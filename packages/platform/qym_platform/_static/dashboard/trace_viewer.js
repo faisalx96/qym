@@ -183,7 +183,94 @@
       data.summary = lastAttempt.summary || {};
       data.spans = lastAttempt.spans || [];
     }
+    data._combinedTree = data.attempts.length > 1 ? buildRetriedTree(data.attempts) : null;
     return data;
+  }
+
+  function attemptFailed(attempt) {
+    return ["failed", "error", "timeout"].includes(String(attempt?.status || "").toLowerCase());
+  }
+
+  function spanHasException(node) {
+    return (Array.isArray(node.events) ? node.events : []).some(ev => ev.name === "exception");
+  }
+
+  // The span a failed try died on: the deepest span that raised, else the deepest ERROR span.
+  function failingSpan(tree) {
+    const errored = tree.nodes.filter(node => statusCls(node.status) === "error");
+    const raised = errored.filter(spanHasException);
+    return (raised.length ? raised : errored)
+      .reduce((best, node) => (!best || node._depth > best._depth ? node : best), null);
+  }
+
+  function ancestorNames(tree, node) {
+    const names = [];
+    let cur = node.parent_span_id ? tree.byId.get(node.parent_span_id) : null;
+    while (cur) {
+      names.unshift(cur.name || "");
+      cur = cur.parent_span_id ? tree.byId.get(cur.parent_span_id) : null;
+    }
+    return names;
+  }
+
+  // A retried item shows one tree: the final try, with each failed try's failing span
+  // (e.g. a timed-out llm_call) inserted right before the span that replaced it.
+  function buildRetriedTree(attempts) {
+    const finalAttempt = attempts.find(a => a.is_last_attempt) || attempts[attempts.length - 1];
+    const base = finalAttempt._tree;
+    const nodes = [...base.nodes];
+    base.nodes.forEach(node => { node._attemptNumber = finalAttempt.attempt_number; });
+
+    attempts.filter(attempt => attempt !== finalAttempt).forEach(attempt => {
+      const failed = attempt._tree ? failingSpan(attempt._tree) : null;
+      if (!failed) return;
+      let parent = null;
+      if (failed.parent_span_id && attempt._tree.byId.has(failed.parent_span_id)) {
+        // Root spans are named per attempt, so match the root by position and the rest by name.
+        parent = base.roots[0] || null;
+        for (const name of ancestorNames(attempt._tree, failed).slice(1)) {
+          const next = parent?._children.find(child => child.name === name);
+          if (!next) break;
+          parent = next;
+        }
+      }
+      const siblings = parent ? parent._children : base.roots;
+      const at = siblings.findIndex(child =>
+        child.name === failed.name && child._attemptNumber === finalAttempt.attempt_number);
+      siblings.splice(at < 0 ? siblings.length : at, 0, failed);
+      failed._groupParent = parent;
+      (function collect(node) {
+        node._attemptNumber = attempt.attempt_number;
+        nodes.push(node);
+        node._children.forEach(collect);
+      })(failed);
+    });
+
+    (function setDepths(list, depth) {
+      list.forEach(node => { node._depth = depth; setDepths(node._children, depth + 1); });
+    })(base.roots, 0);
+
+    const byId = new Map(nodes.map(node => [node.span_id, node]));
+    const starts = nodes.map(_spanStart).filter(v => v != null);
+    const ends = nodes.map(_spanEnd).filter(v => v != null);
+    const start = starts.length ? Math.min(...starts) : null;
+    const end = ends.length ? Math.max(...ends) : null;
+    const failedCount = attempts.filter(attemptFailed).length;
+    return {
+      roots: base.roots,
+      byId,
+      nodes,
+      _bounds: start != null && end != null
+        ? { start, end, total: Math.max(end - start, 1) }
+        : { start: null, end: null, total: 1 },
+      _summary: {
+        span_count: nodes.length,
+        duration_ms: start != null && end != null ? (end - start) / 1e6 : null,
+        error_count: failedCount,
+      },
+      _attemptCount: attempts.length,
+      _failedCount: failedCount,
+    };
   }
 
   function currentAttemptData() {
@@ -198,7 +285,15 @@
   }
 
   function currentTree() {
-    return currentAttemptData()?._tree || null;
+    return S.data?._combinedTree || currentAttemptData()?._tree || null;
+  }
+
+  // Open on the span that raised, so a retried item shows its failure first.
+  function defaultSelectedSpanId() {
+    const tree = currentTree();
+    if (!tree) return null;
+    const failing = tree.nodes.find(node => statusCls(node.status) === "error" && spanHasException(node));
+    return failing?.span_id || tree.roots[0]?.span_id || null;
   }
 
   function laneOpacity(depthIndex) {
@@ -1047,7 +1142,7 @@
   }
 
   function detectRetries(tree) {
-    tree.nodes.forEach(n => { n._retry = 0; n._failed = false; });
+    tree.nodes.forEach(n => { n._retry = 0; n._try = 0; n._failed = false; });
     function processChildren(children) {
       const seen = {};
       children.forEach(c => {
@@ -1065,6 +1160,7 @@
             retryNum++;
           }
         }
+        if (retryNum > 0) group.forEach((span, index) => { span._try = index + 1; });
       });
     }
     processChildren(tree.roots);
@@ -1148,8 +1244,8 @@
       if (n.name && n.name.toLowerCase().includes(q)) {
         n._visible = true;
         // show ancestors
-        let cur = n.parent_span_id ? tree.byId.get(n.parent_span_id) : null;
-        while (cur) { cur._visible = true; S.expanded.add(cur.span_id); cur = cur.parent_span_id ? tree.byId.get(cur.parent_span_id) : null; }
+        let cur = n._groupParent || (n.parent_span_id ? tree.byId.get(n.parent_span_id) : null);
+        while (cur) { cur._visible = true; S.expanded.add(cur.span_id); cur = cur._groupParent || (cur.parent_span_id ? tree.byId.get(cur.parent_span_id) : null); }
       }
     });
   }
@@ -1157,44 +1253,25 @@
   /* ── rendering: header ── */
   function renderHeader(meta, data) {
     const attempt = currentAttemptData();
-    const sum = attempt?.summary || data?.summary || {};
+    const combined = data?._combinedTree || null;
+    const sum = combined ? combined._summary : (attempt?.summary || data?.summary || {});
     const item = data?.item || {};
-    const tree = attempt?._tree;
+    const tree = combined || attempt?._tree;
     const stats = tree ? aggregateStats(tree) : { totalTokens: 0, totalCost: 0 };
 
     S.el.title.textContent = meta.itemLabel || item.item_id || "Trace";
-    if (S.el.attempts) {
-      const attempts = Array.isArray(data?.attempts) ? data.attempts : [];
-      if (attempts.length <= 1) {
-        S.el.attempts.innerHTML = "";
-        S.el.attempts.style.display = "none";
-      } else {
-        const selectedAttempt = Number(attempt?.attempt_number || 0);
-        S.el.attempts.innerHTML = attempts.map(att => {
-          const isActive = Number(att.attempt_number) === selectedAttempt;
-          const isFailed = !att.is_last_attempt;
-          const errReason = !att.is_last_attempt && att.error ? att.error : "";
-          const badge = att.is_last_attempt
-            ? `<span class="tv-attempt-badge qym-badge qym-badge--neutral">latest</span>`
-            : `<span class="tv-attempt-badge qym-badge qym-badge--danger failed">failed</span>`;
-          const tooltip = errReason ? ` title="${esc(errReason)}"` : "";
-          return (
-            `<button type="button" class="tv-attempt-btn ${isActive ? "active" : ""} ${isFailed ? "failed" : ""}" data-attempt="${esc(att.attempt_number)}"${tooltip}>` +
-              `Attempt ${esc(att.attempt_number)}` +
-              `<span class="tv-attempt-dur">${esc(fmtDur(att.latency_ms))}</span>` +
-              badge +
-            `</button>`
-          );
-        }).join("");
-        S.el.attempts.style.display = "";
-      }
-    }
 
-    // Score pills from root span events
-    const rootSpan = tree?.roots?.[0];
+    // Score pills come from the final attempt's root span events.
+    const attempts = Array.isArray(data?.attempts) ? data.attempts : [];
+    const finalAttempt = attempts.find(a => a.is_last_attempt) || attempts[attempts.length - 1];
+    const rootSpan = combined ? finalAttempt?._tree?.roots?.[0] : tree?.roots?.[0];
     const scores = rootSpan ? extractScores(rootSpan) : [];
 
     let chips = `<span class="tv-chip qym-tag qym-tag--count">${sum.span_count||0} spans</span>`;
+    if (combined) {
+      const failed = combined._failedCount;
+      chips += `<span class="tv-chip qym-tag qym-tag--count">${combined._attemptCount} attempts${failed ? ` · ${failed} failed` : ""}</span>`;
+    }
     chips += `<span class="tv-chip qym-tag qym-tag--data">${esc(fmtDur(sum.duration_ms))}</span>`;
     if (stats.totalTokens > 0) chips += `<span class="tv-chip tv-chip-tokens qym-tag qym-tag--data qym-tag--info">${fmtTokens(stats.totalTokens)} tokens</span>`;
     const costStr = fmtCost(stats.totalCost);
@@ -1277,7 +1354,7 @@
     }
     applySearch(tree);
     detectRetries(tree);
-    const bounds = computeBounds(currentAttemptData());
+    const bounds = tree._bounds || computeBounds(currentAttemptData());
     const rows = [];
 
     function visit(node, isLast, prefix) {
@@ -1325,6 +1402,7 @@
 
       // Inline meta for LLM spans
       let inlineMeta = "";
+      if (node._try) inlineMeta += `<span class="tv-chip qym-tag qym-tag--count">try ${node._try}</span>`;
       const model = kind === "LLM" ? spanModel(node) : "";
       if (kind === "LLM" && model) inlineMeta += `<span class="tv-inline-model model-label"><span class="model-label-text">${esc(model)}</span>${spanHasReasoning(node) ? renderModelReasoningBadge() : ""}</span>`;
       if (kind === "LLM" && tokens) inlineMeta += `<span class="tv-inline-tokens"><svg class="tv-tokens-icon" viewBox="0 0 16 16" width="13" height="13"><ellipse cx="9" cy="10.5" rx="5.5" ry="2.8" fill="currentColor" opacity=".45"/><ellipse cx="7.5" cy="7.5" rx="5.5" ry="2.8" transform="rotate(-15 7.5 7.5)" fill="currentColor" opacity=".7"/><ellipse cx="6.5" cy="4.5" rx="5" ry="2.5" transform="rotate(-25 6.5 4.5)" fill="currentColor"/></svg>${fmtTokens(tokens)}</span>`;
@@ -1380,6 +1458,11 @@
     if (!span) {
       S.el.detail.innerHTML = `<div class="tv-empty"><div class="tv-empty-t">Select a span</div></div>`;
       return;
+    }
+    // The header's trace ID and error text follow the try the selected span came from.
+    if (span._attemptNumber != null && Number(span._attemptNumber) !== Number(S.selectedAttempt)) {
+      S.selectedAttempt = span._attemptNumber;
+      renderHeader(S.meta || {}, S.data || {});
     }
 
     const kind = spanKind(span);
@@ -2187,7 +2270,6 @@
           <div class="tv-header-left">
             <div class="tv-eyebrow">TRACE</div>
             <h3 class="tv-title">Trace</h3>
-            <div class="tv-attempts" style="display:none"></div>
             <div class="tv-meta"></div>
             <div class="tv-warning" style="display:none"></div>
           </div>
@@ -2233,7 +2315,6 @@
     document.body.appendChild(el);
     S.shell = el;
     S.el.title = el.querySelector(".tv-title");
-    S.el.attempts = el.querySelector(".tv-attempts");
     S.el.meta = el.querySelector(".tv-meta");
     S.el.warning = el.querySelector(".tv-warning");
     S.el.listPane = el.querySelector(".tv-list-pane");
@@ -2362,16 +2443,11 @@
       // Default to a fully expanded tree.
       S.expanded = new Set(allExpandableSpanIds());
 
-      // Default selection is the root span.
-      S.selected = currentTree()?.roots?.[0]?.span_id || null;
+      S.selected = defaultSelectedSpanId();
 
       renderHeader(meta, S.data);
       renderTree();
     } catch (err) {
-      if (S.el.attempts) {
-        S.el.attempts.innerHTML = "";
-        S.el.attempts.style.display = "none";
-      }
       renderHeader(meta, { item: { trace_id: meta.traceId, trace_url: meta.traceUrl }, summary: {}, spans: [] });
       S.el.list.innerHTML = `<div class="tv-empty"><div class="tv-empty-t">Failed to load</div><div class="tv-empty-d">${esc(err.message)}</div></div>`;
     }
@@ -2448,18 +2524,6 @@
         btn.textContent = "Copied!";
         setTimeout(() => { btn.textContent = orig; }, 1200);
       }
-      return;
-    }
-    if (e.target.closest("[data-attempt]")) {
-      e.preventDefault();
-      const attemptNumber = Number(e.target.closest("[data-attempt]").getAttribute("data-attempt"));
-      if (!Number.isFinite(attemptNumber) || attemptNumber === Number(S.selectedAttempt || 0)) return;
-      S.selectedAttempt = attemptNumber;
-      S.expanded = new Set(allExpandableSpanIds());
-      S.selected = currentTree()?.roots?.[0]?.span_id || null;
-      S.activeTab = null;
-      renderHeader(S.meta || {}, S.data || {});
-      renderTree();
       return;
     }
     // Metric card expand/collapse
