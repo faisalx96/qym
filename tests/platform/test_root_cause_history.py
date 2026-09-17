@@ -5611,6 +5611,109 @@ def test_analyzer_uses_configured_timeout_retry_count(
     assert [event["max_attempts"] for event in retry_events] == [3, 3]
 
 
+def test_analyzer_caps_each_timeout_attempt_at_the_deployment_ceiling(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, _, _, item = _seed_run(db_session)
+    completion = SimpleNamespace(
+        id="capped-retry-success",
+        usage=None,
+        choices=[
+            SimpleNamespace(
+                finish_reason="stop",
+                message=SimpleNamespace(
+                    content=json.dumps(
+                        {
+                            "root_cause": "Reasoning Error",
+                            "root_cause_detail": "evidence gap",
+                            "root_cause_note": "The answer was not grounded.",
+                            "confidence": 0.8,
+                        }
+                    )
+                ),
+            )
+        ],
+    )
+    create_completion = AsyncMock(
+        side_effect=[TimeoutError("first"), TimeoutError("second"), completion]
+    )
+    monkeypatch.setattr(
+        llm_analyzer_service,
+        "create_chat_completion_compat",
+        create_completion,
+    )
+    wait_timeouts: list[float] = []
+
+    async def record_wait_for(awaitable: Any, timeout: float) -> Any:
+        wait_timeouts.append(timeout)
+        return await awaitable
+
+    monkeypatch.setattr(llm_analyzer_service.asyncio, "wait_for", record_wait_for)
+    retry_events: list[dict[str, Any]] = []
+
+    result = asyncio.run(
+        analyze_single_item(
+            SimpleNamespace(),
+            "test-model",
+            item,
+            {},
+            [],
+            request_timeout_seconds=2000,
+            max_timeout_retries=2,
+            retry_callback=retry_events.append,
+        )
+    )
+
+    # Doubling would give 2000 -> 4000 -> 8000; the ceiling holds it at 3600.
+    assert result.error is None
+    assert result.retry_count == 2
+    assert result.request_timeout_seconds == 3600.0
+    assert wait_timeouts == [2000.0, 3600.0, 3600.0]
+    assert [event["timeout_seconds"] for event in retry_events] == [3600.0, 3600.0]
+    assert [event["previous_timeout_seconds"] for event in retry_events] == [
+        2000.0,
+        3600.0,
+    ]
+
+
+def test_approved_corrections_are_ordered_newest_first(
+    db_session: Session,
+) -> None:
+    _, _, run, _ = _seed_run(db_session)
+    for item_id, created_at in (
+        ("older-item", datetime(2026, 1, 1, 12, 0, 0)),
+        ("newest-item", datetime(2026, 3, 1, 12, 0, 0)),
+        ("middle-item", datetime(2026, 2, 1, 12, 0, 0)),
+    ):
+        # Legacy grouped corrections carry no issue_id, so the approved row
+        # alone marks them approved and no RunItem lookup is needed.
+        db_session.add(
+            ReviewCorrection(
+                run_id=run.id,
+                item_id=item_id,
+                task=run.task,
+                ai_root_cause="Hallucination",
+                human_root_cause="Hallucination",
+                human_root_cause_issues=[
+                    {"category": "Hallucination", "subcategory": item_id}
+                ],
+                status=CorrectionStatus.APPROVED,
+                is_active=True,
+                created_at=created_at,
+            )
+        )
+    db_session.commit()
+
+    corrections = analysis_api._approved_corrections(db_session, run)
+
+    assert [correction.item_id for correction in corrections] == [
+        "newest-item",
+        "middle-item",
+        "older-item",
+    ]
+
+
 def test_analyzer_can_disable_timeout_retries(
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,

@@ -535,14 +535,20 @@ def test_analysis_config_uses_catalog_categories_for_prompt_injection(
         "qym_platform.api.analysis._category_catalog_reference",
         lambda *_args, **_kwargs: catalog,
     )
+    # The config builder loads approved corrections once and derives both the
+    # example counts and the approved details from that single list.
     monkeypatch.setattr(
-        "qym_platform.api.analysis._approved_category_example_counts",
+        "qym_platform.api.analysis._approved_corrections",
+        lambda *_args, **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        "qym_platform.api.analysis._category_example_counts",
         lambda *_args, **_kwargs: {},
     )
     # Only this approved-corrections source may reach the prompt; the catalog's
     # editable category_details_map above must not contribute any detail.
     monkeypatch.setattr(
-        "qym_platform.api.analysis._approved_category_details",
+        "qym_platform.api.analysis._approved_category_details_from",
         lambda *_args, **_kwargs: {"Approved Category": ["Approved mechanism"]},
     )
 

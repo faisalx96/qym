@@ -71,6 +71,7 @@ from qym_platform.services.document_extractor import (
 from qym_platform.services.llm_analyzer import (
     DEFAULT_SYSTEM_PROMPT,
     LLM_REQUEST_TIMEOUT_SECONDS,
+    MAX_ANALYSIS_TIMEOUT_SECONDS,
     ROOT_CAUSE_CATEGORIES,
     SOLUTION_CATEGORIES,
     AnalysisRule,
@@ -935,7 +936,7 @@ class AnalyzeRequest(BaseModel):
     limit: Optional[int] = Field(default=None, ge=1)
     concurrency: Optional[int] = Field(default=None, ge=1, le=20)
     timeout_seconds: float = Field(
-        default=LLM_REQUEST_TIMEOUT_SECONDS, ge=1, le=3600
+        default=LLM_REQUEST_TIMEOUT_SECONDS, ge=1, le=MAX_ANALYSIS_TIMEOUT_SECONDS
     )
     config: Optional[PlaygroundConfig] = None
     category_catalog_version_id: Optional[str] = Field(default=None, max_length=80)
@@ -979,7 +980,7 @@ class TestRequest(BaseModel):
     expected_pass_version: Optional[int] = Field(default=None, ge=0, strict=True)
     connection_id: Optional[str] = None
     timeout_seconds: float = Field(
-        default=LLM_REQUEST_TIMEOUT_SECONDS, ge=1, le=3600
+        default=LLM_REQUEST_TIMEOUT_SECONDS, ge=1, le=MAX_ANALYSIS_TIMEOUT_SECONDS
     )
 
 
@@ -1548,6 +1549,10 @@ def _approved_corrections(
         corrections_query = corrections_query.filter(
             ReviewCorrection.task == run.task
         )
+    # Newest first: taxonomy merging and category ordering depend on it.
+    corrections_query = corrections_query.order_by(
+        ReviewCorrection.created_at.desc(), ReviewCorrection.id.desc()
+    )
     return filter_explicitly_approved_issue_corrections(
         db, corrections_query.all()
     )
@@ -1571,9 +1576,16 @@ def _approved_category_details(
     analyzer prompt can only ever surface details reviewers have approved.
     The editable catalog map is deliberately not consulted here.
     """
+    return _approved_category_details_from(_approved_corrections(db, run))
+
+
+def _approved_category_details_from(
+    corrections: List[ReviewCorrection],
+) -> dict[str, list[str]]:
+    """Build the category → approved details map from preloaded corrections."""
     details: dict[str, list[str]] = {}
     seen_by_category: dict[str, set[str]] = {}
-    for correction in _approved_corrections(db, run):
+    for correction in corrections:
         for issue in _correction_root_cause_issues(correction):
             category = issue["category"]
             detail = _catalog_label(issue["subcategory"])
@@ -2223,13 +2235,18 @@ def _analysis_config_with_category_catalog(
     )
     if "max_root_cause_categories" not in config:
         config["max_root_cause_categories"] = values["max_root_cause_categories"]
+    # Load the approved corrections once; the filter behind them queries
+    # RunItem and RunItemPassScore, so repeating it per field is wasteful.
+    approved_corrections = _approved_corrections(db, run)
     if "category_example_counts" not in config:
-        config["category_example_counts"] = _approved_category_example_counts(
-            db, run
+        config["category_example_counts"] = _category_example_counts(
+            approved_corrections
         )
     # Server-owned: never sourced from the editable catalog or the request body,
     # so an unapproved detail cannot reach the analyzer prompt.
-    config["approved_category_details"] = _approved_category_details(db, run)
+    config["approved_category_details"] = _approved_category_details_from(
+        approved_corrections
+    )
     config["category_catalog_version"] = values["version"]
     config["category_catalog_version_id"] = values["id"]
     return config or None
@@ -7405,7 +7422,7 @@ def get_analysis_config(
         },
         "analysis_defaults": {
             "request_timeout_seconds": LLM_REQUEST_TIMEOUT_SECONDS,
-            "max_timeout_seconds": 3600,
+            "max_timeout_seconds": MAX_ANALYSIS_TIMEOUT_SECONDS,
             "max_timeout_retries": _analysis_max_retries(),
         },
         "default_system_prompt": DEFAULT_SYSTEM_PROMPT,

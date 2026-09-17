@@ -55,6 +55,8 @@ MAX_RULE_WRITER_PROMPT_CHARS = 320_000
 MAX_RULE_WRITER_PATCHES = 128
 LLM_REQUEST_TIMEOUT_SECONDS = 120.0
 LLM_RETRY_TIMEOUT_SECONDS = 240.0
+# Upper bound for any single analyzer request, including retries.
+MAX_ANALYSIS_TIMEOUT_SECONDS = 3600.0
 RULE_INFERENCE_TIMEOUT_SECONDS = 120.0
 
 # Public alias kept next to the analyzer constants so callers can use the
@@ -2774,8 +2776,14 @@ async def analyze_single_item(
     )
     timeout_multiplier = LLM_RETRY_TIMEOUT_SECONDS / LLM_REQUEST_TIMEOUT_SECONDS
     configured_max_retries = max(0, int(max_timeout_retries))
+    # Each retry doubles the previous timeout, but no attempt may exceed the
+    # deployment ceiling, so the total wait is bounded by
+    # (retries + 1) * MAX_ANALYSIS_TIMEOUT_SECONDS.
     timeout_schedule = [
-        initial_timeout_seconds * (timeout_multiplier**attempt_index)
+        min(
+            initial_timeout_seconds * (timeout_multiplier**attempt_index),
+            MAX_ANALYSIS_TIMEOUT_SECONDS,
+        )
         for attempt_index in range(configured_max_retries + 1)
     ]
     effective_timeout_seconds = initial_timeout_seconds

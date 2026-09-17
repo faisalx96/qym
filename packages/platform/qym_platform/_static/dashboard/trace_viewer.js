@@ -292,7 +292,7 @@
   function defaultSelectedSpanId() {
     const tree = currentTree();
     if (!tree) return null;
-    const failing = tree.nodes.find(node => statusCls(node.status) === "error" && spanHasException(node));
+    const failing = failingSpan(tree);
     return failing?.span_id || tree.roots[0]?.span_id || null;
   }
 

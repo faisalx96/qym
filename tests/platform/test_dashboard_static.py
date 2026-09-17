@@ -2180,8 +2180,8 @@ def test_clear_filter_control_has_aligned_label_and_soft_count_pill() -> None:
     for page in DASHBOARD_DIR.glob("*.html"):
         source = page.read_text(encoding="utf-8")
         if page.name == "analyzer.html":
-            assert "dashboard.css?v=metric-errors-20260914-1" in source
-            assert "playground.js?v=metric-errors-20260914-1" in source
+            assert "dashboard.css?v=approved-subcategories-20260917-1" in source
+            assert "playground.js?v=approved-subcategories-20260917-1" in source
             assert "ui_components.css?v=auto-analysis-selectors-20260811-1" in source
             assert "ui_components.js?v=auto-analysis-selectors-20260811-1" in source
             continue
@@ -3377,7 +3377,7 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert '"type": "retrying"' in analysis_api
     assert "state.phase === 'retrying'" in playground
     assert "Retrying timed-out analysis…" in playground
-    assert "playground.js?v=metric-errors-20260914-1" in (
+    assert "playground.js?v=approved-subcategories-20260917-1" in (
         DASHBOARD_DIR / "analyzer.html"
     ).read_text(encoding="utf-8")
     assert "Timeout retries: <strong>" in playground
