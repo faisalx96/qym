@@ -1011,9 +1011,9 @@ window.QymPlayground = (function () {
       '<label class="pg-category-taxonomy-field"><span>Use when <abbr title="Required" aria-label="Required">*</abbr></span><textarea data-taxonomy-field="when_to_use" rows="3" placeholder="When the analyzer should use this category..." spellcheck="true" required aria-required="true">' + _esc(catTaxonomy.when_to_use || '') + '</textarea></label>' +
     '</section>';
     html += '<section class="pg-category-tab-panel pg-category-details" id="' + detailsPanelId + '" data-category-panel="details" role="tabpanel" aria-labelledby="pg-category-' + domKey + '-details-tab" hidden>' +
-      '<div class="pg-category-tab-heading"><div><h4>Approved subcategories</h4><p>Subcategories appear here after a reviewer approves a correction using them.</p></div><span class="qym-tag qym-tag--count pg-detail-total-count">' + approvedSubcategoryCount + '</span></div>' +
+      '<div class="pg-category-tab-heading"><div><h4>Subcategories</h4><p>Browse approved subcategories or select All to edit catalog labels.</p></div><span class="qym-tag qym-tag--count pg-detail-total-count">' + approvedSubcategoryCount + '</span></div>' +
       '<div class="pg-category-details-tools"><label class="pg-detail-search-field"><span class="pg-filter-label">Search subcategories</span><input class="pg-detail-search qym-control qym-input qym-search" type="search" data-detail-search placeholder="Filter by subcategory name" aria-label="Search ' + _escAttr(cat) + ' subcategories" /></label>' +
-        '<div class="pg-detail-filter-field"><span class="pg-filter-label" id="pg-detail-filter-' + _escAttr(domKey) + '-label">Show</span><select class="pg-detail-filter qym-control qym-select" data-detail-filter aria-labelledby="pg-detail-filter-' + _escAttr(domKey) + '-label" aria-label="Filter ' + _escAttr(cat) + ' subcategories"><option value="approved">Approved only</option></select></div>' +
+        '<div class="pg-detail-filter-field"><span class="pg-filter-label" id="pg-detail-filter-' + _escAttr(domKey) + '-label">Show</span><select class="pg-detail-filter qym-control qym-select" data-detail-filter aria-labelledby="pg-detail-filter-' + _escAttr(domKey) + '-label" aria-label="Filter ' + _escAttr(cat) + ' subcategories"><option value="approved">Approved only</option><option value="all">All</option></select></div>' +
         '<span class="pg-detail-result-count" data-detail-result-count aria-live="polite"></span></div>' +
       '<div class="pg-details-sublist" data-cat="' + _escAttr(cat) + '">' + _buildCategoryDetailItems(cat, displayedDetails, catExamples, subcategoryTaxonomy, false, catDetails) + '</div>' +
       '<div class="qym-pagination pg-category-pagination" data-category-pagination="details" role="navigation" aria-label="' + _escAttr(cat) + ' subcategories pagination" hidden></div>' +
@@ -1121,8 +1121,9 @@ window.QymPlayground = (function () {
     }
     var query = String(search && search.value || '').trim().toLocaleLowerCase();
     var items = Array.prototype.slice.call(panel.querySelectorAll('.pg-detail-item'));
-    var approvedItems = items.filter(function (item) { return item.dataset.approved === 'true'; });
-    var matchingItems = approvedItems.filter(function (item) {
+    var approvedOnly = !filter || filter.value !== 'all';
+    var filteredItems = items.filter(function (item) { return !approvedOnly || item.dataset.approved === 'true'; });
+    var matchingItems = filteredItems.filter(function (item) {
       var name = String(item.dataset.detail || '').toLocaleLowerCase();
       var matchesSearch = !query || name.indexOf(query) !== -1;
       return matchesSearch;
@@ -1137,13 +1138,15 @@ window.QymPlayground = (function () {
     var empty = panel.querySelector('[data-detail-empty]');
     if (empty) {
       empty.hidden = matchingItems.length > 0;
-      empty.textContent = approvedItems.length > 0 ? 'No approved subcategories match this search.' : 'No approved subcategories yet.';
+      empty.textContent = filteredItems.length > 0
+        ? (approvedOnly ? 'No approved subcategories match this search.' : 'No subcategories match this search.')
+        : (approvedOnly ? 'No approved subcategories yet.' : 'No subcategories yet.');
     }
     var count = panel.querySelector('[data-detail-result-count]');
     if (count) {
       count.textContent = matchingItems.length
         ? (pageStart + 1) + '–' + pageEnd + ' of ' + matchingItems.length + ' subcategories'
-        : '0 of ' + approvedItems.length + ' subcategories';
+        : '0 of ' + filteredItems.length + ' subcategories';
     }
     _renderCategoryPagination(group, 'details', matchingItems.length);
   }
@@ -5516,7 +5519,15 @@ window.QymPlayground = (function () {
           var div = itemWrapper.firstElementChild;
           sublist.appendChild(div);
           input.value = '';
+          // Reveal the draft even when the current filter, search, or page excludes it.
+          var detailFilter = detailGroup.querySelector('[data-detail-filter]');
+          var detailSearch = detailGroup.querySelector('[data-detail-search]');
+          if (detailFilter) detailFilter.value = 'all';
+          if (detailSearch) detailSearch.value = '';
+          var detailCount = sublist.querySelectorAll('.pg-detail-item').length;
+          _setCategoryPage(detailGroup, 'details', Math.floor((detailCount - 1) / _CATEGORY_PAGE_SIZE), detailCount);
           _updateCategoryDetailCounts(detailGroup);
+          div.querySelector('[data-subcategory-taxonomy-field="description"]').focus();
           _scheduleAutoPreview();
         }
       }

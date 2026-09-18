@@ -3683,6 +3683,7 @@
         metrics: [],
         selectedMetrics: [],
         approvalSignature: '',
+        categoryCatalogRevision: 0,
         approvalRefreshInFlight: false,
         approvalRefreshPending: false,
         approvalRefreshLastCheckedAt: 0,
@@ -3866,6 +3867,9 @@
             ? window.QymPlayground.refreshCategoryCatalog(config)
             : false;
           if (!refreshed) return false;
+          state.categoryCatalogRevision = Number(
+            (config.category_catalog_version || ((config.category_catalog || {}).version)) || 0
+          );
           state.approvalSignature = signature;
           state.approvalRefreshPending = false;
           showStatus('success', 'Approved examples updated', 'New project approvals are now visible.');
@@ -5500,7 +5504,7 @@
             requestAnimationFrame(markCategoryCatalogDirty);
           }
         });
-        let categoryCatalogRevision = Number(
+        state.categoryCatalogRevision = Number(
           (playgroundConfig.category_catalog_version ||
             ((playgroundConfig.category_catalog || {}).version)) || 0
         );
@@ -5516,6 +5520,7 @@
             if (!category) return;
             categories.push(category);
             const details = Array.from(group.querySelectorAll('.pg-detail-item'))
+              .filter(item => item.dataset.exampleOnly !== 'true')
               .map(item => {
                 const subcategory = String(item.dataset.detail || '').trim();
                 const taxonomy = {};
@@ -5554,7 +5559,7 @@
               max_root_cause_categories: Number.isFinite(projectMaxCategories)
                 ? Math.min(10, Math.max(1, Math.trunc(projectMaxCategories)))
                 : 3,
-              base_revision: categoryCatalogRevision,
+              base_revision: state.categoryCatalogRevision,
             },
             incompleteTaxonomyCategories,
             incompleteTaxonomySubcategories,
@@ -5600,7 +5605,7 @@
               throw new Error(typeof detail === 'string' ? detail : (detail && detail.message) || 'Could not save diagnosis categories.');
             }
             const catalog = body.catalog || body;
-            categoryCatalogRevision = Number(catalog.version || categoryCatalogRevision);
+            state.categoryCatalogRevision = Number(catalog.version || state.categoryCatalogRevision);
             setCategorySaveState('success', body.created === false ? 'No changes' : 'Saved');
             showStatus('success', 'Categories saved', 'The project catalog is now available to future run analyses.');
             if (state.approvalRefreshPending) {

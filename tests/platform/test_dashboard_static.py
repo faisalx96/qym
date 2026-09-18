@@ -4030,13 +4030,14 @@ def test_per_metric_analysis_is_separate_from_output_card():
     assert "border-top:" not in solution_rule
 
 
-def test_category_subcategories_show_only_reviewer_approved_entries():
+def test_category_subcategories_preserve_catalog_editing_and_approved_suggestions():
     analyzer = ANALYZER_HTML.read_text(encoding="utf-8")
     playground = (DASHBOARD_DIR / "playground.js").read_text(encoding="utf-8")
     run = (DASHBOARD_DIR / "run.html").read_text(encoding="utf-8")
     assert "'details', 'Subcategories', String(approvedSubcategoryCount)" in playground
-    assert "<h4>Approved subcategories</h4>" in playground
+    assert "<h4>Subcategories</h4>" in playground
     assert '<option value="approved">Approved only</option>' in playground
+    assert '<option value="all">All</option>' in playground
     assert "issue.subcategory" in playground
     assert "function _approvedSubcategoriesFor(examples)" in playground
     assert "_buildCategoryDetailItems(cat, displayedDetails, catExamples, subcategoryTaxonomy, false, catDetails)" in playground

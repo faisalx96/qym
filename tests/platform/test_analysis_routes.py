@@ -491,6 +491,46 @@ def test_project_catalog_exposes_only_approved_subcategories_for_run_issue_picke
         for example in config["category_examples"]["Hallucination"]
     ] == ["Invented entity"]
 
+    # Explicit catalog removal must survive unrelated guidance saves even
+    # though the approved evidence continues to expose the removed label.
+    base = "/api/projects/analysis-project/analysis-category-catalog"
+    payload = {
+        "categories": ["Hallucination"],
+        "category_details_map": {"Hallucination": ["Invented entity"]},
+        "category_taxonomy": {
+            "Hallucination": {
+                "description": "Unsupported information.",
+                "when_to_use": "Use when the answer invents information.",
+            }
+        },
+        "subcategory_taxonomy": {
+            "Hallucination": {
+                "Invented entity": {
+                    "description": "An entity is invented.",
+                    "when_to_use": "Use when an entity has no supporting evidence.",
+                }
+            }
+        },
+        "base_revision": response.json()["version"],
+    }
+    saved = analysis_route_client.put(base, headers=_headers(), json=payload)
+    assert saved.status_code == 200
+    payload["base_revision"] = saved.json()["catalog"]["version"]
+    payload["category_details_map"] = {}
+    payload["subcategory_taxonomy"] = {}
+    removed = analysis_route_client.put(base, headers=_headers(), json=payload)
+    assert removed.status_code == 200
+    payload["base_revision"] = removed.json()["catalog"]["version"]
+    payload["category_taxonomy"]["Hallucination"]["description"] = "Updated guidance."
+    updated = analysis_route_client.put(base, headers=_headers(), json=payload)
+    assert updated.status_code == 200
+    assert updated.json()["catalog"]["category_details_map"] == {}
+    reloaded = analysis_route_client.get(base, headers=_headers()).json()
+    assert reloaded["category_details_map"] == {}
+    assert reloaded["approved_category_details"] == {
+        "Hallucination": ["Invented entity"]
+    }
+
 
 def test_analysis_config_uses_catalog_categories_for_prompt_injection(
     monkeypatch: pytest.MonkeyPatch,
