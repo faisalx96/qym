@@ -1298,6 +1298,11 @@ def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
                 ):
                     # Upgrade the published shape from numeric projection rows.
                     # Migration 0058 queues existing summaries without replaying history.
+                    dimension = db.get(Dimension, run_id)
+                    hours = {_hour(dimension.timestamp)} if dimension else set()
+                    if run:
+                        hours.add(_hour(run.started_at or run.created_at))
+                    _lock_buckets(db, partition.project_key, hours)
                     refresh_run_summary(db, run_id, partition.last_applied_version)
                 if partition.queue_state != "repair_required":
                     partition.queue_state = "ready"
@@ -1399,6 +1404,48 @@ def bootstrap_partitions(db, *, limit=100):
     for run_id, project in runs:
         _upsert_partition(db.connection(), run_id, project, 0, datetime.utcnow())
     return len(runs)
+
+
+def reconcile_summary_shapes(db, *, limit=100):
+    """Recover upgrades consumed by an older worker during rolling deployment."""
+    from qym_platform.db.models import Run
+
+    outdated = (
+        select(Summary.run_key)
+        .join(Run, Run.id == Summary.run_key)
+        .where(
+            Run.deleted_at.is_(None),
+            Summary.projection_revision > 0,
+            Summary.data["task_error_count"].as_integer().is_(None),
+        )
+    )
+    eligible = (
+        Partition.queue_state == "ready",
+        Partition.backfill_complete.is_(True),
+        Partition.partition_key.in_(outdated),
+        or_(
+            Partition.lease_until.is_(None), Partition.lease_until <= datetime.utcnow()
+        ),
+    )
+    keys = list(
+        db.scalars(
+            select(Partition.partition_key)
+            .where(*eligible)
+            .order_by(Partition.updated_at, Partition.partition_key)
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+    )
+    if not keys:
+        return 0
+    # Recheck eligibility and preserve publications, revisions and event markers.
+    result = db.execute(
+        update(Partition)
+        .where(Partition.partition_key.in_(keys), *eligible)
+        .values(queue_state="pending", updated_at=datetime.utcnow())
+        .execution_options(synchronize_session=False)
+    )
+    return result.rowcount
 
 
 def _backfill_source_query(model):
@@ -1837,7 +1884,11 @@ def scheduled_partitions(db, *, limit=20):
                 Partition.lease_until <= datetime.utcnow(),
             ),
         )
-        .order_by(Partition.updated_at, Partition.partition_key)
+        .order_by(
+            case((Partition.oldest_pending_event.is_(None), 1), else_=0),
+            Partition.updated_at,
+            Partition.partition_key,
+        )
     )
     urgent = or_(
         and_(Partition.backfill_complete.is_(True), Partition.queue_state != "deleted"),
@@ -1989,6 +2040,7 @@ class DashboardSummaryWorker:
             # number of unregistered runs instead of leaving them invisible.
             if now >= self._next_bootstrap:
                 found = bootstrap_partitions(db, limit=self.max_partitions * 5)
+                found += reconcile_summary_shapes(db, limit=self.max_partitions * 5)
                 db.commit()
                 # Keep discovering quickly while there is a backlog; otherwise every 30 s.
                 self._next_bootstrap = now + (0.0 if found else 30.0)

@@ -125,3 +125,81 @@ def test_repeat_pass_errors_keep_their_types_after_expansion(browser):
         )
     finally:
         fixture.close()
+
+
+def test_null_score_pass_warning_survives_optimistic_and_loaded_rendering(browser):
+    row = make_runs(1)[0]
+    row.update(
+        samples=2,
+        metric_error_count=1,
+        task_error_count=0,
+        metric_error_counts={"accuracy": 1},
+        execution_error_count=1,
+    )
+    passes = [
+        dict(
+            pass_number=1,
+            status="completed",
+            metric_means={},
+            task_error_count=0,
+            metric_error_count=1,
+            metric_error_counts={"accuracy": 1},
+            error_count=1,
+        ),
+        dict(
+            pass_number=2,
+            status="queued",
+            metric_means={},
+            task_error_count=0,
+            metric_error_count=0,
+            metric_error_counts={},
+            error_count=0,
+        ),
+    ]
+    row["pass_summaries"] = passes
+    fixture = DashboardFixture(browser, runs=[row])
+    page = fixture.page
+    pending = []
+    page.route("**/api/runs/run-000/passes", lambda route: pending.append(route))
+    page.route(
+        "**/api/runs/run-000/group-metrics*",
+        lambda route: route.fulfill(json={"metric": "accuracy", "samples": 2}),
+    )
+    try:
+        page.goto("https://qym.test/projects/demo")
+        page.locator('.samples-toggle[data-run-id="run-000"]').click()
+        warning = page.locator(
+            'tr.pass-member[data-pass-number="1"] .col-metric-value .metric-error-indicator'
+        )
+        warning.wait_for()
+        assert (
+            page.locator(
+                'tr.pass-member[data-pass-number="2"] .metric-error-indicator'
+            ).count()
+            == 0
+        )
+        warning.click()
+        assert "accuracy" in page.get_by_role("dialog").inner_text()
+        page.get_by_role("button", name="Close error details").press("Escape")
+        assert pending
+        pending[0].fulfill(
+            json={"samples": 2, "metrics": ["accuracy"], "passes": passes}
+        )
+        page.wait_for_function(
+            "__dashboardTest.state._samplesData['run-000']?.passes.samples === 2"
+        )
+        warning.wait_for()
+        warning.click()
+        assert (
+            "1 metric check failed in this pass"
+            in page.get_by_role("dialog").inner_text()
+        )
+        assert page.url == "https://qym.test/projects/demo"
+        assert (
+            page.locator(
+                'tr.pass-member[data-pass-number="2"] .metric-error-indicator'
+            ).count()
+            == 0
+        )
+    finally:
+        fixture.close()

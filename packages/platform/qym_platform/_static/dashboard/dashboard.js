@@ -1447,7 +1447,7 @@
     modal.setAttribute('role', 'dialog');
     modal.setAttribute('aria-modal', 'true');
     modal.setAttribute('aria-labelledby', 'execution-error-title');
-    modal.innerHTML = `<div class="modal-content modal-small"><div class="modal-header"><h2 id="execution-error-title">${task ? 'Task' : 'Metric'} errors</h2><button class="modal-close qym-icon-action" aria-label="Close error details">×</button></div><div class="modal-body"><p>${details.count} ${task ? 'task executions' : 'metric checks'} failed${escapeHtml(details.scope)}.</p>${task ? '' : `<dl class="execution-error-breakdown">${Object.entries(details.metrics).map(([name, count]) => `<div><dt>${escapeHtml(name)}</dt><dd>${Number(count)}</dd></div>`).join('')}</dl>`}<p class="execution-error-note">${task ? 'Metrics skipped after a task failure are not metric errors.' : 'Task outputs are available. Each failed metric check is counted once per item and pass.'}</p></div></div>`;
+    modal.innerHTML = `<div class="modal-content modal-small"><div class="modal-header"><h2 id="execution-error-title">${task ? 'Task' : 'Metric'} errors</h2><button class="modal-close qym-icon-action" aria-label="Close error details">×</button></div><div class="modal-body"><p>${details.count} ${task ? 'task execution' : 'metric check'}${details.count === 1 ? '' : 's'} failed${escapeHtml(details.scope)}.</p>${task ? '' : `<dl class="execution-error-breakdown">${Object.entries(details.metrics).map(([name, count]) => `<div><dt>${escapeHtml(name)}</dt><dd>${Number(count)}</dd></div>`).join('')}</dl>`}<p class="execution-error-note">${task ? 'Metrics skipped after a task failure are not metric errors.' : 'Task outputs are available. Each failed metric check is counted once per item and pass.'}</p></div></div>`;
     document.body.appendChild(modal);
     const close = () => { modal.remove(); if (button.isConnected) button.focus(); };
     const closeButton = modal.querySelector('button');
@@ -3909,7 +3909,7 @@
         const metricCells = metricsToShow.map(metric => {
           const value = (pass.metric_means || {})[metric];
           if (typeof value !== 'number') {
-            return `<td class="col-metric-value">${pass._queued ? '<span class="metric-na">—</span>' : pendingText('<span class="metric-na">—</span>')}</td>`;
+            return `<td class="col-metric-value">${pass._queued ? '<span class="metric-na">—</span>' : pendingText('<span class="metric-na">—</span>')}${renderExecutionErrors(pass, ' in this pass', metric)}</td>`;
           }
           const metricType = state._metricTypes?.[metric] || window.QymMetrics.detectMetricTypeFromAvg(value);
           const peers = peerPasses.map(sibling => (sibling.metric_means || {})[metric]);
