@@ -100,6 +100,8 @@ class PlatformSettings(BaseSettings):
     # Run lifecycle
     run_stale_timeout_seconds: int = Field(default=60, ge=5)
     analysis_job_max_workers: int = Field(default=2, ge=1)
+    analysis_max_concurrency: int = Field(default=20, ge=1, le=20)
+    analysis_max_retries: int = Field(default=1, ge=0, le=5)
 
     # Product eval API
     product_eval_max_workers: int = Field(default=3, ge=1)

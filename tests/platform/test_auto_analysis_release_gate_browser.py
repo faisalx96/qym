@@ -651,9 +651,12 @@ def test_project_diagnosis_catalog_restores_local_tools(analyzer_page: tuple[obj
     detail_selector = category_panel.locator(".pg-detail-review-selector")
     assert detail_selector.is_visible()
     assert detail_selector.evaluate("wrapper => wrapper.getBoundingClientRect().width >= 240")
+    # Approval-only browsing coexists with access to editable catalog labels.
     detail_selector.locator(".multi-select-btn").click()
-    detail_selector.locator(".multi-select-option[data-value='without_examples']").click()
-    assert category_panel.locator("[data-detail-filter]").input_value() == "without_examples"
+    assert detail_selector.locator(".multi-select-option[data-value='without_examples']").count() == 0
+    assert detail_selector.locator(".multi-select-option[data-value='all']").count() == 1
+    detail_selector.locator(".multi-select-option[data-value='approved']").click()
+    assert category_panel.locator("[data-detail-filter]").input_value() == "approved"
 
     category_search = page.locator("#analysis-category-search")
     category_search.fill("not present")
@@ -764,3 +767,273 @@ def test_auto_analysis_has_no_serious_or_critical_axe_violations(analyzer_page: 
         if violation.get("impact") in {"serious", "critical"}
     ]
     assert not violations, "Axe violations: " + ", ".join(violation["id"] for violation in violations)
+
+
+def _catalog_editor(page: Any, server: _AnalyzerServer) -> dict[str, Any]:
+    """Serve a versioned catalog while exercising the production page's save path."""
+    config = _analysis_config()
+    category = "Reasoning Error"
+    details = ["Approved label"] + [f"Catalog label {index:02}" for index in range(12)]
+    config.update(
+        {
+            "default_categories": [category],
+            "category_catalog_version": 1,
+            "category_details_map": {category: details},
+            "category_taxonomy": {
+                category: {
+                    "description": "Reasoning is incorrect.",
+                    "when_to_use": "Use when the conclusion is unsupported.",
+                }
+            },
+            "subcategory_taxonomy": {
+                category: {
+                    label: {
+                        "description": label,
+                        "when_to_use": "Use for this specific failure.",
+                    }
+                    for label in details
+                }
+            },
+        }
+    )
+    config["category_examples"][category][0]["detail"] = "Approved label"
+    catalog = {"config": config, "saves": [], "fail_refresh": False}
+
+    def get_config(route: Any) -> None:
+        route.fulfill(
+            status=503 if catalog["fail_refresh"] else 200,
+            json={"detail": "Unavailable"} if catalog["fail_refresh"] else config,
+        )
+
+    def save_catalog(route: Any) -> None:
+        body = route.request.post_data_json
+        catalog["saves"].append(body)
+        if body["base_revision"] != config["category_catalog_version"]:
+            route.fulfill(status=409, json={"detail": "Catalog revision conflict"})
+            return
+        config.update(
+            {
+                key: body[key]
+                for key in (
+                    "category_details_map",
+                    "category_taxonomy",
+                    "subcategory_taxonomy",
+                )
+            }
+        )
+        config["default_categories"] = body["categories"]
+        config["category_catalog_version"] += 1
+        route.fulfill(
+            json={
+                "created": True,
+                "catalog": {"version": config["category_catalog_version"]},
+            }
+        )
+
+    page.route("**/api/projects/demo/analysis-config", get_config)
+    page.route("**/api/projects/demo/analysis-category-catalog", save_catalog)
+    page.goto(_url(server, "/projects/demo/analysis?scope=categories"))
+    _wait_ready(page)
+    page.locator("#analysis-diagnosis-view").wait_for(state="visible")
+    return catalog
+
+
+def _catalog_group(page: Any) -> Any:
+    return page.locator(".pg-category-group[data-cat='Reasoning Error']")
+
+
+def _save_catalog(page: Any) -> None:
+    page.locator("#analysis-save-category-catalog").click()
+    page.wait_for_function(
+        "() => document.getElementById('analysis-category-save-status').textContent === 'Saved'"
+    )
+
+
+def _refresh_catalog(page: Any) -> None:
+    # A restored page uses the same refresh path as focus, without its throttle.
+    with page.expect_response("**/api/projects/demo/analysis-config"):
+        page.evaluate(
+            "window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true}))"
+        )
+
+
+def test_catalog_draft_visible_with_search_and_pagination(
+    analyzer_page: tuple[object, _AnalyzerServer],
+) -> None:
+    page, server = analyzer_page
+    catalog = _catalog_editor(page, server)
+    group = _catalog_group(page)
+    group.locator("[data-category-tab='details']").click()
+    group.locator("[data-detail-search]").fill("Approved")
+    group.locator(".pg-add-detail-input").fill("New draft")
+    group.locator(".pg-add-detail-btn").click()
+    draft = group.locator(".pg-detail-item[data-detail='New draft']")
+    assert draft.is_visible()
+    assert draft.get_attribute("data-approved") == "false"
+    assert group.locator("[data-detail-search]").input_value() == ""
+    assert group.locator("[data-detail-filter]").input_value() == "all"
+    assert (
+        group.locator(".pg-detail-review-selector .multi-select-btn").inner_text()
+        == "All"
+    )
+    assert group.get_attribute("data-details-page") == "1"
+    assert group.locator(".pg-detail-total-count").inner_text() == "1"
+    page.locator("#analysis-save-category-catalog").click()
+    assert (
+        page.locator("#analysis-category-save-status").inner_text()
+        == "Taxonomy required"
+    )
+    assert catalog["saves"] == []
+    draft.locator("[data-subcategory-taxonomy-field='description']").fill(
+        "A new failure."
+    )
+    draft.locator("[data-subcategory-taxonomy-field='when_to_use']").fill(
+        "Use for this failure."
+    )
+    _save_catalog(page)
+    assert (
+        catalog["saves"][-1]["category_details_map"]["Reasoning Error"].count(
+            "New draft"
+        )
+        == 1
+    )
+
+    page.reload()
+    _wait_ready(page)
+    group.locator("[data-category-tab='details']").click()
+    group.locator(".pg-detail-review-selector .multi-select-btn").click()
+    group.locator(".multi-select-option[data-value='all']").click()
+    group.locator("[data-detail-search]").fill("New draft")
+    assert draft.is_visible()
+    assert draft.get_attribute("data-approved") == "false"
+    assert (
+        draft.locator("[data-subcategory-taxonomy-field='description']").input_value()
+        == "A new failure."
+    )
+    # Catalog-only labels remain removable after saving and reloading.
+    draft.locator(".pg-detail-remove").click()
+    group.locator(".pg-add-detail-input").fill("Discard this draft")
+    group.locator(".pg-add-detail-btn").click()
+    group.locator(
+        ".pg-detail-item[data-detail='Discard this draft'] .pg-detail-remove"
+    ).click()
+    _save_catalog(page)
+    details = catalog["saves"][-1]["category_details_map"]["Reasoning Error"]
+    assert "New draft" not in details
+    assert "Discard this draft" not in details
+    assert group.locator(".pg-detail-total-count").inner_text() == "1"
+
+
+def test_catalog_save_excludes_removed_approved_label(
+    analyzer_page: tuple[object, _AnalyzerServer],
+) -> None:
+    page, server = analyzer_page
+    catalog = _catalog_editor(page, server)
+    group = _catalog_group(page)
+    group.locator("[data-category-tab='details']").click()
+    group.locator(
+        ".pg-detail-item[data-detail='Approved label'] .pg-detail-remove"
+    ).click()
+    _save_catalog(page)
+    page.reload()
+    _wait_ready(page)
+    group.locator("[data-category-tab='details']").click()
+    evidence = group.locator(".pg-detail-item[data-detail='Approved label']")
+    assert evidence.is_visible()
+    assert evidence.get_attribute("data-example-only") == "true"
+    assert (
+        evidence.locator(
+            "[data-subcategory-taxonomy-field='description']"
+        ).get_attribute("readonly")
+        is not None
+    )
+    group.locator("[data-category-tab='guidance']").click()
+    group.locator("[data-taxonomy-field='description']").fill("Updated guidance.")
+    _save_catalog(page)
+    saved = catalog["saves"][-1]
+    assert "Approved label" not in saved["category_details_map"]["Reasoning Error"]
+    assert "Approved label" not in saved["subcategory_taxonomy"].get(
+        "Reasoning Error", {}
+    )
+    page.reload()
+    _wait_ready(page)
+    group.locator("[data-category-tab='details']").click()
+    assert evidence.is_visible()
+    assert evidence.get_attribute("data-example-only") == "true"
+
+
+def _publish_catalog_label(catalog: dict[str, Any]) -> None:
+    config = catalog["config"]
+    config["category_catalog_version"] += 1
+    config["category_details_map"]["Reasoning Error"].append("New approval")
+    config["category_examples"]["Reasoning Error"].append(
+        {
+            "item_id": "another-approved-item",
+            "metric_name": "quality",
+            "detail": "New approval",
+        }
+    )
+    config["category_example_counts"]["Reasoning Error"] += 1
+
+
+def test_catalog_refresh_updates_save_revision_and_retains_conflicts(
+    analyzer_page: tuple[object, _AnalyzerServer],
+) -> None:
+    page, server = analyzer_page
+    catalog = _catalog_editor(page, server)
+    _publish_catalog_label(catalog)
+    _refresh_catalog(page)
+    page.wait_for_function(
+        "() => document.getElementById('analysis-status').textContent.includes('Approved examples updated')"
+    )
+    group = _catalog_group(page)
+    group.locator("[data-taxonomy-field='description']").fill("After approval.")
+    _save_catalog(page)
+    assert catalog["saves"][-1]["base_revision"] == 2
+    assert (
+        "New approval"
+        in catalog["saves"][-1]["category_details_map"]["Reasoning Error"]
+    )
+    # A subsequent change must still conflict, not silently overwrite it.
+    catalog["config"]["category_catalog_version"] += 1
+    group.locator("[data-taxonomy-field='description']").fill("Concurrent edit.")
+    page._release_gate_allow_http_console_errors = True
+    page.locator("#analysis-save-category-catalog").click()
+    page.wait_for_function(
+        "() => document.getElementById('analysis-category-save-status').textContent === 'Save failed'"
+    )
+    assert catalog["saves"][-1]["base_revision"] == 3
+    assert "Catalog revision conflict" in page.locator("#analysis-status").inner_text()
+
+
+@pytest.mark.parametrize("refresh_failure", ["dirty", "fetch", "install"])
+def test_catalog_deferred_or_failed_refresh_preserves_revision(
+    analyzer_page: tuple[object, _AnalyzerServer], refresh_failure: str
+) -> None:
+    page, server = analyzer_page
+    catalog = _catalog_editor(page, server)
+    group = _catalog_group(page)
+    description = group.locator("[data-taxonomy-field='description']")
+    if refresh_failure == "dirty":
+        description.fill("Unsaved guidance.")
+    elif refresh_failure == "fetch":
+        catalog["fail_refresh"] = True
+    else:
+        page.evaluate("window.QymPlayground.refreshCategoryCatalog = () => false")
+    page._release_gate_allow_http_console_errors = True
+    _publish_catalog_label(catalog)
+    _refresh_catalog(page)
+    if refresh_failure == "dirty":
+        page.wait_for_function(
+            "() => document.getElementById('analysis-status').textContent.includes('New approvals available')"
+        )
+        assert description.input_value() == "Unsaved guidance."
+    else:
+        assert description.input_value() == "Reasoning is incorrect."
+        description.fill("Edit after failed refresh.")
+    assert group.locator(".pg-detail-item[data-detail='New approval']").count() == 0
+    page.locator("#analysis-save-category-catalog").click()
+    page.wait_for_function(
+        "() => document.getElementById('analysis-category-save-status').textContent === 'Save failed'"
+    )
+    assert catalog["saves"][-1]["base_revision"] == 1

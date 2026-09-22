@@ -2180,8 +2180,8 @@ def test_clear_filter_control_has_aligned_label_and_soft_count_pill() -> None:
     for page in DASHBOARD_DIR.glob("*.html"):
         source = page.read_text(encoding="utf-8")
         if page.name == "analyzer.html":
-            assert "dashboard.css?v=metric-errors-20260914-1" in source
-            assert "playground.js?v=metric-errors-20260914-1" in source
+            assert "dashboard.css?v=approved-subcategories-20260917-1" in source
+            assert "playground.js?v=approved-subcategories-20260917-1" in source
             assert "ui_components.css?v=auto-analysis-selectors-20260811-1" in source
             assert "ui_components.js?v=auto-analysis-selectors-20260811-1" in source
             continue
@@ -3296,6 +3296,9 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert "'<div class=\"rc-sol-row\">'" not in run
     assert 'data-metric-issues-item=' in run
     assert 'data-issue-field="category"' in run
+    assert "data-category-suggestions" in run
+    assert "categoryPickerOptions().map" in run
+    assert "Search project categories or type a new one" in run
     assert 'data-issue-field="subcategory"' in run
     assert 'data-issue-field="finding"' in run
     assert 'class="metric-analysis-issue-solution"' in run
@@ -3374,7 +3377,7 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert '"type": "retrying"' in analysis_api
     assert "state.phase === 'retrying'" in playground
     assert "Retrying timed-out analysis…" in playground
-    assert "playground.js?v=metric-errors-20260914-1" in (
+    assert "playground.js?v=approved-subcategories-20260917-1" in (
         DASHBOARD_DIR / "analyzer.html"
     ).read_text(encoding="utf-8")
     assert "Timeout retries: <strong>" in playground
@@ -3424,7 +3427,7 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert "pg-target-limit-help" not in playground
     assert "slice(0, 4)" in playground
     assert ".analysis-page .pg-score-slider::-webkit-slider-runnable-track" in analyzer
-    assert "grid-template-columns: 260px max-content max-content;" in analyzer
+    assert "grid-template-columns: 260px max-content max-content max-content;" in analyzer
     assert "width: 96px;" in analyzer
     assert 'id="pg-connection" class="pg-connection-select"' in playground
     assert "className: 'pg-connection-selector'" in playground
@@ -3466,6 +3469,13 @@ def test_auto_analysis_preserves_prompt_content_and_exposes_timeout_retry() -> N
     assert "_fit_prompt_messages" not in analyzer_service
     assert "_bounded_message_content" not in analyzer_service
     assert "LLM_RETRY_TIMEOUT_SECONDS = 240.0" in analyzer_service
+    assert 'id="pg-analysis-timeout"' in playground
+    assert "analysisDefaults.max_timeout_retries" in playground
+    assert "max_timeout_retries=_analysis_max_retries()" in analysis_api
+    assert "timeout_seconds: timeoutSeconds" in playground
+    assert "timeout_seconds: _getAnalysisTimeoutSeconds()" in playground
+    assert "request_timeout_seconds=request.timeout_seconds" in analysis_api
+    assert "_analysis_request_concurrency(request.concurrency)" in analysis_api
     assert '"context_limit_exceeded"' in analyzer_service
     assert '"analysis_timeout"' in analyzer_service
     assert "MAX_ANALYZER_REQUEST_CHARS" not in analyzer_service
@@ -4018,3 +4028,38 @@ def test_per_metric_analysis_is_separate_from_output_card():
     assert "border-bottom: 1px solid var(--border-subtle);" in issue_divider
     solution_rule = _rule(source, ".metric-analysis-issue-solution {")
     assert "border-top:" not in solution_rule
+
+
+def test_category_subcategories_preserve_catalog_editing_and_approved_suggestions():
+    analyzer = ANALYZER_HTML.read_text(encoding="utf-8")
+    playground = (DASHBOARD_DIR / "playground.js").read_text(encoding="utf-8")
+    run = (DASHBOARD_DIR / "run.html").read_text(encoding="utf-8")
+    assert "'details', 'Subcategories', String(approvedSubcategoryCount)" in playground
+    assert "<h4>Subcategories</h4>" in playground
+    assert '<option value="approved">Approved only</option>' in playground
+    assert '<option value="all">All</option>' in playground
+    assert "issue.subcategory" in playground
+    assert "function _approvedSubcategoriesFor(examples)" in playground
+    assert "_buildCategoryDetailItems(cat, displayedDetails, catExamples, subcategoryTaxonomy, false, catDetails)" in playground
+    assert 'data-approved="' in playground
+    assert 'data-example-only="' in playground
+    assert "item.dataset.approved === 'true'" in playground
+    assert "group.querySelectorAll('.pg-detail-item').forEach" in playground
+    assert "if (el.dataset.exampleOnly === 'true') return;" in playground
+    assert "cfg.category_details_map = cdMap" in playground
+    assert "Needs examples</option>" not in playground
+    assert "function projectApprovalSignature(config)" in analyzer
+    assert "function refreshProjectApprovals(options = {})" in analyzer
+    assert "cache: 'no-store'" in analyzer
+    assert "window.addEventListener('focus'" in analyzer
+    assert "document.addEventListener('visibilitychange'" in analyzer
+    assert "window.addEventListener('pageshow'" in analyzer
+    assert "categoryEditorHasUnsavedChanges()" in analyzer
+    assert "New approvals available" in analyzer
+    assert "refreshCategoryCatalog" in analyzer
+    assert "refreshCategoryCatalog" in playground
+    assert "data-subcategory-suggestions" in run
+    assert "list=\"' + subcategoryListId + '\"" in run
+    assert "categoryApprovedDetails(issue.category)" in run
+    assert "await loadProjectCategoryCatalog();" in run
+    assert "data-subcategory-select" not in run

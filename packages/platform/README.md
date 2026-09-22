@@ -178,6 +178,11 @@ Reviews support filtering, human corrections, root-cause revisions, approval dec
 Background analysis jobs run on a bounded in-process executor. Configure the
 capacity with `QYM_ANALYSIS_JOB_MAX_WORKERS` (default `2`). The registry is
 intentionally in-memory while the platform runs as one Uvicorn worker.
+Each Auto-analysis job sends at most `QYM_ANALYSIS_MAX_CONCURRENCY` item-metric
+requests at once (default `20`, range `1`–`20`). The Auto-analysis page lets the
+user set the timeout for each request. Configure timeout retries with
+`QYM_ANALYSIS_MAX_RETRIES` (default `1`, range `0`–`5`); every retry doubles the
+previous attempt's timeout, and no single attempt waits longer than 3600 seconds.
 
 ## Datasets
 

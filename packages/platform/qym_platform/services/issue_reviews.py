@@ -6,10 +6,11 @@ review of only that issue, never a review of all issues under its metric.
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any
+from typing import Any, Iterable
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
+from sqlalchemy import tuple_
 from sqlalchemy.orm import Session
 
 from qym_platform.datetime_utils import to_api_timestamp, utc_now_naive
@@ -68,6 +69,134 @@ def correction_issues(correction: ReviewCorrection) -> list[dict[str, Any]]:
 def correction_issue_id(correction: ReviewCorrection) -> str:
     issues = correction_issues(correction)
     return str(issues[0].get("issue_id") or "") if len(issues) == 1 else ""
+
+
+def filter_explicitly_approved_issue_corrections(
+    db: Session,
+    corrections: Iterable[ReviewCorrection],
+) -> list[ReviewCorrection]:
+    """Keep corrections whose matching saved issue is explicitly approved.
+
+    ``ReviewCorrection.status`` is not enough on its own. Older imports and
+    demo data can contain an approved correction row while the issue shown on
+    the run still says ``pending``. Suggestions, approved examples, and
+    analyzer prompts must follow the issue review state that the user sees.
+    """
+    candidates = list(corrections)
+    if not candidates:
+        return []
+
+    item_scopes = {
+        (str(correction.run_id), str(correction.item_id))
+        for correction in candidates
+        if correction.pass_number is None
+    }
+    items = (
+        db.query(RunItem)
+        .filter(tuple_(RunItem.run_id, RunItem.item_id).in_(item_scopes))
+        .all()
+        if item_scopes
+        else []
+    )
+    items_by_scope = {(item.run_id, item.item_id): item for item in items}
+    pass_scopes = {
+        (
+            str(correction.run_id),
+            str(correction.item_id),
+            str(correction.metric_name or ""),
+            int(correction.pass_number),
+        )
+        for correction in candidates
+        if correction.pass_number is not None
+    }
+    pass_scores_by_scope: dict[
+        tuple[str, str, str, int], RunItemPassScore
+    ] = {}
+    if pass_scopes:
+        pass_scores = (
+            db.query(RunItemPassScore)
+            .filter(
+                tuple_(
+                    RunItemPassScore.run_id,
+                    RunItemPassScore.item_id,
+                    RunItemPassScore.metric_name,
+                    RunItemPassScore.pass_number,
+                ).in_(pass_scopes)
+            )
+            .all()
+        )
+        pass_scores_by_scope = {
+            (
+                str(score.run_id),
+                str(score.item_id),
+                str(score.metric_name or ""),
+                int(score.pass_number),
+            ): score
+            for score in pass_scores
+            if (
+                str(score.run_id),
+                str(score.item_id),
+                str(score.metric_name or ""),
+                int(score.pass_number),
+            )
+            in pass_scopes
+        }
+
+    approved: list[ReviewCorrection] = []
+    for correction in candidates:
+        issue_id = correction_issue_id(correction)
+        if not issue_id:
+            # Legacy grouped corrections predate issue-level IDs, so their
+            # active approved correction row is the only approval marker.
+            approved.append(correction)
+            continue
+        metric_name = str(correction.metric_name or "").strip()
+        if correction.pass_number is not None:
+            pass_score = pass_scores_by_scope.get(
+                (
+                    str(correction.run_id),
+                    str(correction.item_id),
+                    metric_name,
+                    int(correction.pass_number),
+                )
+            )
+            pass_metadata = (
+                pass_score.meta
+                if pass_score is not None and isinstance(pass_score.meta, dict)
+                else {}
+            )
+            analysis = pass_metadata.get(PASS_ANALYSIS_META_KEY)
+        else:
+            item = items_by_scope.get((correction.run_id, correction.item_id))
+            if item is None:
+                continue
+            metadata = (
+                item.item_metadata if isinstance(item.item_metadata, dict) else {}
+            )
+            if metric_name:
+                metric_analyses = metadata.get("metric_analyses")
+                analysis = (
+                    metric_analyses.get(metric_name)
+                    if isinstance(metric_analyses, dict)
+                    else None
+                )
+            else:
+                analysis = metadata
+        if not isinstance(analysis, dict):
+            continue
+
+        issues = analysis_root_cause_issues(analysis)
+        matching_issue = next(
+            (issue for issue in issues if str(issue.get("issue_id") or "") == issue_id),
+            None,
+        )
+        if (
+            matching_issue is not None
+            and str(matching_issue.get("review_status") or "").strip().lower()
+            == "approved"
+        ):
+            approved.append(correction)
+    return approved
 
 
 def apply_issue_review(issue: dict[str, Any], correction: ReviewCorrection) -> None:

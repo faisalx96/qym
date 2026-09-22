@@ -163,6 +163,79 @@ def test_auto_analysis_completion_reports_errors_instead_of_success() -> None:
     )
 
 
+def test_project_approval_signature_is_order_independent_and_detects_changes() -> None:
+    function = _function("analyzer", "projectApprovalSignature")
+    _run_javascript(
+        function
+        + """
+        const first = {category_examples: {
+          Hallucination: [
+            {id: 2, item_id: 'b', metric_name: 'accuracy', detail: 'Invented fact',
+             root_cause_issues: [{category: 'Hallucination', subcategory: 'Invented fact'}]},
+            {id: 1, item_id: 'a', metric_name: 'accuracy', detail: 'Wrong entity',
+             root_cause_issues: [{category: 'Hallucination', subcategory: 'Wrong entity'}]},
+          ],
+          'Incomplete Answer': [],
+        }};
+        const reordered = {category_examples: {
+          'Incomplete Answer': [],
+          Hallucination: [first.category_examples.Hallucination[1], first.category_examples.Hallucination[0]],
+        }};
+        assert.equal(projectApprovalSignature(first), projectApprovalSignature(reordered));
+
+        const changed = JSON.parse(JSON.stringify(first));
+        changed.category_examples['Incomplete Answer'].push({
+          id: 3,
+          item_id: 'c',
+          metric_name: 'accuracy',
+          detail: 'Omitted constraint',
+          root_cause_issues: [{category: 'Incomplete Answer', subcategory: 'Omitted constraint'}],
+        });
+        assert.notEqual(projectApprovalSignature(first), projectApprovalSignature(changed));
+        """
+    )
+
+
+def test_playground_can_rebuild_categories_from_fresh_approved_examples() -> None:
+    playground = _playground_with_test_exports("_buildCategoryGroupsMarkup")
+    _run_javascript(
+        """
+        const document = {createElement: () => {
+          let escaped = '';
+          return {
+            set textContent(value) {
+              escaped = String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            },
+            get innerHTML() { return escaped; },
+          };
+        }};
+        const window = {};
+        """
+        + f"eval({json.dumps(playground)});\n"
+        + """
+        const html = window.QymPlayground.__test__buildCategoryGroupsMarkup({
+          default_categories: ['Incomplete Answer'],
+          category_details_map: {'Incomplete Answer': ['Catalog-only label']},
+          category_examples: {'Incomplete Answer': [{
+            id: 599,
+            item_id: 'production-sample-0005',
+            detail: 'Omitted constraint',
+            root_cause_issues: [{category: 'Incomplete Answer', subcategory: 'Omitted constraint'}],
+          }]},
+          category_example_counts: {'Incomplete Answer': 1},
+        });
+        assert.ok(html.includes('Omitted constraint'));
+        assert.ok(html.includes('data-approved="true"'));
+        assert.ok(html.includes('1 example'));
+        assert.ok(html.includes('Catalog-only label'));
+        assert.ok(html.includes('data-approved="false"'));
+        """
+    )
+
+
 def test_metric_analysis_is_shown_only_for_failed_or_errored_judges() -> None:
     function = _function("run", "shouldRenderMetricAnalysis")
     _run_javascript(
@@ -573,7 +646,8 @@ def test_add_and_issue_edit_share_popup_with_all_original_fields() -> None:
         const ADD_NEW_SOLUTION_VALUE='__qym_add_new_solution__';
         const escapeAttr=String,escapeHtml=String,CLOSE_ICON='';
         const categoryCatalogEntry=()=>({description:'Meaning',when_to_use:'Usage guidance'});
-        const categoryCatalogDetails=()=>['Saved subtype'];
+        const categoryApprovedDetails=()=>['Saved subtype'];
+        const categoryPickerOptions=()=>['Agent','Evaluator'];
         const draft={mode:'edit',issueIndex:1,issues:[{category:'Agent',subcategory:'Subtype',finding:'Evidence',category_reason:'Why saved',confidence:.9}],originalIssue:{solution:'Fix',solution_note:'Notes'},solution:'Fix',solution_note:'Notes',addingNewSolution:false};
         const html=renderMetricDiagnosisFields(draft);
         for(const field of ['category','subcategory','finding'])assert.ok(html.includes('data-issue-field="'+field+'"'));
@@ -581,6 +655,12 @@ def test_add_and_issue_edit_share_popup_with_all_original_fields() -> None:
         assert.ok(!html.includes('Solution notes (optional)'));
         assert.ok(!html.includes('data-new-solution'));
         for(const text of ['Issue 2','Choose a saved solution','Meaning','Usage guidance','Why saved','90% confidence','Saved subtype','Add Guardrails','+ Add new solution','value="Fix" selected'])assert.ok(html.includes(text),text);
+        assert.ok(html.includes('data-subcategory-suggestions'));
+        assert.ok(html.includes('data-category-suggestions'));
+        assert.ok(html.includes('list="metric-issue-categories-0"'));
+        assert.ok(html.includes('Search project categories or type a new one'));
+        assert.ok(html.includes('Suggestions include only reviewer-approved labels'));
+        assert.ok(html.includes('Search approved subcategories or type a new one'));
         selectMetricDiagnosisSolution(draft,ADD_NEW_SOLUTION_VALUE);
         assert.equal(draft.addingNewSolution,true);assert.equal(draft.solution,'');assert.equal(draft.solution_note,'');
         const customHtml=renderMetricDiagnosisFields(draft);
@@ -590,6 +670,60 @@ def test_add_and_issue_edit_share_popup_with_all_original_fields() -> None:
         selectMetricDiagnosisSolution(draft,'Fix');
         assert.equal(draft.addingNewSolution,false);assert.equal(draft.solution,'Fix');assert.equal(draft.solution_note,'Notes');
         assert.ok(!html.includes('data-add-issue'));
+    """)
+
+
+def test_run_issue_picker_uses_only_approved_labels_for_selected_category() -> None:
+    functions = "\n".join(_function("run", name) for name in (
+        "normalizeCategoryLabels",
+        "normalizeApprovedCategoryDetails",
+        "categoryApprovedDetails",
+        "renderMetricDiagnosisFields",
+    ))
+    _run_javascript(functions + """
+        const state={categoryCatalog:{
+          category_details_map:{Hallucination:['Unapproved catalog label']},
+          approved_category_details:normalizeApprovedCategoryDetails({
+            Hallucination:['Invented entity','invented ENTITY','Missing citation'],
+            'Wrong Format':['Invalid JSON'],
+          }),
+        }};
+        assert.deepEqual(categoryApprovedDetails('hallucination'),['Invented entity','Missing citation']);
+        assert.deepEqual(categoryApprovedDetails('wrong format'),['Invalid JSON']);
+        const metricDiagnosisSolutionOptions=()=>[];
+        const metricIssueGuidanceHtml=()=>'';
+        const categoryPickerOptions=()=>['Hallucination','Wrong Format'];
+        const escapeAttr=String,escapeHtml=String,ADD_NEW_SOLUTION_VALUE='new';
+        const draft={mode:'add',issues:[{category:'Hallucination',subcategory:'New proposed label',finding:''}],
+          issueIndex:0,solution:'',addingNewSolution:false};
+        const html=renderMetricDiagnosisFields(draft);
+        assert.ok(html.includes('Invented entity'));
+        assert.ok(html.includes('Missing citation'));
+        assert.ok(html.includes('value="New proposed label"'));
+        assert.ok(html.includes('<datalist'));
+        assert.ok(html.includes('data-subcategory-suggestions'));
+        assert.ok(html.includes('data-category-suggestions'));
+        assert.ok(html.includes('value="Hallucination"'));
+        assert.ok(html.includes('value="Wrong Format"'));
+        assert.ok(html.includes('list="metric-issue-subcategories-0"'));
+        assert.ok(!html.includes('Unapproved catalog label'));
+        assert.ok(!html.includes('Invalid JSON'));
+        assert.ok(!html.includes('data-subcategory-select'));
+    """)
+
+
+def test_new_run_issue_subcategory_is_sent_as_a_review_candidate() -> None:
+    _run_javascript(_diagnosis_functions() + """
+        const state={run:{file_path:'run-1'},snapshot:{rows:[{item_id:'item-1',
+          item_metadata:{metric_analyses:{accuracy:{root_cause_issues:[]}}}}]}};
+        const draft=createMetricDiagnosisDraft('item-1','accuracy','add');
+        draft.issues[0]={category:'Hallucination',subcategory:'  Newly proposed label  ',finding:'Evidence'};
+        let request;
+        const saveMetricIssueAction=async(_item,_metric,value)=>{request=value;return true;};
+        assert.equal(await saveMetricDiagnosisDraft('item-1','accuracy',draft),true);
+        assert.equal(request.action,'add');
+        assert.equal(request.issue.subcategory,'Newly proposed label');
+        assert.equal(request.issue.finding,'Evidence');
     """)
 
 
@@ -617,11 +751,12 @@ def test_issue_action_request_targets_the_correct_pass_and_ignores_late_reply(sw
         const state={run:{file_path:'run-1',metadata:{pass_revision:7}},viewPass:2,rootCauseValues:[]};
         const apiUrl=String;let body,finish,applied=0;
         const applyUpdatedRow=()=>applied++;
+        let catalogLoads=0;const loadProjectCategoryCatalog=async()=>{catalogLoads++;return true;};
         const fetch=async(url,options)=>{assert.equal(url,'api/runs/update_root_cause_issue');body=JSON.parse(options.body);return new Promise(resolve=>{finish=()=>resolve({ok:true,json:async()=>({ok:true,row:{item_id:'item-1'}})});});};
         const result=saveMetricIssueAction('item-1','accuracy',{action:'approve',issue_id:'two',expected_issue:{category:'Agent'}});
         assert.equal(body.pass_number,2);assert.equal(body.issue_id,'two');assert.equal(body.metric_name,'accuracy');
         assert.equal(body.expected_pass_version,7);
-        if(switchPass)state.viewPass=1;finish();assert.equal(await result,true);assert.equal(applied,switchPass?0:1);
+        if(switchPass)state.viewPass=1;finish();assert.equal(await result,true);assert.equal(applied,switchPass?0:1);assert.equal(catalogLoads,1);
     """)
 
 
