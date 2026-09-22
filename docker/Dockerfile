@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1.7
-FROM python:3.11-slim AS python-base
+ARG BASE_IMAGE=python:3.11-slim
+
+FROM ${BASE_IMAGE} AS python-base
 
 WORKDIR /app
 

@@ -41,6 +41,7 @@ package:
     - source /internet.sh
     - >
       podman build \
+        --build-arg BASE_IMAGE=$CUSTOM_BASE_IMAGE \
         -v "$CI_BUILDS_DIR":"$CI_BUILDS_DIR" \
         -t "$REGISTRY"/"$HARBOR_PROJECT"/"$PROJECT_NAME":$ENV-latest \
         --annotation org.opencontainers.image.revision=$ENV-"$CI_COMMIT_SHA" \
