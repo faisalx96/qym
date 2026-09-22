@@ -45,8 +45,8 @@ package:
         -v "$CI_BUILDS_DIR":"$CI_BUILDS_DIR" \
         -t "$REGISTRY"/"$HARBOR_PROJECT"/"$PROJECT_NAME":$ENV-latest \
         --annotation org.opencontainers.image.revision=$ENV-"$CI_COMMIT_SHA" \
-        -f docker/Dockerfile
-      .
+        -f docker/Dockerfile \
+        .
     - podman push --creds "$HARBOR_USERNAME":"$HARBOR_PASSWORD" "$REGISTRY"/"$HARBOR_PROJECT"/"$PROJECT_NAME":$ENV-latest
     - podman image tag "$REGISTRY"/"$HARBOR_PROJECT"/"$PROJECT_NAME":$ENV-latest "$REGISTRY"/"$HARBOR_PROJECT"/"$PROJECT_NAME":$ENV-"$CI_COMMIT_SHORT_SHA"
     - podman push --creds "$HARBOR_USERNAME":"$HARBOR_PASSWORD" "$REGISTRY"/"$HARBOR_PROJECT"/"$PROJECT_NAME":$ENV-"$CI_COMMIT_SHORT_SHA"
