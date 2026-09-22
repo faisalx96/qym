@@ -667,6 +667,70 @@ def _execution_error_counts(db, run_id, samples):
     return sum(by_pass.values()), by_pass
 
 
+def _execution_error_breakdown(db, run_id, samples):
+    """Split numeric projection evidence without reading source payloads."""
+    from qym_platform.services.execution_errors import error_breakdown
+
+    number = case((Record.pass_number < 1, 1), else_=Record.pass_number)
+    task_scope = or_(
+        and_(
+            Record.record_kind == "attempt",
+            or_(
+                Record.is_last.is_(True), Record.metric_key.startswith("legacy_event:")
+            ),
+        ),
+        and_(Record.record_kind == "item", int(samples or 1) <= 1),
+    )
+    tasks = (
+        select(Record.record_key, number.label("pass_number"))
+        .where(
+            Record.run_key == run_id,
+            Record.present.is_(True),
+            Record.error > 0,
+            task_scope,
+        )
+        .group_by(Record.record_key, number)
+        .subquery()
+    )
+    task_counts = dict(
+        db.execute(
+            select(tasks.c.pass_number, func.count()).group_by(tasks.c.pass_number)
+        ).all()
+    )
+    metric_scope = (
+        Record.record_kind == "pass_score"
+        if int(samples or 1) > 1
+        else Record.record_kind.in_(("score", "pass_score"))
+    )
+    checks = (
+        select(number.label("pass_number"), Record.metric_key, Record.record_key)
+        .outerjoin(
+            tasks,
+            and_(
+                tasks.c.record_key == Record.record_key,
+                tasks.c.pass_number == number,
+            ),
+        )
+        .where(
+            Record.run_key == run_id,
+            Record.present.is_(True),
+            Record.error > 0,
+            metric_scope,
+            tasks.c.record_key.is_(None),
+        )
+        .group_by(number, Record.metric_key, Record.record_key)
+        .subquery()
+    )
+    metric_counts = defaultdict(dict)
+    for number, metric, count in db.execute(
+        select(checks.c.pass_number, checks.c.metric_key, func.count()).group_by(
+            checks.c.pass_number, checks.c.metric_key
+        )
+    ):
+        metric_counts[number][metric] = count
+    return error_breakdown(task_counts, metric_counts)
+
+
 def _repeat_retry_counts(db, run_id):
     """Deduplicate retries across retained attempts and legacy SDK events."""
     executions = (
@@ -995,6 +1059,7 @@ def refresh_run_summary(db, run_id, version):
     execution_error_count, execution_errors_by_pass = _execution_error_counts(
         db, run_id, run.samples
     )
+    error_details = _execution_error_breakdown(db, run_id, run.samples)
     md = run.run_metadata if isinstance(run.run_metadata, dict) else {}
     try:
         expected = int(md["total_items"]) if md.get("total_items") is not None else None
@@ -1097,6 +1162,14 @@ def refresh_run_summary(db, run_id, version):
                 ),
                 "primary_score": means.get(p),
                 "error_count": execution_errors_by_pass.get(p, 0),
+                **error_details["pass_error_counts"].get(
+                    p,
+                    {
+                        "task_error_count": 0,
+                        "metric_error_count": 0,
+                        "metric_error_counts": {},
+                    },
+                ),
                 "retry_count": retries_by_pass.get(p, 0),
                 "analysis_cause_count": pass_causes.get(p, 0),
             }
@@ -1124,6 +1197,7 @@ def refresh_run_summary(db, run_id, version):
         "success_count": summary.success_count,
         "error_count": summary.error_count,
         "execution_error_count": execution_error_count,
+        **{k: v for k, v in error_details.items() if k != "pass_error_counts"},
         "total_retries": total_retries,
         "success_rate": success_rate,
         "avg_latency_ms": avg_latency,
@@ -1217,7 +1291,13 @@ def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
             # Empty stages and removed source runs must not monopolize the
             # oldest queue slots indefinitely. Existing publications stay intact.
             if partition.backfill_complete:
-                if run is None:
+                if run is None or (
+                    summary is not None
+                    and "task_error_count" not in (summary.data or {})
+                    and partition.queue_state != "repair_required"
+                ):
+                    # Upgrade the published shape from numeric projection rows.
+                    # Migration 0058 queues existing summaries without replaying history.
                     refresh_run_summary(db, run_id, partition.last_applied_version)
                 if partition.queue_state != "repair_required":
                     partition.queue_state = "ready"

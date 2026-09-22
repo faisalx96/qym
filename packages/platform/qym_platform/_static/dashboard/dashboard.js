@@ -1416,6 +1416,51 @@
   // DATA PROCESSING
   // ═══════════════════════════════════════════════════
 
+  function renderExecutionErrors(run, scope = '', onlyMetric = null) {
+    const known = run.task_error_count != null && run.metric_error_count != null;
+    if (!known) {
+      const count = Number(run.execution_error_count ?? run.error_count ?? 0);
+      return !onlyMetric && count > 0
+        ? `<span class="status-errors status-errors-pending" title="${count} execution errors${scope}; task/metric breakdown is updating">${count}⚠</span>`
+        : '';
+    }
+    return (onlyMetric ? ['metric'] : ['task', 'metric']).map(kind => {
+      const count = Number(onlyMetric
+        ? run.metric_error_counts?.[onlyMetric] || 0
+        : run[`${kind}_error_count`] || 0);
+      if (!count) return '';
+      const label = `${count} ${kind} error${count === 1 ? '' : 's'}${onlyMetric ? ` in ${onlyMetric}` : ''}${scope}`;
+      const details = { kind, count, scope, metrics: onlyMetric
+        ? { [onlyMetric]: count } : run.metric_error_counts || {} };
+      return `<button type="button" class="status-errors status-error-detail${kind === 'metric' ? ' status-metric-errors' : ''}${onlyMetric ? ' metric-error-indicator' : ''}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" data-execution-errors="${escapeHtml(JSON.stringify(details))}">${onlyMetric ? '' : count}⚠</button>`;
+    }).join('');
+  }
+
+  function showExecutionErrorDetails(button) {
+    const details = JSON.parse(button.dataset.executionErrors);
+    const task = details.kind === 'task';
+    document.getElementById('execution-error-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'execution-error-modal';
+    modal.className = 'modal';
+    modal.style.display = 'flex';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'execution-error-title');
+    modal.innerHTML = `<div class="modal-content modal-small"><div class="modal-header"><h2 id="execution-error-title">${task ? 'Task' : 'Metric'} errors</h2><button class="modal-close qym-icon-action" aria-label="Close error details">×</button></div><div class="modal-body"><p>${details.count} ${task ? 'task executions' : 'metric checks'} failed${escapeHtml(details.scope)}.</p>${task ? '' : `<dl class="execution-error-breakdown">${Object.entries(details.metrics).map(([name, count]) => `<div><dt>${escapeHtml(name)}</dt><dd>${Number(count)}</dd></div>`).join('')}</dl>`}<p class="execution-error-note">${task ? 'Metrics skipped after a task failure are not metric errors.' : 'Task outputs are available. Each failed metric check is counted once per item and pass.'}</p></div></div>`;
+    document.body.appendChild(modal);
+    const close = () => { modal.remove(); if (button.isConnected) button.focus(); };
+    const closeButton = modal.querySelector('button');
+    closeButton.addEventListener('click', close);
+    modal.addEventListener('click', event => { if (event.target === modal) close(); });
+    modal.addEventListener('keydown', event => {
+      event.stopPropagation();
+      if (event.key === 'Escape') close();
+      if (event.key === 'Tab') { event.preventDefault(); closeButton.focus(); }
+    });
+    closeButton.focus();
+  }
+
   function flattenRuns(data) {
     const runs = [];
     const metricsSet = new Set();
@@ -3310,7 +3355,7 @@
       const metricCells = metricsToShow.map(metric => {
         const value = run.metric_averages?.[metric];
         if (value === undefined || value === null) {
-          return `<td class="col-metric-value"><span class="metric-na">—</span></td>`;
+          return `<td class="col-metric-value"><span class="metric-na">—</span>${renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : '', metric)}</td>`;
         }
         const mType = state._metricTypes?.[metric] || window.QymMetrics.detectMetricTypeFromAvg(value);
         const metricClass = window.QymMetrics.getMetricColorClass(value, mType);
@@ -3325,11 +3370,10 @@
         const noiseHtml = lowSamples
           ? `<button type="button" class="metric-noise-warn qym-help-marker" aria-label="Explain high-noise estimate" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">${escapeHtml(noiseCopy)}</span></button>`
           : '';
-        return `<td class="col-metric-value"><span class="metric-score ${metricClass}">${display}</span>${noiseHtml}</td>`;
+        return `<td class="col-metric-value"><span class="metric-score ${metricClass}">${display}</span>${renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : '', metric)}${noiseHtml}</td>`;
       }).join('');
 
       const status = run.status || '';
-      const executionErrorCount = Number(run.execution_error_count ?? run.error_count ?? 0);
       const retryScope = run.samples > 1 ? ' across all passes' : ' across all items';
       const approval = run.approval || null;
 
@@ -3391,7 +3435,7 @@
             </div>
           </td>
           <td class="col-status">
-            ${status ? `<span class="status-badge qym-badge status-${status}" title="${escapeHtml(statusTooltip)}">${status}${passText}${parentProgressText}</span>` : ''}${(executionErrorCount > 0 && status !== 'RUNNING' && status !== 'PENDING') ? `<span class="status-errors" title="${executionErrorCount} execution error${executionErrorCount === 1 ? '' : 's'}${run.samples > 1 ? ' across all passes' : ''}">${executionErrorCount}⚠</span>` : ''}${(run.total_retries > 0 && status !== 'RUNNING' && status !== 'PENDING') ? `<span class="status-retries" title="${run.total_retries} total retr${run.total_retries === 1 ? 'y' : 'ies'}${retryScope}">${run.total_retries}↻</span>` : ''}
+            ${status ? `<span class="status-badge qym-badge status-${status}" title="${escapeHtml(statusTooltip)}">${status}${passText}${parentProgressText}</span>` : ''}${status !== 'RUNNING' && status !== 'PENDING' ? renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : ' across all items') : ''}${(run.total_retries > 0 && status !== 'RUNNING' && status !== 'PENDING') ? `<span class="status-retries" title="${run.total_retries} total retr${run.total_retries === 1 ? 'y' : 'ies'}${retryScope}">${run.total_retries}↻</span>` : ''}
           </td>
           <td class="col-task">
             <span class="tag qym-tag task" title="${escapeHtml(run.task_name || '')}">${run.task_name ? escapeHtml(run.task_name) : '—'}</span>
@@ -3686,6 +3730,10 @@
                   : {},
                 items_scored: null,
                 error_count: s.error_count,
+                task_error_count: s.task_error_count,
+                metric_error_count: s.metric_error_count,
+                metric_error_counts: s.metric_error_counts,
+                retry_count: s.retry_count,
                 analysis_cause_count: s.analysis_cause_count,
               })),
             },
@@ -3857,7 +3905,6 @@
         const progressLabel = rawStatus === 'running' && totalCount > 0
           ? ` • ${Math.round((completedCount / totalCount) * 100)}% • ${completedCount}/${totalCount}`
           : '';
-        const errors = Number(pass.error_count) || 0;
         const retries = Number(pass.retry_count) || 0;
         const metricCells = metricsToShow.map(metric => {
           const value = (pass.metric_means || {})[metric];
@@ -3869,7 +3916,7 @@
           const display = window.QymMetrics.formatMetricValueSmart(value, metricType, peers);
           const metricClass = window.QymMetrics.getMetricColorClass(value, metricType);
           const chip = chipAttrs(metricWinners[metric], firstPass);
-          return `<td class="col-metric-value"><span class="metric-score ${metricClass}${chip.cls}"${chip.title}>${display}</span></td>`;
+          return `<td class="col-metric-value"><span class="metric-score ${metricClass}${chip.cls}"${chip.title}>${display}</span>${renderExecutionErrors(pass, ' in this pass', metric)}</td>`;
         }).join('');
         const latencyCell = (cls, v, winners) => {
           const chip = chipAttrs(winners, firstPass);
@@ -3893,9 +3940,7 @@
             : ''}<span class="pass-indent"></span><span class="pass-member-id">${passLabel}</span>${passMeta ? `<span class="pass-member-items">${passMeta}</span>` : ''}</td>
           <td class="col-status">${badgeClass
             ? `<span class="status-badge qym-badge status-${badgeClass}">${statusLabel}${progressLabel}</span>`
-            : `<span class="pass-member-status">${statusLabel}</span>`}${errors
-            ? `<span class="status-errors" title="${errors} item${errors === 1 ? '' : 's'} errored in this pass">${errors}⚠</span>`
-            : ''}${retries
+            : `<span class="pass-member-status">${statusLabel}</span>`}${renderExecutionErrors(pass, ' in this pass')}${retries
             ? `<span class="status-retries" title="${retries} retr${retries === 1 ? 'y' : 'ies'} in this pass">${retries}↻</span>`
             : ''}</td>
           ${inherit('col-task')}
@@ -7437,6 +7482,14 @@
     const cb = e.target.closest?.('.pass-checkbox');
     if (cb) togglePassSelection(cb.dataset.passRef);
   });
+  el('runs-tbody')?.addEventListener('click', event => {
+    const button = event.target.closest('[data-execution-errors]');
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    showExecutionErrorDetails(button);
+  }, true);
+
   // Compare actions
   el('compare-view')?.addEventListener('click', openComparison);
   el('cohort-view')?.addEventListener('click', openCohortComparison);
@@ -7742,6 +7795,7 @@
   window.addEventListener('beforeunload', saveDashboardState);
   window.addEventListener('pagehide', saveDashboardState);
   function teardownDashboard() {
+    document.getElementById('execution-error-modal')?.remove();
     dashboardActive = false;
     for (const controller of dashboardRequests) controller.abort();
     state.chartHistoryObserver?.disconnect();

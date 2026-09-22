@@ -1,3 +1,13 @@
+# September 2026 — SDK 1.7.0 / Platform 0.3.0
+
+- Runs distinguish task failures from failed metric checks with the original ⚠ symbol: red for tasks, yellow for metrics. Retries use blue ↻. Counts open a breakdown; affected metric scores carry a warning.
+- Counts include every pass and exclude metrics skipped after a task failure. Ordinary zero scores remain scores. Existing combined execution-error counts and score aggregation are unchanged.
+- Migration 0058 queues existing dashboard summaries for background refresh from numeric projection records; it does not replay run event history.
+- SDK 1.7.0 includes the public `BusinessRuleError` and `NonRetryableError` exceptions and the error-handling, streaming, and finalization changes merged since 1.6.0.
+- Platform 0.3.0 includes the analysis/review, storage, and worker changes merged since 0.2.6.
+
+---
+
 # 🚧 qym — Since v0.9.0
 
 **📅 August 2026**
