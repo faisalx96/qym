@@ -42,6 +42,10 @@ package:
     - >
       podman build \
         --build-arg BASE_IMAGE=$CUSTOM_BASE_IMAGE \
+        --build-arg PIP_INDEX_URL=$CUSTOM_PIP_INDEX_URL \
+        --build-arg PIP_TRUSTED_HOST=$CUSTOM_PIP_TRUSTED_HOST \
+        --build-arg PIP_SEARCH_INDEX=$CUSTOM_PIP_SEARCH_INDEX \
+        --build-arg PIP_SEARCH_TRUSTED_HOST=$CUSTOM_PIP_SEARCH_TRUSTED_HOST \
         -v "$CI_BUILDS_DIR":"$CI_BUILDS_DIR" \
         -t "$REGISTRY"/"$HARBOR_PROJECT"/"$PROJECT_NAME":$ENV-latest \
         --annotation org.opencontainers.image.revision=$ENV-"$CI_COMMIT_SHA" \
