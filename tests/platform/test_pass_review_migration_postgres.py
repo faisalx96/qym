@@ -289,7 +289,7 @@ def test_populated_0050_upgrade_recovers_approvals_and_retains_tombstones(postgr
     migration = _load_migration("0057_pass_review_records.py")
     with engine.begin() as conn:
         migration._backfill(conn)
-        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0057"
+        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0058"
     with Session(engine) as db:
         assert [
             (

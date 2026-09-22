@@ -36,6 +36,7 @@
   --success-dim: #064e3b;
   --warning: #f59e0b;
   --warning-dim: #78350f;
+  --metric-error: #eab308;
   --error: #ef4444;
   --error-dim: #7f1d1d;
   --info: #3b82f6;
@@ -2710,7 +2711,7 @@ body.chart-col-resize-active {
 }
 
 .runs-table {
-  --runs-col-status-width: 164px;
+  --runs-col-status-width: 180px;
   --runs-col-status-min-width: 120px;
   --runs-col-status-max-width: 180px;
   --runs-col-run-width: 400px;
@@ -2970,7 +2971,34 @@ body.chart-col-resize-active {
   margin-left: 6px;
   font-size: var(--font-xs);
   font-weight: 600;
-  color: var(--warning);
+  color: var(--info);
+}
+
+.status-error-detail {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font-family: var(--font-sans);
+  cursor: pointer;
+}
+.status-error-detail:hover { text-decoration: underline; }
+.runs-table td.col-status { white-space: normal; }
+.status-metric-errors { color: var(--metric-error); }
+.status-errors-pending { color: var(--text-muted); }
+.metric-error-indicator { font-size: var(--font-sm); }
+.execution-error-breakdown { margin-top: var(--space-md); }
+.execution-error-breakdown > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.execution-error-breakdown dd { font-family: var(--font-mono); }
+.execution-error-note {
+  margin-top: var(--space-md);
+  color: var(--text-muted);
+  font-size: var(--font-base);
 }
 
 .col-run {

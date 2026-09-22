@@ -644,7 +644,7 @@ def _execution_error_counts(db, run_id, samples):
         (
             Record.record_kind == "pass_score"
             if int(samples or 1) > 1
-            else Record.record_kind.in_(("item", "score"))
+            else Record.record_kind.in_(("item", "score", "pass_score"))
         ),
     )
     pass_number = case((Record.pass_number < 1, 1), else_=Record.pass_number)
@@ -665,6 +665,70 @@ def _execution_error_counts(db, run_id, samples):
         ).all()
     )
     return sum(by_pass.values()), by_pass
+
+
+def _execution_error_breakdown(db, run_id, samples):
+    """Split numeric projection evidence without reading source payloads."""
+    from qym_platform.services.execution_errors import error_breakdown
+
+    number = case((Record.pass_number < 1, 1), else_=Record.pass_number)
+    task_scope = or_(
+        and_(
+            Record.record_kind == "attempt",
+            or_(
+                Record.is_last.is_(True), Record.metric_key.startswith("legacy_event:")
+            ),
+        ),
+        and_(Record.record_kind == "item", int(samples or 1) <= 1),
+    )
+    tasks = (
+        select(Record.record_key, number.label("pass_number"))
+        .where(
+            Record.run_key == run_id,
+            Record.present.is_(True),
+            Record.error > 0,
+            task_scope,
+        )
+        .group_by(Record.record_key, number)
+        .subquery()
+    )
+    task_counts = dict(
+        db.execute(
+            select(tasks.c.pass_number, func.count()).group_by(tasks.c.pass_number)
+        ).all()
+    )
+    metric_scope = (
+        Record.record_kind == "pass_score"
+        if int(samples or 1) > 1
+        else Record.record_kind.in_(("score", "pass_score"))
+    )
+    checks = (
+        select(number.label("pass_number"), Record.metric_key, Record.record_key)
+        .outerjoin(
+            tasks,
+            and_(
+                tasks.c.record_key == Record.record_key,
+                tasks.c.pass_number == number,
+            ),
+        )
+        .where(
+            Record.run_key == run_id,
+            Record.present.is_(True),
+            Record.error > 0,
+            metric_scope,
+            tasks.c.record_key.is_(None),
+        )
+        .group_by(number, Record.metric_key, Record.record_key)
+        .subquery()
+    )
+    metric_counts = defaultdict(dict)
+    for number, metric, count in db.execute(
+        select(checks.c.pass_number, checks.c.metric_key, func.count()).group_by(
+            checks.c.pass_number, checks.c.metric_key
+        )
+    ):
+        metric_counts[number][metric] = count
+    return error_breakdown(task_counts, metric_counts)
 
 
 def _repeat_retry_counts(db, run_id):
@@ -995,6 +1059,7 @@ def refresh_run_summary(db, run_id, version):
     execution_error_count, execution_errors_by_pass = _execution_error_counts(
         db, run_id, run.samples
     )
+    error_details = _execution_error_breakdown(db, run_id, run.samples)
     md = run.run_metadata if isinstance(run.run_metadata, dict) else {}
     try:
         expected = int(md["total_items"]) if md.get("total_items") is not None else None
@@ -1097,6 +1162,14 @@ def refresh_run_summary(db, run_id, version):
                 ),
                 "primary_score": means.get(p),
                 "error_count": execution_errors_by_pass.get(p, 0),
+                **error_details["pass_error_counts"].get(
+                    p,
+                    {
+                        "task_error_count": 0,
+                        "metric_error_count": 0,
+                        "metric_error_counts": {},
+                    },
+                ),
                 "retry_count": retries_by_pass.get(p, 0),
                 "analysis_cause_count": pass_causes.get(p, 0),
             }
@@ -1124,6 +1197,7 @@ def refresh_run_summary(db, run_id, version):
         "success_count": summary.success_count,
         "error_count": summary.error_count,
         "execution_error_count": execution_error_count,
+        **{k: v for k, v in error_details.items() if k != "pass_error_counts"},
         "total_retries": total_retries,
         "success_rate": success_rate,
         "avg_latency_ms": avg_latency,
@@ -1217,7 +1291,18 @@ def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
             # Empty stages and removed source runs must not monopolize the
             # oldest queue slots indefinitely. Existing publications stay intact.
             if partition.backfill_complete:
-                if run is None:
+                if run is None or (
+                    summary is not None
+                    and "task_error_count" not in (summary.data or {})
+                    and partition.queue_state != "repair_required"
+                ):
+                    # Upgrade the published shape from numeric projection rows.
+                    # Migration 0058 queues existing summaries without replaying history.
+                    dimension = db.get(Dimension, run_id)
+                    hours = {_hour(dimension.timestamp)} if dimension else set()
+                    if run:
+                        hours.add(_hour(run.started_at or run.created_at))
+                    _lock_buckets(db, partition.project_key, hours)
                     refresh_run_summary(db, run_id, partition.last_applied_version)
                 if partition.queue_state != "repair_required":
                     partition.queue_state = "ready"
@@ -1319,6 +1404,48 @@ def bootstrap_partitions(db, *, limit=100):
     for run_id, project in runs:
         _upsert_partition(db.connection(), run_id, project, 0, datetime.utcnow())
     return len(runs)
+
+
+def reconcile_summary_shapes(db, *, limit=100):
+    """Recover upgrades consumed by an older worker during rolling deployment."""
+    from qym_platform.db.models import Run
+
+    outdated = (
+        select(Summary.run_key)
+        .join(Run, Run.id == Summary.run_key)
+        .where(
+            Run.deleted_at.is_(None),
+            Summary.projection_revision > 0,
+            Summary.data["task_error_count"].as_integer().is_(None),
+        )
+    )
+    eligible = (
+        Partition.queue_state == "ready",
+        Partition.backfill_complete.is_(True),
+        Partition.partition_key.in_(outdated),
+        or_(
+            Partition.lease_until.is_(None), Partition.lease_until <= datetime.utcnow()
+        ),
+    )
+    keys = list(
+        db.scalars(
+            select(Partition.partition_key)
+            .where(*eligible)
+            .order_by(Partition.updated_at, Partition.partition_key)
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+    )
+    if not keys:
+        return 0
+    # Recheck eligibility and preserve publications, revisions and event markers.
+    result = db.execute(
+        update(Partition)
+        .where(Partition.partition_key.in_(keys), *eligible)
+        .values(queue_state="pending", updated_at=datetime.utcnow())
+        .execution_options(synchronize_session=False)
+    )
+    return result.rowcount
 
 
 def _backfill_source_query(model):
@@ -1757,7 +1884,11 @@ def scheduled_partitions(db, *, limit=20):
                 Partition.lease_until <= datetime.utcnow(),
             ),
         )
-        .order_by(Partition.updated_at, Partition.partition_key)
+        .order_by(
+            case((Partition.oldest_pending_event.is_(None), 1), else_=0),
+            Partition.updated_at,
+            Partition.partition_key,
+        )
     )
     urgent = or_(
         and_(Partition.backfill_complete.is_(True), Partition.queue_state != "deleted"),
@@ -1909,6 +2040,7 @@ class DashboardSummaryWorker:
             # number of unregistered runs instead of leaving them invisible.
             if now >= self._next_bootstrap:
                 found = bootstrap_partitions(db, limit=self.max_partitions * 5)
+                found += reconcile_summary_shapes(db, limit=self.max_partitions * 5)
                 db.commit()
                 # Keep discovering quickly while there is a backlog; otherwise every 30 s.
                 self._next_bootstrap = now + (0.0 if found else 30.0)

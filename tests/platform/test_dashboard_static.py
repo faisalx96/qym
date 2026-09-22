@@ -320,8 +320,8 @@ def test_repeat_run_rows_are_ordinary_rows_with_pass_count_chip() -> None:
     assert ".run-pass-count" in styles
 
 
-def test_runs_badge_totals_execution_errors_without_changing_item_math() -> None:
-    """The status badge includes metric/pass errors via a separate API field."""
+def test_runs_badges_separate_error_types_without_changing_item_math() -> None:
+    """Typed badges preserve existing sorting and logical-item arithmetic."""
     source = DASHBOARD_JS.read_text(encoding="utf-8")
     index = (DASHBOARD_DIR / "index.html").read_text(encoding="utf-8")
 
@@ -333,8 +333,10 @@ def test_runs_badge_totals_execution_errors_without_changing_item_math() -> None
     assert "execution_error_count: executionErrorCount" in flatten
     assert "a.execution_error_count - b.execution_error_count" in source
     assert "b.execution_error_count - a.execution_error_count" in source
-    assert "${executionErrorCount}⚠" in source
-    assert "execution error${executionErrorCount === 1 ? '' : 's'}" in source
+    assert "function renderExecutionErrors" in source
+    assert "run.task_error_count != null && run.metric_error_count != null" in source
+    assert "status-metric-errors" in source
+    assert "task/metric breakdown is updating" in source
     assert "run.samples > 1 ? ' across all passes' : ''" in source
     assert "const retryScope = run.samples > 1 ? ' across all passes' : ' across all items';" in source
     assert "${retryScope}" in source
