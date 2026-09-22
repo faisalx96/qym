@@ -644,7 +644,7 @@ def _execution_error_counts(db, run_id, samples):
         (
             Record.record_kind == "pass_score"
             if int(samples or 1) > 1
-            else Record.record_kind.in_(("item", "score"))
+            else Record.record_kind.in_(("item", "score", "pass_score"))
         ),
     )
     pass_number = case((Record.pass_number < 1, 1), else_=Record.pass_number)

@@ -362,3 +362,28 @@ def test_upgrade_and_live_events_share_bucket_lock_order(database, monkeypatch):
             assert db.get(Partition, key).retry_count == 0
         assert db.get(Summary, "historical").data["task_error_count"] == 1
         assert db.get(Summary, "live").data["avg_latency_ms"] == 42
+
+
+def test_classic_pass_score_only_errors_match_combined_count(database):
+    with Session(database) as db:
+        run(db, samples=1, status=RunWorkflowStatus.COMPLETED)
+        item(db)
+        db.add(
+            RunItemPassScore(
+                run_id="r",
+                item_id="i",
+                metric_name="score",
+                pass_number=1,
+                score_numeric=None,
+                meta={"status": "error"},
+            )
+        )
+        db.commit()
+    expected = legacy(database)
+    drain(database)
+    actual = projected(database)
+    for payload in (expected, actual):
+        assert payload["execution_error_count"] == 1
+        assert payload["metric_error_count"] == 1
+        assert payload["metric_error_counts"] == {"score": 1}
+        assert payload["task_error_count"] == 0
