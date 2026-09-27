@@ -637,6 +637,9 @@ async def test_llm_connection(
         ),
     )
     model = conn.llm_model or "gpt-4o-mini"
+    # Nothing below reads the database. Return the connection before the
+    # provider call so it does not sit idle in a transaction meanwhile.
+    db.close()
     try:
         resp = await create_chat_completion_compat(
             client,

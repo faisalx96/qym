@@ -95,7 +95,10 @@ def _post_json(
         return json.loads(body) if body else {}
 
 
-def _post_ndjson(url: str, ndjson: str, api_key: str, *, timeout: float = 30) -> None:
+def _post_ndjson(
+    url: str, ndjson: str, api_key: str, *, timeout: float = 30
+) -> Optional[Dict[str, Any]]:
+    """POST a batch; return the platform's JSON verdict when it sends one."""
     data = ndjson.encode("utf-8")
     req = request.Request(
         url,
@@ -107,7 +110,48 @@ def _post_ndjson(url: str, ndjson: str, api_key: str, *, timeout: float = 30) ->
         method="POST",
     )
     with urlopen(req, timeout=timeout) as resp:
-        resp.read()
+        body = resp.read()
+    try:
+        parsed = json.loads(body.decode("utf-8")) if body else None
+    except (UnicodeDecodeError, ValueError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _rejected_events(response: Any, sent: int) -> "tuple[int, list[dict]]":
+    """Events a 2xx batch response says the platform refused.
+
+    Newer platforms apply the valid part of a batch and list the rest; older
+    platforms return no ``rejected`` field, which counts as none refused.
+    """
+    if not isinstance(response, dict):
+        return 0, []
+    try:
+        count = int(response.get("rejected") or 0)
+    except (TypeError, ValueError):
+        return 0, []
+    details = response.get("rejected_events")
+    if not isinstance(details, list):
+        details = []
+    return max(0, min(count, sent)), [row for row in details if isinstance(row, dict)]
+
+
+def _http_error_reason(exc: BaseException) -> str:
+    """Best-effort reason for a refused request, read from its JSON body."""
+    reason = f"HTTP {getattr(exc, 'code', '?')}"
+    try:
+        body = json.loads(exc.read(65536).decode("utf-8"))  # type: ignore[attr-defined]
+    except Exception:
+        return reason
+    if not isinstance(body, dict):
+        return reason
+    rows = body.get("rejected_events")
+    if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+        if rows[0].get("error"):
+            return f"{reason}: {rows[0]['error']}"
+    if isinstance(body.get("detail"), str):
+        return f"{reason}: {body['detail']}"
+    return reason
 
 
 def _is_poison_error(exc: BaseException) -> bool:
@@ -166,6 +210,10 @@ class PlatformEventStream:
         # after close() to know whether the platform got everything.
         self.sent_events = 0
         self.dropped_events = 0
+        # Subset of dropped_events: events the platform refused as invalid
+        # (validation, reused sequence). Resending them can never succeed.
+        self.rejected_events = 0
+        self._first_rejection: Optional[str] = None
         self._consecutive_failures = 0
         self._seq = 0
         self._seq_lock = threading.Lock()
@@ -211,19 +259,23 @@ class PlatformEventStream:
             if self._remote_closed.is_set():
                 return
             try:
-                _post_ndjson(
+                response = _post_ndjson(
                     f"{self.platform_url}/v1/runs/{self.run_id}/events",
                     ndjson,
                     self.api_key,
                     timeout=self.SYNC_SEND_TIMEOUT,
                 )
                 _debug(f"direct emit success: {evt.get('type', '?')}")
-                self.sent_events += 1
+                self.sent_events += 1 - self._record_rejections(response, [evt])
                 return
             except Exception as e:
                 if getattr(e, "code", None) == 410:
                     self.dropped_events += 1
                     self._disable_uploads()
+                    return
+                if _is_poison_error(e):
+                    # Deterministic rejection: another attempt cannot succeed.
+                    self._record_rejection(evt, _http_error_reason(e))
                     return
                 _debug(
                     f"direct emit error (attempt {attempt + 1}/{self.SYNC_SEND_RETRIES}): {e}"
@@ -240,6 +292,39 @@ class PlatformEventStream:
         _debug(
             f"direct emit FAILED after {self.SYNC_SEND_RETRIES} attempt(s): {evt.get('type', '?')}"
         )
+
+    def _record_rejection(self, evt: Dict[str, Any], reason: str) -> None:
+        """Count one event the platform refused; warn once with the reason."""
+        self.rejected_events += 1
+        self.dropped_events += 1
+        _debug(
+            f"platform rejected event {evt.get('type', '?')} "
+            f"seq={evt.get('sequence', '?')}: {reason}"
+        )
+        if self._first_rejection is None:
+            self._first_rejection = f"{evt.get('type', 'event')}: {reason}"
+            print(
+                f"qym: WARNING: the platform rejected a run event "
+                f"({self._first_rejection}). Other events are still uploaded.",
+                file=sys.stderr,
+            )
+
+    def _record_rejections(
+        self, response: Any, events: "list[Dict[str, Any]]"
+    ) -> int:
+        """Apply a partial-success batch verdict; return how many were refused."""
+        count, details = _rejected_events(response, len(events))
+        if not count:
+            return 0
+        by_id = {str(evt.get("event_id")): evt for evt in events}
+        for index in range(count):
+            detail = details[index] if index < len(details) else {}
+            evt = by_id.get(str(detail.get("event_id"))) or {
+                "type": detail.get("type") or "event",
+                "sequence": detail.get("sequence", "?"),
+            }
+            self._record_rejection(evt, str(detail.get("error") or "rejected"))
+        return count
 
     def _disable_uploads(self) -> None:
         """Latch a permanent server rejection across every delivery path."""
@@ -462,10 +547,16 @@ class PlatformEventStream:
                 if self._remote_closed.is_set():
                     pass  # The terminal rejection was already reported once.
                 elif self.dropped_events:
+                    rejected = (
+                        f" {self.rejected_events} were rejected by the platform "
+                        f"(first: {self._first_rejection})."
+                        if self.rejected_events
+                        else ""
+                    )
                     print(
                         f"qym: WARNING: {self.dropped_events} platform events failed to upload "
-                        "and were dropped — the run page may be missing items. "
-                        "Set QYM_PLATFORM_DEBUG=1 to log the failures.",
+                        "and were dropped — the run page may be missing items."
+                        f"{rejected} Set QYM_PLATFORM_DEBUG=1 to log the failures.",
                         file=sys.stderr,
                     )
                 elif printed_progress:
@@ -496,15 +587,18 @@ class PlatformEventStream:
                     self.dropped_events += len(entries) - index
                     return
                 try:
-                    _post_ndjson(url, line + "\n", self.api_key)
-                    self.sent_events += 1
+                    response = _post_ndjson(url, line + "\n", self.api_key)
+                    self.sent_events += 1 - self._record_rejections(response, [evt])
                     break
                 except Exception as e2:
                     if getattr(e2, "code", None) == 410:
                         self.dropped_events += len(entries) - index
                         self._disable_uploads()
                         return
-                    if _is_poison_error(e2) or attempt == 1:
+                    if _is_poison_error(e2):
+                        self._record_rejection(evt, _http_error_reason(e2))
+                        break
+                    if attempt == 1:
                         self.dropped_events += 1
                         _debug(
                             f"dropped event {evt.get('type','?')} "
@@ -594,13 +688,17 @@ class PlatformEventStream:
             if should_flush:
                 try:
                     ndjson = "\n".join(line for _, line, _, _ in batch) + "\n"
-                    _post_ndjson(
+                    response = _post_ndjson(
                         f"{self.platform_url}/v1/runs/{self.run_id}/events",
                         ndjson,
                         self.api_key,
                         timeout=10 if self._stop.is_set() else 30,
                     )
-                    self.sent_events += len(batch)
+                    # Partial success: the platform applied the valid events
+                    # and refused the rest; never resend the refused ones.
+                    self.sent_events += len(batch) - self._record_rejections(
+                        response, [evt for evt, _, _, _ in batch]
+                    )
                     _debug(
                         f"flushed {len(batch)} events (total sent: {self.sent_events})"
                     )

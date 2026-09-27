@@ -529,6 +529,17 @@ class RunItem(Base):
         session = object_session(self)
         if session is None or not self.trace_id:
             return []
+        if not session.in_transaction():
+            # Analysis ends its read transaction before awaiting a model call
+            # and builds each prompt, which reads these spans, inside that
+            # call. A read on the owning session would begin a transaction
+            # left idle for the whole call (PostgreSQL ends it after 60 s), so
+            # read on a short-lived session instead.
+            with Session(bind=session.get_bind(Span)) as reader:
+                return self._trace_content_from(reader)
+        return self._trace_content_from(session)
+
+    def _trace_content_from(self, session: Session) -> list[dict[str, Any]]:
         spans = (
             session.query(Span)
             .filter(Span.run_id == self.run_id, Span.trace_id == self.trace_id)

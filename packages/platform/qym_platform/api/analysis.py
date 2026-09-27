@@ -2805,6 +2805,40 @@ def _persist_aggregated_bindings(
     return len(changed)
 
 
+def _release_transaction_for_llm(db: Session) -> None:
+    """End the open DB transaction before awaiting a model call.
+
+    The API engine terminates a connection that stays idle in a transaction
+    for longer than ``db_idle_in_transaction_timeout_ms`` (60 s by default),
+    and one model call may take minutes. Every LLM phase is therefore split:
+    reads finish and commit here, which returns the connection to the pool;
+    the model runs with no transaction open; the save phase starts a new
+    short transaction and re-locks every row it writes.
+
+    Loaded rows are kept, not expired, so the model phase reads them without
+    silently reopening a transaction.
+    """
+    expire_on_commit = db.expire_on_commit
+    db.expire_on_commit = False
+    try:
+        db.commit()
+    finally:
+        db.expire_on_commit = expire_on_commit
+
+
+def _lock_run_for_save(db: Session, run: Run) -> Run:
+    """Start a save phase: re-read the run row under FOR UPDATE.
+
+    Serializes saves for one run (in the Run -> item lock order used by
+    ingest and review) and makes run-level writes build on current state
+    instead of the snapshot loaded before the model call.
+    """
+    try:
+        return lock_repeat_run(db, run.id)
+    except RepeatPassDeletionError as exc:
+        raise HTTPException(exc.status_code, exc.detail) from exc
+
+
 async def _aggregate_pass_analysis_results(
     *,
     db: Session,
@@ -2879,6 +2913,7 @@ async def _aggregate_pass_analysis_results(
     if not bindings:
         return {}, 0
 
+    _release_transaction_for_llm(db)
     try:
         categories = await aggregate_analysis_categories(
             client,
@@ -3079,6 +3114,7 @@ async def _aggregate_run_analysis_results(
         )
         for result in combined_results
     ]
+    _release_transaction_for_llm(db)
     try:
         categories = await aggregate_analysis_categories(
             client,
@@ -3125,6 +3161,7 @@ async def _aggregate_run_analysis_results(
         != before
         for result, before in zip(aggregatable_new_results, labels_before)
     )
+    run = _lock_run_for_save(db, run)
     changed_saved_results = _persist_aggregated_bindings(
         db,
         run,
@@ -3194,6 +3231,7 @@ def _save_analysis_results(
 ) -> tuple[list[Dict[str, Any]], int]:
     response_results: list[Dict[str, Any]] = []
     error_count = 0
+    run = _lock_run_for_save(db, run)
 
     results_by_item: dict[str, list[AnalysisResult]] = {}
     for result in results:
@@ -4094,6 +4132,8 @@ async def _run_analysis_job(
                 metric_name=result.metric_name,
             )
 
+        # Reads are done: no transaction may stay open across the model calls.
+        _release_transaction_for_llm(db)
         results = await _analyze_targets_batch(
             client=client,
             model=model,
@@ -4140,6 +4180,7 @@ async def _run_analysis_job(
                 )
             except AnalysisAggregationError as exc:
                 db.rollback()
+                _lock_run_for_save(db, run)
                 _record_run_aggregation_status(
                     run,
                     status="failed",
@@ -4411,6 +4452,7 @@ async def aggregate_saved_analysis_results(
     except AnalysisAggregationError as exc:
         db.rollback()
         if request.pass_number is None:
+            _lock_run_for_save(db, run)
             aggregation_status = _record_run_aggregation_status(
                 run,
                 status="failed",
@@ -4665,7 +4707,8 @@ async def analyze_run_items(
             **_persistence_totals([]),
         }
 
-    # Run async LLM analysis
+    # Run async LLM analysis with no transaction open.
+    _release_transaction_for_llm(db)
     results = await _analyze_targets_batch(
         client=client,
         model=model,
@@ -4699,6 +4742,7 @@ async def analyze_run_items(
             )
         except AnalysisAggregationError as exc:
             db.rollback()
+            _lock_run_for_save(db, run)
             _record_run_aggregation_status(
                 run,
                 status="failed",
@@ -4986,6 +5030,7 @@ async def analyze_run_items_stream(
                 logger_msg = f"Analysis stream failed for run {run_id}: {exc}"
                 await queue.put({"type": "error", "message": logger_msg})
 
+        _release_transaction_for_llm(db)
         batch_task = asyncio.create_task(run_batch())
         try:
             while True:
@@ -5021,6 +5066,7 @@ async def analyze_run_items_stream(
                             )
                         except AnalysisAggregationError as exc:
                             db.rollback()
+                            _lock_run_for_save(db, run)
                             _record_run_aggregation_status(
                                 run,
                                 status="failed",
@@ -6017,6 +6063,7 @@ async def _infer_project_analysis_rules_impl(
         }
         if progress_job is not None:
             inference_args["progress_callback"] = update_rule_progress
+        _release_transaction_for_llm(db)
         # ``mode=update`` is accepted for old clients, but generation is now
         # the only operation: it can append rules and can never revise the
         # existing ruleset.
@@ -6058,6 +6105,11 @@ async def _infer_project_analysis_rules_impl(
         if progress_job.cancel_requested:
             raise asyncio.CancelledError()
 
+    if target_version is not None:
+        # Save phase: the target may have been edited or published while the
+        # rule writer ran. Re-read it under lock and append to current rules.
+        db.refresh(target_version, with_for_update=True)
+        existing_rules = copy.deepcopy(list(target_version.rules or []))
     new_rules = _new_analysis_rules(existing_rules, generated_rules)
     if not new_rules and target_version is None:
         raise HTTPException(
@@ -7044,6 +7096,7 @@ async def analyze_test(
 
     analyzed_results: list[AnalysisResult] = []
     messages_by_result: list[list[dict[str, Any]]] = []
+    _release_transaction_for_llm(db)
     for item, metric_name in targets:
         item_scores = scores_by_item.get(item.item_id, {})
 

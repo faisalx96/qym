@@ -14,7 +14,7 @@ Run creation returns `run_id`, `live_url`, `supports_pass_events`, and `supports
 
 ## Envelope
 
-Every line is one object:
+Every line is one object. Lines end at `\n` only (a trailing `\r` is ignored), so raw U+2028, U+2029 or U+0085 inside a JSON string is safe:
 
 | Field | Rule |
 |---|---|
@@ -23,10 +23,22 @@ Every line is one object:
 | `sequence` | Integer ≥1, increasing within the run. |
 | `sent_at` | RFC 3339 client timestamp. |
 | `type` | One of the 12 event types below. |
-| `run_id` | UUID matching the URL; mismatches are dropped. |
+| `run_id` | UUID matching the URL; mismatches are rejected. |
 | `payload` | Object validated according to `type`. |
 
-The platform deduplicates on `(run_id, event_id)` and stores a unique `(run_id, sequence)`. An NDJSON batch is applied line by line. Invalid lines are logged and dropped without failing valid lines, so reconcile the returned `applied` and `skipped` counts with what the client sent.
+The platform deduplicates on `(run_id, event_id)` and stores a unique `(run_id, sequence)`. An NDJSON batch is validated line by line and every line gets its own verdict: one invalid line never fails the valid lines of its batch. The response is JSON:
+
+```json
+{"ok": true, "applied": 198, "skipped": 1, "rejected": 1,
+ "rejected_events": [{"line": 7, "event_id": "…", "sequence": 7,
+                      "type": "item_completed", "error": "latency_ms: Field required"}]}
+```
+
+- `applied`: new events stored. `skipped`: redelivered events (known `event_id`, or a span whose `span_id` is already stored).
+- `rejected`: lines that were not stored and never will be: invalid JSON or envelope, a `run_id` that does not match the URL, a payload that fails its type schema or the run's metric spec, an integer beyond the 32-bit column range, a new `event_id` that reuses a stored or in-batch `sequence`, or a value the database refuses (text longer than its column, such as an `item_id` or `label` over 200 characters, or a NUL character). `rejected_events` explains the first 100; `line` is 1-based. Database errors that can succeed on retry (a lost connection, a timeout) still return `5xx`.
+- A request in which every line is rejected returns `422` with the same body plus `detail`. Batch-level problems keep their status codes (`400` bad encoding, `403`, `404`, `410` closed run, `503` maintenance).
+- Rejected events must not be resent unchanged. The SDK counts them as dropped, warns once with the first reason, and does not retry them. Clients should retry only network errors, `408`, `429` and `5xx`.
+- A reference to a dataset row that no longer exists (`dataset_item_pk`, `dataset_id`, `dataset_version_id`) is ignored; the rest of the event applies.
 
 ## Event types
 
