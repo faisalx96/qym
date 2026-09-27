@@ -148,6 +148,7 @@ Content-Type: application/x-ndjson</pre>
   <tbody>
     <tr><td>No run with that <code>run_id</code></td><td>404</td><td><code>Run not found</code></td></tr>
     <tr><td>Run was soft-deleted</td><td>410</td><td><code>Run was deleted on &lt;timestamp&gt;</code></td></tr>
+    <tr><td>Run is in review (<code>SUBMITTED</code>, <code>APPROVED</code> or <code>REJECTED</code>) and the batch carries new data</td><td>409</td><td><code>Run is under review (&lt;status&gt;); ...</code> with headers <code>X-Qym-Run-State: in_review</code> and <code>X-Qym-Run-Status</code>. Nothing in the batch is stored. Heartbeats and already-delivered events are accepted as no-ops, so a reviewed run never moves back to <code>RUNNING</code>. A reviewer must withdraw the decision before the run accepts data again.</td></tr>
     <tr><td>Run owned by a different user, or in a different project than your key</td><td>403</td><td><code>Forbidden</code></td></tr>
     <tr><td>Request body is not valid UTF-8</td><td>400</td><td><code>Invalid encoding</code></td></tr>
   </tbody>

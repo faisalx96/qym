@@ -13,6 +13,7 @@
   <script src="/static/run_details.js"></script>
   <script src="/static/trace_viewer.js?v=trace-retries-20260917-1"></script>
   <script src="/static/step_latency.js?v=empty-sections-20260911-2"></script>
+  <script src="/static/review_history.js?v=review-workflow-1"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
     .run-container {
@@ -5717,6 +5718,7 @@
 
     <div id="run-content" style="display:none;">
       <div class="run-summary" id="run-summary"></div>
+      <div id="review-history-section"></div>
 
       <div id="overview-section">
         <div id="overview-primary-section"></div>
@@ -7185,6 +7187,13 @@
         el('error-state').style.display = 'none';
         el('run-content').style.display = 'block';
         renderSummary();
+        if (!IS_EXPORT && window.QymReviewHistory && RUN_ID) {
+          window.QymReviewHistory.load(
+            el('review-history-section'),
+            apiUrl('api/runs/' + encodeURIComponent(RUN_ID) + '/review-history'),
+            state.run && state.run.status,
+          );
+        }
         wireTopActions();
         populateMetricSelectors();
         renderOverview();

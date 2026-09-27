@@ -602,6 +602,44 @@ def test_stop_product_eval_run_marks_run_and_job_stopped(
         assert run.status_reason == "product_eval_stopped"
 
 
+@pytest.mark.parametrize(
+    "review_status",
+    [RunWorkflowStatus.SUBMITTED, RunWorkflowStatus.APPROVED, RunWorkflowStatus.REJECTED],
+)
+def test_stop_product_eval_run_leaves_a_reviewed_run_alone(
+    client, session_factory, monkeypatch, review_status
+) -> None:
+    run_id = "00000000-0000-0000-0000-000000000502"
+    with session_factory() as session:
+        _seed_api_key(session, token="write-token", scopes=["runs:write"])
+        session.add(
+            Run(
+                id=run_id,
+                project_id="project-1",
+                created_by_user_id="user-1",
+                owner_user_id="user-1",
+                task="test_task",
+                dataset="dataset-1",
+                model="model-1",
+                metrics=["exact_match"],
+                status=review_status,
+            )
+        )
+        session.commit()
+    monkeypatch.setattr(product_evals.job_manager, "get_by_qym_run_id", lambda _: None)
+
+    response = client.post(
+        f"/v1/product-evals/{run_id}/stop",
+        headers=_auth_headers("write-token"),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["stopped"] is False
+    with session_factory() as session:
+        run = session.get(Run, run_id)
+        assert (run.status, run.status_reason) == (review_status, None)
+
+
 def test_submit_rejects_invalid_preset(client, session_factory) -> None:
     with session_factory() as session:
         _seed_api_key(session, token="submit-token", scopes=["runs:write"])

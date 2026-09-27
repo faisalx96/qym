@@ -69,4 +69,4 @@ QYM_API_KEY=&lt;token-shown-once&gt;</pre>
 <p>You can edit a correction, approve or reject it with a comment, reset it to pending, or delete it. Select several corrections for bulk approve, reject, reset, or delete.</p>
 
 <h2>Deleted runs</h2>
-<p>Deleting a run is soft-delete: it leaves active views but keeps its data and deletion audit details. <strong>Deleted Runs</strong> is visible only to platform admins, who can restore a run to its project.</p>
+<p>Deleting a run is soft-delete: it leaves active views but keeps its data and deletion audit details. <strong>Deleted Runs</strong> is visible only to platform admins, who can restore a run to its project. Retention permanently removes a deleted run and all its results after a grace period (<code>QYM_DELETED_RUN_GRACE_DAYS</code>, 30 days by default); the page shows each run's purge date and flags runs with fewer than 3 days left.</p>

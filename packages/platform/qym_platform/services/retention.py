@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -88,6 +88,13 @@ def drop_expired_span_partitions(engine: Engine, *, retention_days: int, now: da
         dropped.append(name)
         logger.info("dropped expired span partition %s (upper bound %s)", name, bounds[1])
     return dropped
+
+
+def purge_due_at(deleted_at: Optional[datetime], grace_days: int) -> Optional[datetime]:
+    """When ``purge_soft_deleted_runs`` may hard-delete a run (None: never)."""
+    if deleted_at is None or grace_days <= 0:
+        return None
+    return deleted_at + timedelta(days=grace_days)
 
 
 def purge_soft_deleted_runs(engine: Engine, *, grace_days: int, limit: int = 50, now: datetime = None) -> List[str]:

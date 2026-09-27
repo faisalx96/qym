@@ -78,6 +78,7 @@ from qym_platform.item_identity import (
 from qym_platform.services.run_means import is_metric_error
 from qym_platform.services.run_lifecycle import (
     is_run_force_stopped,
+    is_run_in_review,
     mark_run_running,
     mark_run_terminal,
     touch_run_event,
@@ -1270,6 +1271,25 @@ def _ingest_events_sync(
                 continue
             deduped.append(entry)
         accepted = deduped
+
+    if is_run_in_review(run):
+        # A reviewed run is frozen. Heartbeats are harmless no-ops (a late one
+        # must not move it back to RUNNING); redelivered events were already
+        # skipped above. Any new data would change what the reviewer saw.
+        writes = [evt.type for _, evt, _ in accepted if evt.type != "run_heartbeat"]
+        if writes:
+            status = run.status.value
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Run is under review ({status}); its results stay frozen "
+                    "until a project manager withdraws the review decision"
+                ),
+                headers={"X-Qym-Run-State": "in_review", "X-Qym-Run-Status": status},
+            )
+        return JSONResponse(
+            {"ok": True, "applied": 0, "skipped": skipped + len(accepted)}
+        )
 
     storage = ingest_settings()
     event_rows = [

@@ -31,10 +31,18 @@ from qym_platform.services.product_evals import (
     ProductEvalQueueFull,
     ProductEvalRuntimeInputs,
 )
+from qym_platform.services.run_lifecycle import (
+    REVIEW_RUN_STATUSES,
+    TERMINAL_RUN_STATUSES,
+)
 from qym_platform.settings import PlatformSettings
 
 
 logger = logging.getLogger(__name__)
+
+# Stop never touches a finished run, nor one in review (its status is the
+# review state; moving it would strand the review).
+_SETTLED_RUN_STATUSES = TERMINAL_RUN_STATUSES | REVIEW_RUN_STATUSES
 
 router = APIRouter(prefix="/v1/product-evals", tags=["product-evals"])
 job_manager = ProductEvalJobManager()
@@ -427,11 +435,7 @@ def _stop_product_eval_runs(
     now = utc_now_naive()
     stopped = 0
     for run in query.order_by(Run.id).with_for_update().populate_existing().all():
-        if run.status in {
-            RunWorkflowStatus.COMPLETED,
-            RunWorkflowStatus.FAILED,
-            RunWorkflowStatus.STOPPED,
-        }:
+        if run.status in _SETTLED_RUN_STATUSES:
             continue
         run.status = RunWorkflowStatus.STOPPED
         run.status_reason = "product_eval_stopped"
@@ -447,11 +451,7 @@ def _stop_runs(db: Session, runs: List[Run]) -> int:
     stopped = 0
     for run in sorted(runs, key=lambda value: value.id):
         db.refresh(run, with_for_update=True)
-        if run.status in {
-            RunWorkflowStatus.COMPLETED,
-            RunWorkflowStatus.FAILED,
-            RunWorkflowStatus.STOPPED,
-        }:
+        if run.status in _SETTLED_RUN_STATUSES:
             continue
         run.status = RunWorkflowStatus.STOPPED
         run.status_reason = "product_eval_stopped"
@@ -464,11 +464,7 @@ def _stop_runs(db: Session, runs: List[Run]) -> int:
 
 def _mark_run_stopped(db: Session, run: Run) -> bool:
     db.refresh(run, with_for_update=True)
-    if run.status in {
-        RunWorkflowStatus.COMPLETED,
-        RunWorkflowStatus.FAILED,
-        RunWorkflowStatus.STOPPED,
-    }:
+    if run.status in _SETTLED_RUN_STATUSES:
         return False
     now = utc_now_naive()
     run.status = RunWorkflowStatus.STOPPED
@@ -782,11 +778,7 @@ def stop_product_eval(
             return job_or_response
         job_or_response.request_stop()
         stopped_runs = _stop_product_eval_runs(db, job_or_response, principal)
-        if run.status not in {
-            RunWorkflowStatus.COMPLETED,
-            RunWorkflowStatus.FAILED,
-            RunWorkflowStatus.STOPPED,
-        }:
+        if run.status not in _SETTLED_RUN_STATUSES:
             run = _require_run_access(db, principal, identifier)
             _mark_run_stopped(db, run)
             stopped_runs += 1

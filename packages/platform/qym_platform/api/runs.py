@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qsl, quote, urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from sqlalchemy import Text, case, cast, func, or_
 from sqlalchemy.orm import Session, load_only
 
@@ -69,6 +69,16 @@ from qym_platform.services.run_lifecycle import (
     reconcile_stale_running_run,
 )
 from qym_platform.services.run_payloads import compact_row, detail_item_ids, search_conditions
+from qym_platform.services.run_review import (
+    SUBMITTABLE_STATUSES,
+    keep_legacy_review,
+    lock_approval,
+    lock_review_run,
+    record_transition,
+    resolve_execution_outcome,
+    review_history,
+    state_conflict,
+)
 from qym_platform.services.run_means import (
     METRIC_ERROR_STATUSES,
     MetricTotals,
@@ -78,6 +88,7 @@ from qym_platform.services.run_means import (
     raw_metric_totals,
     run_metric_mean,
 )
+from qym_platform.services.retention import purge_due_at
 from qym_platform.services.repeat_passes import (
     RepeatPassDeletionError,
     delete_repeat_pass,
@@ -3843,17 +3854,23 @@ def export_run_html(
 
 @router.get("/api/runs/trash")
 def list_deleted_runs(
+    response: Response,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> List[Dict[str, Any]]:
-    """List soft-deleted runs (admin only)."""
+    """List soft-deleted runs (admin only) with the date retention purges each."""
     if principal.user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Admin only")
+    # The maintenance worker hard-deletes runs this long after deletion; 0 = never.
+    grace_days = PlatformSettings().deleted_run_grace_days
+    response.headers["X-Qym-Deleted-Run-Grace-Days"] = str(grace_days)
 
+    # The list is capped, so with purge on it keeps the runs closest to their
+    # purge date (oldest deletions); otherwise the newest deletions.
     deleted_runs = (
         db.query(Run)
         .filter(Run.deleted_at.isnot(None))
-        .order_by(Run.deleted_at.desc())
+        .order_by(Run.deleted_at.asc() if grace_days > 0 else Run.deleted_at.desc())
         .limit(200)
         .all()
     )
@@ -3892,6 +3909,7 @@ def list_deleted_runs(
                 "deleted_by_user_id": r.deleted_by_user_id,
                 "deleted_by_name": deleters.get(r.deleted_by_user_id, ""),
                 "created_at": to_api_timestamp(r.created_at),
+                "purge_at": to_api_timestamp(purge_due_at(r.deleted_at, grace_days)),
             }
         )
     return result
@@ -5278,7 +5296,8 @@ def delete_run(
         raise HTTPException(status_code=403, detail="Permission denied")
 
     # Soft-delete only. All evaluation, analysis, and review history remains
-    # available if an administrator restores the run.
+    # available if an administrator restores the run before retention purges
+    # it (deleted_run_grace_days after deletion).
     snapshot = run.audit_snapshot()
     run.deleted_at = utc_now_naive()
     run.deleted_by_user_id = principal.user.id
@@ -5297,7 +5316,10 @@ def delete_run(
     db.add(audit)
     db.commit()
 
-    return {"ok": True}
+    return {
+        "ok": True,
+        "purge_after_days": PlatformSettings().deleted_run_grace_days,
+    }
 
 
 @router.post("/api/runs/restore")
@@ -5348,42 +5370,111 @@ def submit_run(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
-    run = Run.active(db).filter(Run.id == run_id).first()
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found")
+    run = lock_review_run(db, run_id)
     # A removed member keeps run ownership on record but loses the rights it gave.
     if not has_project_access(db, principal, run.project_id):
         raise HTTPException(status_code=403, detail="Access denied")
     if run.owner_user_id != principal.user.id:
         raise HTTPException(status_code=403, detail="Only owner can submit")
     # Allow completed/failed runs and rejected runs that need another review pass.
-    submittable_statuses = {
-        RunWorkflowStatus.COMPLETED,
-        RunWorkflowStatus.FAILED,
-        RunWorkflowStatus.REJECTED,
-    }
-    if run.status not in submittable_statuses:
-        raise HTTPException(
-            status_code=400, detail=f"Run not submittable from status={run.status}"
+    if run.status not in SUBMITTABLE_STATUSES:
+        raise state_conflict(
+            run, "Only a completed, failed or rejected run can be submitted"
         )
-    run.status = RunWorkflowStatus.SUBMITTED
-    approval = db.query(Approval).filter(Approval.run_id == run.id).first()
+    from_status = run.status
+    now = utc_now_naive()
+    approval = lock_approval(db, run)
+    keep_legacy_review(db, run, approval)
+    # A resubmitted rejection keeps the outcome recorded when it first entered review.
+    outcome = resolve_execution_outcome(db, run, approval)
     if not approval:
         approval = Approval(run_id=run.id, submitted_by_user_id=principal.user.id)
         db.add(approval)
-    else:
-        approval.submitted_by_user_id = principal.user.id
-        approval.submitted_at = utc_now_naive()
-        approval.decision = None
-        approval.decision_by_user_id = None
-        approval.decision_at = None
-        approval.comment = ""
+    approval.submitted_by_user_id = principal.user.id
+    approval.submitted_at = now
+    approval.execution_status = outcome.value
+    # The previous decision stays on the approval row; the history keeps every round.
+    run.status = RunWorkflowStatus.SUBMITTED
+    record_transition(
+        db,
+        run=run,
+        action="submit",
+        from_status=from_status,
+        actor_user_id=principal.user.id,
+        approval=approval,
+        at=now,
+    )
     db.commit()
     return {"ok": True, "status": run.status}
 
 
-class DecisionRequest(JSONResponse):
-    pass
+_DECISION_PAST = {
+    "approve": "approved",
+    "reject": "rejected",
+    "unapprove": "unapproved",
+    "unreject": "unrejected",
+}
+
+
+def _decide_run(
+    db: Session,
+    principal: Principal,
+    run_id: str,
+    body: Optional[Dict[str, Any]],
+    *,
+    action: str,
+) -> Dict[str, Any]:
+    """Approve/reject a submitted run, or withdraw an approval/rejection."""
+    expected = {
+        "approve": RunWorkflowStatus.SUBMITTED,
+        "reject": RunWorkflowStatus.SUBMITTED,
+        "unapprove": RunWorkflowStatus.APPROVED,
+        "unreject": RunWorkflowStatus.REJECTED,
+    }[action]
+    run = lock_review_run(db, run_id)
+    # Permission first: the conflict below reports the run's current status.
+    if not _can_approve_run(db, principal, run):
+        raise HTTPException(
+            status_code=403, detail=f"Only a project manager or admin can {action}"
+        )
+    if run.status != expected:
+        raise state_conflict(
+            run, f"Only {expected.value} runs can be {_DECISION_PAST[action]}"
+        )
+    approval = lock_approval(db, run)
+    if not approval:
+        raise HTTPException(status_code=400, detail="Missing approval record")
+    keep_legacy_review(db, run, approval)
+    comment = str((body or {}).get("comment") or "")
+    now = utc_now_naive()
+    if action in ("approve", "reject"):
+        approval.decision = (
+            ApprovalDecision.APPROVED if action == "approve" else ApprovalDecision.REJECTED
+        )
+        approval.decision_by_user_id = principal.user.id
+        approval.decision_at = now
+        approval.comment = comment
+        run.status = (
+            RunWorkflowStatus.APPROVED if action == "approve" else RunWorkflowStatus.REJECTED
+        )
+    else:
+        # Withdrawing keeps the decision on record and returns the run to its
+        # real execution outcome: a failed run stays failed.
+        outcome = resolve_execution_outcome(db, run, approval)
+        approval.execution_status = outcome.value
+        run.status = outcome
+    record_transition(
+        db,
+        run=run,
+        action=action,
+        from_status=expected,
+        actor_user_id=principal.user.id,
+        comment=comment,
+        approval=approval,
+        at=now,
+    )
+    db.commit()
+    return {"ok": True, "status": run.status}
 
 
 @router.post("/v1/runs/{run_id}/approve")
@@ -5393,25 +5484,7 @@ def approve_run(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
-    run = Run.active(db).filter(Run.id == run_id).first()
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found")
-    if run.status != RunWorkflowStatus.SUBMITTED:
-        raise HTTPException(status_code=400, detail="Run not submitted")
-    if not _can_approve_run(db, principal, run):
-        raise HTTPException(
-            status_code=403, detail="Only a project manager or admin can approve"
-        )
-    approval = db.query(Approval).filter(Approval.run_id == run.id).first()
-    if not approval:
-        raise HTTPException(status_code=400, detail="Missing approval record")
-    approval.decision = ApprovalDecision.APPROVED
-    approval.decision_by_user_id = principal.user.id
-    approval.decision_at = utc_now_naive()
-    approval.comment = str(body.get("comment") or "")
-    run.status = RunWorkflowStatus.APPROVED
-    db.commit()
-    return {"ok": True, "status": run.status}
+    return _decide_run(db, principal, run_id, body, action="approve")
 
 
 @router.post("/v1/runs/{run_id}/reject")
@@ -5421,79 +5494,46 @@ def reject_run(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
-    run = Run.active(db).filter(Run.id == run_id).first()
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found")
-    if run.status != RunWorkflowStatus.SUBMITTED:
-        raise HTTPException(status_code=400, detail="Run not submitted")
-    if not _can_approve_run(db, principal, run):
-        raise HTTPException(
-            status_code=403, detail="Only a project manager or admin can reject"
-        )
-    approval = db.query(Approval).filter(Approval.run_id == run.id).first()
-    if not approval:
-        raise HTTPException(status_code=400, detail="Missing approval record")
-    approval.decision = ApprovalDecision.REJECTED
-    approval.decision_by_user_id = principal.user.id
-    approval.decision_at = utc_now_naive()
-    approval.comment = str(body.get("comment") or "")
-    run.status = RunWorkflowStatus.REJECTED
-    db.commit()
-    return {"ok": True, "status": run.status}
+    return _decide_run(db, principal, run_id, body, action="reject")
 
 
 @router.post("/v1/runs/{run_id}/unapprove")
 def unapprove_run(
     run_id: str,
+    body: Optional[Dict[str, Any]] = Body(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
-    run = Run.active(db).filter(Run.id == run_id).first()
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found")
-    if run.status != RunWorkflowStatus.APPROVED:
-        raise HTTPException(status_code=400, detail="Run not approved")
-    if not _can_approve_run(db, principal, run):
-        raise HTTPException(
-            status_code=403, detail="Only a project manager or admin can unapprove"
-        )
-    approval = db.query(Approval).filter(Approval.run_id == run.id).first()
-    if not approval:
-        raise HTTPException(status_code=400, detail="Missing approval record")
-    approval.decision = None
-    approval.decision_by_user_id = None
-    approval.decision_at = None
-    approval.comment = ""
-    run.status = RunWorkflowStatus.COMPLETED
-    db.commit()
-    return {"ok": True, "status": run.status}
+    return _decide_run(db, principal, run_id, body, action="unapprove")
 
 
 @router.post("/v1/runs/{run_id}/unreject")
 def unreject_run(
     run_id: str,
+    body: Optional[Dict[str, Any]] = Body(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
+    return _decide_run(db, principal, run_id, body, action="unreject")
+
+
+@router.get("/api/runs/{run_id}/review-history")
+def get_run_review_history(
+    run_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Append-only review timeline (submit/approve/reject/withdrawals)."""
     run = Run.active(db).filter(Run.id == run_id).first()
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
-    if run.status != RunWorkflowStatus.REJECTED:
-        raise HTTPException(status_code=400, detail="Run not rejected")
-    if not _can_approve_run(db, principal, run):
-        raise HTTPException(
-            status_code=403, detail="Only a project manager or admin can unreject"
-        )
-    approval = db.query(Approval).filter(Approval.run_id == run.id).first()
-    if not approval:
-        raise HTTPException(status_code=400, detail="Missing approval record")
-    approval.decision = None
-    approval.decision_by_user_id = None
-    approval.decision_at = None
-    approval.comment = ""
-    run.status = RunWorkflowStatus.COMPLETED
-    db.commit()
-    return {"ok": True, "status": run.status}
+    if not can_view_run(db, principal, run):
+        raise HTTPException(status_code=403, detail="Access denied")
+    return {
+        "run_id": run.id,
+        "status": run.status.value if run.status else None,
+        "events": review_history(db, run),
+    }
 
 
 # ---------------------------------------------------------------------------

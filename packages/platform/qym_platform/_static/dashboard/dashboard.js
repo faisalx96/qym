@@ -3408,9 +3408,10 @@
         ? ` • pass ${Math.min((run.last_completed_pass || 0) + 1, run.samples)}/${run.samples}`
         : '';
 
-      // Build status tooltip with approval info
+      // Build status tooltip with approval info. The approval keeps the last
+      // decision after it is withdrawn; attribute only a decision in effect.
       let statusTooltip = status;
-      if (approval && approval.decision_by) {
+      if (approval && approval.decision_by && approval.decision === status) {
         statusTooltip = `${status} by ${approval.decision_by.display_name || approval.decision_by.email}`;
         if (approval.comment) {
           statusTooltip += `\n"${approval.comment}"`;
@@ -6017,7 +6018,7 @@
     const confirmBtn = el('confirm-delete-btn');
 
     if (titleEl) titleEl.textContent = 'Delete run';
-    if (descriptionEl) descriptionEl.textContent = 'Are you sure you want to delete this run?';
+    if (descriptionEl) descriptionEl.textContent = 'Are you sure you want to delete this run? An admin can restore it from Deleted Runs until retention permanently removes it.';
     runNameEl.textContent = runId;
     modal.style.display = 'flex';
 
@@ -6037,10 +6038,14 @@
         });
 
         if (response.ok) {
+          const result = await response.json().catch(() => ({}));
+          const graceDays = Number(result.purge_after_days) || 0;
           modal.style.display = 'none';
           // Remove from selection if selected
           state.selectedRuns.delete(filePath);
-          showToast('success', 'Run deleted', 'The run was moved to the trash.');
+          showToast('success', 'Run deleted', graceDays > 0
+            ? `The run was moved to the trash. An admin can restore it for ${graceDays} day${graceDays === 1 ? '' : 's'}; then it is permanently removed.`
+            : 'The run was moved to the trash.');
           // Refresh data
           await fetchRuns({ refreshAllPages: true });
         } else {
@@ -6091,7 +6096,8 @@
     if (passRefs.length) selectionParts.push(`${passRefs.length} pass${passRefs.length === 1 ? '' : 'es'}`);
 
     if (titleEl) titleEl.textContent = 'Delete selection';
-    if (descriptionEl) descriptionEl.textContent = `Are you sure you want to delete the selected ${selectionParts.join(' and ')}?`;
+    if (descriptionEl) descriptionEl.textContent = `Are you sure you want to delete the selected ${selectionParts.join(' and ')}?`
+      + (runRefs.length ? ' An admin can restore deleted runs from Deleted Runs until retention permanently removes them.' : '');
     runNameEl.textContent = `${selectionParts.join(' and ')} selected`;
     modal.style.display = 'flex';
 
@@ -6179,9 +6185,9 @@
       ? 'Unapprove Run'
       : (isUnreject ? 'Unreject Run' : (isApprove ? 'Approve Run' : 'Reject Run'));
     descEl.textContent = isUnapprove
-      ? 'Clear this approval and return the run to completed.'
+      ? 'Withdraw this approval. The run returns to its execution result and the approval stays in its review history.'
       : (isUnreject
-        ? 'Clear this rejection and return the run to completed.'
+        ? 'Withdraw this rejection. The run returns to its execution result and the rejection stays in its review history.'
       : (isApprove
         ? 'Approve this run to make it visible to leadership.'
         : 'Reject this run and send it back for review.'));
@@ -6210,12 +6216,14 @@
         });
 
         if (response.ok) {
+          const result = await response.json().catch(() => ({}));
+          const restored = String(result.status || 'completed').toLowerCase();
           modal.style.display = 'none';
           await fetchRuns({ refreshAllPages: true });
           showToast(
             'success',
             isUnapprove ? 'Unapproved' : (isUnreject ? 'Unrejected' : (isApprove ? 'Approved' : 'Rejected')),
-            (isUnapprove || isUnreject) ? 'Run returned to completed' : (isApprove ? 'Run approved' : 'Run rejected'),
+            (isUnapprove || isUnreject) ? `Run returned to ${restored}` : (isApprove ? 'Run approved' : 'Run rejected'),
           );
         } else {
           const data = await response.json();

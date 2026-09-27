@@ -866,6 +866,30 @@ class Approval(Base):
     decision_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     decision: Mapped[Optional[ApprovalDecision]] = mapped_column(Enum(ApprovalDecision), nullable=True)
     comment: Mapped[str] = mapped_column(Text, default="")
+    # runs.status shows the review state while a run is in review. This keeps
+    # the execution outcome (COMPLETED/FAILED) it had when it was submitted so
+    # withdrawing a decision restores it. NULL for reviews started before 0060.
+    execution_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+
+
+class RunWorkflowEvent(Base):
+    """Append-only history of a run's review transitions (submit/approve/...)."""
+
+    __tablename__ = "run_workflow_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"))
+    action: Mapped[str] = mapped_column(String(20))
+    from_status: Mapped[str] = mapped_column(String(20))
+    to_status: Mapped[str] = mapped_column(String(20))
+    actor_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    comment: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Copied from the approval row of a review that started before history
+    # was kept, just before its first recorded transition overwrote the row.
+    reconstructed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    __table_args__ = (Index("ix_run_workflow_events_run", "run_id", "id"),)
 
 
 class AuditLog(Base):

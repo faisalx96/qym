@@ -43,6 +43,10 @@ from qym_platform.db.models import (
     UserRole,
 )
 from qym_platform.db.session import SessionLocal
+from qym_platform.services.run_review import (
+    audit_correction_review,
+    correction_review_state,
+)
 from qym_platform.deps import get_db
 from qym_platform.llm_endpoint_security import (
     LlmEndpointValidationError,
@@ -8499,6 +8503,7 @@ def _approve_candidate(
 ) -> None:
     lock_issue_correction(db, correction)
     _require_active_candidate(correction)
+    before = correction_review_state(correction)
 
     has_human_label = any(
         str(value or "").strip()
@@ -8563,6 +8568,9 @@ def _approve_candidate(
     sync_correction_issue_metadata(db, correction)
     run = db.get(Run, correction.run_id)
     publish_approved_categories(db, run.project_id, [correction], reviewer_id)
+    audit_correction_review(
+        db, correction=correction, action="approved", actor_user_id=reviewer_id, before=before
+    )
 
 
 def _reject_candidate(
@@ -8576,11 +8584,30 @@ def _reject_candidate(
     """Reject a review candidate while preserving its full audit history."""
     lock_issue_correction(db, correction)
     _require_active_candidate(correction)
+    before = correction_review_state(correction)
     correction.status = CorrectionStatus.REJECTED
     correction.reviewed_by_user_id = reviewer_id
     correction.reviewed_at = reviewed_at
     correction.review_comment = comment
     sync_correction_issue_metadata(db, correction)
+    audit_correction_review(
+        db, correction=correction, action="rejected", actor_user_id=reviewer_id, before=before
+    )
+
+
+def _reset_candidate(
+    db: Session, *, correction: ReviewCorrection, actor_user_id: Optional[str]
+) -> None:
+    """Return a candidate to pending; the audit row keeps the cleared decision."""
+    before = correction_review_state(correction)
+    correction.status = CorrectionStatus.PENDING
+    correction.reviewed_by_user_id = None
+    correction.reviewed_at = None
+    correction.review_comment = ""
+    sync_correction_issue_metadata(db, correction)
+    audit_correction_review(
+        db, correction=correction, action="reset", actor_user_id=actor_user_id, before=before
+    )
 
 
 def _sync_legacy_summary_after_metric_deletion(
@@ -8659,6 +8686,27 @@ def _delete_active_candidate(
     reviewed_at: datetime,
 ) -> None:
     """Remove a candidate from reviews while retaining a rejected audit record."""
+    before = correction_review_state(correction)
+    _remove_active_candidate(
+        db,
+        correction=correction,
+        reviewer_id=reviewer_id,
+        comment=comment,
+        reviewed_at=reviewed_at,
+    )
+    audit_correction_review(
+        db, correction=correction, action="deleted", actor_user_id=reviewer_id, before=before
+    )
+
+
+def _remove_active_candidate(
+    db: Session,
+    *,
+    correction: ReviewCorrection,
+    reviewer_id: Optional[str],
+    comment: str,
+    reviewed_at: datetime,
+) -> None:
     _require_active_candidate(correction)
     run = Run.active(db).filter(Run.id == correction.run_id).first()
     if not run:
@@ -9477,11 +9525,11 @@ def reset_correction(
         raise HTTPException(status_code=403, detail="Access denied")
 
     lock_issue_correction(db, c)
-    c.status = CorrectionStatus.PENDING
-    c.reviewed_by_user_id = None
-    c.reviewed_at = None
-    c.review_comment = ""
-    sync_correction_issue_metadata(db, c)
+    _reset_candidate(
+        db,
+        correction=c,
+        actor_user_id=principal.user.id if principal.auth_type != "none" else None,
+    )
 
     db.commit()
     return _serialize_corrections_with_history(db, [c])[0]
@@ -9558,11 +9606,7 @@ def bulk_correction_action(
             )
             affected += 1
         elif request.action == "reset":
-            c.status = CorrectionStatus.PENDING
-            c.reviewed_by_user_id = None
-            c.reviewed_at = None
-            c.review_comment = ""
-            sync_correction_issue_metadata(db, c)
+            _reset_candidate(db, correction=c, actor_user_id=reviewer_id)
             affected += 1
         elif request.action == "delete":
             _delete_active_candidate(
