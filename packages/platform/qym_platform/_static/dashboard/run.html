@@ -10,9 +10,9 @@
   <script src="/static/auth.js"></script>
   <script src="/static/shell.js?v=ui-consistency-20260730-15"></script>
   <script src="/static/metrics.js?v=metric-errors-20260914-1"></script>
-  <script src="/static/run_details.js"></script>
+  <script src="/static/run_details.js?v=payload-perf-1"></script>
   <script src="/static/trace_viewer.js?v=trace-retries-20260917-1"></script>
-  <script src="/static/step_latency.js?v=empty-sections-20260911-2"></script>
+  <script src="/static/step_latency.js?v=payload-perf-1"></script>
   <script src="/static/review_history.js?v=review-workflow-1"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
@@ -7073,8 +7073,27 @@
           }
         }
 
-        // Collect metric metadata keys
+        // Collect metric metadata keys. Lazy rows carry only short values, so
+        // the snapshot lists every key once (per pass when a pass is viewed).
         const mmKeySet = new Set();
+        const passMetaKeys = state.viewPass ? (snap.pass_metric_meta_keys || {}) : {};
+        const keysByPass = snap.pass_metric_meta_keys_by_pass;
+        const schemaKeys = [
+          // A pass view shows pass metadata; run-level metadata only for
+          // metrics without it (legacy repeat runs), as scopeRowToPass does.
+          ...Object.entries(snap.metric_meta_keys || {})
+            .filter(([name]) => !passMetaKeys[name])
+            .map(([, keys]) => keys),
+          // Only this pass's keys: a field seen in another pass is not here.
+          ...(state.viewPass && keysByPass
+            ? [keysByPass[String(state.viewPass)] || []]
+            : Object.values(passMetaKeys)),
+        ];
+        for (const keys of schemaKeys) {
+          for (const k of keys || []) {
+            if (!['modified', 'original_score'].includes(k)) mmKeySet.add(k);
+          }
+        }
         for (const row of (snap.rows || [])) {
           const mm = row.metric_meta || {};
           for (const metricName of Object.keys(mm)) {
@@ -7163,6 +7182,37 @@
           showToast('error', 'Could not load items', error.message);
         });
         return true;
+      }
+
+      // Collapsed cards render from the index. An opened item loads its
+      // bodies and judge output on demand, without blocking the list; a failed
+      // load stays on that card with a retry.
+      const openedItemErrors = new Map();
+      function rowItemKey(row) { return row.item_id || String(row.index); }
+      function isItemRowExpanded(row) { return !!(state.itemExpanded || {})[rowItemKey(row)]; }
+      function loadOpenedItems(rows, version) {
+        const wanted = rows.filter(row => !openedItemErrors.has(rowItemKey(row)));
+        const promise = wanted.length ? runDetails.ensureRows(wanted, { retainAll: runNeedsFullText() }) : null;
+        if (!promise) return;
+        promise.then(() => {
+          if (version === itemRenderVersion) renderItems(false, { itemsOnly: true });
+        }).catch(error => {
+          if (error.name === 'AbortError' || !runDetails) return;
+          wanted.forEach(row => {
+            if (!runDetails.isLoaded(row)) openedItemErrors.set(rowItemKey(row), error.message);
+          });
+          if (version === itemRenderVersion) {
+            renderItems(false, { itemsOnly: true });
+            showToast('error', 'Could not load item', error.message);
+          }
+        });
+      }
+      function renderOpenedItemStatus(itemId) {
+        const style = ' style="padding: var(--space-md); color: var(--text-muted); font-size: var(--font-base);"';
+        if (!openedItemErrors.has(itemId)) {
+          return '<div class="item-detail-status" role="status"' + style + '>Loading item details…</div>';
+        }
+        return '<div class="item-detail-status" role="alert"' + style + '>Item details could not be loaded. <button type="button" class="qym-inline-action qym-inline-action--accent" data-item-retry="' + escapeAttr(itemId) + '">Retry</button></div>';
       }
 
       function showEmpty() {
@@ -11295,13 +11345,16 @@
           + rows.map(r => r.body).join('') + '</div>';
       }
 
-      function renderItems(scrollToTop) {
+      function renderItems(scrollToTop, options = {}) {
         const version = ++itemRenderVersion;
         if (runDetails && deferItemsUntil(ensureRunSearch(), version, scrollToTop)) return;
         const preserveAnchor = state.hasRenderedItems && !scrollToTop;
         const anchorTop = preserveAnchor ? getItemsGridTop() : null;
+        // Opening an item or loading its details changes no aggregate, so the
+        // overview, breakdown and step latency panels keep their render.
+        const itemsOnly = !!options.itemsOnly;
         // Keep Performance by Category in sync with the current filters (debounced)
-        scheduleBreakdownRender(preserveAnchor, scrollToTop ? scrollItemByItemToTop : null);
+        if (!itemsOnly) scheduleBreakdownRender(preserveAnchor, scrollToTop ? scrollItemByItemToTop : null);
 
         const container = el('items-grid');
         const paginationEl = el('pagination');
@@ -11311,7 +11364,7 @@
         const mIdx = metric ? state.allMetrics.indexOf(metric) : -1;
         const isBoolean = metric ? state.metricIsBoolean[metric] : false;
         const threshold = isBoolean ? 0.9999 : (state.metricThresholds[metric] || 0.8);
-        renderOverview(items);
+        if (!itemsOnly) renderOverview(items);
 
         const totalRows = (state.snapshot.rows || []).length;
         const itemsSection = container.closest('.items-comparison');
@@ -11331,8 +11384,8 @@
         const pageItems = items.slice(start, start + state.pageSize);
 
         if (state.itemDetailView !== 'heatmap' && runDetails) {
-          visibleDetailRows = pageItems.map(item => item.row);
-          if (deferItemsUntil(runDetails.ensureRows(visibleDetailRows, { retainAll: runNeedsFullText() }), version, scrollToTop)) return;
+          visibleDetailRows = pageItems.map(item => item.row).filter(isItemRowExpanded);
+          loadOpenedItems(visibleDetailRows, version);
           if (runFullTextRetained && !runNeedsFullText()) {
             runDetails.releaseExcept(visibleDetailRows);
             runFullTextRetained = false;
@@ -11380,6 +11433,8 @@
           const itemId = row.item_id || String(row.index);
           const safeId = btoa(itemId).replace(/[+/=]/g, '_');
           const isExpanded = !!(state.itemExpanded || {})[itemId];
+          // The expanded body needs the item's bodies and judge output.
+          const renderBody = isExpanded && (!runDetails || runDetails.isLoaded(row));
           const outputLabel = state.viewPass
             ? 'OUTPUT · PASS ' + state.viewPass
             : ((!isRepeatItem && latestOutputPass) ? 'OUTPUT · PASS ' + latestOutputPass : 'OUTPUT');
@@ -11492,14 +11547,14 @@
           // strip carries meta only when it lives at the item level.
           const hasPassMeta = isRepeatItem && row.pass_metric_meta
             && Object.keys(row.pass_metric_meta).length > 0;
-          const metricStripHtml = renderMetricStrip(
-            hasPassMeta ? {} : metricMeta, metricMeta, metricVals, safeId, row.index);
+          const metricStripHtml = renderBody ? renderMetricStrip(
+            hasPassMeta ? {} : metricMeta, metricMeta, metricVals, safeId, row.index) : '';
 
           // Item metadata badges
           let itemMetadataHtml = '';
           const SPECIAL_KEYS = ['complexity', 'domain', 'root_cause', 'root_causes', 'root_cause_issues', 'root_cause_detail', 'root_cause_reason', 'root_cause_note', 'root_cause_source', 'root_cause_confidence', 'solution', 'solution_note', 'solution_source', 'metric_analyses', 'analysis_warning'];
           const itemMd = row.item_metadata || {};
-          if (typeof itemMd === 'object') {
+          if (renderBody && typeof itemMd === 'object') {
             let badgesHtml = '';
             for (const sk of SPECIAL_KEYS) {
               if (sk.startsWith('root_cause') || sk.startsWith('solution') || sk === 'analysis_warning') continue;
@@ -11530,17 +11585,19 @@
           // Expanded body: repeat runs show every answer side by side; the
           // metric details, edits, and root cause sit at the item level.
           let outputBlockHtml = '';
-          if (isRepeatItem) {
+          if (renderBody && isRepeatItem) {
             outputBlockHtml = renderAnswerColumns(baseRow, itemId, displayItemId, metric, threshold)
               + _renderTraceChips(row.trace_stats, row.retry_count);
           }
-          if (!outputBlockHtml) {
+          if (renderBody && !outputBlockHtml) {
             outputBlockHtml = '<div class="item-run-output' + executionErrorClass + '"><div class="output-header"><span class="output-status-cluster"><span class="run-label">' + outputLabel + '</span>' + statusIndicator + durationPart + timePart + '</span><span class="output-actions">' + traceChip + copyBtn + '</span></div><div class="output-text ' + (status === 'error' ? 'score-1' : '') + '">' + renderMarkdownSafe(output) + '</div>' + _renderTraceChips(row.trace_stats, row.retry_count) + metricStripHtml + '</div>';
           }
 
           // Collapsed header: the input itself is the title; aggregates live
-          // beside it as pills. No output shows until the item expands.
-          const titleText = (typeof input === 'object' ? JSON.stringify(input) : String(input)).replace(/\s+/g, ' ').trim();
+          // beside it as pills. No output shows until the item expands. Rows
+          // not loaded yet carry a one-line input preview from the index.
+          const titleInput = (row.input_full || row.input) ? input : (row.input_preview || input);
+          const titleText = (typeof titleInput === 'object' ? JSON.stringify(titleInput) : String(titleInput)).replace(/\s+/g, ' ').trim();
           // Header pills carry the summary only while the card is closed;
           // open, the metrics strip in the body is the single source.
           const aggPills = isExpanded ? '' : state.allMetrics.map((name, i) => {
@@ -11580,6 +11637,9 @@
           if (!isExpanded) {
             // The whole collapsed card is the expand target
             return '<div class="item-card item-collapsed item-header-expand' + executionErrorClass + '" data-item-id="' + escapeAttr(itemId) + '"' + expandAttrs + '>' + headerHtml + '</div>';
+          }
+          if (!renderBody) {
+            return '<div class="item-card" data-item-id="' + escapeAttr(itemId) + '" aria-busy="' + !openedItemErrors.has(itemId) + '">' + headerHtml + renderOpenedItemStatus(itemId) + '</div>';
           }
 
           return '<div class="item-card" data-item-id="' + escapeAttr(itemId) + '">' +
@@ -11631,7 +11691,8 @@
             state.itemExpanded = state.itemExpanded || {};
             if (state.itemExpanded[id]) delete state.itemExpanded[id];
             else state.itemExpanded[id] = true;
-            renderItems();
+            openedItemErrors.delete(id);
+            renderItems(false, { itemsOnly: true });
           };
           header.addEventListener('click', (e) => {
             if (e.target.closest('.copy-btn') || e.target.closest('.metric-edit-open')) return;
@@ -11639,6 +11700,12 @@
           });
           header.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+          });
+        });
+        container.querySelectorAll('[data-item-retry]').forEach(button => {
+          button.addEventListener('click', () => {
+            openedItemErrors.delete(button.dataset.itemRetry);
+            renderItems(false, { itemsOnly: true });
           });
         });
 

@@ -369,3 +369,41 @@ def test_pooled_runs_keep_shared_trace_ancestry_separate(client, session_factory
         if row["span_id"] == "shared-trace-s3"
     }
     assert phases == {"run-1": "eval", "run-2": "task"}
+
+
+def test_group_by_ref_returns_each_lane_as_if_requested_alone(client, session_factory):
+    """Compare draws a lane per run or pass; one request serves every lane."""
+    with session_factory() as session:
+        _seed(session, run_id="run-1", trace="trace-a")
+        _seed_second_pass(session, run_id="run-1", trace="trace-b")
+        # run-2 reuses run-1's trace ids; lanes must stay bound to their run.
+        _seed(session, run_id="run-2", trace="trace-b")
+    headers = _headers("owner@example.com")
+    refs = ["run-1::pass1", "run-1::pass2", "run-2", "run-1"]
+    for extra in ("", "&pass_number=2", "&rollup=kind"):
+        pooled = client.get(
+            "/api/runs/step-latency?run_ids=" + ",".join(refs) + "&group_by=ref" + extra,
+            headers=headers,
+        )
+        assert pooled.status_code == 200, pooled.text
+        body = pooled.json()
+        alone = client.get(
+            "/api/runs/step-latency?run_ids=" + ",".join(refs) + extra, headers=headers
+        ).json()
+        assert body["groups"] == alone["groups"]
+        assert "groups_by_ref" not in alone
+        assert list(body["groups_by_ref"]) == refs
+        for ref in refs:
+            single = client.get(
+                f"/api/runs/step-latency?run_ids={ref}" + extra, headers=headers
+            ).json()
+            assert body["groups_by_ref"][ref] == single["groups"], (ref, extra)
+    lane = next(
+        group for group in body["groups_by_ref"]["run-1::pass2"]
+        if group["phase"] == "task"
+    )
+    assert lane["n"] == 1 and lane["mean_ms"] == pytest.approx(800.0)
+    rejected = client.get(
+        "/api/runs/step-latency?run_ids=run-1&group_by=run", headers=headers
+    )
+    assert rejected.status_code == 422

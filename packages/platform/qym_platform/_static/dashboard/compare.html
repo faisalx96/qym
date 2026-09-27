@@ -10,9 +10,9 @@
   <script src="./static/auth.js"></script>
   <script src="./static/shell.js?v=ui-consistency-20260730-15"></script>
   <script src="./static/metrics.js?v=metric-errors-20260914-1"></script>
-  <script src="./static/run_details.js"></script>
+  <script src="./static/run_details.js?v=payload-perf-1"></script>
   <script src="./static/trace_viewer.js?v=trace-retries-20260917-1"></script>
-  <script src="./static/step_latency.js?v=empty-sections-20260911-2"></script>
+  <script src="./static/step_latency.js?v=payload-perf-1"></script>
   <script src="./static/playground.js?v=approved-subcategories-20260917-1"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
@@ -7578,6 +7578,46 @@
         });
         return true;
       }
+      // Collapsed cards render from the index. An opened item loads its
+      // bodies and judge output on demand, without blocking the list; a failed
+      // load stays on that card with a retry.
+      const openedComparisonErrors = new Map();
+      function isComparisonItemLoaded(rowData) {
+        return rowData.every((row, ri) => !row || !comparisonDetails.has(state.runs[ri]) || row.__details_loaded !== false);
+      }
+      function loadOpenedComparisonItems(items, version) {
+        const wanted = items.filter(item => !openedComparisonErrors.has(item.itemId));
+        const promise = wanted.length ? ensureComparisonRows(wanted, { retainAll: comparisonNeedsFullText() }) : null;
+        if (!promise) return;
+        promise.then(() => {
+          if (version === comparisonRenderVersion) renderItems(false, { itemsOnly: true });
+        }).catch(error => {
+          if (error.name === 'AbortError' || !hasComparisonDetails()) return;
+          wanted.forEach(item => {
+            if (!isComparisonItemLoaded(item.rowData)) openedComparisonErrors.set(item.itemId, error.message);
+          });
+          if (version === comparisonRenderVersion) {
+            renderItems(false, { itemsOnly: true });
+            showToast('error', 'Could not load item', error.message);
+          }
+        });
+      }
+      // The analyzer offers the JSON fields it finds in the first rows. The
+      // index carries no bodies or judge output, so load those rows first.
+      function openComparePlayground() {
+        const run = state.runs[0];
+        const details = run ? comparisonDetails.get(run) : null;
+        const sample = details ? (run.snapshot?.rows || []).slice(0, 20) : [];
+        return Promise.resolve(sample.length ? details.ensureRows(sample, { retainAll: true }) : null)
+          .then(() => QymPlayground.open());
+      }
+      function renderOpenedComparisonStatus(itemId) {
+        const style = ` style="padding: var(--space-md); color: var(--text-muted); font-size: var(--font-base);"`;
+        if (!openedComparisonErrors.has(itemId)) {
+          return `<div class="item-detail-status" role="status"${style}>Loading item details…</div>`;
+        }
+        return `<div class="item-detail-status" role="alert"${style}>Item details could not be loaded. <button type="button" class="qym-inline-action qym-inline-action--accent" data-item-retry="${escapeAttr(itemId)}">Retry</button></div>`;
+      }
 
       function getApprovalState(row, metricName) {
         if (!row) return '';
@@ -8009,9 +8049,25 @@
           }
         }
 
-        // Collect metric metadata keys
+        // Collect metric metadata keys. Lazy rows carry only short values, so
+        // each snapshot lists every key once; a pass column shows the keys of
+        // its own pass only.
         const mmKeySet = new Set();
         for (const run of state.runs) {
+          const ref = String(run?.run?.file_path || '');
+          const base = passRefBase(ref);
+          const snapshot = run?.snapshot || {};
+          const keysByPass = snapshot.pass_metric_meta_keys_by_pass;
+          const schema = base === ref
+            ? Object.values(snapshot.metric_meta_keys || {})
+            : (keysByPass
+              ? [keysByPass[String(parseInt(ref.slice(base.length + PASS_REF_SEP.length), 10))] || []]
+              : Object.values(snapshot.pass_metric_meta_keys || {}));
+          for (const keys of schema) {
+            for (const k of keys || []) {
+              if (!['modified', 'original_score'].includes(k)) mmKeySet.add(k);
+            }
+          }
           for (const row of (run?.snapshot?.rows || [])) {
             const mm = row.metric_meta || {};
             for (const metricName of Object.keys(mm)) {
@@ -10357,7 +10413,7 @@
         // Wire auto-analyze button
         var aaBtn = section.querySelector('#auto-analyze-btn');
         if (aaBtn) aaBtn.addEventListener('click', function () {
-          QymPlayground.open().catch(function (error) {
+          openComparePlayground().catch(function (error) {
             showToast('error', 'Auto-analysis', error.message || 'Could not load the analyzer.');
           });
         });
@@ -11660,8 +11716,10 @@
           }
 
           // Collapsed header: the input itself is the title; each run's
-          // execution error or selected-metric score sits beside it.
-          const titleText = (typeof input === 'object' ? JSON.stringify(input) : String(input)).replace(/\s+/g, ' ').trim();
+          // execution error or selected-metric score sits beside it. Rows not
+          // loaded yet carry a one-line input preview from the index.
+          const titleInput = (inputRow?.input_full || inputRow?.input) ? input : (inputRow?.input_preview || input);
+          const titleText = (typeof titleInput === 'object' ? JSON.stringify(titleInput) : String(titleInput)).replace(/\s+/g, ' ').trim();
           const headerMetric = state.selectedItemsMetric;
           const headerPills = rowData.map((row, runIdx) => {
             const emptyPill = `<span class="item-agg-pill qym-item-metric-cell qym-item-metric-cell--empty" data-qym-metric-column="${runIdx}" aria-hidden="true"></span>`;
@@ -11711,6 +11769,9 @@
           if (!isExpanded) {
             // The whole collapsed card is the expand target
             return `<div class="item-comparison-row item-collapsed item-header-expand${itemExecutionErrorClass}"${expandable ? expandAttrs : ''}>${headerHtml}</div>`;
+          }
+          if (!options.forceExpanded && hasComparisonDetails() && !isComparisonItemLoaded(rowData)) {
+            return `<div class="item-comparison-row" aria-busy="${!openedComparisonErrors.has(itemId)}">${headerHtml}${renderOpenedComparisonStatus(itemId)}</div>`;
           }
 
           return `
@@ -11874,15 +11935,18 @@
         overlay.querySelector('#item-comparison-modal-close')?.focus();
       }
 
-      function renderItems(scrollToTop = false) {
+      function renderItems(scrollToTop = false, options = {}) {
         const version = ++comparisonRenderVersion;
         if (hasComparisonDetails() && deferComparisonItems(ensureComparisonSearch(), version, scrollToTop)) return;
         const preserveAnchor = state.hasRenderedItems && !scrollToTop;
         const anchorTop = preserveAnchor ? getItemsGridTop() : null;
-        // Keep Performance by Category and Root Cause Analysis in sync with filters
-        renderMetadataBreakdown();
-        renderErrorDistributionSection();
-        renderRootCauseSection();
+        // Keep Performance by Category and Root Cause Analysis in sync with
+        // filters. Opening an item or loading its details changes neither.
+        if (!options.itemsOnly) {
+          renderMetadataBreakdown();
+          renderErrorDistributionSection();
+          renderRootCauseSection();
+        }
 
         const container = el('items-grid');
         const paginationEl = el('pagination');
@@ -11927,8 +11991,8 @@
         if (state.page > totalPages) state.page = totalPages;
         const start = (state.page - 1) * state.pageSize;
         const pageItems = items.slice(start, start + state.pageSize);
-        visibleComparisonItems = pageItems;
-        if (hasComparisonDetails() && deferComparisonItems(ensureComparisonRows(pageItems, { retainAll: comparisonNeedsFullText() }), version, scrollToTop)) return;
+        visibleComparisonItems = pageItems.filter(item => (state.itemExpanded || {})[item.itemId]);
+        if (hasComparisonDetails()) loadOpenedComparisonItems(visibleComparisonItems, version);
         if (comparisonFullTextRetained && !comparisonNeedsFullText()) {
           releaseComparisonBodies();
           comparisonFullTextRetained = false;
@@ -13094,7 +13158,14 @@
           state.itemExpanded = state.itemExpanded || {};
           if (state.itemExpanded[id]) delete state.itemExpanded[id];
           else state.itemExpanded[id] = true;
-          renderItems();
+          openedComparisonErrors.delete(id);
+          renderItems(false, { itemsOnly: true });
+          return;
+        }
+        const retry = e.target.closest('[data-item-retry]');
+        if (retry) {
+          openedComparisonErrors.delete(retry.dataset.itemRetry);
+          renderItems(false, { itemsOnly: true });
         }
       });
       document.addEventListener('keydown', (e) => {
@@ -14425,7 +14496,7 @@
       // ── AI Evaluator Playground (compare view) ──────────────
       if (!IS_COMPARE_EXPORT && typeof QymPlayground !== 'undefined') {
         el('compare-auto-analyze-btn')?.addEventListener('click', () => {
-          QymPlayground.open().catch(error => {
+          openComparePlayground().catch(error => {
             showToast('error', 'Auto-analysis', error.message || 'Could not load the analyzer.');
           });
         });

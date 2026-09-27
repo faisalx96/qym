@@ -68,7 +68,13 @@ from qym_platform.services.run_lifecycle import (
     is_stale_running_run,
     reconcile_stale_running_run,
 )
-from qym_platform.services.run_payloads import compact_row, detail_item_ids, search_conditions
+from qym_platform.services.run_payloads import (
+    compact_row,
+    detail_item_ids,
+    meta_key_schema,
+    new_meta_key_index,
+    search_conditions,
+)
 from qym_platform.services.run_review import (
     SUBMITTABLE_STATUSES,
     keep_legacy_review,
@@ -3186,7 +3192,8 @@ def legacy_compare(
     """
     if not files:
         raise HTTPException(status_code=400, detail="No files specified")
-    run_ids = _parse_requested_run_ids(files)
+    # Each run is built once however often it is requested.
+    run_ids = list(dict.fromkeys(_parse_requested_run_ids(files)))
 
     runs_data: list[dict[str, Any]] = []
     for run_id in run_ids:
@@ -3300,8 +3307,18 @@ def _build_run_data(
     pass_analysis_by_item: Dict[str, Dict[str, Dict[int, Dict[str, Any]]]] = {}
     pass_attempts_by_item: Dict[str, Dict[int, Dict[str, Any]]] = {}
     if repeat_context:
+        # Plain column rows: a repeat run has items x metrics x passes of
+        # these, and ORM identity tracking dominated their load time.
         for ps in (
-            db.query(RunItemPassScore)
+            db.query(
+                RunItemPassScore.item_id,
+                RunItemPassScore.metric_name,
+                RunItemPassScore.pass_number,
+                RunItemPassScore.score_numeric,
+                RunItemPassScore.meta,
+                RunItemPassScore.label,
+                RunItemPassScore.explanation,
+            )
             .filter(RunItemPassScore.run_id == run.id)
             .filter(
                 RunItemPassScore.item_id.in_(item_ids) if item_ids is not None else True
@@ -3470,6 +3487,7 @@ def _build_run_data(
                 _item_start_ts[iid] = int(ev.sent_at.timestamp() * 1000)
 
     ui_rows = []
+    meta_keys = new_meta_key_index() if compact else None
     stats = {
         "total": item_count if compact else len(items),
         "completed": 0,
@@ -3532,6 +3550,9 @@ def _build_run_data(
             metadata=item_metadata,
             duplicate_counts=duplicate_counts,
         )
+        input_text = _stringify(it.input)
+        output_text = _stringify(it.output) if not is_error else f"ERROR: {it.error}"
+        expected_text = _stringify(it.expected)
 
         ui_rows.append(
             {
@@ -3547,16 +3568,12 @@ def _build_run_data(
                 "execution_error_count": execution_errors_by_item.get(
                     str(it.item_id), 0
                 ),
-                "input": _stringify(it.input),
-                "input_full": _stringify(it.input),
-                "output": (
-                    _stringify(it.output) if not is_error else f"ERROR: {it.error}"
-                ),
-                "output_full": (
-                    _stringify(it.output) if not is_error else f"ERROR: {it.error}"
-                ),
-                "expected": _stringify(it.expected),
-                "expected_full": _stringify(it.expected),
+                "input": input_text,
+                "input_full": input_text,
+                "output": output_text,
+                "output_full": output_text,
+                "expected": expected_text,
+                "expected_full": expected_text,
                 "time": (
                     ""
                     if it.latency_ms is None
@@ -3641,7 +3658,7 @@ def _build_run_data(
             }
         )
         if compact:
-            ui_rows[-1] = compact_row(ui_rows[-1])
+            ui_rows[-1] = compact_row(ui_rows[-1], meta_keys)
 
     stats["success_rate"] = (
         (stats["completed"] / stats["total"] * 100.0) if stats["total"] else 0.0
@@ -3720,7 +3737,17 @@ def _build_run_data(
                 "stats": stats,
                 "metric_names": metrics,
                 "metric_specs": metric_specs,
-                **({"detail_mode": "lazy", "detail_page_size": 100} if compact else {}),
+                **(
+                    {
+                        "detail_mode": "lazy",
+                        "detail_page_size": 100,
+                        # Index rows carry only short metadata values; these
+                        # list every key for the metric-field chooser.
+                        **meta_key_schema(meta_keys),
+                    }
+                    if meta_keys is not None
+                    else {}
+                ),
             },
         }
     )
@@ -4439,19 +4466,39 @@ def search_run_items(
 ) -> Dict[str, Any]:
     run = _detail_run(db, principal, run_id)
     conditions = search_conditions(request)
-    pass_number = request.get("pass_number")
-    if pass_number is not None:
-        if (
-            isinstance(pass_number, bool)
-            or not isinstance(pass_number, int)
-            or not 1 <= pass_number <= int(run.samples or 1)
-        ):
-            raise HTTPException(422, "pass_number must identify an existing pass")
+    samples = int(run.samples or 1)
 
-    matches: Dict[str, List[str]] = {condition["id"]: [] for condition in conditions}
+    def is_pass(value: Any) -> bool:
+        return (
+            not isinstance(value, bool)
+            and isinstance(value, int)
+            and 1 <= value <= samples
+        )
+
+    pass_number = request.get("pass_number")
+    if pass_number is not None and not is_pass(pass_number):
+        raise HTTPException(422, "pass_number must identify an existing pass")
+    # Compare shows one column per pass of a run; it searches all of them in
+    # one request so the run's rows are read once, not once per column.
+    pass_numbers = request.get("pass_numbers")
+    if pass_numbers is not None:
+        if (
+            pass_number is not None
+            or not isinstance(pass_numbers, list)
+            or not 1 <= len(pass_numbers) <= samples
+            or not all(is_pass(value) for value in pass_numbers)
+        ):
+            raise HTTPException(422, "pass_numbers must list existing passes")
+        scopes: List[Optional[int]] = list(dict.fromkeys(pass_numbers))
+    else:
+        scopes = [pass_number]
+
+    matches_by_scope: Dict[Optional[int], Dict[str, List[str]]] = {
+        scope: {condition["id"]: [] for condition in conditions} for scope in scopes
+    }
     # Search is deliberately explicit: the initial index never transfers large
     # bodies. Streaming selected columns bounds aggregate-mode server memory.
-    if pass_number is None:
+    if scopes == [None]:
         rows = (
             db.query(
                 RunItem.item_id,
@@ -4472,8 +4519,12 @@ def search_run_items(
                     str(row.item_id or row.index or ""),
                     _stringify(row.input),
                     _stringify(row.expected),
-                    f"ERROR: {row.error}" if row.error else _stringify(row.output),
                 ],
+                {
+                    None: (
+                        f"ERROR: {row.error}" if row.error else _stringify(row.output)
+                    )
+                },
             )
             for row in rows
         )
@@ -4498,29 +4549,42 @@ def search_run_items(
                 data = _build_run_data(db, run, item_ids=batch)
                 for row in data["snapshot"]["rows"]:
                     attempts = row.get("pass_attempts") or []
-                    output = (
-                        str((attempts[pass_number - 1] or {}).get("output") or "")
-                        if len(attempts) >= pass_number
-                        else ""
-                    )
-                    yield row["item_id"], [
+                    content = [
                         str(row["item_id"] or row["index"] or ""),
-                        row["input"], row["expected"], output,
+                        row["input"],
+                        row["expected"],
                     ]
+                    outputs = {
+                        number: (
+                            str((attempts[number - 1] or {}).get("output") or "")
+                            if len(attempts) >= number
+                            else ""
+                        )
+                        for number in scopes
+                    }
+                    yield row["item_id"], content, outputs
                 del data
 
         texts = pass_texts()
-    for item_id, values in texts:
-        lowered = [value.lower() for value in values]
-        for condition in conditions:
-            candidates = (
-                lowered if condition["field"] == "all"
-                else lowered[1:] if condition["field"] == "content"
-                else lowered[-1:]
-            )
-            if any(condition["value"] in candidate for candidate in candidates):
-                matches[condition["id"]].append(item_id)
-    return {"matches": matches}
+    for item_id, content, outputs in texts:
+        content_lowered = [value.lower() for value in content]
+        for scope, output in outputs.items():
+            lowered = content_lowered + [output.lower()]
+            for condition in conditions:
+                candidates = (
+                    lowered if condition["field"] == "all"
+                    else lowered[1:] if condition["field"] == "content"
+                    else lowered[-1:]
+                )
+                if any(condition["value"] in candidate for candidate in candidates):
+                    matches_by_scope[scope][condition["id"]].append(item_id)
+    if pass_numbers is not None:
+        return {
+            "matches_by_pass": {
+                str(scope): matches for scope, matches in matches_by_scope.items()
+            }
+        }
+    return {"matches": matches_by_scope[pass_number]}
 
 
 

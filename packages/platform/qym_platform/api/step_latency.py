@@ -362,6 +362,48 @@ def _load_spans(
     return _project_spans(db, filters), passes
 
 
+def _spans_by_ref(
+    db: Session,
+    run_ids: List[str],
+    spans: List["_SpanView"],
+    pass_number: Optional[int] = None,
+) -> Dict[str, List["_SpanView"]]:
+    """Split the pooled spans of ``_load_spans`` into each ref's own spans.
+
+    A pass ref owns the traces of that pass's attempts, exactly as the pooled
+    filter selects them, so one request can serve every compared lane.
+    """
+    refs = list(dict.fromkeys(run_ids))
+    scoped = {}
+    for ref in refs:
+        base, ref_pass = _parse_run_ref(ref)
+        scoped[ref] = (base, ref_pass if ref_pass is not None else pass_number)
+    wanted = {key for key in scoped.values() if key[1] is not None}
+    traces: Dict[tuple, set] = defaultdict(set)
+    if wanted:
+        rows = db.query(
+            RunItemAttempt.run_id, RunItemAttempt.pass_number, RunItemAttempt.trace_id
+        ).filter(
+            RunItemAttempt.run_id.in_(sorted({base for base, _ in wanted})),
+            RunItemAttempt.trace_id.isnot(None),
+        )
+        for run_id, number, trace_id in rows:
+            if (run_id, number) in wanted:
+                traces[(run_id, number)].add(trace_id)
+    spans_by_run: Dict[str, List[_SpanView]] = defaultdict(list)
+    for span in spans:
+        spans_by_run[span.run_id].append(span)
+    result: Dict[str, List[_SpanView]] = {}
+    for ref, (base, effective) in scoped.items():
+        run_spans = spans_by_run.get(base, [])
+        if effective is None:
+            result[ref] = run_spans
+        else:
+            trace_ids = traces.get((base, effective), set())
+            result[ref] = [span for span in run_spans if span.trace_id in trace_ids]
+    return result
+
+
 class _SpanView:
     """Narrow span row: scalar columns plus the few attributes this module reads.
 
@@ -437,6 +479,11 @@ def multi_run_step_latency(
     level: str = Query("summary", pattern="^(summary|spans)$"),
     rollup: str = Query("name", pattern="^(name|kind)$"),
     pass_number: Optional[int] = Query(None, ge=1, description="Restrict to one repeat pass"),
+    group_by: Optional[str] = Query(
+        None,
+        pattern="^ref$",
+        description="Also return each run ref's own groups (JSON summary only)",
+    ),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ):
@@ -454,7 +501,7 @@ def multi_run_step_latency(
     groups = compute_step_latency(spans, rollup=rollup)
     if format == "csv":
         return _csv_response(_SUMMARY_FIELDS, groups, "step_latency_summary.csv")
-    return {
+    payload: Dict[str, Any] = {
         "run_ids": ids,
         "rollup": rollup,
         "pass_number": pass_number,
@@ -462,6 +509,14 @@ def multi_run_step_latency(
         "trace_count": trace_count,
         "groups": groups,
     }
+    if group_by == "ref":
+        # Compare draws one lane per run or pass; serving every lane from the
+        # pooled spans replaces one request per lane.
+        payload["groups_by_ref"] = {
+            ref: compute_step_latency(ref_spans, rollup=rollup)
+            for ref, ref_spans in _spans_by_ref(db, ids, spans, pass_number).items()
+        }
+    return payload
 
 
 @router.get("/api/runs/{run_id}/step-latency")
