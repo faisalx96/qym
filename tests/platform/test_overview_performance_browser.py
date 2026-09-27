@@ -52,6 +52,7 @@ class OverviewFixture:
         self.denied = False
         self.live_label = "Evaluation in progress"
         self.requests = []
+        self.kpi_requests = []
         self.errors = []
         self.context = browser.new_context(
             viewport={"width": 1440, "height": 1000}, reduced_motion="reduce"
@@ -92,6 +93,26 @@ class OverviewFixture:
                             "role": "MANAGER",
                         }
                     ],
+                }
+            )
+            return
+        if path == "/api/dashboard/kpis":
+            self.kpi_requests.append(route.request.post_data_json)
+            if self.denied:
+                route.fulfill(status=401, json={"detail": "Expired session"})
+                return
+            unknown = self.pending or self.empty
+            route.fulfill(
+                json={
+                    "kpis": {
+                        "scope": "project",
+                        "runs": 0 if unknown else 25,
+                        "models": 0 if unknown else 7,
+                        "items": 0 if unknown else 15832,
+                        "execution_success": None if unknown else 0.9998,
+                        "runs_with_errors": 0 if unknown else 3,
+                    },
+                    "freshness": {"updating": self.pending},
                 }
             )
             return
@@ -236,6 +257,51 @@ def test_overview_post_filters_progress_links_and_layout(browser):
             path=str(SCREENSHOTS / "overview-desktop-1280.png"), full_page=True
         )
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
+    finally:
+        fixture.close()
+
+
+def test_overview_kpis_come_from_the_project_aggregation(browser):
+    """C011: cards and topbar read /api/dashboard/kpis, not the 5 recent rows."""
+    fixture = OverviewFixture(browser)
+    try:
+        fixture.open()
+        page = fixture.page
+        page.wait_for_function(
+            "document.querySelector('#ov-items').textContent !== '—'"
+        )
+        cards = page.eval_on_selector_all(
+            "#overview-stats [data-kpi]",
+            """cards => cards.map(card => [
+              card.querySelector('.ov-kpi-name').textContent,
+              card.querySelector('.stat-card-value').textContent,
+              card.querySelector('.stat-card-sub').textContent,
+            ])""",
+        )
+        # The recent rows hold one model and 240 items each; none of that leaks
+        # into the project KPIs. 99.98% is never rounded up to 100%.
+        assert cards == [
+            ["Runs", "25", "All runs · 12 approved"],
+            ["Execution success", "99.9%", "All runs"],
+            ["Runs with errors", "3", "All runs"],
+            ["Models", "7", "All runs"],
+            ["Items", "15,832", "All runs"],
+        ]
+        assert fixture.kpi_requests == [{"project_slug": "demo", "filters": {}}]
+        topbar = " ".join(page.locator("#shell-topbar-stats").inner_text().split())
+        assert topbar == (
+            "All runs 25 runs 99.9% execution success 3 runs with errors"
+            " 7 models 15,832 items"
+        )
+        assert (
+            "weighted by items"
+            in page.locator(
+                '[data-kpi="execution_success"] .qym-help-tooltip'
+            ).text_content()
+        )
+        assert page.locator(".topbar-stat").first.get_attribute("title") == (
+            "All runs in this project."
+        )
     finally:
         fixture.close()
 

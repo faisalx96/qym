@@ -394,8 +394,24 @@ body {
 .topbar-left { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; }
 
 
-.topbar-stats { display: flex; align-items: center; gap: var(--space-lg); }
-.topbar-stat { display: flex; align-items: center; gap: 6px; font-size: var(--shell-font-sm); color: var(--text-muted); }
+/* KPI chips fill the space beside the breadcrumb in priority order. A chip
+   that does not fit wraps onto a clipped second line, so it drops out
+   instead of covering the breadcrumb. */
+.topbar-stats {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;
+  flex: 1 1 0; min-width: 0; height: 24px; overflow: hidden;
+  column-gap: var(--space-lg); row-gap: 24px;
+}
+.topbar-stats-scope {
+  padding-right: var(--space-lg); border-right: 1px solid var(--border-default);
+  font-size: var(--shell-font-sm); font-weight: 600; color: var(--text-muted);
+  white-space: nowrap; cursor: help;
+}
+.topbar-stat { display: flex; align-items: center; gap: 6px; font-size: var(--shell-font-sm); color: var(--text-muted); white-space: nowrap; }
+.topbar-stat[title] { cursor: help; }
+@media (max-width: 1199px) {
+  .topbar-stat--secondary { display: none; }
+}
 .topbar-stat-value { font-family: var(--font-mono); font-weight: 600; font-size: var(--shell-font-md); color: var(--text-secondary); }
 .topbar-stat-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 

@@ -1420,13 +1420,23 @@
   // TOPBAR STATS
   // ══════════════════════════════════════════════════
 
-  function setTopbarStats(stats) {
+  function escAttr(s) {
+    return esc(s).replace(/"/g, '&quot;');
+  }
+
+  function setTopbarStats(stats, options) {
     var el = document.getElementById('shell-topbar-stats');
     if (!el) return;
     if (!stats || !stats.length) { el.innerHTML = ''; return; }
     var html = '';
+    if (options && options.scope) {
+      html += '<span class="topbar-stats-scope"'
+        + (options.scopeTitle ? ' title="' + escAttr(options.scopeTitle) + '"' : '')
+        + '>' + esc(options.scope) + '</span>';
+    }
     stats.forEach(function (s) {
-      html += '<div class="topbar-stat">'
+      html += '<div class="topbar-stat' + (s.secondary ? ' topbar-stat--secondary' : '') + '"'
+        + (s.title ? ' title="' + escAttr(s.title) + '"' : '') + '>'
         + '<span class="topbar-stat-dot" style="background:' + (s.color || 'var(--accent-primary)') + '"></span>'
         + '<span class="topbar-stat-value">' + esc(String(s.value)) + '</span> ' + esc(s.label)
         + '</div>';

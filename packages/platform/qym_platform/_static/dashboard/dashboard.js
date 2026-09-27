@@ -1910,18 +1910,9 @@
   // ═══════════════════════════════════════════════════
 
   function renderStatsBar() {
-    const agg = state.aggregations;
-    if (!agg) return;
-
-    // Push stats to the shell topbar
-    if (window.QymShell) {
-      window.QymShell.setTopbarStats([
-        { label: 'runs', value: formatNumber(agg.totalRuns), color: 'var(--accent-primary)' },
-        { label: 'success', value: formatPercent(agg.avgSuccess), color: 'var(--success)' },
-        { label: 'models', value: formatNumber(agg.totalModels), color: 'var(--accent-secondary)' },
-        { label: 'items', value: formatNumber(agg.totalItems), color: 'var(--accent-tertiary)' },
-      ]);
-    }
+    // Server KPIs for the active filter (or the whole project), rendered with
+    // the Overview's labels. Never derive headline numbers from loaded rows.
+    window.QymKpis?.renderTopbar(state.dashboardOverview?.kpis || null);
   }
 
   function isLatencyLikeMetric(metricName) {
@@ -3216,6 +3207,57 @@
     },
   ];
 
+  // Frozen (horizontally sticky) cells of the runs table.
+  function isRunsFrozenCell(cell) {
+    const style = cell ? getComputedStyle(cell) : null;
+    return !!style && style.position === 'sticky' && style.left !== 'auto';
+  }
+
+  function isRunsTableAtEnd(scroller) {
+    return scroller.scrollLeft > 0
+      && scroller.scrollLeft >= scroller.scrollWidth - scroller.clientWidth - 1;
+  }
+
+  // Keyboard focus must not land under the frozen identity block (WCAG 2.4.11).
+  // Chromium scrolls a newly focused control into view before `focusin`, so
+  // this moves the table until the control clears the frozen edge, and keeps
+  // that edge as scroll padding so the next focus scroll already stops there.
+  // Frozen cells clear the padding, so focusing them never jumps the table.
+  // Pointer focus is left alone: moving the table under a pressed mouse
+  // button would drop the click on whatever slid beneath it.
+  const RUNS_FOCUS_CLEARANCE_PX = 12; // frozen-edge shadow plus focus ring
+  function isKeyboardFocus(target) {
+    try {
+      return target.matches(':focus-visible');
+    } catch {
+      return true;
+    }
+  }
+
+  function keepRunsFocusClearOfFrozenColumns(target) {
+    const scroller = el('runs-table-scroll');
+    if (!scroller) return;
+    const cell = target instanceof Element ? target.closest('td, th') : null;
+    if (!cell || !scroller.contains(cell) || isRunsFrozenCell(cell) || !isKeyboardFocus(target)) {
+      scroller.style.scrollPaddingLeft = '';
+      return;
+    }
+    const view = scroller.getBoundingClientRect();
+    const frozenRight = Array.from(scroller.querySelectorAll('.runs-table thead th'))
+      .filter(isRunsFrozenCell)
+      .reduce((edge, th) => Math.max(edge, th.getBoundingClientRect().right), view.left);
+    const box = target.getBoundingClientRect();
+    // A window narrower than the control keeps its right part in view.
+    const padding = Math.max(0, Math.floor(Math.min(
+      frozenRight - view.left + RUNS_FOCUS_CLEARANCE_PX, scroller.clientWidth - box.width
+    )));
+    scroller.style.scrollPaddingLeft = `${padding}px`;
+    const visibleLeft = view.left + padding;
+    const visibleRight = view.left + scroller.clientWidth;
+    if (box.left < visibleLeft) scroller.scrollLeft -= visibleLeft - box.left;
+    else if (box.right > visibleRight) scroller.scrollLeft += box.right - visibleRight;
+  }
+
   function scheduleRunsStickyColumnSizing() {
     const table = document.querySelector('.runs-table');
     if (!table || state.currentView !== 'table') return;
@@ -3226,6 +3268,14 @@
       state._runsStickyColumnFrame = null;
       if (!table.isConnected || state.currentView !== 'table') return;
 
+      // Measuring releases the column caps for one layout, which can clamp the
+      // scroll position, and a re-render can widen the table. Keep a reader who
+      // was at the end (where the Actions column is) at the end, and anyone
+      // else exactly where they were.
+      const scroller = table.closest('.table-scroll');
+      const scrollLeft = scroller ? scroller.scrollLeft : 0;
+      const keepEnd = !!scroller && (state._runsTableAtEnd === true || state._runsKeepTableEnd === true);
+      state._runsKeepTableEnd = false;
       table.classList.add('runs-table--measuring-sticky-columns');
       const computed = getComputedStyle(table);
       const measured = [];
@@ -3249,12 +3299,22 @@
       measured.forEach(({ widthVar, width }) => {
         table.style.setProperty(widthVar, `${width}px`);
       });
+      if (scroller) {
+        scroller.scrollLeft = keepEnd ? scroller.scrollWidth : scrollLeft;
+        state._runsTableAtEnd = keepEnd || isRunsTableAtEnd(scroller);
+      }
     });
   }
 
   function renderTableView() {
     const allRuns = state.filteredRuns;
     const tbody = el('runs-tbody');
+    // Note a reader at the table's end before the new rows change its width.
+    const tableScroll = el('runs-table-scroll');
+    if (tableScroll) {
+      state._runsTableAtEnd = isRunsTableAtEnd(tableScroll);
+      if (state._runsTableAtEnd) state._runsKeepTableEnd = true;
+    }
     const availableMetrics = getAvailableMetricsForRuns(allRuns);
     const metricsToShow = getVisibleMetrics(availableMetrics);
     const visibleTraceMetrics = _visibleTraceMetrics(allRuns);
@@ -7505,6 +7565,15 @@
     event.stopPropagation();
     showExecutionErrorDetails(button);
   }, true);
+  // Frozen columns: keep focused controls and the table's end in view.
+  const runsTableScroll = el('runs-table-scroll');
+  runsTableScroll?.addEventListener('focusin', event => keepRunsFocusClearOfFrozenColumns(event.target));
+  runsTableScroll?.addEventListener('focusout', event => {
+    if (!runsTableScroll.contains(event.relatedTarget)) keepRunsFocusClearOfFrozenColumns(null);
+  });
+  runsTableScroll?.addEventListener('scroll', () => {
+    state._runsTableAtEnd = isRunsTableAtEnd(runsTableScroll);
+  }, { passive: true });
 
   // Compare actions
   el('compare-view')?.addEventListener('click', openComparison);

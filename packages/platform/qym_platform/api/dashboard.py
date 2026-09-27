@@ -26,6 +26,7 @@ from qym_platform.services.dashboard_cache import DashboardSnapshotCache
 _overview_cache = DashboardSnapshotCache()
 _page_cache = DashboardSnapshotCache()
 _catalog_cache = DashboardSnapshotCache(max_entries=4, max_bytes=16 * 1024 * 1024)
+_kpi_cache = DashboardSnapshotCache()
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 _FILTER_COLUMNS = {
@@ -364,6 +365,68 @@ def _facets(db, base, filters):
     return result
 
 
+def _kpis(db, conditions, *, filtered):
+    """Headline KPIs: the one definition behind the Overview cards and topbars.
+
+    One aggregate over the runs in scope (the whole project, or the active
+    filter); a summary that is not published yet adds a run but no items.
+    Execution success is weighted by items; task and metric errors are counted
+    as runs with errors. Models are distinct model names, so reasoning and plain
+    variants of one model count once.
+    """
+    data = Summary.data
+    task, metric = (
+        data["task_error_count"].as_float(),
+        data["metric_error_count"].as_float(),
+    )
+    # Summaries published before the task/metric split carry one error count.
+    errors = case(
+        (and_(task.isnot(None), metric.isnot(None)), task + metric),
+        else_=func.coalesce(
+            data["execution_error_count"].as_float(), data["error_count"].as_float(), 0
+        ),
+    )
+    name = func.replace(
+        func.replace(Dimension.model, "|||reasoning", ""), "|||plain", ""
+    )
+    runs, models, items, successes, errored = db.execute(
+        _query(
+            func.count(),
+            func.count(func.distinct(case((name != "nomodel", name)))),
+            func.coalesce(func.sum(data["total_items"].as_float()), 0),
+            func.coalesce(func.sum(data["success_count"].as_float()), 0),
+            func.coalesce(func.sum(case((errors > 0, 1), else_=0)), 0),
+        ).where(*conditions)
+    ).one()
+    items = int(items)
+    return {
+        "scope": "filtered" if filtered else "project",
+        "runs": int(runs),
+        "models": int(models),
+        "items": items,
+        "execution_success": float(successes) / items if items else None,
+        "runs_with_errors": int(errored),
+    }
+
+
+def _scoped_kpis(db, project, filters, freshness):
+    """KPIs for the project or its active filter, reused per projection revision."""
+    active = _filter_conditions(filters)
+    conditions = _base_conditions(project) + active
+    if not project or not freshness["revision"]:
+        return _kpis(db, conditions, filtered=bool(active))
+    key = (
+        db.get_bind().engine,
+        project["id"],
+        freshness["catalog_revision"],
+        PlatformSettings().hidden_tasks,
+        json.dumps(filters, sort_keys=True, default=str),
+    )
+    return _kpi_cache.get_or_compute(
+        key, lambda: _kpis(db, conditions, filtered=bool(active))
+    )
+
+
 def _overview(db, project, filters, sort="time-desc", collation=None):
     freshness = _freshness(db, project)
     if not project or not freshness["revision"]:
@@ -426,6 +489,7 @@ def _build_overview(db, project, filters, sort="time-desc", collation=None):
         total_count=db.scalar(_query(func.count()).where(*base)) or 0,
         total_runs=db.scalar(_query(func.count()).where(*filtered)) or 0,
         facets=_facets(db, base, filters),
+        kpis=_scoped_kpis(db, project, filters, freshness),
         project=project,
     )
     owners = db.execute(
@@ -752,6 +816,25 @@ def dashboard_overview(
         return _overview(reader, project, parsed, sort, _parse_collation(collation))
 
 
+@router.get("/kpis")
+def dashboard_kpis(
+    project_slug: Optional[str] = None,
+    filters: Optional[str] = None,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+):
+    """Headline KPIs only, without the overview's chart and facet payload."""
+    project, parsed = _project(db, principal, project_slug), _parse_filters(filters)
+    with _read_snapshot(db) as reader:
+        project = _snapshot_project(reader, project)
+        freshness = _freshness(reader, project)
+        return {
+            "kpis": _scoped_kpis(reader, project, parsed, freshness),
+            "project": project,
+            **freshness,
+        }
+
+
 @router.get("/points")
 def dashboard_points(
     project_slug: Optional[str] = None,
@@ -1023,6 +1106,19 @@ def dashboard_overview_query(
 ):
     return dashboard_overview(
         **_body_parameters(payload, {"project_slug", "filters", "sort", "collation"}),
+        db=db,
+        principal=principal,
+    )
+
+
+@router.post("/kpis")
+def dashboard_kpis_query(
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+):
+    return dashboard_kpis(
+        **_body_parameters(payload, {"project_slug", "filters"}),
         db=db,
         principal=principal,
     )

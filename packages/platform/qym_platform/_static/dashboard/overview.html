@@ -8,15 +8,17 @@
   <link rel="stylesheet" href="/static/dashboard.css?v=runs-analysis-c1-20260804-16">
   <link rel="stylesheet" href="/static/shell.css">
   <script src="/static/auth.js"></script>
-  <script src="/static/shell.js?v=ui-consistency-20260730-15"></script>
+  <script src="/static/shell.js?v=ui-consistency-20260730-15-runs-kpis"></script>
+  <script src="/static/kpis.js?v=runs-kpis-20260927"></script>
   <style>
     .overview { }
     .overview-header { margin-bottom: var(--space-lg); }
     .overview-header h1 { font-size: var(--font-title); font-weight: 600; margin: 0; }
     .overview-header p { color: var(--text-muted); font-size: var(--font-sm); margin-top: 6px; }
-    .overview-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-md); margin-bottom: var(--space-lg); }
+    .overview-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-md); margin-bottom: var(--space-lg); }
     .stat-card { background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: 8px; padding: var(--space-lg); }
     .stat-card-label { font-size: var(--font-sm); font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--space-sm); }
+    .stat-card-label .qym-help-marker { margin-left: 6px; vertical-align: 1px; }
     .stat-card-value { font-size: var(--font-stat); font-weight: 700; font-family: var(--font-mono); color: var(--text-primary); }
     .stat-card-sub { font-size: var(--font-sm); color: var(--text-muted); margin-top: 4px; }
     .stat-card-sub.positive { color: var(--success); }
@@ -61,11 +63,14 @@
       <p id="overview-subtitle">Project overview and recent activity.</p>
     </div>
 
+    <!-- Names, definitions and values come from QymKpis.entries() (kpis.js),
+         the same source as the Runs/Charts/Models topbar. -->
     <div class="overview-stats qym-stat-strip" id="overview-stats">
-      <div class="stat-card qym-stat-strip__item"><div class="stat-card-label qym-stat-strip__label">Total Runs</div><div class="stat-card-value qym-stat-strip__value" id="ov-runs">—</div><div class="stat-card-sub" id="ov-runs-sub"></div></div>
-      <div class="stat-card qym-stat-strip__item"><div class="stat-card-label qym-stat-strip__label">Avg Success</div><div class="stat-card-value qym-stat-strip__value" id="ov-success">—</div><div class="stat-card-sub" id="ov-success-sub"></div></div>
-      <div class="stat-card qym-stat-strip__item"><div class="stat-card-label qym-stat-strip__label">Models</div><div class="stat-card-value qym-stat-strip__value" id="ov-models">—</div><div class="stat-card-sub" id="ov-models-sub"></div></div>
-      <div class="stat-card qym-stat-strip__item"><div class="stat-card-label qym-stat-strip__label">Items Evaluated</div><div class="stat-card-value qym-stat-strip__value" id="ov-items">—</div><div class="stat-card-sub" id="ov-items-sub"></div></div>
+      <div class="stat-card qym-stat-strip__item" data-kpi="runs"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Runs</span><button type="button" class="qym-help-marker" aria-label="Explain Runs" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">All runs in this project.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-runs">—</div><div class="stat-card-sub" id="ov-runs-sub"></div></div>
+      <div class="stat-card qym-stat-strip__item" data-kpi="execution_success"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Execution success</span><button type="button" class="qym-help-marker" aria-label="Explain Execution success" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">Share of items that ran without a task error, weighted by items.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-success">—</div><div class="stat-card-sub" id="ov-success-sub"></div></div>
+      <div class="stat-card qym-stat-strip__item" data-kpi="runs_with_errors"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Runs with errors</span><button type="button" class="qym-help-marker" aria-label="Explain Runs with errors" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">Runs with at least one task or metric error.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-errors">—</div><div class="stat-card-sub" id="ov-errors-sub"></div></div>
+      <div class="stat-card qym-stat-strip__item" data-kpi="models"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Models</span><button type="button" class="qym-help-marker" aria-label="Explain Models" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">Distinct model names.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-models">—</div><div class="stat-card-sub" id="ov-models-sub"></div></div>
+      <div class="stat-card qym-stat-strip__item" data-kpi="items"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Items</span><button type="button" class="qym-help-marker" aria-label="Explain Items" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">Items evaluated.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-items">—</div><div class="stat-card-sub" id="ov-items-sub"></div></div>
     </div>
 
     <div class="overview-card live-card">
@@ -183,13 +188,6 @@
         return runs;
       }
 
-      function getPrimaryMetricScore(run) {
-        if (!run || !run.metric_averages || typeof run.metric_averages !== 'object') return null;
-        const metricNames = Array.isArray(run.metrics) ? run.metrics : Object.keys(run.metric_averages || {});
-        const firstMetric = metricNames.find(name => run.metric_averages[name] != null);
-        return firstMetric ? run.metric_averages[firstMetric] : null;
-      }
-
       function getRunName(run) {
         return run.run_name || run.external_run_id || (run.run_id || '').slice(0, 8) || '—';
       }
@@ -261,6 +259,52 @@
         return response.json();
       }
 
+      // Project KPIs come from one server aggregation over every run in the
+      // project (never the recent-runs sample below) and use the topbar's
+      // shared names, definitions and number formats.
+      const kpiView = { kpis: null, unknown: true, updating: false, listsUpdating: false, approved: 0 };
+
+      function renderKpiCards() {
+        const shared = window.QymKpis;
+        if (!shared || !kpiView.kpis) return;
+        const scope = shared.scope(kpiView.kpis).label;
+        shared.entries(kpiView.kpis).forEach(entry => {
+          const card = document.querySelector('#overview-stats [data-kpi="' + entry.key + '"]');
+          if (!card) return;
+          card.querySelector('.ov-kpi-name').textContent = entry.name;
+          card.querySelector('.qym-help-marker').setAttribute('aria-label', 'Explain ' + entry.name);
+          card.querySelector('.qym-help-tooltip').textContent = entry.title;
+          card.querySelector('.stat-card-value').textContent = kpiView.unknown ? '—' : entry.value;
+          const notes = [scope];
+          if (entry.key === 'runs' && kpiView.approved) notes.push(kpiView.approved + ' approved');
+          if (entry.key === 'runs' && (kpiView.updating || kpiView.listsUpdating)) notes.push('Updating…');
+          card.querySelector('.stat-card-sub').textContent = notes.join(' · ');
+        });
+        shared.renderTopbar(kpiView.unknown ? null : kpiView.kpis);
+      }
+
+      async function loadKpis(slug) {
+        if (!overviewActive) return false;
+        try {
+          const response = await fetch(apiUrl('api/dashboard/kpis'), {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ project_slug: slug, filters: {} }),
+          });
+          handleAuthResponse(response);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const data = await response.json();
+          if (!overviewActive) return false;
+          kpiView.kpis = data.kpis;
+          kpiView.updating = !!data.freshness?.updating;
+          kpiView.unknown = kpiView.updating && !data.kpis.runs;
+          renderKpiCards();
+          return kpiView.updating;
+        } catch (e) {
+          if (overviewActive) console.error('[Overview] Failed to load KPIs:', e);
+          return false;
+        }
+      }
+
       async function loadLiveRuns(slug) {
         const tbody = document.getElementById('live-runs-body');
         if (!overviewActive || !tbody) return;
@@ -316,6 +360,7 @@
           document.getElementById('view-approved-runs').href = projectUrl(slug);
         }
 
+        const kpisUpdating = loadKpis(slug);
         await loadLiveRuns(slug);
         if (!overviewActive) return;
 
@@ -324,26 +369,6 @@
           const data = await summaryRuns(slug, { statuses: ['DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED', 'COMPLETED', 'FAILED', 'STOPPED'] }, 5);
           if (!overviewActive) return;
           const runs = flattenRunsPayload(data);
-          const totalRuns = data.total_runs != null ? data.total_runs : runs.length;
-          const unknownStats = !!data.freshness?.updating && totalRuns === 0;
-
-          // Stats
-          document.getElementById('ov-runs').textContent = unknownStats ? '—' : totalRuns;
-          const models = new Set(runs.map(r => r.model_name).filter(Boolean));
-          document.getElementById('ov-models').textContent = models.size || '—';
-
-          // Avg success
-          const scores = runs.map(getPrimaryMetricScore).filter(v => v !== null);
-          if (scores.length) {
-            const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-            document.getElementById('ov-success').textContent = (avg * 100).toFixed(1) + '%';
-          } else {
-            document.getElementById('ov-success').textContent = '—';
-          }
-
-          // Total items
-          const totalItems = runs.reduce((acc, r) => acc + (r.total_items || 0), 0);
-          document.getElementById('ov-items').textContent = unknownStats ? '—' : totalItems.toLocaleString();
 
           // Recent runs table
           const tbody = document.getElementById('recent-runs-body');
@@ -358,18 +383,14 @@
           const approvedBody = document.getElementById('approved-runs-body');
           approvedBody.setAttribute('aria-busy', approvedData.freshness?.updating ? 'true' : 'false');
           approvedBody.innerHTML = renderRunRows(approvedRuns.slice(0, 5), slug, { emptyText: approvedData.freshness?.updating ? 'Updating approved runs…' : 'No approved runs yet' });
-          document.getElementById('ov-runs-sub').textContent = (approvedTotal ? approvedTotal + ' approved' : '') + ((data.freshness?.updating || approvedData.freshness?.updating) ? ' · Updating…' : '');
-          if (data.freshness?.updating || approvedData.freshness?.updating) {
+          kpiView.approved = approvedTotal;
+          kpiView.listsUpdating = !!(data.freshness?.updating || approvedData.freshness?.updating);
+          renderKpiCards();
+          const kpisStillUpdating = await kpisUpdating;
+          if (!overviewActive) return;
+          if (kpiView.listsUpdating || kpisStillUpdating) {
             clearTimeout(summaryRefreshTimer);
             summaryRefreshTimer = setTimeout(() => { if (overviewActive) load(); }, 2000);
-          }
-
-          // Update topbar stats
-          if (window.QymShell) {
-            window.QymShell.setTopbarStats([
-              { label: 'runs', value: unknownStats ? '—' : totalRuns, color: 'var(--accent-primary)' },
-              { label: 'models', value: unknownStats ? '—' : models.size, color: 'var(--accent-secondary)' },
-            ]);
           }
         } catch (e) {
           if (!overviewActive) return;
