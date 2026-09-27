@@ -15,34 +15,36 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Optional
 
-from sqlalchemy import Text, cast, func, or_
+from sqlalchemy import Text, cast, func
 
 METRIC_ERROR_STATUSES = ("error", "failed", "timeout")
 
 
 def is_metric_error(meta: Any) -> bool:
-    """Return whether metric metadata represents a raised scorer error."""
+    """Return whether metric metadata represents a raised scorer error.
+
+    ``meta.status`` is the only signal. The SDK sets it when a metric raises,
+    times out, or returns a top-level ``error`` key (SDKs since 2026-09;
+    earlier SDKs stored no score row for a raised metric). ``meta.error``
+    alone is a verdict reason written by the metric itself (for example
+    "Empty output" or a SQL syntax error), not a scorer crash.
+
+    The run page applies the same rule in ``metrics.js``
+    (``isMetricErrorMeta``).
+    """
     if not isinstance(meta, dict):
         return False
     status = str(meta.get("status") or "").strip().lower()
-    if status in METRIC_ERROR_STATUSES:
-        return True
-    error = meta.get("error")
-    if isinstance(error, str):
-        return bool(error.strip())
-    return bool(error)
+    return status in METRIC_ERROR_STATUSES
 
 
 def metric_error_candidates(model):
-    """SQL prefilter for score rows whose metadata may hold a scorer error.
+    """SQL prefilter for score rows whose metadata holds a scorer error.
 
     Confirm each candidate with :func:`is_metric_error`.
     """
-    return or_(
-        func.lower(func.trim(cast(model.meta["status"].as_string(), Text))).in_(
-            METRIC_ERROR_STATUSES
-        ),
-        model.meta["error"].as_string().isnot(None),
+    return func.lower(func.trim(cast(model.meta["status"].as_string(), Text))).in_(
+        METRIC_ERROR_STATUSES
     )
 
 
@@ -132,13 +134,12 @@ def raw_metric_totals(db, run_ids) -> Dict[str, Dict[str, MetricTotals]]:
         totals.setdefault(run_id, {})[metric] = MetricTotals(
             score_sum=float(score_sum or 0.0), score_count=int(score_count or 0)
         )
-    for run_id, metric, score, status, error in (
+    for run_id, metric, score, status in (
         db.query(
             RunItemScore.run_id,
             RunItemScore.metric_name,
             RunItemScore.score_numeric,
             RunItemScore.meta["status"].as_string(),
-            RunItemScore.meta["error"],
         )
         .join(RunItem, task_ok)
         .filter(
@@ -147,7 +148,7 @@ def raw_metric_totals(db, run_ids) -> Dict[str, Dict[str, MetricTotals]]:
         )
         .yield_per(1000)
     ):
-        if not is_metric_error({"status": status, "error": error}):
+        if not is_metric_error({"status": status}):
             continue
         metric_totals = totals.setdefault(run_id, {}).setdefault(metric, MetricTotals())
         if score is None:

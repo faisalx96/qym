@@ -82,7 +82,7 @@
               <label class="filter-label">Pass ≥</label>
               <input type="range" id="models-threshold-slider" class="threshold-slider-inline" min="0" max="100" step="5" value="80">
               <span class="threshold-value" id="models-threshold-value">80%</span>
-              <button type="button" class="stat-info-icon qym-help-marker threshold-info" aria-label="Explain the pass threshold" aria-expanded="false">i<span class="stat-info-tooltip qym-help-tooltip" role="tooltip">Score threshold for Pass@K and Pass^K metrics. Items scoring at or above this threshold are considered "correct".</span></button>
+              <button type="button" class="stat-info-icon qym-help-marker threshold-info" aria-label="Explain the pass threshold" aria-expanded="false">i<span class="stat-info-tooltip qym-help-tooltip" role="tooltip">Score threshold for Pass@K and Pass^K metrics. Items scoring at or above this threshold (at or below it for a lower-is-better metric) are considered "correct".</span></button>
             </span>
             <div class="multi-select-wrapper" id="models-stat-visibility-wrapper" style="display:none;">
               <button class="multi-select-btn" id="models-stat-visibility-btn" title="Choose which model summary metrics to show">Shown Metrics</button>
@@ -129,7 +129,7 @@
   </div>
 
   <script>window.__QYM_INITIAL_VIEW__ = 'models';</script>
-  <script src="/static/metrics.js?v=metric-errors-20260914-1"></script>
-  <script src="/static/dashboard.js?v=runs-performance-20260914-runs-kpis"></script>
+  <script src="/static/metrics.js?v=metric-errors-20260914-1-metric-semantics"></script>
+  <script src="/static/dashboard.js?v=runs-performance-20260914-metric-semantics"></script>
 </body>
 </html>

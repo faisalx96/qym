@@ -15,11 +15,13 @@ evaluator = Evaluator(
     task=my_task,
     dataset=my_dataset,
     metrics=[
-        Metric(is_correct, score_type="boolean"),
-        Metric(similarity, score_type="percentage", pass_threshold=0.8),
+        Metric(is_correct, score_type="boolean", direction="maximize"),
+        Metric(similarity, score_type="percentage", direction="maximize", pass_threshold=0.8),
+        Metric(empty_output, score_type="boolean", direction="minimize"),
         Metric(token_count, score_type="count", direction="minimize", unit="tokens"),
         Metric(raw_measurement, score_type="number"),
     ],
+    primary_metric="similarity",
 )</pre>
 
 <table>
@@ -33,6 +35,10 @@ evaluator = Evaluator(
 </table>
 
 <p>The wrapper accepts an optional stable <code>name</code>, <code>direction="maximize"</code> or <code>"minimize"</code>, a percentage or numeric <code>pass_threshold</code>, a short <code>unit</code>, and display <code>precision</code>. You can also construct and reuse <code>MetricSpec</code> explicitly:</p>
+
+<h3>Direction and the primary metric</h3>
+<p><code>direction</code> tells the platform which way is better. With <code>"maximize"</code> a higher score is better; with <code>"minimize"</code> (error rates, empty outputs, latency, cost) a lower one is, and a boolean passes when it is <code>False</code>. The platform uses it for score colors, Pass/Fail, the best value and winners in Compare, the Sweep verdict, and the Models ranking. A metric that declares no direction (the default, and every plain callable) is shown neutrally: its values and distributions, without good/bad colors, Pass/Fail, winners or an improved/regressed verdict. Built-in metrics declare theirs.</p>
+<p><code>primary_metric</code> names the run's headline metric (<code>--primary-metric</code> on the CLI). Compare, Sweep, the Models page and the run page open on it; without it they open on the first metric in the order you listed them.</p>
 
 <pre data-lang="python">from qym import Metric, MetricSpec
 
@@ -55,7 +61,7 @@ quality = Metric(quality_score, name="quality", spec=quality_spec)</pre>
 <tr><td><code>bool</code></td><td><code>1.0</code> if <code>True</code>, else <code>0.0</code></td><td>Cleanest shape for pass/fail checks.</td></tr>
 <tr><td><code>int</code> / <code>float</code></td><td><code>float(value)</code></td><td>Used as the numeric score directly.</td></tr>
 <tr><td><code>dict</code> with a <code>score</code> key</td><td><code>float(score)</code></td><td>A non-numeric/missing <code>score</code> falls back to <code>0.0</code>. <code>label</code>, <code>explanation</code>, and <code>metadata</code> are carried through.</td></tr>
-<tr><td><code>dict</code> with an <code>error</code> key</td><td><code>0.0</code></td><td><strong>Excluded from aggregation</strong> &mdash; see below. The error message is stored under <code>metadata.error</code>.</td></tr>
+<tr><td><code>dict</code> with an <code>error</code> key</td><td><code>0.0</code></td><td>Recorded as a <strong>metric error</strong>: <code>metadata.status = "error"</code> and the message under <code>metadata.error</code>. It counts as 0 in the run mean. A reason for a low score belongs in <code>metadata.reason</code> instead.</td></tr>
 <tr><td><code>MetricResult</code></td><td>its <code>score</code></td><td>Pass-through; the richest shape.</td></tr>
 <tr><td>anything else</td><td><code>0.0</code></td><td>Raw value preserved in <code>metadata.raw</code>. This is the silent-failure case for a metric that returns a string.</td></tr>
 </tbody>
@@ -224,10 +230,10 @@ Evaluator(task=my_task, dataset=ds, metrics=["correctness"], config=config).run(
 
 <h3>faithfulness (code heuristic)</h3>
 <p>Measures what proportion of meaningful output tokens appear in the source context. It reads <code>context</code> from <code>input_data</code> &mdash; either <code>input_data["context"]</code> or, if absent, <code>input_data["input"]["context"]</code>. It lowercases everything, drops a built-in stopword list and single-character tokens, then scores <code>grounded_tokens / total_tokens</code>.</p>
-<p>It returns an <strong>error dict</strong> (which excludes the item from aggregation, per the rule above) when:</p>
+<p>It scores <code>0.0</code> without comparing tokens when:</p>
 <ul>
-<li>the output is empty &mdash; <code>{"score": 0.0, "metadata": {"error": "Empty output"}}</code></li>
-<li>no context is found &mdash; <code>{"score": 0.0, "metadata": {"error": "No context found in input_data"}}</code></li>
+<li>the output is empty &mdash; <code>{"score": 0.0, "metadata": {"reason": "Empty output"}}</code> (a scored zero)</li>
+<li>no context is found &mdash; <code>{"score": 0.0, "error": "No context found in input_data"}</code> (a metric error: the metric cannot judge without context)</li>
 </ul>
 <p>This is a dependency-free heuristic, not a model-graded check. For semantic faithfulness, use the <code>faithfulness_llm</code> judge.</p>
 

@@ -51,8 +51,16 @@ def build_repeat_analysis(
     *,
     threshold: float,
     samples: int,
+    direction: str = "maximize",
 ) -> Dict[str, Any]:
-    """Build Pass@k, Pass^k, and cumulative-average curves with item CIs."""
+    """Build Pass@k, Pass^k, and cumulative-average curves with item CIs.
+
+    A lower-is-better metric (``direction="minimize"``) passes at or below
+    the threshold.
+    """
+
+    def passes(score: float) -> bool:
+        return score <= threshold if direction == "minimize" else score >= threshold
 
     max_k = max((len(scores) for scores in items_scores.values()), default=0)
     band: Dict[int, Dict[str, Any]] = {}
@@ -62,7 +70,7 @@ def build_repeat_analysis(
         pass_hat_values: List[float] = []
         cumulative_values: List[float] = []
         for scores in eligible:
-            correct = sum(1 for score in scores if score >= threshold)
+            correct = sum(1 for score in scores if passes(score))
             pass_at_values.append(unbiased_pass_at_k(len(scores), correct, k))
             pass_hat_values.append(unbiased_pass_hat_k(len(scores), correct, k))
             cumulative_values.append(sum(scores[:k]) / k)
@@ -85,7 +93,7 @@ def build_repeat_analysis(
 
     distribution = [0] * (samples + 1)
     for scores in items_scores.values():
-        correct = sum(1 for score in scores if score >= threshold)
+        correct = sum(1 for score in scores if passes(score))
         distribution[min(correct, samples)] += 1
 
     return {
@@ -108,11 +116,16 @@ def cached_repeat_analysis(
     samples: int,
     rows: Sequence[ScoreRow],
     items_scores: Dict[str, List[float]],
+    direction: str = "maximize",
 ) -> Dict[str, Any]:
     """Return a persisted curve, recomputing only when its score digest changes."""
 
     threshold_micros = round(float(threshold) * 1_000_000)
     signature = score_signature(rows)
+    if direction == "minimize":
+        # A run's direction is fixed; folding it into the digest keeps
+        # curves cached before directions existed valid for "maximize".
+        signature = hashlib.sha256((signature + ":minimize").encode("ascii")).hexdigest()
     cached = (
         db.query(RunMetricAnalysis)
         .filter(
@@ -134,6 +147,7 @@ def cached_repeat_analysis(
         items_scores,
         threshold=threshold,
         samples=samples,
+        direction=direction,
     )
     if cached:
         cached.source_signature = signature

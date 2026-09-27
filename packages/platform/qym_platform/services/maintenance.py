@@ -707,6 +707,80 @@ def _drop_legacy_spans(ctx: JobContext) -> bool:
     return True
 
 
+def _counted_verdict_reason(meta: Any) -> bool:
+    """A score the pre-C010 rule counted as a scorer error but the current rule
+    reads as a verdict reason: ``meta.error`` set without an error status."""
+    from qym_platform.services.run_means import is_metric_error
+
+    if not isinstance(meta, dict) or is_metric_error(meta):
+        return False
+    error = meta.get("error")
+    return bool(error.strip()) if isinstance(error, str) else bool(error)
+
+
+@register(
+    "reclassify_metric_errors",
+    description="Rebuild dashboard numbers for runs whose metric verdict reasons were counted as scorer errors (C010).",
+)
+def _reclassify_metric_errors(ctx: JobContext) -> bool:
+    """Scan score rows in id windows; repair each affected run once.
+
+    Summaries and error counts come from numeric projection records whose
+    error flag was computed when the score was stored. Rows that only carry a
+    verdict reason in ``meta.error`` need their run rebuilt from source, which
+    the dashboard worker does in the background after the repair request.
+    """
+    from qym_platform.db.models import RunItemPassScore, RunItemScore
+    from qym_platform.services.dashboard_summaries import request_dashboard_repair
+
+    window = max(1, int(ctx.params.get("window", 20000)))
+    phases = (("score", RunItemScore), ("pass_score", RunItemPassScore))
+    phase = ctx.progress.get("phase") or phases[0][0]
+    names = [name for name, _ in phases]
+    if phase not in names:
+        return True
+    model = dict(phases)[phase]
+    cursor = int(ctx.progress.get("cursor") or 0)
+    repaired = set(ctx.progress.get("runs") or [])
+    with ctx.session() as db:
+        max_key = phase + "_max_id"
+        if max_key not in ctx.progress:
+            # Rows stored after the upgrade already use the current rule.
+            ctx.progress[max_key] = int(
+                db.scalar(select(model.id).order_by(model.id.desc()).limit(1)) or 0
+            )
+        max_id = int(ctx.progress[max_key])
+        rows = db.execute(
+            select(model.run_id, model.meta).where(
+                model.id > cursor,
+                model.id <= cursor + window,
+                model.meta["error"].as_string().isnot(None),
+            )
+        ).all()
+        affected = {
+            run_id for run_id, meta in rows if _counted_verdict_reason(meta)
+        } - repaired
+        for run_id in sorted(affected):
+            if request_dashboard_repair(db, run_id, publish=False):
+                repaired.add(run_id)
+        db.commit()
+    cursor += window
+    ctx.progress["runs"] = sorted(repaired)
+    ctx.progress["runs_repaired"] = len(repaired)
+    if cursor >= max_id:
+        position = names.index(phase) + 1
+        if position >= len(names):
+            ctx.progress["phase"] = "done"
+            ctx.progress["message"] = f"done: {len(repaired):,} runs queued for a dashboard rebuild"
+            ctx.log(ctx.progress["message"])
+            return True
+        ctx.progress["phase"], ctx.progress["cursor"] = names[position], 0
+    else:
+        ctx.progress["phase"], ctx.progress["cursor"] = phase, cursor
+    ctx.progress["message"] = f"{phase} rows up to id {min(cursor, max_id):,}; {len(repaired):,} runs queued"
+    return False
+
+
 def ingest_settings_for_maintenance():
     from qym_platform.settings import PlatformSettings
 

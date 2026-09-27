@@ -647,16 +647,21 @@ def test_source_api_preserves_repeated_offpage_details_search_edit_and_csv(
             page = fixture.page
             # Editing must reach the real pass score and re-reduced run score,
             # then keep its body and logical identity after the response patch.
+            # accuracy is a boolean spec, so 0.25 is edited on the numeric
+            # count metric; score edits are validated by type (C009).
             page.locator("#items-grid .item-header-expand").first.click()
-            page.locator("#items-grid .metric-edit-open").first.click()
-            editor = page.locator("#items-grid .metric-edit-input:visible").first
+            chip = page.locator("#items-grid .metric-compare-row").filter(
+                has_text="count"
+            ).first
+            chip.locator(".metric-edit-open").click()
+            editor = chip.locator(".metric-edit-input")
             editor.fill("0.25")
             with page.expect_response("**/api/runs/update_metric") as edited:
                 editor.press("Enter")
             assert edited.value.status == 200
             editor.wait_for(state="hidden")
             updated = client.get("/api/runs/run-1").json()["snapshot"]["rows"][60]
-            assert 0.25 in updated["pass_scores"]["accuracy"]
+            assert 0.25 in updated["pass_scores"]["count"]
             assert any(verb == "details" for _, verb, _ in fixture.requests)
             assert any(verb == "search" for _, verb, _ in fixture.requests)
             assert all(

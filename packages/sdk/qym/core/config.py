@@ -35,6 +35,9 @@ class EvaluatorConfig(BaseModel):
     # `samples` stored passes — run 9, report pass@3. Must be <= samples.
     # None keeps the historical behavior (k = samples).
     report_k: Optional[int] = Field(default=None, ge=1)
+    # The run's headline metric. The platform opens Compare, Sweep, Models
+    # and the run page on it; without it they use the first metric.
+    primary_metric: Optional[str] = None
     run_metadata: Dict[str, Any] = Field(default_factory=dict)
     should_stop: Optional[Callable[[], bool]] = Field(default=None, exclude=True)
     git_branch: Optional[str] = None   # Override auto-detected git branch

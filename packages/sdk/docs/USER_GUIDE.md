@@ -682,6 +682,10 @@ def detailed_metric(output, expected):
 
 The metadata appears in your CSV results and Langfuse traces for debugging.
 
+Declare which way is better with `Metric(fn, score_type=..., direction="maximize" | "minimize")`, and name the headline metric with `Evaluator(..., primary_metric="accuracy")` (CLI: `--primary-metric`). The platform colors scores, shows Pass/Fail, picks winners and ranks models by the declared direction; a metric without one is shown neutrally. Views open on the primary metric, else on the first metric you listed.
+
+Put the reason for a low score in `metadata["reason"]`. When the metric itself cannot score (a judge call fails, required input is missing), raise an exception or return a top-level `error` key such as `{"score": 0, "error": "No context"}`. qym then sets `metadata["status"] = "error"`, and the platform reports a metric error, not a judged 0. Only `metadata["status"]` marks a metric error; a reason stored in `metadata["error"]` is shown as a reason.
+
 #### Using Task Metadata in Custom Metrics
 
 When a task needs to expose supporting data to metrics without showing that data as the platform output, return the qym task-output envelope:

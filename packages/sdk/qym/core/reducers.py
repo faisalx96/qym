@@ -33,7 +33,12 @@ DEFAULT_CONFIDENCE = 0.95
 # ── per-item helpers ─────────────────────────────────────────────────
 
 
-def _pass_count(scores: Sequence[float], threshold: float) -> int:
+def _pass_count(
+    scores: Sequence[float], threshold: float, direction: str = "maximize"
+) -> int:
+    """Passing scores: ``>= threshold``, or ``<= threshold`` when lower is better."""
+    if direction == "minimize":
+        return sum(1 for score in scores if score <= threshold)
     return sum(1 for score in scores if score >= threshold)
 
 
@@ -107,8 +112,12 @@ def group_stats(
     threshold: float = DEFAULT_THRESHOLD,
     k: Optional[int] = None,
     report_k: Optional[int] = None,
+    direction: str = "maximize",
 ) -> Dict[str, Optional[float]]:
     """Group metrics over the passes actually run.
+
+    ``direction="minimize"`` (lower is better) passes scores ``<= threshold``
+    and takes the per-item minimum for ``max_at_k`` (the best score).
 
     Returns the platform-compatible set: ``pass_at_k``, ``pass_hat_k``,
     ``avg_at_k`` (mean over all scores), ``max_at_k`` (mean of per-item best),
@@ -138,7 +147,7 @@ def group_stats(
         if not scores:
             continue
         total_items += 1
-        pass_count = _pass_count(scores, threshold)
+        pass_count = _pass_count(scores, threshold, direction)
         score_count = len(scores)
 
         k_eff = min(report_k, score_count) if report_k else score_count
@@ -153,7 +162,7 @@ def group_stats(
                 reliability_sum += pass_count / score_count
                 items_with_a_pass += 1
 
-        max_score_sum += max(scores)
+        max_score_sum += min(scores) if direction == "minimize" else max(scores)
         total_score_sum += sum(scores)
         total_score_count += score_count
 

@@ -84,6 +84,9 @@ import logging
 logger = logging.getLogger(__name__)
 from ..platform.defaults import DEFAULT_PLATFORM_URL
 
+# ``metadata.status`` values that mark a metric (scorer) execution failure.
+_METRIC_ERROR_STATUSES = frozenset({"error", "failed", "timeout"})
+
 
 def _utc_now_str() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -453,6 +456,7 @@ class Evaluator:
         langfuse_client: Optional[Any] = None,
         progress_callback: Optional[Callable[[ProgressSnapshot], None]] = None,
         input_mapping: Optional[Dict[str, str]] = None,
+        primary_metric: Optional[str] = None,
     ):
         """
         Initialize the evaluator.
@@ -476,6 +480,9 @@ class Evaluator:
                 parameter names. Useful when a local CSV uses columns such as
                 ``sql_prompt`` and ``sql_context`` but the task signature expects
                 ``question`` and ``schema``.
+            primary_metric: Name of the run's headline metric. The platform
+                opens its views on it; without it, the first metric is used.
+                Overrides ``config.primary_metric``.
         """
 
         # Parse config
@@ -516,6 +523,16 @@ class Evaluator:
         self._raw_metrics = list(metrics)
         self.metric_specs: Dict[str, MetricSpec] = {}
         self.metrics = self._prepare_metrics(metrics)
+        if primary_metric is not None:
+            self.config.primary_metric = primary_metric
+        if (
+            self.config.primary_metric is not None
+            and self.config.primary_metric not in self.metrics
+        ):
+            raise ValueError(
+                f"primary_metric {self.config.primary_metric!r} is not one of the "
+                f"run's metrics: {', '.join(self.metrics)}"
+            )
 
         # Load only the caller's cwd .env before any config/env auto-detection.
         load_cwd_dotenv()
@@ -777,7 +794,11 @@ class Evaluator:
         return run_block
 
     def _metric_specs_payload(self) -> Dict[str, Dict[str, Any]]:
-        return {name: spec.to_dict() for name, spec in self.metric_specs.items()}
+        primary = getattr(getattr(self, "config", None), "primary_metric", None)
+        payload = {name: spec.to_dict() for name, spec in self.metric_specs.items()}
+        if primary in payload:
+            payload[primary]["primary"] = True
+        return payload
 
     def _prepare_metrics(
         self, metrics: List[Union[str, Callable, Metric]]
@@ -2638,7 +2659,14 @@ class Evaluator:
             # Wrap in MetricResult. A caught exception still has score 0 for
             # aggregation, but its metadata explicitly marks it as Error so
             # clients do not confuse it with an ordinary judged failure.
+            # ``metadata.status`` is that execution signal; ``metadata.error``
+            # or ``metadata.reason`` alone is a verdict reason.
             result = MetricResult.from_raw(score)
+            declared_status = (
+                str((result.metadata or {}).get("status") or "").strip().lower()
+            )
+            if declared_status in _METRIC_ERROR_STATUSES:
+                metric_status = "timeout" if declared_status == "timeout" else "error"
             if metric_status in {"error", "timeout"}:
                 result.metadata = dict(result.metadata or {})
                 result.metadata["status"] = metric_status
@@ -2735,19 +2763,20 @@ class Evaluator:
 
         for m_name, score in scores.items():
             if score is not None:
-                score_metadata = (
-                    score.get("metadata", {}) if isinstance(score, dict) else {}
-                )
-                has_metric_error = isinstance(score, dict) and (
-                    (
-                        score.get("error") is not None
-                        and str(score.get("error")).strip() != ""
-                    )
-                    or (
-                        isinstance(score_metadata, dict)
-                        and str(score_metadata.get("status", "")).lower()
-                        in {"error", "failed", "timeout"}
-                    )
+                if isinstance(score, dict):
+                    score_metadata = score.get("metadata", {})
+                elif isinstance(score, MetricResult):
+                    score_metadata = score.metadata or {}
+                else:
+                    score_metadata = {}
+                has_metric_error = (
+                    isinstance(score, dict)
+                    and score.get("error") is not None
+                    and str(score.get("error")).strip() != ""
+                ) or (
+                    isinstance(score_metadata, dict)
+                    and str(score_metadata.get("status", "")).lower()
+                    in _METRIC_ERROR_STATUSES
                 )
                 if has_metric_error:
                     tracker.set_metric_error(index, m_name)

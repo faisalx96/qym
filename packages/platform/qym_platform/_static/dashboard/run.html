@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/static/shell.css">
   <script src="/static/auth.js"></script>
   <script src="/static/shell.js?v=ui-consistency-20260730-15-runs-kpis"></script>
-  <script src="/static/metrics.js?v=metric-errors-20260914-1"></script>
+  <script src="/static/metrics.js?v=metric-errors-20260914-1-metric-semantics"></script>
   <script src="/static/run_details.js?v=payload-perf-1"></script>
   <script src="/static/trace_viewer.js?v=trace-retries-20260917-1"></script>
   <script src="/static/step_latency.js?v=payload-perf-1"></script>
@@ -1216,6 +1216,13 @@
     }
     .metric-bool-dot.pass { background: var(--success); }
     .metric-bool-dot.fail { background: var(--error); }
+    /* No declared direction: True/False without good/bad colors (C008). */
+    .metric-bool-seg.true-seg,
+    .metric-bool-seg.false-seg { cursor: default; }
+    .metric-bool-seg.true-seg { background: var(--text-muted); color: var(--bg-base); }
+    .metric-bool-seg.false-seg { background: var(--bg-active); color: var(--text-primary); }
+    .metric-bool-dot.true { background: var(--text-muted); }
+    .metric-bool-dot.false { background: var(--bg-active); box-shadow: inset 0 0 0 1px var(--border-strong); }
     .metric-bool-dot.error { background: var(--metric-error); }
     .metric-card-badge {
       font-size: var(--font-xs);
@@ -3050,6 +3057,13 @@
     }
     .metric-edit-save:disabled { opacity: 0.6; cursor: default; }
     .metric-edit-status { font-size: var(--font-xs); color: var(--text-muted); }
+    /* A rejected score edit (C009): the reason wraps below the input, inside the chip. */
+    .qym-metric-edit-controls .metric-edit-status.is-error { flex: 1 1 100%; font-size: var(--font-sm); color: var(--error); white-space: normal; }
+    .det-toggle.editing:has(.metric-edit-status.is-error) { flex-wrap: wrap; }
+    .det-toggle.editing > .qym-metric-edit-controls:has(.metric-edit-status.is-error) { flex: 1 1 100%; flex-wrap: wrap; min-width: 0; margin-left: 0; }
+    .qym-metric-edit-controls .metric-edit-input[aria-invalid="true"],
+    .qym-metric-edit-controls .metric-edit-input[aria-invalid="true"]:focus { border-color: var(--error); }
+    .metric-score-value.metric-score-invalid { color: var(--warning); }
     .metric-edit-badge {
       display: inline-flex;
       align-items: center;
@@ -6402,6 +6416,24 @@
         return '<span class="model-label"><span class="model-label-text">' + escapeHtml(modelName || '—') + '</span>' + (hasReasoning ? renderModelReasoningBadge() : '') + '</span>';
       }
 
+      // Metric semantics (C008): one rule from metrics.js for every view.
+      function metricDirectionOf(metricName) {
+        return (state.metricDirections || {})[metricName] || null;
+      }
+
+      function metricPassesFor(metricName, value) {
+        return window.QymMetrics.metricPasses(
+          value,
+          state.metricThresholds[metricName] ?? 0.8,
+          metricDirectionOf(metricName),
+          !!state.metricIsBoolean[metricName],
+        );
+      }
+
+      function metricColorClassFor(metricName, value, metricType = state.metricTypes[metricName] || 'score') {
+        return window.QymMetrics.getMetricColorClass(value, metricType, metricDirectionOf(metricName));
+      }
+
       function scoreColorClass(value) {
         if (value >= 0.9) return 'score-5';
         if (value >= 0.75) return 'score-4';
@@ -6985,13 +7017,16 @@
           };
           state.passSummary = { ...inferredSummary, ...(state.passSummary || {}) };
         }
-        if (state.allMetrics.length > 0 && !state.selectedMetric) {
-          state.selectedMetric = state.allMetrics[0];
-        }
-
         // Detect metric types (boolean/score/numeric)
         state.metricTypes = {};
         state.metricSpecs = snap.metric_specs || state.run?.metric_specs || {};
+        // Open on the declared primary metric, else the first by position (C008).
+        if (state.allMetrics.length > 0 && !state.selectedMetric) {
+          state.selectedMetric = window.QymMetrics.defaultMetricName(state.allMetrics, state.metricSpecs);
+        }
+        // The declared direction decides colors, pass/fail and "best"; a
+        // metric without one is shown neutrally.
+        state.metricDirections = {};
         for (const metricName of state.allMetrics) {
           const mIdx = state.allMetrics.indexOf(metricName);
           const metricSpec = state.metricSpecs[metricName];
@@ -7008,13 +7043,16 @@
           const inferredType = passObservationRows.length
             ? window.QymMetrics.detectMetricType(passObservationRows, 0)
             : window.QymMetrics.detectMetricType(snap.rows || [], mIdx);
-          const mType = metricSpec
+          // A legacy spec declares no type: infer it from the values instead
+          // of forcing a percentage (C008).
+          const mType = metricSpec && metricSpec.score_type !== 'legacy'
             ? window.QymMetrics.metricTypeFromSpec(metricSpec)
             : inferredType;
           state.metricTypes[metricName] = mType;
           state.metricIsBoolean[metricName] = (mType === 'boolean');
+          state.metricDirections[metricName] = window.QymMetrics.metricDirection(metricSpec);
           if (state.metricThresholds[metricName] == null) {
-            state.metricThresholds[metricName] = metricSpec?.pass_threshold ?? 0.8;
+            state.metricThresholds[metricName] = window.QymMetrics.defaultPassThreshold(metricSpec);
           }
         }
 
@@ -7389,9 +7427,12 @@
         const metricName = state.samplesMetric || state.selectedMetric || state.allMetrics[0] || '';
         const metricType = state.metricTypes?.[metricName] || 'score';
         const isBooleanMetric = !!state.metricIsBoolean[metricName];
-        const supportsThreshold = !!metricName && !isBooleanMetric && metricType !== 'numeric';
+        // Pass-based repeat statistics need a declared direction; the server
+        // applies it (lower is better passes at or below the threshold).
+        const metricDirection = metricDirectionOf(metricName);
+        const supportsThreshold = !!metricName && !isBooleanMetric && metricType !== 'numeric' && Boolean(metricDirection);
         const requestedThreshold = isBooleanMetric
-          ? 0.9999
+          ? (metricDirection === 'minimize' ? 0.0001 : 0.9999)
           : (state.metricThresholds[metricName] ?? 0.8);
 
         let group, passes;
@@ -7419,6 +7460,8 @@
         const mTypeOf = m => state.metricTypes[m] || 'score';
         const fmtMetric = (v, m) => window.QymMetrics.formatMetricValue(v, mTypeOf(m));
         const groupMetricType = mTypeOf(groupMetric);
+        const groupDirection = metricDirectionOf(groupMetric);
+        const passBased = groupMetricType !== 'numeric' && Boolean(groupDirection);
         const groupMetricLabel = String(groupMetric || 'Metric')
           .replace(/[_-]+/g, ' ')
           .replace(/\b\w/g, c => c.toUpperCase());
@@ -7459,7 +7502,9 @@
           if (!Number.isFinite(value)) return '';
           const scoreEncoded = options.scoreEncoded !== false;
           if (scoreEncoded && g.total_items === 0) return '';
-          const cls = options.valueClass || ((scoreEncoded && typeof value === 'number') ? getSuccessClass(value) : '');
+          const cls = options.valueClass !== undefined
+            ? options.valueClass
+            : ((scoreEncoded && typeof value === 'number') ? getSuccessClass(value) : '');
           const display = options.format ? options.format(value) : fp(value);
           return '<div class="model-stat-box qym-stat-strip__item">' +
             '<div class="stat-title qym-stat-strip__label">' + title + (tooltip ? ' ' + infoIcon(tooltip) : '') + '</div>' +
@@ -7467,12 +7512,14 @@
           '</div>';
         }
         const tilesHtml = [
-          statTile(estimatorLabel('@'), estActive ? g.pass_at_k : finalPassAtK, estActive ? '' : tooltips.passAtK),
-          statTile(estimatorLabel('^'), estActive ? g.pass_hat_k : finalPassHatK, estActive ? '' : tooltips.passHatK),
-          statTile('Consistency', g.consistency, tooltips.consistency),
-          statTile('Reliability', g.reliability, tooltips.reliability),
+          passBased ? statTile(estimatorLabel('@'), estActive ? g.pass_at_k : finalPassAtK, estActive ? '' : tooltips.passAtK) : '',
+          passBased ? statTile(estimatorLabel('^'), estActive ? g.pass_hat_k : finalPassHatK, estActive ? '' : tooltips.passHatK) : '',
+          passBased ? statTile('Consistency', g.consistency, tooltips.consistency) : '',
+          passBased ? statTile('Reliability', g.reliability, tooltips.reliability) : '',
           statTile('Avg Score', g.avg_at_k, tooltips.avgScore, {
             scoreEncoded: groupMetricType !== 'numeric',
+            // Direction-aware; none for numeric or undeclared metrics.
+            valueClass: metricColorClassFor(groupMetric, g.avg_at_k, groupMetricType),
             format: v => fmtMetric(v, groupMetric),
           }),
           statTile('Avg Latency', aggregateAvgLatency, tooltips.avgLatency, {
@@ -7492,13 +7539,13 @@
         ).join('');
         const thresholdControlHtml = supportsThreshold
           ? '<div class="threshold-control qym-threshold-control samples-repeat-threshold">' +
-              '<span class="threshold-label">Pass if &ge;</span>' +
+              '<span class="threshold-label">Pass if ' + (metricDirection === 'minimize' ? '&le;' : '&ge;') + '</span>' +
               '<input type="range" class="threshold-slider qym-threshold-slider" data-samples-threshold min="0" max="100" step="5" value="' + thresholdPct + '" style="--qym-range-value:' + thresholdPct + '%;" aria-label="Pass threshold for ' + escapeAttr(groupMetric) + '">' +
               '<span class="threshold-value qym-threshold-value" data-samples-threshold-value>' + thresholdPct + '%</span>' +
             '</div>'
           : '';
 
-        const metricColorCls = (v, m) => (typeof v === 'number' ? window.QymMetrics.getMetricColorClass(v, mTypeOf(m)) : '');
+        const metricColorCls = (v, m) => (typeof v === 'number' ? metricColorClassFor(m, v, mTypeOf(m)) : '');
 
         // Pass sweep table: every metric + latency stats per pass.
         let sweepHtml = '';
@@ -7508,6 +7555,8 @@
           const queued = passes.passes.length - visible.length;
           const latCell = v => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v / 1000) + 's' : '—');
           const winnersFor = (valueOf, direction) => {
+            // Metric columns pass their declared direction; none = no best.
+            if (direction !== 'max' && direction !== 'min') return new Set();
             const values = visible
               .map(p => ({ pass: p.pass_number, value: valueOf(p) }))
               .filter(entry => typeof entry.value === 'number' && Number.isFinite(entry.value));
@@ -7524,7 +7573,10 @@
           };
           const metricWinners = Object.fromEntries(metricCols.map(m => [
             m,
-            winnersFor(p => (p.metric_means || {})[m], 'max'),
+            winnersFor(
+              p => (p.metric_means || {})[m],
+              { maximize: 'max', minimize: 'min' }[metricDirectionOf(m)] || null,
+            ),
           ]));
           const avgLatencyWinners = winnersFor(p => p.avg_latency_ms, 'min');
           const medianLatencyWinners = winnersFor(p => p.median_latency_ms, 'min');
@@ -7584,7 +7636,7 @@
         // uncertainty band per statistic so every view shares one contract.
         const band = group.band || {};
         const ks = Object.keys(band).map(Number).sort((a, b) => a - b);
-        const statisticOptions = groupMetricType === 'numeric'
+        const statisticOptions = !passBased
           ? [{ key: 'cumulative_avg', label: 'Average', xLabel: 'Passes observed', copy: 'Average score as observed passes are added.' }]
           : [
               { key: 'compare', label: 'Compare', xLabel: 'Attempts allowed', copy: 'Compare the chance of any success with the chance of consistent success as attempts increase.' },
@@ -7688,7 +7740,7 @@
         }
         function curveTableHtml() {
           if (!ks.length) return '';
-          const tableStatistics = groupMetricType === 'numeric'
+          const tableStatistics = !passBased
             ? [{ key: 'cumulative_avg', label: 'Average' }]
             : [
                 { key: 'pass_at_k', label: 'Pass@k' },
@@ -7698,9 +7750,11 @@
           const tableCell = (point, statistic) => {
             const value = statisticValue(point, statistic.key);
             const interval = statisticInterval(point, statistic.key);
-            const valueColorClass = Number.isFinite(value)
-              ? window.QymMetrics.getMetricColorClass(value, groupMetricType)
-              : '';
+            // Pass rates read higher-is-better; the average follows the metric.
+            const valueColorClass = !Number.isFinite(value) ? ''
+              : statistic.key === 'cumulative_avg'
+              ? metricColorClassFor(groupMetric, value, groupMetricType)
+              : window.QymMetrics.getMetricColorClass(value, groupMetricType, 'maximize');
             const margin = interval && Number.isFinite(interval.low) && Number.isFinite(interval.high)
               ? (interval.high - interval.low) / 2
               : null;
@@ -7780,11 +7834,14 @@
 
         let thresholdExplorerHtml = '';
         if (supportsThreshold && passVectors.length) {
-          const thresholds = [0.5, 0.6, 0.7, 0.8, 0.9, 0.95];
+          // Lower is better: stricter thresholds are lower (pass at or below).
+          const lowerIsBetter = metricDirection === 'minimize';
+          const thresholds = lowerIsBetter ? [0.5, 0.4, 0.3, 0.2, 0.1, 0.05] : [0.5, 0.6, 0.7, 0.8, 0.9, 0.95];
+          const passesAt = (value, threshold) => window.QymMetrics.metricPasses(value, threshold, metricDirection) === true;
           const allValues = passVectors.flatMap(point => point.values);
-          const passRates = thresholds.map(threshold => allValues.length ? allValues.filter(value => value >= threshold).length / allValues.length : 0);
+          const passRates = thresholds.map(threshold => allValues.length ? allValues.filter(value => passesAt(value, threshold)).length / allValues.length : 0);
           const partialRates = thresholds.map(threshold => passVectors.length ? passVectors.filter(point => {
-            const passesAtThreshold = point.values.filter(value => value >= threshold).length;
+            const passesAtThreshold = point.values.filter(value => passesAt(value, threshold)).length;
             return passesAtThreshold > 0 && passesAtThreshold < point.values.length;
           }).length / passVectors.length : 0);
           const W = 620, H = 245, L = 46, R = 16, T = 14, B = 38, DATA_INSET = 12;
@@ -7800,10 +7857,10 @@
             line.values.forEach((value, index) => {
               const markerY = y(value);
               const labelY = Math.max(T + 9, Math.min(H - B - 5, markerY + line.labelOffset));
-              svg += '<circle cx="' + x(index).toFixed(1) + '" cy="' + markerY.toFixed(1) + '" r="4" fill="var(--bg-surface)" stroke="' + line.color + '" stroke-width="2"><title>≥' + Math.round(thresholds[index] * 100) + '%: ' + escapeHtml(formatPercent(value)) + '</title></circle><text x="' + x(index).toFixed(1) + '" y="' + labelY.toFixed(1) + '" text-anchor="middle" class="ri-point-value" fill="' + line.color + '">' + escapeHtml(formatPercent(value, 0)) + '</text>';
+              svg += '<circle cx="' + x(index).toFixed(1) + '" cy="' + markerY.toFixed(1) + '" r="4" fill="var(--bg-surface)" stroke="' + line.color + '" stroke-width="2"><title>' + window.QymMetrics.passThresholdLabel(thresholds[index], metricDirection) + ': ' + escapeHtml(formatPercent(value)) + '</title></circle><text x="' + x(index).toFixed(1) + '" y="' + labelY.toFixed(1) + '" text-anchor="middle" class="ri-point-value" fill="' + line.color + '">' + escapeHtml(formatPercent(value, 0)) + '</text>';
             });
           });
-          thresholds.forEach((threshold, index) => svg += '<text x="' + x(index).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle" class="ri-data-label">≥' + Math.round(threshold * 100) + '%</text>');
+          thresholds.forEach((threshold, index) => svg += '<text x="' + x(index).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle" class="ri-data-label">' + window.QymMetrics.passThresholdLabel(threshold, metricDirection) + '</text>');
           thresholdExplorerHtml = '<div class="ri-panel half"><div class="ri-panel-head"><div><div class="ri-panel-title">Threshold Explorer</div><div class="ri-panel-copy">Pass rate and partial-pass items for ' + escapeHtml(groupMetric) + ' at several thresholds.</div></div></div><div class="ri-legend"><span class="ri-legend-item" style="--ri-color:var(--chart-1)"><span class="ri-legend-swatch"></span>pass rate</span><span class="ri-legend-item" style="--ri-color:var(--chart-5)"><span class="ri-legend-swatch"></span>partial-pass items</span></div><svg class="ri-chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + escapeAttr(groupMetric + ' pass rate and partial-pass items by threshold') + '">' + svg + '</svg></div>';
         }
 
@@ -7837,7 +7894,7 @@
         const distributionCopy = isBool
           ? 'Items by exact correct-pass count. Runs above 10 passes are grouped into percentage bins.'
           : 'Items by attempts meeting the selected pass threshold. Runs above 10 passes are grouped into percentage bins.';
-        const distBlockHtml = (dist && dist.length > 1 && dist.some(count => count > 0))
+        const distBlockHtml = (passBased && dist && dist.length > 1 && dist.some(count => count > 0))
           ? '<div class="ri-panel samples-distribution-panel">' +
               '<div class="ri-panel-head"><div>' +
                 '<div class="ri-panel-title">' + distributionTitle + '</div>' +
@@ -8141,10 +8198,14 @@
         if (!tg || !ts) return;
         const metric = state.selectedMetric;
         const mType = state.metricTypes?.[metric];
-        if (!metric || state.metricIsBoolean[metric] || mType === 'numeric') {
+        const direction = metricDirectionOf(metric);
+        // No pass threshold without a declared direction (C008).
+        if (!metric || state.metricIsBoolean[metric] || mType === 'numeric' || !direction) {
           tg.style.display = 'none';
         } else {
           tg.style.display = '';
+          const ruleLabel = tg.querySelector(':scope > span');
+          if (ruleLabel) ruleLabel.textContent = direction === 'minimize' ? 'Pass if score \u2264' : 'Pass if score \u2265';
           const pct = Math.round((state.metricThresholds[metric] ?? 0.8) * 100);
           ts.value = pct;
           ts.style.setProperty('--qym-range-value', pct + '%');
@@ -8168,7 +8229,12 @@
         return buckets;
       }
 
-      function getDistSegmentColor(bucketIdx) {
+      function getDistSegmentColor(bucketIdx, direction = 'maximize') {
+        // No declared direction: one neutral data color (blue, not the
+        // green that reads as "good"), no good/bad ramp (C008).
+        if (direction !== 'maximize' && direction !== 'minimize') return 'var(--chart-2)';
+        // Lower is better: the same palette read from the other end.
+        if (direction === 'minimize') bucketIdx = 10 - bucketIdx;
         // Per-bucket gradient using qym score palette (0%=red -> 100%=green)
         const colors = [
           'var(--score-1)',    // 0%
@@ -8246,7 +8312,11 @@
         return fmt(minMs) + '-' + fmt(maxMs);
       }
 
-      function riScoreColor(value) {
+      function riScoreColor(value, direction = 'maximize') {
+        // Direction-aware (C008): lower-is-better reads the ramp from the
+        // other end; no declared direction uses one neutral data color.
+        if (direction !== 'maximize' && direction !== 'minimize') return 'var(--chart-2)';
+        if (direction === 'minimize') value = 1 - value;
         if (value >= 0.9) return 'var(--score-5)';
         if (value >= 0.75) return 'var(--score-4)';
         if (value >= 0.6) return 'var(--score-3)';
@@ -8296,6 +8366,7 @@
             name,
             metricIndex,
             type: state.metricTypes[name] || 'score',
+            direction: metricDirectionOf(name),
             points,
             min: values.length ? Math.min(...values) : 0,
             max: values.length ? Math.max(...values) : 1,
@@ -8327,7 +8398,7 @@
               const normalized = rawValue === null ? null : (metric.type === 'numeric'
                 ? (metric.max === metric.min ? 0.5 : (rawValue - metric.min) / (metric.max - metric.min))
                 : Math.max(0, Math.min(1, rawValue)));
-              const fill = normalized === null ? 'var(--bg-active)' : riScoreColor(normalized);
+              const fill = normalized === null ? 'var(--bg-active)' : riScoreColor(normalized, metric.direction);
               const display = rawValue === null ? 'No score' : window.QymMetrics.formatMetricValue(rawValue, metric.type);
               svg += '<rect x="' + (x + 0.5).toFixed(1) + '" y="' + (y + 0.5) + '" width="' + Math.max(1, cellW - 1).toFixed(1) + '" height="' + (cellH - 1) + '" rx="1.5" fill="' + fill + '"' + (normalized === null ? ' opacity="0.35"' : '') + '>' +
                 '<title>' + escapeHtml((row.item_id || ('Item ' + (rowIndex + 1))) + ' · ' + metric.name + ': ' + display) + '</title></rect>';
@@ -8414,13 +8485,15 @@
 
         // Quality-latency frontier: one item per point using normalized composite quality.
         {
-          const normalizedByMetric = series.map(metric => {
+          // Composite quality needs a direction: lower-is-better metrics are
+          // flipped, metrics without a direction are left out (C008).
+          const normalizedByMetric = series.filter(metric => metric.direction).map(metric => {
             const map = new Map();
             metric.points.forEach(point => {
               const normalized = metric.type === 'numeric'
                 ? (metric.max === metric.min ? 0.5 : (point.value - metric.min) / (metric.max - metric.min))
                 : Math.max(0, Math.min(1, point.value));
-              map.set(point.rowIndex, normalized);
+              map.set(point.rowIndex, metric.direction === 'minimize' ? 1 - normalized : normalized);
             });
             return map;
           });
@@ -8641,8 +8714,11 @@
             '<svg class="ri-chart" viewBox="0 0 ' + SW + ' ' + SH + '" role="img" aria-label="Relationship between selected metrics">' + scatter + '</svg></div>');
         }
 
-        const qualityMetric = series.find(metric => metric.name === state.selectedMetric && metric.type !== 'numeric') || series.find(metric => metric.type !== 'numeric') || series[0];
-        const qualityItems = qualityMetric.points.map(point => ({ row: point.row, rowIndex: point.rowIndex, quality: point.value, latency: Number(point.row.latency_ms) })).filter(item => Number.isFinite(item.latency) && item.latency > 0);
+        // "Fast + strong" needs a declared direction; lower-is-better metrics
+        // plot with 0% at the top so the strong zone stays top-left (C008).
+        const qualityMetric = series.find(metric => metric.name === state.selectedMetric && metric.type !== 'numeric' && metric.direction)
+          || series.find(metric => metric.type !== 'numeric' && metric.direction);
+        const qualityItems = qualityMetric ? qualityMetric.points.map(point => ({ row: point.row, rowIndex: point.rowIndex, quality: point.value, latency: Number(point.row.latency_ms) })).filter(item => Number.isFinite(item.latency) && item.latency > 0) : [];
         let frontierPanel = '';
         if (qualityItems.length > 1) {
           const W = 620, H = 250, L = 54, R = 18, T = 16, B = 42;
@@ -8663,10 +8739,12 @@
             if (!hasOutliers || value <= p95Latency) return riScale(value, latMin, mainLatencyMax, L, p95X);
             return riScale(value, p95Latency, latMax, p95X + 12, plotRight);
           };
-          const y = value => riScale(value, 0, 1, H - B, T);
+          const y = qualityMetric.direction === 'minimize'
+            ? value => riScale(value, 0, 1, T, H - B)
+            : value => riScale(value, 0, 1, H - B, T);
           const medianX = x(medianLatency), zoneY = y(medianQuality);
           let frontier = (hasOutliers ? '<rect x="' + p95X.toFixed(1) + '" y="' + T + '" width="' + outlierBandWidth.toFixed(1) + '" height="' + (H - B - T) + '" fill="var(--bg-elevated)" opacity="0.55"/>' : '') +
-            '<rect x="' + L + '" y="' + T + '" width="' + (medianX - L).toFixed(1) + '" height="' + (zoneY - T).toFixed(1) + '" fill="var(--success)" opacity="0.10"/>' +
+            '<rect x="' + L + '" y="' + T + '" width="' + (medianX - L).toFixed(1) + '" height="' + Math.max(0, zoneY - T).toFixed(1) + '" fill="var(--success)" opacity="0.10"/>' +
             '<rect x="' + p95X.toFixed(1) + '" y="' + zoneY.toFixed(1) + '" width="' + (plotRight - p95X).toFixed(1) + '" height="' + (H - B - zoneY).toFixed(1) + '" fill="var(--error)" opacity="0.10"/>' +
             '<line x1="' + L + '" y1="' + (H - B) + '" x2="' + plotRight + '" y2="' + (H - B) + '" class="ri-axis"/><line x1="' + L + '" y1="' + T + '" x2="' + L + '" y2="' + (H - B) + '" class="ri-axis"/>' +
             '<line x1="' + medianX.toFixed(1) + '" y1="' + T + '" x2="' + medianX.toFixed(1) + '" y2="' + (H - B) + '" stroke="var(--border-strong)" stroke-dasharray="5 4"/>' +
@@ -8683,7 +8761,7 @@
           });
           qualityItems.forEach(item => {
             const radius = 3.5 + Math.min(2, Number(item.row.retry_count || 0));
-            frontier += '<circle cx="' + x(item.latency).toFixed(1) + '" cy="' + y(item.quality).toFixed(1) + '" r="' + radius + '" fill="' + riScoreColor(item.quality) + '" stroke="var(--bg-surface)" stroke-width="1.5"><title>' + escapeHtml((item.row.item_id || ('Item ' + (item.rowIndex + 1))) + ' · ' + qualityMetric.name + ' ' + riMetricValue(qualityMetric, item.quality) + ' · latency ' + formatLatency(item.latency)) + '</title></circle>';
+            frontier += '<circle cx="' + x(item.latency).toFixed(1) + '" cy="' + y(item.quality).toFixed(1) + '" r="' + radius + '" fill="' + riScoreColor(item.quality, qualityMetric.direction) + '" stroke="var(--bg-surface)" stroke-width="1.5"><title>' + escapeHtml((item.row.item_id || ('Item ' + (item.rowIndex + 1))) + ' · ' + qualityMetric.name + ' ' + riMetricValue(qualityMetric, item.quality) + ' · latency ' + formatLatency(item.latency)) + '</title></circle>';
           });
           frontier += '<text x="' + ((L + W - R) / 2) + '" y="' + (H - 8) + '" text-anchor="middle" class="ri-label">Average latency</text>' +
             '<text x="16" y="' + ((T + H - B) / 2) + '" text-anchor="middle" transform="rotate(-90 16 ' + ((T + H - B) / 2) + ')" class="ri-label">Mean ' + escapeHtml(qualityMetric.name) + '</text>';
@@ -8756,14 +8834,18 @@
           return '#ef4444';
         }
 
-        function buildGaugeRing(score) {
-          const color = gaugeColorHex(score);
+        function buildGaugeRing(score, metric) {
+          // Direction-aware ring color; neutral when no direction is declared.
+          const direction = metricDirectionOf(metric);
+          const color = direction === 'maximize' ? gaugeColorHex(score)
+            : direction === 'minimize' ? gaugeColorHex(1 - score)
+            : 'var(--text-muted)';
           const r = 18, circ = 2 * Math.PI * r;
           const fillLen = score >= 1 ? circ : circ * Math.max(0, score - 0.03);
           return '<div class="gauge-ring"><svg class="gauge-svg" viewBox="0 0 48 48">' +
             '<circle class="gauge-track" cx="24" cy="24" r="' + r + '"/>' +
-            '<circle class="gauge-fill" cx="24" cy="24" r="' + r + '" stroke="' + color + '" ' +
-            'style="stroke-dasharray:' + fillLen.toFixed(2) + ' ' + circ.toFixed(2) + ';"/>' +
+            '<circle class="gauge-fill" cx="24" cy="24" r="' + r + '" ' +
+            'style="stroke:' + color + ';stroke-dasharray:' + fillLen.toFixed(2) + ' ' + circ.toFixed(2) + ';"/>' +
             '</svg></div>';
         }
 
@@ -8824,20 +8906,37 @@
             cardIdx++;
 
           } else if (mType === 'boolean') {
-            // ── Boolean: pass/fail split bar ──
-            const passCount = Math.round(avg * cnt);
-            const errorCount = Math.min(errCnt, cnt - passCount);
-            const failCount = cnt - passCount - errorCount;
-            const passPct = (avg * 100).toFixed(0);
-            const failPct = ((failCount / cnt) * 100).toFixed(0);
-            const errorPct = ((errorCount / cnt) * 100).toFixed(0);
+            // ── Boolean: True/False split bar. Pass/Fail only when the metric
+            // declares a direction: True passes when higher is better, False
+            // when lower is better; otherwise True/False stay neutral (C008).
+            const direction = metricDirectionOf(metric);
+            const trueCount = Math.round(avg * cnt);
+            const errorCount = Math.min(errCnt, cnt - trueCount);
+            const falseCount = cnt - trueCount - errorCount;
+            const pct = count => ((count / cnt) * 100).toFixed(0);
+            const errorPct = pct(errorCount);
+            const segments = direction === 'minimize'
+              ? [
+                  { count: falseCount, cls: 'pass-seg', dot: 'pass', filter: 'passed', label: 'Pass (False)', title: 'Click to filter passing items' },
+                  { count: trueCount, cls: 'fail-seg', dot: 'fail', filter: 'failed', label: 'Fail (True)', title: 'Click to filter failing items' },
+                ]
+              : direction === 'maximize'
+              ? [
+                  { count: trueCount, cls: 'pass-seg', dot: 'pass', filter: 'passed', label: 'Pass', title: 'Click to filter passing items' },
+                  { count: falseCount, cls: 'fail-seg', dot: 'fail', filter: 'failed', label: 'Fail', title: 'Click to filter failing items' },
+                ]
+              : [
+                  { count: trueCount, cls: 'true-seg', dot: 'true', filter: '', label: 'True', title: 'True' },
+                  { count: falseCount, cls: 'false-seg', dot: 'false', filter: '', label: 'False', title: 'False' },
+                ];
+            const errorLabel = direction ? 'counted as fail' : 'counted as False';
             cards += '<div class="metric-card" style="animation-delay:' + (cardIdx * 50) + 'ms;">' +
               '<div class="metric-card-header">' +
                 '<div class="metric-card-gauge">' +
-                  buildGaugeRing(avg) +
+                  buildGaugeRing(avg, metric) +
                   '<div class="metric-card-info">' +
-                    '<div class="metric-card-value ' + scoreColorClass(avg) + '">' + formatPercent(avg) + '</div>' +
-                    '<div class="metric-card-name">' + escapeHtml(metric) + '</div>' +
+                    '<div class="metric-card-value ' + metricColorClassFor(metric, avg, mType) + '">' + formatPercent(avg) + '</div>' +
+                    '<div class="metric-card-name" title="' + escapeAttr(window.QymMetrics.metricDirectionLabel(direction)) + '">' + escapeHtml(metric) + '</div>' +
                     errorNote +
                   '</div>' +
                 '</div>' +
@@ -8845,14 +8944,14 @@
               '</div>' +
               '<div class="metric-bool-bar">' +
                 '<div class="metric-bool-track">' +
-                  (passCount > 0 ? '<div class="metric-bool-seg pass-seg" data-metric="' + escapeAttr(metric) + '" data-bool-filter="passed" style="flex:' + passCount + '" title="Click to filter passing items">' + (passCount > 1 ? passCount : '') + '</div>' : '') +
-                  (failCount > 0 ? '<div class="metric-bool-seg fail-seg" data-metric="' + escapeAttr(metric) + '" data-bool-filter="failed" style="flex:' + failCount + '" title="Click to filter failing items">' + (failCount > 1 ? failCount : '') + '</div>' : '') +
-                  (errorCount > 0 ? '<div class="metric-bool-seg error-seg" style="flex:' + errorCount + '" title="' + errorCount + ' scorer error' + (errorCount === 1 ? '' : 's') + ', counted as fail">' + (errorCount > 1 ? errorCount : '') + '</div>' : '') +
+                  segments.map(seg => seg.count > 0
+                    ? '<div class="metric-bool-seg ' + seg.cls + '" data-metric="' + escapeAttr(metric) + '"' + (seg.filter ? ' data-bool-filter="' + seg.filter + '"' : '') + ' style="flex:' + seg.count + '" title="' + escapeAttr(seg.title) + '">' + (seg.count > 1 ? seg.count : '') + '</div>'
+                    : '').join('') +
+                  (errorCount > 0 ? '<div class="metric-bool-seg error-seg" style="flex:' + errorCount + '" title="' + errorCount + ' scorer error' + (errorCount === 1 ? '' : 's') + ', ' + errorLabel + '">' + (errorCount > 1 ? errorCount : '') + '</div>' : '') +
                 '</div>' +
                 '<div class="metric-bool-legend">' +
-                  '<span class="metric-bool-legend-item"><span class="metric-bool-dot pass"></span> Pass ' + passPct + '%</span>' +
-                  '<span class="metric-bool-legend-item"><span class="metric-bool-dot fail"></span> Fail ' + failPct + '%</span>' +
-                  (errorCount > 0 ? '<span class="metric-bool-legend-item"><span class="metric-bool-dot error"></span> Scorer error ' + errorPct + '%, counted as fail</span>' : '') +
+                  segments.map(seg => '<span class="metric-bool-legend-item"><span class="metric-bool-dot ' + seg.dot + '"></span> ' + seg.label + ' ' + pct(seg.count) + '%</span>').join('') +
+                  (errorCount > 0 ? '<span class="metric-bool-legend-item"><span class="metric-bool-dot error"></span> Scorer error ' + errorPct + '%, ' + errorLabel + '</span>' : '') +
                 '</div>' +
               '</div>' +
             '</div>';
@@ -8869,7 +8968,7 @@
             for (let b = 0; b <= 10; b++) {
               const count = buckets[b];
               const barH = maxCount > 0 ? Math.max(count > 0 ? 3 : 0, Math.round((count / maxCount) * MAX_BAR_PX)) : 0;
-              const color = getDistSegmentColor(b);
+              const color = getDistSegmentColor(b, metricDirectionOf(metric));
               const label = (b * 10) + '%';
               const rangeMin = b / 10;
               const rangeMax = b === 10 ? 1.01 : (b + 1) / 10;
@@ -8890,10 +8989,10 @@
             cards += '<div class="metric-card" style="animation-delay:' + (cardIdx * 50) + 'ms;">' +
               '<div class="metric-card-header">' +
                 '<div class="metric-card-gauge">' +
-                  buildGaugeRing(avg) +
+                  buildGaugeRing(avg, metric) +
                   '<div class="metric-card-info">' +
-                    '<div class="metric-card-value ' + scoreColorClass(avg) + '">' + formatPercent(avg) + '</div>' +
-                    '<div class="metric-card-name">' + escapeHtml(metric) + '</div>' +
+                    '<div class="metric-card-value ' + metricColorClassFor(metric, avg, mType) + '">' + formatPercent(avg) + '</div>' +
+                    '<div class="metric-card-name" title="' + escapeAttr(window.QymMetrics.metricDirectionLabel(metricDirectionOf(metric))) + '">' + escapeHtml(metric) + '</div>' +
                     errorNote +
                   '</div>' +
                 '</div>' +
@@ -9324,6 +9423,10 @@
 
         const score = window.QymMetrics.parseScoreValue(metricValue);
         if (score === null) return false;
+        // Direction-aware (C008). Without a declared direction, diagnosis
+        // keeps the analyzer's historical higher-is-better targeting.
+        const passed = metricPassesFor(metricName, score);
+        if (passed !== null) return !passed;
         const passThreshold = state.metricIsBoolean[metricName]
           ? 0.9999
           : (state.metricThresholds[metricName] ?? 0.8);
@@ -9901,7 +10004,7 @@
 
         const stats = Object.entries(groups).map(([groupValue, group]) => {
           if (!group.scores.length) return null;
-          const passCount = supportsPassRate ? group.scores.filter(score => score >= threshold).length : 0;
+          const passCount = supportsPassRate ? group.scores.filter(score => metricPassesFor(metric, score) === true).length : 0;
           return {
             groupVal: groupValue,
             itemCount: group.count,
@@ -9928,10 +10031,10 @@
         return stats;
       }
 
-      function categoryScoreTrack(score, baseline) {
+      function categoryScoreTrack(score, baseline, direction = 'maximize') {
         if (score === null) return '';
         const baselineStyle = baseline === null ? '' : '--category-baseline:' + Math.round(baseline * 100) + '%;';
-        return '<div class="category-pass-track' + (baseline === null ? '' : ' has-baseline') + '" style="--category-pass:' + Math.round(score * 100) + '%;' + baselineStyle + '--category-pass-color:' + riScoreColor(score) + '">' +
+        return '<div class="category-pass-track' + (baseline === null ? '' : ' has-baseline') + '" style="--category-pass:' + Math.round(score * 100) + '%;' + baselineStyle + '--category-pass-color:' + riScoreColor(score, direction) + '">' +
           '<span class="category-pass-fill"></span></div>';
       }
 
@@ -9952,7 +10055,8 @@
         const mIdx = state.allMetrics.indexOf(metric);
         const metricType = state.metricTypes[metric] || 'score';
         const isBoolean = state.metricIsBoolean[metric];
-        const supportsPassRate = metricType !== 'numeric';
+        // Pass rates need a declared direction (C008).
+        const supportsPassRate = metricType !== 'numeric' && Boolean(metricDirectionOf(metric));
         if (!supportsPassRate && ['rate', 'delta'].includes(state.categoryBreakdownSort)) {
           state.categoryBreakdownSort = 'default';
         }
@@ -10005,7 +10109,7 @@
         html = '<h3 class="section-title">Performance by Category</h3>' + html;
         html += '<div class="comparison-stats metadata-breakdown-content">';
         if (supportsPassRate && overallAverage !== null) {
-          html += '<div class="category-baseline-note"><span class="category-baseline-marker"></span><span>Overall metric average score</span><strong class="category-baseline-score" style="--category-average-color:' + riScoreColor(overallAverage) + '">' + window.QymMetrics.formatMetricValue(overallAverage, metricType, 0) + '</strong></div>';
+          html += '<div class="category-baseline-note"><span class="category-baseline-marker"></span><span>Overall metric average score</span><strong class="category-baseline-score" style="--category-average-color:' + riScoreColor(overallAverage, metricDirectionOf(metric)) + '">' + window.QymMetrics.formatMetricValue(overallAverage, metricType, 0) + '</strong></div>';
         }
 
         if (state.categoryBreakdownView === 'compare') {
@@ -10022,7 +10126,7 @@
             const latencyDisplay = group.avgLatency !== null ? formatLatency(group.avgLatency) : '&mdash;';
             html += '<button type="button" class="category-compare-row" data-bd-category="' + escapeAttr(state.categoryCompareKey) + '" data-bd-value="' + escapeAttr(group.groupVal) + '" title="Click to filter by ' + escapeAttr(group.groupVal) + '">' +
               '<span class="category-compare-name" title="' + escapeAttr(group.groupVal) + '">' + escapeHtml(group.groupVal) + '</span>' +
-              '<span>' + (supportsPassRate ? categoryScoreTrack(group.avgScore, overallAverage) : '') + '</span>' +
+              '<span>' + (supportsPassRate ? categoryScoreTrack(group.avgScore, overallAverage, metricDirectionOf(metric)) : '') + '</span>' +
               '<span class="category-compare-number muted">' + averageDisplay + '</span>' +
               '<span class="category-compare-number muted">' + group.itemCount + '</span>' +
               '<span class="category-compare-number muted">' + latencyDisplay + '</span></button>';
@@ -10049,13 +10153,13 @@
                 else if (['hard','difficult','advanced','high','complex'].includes(value)) cardValueClass = ' complexity-hard';
                 else if (['very hard','very_hard','expert','extreme'].includes(value)) cardValueClass = ' complexity-expert';
               }
-              const colorClassName = window.QymMetrics.getMetricColorClass(group.avgScore, metricType);
+              const colorClassName = metricColorClassFor(metric, group.avgScore, metricType);
               const averageDisplay = window.QymMetrics.formatMetricValue(group.avgScore, metricType, 0);
               const performanceValueHtml = '<span class="score-col-value ' + colorClassName + '">' + averageDisplay + '</span>';
               html += '<div class="breakdown-card' + cardValueClass + '" data-bd-category="' + escapeAttr(bdKey) + '" data-bd-value="' + escapeAttr(group.groupVal) + '" style="cursor:pointer;" title="Click to filter by ' + escapeAttr(group.groupVal) + '">' +
                 '<div class="breakdown-card-label">' + escapeHtml(group.groupVal) + '</div>' +
                 '<div class="breakdown-card-scores"><div class="score-col"><span class="score-col-label">Average</span><span class="score-col-performance">' + performanceValueHtml + '</span></div><div class="score-col"><span class="score-col-label">Items</span><span class="score-col-value" style="color:var(--text-muted);">' + group.itemCount + '</span></div><div class="score-col"><span class="score-col-label">Latency</span><span class="score-col-value" style="color:var(--text-secondary); font-weight:500;">' + latencyDisplay + '</span></div></div>' +
-                (supportsPassRate ? categoryScoreTrack(group.avgScore, overallAverage) : '') +
+                (supportsPassRate ? categoryScoreTrack(group.avgScore, overallAverage, metricDirectionOf(metric)) : '') +
               '</div>';
             }
             html += '</div>';
@@ -10537,9 +10641,10 @@
           const mType = state.metricTypes[name] || 'score';
           defs.push({
             id: 'metric:' + name, label: name, group: 'Metrics',
-            kind: mType === 'numeric' ? 'number' : 'metric',
+            // passed/failed needs a declared direction; otherwise compare values.
+            kind: mType === 'numeric' || !metricDirectionOf(name) ? 'number' : 'metric',
             get: row => window.QymMetrics.parseScoreValue((row.metric_values || [])[i]),
-            threshold: () => state.metricIsBoolean[name] ? 0.9999 : (state.metricThresholds[name] ?? 0.8),
+            passes: value => metricPassesFor(name, value),
           });
         });
         [['complexity', 'Complexity'], ['domain', 'Domain'], ['root_cause', 'Root cause']].forEach(([cat, label]) => {
@@ -10617,8 +10722,9 @@
         if (f.kind === 'metric') {
           if (node.oper === 'is') {
             if (v === null) return false;
-            const thr = f.threshold();
-            return node.value === 'passed' ? v >= thr : v < thr;
+            const passed = f.passes(v);
+            if (passed === null) return false;
+            return node.value === 'passed' ? passed : !passed;
           }
           return _numCompare(node.oper, v, node.value);
         }
@@ -10890,12 +10996,12 @@
             score = result.score;
           }
 
-          // Item filter
+          // Item filter: pass/fail follows the metric's declared direction.
           if (state.itemFilter === 'passed') {
-            if (score === null || score < threshold) continue;
+            if (metricPassesFor(metric, score) !== true) continue;
           } else if (state.itemFilter === 'failed') {
             const isError = window.QymMetrics.isErrorRow(row);
-            if (!isError && (score === null || score >= threshold)) continue;
+            if (!isError && metricPassesFor(metric, score) !== false) continue;
           } else if (state.itemFilter === 'errors') {
             if (!window.QymMetrics.isErrorRow(row)) continue;
           } else if (state.itemFilter === 'edited_metrics') {
@@ -11043,7 +11149,7 @@
               const value = values[index];
               if (value === null || !Number.isFinite(value)) return '<span class="item-heatmap-cell empty">\u2014</span>';
               const normalized = metricType === 'numeric' ? 0.5 : Math.max(0, Math.min(1, value));
-              return '<span class="item-heatmap-cell" style="background:' + riScoreColor(normalized) + ';opacity:' + (0.55 + normalized * 0.45).toFixed(2) + '" title="' + escapeAttr((row.item_id || String(row.index)) + ' · pass ' + (index + 1) + ' · ' + riMetricValue({ type: metricType }, value)) + '">' + escapeHtml(riMetricValue({ type: metricType }, value)) + '</span>';
+              return '<span class="item-heatmap-cell" style="background:' + riScoreColor(normalized, metricType === 'numeric' ? null : metricDirectionOf(metric)) + ';opacity:' + (0.55 + normalized * 0.45).toFixed(2) + '" title="' + escapeAttr((row.item_id || String(row.index)) + ' · pass ' + (index + 1) + ' · ' + riMetricValue({ type: metricType }, value)) + '">' + escapeHtml(riMetricValue({ type: metricType }, value)) + '</span>';
             }).join('');
             return '<div class="item-heatmap-grid item-heatmap-row" style="--heat-pass-count:' + passCount + ';--heat-min-width:' + minWidth + 'px"><span class="item-heatmap-id" title="' + escapeAttr(row.item_id || String(row.index)) + '">' + escapeHtml(row.item_id || String(row.index)) + '</span><span class="item-heatmap-category">' + escapeHtml(String(category)) + '</span><span class="item-heatmap-number">' + (average === null ? '\u2014' : escapeHtml(riMetricValue({ type: metricType }, average))) + '</span><span class="item-heatmap-number">' + escapeHtml(formatPercent(deviation)) + '</span>' + cells + '</div>';
           }).join('');
@@ -11131,8 +11237,8 @@
             // A metric exception is shown on that metric row below. Do not
             // mislabel the whole pass as an ordinary judged failure.
             if (window.QymMetrics.isMetricErrorMeta(metaFor(metric, att.pass_number))) return '';
-            const value = scoreFor(metric, att.pass_number);
-            if (value !== null) verdict = value >= threshold ? 'pass' : 'fail';
+            const passed = metricPassesFor(metric, scoreFor(metric, att.pass_number));
+            if (passed !== null) verdict = passed ? 'pass' : 'fail';
           }
           if (!verdict) return '';
           if (verdict === 'error') {
@@ -11146,7 +11252,7 @@
           const v = scoreFor(name, passNo);
           if (v === null) return { cls: '', display: '\u2014' };
           const mType = state.metricTypes[name] || 'score';
-          const cls = window.QymMetrics.getMetricColorClass(v, mType);
+          const cls = metricColorClassFor(name, v, mType);
           const display = window.QymMetrics.formatMetricObservation(v, mType, state.metricSpecs?.[name]);
           return { cls, display };
         };
@@ -11210,7 +11316,7 @@
               if (!['modified', 'original_score'].includes(key)
                   && state.visibleMetricMetaFields[key] !== false
                   && meta[key] !== undefined && meta[key] !== null && meta[key] !== '') {
-                detail[key] = _parseMetaDeep(meta[key]);
+                detail[window.QymMetrics.metricMetaDisplayKey(key, meta)] = _parseMetaDeep(meta[key]);
               }
             });
             return detail;
@@ -11265,12 +11371,12 @@
             && meta[k] !== undefined && meta[k] !== null && meta[k] !== '');
           if (!metaKeys.length) return '';
           const obj = {};
-          metaKeys.forEach(k => { obj[k] = _parseMetaDeep(meta[k]); });
+          metaKeys.forEach(k => { obj[window.QymMetrics.metricMetaDisplayKey(k, meta)] = _parseMetaDeep(meta[k]); });
           const v = window.QymMetrics.parseScoreValue((metricVals || [])[i]);
           let badge = '';
           if (v !== null) {
             const mType = state.metricTypes[name] || 'score';
-            const cls = window.QymMetrics.getMetricColorClass(v, mType);
+            const cls = metricColorClassFor(name, v, mType);
             badge = '<span class="metric-score-value ' + cls + '">' + window.QymMetrics.formatMetricObservation(v, mType, state.metricSpecs?.[name]) + '</span>';
           }
           const bid = 'det_' + safeId + '_' + i;
@@ -11293,11 +11399,18 @@
             !['modified', 'original_score'].includes(k)
             && state.visibleMetricMetaFields[k] !== false
             && meta[k] !== undefined && meta[k] !== null && meta[k] !== '');
-          if (v === null && !metaKeys.length && !hasMetricExecutionError) return '';
+          const rawValue = ((metricVals || [])[i] == null || (metricVals || [])[i] === '') ? '' : String((metricVals || [])[i]);
+          const modified = String(fullMetricMeta.modified || '').toLowerCase() === 'true';
+          // A stored score that is not a number (older edits kept text such as
+          // "abc") keeps its chip and edit control so it can be fixed (C009).
+          const invalidStored = v === null && rawValue.trim() !== '';
+          if (v === null && !metaKeys.length && !hasMetricExecutionError && !invalidStored && !modified) return '';
           let badge = '';
-          if (v !== null) {
+          if (invalidStored) {
+            badge = '<span class="metric-score-value metric-score-invalid" title="' + escapeAttr('Stored score "' + rawValue + '" is not a number. Edit it to fix it.') + '">' + escapeHtml(rawValue.length > 12 ? rawValue.slice(0, 12) + '\u2026' : rawValue) + '</span>';
+          } else if (v !== null) {
             const mType = state.metricTypes[name] || 'score';
-            const cls = window.QymMetrics.getMetricColorClass(v, mType);
+            const cls = metricColorClassFor(name, v, mType);
             const isReducedBoolean = mType === 'boolean'
               && Number(state.run?.samples || 1) > 1
               && !state.viewPass;
@@ -11309,13 +11422,11 @@
           const editBtn = '<button class="metric-edit-open qym-icon-action" data-row-index="' + escapeAttr(String(rowIndex ?? 0)) + '" data-metric="' + escapeAttr(name) + '" title="Edit" aria-label="Edit ' + escapeAttr(name) + '">' + EDIT_ICON + '</button>';
           // Inline edit: the chip's value swaps for an input plus explicit
           // save and cancel actions.
-          const rawValue = ((metricVals || [])[i] == null || (metricVals || [])[i] === '') ? '' : String((metricVals || [])[i]);
           const inlineEdit = '<span class="metric-edit-controls chip-edit qym-metric-edit-controls hidden">'
             + '<input class="metric-edit-input" type="text" value="' + escapeAttr(rawValue) + '" data-row-index="' + escapeAttr(String(rowIndex ?? 0)) + '" data-metric="' + escapeAttr(name) + '" aria-label="New score" />'
             + '<button class="metric-edit-save qym-metric-edit-action" data-row-index="' + escapeAttr(String(rowIndex ?? 0)) + '" data-metric="' + escapeAttr(name) + '" title="Save" aria-label="Save ' + escapeAttr(name) + '">' + SAVE_ICON + '</button>'
             + '<button class="metric-edit-cancel qym-metric-edit-action" type="button" title="Cancel" aria-label="Cancel editing">' + CLOSE_ICON + '</button>'
-            + '<span class="metric-edit-status"></span></span>';
-          const modified = String(((fullMeta || {})[name] || {}).modified || '').toLowerCase() === 'true';
+            + '<span class="metric-edit-status" aria-live="polite"></span></span>';
           const editedBadge = modified ? '<span class="metric-edit-badge">Edited</span>' : '';
           const metricErrorClass = hasMetricExecutionError ? ' metric-execution-error' : '';
           const metricErrorIndicator = hasMetricExecutionError ? renderMetricErrorIndicator(name) : '';
@@ -11325,7 +11436,7 @@
           let triggerAttrs = ' aria-disabled="true" tabindex="-1"';
           if (metaKeys.length) {
             const obj = {};
-            metaKeys.forEach(k => { obj[k] = _parseMetaDeep(meta[k]); });
+            metaKeys.forEach(k => { obj[window.QymMetrics.metricMetaDisplayKey(k, fullMetricMeta)] = _parseMetaDeep(meta[k]); });
             bodyHtml = '<div class="det-body hidden" id="' + bid + '">' + formatObjectAsHtml(obj) + '</div>';
             caret = '<span class="det-caret"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 3.5 5 4.5-5 4.5"/></svg></span>';
             triggerAttrs = ' data-det-target="' + bid + '" aria-expanded="false"';
@@ -11470,9 +11581,10 @@
           if (hasAnyTaskError) {
             pfClass = 'error';
           } else if (!selectedMetricHasError && metric && mIdx >= 0 && pfMType !== 'numeric') {
-            const pfVal = window.QymMetrics.parseScoreValue(metricVals[mIdx]);
-            if (pfVal !== null) {
-              pfClass = pfVal >= threshold ? 'pass' : 'fail';
+            // No declared direction: no Pass/Fail tag (C008).
+            const pfPassed = metricPassesFor(metric, window.QymMetrics.parseScoreValue(metricVals[mIdx]));
+            if (pfPassed !== null) {
+              pfClass = pfPassed ? 'pass' : 'fail';
             }
           }
           const statusLabel = pfClass === 'pass' ? 'Pass' : 'Fail';
@@ -11605,7 +11717,7 @@
             const hasMetricExecutionError = window.QymMetrics.hasMetricError(row, name);
             if (v === null && !hasMetricExecutionError) return '<span class="item-agg-pill qym-item-metric-cell qym-item-metric-cell--empty" data-qym-metric-column="' + i + '" aria-hidden="true"></span>';
             const mType = state.metricTypes[name] || 'score';
-            const cls = v === null ? '' : window.QymMetrics.getMetricColorClass(v, mType);
+            const cls = v === null ? '' : metricColorClassFor(name, v, mType);
             const isReducedBoolean = mType === 'boolean'
               && Number(state.run?.samples || 1) > 1
               && !state.viewPass;
@@ -11817,8 +11929,28 @@
           }),
         });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok || data.error) throw new Error(data.detail || data.error || 'Failed to update metric');
+        if (!res.ok || data.error) {
+          const error = new Error(data.detail || data.error || 'Failed to update metric');
+          error.status = res.status;
+          throw error;
+        }
         return data;
+      }
+
+      // A rejected score edit keeps the editor open with the reason beside
+      // the input (C009); typing again clears it.
+      function setScoreEditError(input, statusEl, message) {
+        if (statusEl) {
+          statusEl.textContent = message || '';
+          statusEl.classList.toggle('is-error', Boolean(message));
+        }
+        if (!input) return;
+        if (message) {
+          input.setAttribute('aria-invalid', 'true');
+          input.focus();
+        } else {
+          input.removeAttribute('aria-invalid');
+        }
       }
 
       function applyUpdatedRow(updatedRow) {
@@ -11860,6 +11992,7 @@
             if (e.key === 'Enter') input.parentElement.querySelector('.metric-edit-save')?.click();
             else if (e.key === 'Escape') input.parentElement.querySelector('.metric-edit-cancel')?.click();
           };
+          input.oninput = () => setScoreEditError(input, input.parentElement.querySelector('.metric-edit-status'), '');
         });
         document.querySelectorAll('.metric-edit-cancel').forEach(btn => {
           btn.onclick = (event) => {
@@ -11868,6 +12001,7 @@
             const chip = btn.closest('.det-toggle, .qym-metric-compare__cell');
             const input = controls ? controls.querySelector('.metric-edit-input') : null;
             if (input && input.dataset.originalValue !== undefined) input.value = input.dataset.originalValue;
+            setScoreEditError(input, controls?.querySelector('.metric-edit-status'), '');
             controls?.classList.add('hidden');
             chip?.classList.remove('editing');
           };
@@ -11883,18 +12017,27 @@
             const statusEl = controls ? controls.querySelector('.metric-edit-status') : null;
             const filePath = state.run?.file_path || '';
             if (!filePath || !metricName || !input) { if (statusEl) statusEl.textContent = 'Unavailable'; return; }
+            const parsed = window.QymMetrics.parseMetricScoreInput(input.value, state.metricSpecs?.[metricName] || null, {
+              reduced: Number(state.run?.samples || 1) > 1 && !passNumber,
+            });
+            if (!parsed.ok) { setScoreEditError(input, statusEl, parsed.message); return; }
+            setScoreEditError(input, statusEl, '');
             btn.disabled = true;
             if (statusEl) statusEl.textContent = 'Saving...';
             try {
-              const result = await updateMetricScore(filePath, rowIndex, metricName, input.value, passNumber);
+              const result = await updateMetricScore(filePath, rowIndex, metricName, parsed.value, passNumber);
               if (result && result.row) {
                 applyUpdatedRow(result.row);
                 renderOverview();
                 renderItems();
               }
             } catch (err) {
-              if (statusEl) statusEl.textContent = 'Error';
-              showToast('error', 'Could not save score', err.message || 'The score was not saved.');
+              if (err && err.status === 422) {
+                setScoreEditError(input, statusEl, err.message);
+              } else {
+                if (statusEl) statusEl.textContent = 'Error';
+                showToast('error', 'Could not save score', err.message || 'The score was not saved.');
+              }
             } finally {
               btn.disabled = false;
               if (statusEl && statusEl.textContent === 'Saving...') statusEl.textContent = '';

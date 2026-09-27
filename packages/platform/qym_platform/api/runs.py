@@ -85,6 +85,12 @@ from qym_platform.services.run_review import (
     review_history,
     state_conflict,
 )
+from qym_platform.services.metric_semantics import declared_direction
+from qym_platform.services.score_edits import (
+    ScoreEditError,
+    parse_score_edit,
+    reduced_score_type,
+)
 from qym_platform.services.run_means import (
     METRIC_ERROR_STATUSES,
     MetricTotals,
@@ -128,12 +134,16 @@ def _metric_spec_payload(spec: RunMetricSpec) -> Dict[str, Any]:
     return {
         "schema_version": spec.schema_version,
         "score_type": spec.score_type,
+        # None: no declared direction. metrics.js metricDirection() also
+        # treats the default "maximize" schema 1 SDKs sent for plain
+        # callables (score_type "legacy") as undeclared.
         "direction": spec.direction,
         "pass_threshold": spec.pass_threshold,
         "sample_reducer": spec.sample_reducer,
         "run_reducer": spec.run_reducer,
         "unit": spec.unit,
         "precision": spec.precision,
+        "primary": bool(spec.is_primary),
     }
 
 
@@ -255,22 +265,16 @@ def _execution_error_pairs_for_runs(
             RunItemScore.item_id,
             RunItemScore.metric_name,
             RunItemScore.meta["status"].as_string(),
-            RunItemScore.meta["error"],
         )
         .filter(
             RunItemScore.run_id.in_(classic_run_ids),
-            or_(
-                func.lower(
-                    func.trim(cast(RunItemScore.meta["status"].as_string(), Text))
-                ).in_(tuple(_EXECUTION_ERROR_STATUSES)),
-                RunItemScore.meta["error"].as_string().isnot(None),
-            ),
+            metric_error_candidates(RunItemScore),
         )
         .filter(RunItemScore.item_id.in_(item_ids) if item_ids is not None else True)
         .yield_per(1000)
     )
-    for run_id, item_id, metric, status, error in aggregate_score_candidates:
-        if _is_metric_execution_error({"status": status, "error": error}):
+    for run_id, item_id, metric, status in aggregate_score_candidates:
+        if _is_metric_execution_error({"status": status}):
             error_pairs[run_id].add((str(item_id), 1))
             if (str(item_id), 1) not in task_pairs.get(run_id, set()):
                 metric_checks[run_id].add((str(item_id), 1, metric))
@@ -282,24 +286,18 @@ def _execution_error_pairs_for_runs(
             RunItemPassScore.pass_number,
             RunItemPassScore.metric_name,
             RunItemPassScore.meta["status"].as_string(),
-            RunItemPassScore.meta["error"],
         )
         .filter(
             RunItemPassScore.run_id.in_(run_ids),
-            or_(
-                func.lower(
-                    func.trim(cast(RunItemPassScore.meta["status"].as_string(), Text))
-                ).in_(tuple(_EXECUTION_ERROR_STATUSES)),
-                RunItemPassScore.meta["error"].as_string().isnot(None),
-            ),
+            metric_error_candidates(RunItemPassScore),
         )
         .filter(
             RunItemPassScore.item_id.in_(item_ids) if item_ids is not None else True
         )
         .yield_per(1000)
     )
-    for run_id, item_id, pass_number, metric, status, error in pass_score_candidates:
-        if _is_metric_execution_error({"status": status, "error": error}):
+    for run_id, item_id, pass_number, metric, status in pass_score_candidates:
+        if _is_metric_execution_error({"status": status}):
             pair = (str(item_id), max(1, int(pass_number or 1)))
             error_pairs[run_id].add(pair)
             if pair not in task_pairs.get(run_id, set()):
@@ -3984,12 +3982,11 @@ def run_passes(
     )
     # Scorer errors without a score count as 0 (services/run_means.py).
     unscored_errors: Dict[tuple[int, str], int] = defaultdict(int)
-    for pass_number, metric_name, status, error in (
+    for pass_number, metric_name, status in (
         db.query(
             RunItemPassScore.pass_number,
             RunItemPassScore.metric_name,
             RunItemPassScore.meta["status"].as_string(),
-            RunItemPassScore.meta["error"],
         )
         .filter(
             RunItemPassScore.run_id == run.id,
@@ -3998,7 +3995,7 @@ def run_passes(
         )
         .all()
     ):
-        if is_metric_error({"status": status, "error": error}):
+        if is_metric_error({"status": status}):
             unscored_errors[(int(pass_number), metric_name)] += 1
     pass_totals: Dict[tuple[int, str], MetricTotals] = {
         (int(pass_number), metric_name): MetricTotals(
@@ -4343,7 +4340,7 @@ def delete_run_passes(
 def run_group_metrics(
     run_id: str,
     metric: Optional[str] = Query(None),
-    threshold: float = Query(0.8),
+    threshold: Optional[float] = Query(None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
@@ -4364,9 +4361,27 @@ def run_group_metrics(
     from qym_platform.services.repeat_analysis import cached_repeat_analysis
 
     samples = int(getattr(run, "samples", 1) or 1)
-    metric_name = metric or (run.metrics[0] if run.metrics else None)
+    # Default to the declared primary metric, else the first (C008).
+    specs = {
+        spec.metric_name: spec
+        for spec in db.query(RunMetricSpec).filter(RunMetricSpec.run_id == run.id)
+    }
+    metric_name = metric or next(
+        (name for name in run.metrics or [] if getattr(specs.get(name), "is_primary", None)),
+        run.metrics[0] if run.metrics else None,
+    )
     if not metric_name:
         return {"error": "Run has no metrics"}
+    # Passes follow the metric's declared direction. Without one the page
+    # shows only averages; the pass math keeps the historical default.
+    spec = specs.get(metric_name)
+    direction = declared_direction(spec)
+    if threshold is None:
+        threshold = (
+            spec.pass_threshold
+            if spec is not None and spec.pass_threshold is not None
+            else (0.2 if direction == "minimize" else 0.8)
+        )
 
     items_scores: Dict[str, list] = {}
     rows = (
@@ -4395,7 +4410,13 @@ def run_group_metrics(
         if isinstance(raw_report_k, (int, float)) and 1 <= int(raw_report_k) <= samples
         else None
     )
-    stats = group_stats(items_scores, threshold=threshold, k=samples, report_k=report_k)
+    stats = group_stats(
+        items_scores,
+        threshold=threshold,
+        k=samples,
+        report_k=report_k,
+        direction=direction or "maximize",
+    )
     analysis = cached_repeat_analysis(
         db,
         run_id=run.id,
@@ -4404,10 +4425,12 @@ def run_group_metrics(
         samples=samples,
         rows=score_rows,
         items_scores=items_scores,
+        direction=direction or "maximize",
     )
     return {
         "run_id": run.id,
         "metric": metric_name,
+        "direction": direction,
         "threshold": threshold,
         "samples": samples,
         "report_k": report_k,
@@ -4679,6 +4702,28 @@ def update_metric(
         .first()
     )
 
+    # Validate before anything is written: the metric must belong to the run
+    # and the score must be a number its type accepts (C009).
+    if not score_record and metric_name not in (run.metrics or []):
+        raise HTTPException(
+            status_code=422, detail=f"Unknown metric for this run: {metric_name}"
+        )
+    spec = (
+        db.query(RunMetricSpec)
+        .filter(
+            RunMetricSpec.run_id == run.id, RunMetricSpec.metric_name == metric_name
+        )
+        .first()
+    )
+    score_type = spec.score_type if spec else None
+    if pass_number is None and run_samples > 1:
+        # A repeat run's item value is the mean over its passes.
+        score_type = reduced_score_type(score_type)
+    try:
+        numeric_val = parse_score_edit(new_score, score_type)
+    except ScoreEditError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
     if not score_record:
         score_record = RunItemScore(
             run_id=run.id,
@@ -4699,13 +4744,8 @@ def update_metric(
     meta["modified"] = "true"
 
     if pass_number is not None:
-        from qym_platform.db.models import RunItemPassScore
-
-        try:
-            numeric_val = float(new_score)
-        except (ValueError, TypeError):
-            raise HTTPException(status_code=400, detail="Pass scores must be numeric")
-
+        # RunItemPassScore comes from the module import: a local import here
+        # made it unbound for repeat-run item edits without a pass (C009).
         pass_record = (
             db.query(RunItemPassScore)
             .filter(
@@ -4751,13 +4791,8 @@ def update_metric(
             {int(p.pass_number): p.score_numeric for p in siblings}, meta
         )
     else:
-        try:
-            numeric_val = float(new_score)
-            score_record.score_numeric = numeric_val
-            score_record.score_raw = numeric_val
-        except (ValueError, TypeError):
-            score_record.score_numeric = None
-            score_record.score_raw = new_score
+        score_record.score_numeric = numeric_val
+        score_record.score_raw = numeric_val
 
     score_record.meta = meta
     db.commit()

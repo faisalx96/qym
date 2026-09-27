@@ -57,7 +57,7 @@ result = Evaluator(
     <tr><td><code>bool</code></td><td><code>True</code> &rarr; <code>1.0</code>, <code>False</code> &rarr; <code>0.0</code>.</td></tr>
     <tr><td><code>int</code> / <code>float</code></td><td>Used directly as the numeric score (coerced to <code>float</code>).</td></tr>
     <tr><td><code>dict</code> with a <code>score</code> key</td><td>Numeric <code>score</code> plus optional <code>label</code>, <code>explanation</code>, and <code>metadata</code>. A non-numeric <code>score</code> becomes <code>0.0</code>.</td></tr>
-    <tr><td><code>dict</code> with an <code>error</code> key</td><td>Score forced to <code>0.0</code> and the item is treated as a <strong>metric error</strong> — see the warning below.</td></tr>
+    <tr><td><code>dict</code> with an <code>error</code> key</td><td>Score forced to <code>0.0</code> and the item is recorded as a <strong>metric error</strong> (<code>metadata.status = "error"</code>) — see the warning below.</td></tr>
     <tr><td><code>MetricResult</code></td><td>Passed through unchanged (richest option).</td></tr>
     <tr><td>anything else</td><td>Score <code>0.0</code>; the raw value is stashed in <code>metadata</code> under <code>raw</code>.</td></tr>
   </tbody>
@@ -77,7 +77,7 @@ result = Evaluator(
 
 <div class="docs-callout danger">
   <svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-  <p><span class="docs-callout-title">A top-level <code>error</code> key excludes the item from aggregation.</span> A dict whose <strong>top level</strong> contains <code>error</code> (e.g. <code>{"score": 0, "error": "..."}</code>) is recorded as a metric error: it counts against the metric's success rate but is left <em>out</em> of the mean. If instead you want a genuine failing score that still pulls the average down, return a real <code>0.0</code> and put the reason in <code>metadata</code> — i.e. <code>{"score": 0.0, "metadata": {"error": "..."}}</code>. The nested form is a normal scored zero; only the top-level <code>error</code> key triggers exclusion.</p>
+  <p><span class="docs-callout-title">A top-level <code>error</code> key means the metric itself failed.</span> Raising an exception, timing out, or returning a dict whose <strong>top level</strong> contains <code>error</code> (e.g. <code>{"score": 0, "error": "..."}</code>) records a metric error: qym sets <code>metadata.status = "error"</code> (or <code>"timeout"</code>), and the platform counts it in the error totals and as <code>0</code> in the run mean. When the metric worked and the output is simply wrong, return a real <code>0.0</code> and put the reason in <code>metadata</code> under <code>reason</code> — i.e. <code>{"score": 0.0, "metadata": {"reason": "..."}}</code>. That is a normal scored zero, shown as the metric's reason, not as an error. Only <code>metadata.status</code> marks a metric error; a reason that older metrics stored in <code>metadata.error</code> is also shown as a reason.</p>
 </div>
 
 <h3>MetricResult — the structured form</h3>
@@ -141,7 +141,7 @@ def json_validity(output, expected=None):
 <pre data-lang="python">def valid_sql(output, expected, input_data):
     """1.0 if the generated SQL parses, else 0.0."""
     if output is None or str(output).strip() == "":
-        return {"score": 0.0, "metadata": {"is_valid": False, "error": "Empty output"}}
+        return {"score": 0.0, "metadata": {"is_valid": False, "reason": "Empty output"}}
 
     sql = str(output).strip()
     try:
@@ -157,9 +157,9 @@ def json_validity(output, expected=None):
             "metadata": {"is_valid": is_valid, "note": "sqlglot not installed"},
         }
     except Exception as exc:
-        return {"score": 0.0, "metadata": {"is_valid": False, "error": str(exc)}}</pre>
+        return {"score": 0.0, "metadata": {"is_valid": False, "reason": str(exc)}}</pre>
 
-<p>Note the failure path returns a real <code>0.0</code> with the reason nested in <code>metadata</code> — those zeros stay in the aggregate, which is what you want for a "this output is wrong" signal.</p>
+<p>Note the failure path returns a real <code>0.0</code> with the reason nested in <code>metadata</code> under <code>reason</code> — those zeros stay in the aggregate, which is what you want for a "this output is wrong" signal. A syntax error in the model's SQL is a verdict about the output, not a failure of the metric, so it is not reported as a metric error.</p>
 
 <h2>Async metrics</h2>
 <p>Make a metric <code>async</code> <strong>only</strong> when it must <code>await</code> a genuinely async dependency. Synchronous metrics are already run in a thread pool, so they never block the event loop:</p>
@@ -208,7 +208,7 @@ evaluator = Evaluator(
 <table>
   <thead><tr><th>Mistake</th><th>What happens</th><th>Fix</th></tr></thead>
   <tbody>
-    <tr><td>Raising an exception on ordinary bad output</td><td>qym catches it and records a metric <strong>error</strong> (<code>{"score": 0, "error": ...}</code>), which is excluded from the mean.</td><td>Return <code>0.0</code> with the reason in <code>metadata</code> instead of raising.</td></tr>
+    <tr><td>Raising an exception on ordinary bad output</td><td>qym catches it and records a metric <strong>error</strong> (<code>{"score": 0, "error": ...}</code>), which counts as <code>0</code> in the mean and in the error totals.</td><td>Return <code>0.0</code> with the reason in <code>metadata</code> instead of raising.</td></tr>
     <tr><td>Returning a string as the score</td><td>A non-numeric <code>score</code> is coerced to <code>0.0</code>.</td><td>Return a number, a scored dict, or a <code>MetricResult</code>.</td></tr>
     <tr><td>Two metrics with the same <code>__name__</code> (or two lambdas)</td><td>One silently overwrites the other in the metrics dict.</td><td>Use distinct function names or <code>register_metric</code> with explicit names.</td></tr>
     <tr><td>Marking a blocking function <code>async</code></td><td>It stalls the event loop and slows the whole run.</td><td>Keep it synchronous — qym threads sync metrics automatically.</td></tr>

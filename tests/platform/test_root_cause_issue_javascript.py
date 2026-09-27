@@ -237,12 +237,25 @@ def test_playground_can_rebuild_categories_from_fresh_approved_examples() -> Non
 
 
 def test_metric_analysis_is_shown_only_for_failed_or_errored_judges() -> None:
-    function = _function("run", "shouldRenderMetricAnalysis")
+    function = "\n".join(
+        _function("run", name)
+        for name in ("metricDirectionOf", "metricPassesFor", "shouldRenderMetricAnalysis")
+    )
+    metrics_js = (DASHBOARD / "metrics.js").read_text()
     _run_javascript(
-        function
+        "const realMetrics = (() => { const window = {};\n"
+        + metrics_js
+        + "\nreturn window.QymMetrics; })();\n"
+        + function
         + """
         const metricErrors = new Set();
         const state = {
+          // Pass/fail follows the declared direction (C008).
+          metricDirections: {
+            passing_boolean: 'maximize', failing_boolean: 'maximize',
+            passing_score: 'maximize', failing_score: 'maximize',
+            zero_threshold: 'maximize', broken_judge: 'maximize',
+          },
           metricTypes: {
             passing_boolean: 'boolean',
             failing_boolean: 'boolean',
@@ -263,6 +276,7 @@ def test_metric_analysis_is_shown_only_for_failed_or_errored_judges() -> None:
           },
         };
         const window = {QymMetrics: {
+          metricPasses: realMetrics.metricPasses,
           isTaskErrorRow: row => ['error', 'failed'].includes(String(row?.status || '').toLowerCase()),
           hasMetricError: (_row, metricName) => metricErrors.has(metricName),
           parseScoreValue: value => {
@@ -350,6 +364,9 @@ def test_compare_displays_and_saves_the_same_scope(scope_kind: str) -> None:
             "passRefBase",
             "compareRootCauseScope",
             "compareExecutionErrorInfo",
+            "metricDirectionFor",
+            "metricPassesFor",
+            "metricColorClassFor",
             "renderCompareOutputGroup",
             "wireRootCauseHandlers",
             "saveRootCauseIssues",

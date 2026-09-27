@@ -82,6 +82,21 @@ def test_metric_docs_match_runtime_dependency_and_timeout_behavior() -> None:
     assert "JudgeInputError" in judges
 
 
+def test_metric_error_docs_match_the_status_contract() -> None:
+    """Only ``metadata.status`` marks a metric error (C010), and scorer errors
+    count as 0 in the run mean (C015); no guide may still say otherwise."""
+    guides = {
+        path.relative_to(DASHBOARD_DOCS).as_posix(): _read(path)
+        for path in DASHBOARD_DOCS.rglob("*.html")
+    }
+    for name, text in guides.items():
+        assert "excluded from the mean" not in text, name
+        assert "excludes the item from aggregation" not in text, name
+        assert 'metadata={"error": "..."}' not in text, name
+    judges = guides["sdk-guide/judges.html"]
+    assert 'metadata={"status": "error", "error": "..."}' in judges
+
+
 def test_product_eval_docs_use_one_native_repeat_run() -> None:
     client = _read(PLATFORM / "docs" / "PRODUCT_EVAL_API_CLIENT_GUIDE.md")
     operator = _read(PLATFORM / "docs" / "PRODUCT_EVAL_API_GUIDE.md")

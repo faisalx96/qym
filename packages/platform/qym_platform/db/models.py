@@ -781,12 +781,16 @@ class RunMetricSpec(Base):
     position: Mapped[int] = mapped_column(Integer, default=0)
     schema_version: Mapped[int] = mapped_column(Integer, default=1)
     score_type: Mapped[str] = mapped_column(String(30))
-    direction: Mapped[str] = mapped_column(String(20), default="maximize")
+    # "maximize" / "minimize"; NULL when the metric declares no direction
+    # (views then show it neutrally).
+    direction: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     pass_threshold: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     sample_reducer: Mapped[str] = mapped_column(String(20), default="mean")
     run_reducer: Mapped[str] = mapped_column(String(20), default="mean")
     unit: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
     precision: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # The run's declared headline metric (at most one per run).
+    is_primary: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("run_id", "metric_name", name="uq_run_metric_spec"),

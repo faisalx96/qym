@@ -249,8 +249,11 @@ Numeric/ID columns add `font-family: var(--font-mono)` and
 Right-align scalar numeric columns. A column whose primary content is a chart,
 bar, or score track aligns its header to the visualization's left edge.
 Score-bearing table values use `.qym-score-value` plus the `score-1`…`score-5`
-class returned by `QymMetrics.getMetricColorClass()`. Raw numeric metrics stay
-neutral, and confidence intervals remain muted rather than inheriting the
+class returned by `QymMetrics.getMetricColorClass(value, type, direction)`,
+with the direction from `QymMetrics.metricDirection(spec)`. Lower-is-better
+metrics read the ramp inverted; a metric that declares no direction stays
+neutral (no good/bad color, Pass/Fail, "best" or winner). Raw numeric metrics
+stay neutral, and confidence intervals remain muted rather than inheriting the
 estimate's score color.
 Wide tables that use `.qym-scroll-mirror` expose only the persistent mirrored
 horizontal scrollbar. Shared behavior adds `.qym-scroll-mirror-target` to hide

@@ -3718,23 +3718,16 @@ def _metric_passed(
     return score.score_numeric >= threshold
 
 
-_EXECUTION_ERROR_STATUSES = {"error", "failed", "timeout"}
-
-
 def _metric_score_has_execution_error(score: Any) -> bool:
     """Return whether a metric score represents an exception, not a bad answer."""
     if score is None:
         return False
-    # Labels are judge verdicts. Only explicit execution metadata identifies
-    # an exception; task failures are filtered using the item's error field.
-    meta = getattr(score, "meta", None)
-    if not isinstance(meta, dict):
-        return False
-    status = str(meta.get("status") or "").strip().lower()
-    if status in _EXECUTION_ERROR_STATUSES:
-        return True
-    error = meta.get("error")
-    return bool(error.strip()) if isinstance(error, str) else bool(error)
+    # Labels and verdict reasons are judge output. Only explicit execution
+    # metadata identifies an exception; task failures are filtered using the
+    # item's error field.
+    from qym_platform.services.run_means import is_metric_error
+
+    return is_metric_error(getattr(score, "meta", None))
 
 
 def _analysis_metric_names(

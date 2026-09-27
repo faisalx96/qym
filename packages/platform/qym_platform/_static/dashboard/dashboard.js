@@ -215,6 +215,7 @@
       selectedMetric: '',
       globalK: 5,
       threshold: 0.8,
+      thresholdByMetric: {},  // metric -> pass threshold the user chose
       metricIsBoolean: false,
       metricIsNumeric: false,
       visibleStatKeys: null,  // null = all visible; [] = none; otherwise explicit keys
@@ -365,6 +366,23 @@
     });
   }
 
+  // Metric semantics (C008): a metric's declared direction in a run's spec
+  // decides colors, "best" and ranking; without one it is shown neutrally.
+  function runMetricDirection(run, metric) {
+    return window.QymMetrics.metricDirection(run?.metric_specs?.[metric]);
+  }
+
+  // One direction for a set of runs: the one they declare, null if none or
+  // if runs disagree.
+  function runsMetricDirection(runs, metric) {
+    const directions = new Set();
+    for (const run of runs || []) {
+      const direction = runMetricDirection(run, metric);
+      if (direction) directions.add(direction);
+    }
+    return directions.size === 1 ? Array.from(directions)[0] : null;
+  }
+
   function getTraceMetricConfig(metricKey) {
     return TRACE_METRICS.find(tm => tm.key === metricKey) || null;
   }
@@ -378,7 +396,7 @@
       return '<td class="col-trace-metric-value">—</td>';
     }
     if (traceMetric.key === 'tool_success_rate') {
-      const metricClass = window.QymMetrics.getMetricColorClass(value, 'score');
+      const metricClass = window.QymMetrics.getMetricColorClass(value, 'score', 'maximize');
       return `<td class="col-trace-metric-value"><span class="metric-score ${metricClass}">${traceMetric.fmt(value)}</span></td>`;
     }
     return `<td class="col-trace-metric-value">${traceMetric.fmt(value)}</td>`;
@@ -2105,6 +2123,8 @@
             file_path: run.file_path,
             timestamp: run.timestamp,
             metric_averages: run.metric_averages || {},
+            metric_specs: run.metric_specs || {},
+            metrics: run.metrics || [],
             trace_stats: run.trace_stats || null,
             latency: run.avg_latency_ms || 0,
             median_latency: run.median_latency_ms || 0,
@@ -2116,7 +2136,16 @@
       }
 
       const visibleTraceMetrics = _visibleTraceMetrics(allRuns);
-      const groupMetricName = allComboMetrics.find(metric => (state._metricTypes?.[metric] || 'score') !== 'numeric') || '';
+      // Group Pass@K uses the newest run's declared primary metric when it is
+      // a score, else the first score metric; it needs a declared direction.
+      const newestComboRun = allRuns.slice().sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))[0];
+      const declaredGroupMetric = newestComboRun
+        ? window.QymMetrics.defaultMetricName(newestComboRun.metrics, newestComboRun.metric_specs)
+        : null;
+      const isScoreMetric = metric => (state._metricTypes?.[metric] || 'score') !== 'numeric';
+      const groupMetricName = (declaredGroupMetric && allComboMetrics.includes(declaredGroupMetric) && isScoreMetric(declaredGroupMetric)
+        ? declaredGroupMetric
+        : allComboMetrics.find(isScoreMetric)) || '';
 
       // Generate unique card ID for sorting state
       const cardId = getChartCardId(combo.task, combo.dataset);
@@ -2493,7 +2522,8 @@
       }
 
       function getChartGroupMetricThreshold(runs, metricName) {
-        return isChartGroupMetricBoolean(runs, metricName) ? 0.9999 : 0.8;
+        if (isChartGroupMetricBoolean(runs, metricName)) return 0.9999;
+        return window.QymMetrics.defaultPassThreshold(null, runsMetricDirection(runs, metricName));
       }
 
       function scheduleChartGroupMetricStats(runs, metricName, threshold, isBoolean) {
@@ -2507,7 +2537,7 @@
         const paths = Array.from(new Set(runs.map(run => run.file_path).filter(Boolean)));
         fetchModelRunsData(paths).then((payload) => {
           const detailedRuns = payload && Array.isArray(payload.runs) ? payload.runs : [];
-          const stats = calculateModelStatsFromItems(detailedRuns, metricName, threshold, isBoolean);
+          const stats = calculateModelStatsFromItems(detailedRuns, metricName, threshold, isBoolean, runsMetricDirection(runs, metricName));
           state.chartGroupMetricStats[cacheKey] = { status: 'ready', K: stats.K || runs.length, stats };
           if (state.currentView === 'charts') renderChartsView();
         }).catch(() => {
@@ -2543,6 +2573,8 @@
         if (!showGroupStatColumns) return '';
         const emptyCells = renderEmptyGroupStatCells();
         if (!groupMetricName || !Array.isArray(runs) || runs.length === 0) return emptyCells;
+        // Pass rates need a declared direction (C008).
+        if (!runsMetricDirection(runs, groupMetricName)) return emptyCells;
         const isBoolean = isChartGroupMetricBoolean(runs, groupMetricName);
         const threshold = getChartGroupMetricThreshold(runs, groupMetricName);
         const entry = scheduleChartGroupMetricStats(runs, groupMetricName, threshold, isBoolean);
@@ -3422,7 +3454,7 @@
           return `<td class="col-metric-value"><span class="metric-na">—</span>${renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : '', metric)}</td>`;
         }
         const mType = state._metricTypes?.[metric] || window.QymMetrics.detectMetricTypeFromAvg(value);
-        const metricClass = window.QymMetrics.getMetricColorClass(value, mType);
+        const metricClass = window.QymMetrics.getMetricColorClass(value, mType, runMetricDirection(run, metric));
         const peerValues = usesDashboardPage()
           ? (run.metric_neighbor_values?.[metric] || [])
           : getRunComboPeerValues(allRuns, run, candidate => candidate.metric_averages?.[metric]);
@@ -3784,7 +3816,7 @@
         // then fills values in place — same geometry, no loading flicker.
         const listRun = runs.find(r => r.run_id === runId);
         const summaries = (listRun && Array.isArray(listRun.pass_summaries)) ? listRun.pass_summaries : [];
-        const primary = listRun ? (listRun.metrics || [])[0] : null;
+        const primary = listRun ? window.QymMetrics.defaultMetricName(listRun.metrics || [], listRun.metric_specs || {}) : null;
         if (summaries.length) {
           data = {
             _optimistic: true,
@@ -3854,7 +3886,16 @@
       const passHatLabel = estLabel('^', reportK);
       const threshold = groupPayload.threshold != null ? groupPayload.threshold : 0.8;
       const thrPct = Math.round(threshold * 100);
-      const groupMetric = groupPayload.metric || (passes.metrics || [])[0] || 'primary metric';
+      const listRunForGroup = runs.find(candidate => candidate.run_id === runId) || {};
+      const groupMetric = groupPayload.metric
+        || window.QymMetrics.defaultMetricName(passes.metrics || [], listRunForGroup.metric_specs || {})
+        || 'primary metric';
+      // Pass rates need a declared direction; lower-is-better passes at or
+      // below the threshold (the server applies the same rule).
+      const groupDirection = groupPayload.direction !== undefined
+        ? window.QymMetrics.metricDirection({ direction: groupPayload.direction })
+        : runMetricDirection(listRunForGroup, groupMetric);
+      const passRule = groupDirection === 'minimize' ? '≤' : '≥';
       const metricOptions = (passes.metrics || []).map(metric =>
         `<option value="${escapeHtml(metric)}"${metric === groupMetric ? ' selected' : ''}>${escapeHtml(metric)}</option>`
       ).join('');
@@ -3869,9 +3910,10 @@
         ? `across ${k} independent passes.`
         : `from ${finished} of ${k} completed passes.`;
 
-      const stat = (label, v, tooltip) => {
+      const stat = (label, v, tooltip, direction = 'maximize') => {
+        if (!groupDirection && direction === 'maximize') return '';
         const isNum = typeof v === 'number';
-        const cls = isNum ? window.QymMetrics.getMetricColorClass(v, 'score') : '';
+        const cls = isNum ? window.QymMetrics.getMetricColorClass(v, 'score', direction) : '';
         const text = isNum ? window.QymMetrics.formatMetricValue(v, 'score') : pendingText('—');
         return `<span class="samples-summary-stat" title="${escapeHtml(tooltip)}">` +
           `<span class="samples-summary-label">${label}</span>` +
@@ -3914,6 +3956,8 @@
       // Best-in-column chips across sibling passes (same dialect as the run
       // page's pass sweep): max wins for metrics, min wins for latencies.
       const winnersFor = (valueOf, direction) => {
+        // Metric columns pass their declared direction; none = no best.
+        if (direction !== 'max' && direction !== 'min') return new Set();
         const entries = peerPasses
           .map(p => ({ pass: Number(p.pass_number), value: valueOf(p) }))
           .filter(entry => typeof entry.value === 'number' && Number.isFinite(entry.value));
@@ -3930,7 +3974,10 @@
       };
       const metricWinners = Object.fromEntries(metricsToShow.map(metric => [
         metric,
-        winnersFor(p => (p.metric_means || {})[metric], 'max'),
+        winnersFor(
+          p => (p.metric_means || {})[metric],
+          { maximize: 'max', minimize: 'min' }[runMetricDirection(parentRun, metric)] || null,
+        ),
       ]));
       const avgLatencyWinners = winnersFor(p => p.avg_latency_ms, 'min');
       const medianLatencyWinners = winnersFor(p => p.median_latency_ms, 'min');
@@ -3983,7 +4030,7 @@
           const metricType = state._metricTypes?.[metric] || window.QymMetrics.detectMetricTypeFromAvg(value);
           const peers = peerPasses.map(sibling => (sibling.metric_means || {})[metric]);
           const display = window.QymMetrics.formatMetricValueSmart(value, metricType, peers);
-          const metricClass = window.QymMetrics.getMetricColorClass(value, metricType);
+          const metricClass = window.QymMetrics.getMetricColorClass(value, metricType, runMetricDirection(parentRun, metric));
           const chip = chipAttrs(metricWinners[metric], firstPass);
           return `<td class="col-metric-value"><span class="metric-score ${metricClass}${chip.cls}"${chip.title}>${display}</span>${renderExecutionErrors(pass, ' in this pass', metric)}</td>`;
         }).join('');
@@ -4041,20 +4088,20 @@
                 <span>Metric</span>
                 <select class="samples-metric-select" aria-label="Group metric">${metricOptions}</select>
               </label>` : ''}
-              <span class="samples-threshold" title="An item passes when its score meets or exceeds this threshold.">
-                <span>Pass if ≥</span>
+              ${groupDirection ? `<span class="samples-threshold" title="${groupDirection === 'minimize' ? 'An item passes when its score is at or below this threshold.' : 'An item passes when its score meets or exceeds this threshold.'}">
+                <span>Pass if ${passRule}</span>
                 <input type="range" class="threshold-slider-inline samples-threshold-slider"
                   min="0" max="100" step="5" value="${thrPct}" aria-label="Pass threshold">
                 <span class="threshold-value">${thrPct}%</span>
-              </span>
+              </span>` : `<span class="samples-threshold" title="${escapeHtml(window.QymMetrics.metricDirectionLabel(null))}">No direction declared</span>`}
               <div class="samples-summary-grid">
               ${stat(passAtLabel, group.pass_at_k, reportK
-                ? `Estimated chance that at least one of ${reportK} attempts scores ≥${thrPct}% — the unbiased pass@${reportK} computed from all ${k} stored passes.`
-                : `% of items where at least one of the ${k} passes scored ≥${thrPct}%.`)}
+                ? `Estimated chance that at least one of ${reportK} attempts scores ${passRule}${thrPct}% — the unbiased pass@${reportK} computed from all ${k} stored passes.`
+                : `% of items where at least one of the ${k} passes scored ${passRule}${thrPct}%.`)}
               ${stat(passHatLabel, group.pass_hat_k, reportK
-                ? `Estimated chance that all ${reportK} attempts score ≥${thrPct}% — the unbiased pass^${reportK} computed from all ${k} stored passes.`
-                : `% of items where all ${k} passes scored ≥${thrPct}%.`)}
-              ${stat(`Avg@${k}`, group.avg_at_k, `Mean score across all items and all ${k} passes.`)}
+                ? `Estimated chance that all ${reportK} attempts score ${passRule}${thrPct}% — the unbiased pass^${reportK} computed from all ${k} stored passes.`
+                : `% of items where all ${k} passes scored ${passRule}${thrPct}%.`)}
+              ${stat(`Avg@${k}`, group.avg_at_k, `Mean score across all items and all ${k} passes.`, groupDirection)}
               ${stat('Consistency', group.consistency, 'How often passes agree on pass/fail for the same item. 100% = all passes agree.')}
               ${stat('Reliability', group.reliability, 'Of the items solved at least once, the share of attempts that solve them.')}
               ${latencyStat}
@@ -4994,15 +5041,30 @@
       }
     }
 
-    // Detect if metric is boolean
+    // Detect if metric is boolean, and its declared direction (C008)
     detectModelsViewMetricType(matchingRuns, mvs.selectedMetric);
+    mvs.metricDirection = runsMetricDirection(matchingRuns, mvs.selectedMetric);
+    // Pass threshold: the one chosen for this metric, else the metric's own
+    // default (spec pass_threshold, else 80%, or 20% when lower is better),
+    // as on Compare and the run page. A fixed 80% made "Pass ≤ 80%" pass
+    // nearly every item of a lower-is-better metric.
+    const thresholdSpec = matchingRuns
+      .map(run => run?.metric_specs?.[mvs.selectedMetric])
+      .find(spec => spec && typeof spec === 'object') || null;
+    const chosenThreshold = (mvs.thresholdByMetric || {})[mvs.selectedMetric];
+    mvs.threshold = chosenThreshold != null
+      ? chosenThreshold
+      : window.QymMetrics.defaultPassThreshold(thresholdSpec, mvs.metricDirection);
+    syncModelsThresholdSlider();
     const globalMetric = candidates?.metric_summary?.[mvs.selectedMetric];
     if (globalMetric) {
       mvs.metricIsBoolean = !!globalMetric.is_boolean;
       mvs.metricIsNumeric = !!globalMetric.is_numeric;
       const thresholdRow = el('models-threshold-row');
-      if (thresholdRow) thresholdRow.style.display = (mvs.metricIsBoolean || mvs.metricIsNumeric) ? 'none' : 'inline-flex';
+      if (thresholdRow) thresholdRow.style.display = (mvs.metricIsBoolean || mvs.metricIsNumeric || !mvs.metricDirection) ? 'none' : 'inline-flex';
     }
+    const thresholdLabel = el('models-threshold-row')?.querySelector('.filter-label');
+    if (thresholdLabel) thresholdLabel.textContent = mvs.metricDirection === 'minimize' ? 'Pass ≤' : 'Pass ≥';
     populateModelsStatVisibility(matchingRuns);
 
     const models = Object.keys(runsByModel);
@@ -5020,6 +5082,7 @@
       mvs.selectedMetric,
       String(mvs.threshold),
       String(mvs.metricIsBoolean),
+      String(mvs.metricDirection),
       String(globalK),
       ...modelSelections
         .map(({ model, selectedPaths }) => `${model}:${selectedPaths.slice().sort().join(',')}`)
@@ -5079,7 +5142,7 @@
     mvs.modelStats = {};
     modelSelections.forEach(({ model, selectedPaths, selectedRuns }) => {
       const detailedData = selectedPaths.map((path) => runsDataById.get(path)).filter(Boolean);
-      mvs.modelStats[model] = calculateModelStatsFromItems(detailedData, mvs.selectedMetric, mvs.threshold, mvs.metricIsBoolean);
+      mvs.modelStats[model] = calculateModelStatsFromItems(detailedData, mvs.selectedMetric, mvs.threshold, mvs.metricIsBoolean, mvs.metricDirection);
       mvs.modelStats[model].traceAverages = calculateModelTraceStats(selectedRuns);
       mvs.modelStats[model].totalRetries = selectedRuns.reduce((sum, run) => sum + Number(run.total_retries || 0), 0);
       mvs.modelStats[model].totalAvailable = candidates?.totals?.[model] ?? runsByModel[model].length;
@@ -5113,25 +5176,33 @@
       if (!currentDataset && uniqueDatasets.size === 1) currentDataset = [...uniqueDatasets][0];
     }
 
-    // Get metrics for selected task+dataset
+    // Get metrics for selected task+dataset, in spec position order (newest
+    // run first), never alphabetical (C008).
     const runsForCombo = currentTask && currentDataset
       ? state.filteredRuns.filter(r => r.task_name === currentTask && getRunDatasetKey(r) === currentDataset)
       : [];
-    const metricsSet = new Set(currentTask && currentDataset && candidates ? candidates.metrics : []);
-    for (const run of runsForCombo) {
-      if (run.metrics) {
-        run.metrics.forEach(m => metricsSet.add(m));
-      }
-    }
-    const metrics = [...metricsSet].sort();
+    const comboRuns = currentTask && currentDataset && candidates
+      ? (candidates.rows || []).filter(r => r.task_name === currentTask && getRunDatasetKey(r) === currentDataset)
+      : [];
+    const orderedRuns = [...comboRuns, ...runsForCombo]
+      .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+    const metrics = window.QymMetrics.mergeMetricNames([
+      ...orderedRuns.map(run => run.metrics || []),
+      currentTask && currentDataset && candidates ? (candidates.metrics || []) : [],
+    ]);
     const currentMetric = state.modelsViewState.selectedMetric;
     metricSelect.innerHTML = '<option value="">Select a metric...</option>' +
       metrics.map(m => `<option value="${escapeHtml(m)}" ${m === currentMetric ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('');
 
-    // Auto-select first metric if none selected or current metric not in list
+    // Default to the newest run's declared primary metric, else its first.
     if ((!currentMetric || !metrics.includes(currentMetric)) && metrics.length > 0) {
-      state.modelsViewState.selectedMetric = metrics[0];
-      metricSelect.value = metrics[0];
+      const newest = orderedRuns[0];
+      const preferred = newest
+        ? window.QymMetrics.defaultMetricName(newest.metrics || [], newest.metric_specs || {})
+        : null;
+      const defaultMetric = preferred && metrics.includes(preferred) ? preferred : metrics[0];
+      state.modelsViewState.selectedMetric = defaultMetric;
+      metricSelect.value = defaultMetric;
     }
 
     // K input value
@@ -5139,7 +5210,10 @@
       kInput.value = state.modelsViewState.globalK;
     }
 
-    // Threshold slider value
+    syncModelsThresholdSlider();
+  }
+
+  function syncModelsThresholdSlider() {
     const thresholdSlider = el('models-threshold-slider');
     const thresholdValue = el('models-threshold-value');
     if (thresholdSlider) {
@@ -5225,7 +5299,7 @@
     return entry.promise;
   }
 
-  function calculateModelStatsFromItems(runsData, metricName, threshold, isBoolean) {
+  function calculateModelStatsFromItems(runsData, metricName, threshold, isBoolean, direction = null) {
     // Get run names before delegating to shared function
     const runNames = (runsData || []).map((r, i) => r?.run?.run_name || `Run ${i + 1}`);
     const K = runsData?.length || 0;
@@ -5239,6 +5313,7 @@
     }
 
     const effectiveThreshold = isBoolean ? 0.9999 : threshold;
+    // Pass/fail and the best score follow the declared direction (C008).
 
     // Use shared metrics calculation. Repeat runs pool their ATTEMPTS: a ×k
     // run contributes k per-pass entries, so Pass@K math runs over the pooled
@@ -5247,6 +5322,8 @@
       runsData: expandSampledRunsData(runsData),
       metricName,
       threshold: effectiveThreshold,
+      direction,
+      isBoolean: !!isBoolean,
       getMetricIndex: (runData) => {
         const metricNames = runData?.snapshot?.metric_names || runData?.run?.metric_names || [];
         return metricNames.indexOf(metricName);
@@ -5320,7 +5397,8 @@
     // Show/hide threshold control (inline) — hide for boolean and numeric
     const thresholdRow = el('models-threshold-row');
     if (thresholdRow) {
-      thresholdRow.style.display = (allBoolean || isNumeric) ? 'none' : 'inline-flex';
+      const direction = runsMetricDirection(runs, metricName);
+      thresholdRow.style.display = (allBoolean || isNumeric || !direction) ? 'none' : 'inline-flex';
     }
   }
 
@@ -5360,12 +5438,18 @@
     const visibleTraceMetrics = mvs.visibleTraceMetrics || [];
     const availableStatOptions = getModelsViewStatOptions();
     const visibleStatKeys = new Set(getVisibleModelsViewStatKeys(availableStatOptions));
+    // No declared direction: values only, no pass rates or colors (C008).
+    const direction = mvs.metricDirection || null;
+    const isNeutral = !isNumeric && !direction;
+    const passRule = direction === 'minimize' ? '≤' : '≥';
+    const scoreClassFor = value => window.QymMetrics.getMetricColorClass(value, mType, direction);
 
     const models = Object.keys(runsByModel).sort((a, b) => {
-      // Sort by avg score descending
+      // Best average first when a direction is declared, else by name.
       const scoreA = mvs.modelStats[a]?.avgScore || 0;
       const scoreB = mvs.modelStats[b]?.avgScore || 0;
-      return scoreB - scoreA;
+      const better = window.QymMetrics.compareMetricValues(scoreA, scoreB, direction);
+      return better ? -better : String(a).localeCompare(String(b));
     });
 
     container.innerHTML = models.map((model, idx) => {
@@ -5378,11 +5462,11 @@
       const correctDef = isBoolean ? '100%' : `≥${threshold}%`;
       const tooltips = {
         passAtK: isBoolean
-          ? `% of items where at least one of the ${K} runs achieved 100%`
-          : `% of items where at least one of the ${K} runs scored ≥${threshold}%`,
+          ? `% of items where at least one of the ${K} runs achieved ${direction === 'minimize' ? 'the best score (0%)' : '100%'}`
+          : `% of items where at least one of the ${K} runs scored ${passRule}${threshold}%`,
         passHatK: isBoolean
-          ? `% of items where ALL ${K} runs achieved 100%`
-          : `% of items where ALL ${K} runs scored ≥${threshold}%`,
+          ? `% of items where ALL ${K} runs achieved ${direction === 'minimize' ? 'the best score (0%)' : '100%'}`
+          : `% of items where ALL ${K} runs scored ${passRule}${threshold}%`,
         maxAtK: isNumeric
           ? `Average of the best value per item across all ${K} runs`
           : `Average of the best score per item across all ${K} runs`,
@@ -5396,11 +5480,11 @@
         avgLatency: `Average response time across all runs`,
         medianLatency: `Median response time across all items and all ${K} runs. Less sensitive to outliers than the mean.`,
         correctDist: isBoolean
-          ? `How many runs got each item correct (100%). "0" = no run solved it, "${K}" = all runs solved it.`
-          : `How many runs scored ≥${threshold}% for each item.`
+          ? `How many runs got each item correct. "0" = no run solved it, "${K}" = all runs solved it.`
+          : `How many runs scored ${passRule}${threshold}% for each item.`
       };
 
-      const distBar = isNumeric ? '' : buildModelDistributionBar(stats);
+      const distBar = isNumeric || isNeutral ? '' : buildModelDistributionBar(stats);
 
       // Helper to create info icon with tooltip (same as compare view)
       function infoIcon(tooltip) {
@@ -5422,7 +5506,16 @@
         if (!visibleStatKeys.has(key)) return;
         statTiles.push(renderModelStatTile(title, value, valueClass, tooltip));
       }
-      if (isNumeric) {
+      if (isNeutral) {
+        const fmtScore = value => window.QymMetrics.formatMetricValue(value, mType);
+        addStatTile('avgScore', 'Avg Score', fmtScore(stats.avgScore), '', tooltips.avgScore);
+        addStatTile('minScore', 'Min', fmtScore(stats.minScore), '', 'Minimum value across all items and runs.');
+        addStatTile('stddevScore', 'StdDev', fmtScore(stats.stddevScore), '', 'Standard deviation across all items and runs.');
+        addStatTile('failedCount', 'Errors', String(stats.failedCount), stats.failedCount > 0 ? 'failed-count' : '', tooltips.failedCount);
+        addStatTile('totalRetries', 'Retries', String(stats.totalRetries || 0), stats.totalRetries > 0 ? 'retry-count' : '', tooltips.totalRetries);
+        addStatTile('avgLatency', '⚡ Avg Latency', formatLatency(stats.avgLatency), '', tooltips.avgLatency);
+        addStatTile('medianLatency', '⚡ Median Latency', formatLatency(stats.medianLatency), '', tooltips.medianLatency);
+      } else if (isNumeric) {
         addStatTile('avgScore', 'Avg', fmtN(stats.avgScore), '', tooltips.avgScore);
         addStatTile('minScore', 'Min', fmtN(stats.minScore), '', 'Minimum value across all items and runs.');
         addStatTile('maxAtK', `Max@${K}`, fmtN(stats.maxAtK), '', tooltips.maxAtK);
@@ -5435,10 +5528,10 @@
       } else {
         addStatTile('passAtK', `Pass@${K}`, formatPercent(stats.passAtK), getSuccessClass(stats.passAtK), tooltips.passAtK);
         addStatTile('passHatK', `Pass^${K}`, formatPercent(stats.passHatK), getSuccessClass(stats.passHatK), tooltips.passHatK);
-        addStatTile('maxAtK', `Max@${K}`, formatPercent(stats.maxAtK), getSuccessClass(stats.maxAtK), tooltips.maxAtK);
+        addStatTile('maxAtK', `${direction === 'minimize' ? 'Min' : 'Max'}@${K}`, formatPercent(stats.maxAtK), scoreClassFor(stats.maxAtK), tooltips.maxAtK);
         addStatTile('consistency', 'Consistency', stats.consistency !== null ? formatPercent(stats.consistency) : 'NA', stats.consistency !== null ? getSuccessClass(stats.consistency) : '', tooltips.consistency);
         addStatTile('reliability', 'Reliability', stats.reliability !== null ? formatPercent(stats.reliability) : 'NA', stats.reliability !== null ? getSuccessClass(stats.reliability) : '', tooltips.reliability);
-        addStatTile('avgScore', 'Avg Score', formatPercent(stats.avgScore), getSuccessClass(stats.avgScore), tooltips.avgScore);
+        addStatTile('avgScore', 'Avg Score', formatPercent(stats.avgScore), scoreClassFor(stats.avgScore), tooltips.avgScore);
         addStatTile('failedCount', 'Errors', String(stats.failedCount), stats.failedCount > 0 ? 'failed-count' : '', tooltips.failedCount);
         addStatTile('totalRetries', 'Retries', String(stats.totalRetries || 0), stats.totalRetries > 0 ? 'retry-count' : '', tooltips.totalRetries);
         addStatTile('avgLatency', '⚡ Avg Latency', formatLatency(stats.avgLatency), '', tooltips.avgLatency);
@@ -5454,7 +5547,7 @@
         statTiles.push(renderModelStatTile(traceMetric.modelsLabel || traceMetric.label, traceMetric.fmt(traceValue), traceClass));
       });
 
-      const showDistribution = !isNumeric && visibleStatKeys.has('correctDistribution');
+      const showDistribution = !isNumeric && !isNeutral && visibleStatKeys.has('correctDistribution');
       const statsGridHtml = statTiles.length > 0
         ? `<div class="model-stats-grid">${statTiles.join('')}</div>`
         : '<div class="model-stats-empty">No summary metrics selected.</div>';
@@ -5529,23 +5622,32 @@
       return;
     }
 
-    // Sort by avg score descending
+    // Rank by the metric's declared direction (C008). Without one there is
+    // no "better": list models by name, with no medals or colors.
+    const direction = mvs.metricDirection || null;
     const ranked = models
       .map(m => ({ model: m, score: mvs.modelStats[m]?.avgScore || 0 }))
-      .sort((a, b) => b.score - a.score);
+      .sort((a, b) => {
+        const better = window.QymMetrics.compareMetricValues(a.score, b.score, direction);
+        return better ? -better : String(a.model).localeCompare(String(b.model));
+      });
 
     const rankEmojis = ['🥇', '🥈', '🥉'];
 
     const isNumeric = mvs.metricIsNumeric;
     const rankMType = isNumeric ? 'numeric' : 'score';
+    const byLabel = isNumeric ? 'Avg Value' : 'Avg Score';
+    const title = !direction
+      ? `Models (${byLabel}; ${mvs.selectedMetric || 'metric'} declares no direction, so there is no ranking)`
+      : `Ranking (by ${byLabel}${direction === 'minimize' ? ', lower is better' : ''})`;
 
     container.style.display = 'block';
     container.innerHTML = `
-      <h3>Ranking (by ${isNumeric ? 'Avg Value' : 'Avg Score'})</h3>
+      <h3>${escapeHtml(title)}</h3>
       <div class="ranking-list">
         ${ranked.map((item, idx) => {
-          const rank = idx < 3 ? rankEmojis[idx] : `#${idx + 1}`;
-          const scoreClass = window.QymMetrics.getMetricColorClass(item.score, rankMType);
+          const rank = !direction ? '' : (idx < 3 ? rankEmojis[idx] : `#${idx + 1}`);
+          const scoreClass = window.QymMetrics.getMetricColorClass(item.score, rankMType, direction);
           const display = window.QymMetrics.formatMetricValue(item.score, rankMType);
           return `
             <div class="ranking-item">
@@ -5628,7 +5730,7 @@
             const isSelected = selected.has(run.file_path);
             const score = run.metric_averages?.[mvs.selectedMetric];
             const metricType = mvs.metricIsNumeric ? 'numeric' : 'score';
-            const scoreClass = score !== undefined ? window.QymMetrics.getMetricColorClass(score, metricType) : '';
+            const scoreClass = score !== undefined ? window.QymMetrics.getMetricColorClass(score, metricType, runMetricDirection(run, mvs.selectedMetric)) : '';
             const scoreDisplay = score !== undefined ? window.QymMetrics.formatMetricValue(score, metricType) : '';
             const runDisplayName = getRunDisplayName(run);
             html += `<label class="run-selection-item ${isSelected ? 'selected' : ''}">
@@ -5715,7 +5817,7 @@
         const metric = mvs.selectedMetric;
         const score = run.metric_averages?.[metric];
         const selMType = mvs.metricIsNumeric ? 'numeric' : 'score';
-        const scoreClass = score !== undefined ? window.QymMetrics.getMetricColorClass(score, selMType) : '';
+        const scoreClass = score !== undefined ? window.QymMetrics.getMetricColorClass(score, selMType, runMetricDirection(run, metric)) : '';
         const scoreDisplay = score !== undefined ? window.QymMetrics.formatMetricValue(score, selMType) : '';
         const runDisplayName = getRunDisplayName(run);
 
@@ -7537,6 +7639,8 @@
     const value = parseFloat(e.target.value);
     if (!isNaN(value) && value >= 0 && value <= 100) {
       state.modelsViewState.threshold = value / 100;
+      const mvs = state.modelsViewState;
+      mvs.thresholdByMetric = { ...(mvs.thresholdByMetric || {}), [mvs.selectedMetric]: value / 100 };
       // Clear stats cache so they get recalculated with new threshold
       state.modelsViewState.modelStats = {};
       renderModelsView();

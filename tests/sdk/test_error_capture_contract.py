@@ -164,3 +164,70 @@ def test_sync_and_async_metric_exceptions_are_reported_as_errors(monkeypatch) ->
         )
         tracker.set_metric_error.assert_called_once_with(0, metric_name)
         tracker.update_metric.assert_not_called()
+
+
+def _run_metric(metric, *, output="ok"):
+    evaluator = Evaluator(
+        task=lambda value: value,
+        dataset=_ErrorDataset(),
+        metrics=[metric],
+        config={
+            "run_name": "metric-reason-contract",
+            "checkpoint_enabled": False,
+            "otel_enabled": False,
+        },
+    )
+    evaluator._platform_stream = MagicMock()
+    item = _Item("reason-item", "reason", "ok")
+    metric_name, raw_score = asyncio.run(
+        evaluator._run_single_metric(
+            metric.__name__, metric, output, "ok", 0, item, ItemSpans(), {}
+        )
+    )
+    events = [
+        call.args[1]
+        for call in evaluator._platform_stream.emit.call_args_list
+        if call.args[0] == "metric_scored"
+    ]
+    tracker = MagicMock()
+    evaluator._update_tracker(
+        0, item, output, {metric_name: raw_score}, 0.1, 0, ItemSpans(), tracker
+    )
+    return events, tracker
+
+
+def test_verdict_reason_is_a_scored_zero_not_a_metric_error(monkeypatch) -> None:
+    """C010: a reason in metadata (even under "error") is a judged 0."""
+    for name in ("QYM_API_KEY", "QYM_BASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+
+    def valid_sql(output: str, expected: str) -> dict:
+        del output, expected
+        return {"score": 0.0, "metadata": {"is_valid": False, "error": "syntax error"}}
+
+    events, tracker = _run_metric(valid_sql)
+    assert len(events) == 1
+    assert "status" not in events[0]["meta"]
+    assert events[0]["meta"]["error"] == "syntax error"
+    tracker.set_metric_error.assert_not_called()
+    tracker.update_metric.assert_called_once()
+
+
+def test_declared_error_status_is_reported_as_metric_error(monkeypatch) -> None:
+    """A metric (or judge) that returns status="error" failed to score."""
+    from qym.metrics.result import MetricResult
+
+    for name in ("QYM_API_KEY", "QYM_BASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+
+    def judge(output: str, expected: str) -> MetricResult:
+        del output, expected
+        return MetricResult(
+            score=0.0, kind="llm", metadata={"status": "error", "error": "429"}
+        )
+
+    events, tracker = _run_metric(judge)
+    assert events[0]["meta"]["status"] == "error"
+    assert events[0]["score_numeric"] == 0.0
+    tracker.set_metric_error.assert_called_once_with(0, "judge")
+    tracker.update_metric.assert_not_called()

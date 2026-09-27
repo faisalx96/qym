@@ -1078,7 +1078,8 @@ def test_runs_list_payload_includes_pass_summaries_for_dot_strip():
 @pytest.mark.parametrize("metric_meta, expected_errors", [
     ({"status": "error", "error": "metric exploded"}, 1),
     ({"status": "timeout", "error": False}, 1),
-    ({"error": "metric exploded"}, 1),
+    # meta.error without a status is a verdict reason, not a crash (C010).
+    ({"error": "Empty output"}, 0),
     ({"error": False}, 0),
     ({"error": 0}, 0),
     ({"error": None}, 0),

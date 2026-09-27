@@ -24,15 +24,28 @@ function isTaskErrorRow(row) {
  * Check whether one metric metadata object represents an execution error.
  * Metric exceptions keep a numeric score of 0 for aggregation, so metadata is
  * the signal that distinguishes an exception from an ordinary judged failure.
+ * Same rule as services/run_means.py (is_metric_error).
  */
 function isMetricErrorMeta(meta) {
   if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return false;
   // A metric label such as "failed" can be an ordinary judge verdict, and a
   // task exception creates zero-filled pass scores labelled "error". Only the
-  // explicit execution metadata emitted for a raised metric is authoritative.
+  // explicit execution status the SDK sets for a raised metric is
+  // authoritative; meta.error alone is a verdict reason ("Empty output").
   const status = String(meta.status || '').trim().toLowerCase();
-  if (status === 'error' || status === 'failed' || status === 'timeout') return true;
-  return Boolean(meta.error) && String(meta.error).trim() !== '';
+  return status === 'error' || status === 'failed' || status === 'timeout';
+}
+
+/**
+ * Display key for one metric metadata field. Older metrics (and the SDK guide
+ * before the "reason" key) stored verdict reasons such as "Empty output" under
+ * "error"; without an execution status that field reads as the "reason".
+ */
+function metricMetaDisplayKey(key, meta) {
+  if (key !== 'error' || isMetricErrorMeta(meta)) return key;
+  const hasReason = meta && typeof meta === 'object'
+    && meta.reason !== undefined && meta.reason !== null && meta.reason !== '';
+  return hasReason ? key : 'reason';
 }
 
 /**
@@ -102,6 +115,61 @@ function parseScoreValue(metricValue) {
   return score;
 }
 
+/**
+ * Validate a manual score edit by the metric's spec type before it is sent.
+ * Same rules and messages as services/score_edits.py on the server, which
+ * rejects anything else with a 422.
+ * @param {*} raw - Input value (usually the editor's text)
+ * @param {Object|null} spec - Run metric spec (score_type); none = any number
+ * @param {{reduced?: boolean}} [options] - reduced: a repeat-run item value
+ *   (the mean over passes), so a boolean is a rate and a count may be fractional
+ * @returns {{ok: true, value: number}|{ok: false, message: string}}
+ */
+const SCORE_EDIT_HINTS = {
+  boolean: 'Enter true or false (1 or 0).',
+  percentage: 'Enter a value from 0 to 1, or 0% to 100%.',
+  count: 'Enter a whole number, 0 or more.',
+  number: 'Enter a number.',
+  legacy: 'Enter a number.',
+};
+
+function parseMetricScoreInput(raw, spec, options = {}) {
+  let scoreType = spec && spec.score_type;
+  if (options && options.reduced) scoreType = { boolean: 'percentage', count: 'number' }[scoreType] || scoreType;
+  const kind = Object.prototype.hasOwnProperty.call(SCORE_EDIT_HINTS, scoreType) ? scoreType : 'legacy';
+  const hint = SCORE_EDIT_HINTS[kind];
+  const fail = message => ({ ok: false, message });
+  const booleanWords = kind === 'boolean' || kind === 'legacy';
+  let number;
+  if (typeof raw === 'boolean') {
+    return booleanWords ? { ok: true, value: raw ? 1 : 0 } : fail(hint);
+  }
+  if (typeof raw === 'number') {
+    number = raw;
+  } else if (typeof raw === 'string') {
+    let text = raw.trim();
+    if (!text) return fail('Enter a score. ' + hint);
+    const lowered = text.toLowerCase();
+    if (booleanWords && (lowered === 'true' || lowered === 'yes')) return { ok: true, value: 1 };
+    if (booleanWords && (lowered === 'false' || lowered === 'no')) return { ok: true, value: 0 };
+    const percent = text.endsWith('%');
+    if (percent) {
+      if (kind !== 'percentage' && kind !== 'legacy') return fail(hint);
+      text = text.slice(0, -1).trim();
+    }
+    if (/^[+-]?[0-9]+,[0-9]+$/.test(text)) return fail('Use a dot for decimals (0.7, not 0,7).');
+    if (!/^[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+)?$/.test(text)) return fail(hint);
+    number = Number(text) / (percent ? 100 : 1);
+  } else {
+    return fail(hint);
+  }
+  if (!Number.isFinite(number)) return fail(hint);
+  if (kind === 'boolean' && number !== 0 && number !== 1) return fail(hint);
+  if (kind === 'percentage' && !(number >= 0 && number <= 1)) return fail(hint);
+  if (kind === 'count' && (number < 0 || !Number.isInteger(number))) return fail(hint);
+  return { ok: true, value: number };
+}
+
 function getRowScore(row, metricIdx, metricName = null) {
   if (!row) return { score: null, isError: false };
 
@@ -146,10 +214,17 @@ function indexRowsById(rows, getItemId) {
  * @param {Function} options.getMetricIndex - Function to get metric index from run data
  * @param {Function} [options.getItemId] - Optional function to get item ID from row (defaults to index)
  * @param {boolean} [options.trackDistribution] - If true, track correctDistribution array
+ * @param {'maximize'|'minimize'|null} [options.direction] - Declared direction
+ *   (metricDirection). Pass/fail and Max@K follow it; null (no direction)
+ *   yields no passes. Omitted = maximize, for older callers.
+ * @param {boolean} [options.isBoolean] - Boolean metric (pass on True/False)
  * @returns {Object} Calculated metrics
  */
 function calculateItemLevelMetrics(options) {
   const { runsData, metricName, threshold, getMetricIndex, getItemId, trackDistribution } = options;
+  const direction = options.direction === undefined ? 'maximize' : options.direction;
+  const isBoolean = options.isBoolean === undefined ? Number(threshold) >= 0.9999 : !!options.isBoolean;
+  const passes = s => metricPasses(s, threshold, direction, isBoolean) === true;
 
   const K = runsData?.length || 0;
 
@@ -250,9 +325,9 @@ function calculateItemLevelMetrics(options) {
     if (scores.length === 0) continue;
     itemsWithData++;
 
-    // Calculate item-level stats
-    const maxScore = Math.max(...scores);
-    const numCorrect = scores.filter(s => s >= threshold).length;
+    // Calculate item-level stats: the best score follows the direction.
+    const maxScore = direction === 'minimize' ? Math.min(...scores) : Math.max(...scores);
+    const numCorrect = scores.filter(passes).length;
 
     // Track distribution if requested
     if (trackDistribution && result.correctDistribution) {
@@ -380,6 +455,9 @@ function calculateGroupedOutcomeBuckets(options) {
  * @param {Function} options.getMetricIndex
  * @param {Function} options.getItemId
  * @param {Function} options.getRunId
+ * @param {'maximize'|'minimize'|null} [options.direction] - Declared direction;
+ *   passes follow it (omitted = maximize, for older callers)
+ * @param {boolean} [options.isBoolean]
  * @returns {Object}
  */
 function calculateGroupedCohortComparison(options) {
@@ -393,6 +471,9 @@ function calculateGroupedCohortComparison(options) {
     getRunId,
     metricName,
   } = options || {};
+  const direction = options?.direction === undefined ? 'maximize' : options.direction;
+  const isBoolean = options?.isBoolean === undefined ? Number(threshold) >= 0.9999 : !!options.isBoolean;
+  const passesAt = value => metricPasses(value, threshold, direction, isBoolean) === true;
 
   const bucketKeys = ['a_sweeps_b', 'b_sweeps_a', 'both_pass', 'both_fail'];
   const result = {
@@ -525,7 +606,7 @@ function calculateGroupedCohortComparison(options) {
         const attempt = Math.max(1, Number(row?.retry_count || 0) + 1);
         cleanPasses.forEach((value) => {
           scores.push(value);
-          passes.push(value >= threshold);
+          passes.push(passesAt(value));
           attempts.push(attempt);
         });
         rowList.push(row);
@@ -534,7 +615,7 @@ function calculateGroupedCohortComparison(options) {
       const { score } = getRowScore(row, metricIdx, metricName);
       if (score === null) return null;
       scores.push(score);
-      passes.push(score >= threshold);
+      passes.push(passesAt(score));
       attempts.push(Math.max(1, Number(row?.retry_count || 0) + 1));
       rowList.push(row);
     }
@@ -855,16 +936,150 @@ function formatNumericValue(value, decimals = 1) {
   return value.toFixed(decimals);
 }
 
+/* ── Metric semantics: direction and default metric (C008) ─────────────────
+ * One definition for every page. A metric's direction comes from its run
+ * spec. A metric that declares none is shown neutrally: no good/bad colors,
+ * no pass/fail verdict, no best/winner and no improved/regressed label.
+ */
+
 /**
- * Get CSS color class for a metric value, respecting its type.
- * Numeric metrics get no color class (they have no intrinsic good/bad scale).
+ * The direction a metric's run spec declares.
+ * Schema 1 specs (SDKs before 2026-09) sent "maximize" as a default for plain
+ * callables (score_type "legacy"); that default is not a declaration. Schema 2
+ * specs send no direction unless one is declared.
+ * Same rule as services/metric_semantics.py (declared_direction).
+ * @param {Object|null} spec
+ * @returns {'maximize'|'minimize'|null}
+ */
+function metricDirection(spec) {
+  if (!spec || typeof spec !== 'object') return null;
+  const direction = String(spec.direction || '').trim().toLowerCase();
+  if (direction === 'minimize') return 'minimize';
+  if (direction !== 'maximize') return null;
+  const schemaVersion = Number(spec.schema_version) || 1;
+  return spec.score_type === 'legacy' && schemaVersion < 2 ? null : 'maximize';
+}
+
+/** Short explanation of a direction, for titles and hints. */
+function metricDirectionLabel(direction) {
+  if (direction === 'maximize') return 'Higher is better';
+  if (direction === 'minimize') return 'Lower is better';
+  return 'No direction declared: shown without good/bad colors or verdicts';
+}
+
+/**
+ * The metric views open on: the declared primary metric, else the first
+ * metric by spec position (run.metrics order), never alphabetical order.
+ * @param {string[]} metricNames - Names in spec position order
+ * @param {Object} specs - metric name -> run spec
+ */
+function defaultMetricName(metricNames, specs) {
+  const names = Array.isArray(metricNames) ? metricNames.filter(Boolean) : [];
+  const declared = names.find(name => specs && specs[name] && specs[name].primary === true);
+  return declared || names[0] || null;
+}
+
+/** Merge metric name lists keeping first-seen (spec position) order. */
+function mergeMetricNames(lists) {
+  const merged = [];
+  const seen = new Set();
+  for (const list of lists || []) {
+    for (const name of Array.isArray(list) ? list : []) {
+      if (name && !seen.has(name)) { seen.add(name); merged.push(name); }
+    }
+  }
+  return merged;
+}
+
+/**
+ * Compare two values by direction: > 0 when ``a`` is better, < 0 when worse,
+ * 0 when equal, not comparable, or the direction is not declared.
+ */
+function compareMetricValues(a, b, direction) {
+  const x = Number(a), y = Number(b);
+  if (a === null || a === undefined || b === null || b === undefined) return 0;
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x === y) return 0;
+  if (direction === 'maximize') return x > y ? 1 : -1;
+  if (direction === 'minimize') return x < y ? 1 : -1;
+  return 0;
+}
+
+/** Indexes holding the best finite value; [] when the direction is not declared. */
+function bestMetricIndexes(values, direction) {
+  if (direction !== 'maximize' && direction !== 'minimize') return [];
+  let best = null;
+  (values || []).forEach(value => {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) return;
+    if (best === null || compareMetricValues(value, best, direction) > 0) best = Number(value);
+  });
+  if (best === null) return [];
+  const indexes = [];
+  (values || []).forEach((value, index) => {
+    if (value !== null && value !== undefined && Number(value) === best) indexes.push(index);
+  });
+  return indexes;
+}
+
+/**
+ * Default pass threshold: the spec's, else 80% (maximize) or 20% (minimize).
+ * ``direction`` overrides the spec's when the caller resolved it already.
+ */
+function defaultPassThreshold(spec, direction) {
+  const declared = spec && spec.pass_threshold;
+  if (declared !== null && declared !== undefined && Number.isFinite(Number(declared))) return Number(declared);
+  const resolved = direction === undefined ? metricDirection(spec) : direction;
+  return resolved === 'minimize' ? 0.2 : 0.8;
+}
+
+/**
+ * Pass/fail verdict for one value: true, false, or null when the metric
+ * declares no direction. Booleans pass on True (maximize) or False
+ * (minimize); a reduced repeat-run boolean passes only when every pass did.
+ */
+function metricPasses(value, threshold, direction, isBoolean = false) {
+  if (direction !== 'maximize' && direction !== 'minimize') return null;
+  if (value === null || value === undefined) return null;
+  const v = Number(value);
+  if (!Number.isFinite(v)) return null;
+  if (isBoolean) return direction === 'minimize' ? v <= 0.0001 : v >= 0.9999;
+  const t = Number(threshold);
+  return direction === 'minimize' ? v <= t : v >= t;
+}
+
+/** "≥ 80%" / "≤ 20%" for pass-threshold labels. */
+function passThresholdLabel(threshold, direction) {
+  const pct = Math.round(Number(threshold) * 100);
+  return (direction === 'minimize' ? '≤' : '≥') + pct + '%';
+}
+
+/**
+ * Verdict for a change beyond noise: 'improved', 'regressed', 'within_noise',
+ * or 'changed' when the metric declares no direction (no better/worse).
+ */
+function metricDeltaVerdict(delta, noise, direction) {
+  const d = Number(delta);
+  const n = Math.max(0, Number(noise) || 0);
+  if (!Number.isFinite(d) || Math.abs(d) <= n) return 'within_noise';
+  if (direction === 'maximize') return d > 0 ? 'improved' : 'regressed';
+  if (direction === 'minimize') return d < 0 ? 'improved' : 'regressed';
+  return 'changed';
+}
+
+/**
+ * Get CSS color class for a metric value, respecting its type and direction.
+ * Numeric metrics get no color class (they have no intrinsic good/bad scale),
+ * and neither do metrics that declare no direction. Lower-is-better scores
+ * use the ramp inverted, so a low error rate reads as good.
  * @param {number} value
  * @param {'boolean'|'score'|'numeric'} metricType
+ * @param {'maximize'|'minimize'|null} direction
  * @returns {string}
  */
-function getMetricColorClass(value, metricType) {
+function getMetricColorClass(value, metricType, direction) {
   if (metricType === 'numeric') return '';
-  return getScoreColorClass(value);
+  if (direction === 'maximize') return getScoreColorClass(value);
+  if (direction === 'minimize') return getScoreColorClass(1 - Number(value));
+  return '';
 }
 
 // Export for use in other modules (if using ES modules)
@@ -873,10 +1088,12 @@ if (typeof window !== 'undefined') {
     // Core error handling - USE THESE for consistent error treatment
     isTaskErrorRow,
     isMetricErrorMeta,
+    metricMetaDisplayKey,
     hasMetricError,
     isErrorRow,
     getRowScore,
     parseScoreValue,
+    parseMetricScoreInput,
     indexRowsById,
     // Metrics calculation
     calculateItemLevelMetrics,
@@ -896,6 +1113,17 @@ if (typeof window !== 'undefined') {
     formatLatency,
     getScoreColorClass,
     getMetricColorClass,
+    // Metric semantics (direction, default metric)
+    metricDirection,
+    metricDirectionLabel,
+    defaultMetricName,
+    mergeMetricNames,
+    compareMetricValues,
+    bestMetricIndexes,
+    defaultPassThreshold,
+    metricPasses,
+    passThresholdLabel,
+    metricDeltaVerdict,
     getMetricTooltips
   };
 }

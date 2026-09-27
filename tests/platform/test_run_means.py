@@ -34,7 +34,8 @@ REPO = Path(__file__).resolve().parents[2]
 
 # score: 1.0 + 0.5, one scorer error with no score, one scorer error stored as
 # 0, one task error -> 1.5 / 5. Without the scorer errors: 1.5 / 3.
-# other: 0.8 + 0.6 + 0.4 + 1.0, one task error -> 2.8 / 5. No scorer errors.
+# other: 0.8 + 0.6 + 0.4 + 1.0, one task error -> 2.8 / 5. No scorer errors:
+# a verdict reason in meta.error is a judged score, not a scorer error (C010).
 EXPECTED = {"score": 0.3, "other": 0.56}
 EXPECTED_SCORED = {"score": 0.5}
 
@@ -48,10 +49,10 @@ def _seed(db):
         ("ok1", "score", 1.0, {}),
         ("ok2", "score", 0.5, {}),
         ("unscored", "score", None, {"status": "error", "error": "429"}),
-        ("zeroed", "score", 0.0, {"error": "judge failed"}),
+        ("zeroed", "score", 0.0, {"status": "error", "error": "judge failed"}),
         ("ok1", "other", 0.8, {}),
         ("ok2", "other", 0.6, {}),
-        ("unscored", "other", 0.4, {}),
+        ("unscored", "other", 0.4, {"error": "Empty output"}),
         ("zeroed", "other", 1.0, {}),
     ]:
         db.add(

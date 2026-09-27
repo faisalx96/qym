@@ -105,7 +105,9 @@ def test_run_item_scopes_task_and_metric_errors_to_the_right_surface() -> None:
     assert "if (hasAnyTaskError)" in verdict_block
     assert "else if (!selectedMetricHasError" in verdict_block
     assert "pfClass = 'error';" in verdict_block
-    assert "pfClass = pfVal >= threshold ? 'pass' : 'fail';" in verdict_block
+    # Pass/Fail follows the declared direction; none = no tag (C008).
+    assert "const pfPassed = metricPassesFor(metric, window.QymMetrics.parseScoreValue(metricVals[mIdx]));" in verdict_block
+    assert "pfClass = pfPassed ? 'pass' : 'fail';" in verdict_block
     assert "const statusLabel = pfClass === 'pass' ? 'Pass' : 'Fail';" in verdict_block
     assert "? 'Task execution failed in ' + taskErrorAttempts.length" in verdict_block
     assert ": 'Task execution failed')" in verdict_block
@@ -612,8 +614,9 @@ def test_repeat_drawer_follows_mock_option_c() -> None:
     assert ".pass-member .tag," in styles
 
     # best-in-column chips across sibling passes (same dialect as the run
-    # page's pass sweep): max wins for metrics, min wins for latencies
-    assert "winnersFor(p => (p.metric_means || {})[metric], 'max')" in source
+    # page's pass sweep): metrics follow their declared direction (none = no
+    # best, C008), min wins for latencies
+    assert "{ maximize: 'max', minimize: 'min' }[runMetricDirection(parentRun, metric)] || null" in source
     assert "const avgLatencyWinners = winnersFor(p => p.avg_latency_ms, 'min');" in source
     assert "const medianLatencyWinners = winnersFor(p => p.median_latency_ms, 'min');" in source
     assert "const chipAttrs = (winners, passNumber) =>" in source
@@ -660,7 +663,8 @@ def test_run_page_supports_single_pass_scope() -> None:
     assert "const isRepeatItem = !state.viewPass" in source
     # edits are allowed and routed to the viewed pass
     assert "const passNumber = Number(btn.dataset.passNumber) || state.viewPass || null;" in source
-    assert "updateMetricScore(filePath, rowIndex, metricName, input.value, passNumber)" in source
+    # the validated number is sent, never the raw input text (C009)
+    assert "updateMetricScore(filePath, rowIndex, metricName, parsed.value, passNumber)" in source
     assert "...(passNumber ? { pass_number: passNumber, expected_pass_version: currentPassVersion() } : {})," in source
     # applying the server row keeps per-pass fields and re-applies the lens
     assert "let next = { ...rows[pos], ...updatedRow };" in source
@@ -1061,7 +1065,7 @@ def test_repeat_run_analysis_uses_shared_visual_language() -> None:
     assert "'&threshold=' + encodeURIComponent(requestedThreshold)" in source
     assert "state.metricThresholds[groupMetric] = value / 100;" in source
     assert 'class="samples-metric-threshold"' not in source
-    assert "window.QymMetrics.getMetricColorClass(v, mTypeOf(m))" in source
+    assert "metricColorClassFor(m, v, mTypeOf(m))" in source
     assert "statTile('Max@' + samplesCount" not in source
     assert "statTile('Avg Score'" in source
     assert "const finalRepeatPoint = group.band?.[samplesCount]" in source
@@ -1169,7 +1173,8 @@ def test_repeat_run_analysis_uses_shared_visual_language() -> None:
     assert "P95 Latency" not in repeat_analysis
     assert "p.p95_latency_ms" not in repeat_analysis
     assert "const winnersFor = (valueOf, direction) =>" in source
-    assert "winnersFor(p => (p.metric_means || {})[m], 'max')" in source
+    # Best pass per metric column follows the declared direction (C008).
+    assert "{ maximize: 'max', minimize: 'min' }[metricDirectionOf(m)] || null" in source
     assert "const avgLatencyWinners = winnersFor(p => p.avg_latency_ms, 'min');" in source
     assert "const medianLatencyWinners = winnersFor(p => p.median_latency_ms, 'min');" in source
     assert "const errorWinners = winnersFor(p => Number(p.error_count || 0), 'min');" in source
@@ -1222,7 +1227,9 @@ def test_repeat_run_analysis_uses_shared_visual_language() -> None:
     assert "samples-band-table-wrap" in repeat_analysis
     assert "samples-band-cell-ci" in repeat_analysis
     assert "±" in repeat_analysis
-    assert "window.QymMetrics.getMetricColorClass(value, groupMetricType)" in repeat_analysis
+    # Pass rates read higher-is-better; the average follows the metric (C008).
+    assert "window.QymMetrics.getMetricColorClass(value, groupMetricType, 'maximize')" in repeat_analysis
+    assert "metricColorClassFor(groupMetric, value, groupMetricType)" in repeat_analysis
     assert "samples-band-cell-main qym-score-value" in repeat_analysis
     for band in range(1, 6):
         assert f".qym-score-value.score-{band} {{ color: var(--score-{band}); }}" in components
@@ -1404,8 +1411,8 @@ def test_run_category_breakdown_keeps_cards_and_adds_repeat_aware_compare_view()
     assert "Avg / pass rate" not in source
     assert 'class="breakdown-pass-summary"' not in source
     assert 'class="category-pass-track' in source
-    assert "function categoryScoreTrack(score, baseline)" in source
-    assert "categoryScoreTrack(group.avgScore, overallAverage)" in source
+    assert "function categoryScoreTrack(score, baseline, direction = 'maximize')" in source
+    assert "categoryScoreTrack(group.avgScore, overallAverage, metricDirectionOf(metric))" in source
     assert 'class="category-compare-row"' in source
     assert "<span>Pass rate</span>" not in source
     assert "<span>Rate</span>" not in source
@@ -1473,7 +1480,11 @@ def test_models_view_uses_globally_filtered_runs() -> None:
     assert "state.filterModels.size > 0 && !state.filterModels.has('__none__')" not in models_block
     assert "? state.filteredRuns.filter(r => r.task_name === currentTask && getRunDatasetKey(r) === currentDataset)" in dropdown_block
     assert "? state.flatRuns.filter(r => r.task_name === currentTask && getRunDatasetKey(r) === currentDataset)" not in dropdown_block
-    assert "currentTask && currentDataset && candidates ? candidates.metrics : []" in dropdown_block
+    assert "currentTask && currentDataset && candidates ? (candidates.metrics || []) : []" in dropdown_block
+    # Spec position order and the declared primary metric, not alphabetical (C008).
+    assert "window.QymMetrics.mergeMetricNames([" in dropdown_block
+    assert "window.QymMetrics.defaultMetricName(newest.metrics || [], newest.metric_specs || {})" in dropdown_block
+    assert "[...metricsSet].sort()" not in dropdown_block
 
 
 def test_charts_grouped_view_uses_presets_for_version_model_splits() -> None:
@@ -1513,7 +1524,7 @@ def test_charts_grouped_view_uses_presets_for_version_model_splits() -> None:
     assert "function renderEmptyGroupStatCells()" in charts_block
     assert "function renderGroupStatBar(value, label, title, modelIdx)" in charts_block
     assert "scheduleChartGroupMetricStats(runs, groupMetricName, threshold, isBoolean)" in charts_block
-    assert "calculateModelStatsFromItems(detailedRuns, metricName, threshold, isBoolean)" in charts_block
+    assert "calculateModelStatsFromItems(detailedRuns, metricName, threshold, isBoolean, runsMetricDirection(runs, metricName))" in charts_block
     assert "const GROUP_DISPLAY_COLUMNS = [" in source
     assert "Grouped Run Columns" in source
     assert "...GROUP_DISPLAY_COLUMNS.map(col => col.key)" in source
@@ -2056,7 +2067,9 @@ def test_compare_view_uses_current_run_detail_component_contracts() -> None:
     assert "table-layout: fixed;" in compare
     assert "width: 18%;" in compare
     assert "display: flex;" in compare.split(".metric-run-heading {", 1)[1].split("}", 1)[0]
-    assert "const isBest = mType !== 'numeric'" in compare
+    # "Best" follows the metric's declared direction; none = no best (C008).
+    assert "const isBest = bestValues[metric] !== null" in compare
+    assert "window.QymMetrics.bestMetricIndexes(values, metricDirectionFor(metric))" in compare
     assert "text-align: center;" in compare.split(
         ".metrics-table.qdt-table th:not(:first-child),", 1
     )[1].split("}", 1)[0]

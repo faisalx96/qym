@@ -26,6 +26,7 @@ def run_compare_js(body: str, *, render: bool = False) -> None:
         "stringify", "normalizeErrorLabel", "splitErrorLabel",
         "getErrorBucketKey", "addErrorBucket",
         "rowMatchesErrorFilter", "rowMatchesActiveErrorFilters", "getErrorFilterSlot",
+        "metricDirectionFor", "metricPassesFor", "metricColorClassFor",
     )
     if render:
         names += (
@@ -77,6 +78,7 @@ RENDER_FIXTURE_JS = r"""
     const state = {
       runs:[], allMetrics:['accuracy','quality'], selectedItemsMetric:'accuracy',
       metricTypes:{accuracy:'score',quality:'score'},
+      metricDirections:{accuracy:'maximize',quality:'maximize'},
       metricThresholds:{accuracy:.8,quality:.8}, metricIsBoolean:{},
       visibleMetricMetaFields:{}, visibleMetadataFields:{}, itemExpanded:{},
     };
@@ -101,7 +103,8 @@ RENDER_FIXTURE_JS = r"""
 @pytest.mark.parametrize("error_meta", [
     {"status": "error", "error": "Judge unavailable"},
     {"status": "timeout"},
-    {"error": "Legacy metric exception"},
+    # meta.error alone is a verdict reason (C010); the status is the signal.
+    {"status": "failed", "error": "Legacy metric exception"},
 ])
 def test_metric_error_marks_only_its_own_surfaces(metric_type, score, error_meta) -> None:
     run_compare_js(
@@ -142,7 +145,7 @@ def test_metric_error_marks_only_its_own_surfaces(metric_type, score, error_meta
 @pytest.mark.parametrize(("metric_type", "expected"), [
     ("boolean", "False"), ("score", "0.0%"), ("numeric", "0"),
 ])
-@pytest.mark.parametrize("error_value", [None, False, 0, "", "   "])
+@pytest.mark.parametrize("error_value", [None, False, 0, "", "   ", "Empty output"])
 def test_judged_zero_without_exception_keeps_its_display(metric_type, expected, error_value) -> None:
     run_compare_js(
         "state.metricTypes.accuracy=" + json.dumps(metric_type) + ";\n"
@@ -288,7 +291,8 @@ def test_three_plus_three_matches_overview_for_every_metric(metric_name: str) ->
           {compare_item_id:'timeout',status:'error',metric_values:[]},
         ]}});
         const state = {runs:[fixture(),fixture()],compareItemIds:['pass','judge','metric','task','timeout'],
-          metricIsBoolean:{accuracy:true,quality:true,missing:true},metricThresholds:{accuracy:.8,quality:.8,missing:.8}};
+          metricIsBoolean:{accuracy:true,quality:true,missing:true},metricThresholds:{accuracy:.8,quality:.8,missing:.8},
+          metricDirections:{accuracy:'maximize',quality:'maximize',missing:'maximize'}};
         const summaries=state.runs.map(run=>getCompareRowSummary(run.snapshot.rows));
         assert.deepEqual(summaries.map(s=>s.failed),[3,3]);
         const overview=calculateComparisonStatsForMetric(metricName);

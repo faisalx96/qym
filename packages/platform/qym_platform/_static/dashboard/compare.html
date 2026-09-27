@@ -5,15 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Compare Runs</title>
   <link rel="icon" type="image/png" href="./static/qym_icon.png">
-<link rel="stylesheet" href="./static/dashboard.css?v=approved-subcategories-20260917-1">
+<link rel="stylesheet" href="./static/dashboard.css?v=approved-subcategories-20260917-1-metric-semantics">
   <link rel="stylesheet" href="./static/shell.css">
   <script src="./static/auth.js"></script>
   <script src="./static/shell.js?v=ui-consistency-20260730-15-runs-kpis"></script>
-  <script src="./static/metrics.js?v=metric-errors-20260914-1"></script>
+  <script src="./static/metrics.js?v=metric-errors-20260914-1-metric-semantics"></script>
   <script src="./static/run_details.js?v=payload-perf-1"></script>
   <script src="./static/trace_viewer.js?v=trace-retries-20260917-1"></script>
   <script src="./static/step_latency.js?v=payload-perf-1"></script>
-  <script src="./static/playground.js?v=approved-subcategories-20260917-1"></script>
+  <script src="./static/playground.js?v=approved-subcategories-20260917-1-metric-semantics"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
     /* Compare-specific styles */
@@ -689,6 +689,14 @@
       background: var(--bg-surface);
       border: 1px solid var(--border-default);
       border-radius: 8px;
+    }
+
+    /* A metric without a declared direction is shown neutrally (C008). */
+    .metric-direction-note {
+      margin: var(--space-sm) 0;
+      color: var(--text-muted);
+      font-size: var(--font-sm);
+      line-height: 1.5;
     }
 
     .item-comparison-modal-overlay {
@@ -3169,6 +3177,13 @@
       font-size: var(--font-xs);
       color: var(--text-muted);
     }
+    /* A rejected score edit (C009): the reason wraps below the input, inside the chip. */
+    .qym-metric-edit-controls .metric-edit-status.is-error { flex: 1 1 100%; font-size: var(--font-sm); color: var(--error); white-space: normal; }
+    .det-toggle.editing:has(.metric-edit-status.is-error) { flex-wrap: wrap; }
+    .det-toggle.editing > .qym-metric-edit-controls:has(.metric-edit-status.is-error) { flex: 1 1 100%; flex-wrap: wrap; min-width: 0; margin-left: 0; }
+    .qym-metric-edit-controls .metric-edit-input[aria-invalid="true"],
+    .qym-metric-edit-controls .metric-edit-input[aria-invalid="true"]:focus { border-color: var(--error); }
+    .metric-score-value.metric-score-invalid { color: var(--warning); }
     .metric-edit-badge {
       display: inline-flex;
       align-items: center;
@@ -5069,8 +5084,11 @@
       border-radius: var(--control-radius);
     }
 
+    /* Outline, not a fill: a best value keeps its score color readable
+       (a red score on a green fill was 2.58:1). */
     .metrics-table .metric-val.best {
-      background: var(--success-dim);
+      background: transparent;
+      box-shadow: inset 0 0 0 1px var(--success);
     }
 
     .fp-status .filter-count {
@@ -5759,7 +5777,9 @@
               if (metricIdx < 0) return null;
               const { score } = window.QymMetrics.getRowScore(row, metricIdx, metricName);
               if (score === null) return null;
-              values.push(score >= threshold);
+              values.push(window.QymMetrics.metricPasses(
+                score, threshold, options?.direction === undefined ? 'maximize' : options.direction, !!options?.isBoolean,
+              ) === true);
             }
             return values;
           }
@@ -5851,15 +5871,17 @@
         const metricType = state.metricTypes?.[metricName];
         if (metricType === 'numeric') return null;
 
-        const threshold = state.metricIsBoolean[metricName]
-          ? 0.9999
-          : (state.metricThresholds[metricName] || 0.8);
+        const direction = metricDirectionFor(metricName);
+        if (!direction) return null;
+        const threshold = state.metricThresholds[metricName] ?? 0.8;
 
         return window.QymMetrics.calculateGroupedOutcomeBuckets({
           runsData: state.runs,
           leftRunIds: groups.leftRunIds || [],
           rightRunIds: groups.rightRunIds || [],
           threshold,
+          direction,
+          isBoolean: !!state.metricIsBoolean[metricName],
           metricName,
           getMetricIndex: (runData) => {
             const metricNames = runData?.snapshot?.metric_names || runData?.run?.metric_names || [];
@@ -5895,15 +5917,18 @@
         }
 
         const groups = state.groupedOutcomeGroups;
-        const threshold = state.metricIsBoolean[metricName]
-          ? 0.9999
-          : (state.metricThresholds[metricName] || 0.8);
+        // Sweep verdicts need a declared direction (C008).
+        const direction = metricDirectionFor(metricName);
+        if (!direction) return null;
+        const threshold = state.metricThresholds[metricName] ?? 0.8;
 
         const result = window.QymMetrics.calculateGroupedCohortComparison({
           runsData: state.runs,
           leftRunIds: groups.leftRunIds || [],
           rightRunIds: groups.rightRunIds || [],
           threshold,
+          direction,
+          isBoolean: !!state.metricIsBoolean[metricName],
           metricName,
           getMetricIndex: (runData) => {
             const metricNames = runData?.snapshot?.metric_names || runData?.run?.metric_names || [];
@@ -5923,6 +5948,7 @@
         result.reportK = reportKs.length && reportKs.every(value => value && value === reportKs[0])
           ? reportKs[0]
           : null;
+        result.direction = direction;
         state.groupedComparisonCache[metricName] = result;
         return result;
       }
@@ -6021,25 +6047,33 @@
         return `${prefix}${rounded.toFixed(2)}`;
       }
 
-      function getDeltaClass(value) {
-        if (value > 0.0005) return 'positive';
-        if (value < -0.0005) return 'negative';
+      // Delta colors follow the metric's direction (C008): for a lower-is-
+      // better metric a drop is the improvement. Pass rates, consistency and
+      // reliability are always higher-is-better (the default).
+      function getDeltaClass(value, direction = 'maximize') {
+        const signed = direction === 'minimize' ? -value : value;
+        if (signed > 0.0005) return 'positive';
+        if (signed < -0.0005) return 'negative';
         return 'neutral';
       }
 
       // Evidence-based coloring: a delta only earns color when it exceeds its
       // own luck band; inside the band it renders neutral regardless of sign.
-      function getNoiseDeltaClass(value, noise) {
+      function getNoiseDeltaClass(value, noise, direction = 'maximize') {
         if (!noise || noise.halfWidth === null || noise.halfWidth === undefined) {
-          return getDeltaClass(value);
+          return getDeltaClass(value, direction);
         }
-        if (value > noise.halfWidth) return 'positive';
-        if (value < -noise.halfWidth) return 'negative';
+        if (noise.verdict === 'improved') return 'positive';
+        if (noise.verdict === 'regressed') return 'negative';
+        if (noise.verdict) return 'neutral';
+        const signed = direction === 'minimize' ? -value : value;
+        if (signed > noise.halfWidth) return 'positive';
+        if (signed < -noise.halfWidth) return 'negative';
         return 'neutral';
       }
 
-      function renderSweepDelta(value, noise) {
-        const deltaClass = getNoiseDeltaClass(value, noise);
+      function renderSweepDelta(value, noise, direction = 'maximize') {
+        const deltaClass = getNoiseDeltaClass(value, noise, direction);
         const rounded = Math.abs(value) < 0.0005 ? 0 : value;
         const prefix = rounded > 0 ? '+' : '';
         const pill = `<span class="sweep-delta-pill ${deltaClass}">${prefix}${(rounded * 100).toFixed(1)}%</span>`;
@@ -6125,7 +6159,7 @@
 
       const SWEEP_Z_95 = 1.959964;
 
-      function computeSweepNoise(items, reportK) {
+      function computeSweepNoise(items, reportK, direction = 'maximize') {
         const names = ['passAtK', 'passHatK', 'consistency'];
         const sumsLeft = {};
         const sumsRight = {};
@@ -6193,9 +6227,8 @@
           const sd = Math.sqrt(variances[name] || 0) / nItems;
           const halfWidth = SWEEP_Z_95 * sd;
           const pValue = sd > 0 ? 2 * (1 - normalCdf(Math.abs(delta) / sd)) : (delta === 0 ? 1 : 0);
-          let verdict = 'within_noise';
-          if (delta > halfWidth) verdict = 'improved';
-          else if (delta < -halfWidth) verdict = 'regressed';
+          const verdict = window.QymMetrics.metricDeltaVerdict(
+            delta, halfWidth, name === 'avgAtK' ? direction : 'maximize');
           out[name] = { delta, halfWidth, pValue, verdict, items: nItems };
         });
         return out;
@@ -6356,8 +6389,8 @@
         return `${escapeHtml(base)}<span class="est-atk">${escapeHtml(sym)}${reportK}</span><button type="button" class="stat-info-icon qym-help-marker est-info-icon" aria-label="Explain this estimate" aria-expanded="false">i<span class="stat-info-tooltip qym-help-tooltip" role="tooltip">${tip}</span></button>`;
       }
 
-      function renderSweepStatCard(labelHtml, fromValue, toValue, deltaValue, noise) {
-        const deltaClass = getNoiseDeltaClass(deltaValue, noise);
+      function renderSweepStatCard(labelHtml, fromValue, toValue, deltaValue, noise, direction = 'maximize') {
+        const deltaClass = getNoiseDeltaClass(deltaValue, noise, direction);
         return `
           <div class="sweep-stat-card qym-stat-strip__item ${deltaClass}">
             <div class="sweep-stat-label qym-stat-strip__label">${labelHtml}</div>
@@ -6366,7 +6399,7 @@
               <span class="sweep-stat-arrow">→</span>
               <span class="sweep-stat-to">${formatSweepMetricValue(toValue)}</span>
             </div>
-            ${renderSweepDelta(deltaValue, noise)}
+            ${renderSweepDelta(deltaValue, noise, direction)}
           </div>
         `;
       }
@@ -6376,6 +6409,11 @@
       function renderSweepVerdict(noise, primaryLabel, primaryKey) {
         const entry = noise ? noise[primaryKey] : null;
         if (!entry) return '';
+        const metricName = state.selectedOverviewMetric || '';
+        const metricRole = metricName !== state.defaultMetric
+          ? 'selected metric'
+          : (state.defaultMetricDeclared ? 'declared primary metric' : 'first metric (no primary declared)');
+        const directionNote = metricDirectionFor(metricName) === 'minimize' ? ' · lower is better' : '';
         const delta = entry.delta;
         const prefix = delta > 0 ? '+' : '';
         const deltaText = `${prefix}${(delta * 100).toFixed(1)}%`;
@@ -6398,7 +6436,7 @@
             <span class="sweep-verdict-badge qym-badge ${cls === 'positive' ? 'qym-badge--success' : (cls === 'negative' ? 'qym-badge--danger' : 'qym-badge--neutral')}">${badge}</span>
             <div>
               <div class="sweep-verdict-title">${escapeHtml(headline)}</div>
-              <div class="sweep-verdict-sub">noise ±${band}% at 95% · ${pv} · ${entry.items} paired items · primary metric — other metrics below are context</div>
+              <div class="sweep-verdict-sub">${escapeHtml(metricName)}${directionNote} · noise ±${band}% at 95% · ${pv} · ${entry.items} paired items · ${metricRole} — other metrics below are context</div>
             </div>
           </div>
         `;
@@ -6668,7 +6706,7 @@
           }
         });
         summary.summary.avgAttemptsDelta = items.length ? attemptsDeltaSum / items.length : 0;
-        summary.noise = computeSweepNoise(items, reportK);
+        summary.noise = computeSweepNoise(items, reportK, metricDirectionFor(state.selectedOverviewMetric) || 'maximize');
         return summary;
       }
 
@@ -6706,8 +6744,8 @@
         return metadataKeys[0] || null;
       }
 
-      function renderSweepMetadataMetricCell(fromValue, toValue, deltaValue) {
-        const deltaClass = getDeltaClass(deltaValue);
+      function renderSweepMetadataMetricCell(fromValue, toValue, deltaValue, direction = 'maximize') {
+        const deltaClass = getDeltaClass(deltaValue, direction);
         return `
           <div class="sweep-metadata-metric">
             <span class="from">${formatSweepCompactMetricValue(fromValue)}</span>
@@ -6724,6 +6762,9 @@
         if (!values.length) return '';
         const supportsExclusive = sweepMetadataKeySupportsExclusive(items, metadataKey);
         const baseItems = Array.isArray(sourceItems) && sourceItems.length ? sourceItems : items;
+        // Avg@k is the metric's own value, so its delta color follows the
+        // metric's direction; the pass-based columns stay higher-is-better.
+        const avgDirection = metricDirectionFor(state.selectedOverviewMetric) || 'maximize';
 
         const rows = values.map((value) => {
           const isFiltered = state.sweepMetadataKey === metadataKey && Array.isArray(state.sweepMetadataValues) && state.sweepMetadataValues.includes(value);
@@ -6783,7 +6824,7 @@
             <td><div class="sweep-metadata-value">${escapeHtml(row.value)}</div></td>
             <td><span class="sweep-metadata-count">${row.count}</span></td>
             <td>${renderSweepMetadataMetricCell(row.summary.left.passAtK, row.summary.right.passAtK, row.summary.deltas.passAtK)}</td>
-            <td>${renderSweepMetadataMetricCell(row.summary.left.avgAtK, row.summary.right.avgAtK, row.summary.deltas.avgAtK)}</td>
+            <td>${renderSweepMetadataMetricCell(row.summary.left.avgAtK, row.summary.right.avgAtK, row.summary.deltas.avgAtK, avgDirection)}</td>
             <td>${renderSweepMetadataMetricCell(row.summary.left.consistency ?? 0, row.summary.right.consistency ?? 0, row.summary.deltas.consistency)}</td>
             <td>${renderSweepMetadataMetricCell(row.summary.left.reliability ?? 0, row.summary.right.reliability ?? 0, row.summary.deltas.reliability)}</td>
             <td>${renderSweepMetadataMetricCell(row.summary.left.passHatK, row.summary.right.passHatK, row.summary.deltas.passHatK)}</td>
@@ -6822,6 +6863,10 @@
           return;
         }
 
+        if (!metricDirectionFor(state.selectedOverviewMetric)) {
+          container.innerHTML = `<div class="sweep-empty">${escapeHtml(state.selectedOverviewMetric || 'This metric')} declares no direction, so Sweep cannot say which side is better. Declare <code>direction="maximize"</code> or <code>"minimize"</code> in its SDK MetricSpec, or choose another metric.</div>`;
+          return;
+        }
         const grouped = getActiveGroupedComparison();
         const groups = state.groupedOutcomeGroups;
         if (!grouped || !groups) {
@@ -6881,7 +6926,7 @@
         const passAtPlain = reportK && reportK !== k ? `Pass@${reportK}` : `Pass@${k}`;
         const statCards = [
           renderSweepStatCard(estimatorLabelHtml('Pass', '@', reportK, k), presentation.left.passAtK, presentation.right.passAtK, presentation.deltas.passAtK, noise.passAtK),
-          renderSweepStatCard(escapeHtml(`Avg@${k}`), presentation.left.avgAtK, presentation.right.avgAtK, presentation.deltas.avgAtK, noise.avgAtK),
+          renderSweepStatCard(escapeHtml(`Avg@${k}`), presentation.left.avgAtK, presentation.right.avgAtK, presentation.deltas.avgAtK, noise.avgAtK, metricDirectionFor(metricName) || 'maximize'),
           renderSweepStatCard('Consistency', presentation.left.consistency ?? 0, presentation.right.consistency ?? 0, presentation.deltas.consistency, noise.consistency),
           renderSweepStatCard('Reliability', presentation.left.reliability ?? 0, presentation.right.reliability ?? 0, presentation.deltas.reliability, noise.reliability),
           renderSweepStatCard(estimatorLabelHtml('Pass', '^', reportK, k), presentation.left.passHatK, presentation.right.passHatK, presentation.deltas.passHatK, noise.passHatK),
@@ -7945,19 +7990,25 @@
         state.compareAlignmentIssues = unalignableRuns;
         state.compareItemIds = Array.from(compareItemIds);
 
-        // Collect all unique metrics
-        const metricsSet = new Set();
+        // Metrics keep their spec position order (first run first). Views
+        // open on the declared primary metric, else the first metric (C008).
+        const metricLists = [];
+        const defaultSpecs = {};
         for (const run of state.runs) {
           const snap = run.snapshot || {};
-          const names = snap.metric_names || run.run?.metric_names || [];
-          names.forEach(m => metricsSet.add(m));
+          metricLists.push(snap.metric_names || run.run?.metric_names || []);
+          const specs = snap.metric_specs || run.run?.metric_specs || {};
+          Object.keys(specs).forEach(name => { if (!(name in defaultSpecs)) defaultSpecs[name] = specs[name]; });
         }
-        state.allMetrics = Array.from(metricsSet).sort();
+        state.allMetrics = window.QymMetrics.mergeMetricNames(metricLists);
 
         // Set default selected metrics
         if (state.allMetrics.length > 0) {
-          state.selectedOverviewMetric = state.allMetrics[0];
-          state.selectedItemsMetric = state.allMetrics[0];
+          const defaultMetric = window.QymMetrics.defaultMetricName(state.allMetrics, defaultSpecs);
+          state.defaultMetric = defaultMetric;
+          state.defaultMetricDeclared = Boolean(defaultSpecs[defaultMetric]?.primary);
+          state.selectedOverviewMetric = defaultMetric;
+          state.selectedItemsMetric = defaultMetric;
         }
 
         // Update header stats
@@ -8213,10 +8264,14 @@
 
         const isBoolean = state.metricIsBoolean[metric];
         const isNumeric = state.metricTypes?.[metric] === 'numeric';
-        if (isBoolean || isNumeric) {
+        const direction = metricDirectionFor(metric);
+        // No pass threshold without a declared direction (C008).
+        if (isBoolean || isNumeric || !direction) {
           thresholdControl.style.display = 'none';
         } else {
           thresholdControl.style.display = 'flex';
+          const thresholdLabel = thresholdControl.querySelector('.threshold-label');
+          if (thresholdLabel) thresholdLabel.textContent = direction === 'minimize' ? 'Pass if ≤' : 'Pass if ≥';
           // Set slider value to current threshold (as percentage)
           const pct = Math.round((state.metricThresholds[metric] ?? 0.8) * 100);
           thresholdSlider.value = pct;
@@ -8225,18 +8280,41 @@
         }
       }
 
+      // Metric semantics (C008): the declared direction decides colors,
+      // pass/fail, winners and verdicts; no direction = neutral display.
+      function metricDirectionFor(metricName) {
+        return (state.metricDirections || {})[metricName] || null;
+      }
+
+      function metricPassesFor(metricName, score) {
+        return window.QymMetrics.metricPasses(
+          score,
+          state.metricThresholds[metricName] ?? 0.8,
+          metricDirectionFor(metricName),
+          !!state.metricIsBoolean[metricName],
+        );
+      }
+
+      function metricColorClassFor(metricName, value, metricType = state.metricTypes?.[metricName] || 'score') {
+        return window.QymMetrics.getMetricColorClass(value, metricType, metricDirectionFor(metricName));
+      }
+
       // Detect if a metric is boolean/score/numeric and initialize threshold
       function detectMetricTypes() {
         state.metricTypes = {};
         state.metricSpecs = {};
         state.metricSpecConflicts = {};
+        state.metricDirections = {};
         for (const metricName of state.allMetrics) {
           // Collect all rows across all runs for this metric
           let allRows = [];
           let metricIdx = -1;
+          const declaredDirections = new Set();
           for (const run of state.runs) {
             const snap = run.snapshot || {};
             const spec = snap.metric_specs?.[metricName] || run.run?.metric_specs?.[metricName];
+            const declaredDirection = window.QymMetrics.metricDirection(spec);
+            if (declaredDirection) declaredDirections.add(declaredDirection);
             if (spec && spec.score_type !== 'legacy') {
               const existingSpec = state.metricSpecs[metricName];
               if (existingSpec && JSON.stringify(existingSpec) !== JSON.stringify(spec)) {
@@ -8265,8 +8343,13 @@
             : inferredType;
           state.metricTypes[metricName] = mType;
           state.metricIsBoolean[metricName] = (mType === 'boolean');
+          // Runs that declare opposite directions compare neutrally.
+          state.metricDirections[metricName] = declaredDirections.size === 1
+            ? Array.from(declaredDirections)[0]
+            : null;
           if (state.metricThresholds[metricName] == null) {
-            state.metricThresholds[metricName] = state.metricSpecs[metricName]?.pass_threshold ?? 0.8;
+            state.metricThresholds[metricName] = window.QymMetrics.defaultPassThreshold(
+              state.metricSpecs[metricName], state.metricDirections[metricName]);
           }
         }
       }
@@ -8375,18 +8458,18 @@
 
           const scores = scoresWithStatus.map(s => s.score);
           const validScores = scores.filter(s => s !== null);
+          // Best, pass and winner follow the declared direction (C008); a
+          // metric without one gets no winners, passes or Max@K.
+          const direction = metricDirectionFor(metricName);
+          const isWorst = s => direction === 'minimize' ? s > 0.9999 : direction === 'maximize' && s < 0.0001;
 
           // Max@K: track the best score for this item across all runs (not affected by threshold)
-          if (validScores.length > 0) {
-            stats.maxAtK += Math.max(...validScores);
+          if (validScores.length > 0 && direction) {
+            stats.maxAtK += direction === 'minimize' ? Math.min(...validScores) : Math.max(...validScores);
           }
 
-          // Determine threshold for "correct": 1.0 for boolean, user-defined for continuous
-          const isBoolean = state.metricIsBoolean[metricName];
-          const threshold = isBoolean ? 0.9999 : state.metricThresholds[metricName];
-
           // Count distribution for ALL items (even those with missing data)
-          const numCorrect = scores.filter(s => s !== null && s >= threshold).length;
+          const numCorrect = scores.filter(s => s !== null && metricPassesFor(metricName, s) === true).length;
           stats.correctDistribution[numCorrect]++;
 
           // For head-to-head comparison, need at least 2 valid scores
@@ -8394,7 +8477,7 @@
             stats.itemWinners.push(null);
             // Still count pass@k for items with any data
             if (numCorrect > 0) stats.passAtK++;
-            if (scores.every(s => s === null || s < 0.0001)) stats.allWrong++;
+            if (direction && scores.every(s => s === null || isWorst(s))) stats.allWrong++;
             if (numCorrect === scores.filter(s => s !== null).length && numCorrect > 0) stats.allCorrect++;
             stats.totalCompared++;
             continue;
@@ -8404,10 +8487,12 @@
 
           const maxScore = Math.max(...validScores);
           const minScore = Math.min(...validScores);
-          const winners = scores.map((s, idx) => s === maxScore ? idx : -1).filter(x => x >= 0);
+          const winners = window.QymMetrics.bestMetricIndexes(scores, direction);
 
           // Check if ALL scores are the same (true tie)
-          if (maxScore === minScore) {
+          if (!direction) {
+            stats.itemWinners.push(null);
+          } else if (maxScore === minScore) {
             stats.ties++;
             stats.itemWinners.push('tie');
           } else if (winners.length === 1) {
@@ -8427,7 +8512,7 @@
           // All correct / all wrong / pass@k (at least one run meets threshold)
           // Note: numCorrect was already calculated above using threshold
           const allCorrectItem = numCorrect === validScores.length && validScores.length > 0;
-          const allZeroItem = validScores.every(s => s < 0.0001); // All scores are 0%
+          const allZeroItem = Boolean(direction) && validScores.every(isWorst); // Worst score everywhere
 
           if (allCorrectItem) stats.allCorrect++;
           if (allZeroItem) stats.allWrong++;
@@ -8781,12 +8866,10 @@
         return keys;
       }
 
-      function categoryScoreColor(value) {
-        if (value >= 0.9) return 'var(--score-5)';
-        if (value >= 0.75) return 'var(--score-4)';
-        if (value >= 0.6) return 'var(--score-3)';
-        if (value >= 0.4) return 'var(--score-2)';
-        return 'var(--score-1)';
+      function categoryScoreColor(value, metricName = state.selectedOverviewMetric) {
+        // Direction-aware score color; neutral when no direction is declared.
+        const cls = metricColorClassFor(metricName, value);
+        return cls ? `var(--${cls})` : 'var(--text-muted)';
       }
 
       function categoryScoreTrack(score, baseline) {
@@ -8853,6 +8936,8 @@
             const bIndex = order.indexOf(b.groupVal.toLowerCase().trim());
             return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
           });
+        } else if (metricDirectionFor(selectedMetric) === 'minimize') {
+          stats.sort((a, b) => a.avgScore - b.avgScore);
         } else {
           stats.sort((a, b) => b.avgScore - a.avgScore);
         }
@@ -8979,7 +9064,7 @@
                 else if (['very hard', 'very_hard', 'expert', 'extreme'].includes(value)) cardValueClass = ' complexity-expert';
               }
 
-              const colorClassName = window.QymMetrics.getMetricColorClass(group.avgScore, metricType);
+              const colorClassName = metricColorClassFor(selectedMetric, group.avgScore, metricType);
               const averageDisplay = window.QymMetrics.formatMetricValue(group.avgScore, metricType, 0);
               const performanceValueHtml = `<span class="score-col-value qym-score-value ${colorClassName}">${averageDisplay}</span>`;
               html += `<div class="breakdown-card${cardValueClass}" data-bd-category="${escapeAttr(bdKey)}" data-bd-value="${escapeAttr(group.groupVal)}" style="cursor:pointer;" title="Click to filter by ${escapeAttr(group.groupVal)}">` +
@@ -9148,22 +9233,28 @@
         </div>`;
 
         // Tooltips for each metric - adjust based on boolean vs continuous
-        const isBoolean = state.metricIsBoolean[state.selectedOverviewMetric];
-        const isNumeric = state.metricTypes?.[state.selectedOverviewMetric] === 'numeric';
+        const overviewMetric = state.selectedOverviewMetric;
+        const isBoolean = state.metricIsBoolean[overviewMetric];
+        const isNumeric = state.metricTypes?.[overviewMetric] === 'numeric';
         const overviewMType = isNumeric ? 'numeric' : (isBoolean ? 'boolean' : 'score');
-        const threshold = Math.round((state.metricThresholds[state.selectedOverviewMetric] ?? 0.8) * 100);
-        const correctDef = isBoolean ? '100%' : `≥${threshold}%`;
+        // No declared direction: values only, no pass rates, winners or colors (C008).
+        const overviewDirection = metricDirectionFor(overviewMetric);
+        const isNeutral = !isNumeric && !overviewDirection;
+        const lowerIsBetter = overviewDirection === 'minimize';
+        const threshold = Math.round((state.metricThresholds[overviewMetric] ?? 0.8) * 100);
+        const passRule = lowerIsBetter ? `≤${threshold}%` : `≥${threshold}%`;
+        const perfectScore = lowerIsBetter ? 'the best score (0%)' : 'a perfect score (100%)';
 
         const tooltips = {
           passAtK: isBoolean
-            ? `Percentage of items where <strong>at least one</strong> of the ${K} runs achieved a perfect score (100%). Measures coverage - can any run solve this item?`
-            : `Percentage of items where <strong>at least one</strong> of the ${K} runs scored <strong>≥${threshold}%</strong>. Adjust the threshold above to change what counts as "correct".`,
+            ? `Percentage of items where <strong>at least one</strong> of the ${K} runs achieved ${perfectScore}. Measures coverage - can any run solve this item?`
+            : `Percentage of items where <strong>at least one</strong> of the ${K} runs scored <strong>${passRule}</strong>. Adjust the threshold above to change what counts as "correct".`,
           passHatK: isBoolean
-            ? `Percentage of items where <strong>all ${K} runs</strong> achieved a perfect score (100%). Measures consistency - do all runs reliably solve this item?`
-            : `Percentage of items where <strong>all ${K} runs</strong> scored <strong>≥${threshold}%</strong>. Adjust the threshold above to change what counts as "correct".`,
+            ? `Percentage of items where <strong>all ${K} runs</strong> achieved ${perfectScore}. Measures consistency - do all runs reliably solve this item?`
+            : `Percentage of items where <strong>all ${K} runs</strong> scored <strong>${passRule}</strong>. Adjust the threshold above to change what counts as "correct".`,
           maxAtK: isNumeric
             ? `Average of the <strong>best value</strong> across all ${K} runs for each item.`
-            : `Average of the <strong>best score</strong> across all ${K} runs for each item. Shows the upper bound of what your runs can achieve.`,
+            : `Average of the <strong>best score</strong> (${lowerIsBetter ? 'lowest' : 'highest'}) across all ${K} runs for each item. Shows the bound of what your runs can achieve.`,
           consistency: `Measures how often runs <strong>agree on pass/fail</strong> across ${K} runs. <strong>100%</strong> = all runs agree, <strong>0%</strong> = 50/50 split.`,
           reliability: `When an item <strong>CAN be solved</strong>, how often is it? Only includes items with <strong>≥1 passing run</strong>.`,
           failedCount: `Item/run executions with a <strong>task or metric error</strong>, across all metrics in the current filtered items. Each execution counts once, even if multiple metrics error. A low judge score alone is not an error.`,
@@ -9171,25 +9262,29 @@
             ? `The <strong>mean value</strong> across all items and all runs.`
             : `The <strong>mean score</strong> across all items and all runs. A general measure of overall performance.`,
           avgLatency: `The <strong>mean response time</strong> across all items and all runs. Lower is better.`,
-          winnerBreakdown: `Shows which run "won" (scored highest) for each item. Ties occur when multiple runs share the top score. Helps identify which run performs best most often.`,
+          winnerBreakdown: `Shows which run "won" (scored ${lowerIsBetter ? 'lowest' : 'highest'}, the better score for this metric) for each item. Ties occur when multiple runs share the best score. Helps identify which run performs best most often.`,
           correctDist: isBoolean
             ? `Distribution showing how many runs got each item correct. "0 runs" = no run solved it, "${K} runs" = all runs solved it. Helps identify easy vs hard items.`
-            : `Distribution showing how many runs scored ≥${threshold}% for each item. Adjust the threshold above to change what counts as "correct".`
+            : `Distribution showing how many runs scored ${passRule} for each item. Adjust the threshold above to change what counts as "correct".`
         };
 
         // For numeric metrics, show avg/max instead of pass@K/consistency
         const avgScoreDisplay = window.QymMetrics.formatMetricValue(stats.overallAvgScore, overviewMType);
-        const avgScoreColor = window.QymMetrics.getMetricColorClass(stats.overallAvgScore, overviewMType);
+        const avgScoreColor = metricColorClassFor(overviewMetric, stats.overallAvgScore, overviewMType);
         const maxAtKVal = stats.totalCompared > 0 ? stats.maxAtK / stats.totalCompared : 0;
         const maxAtKDisplay = window.QymMetrics.formatMetricValue(maxAtKVal, overviewMType);
-        const maxAtKColor = window.QymMetrics.getMetricColorClass(maxAtKVal, overviewMType);
+        const maxAtKColor = metricColorClassFor(overviewMetric, maxAtKVal, overviewMType);
 
         const fmtN = window.QymMetrics.formatNumericValue;
-        const statsRowHtml = isNumeric ? `
+        const fmtValue = isNumeric ? fmtN : (value => window.QymMetrics.formatMetricValue(value, overviewMType));
+        const neutralNote = !overviewDirection
+          ? `<div class="metric-direction-note">${escapeHtml(overviewMetric)} declares no direction, so pass rates, winners and colors are not shown. Declare <code>direction="maximize"</code> or <code>"minimize"</code> in its SDK MetricSpec to compare it.</div>`
+          : '';
+        const statsRowHtml = (isNumeric || isNeutral) ? `
           <div class="stats-row qym-stat-strip">
             <div class="stat-box qym-stat-strip__item">
               <div class="stat-title qym-stat-strip__label">Min ${infoIcon('The lowest individual value across all items and runs.')}</div>
-              <div class="stat-main qym-stat-strip__value">${fmtN(stats.allScoresMin)}</div>
+              <div class="stat-main qym-stat-strip__value">${fmtValue(stats.allScoresMin)}</div>
             </div>
 
             <div class="stat-box qym-stat-strip__item">
@@ -9199,13 +9294,13 @@
 
             <div class="stat-box qym-stat-strip__item">
               <div class="stat-title qym-stat-strip__label">Max ${infoIcon('The highest individual value across all items and runs.')}</div>
-              <div class="stat-main qym-stat-strip__value">${fmtN(stats.allScoresMax)}</div>
+              <div class="stat-main qym-stat-strip__value">${fmtValue(stats.allScoresMax)}</div>
             </div>
 
-            <div class="stat-box qym-stat-strip__item">
+            ${isNumeric ? `<div class="stat-box qym-stat-strip__item">
               <div class="stat-title qym-stat-strip__label">Total ${infoIcon('Sum of all values across all items and runs.')}</div>
               <div class="stat-main qym-stat-strip__value" style="color:var(--accent-primary)">${fmtN(stats.allScoresTotal)}</div>
-            </div>
+            </div>` : ''}
 
             <div class="stat-box qym-stat-strip__item">
               <div class="stat-title qym-stat-strip__label">Avg Latency ${infoIcon(tooltips.avgLatency)}</div>
@@ -9230,8 +9325,8 @@
             </div>
 
             <div class="stat-box qym-stat-strip__item">
-              <div class="stat-title qym-stat-strip__label">Max@${K} ${infoIcon(tooltips.maxAtK)}</div>
-              <div class="stat-main qym-stat-strip__value qym-score-value ${scoreColorClass(stats.maxAtK / stats.totalCompared)}">${formatPercent(stats.maxAtK / stats.totalCompared)}</div>
+              <div class="stat-title qym-stat-strip__label">${lowerIsBetter ? 'Min' : 'Max'}@${K} ${infoIcon(tooltips.maxAtK)}</div>
+              <div class="stat-main qym-stat-strip__value qym-score-value ${maxAtKColor}">${formatPercent(stats.maxAtK / stats.totalCompared)}</div>
             </div>
 
             <div class="stat-box qym-stat-strip__item">
@@ -9250,7 +9345,7 @@
 
             <div class="stat-box qym-stat-strip__item">
               <div class="stat-title qym-stat-strip__label">Avg Score ${infoIcon(tooltips.avgScore)}</div>
-              <div class="stat-main qym-stat-strip__value qym-score-value ${scoreColorClass(stats.overallAvgScore)}">${formatPercent(stats.overallAvgScore)}</div>
+              <div class="stat-main qym-stat-strip__value qym-score-value ${avgScoreColor}">${formatPercent(stats.overallAvgScore)}</div>
             </div>
 
             <div class="stat-box qym-stat-strip__item">
@@ -9267,8 +9362,9 @@
 
         container.innerHTML = `
           ${statsRowHtml}
+          ${neutralNote}
 
-          <div class="stat-box wide">
+          ${!overviewDirection ? '' : `<div class="stat-box wide">
             <div class="stat-title">Winner Breakdown ${infoIcon(tooltips.winnerBreakdown)}</div>
             <div class="win-loss-bar">
               ${winBarSegments}
@@ -9278,9 +9374,9 @@
               ${legendItems}
               ${tieLegend}
             </div>
-          </div>
+          </div>`}
 
-          ${isNumeric ? '' : `<div class="stat-box wide">
+          ${isNumeric || isNeutral ? '' : `<div class="stat-box wide">
             <div class="stat-title">Correct Distribution ${infoIcon(tooltips.correctDist)}</div>
             <div class="distribution-bar">
               ${buildDistributionBar(stats)}
@@ -9529,16 +9625,13 @@
         // Find best (lowest) latency
         const bestLatency = Math.min(...runLatencyAvgs.filter(v => v !== null));
 
-        // Find best value for each metric
+        // Best value for each metric follows its declared direction; a
+        // metric without one has no "best" (C008).
         const bestValues = {};
         for (const metric of state.allMetrics) {
-          let best = -Infinity;
-          for (const avgs of runMetricAvgs) {
-            if (avgs[metric] !== null && avgs[metric] > best) {
-              best = avgs[metric];
-            }
-          }
-          bestValues[metric] = best > -Infinity ? best : null;
+          const values = runMetricAvgs.map(avgs => avgs[metric]);
+          const best = window.QymMetrics.bestMetricIndexes(values, metricDirectionFor(metric));
+          bestValues[metric] = best.length ? values[best[0]] : null;
         }
 
         // Render rows - metrics first, then latency
@@ -9552,15 +9645,15 @@
           const cells = runMetricAvgs.map(avgs => {
             const val = avgs[metric];
             if (val === null) return '<td class="metric-value-cell"><span class="metric-val">—</span></td>';
-            const isBest = mType !== 'numeric' && val === bestValues[metric] && state.runs.length > 1;
-            const cls = window.QymMetrics.getMetricColorClass(val, mType);
+            const isBest = bestValues[metric] !== null && val === bestValues[metric] && state.runs.length > 1;
+            const cls = metricColorClassFor(metric, val, mType);
             const display = window.QymMetrics.formatMetricValueSmart(val, mType, peerValues);
             return `<td class="metric-value-cell"><span class="metric-val qym-score-value ${cls} ${isBest ? 'best' : ''}"${isBest ? ' title="Best across runs"' : ''}>${display}</span></td>`;
           }).join('');
 
           return `
             <tr>
-              <td class="metric-name">${metric}</td>
+              <td class="metric-name" title="${escapeAttr(window.QymMetrics.metricDirectionLabel(metricDirectionFor(metric)))}">${escapeHtml(metric)}</td>
               ${cells}
             </tr>
           `;
@@ -10527,10 +10620,11 @@
 
       function compareFilterContext(itemId, rowData, scores, stats) {
         const validScores = scores.filter(score => score !== null);
-        const isBoolean = state.metricIsBoolean[state.selectedItemsMetric];
-        const threshold = isBoolean ? 0.9999 : (state.metricThresholds[state.selectedItemsMetric] ?? 0.8);
+        // Pass/fail follows the metric's declared direction; none = no verdict.
+        const passes = score => metricPassesFor(state.selectedItemsMetric, score);
+        const hasDirection = Boolean(metricDirectionFor(state.selectedItemsMetric));
         const correctRuns = scores
-          .map((score, index) => score !== null && score >= threshold ? index : -1)
+          .map((score, index) => score !== null && passes(score) === true ? index : -1)
           .filter(index => index >= 0);
         const outcomes = [];
         const outputs = rowData.map(row => row?.output_full || row?.output || '').filter(Boolean);
@@ -10539,8 +10633,8 @@
         const hasEditedMetric = rowData.some(rowHasEditedMetric);
         if (hasError) outcomes.push('errors');
         if (hasEditedMetric) outcomes.push('edited_metrics');
-        if (validScores.length >= 2 && validScores.every(score => score >= threshold)) outcomes.push('all_correct');
-        if (validScores.length >= 2 && validScores.every(score => score < threshold)) outcomes.push('all_wrong');
+        if (hasDirection && validScores.length >= 2 && validScores.every(score => passes(score) === true)) outcomes.push('all_correct');
+        if (hasDirection && validScores.length >= 2 && validScores.every(score => passes(score) === false)) outcomes.push('all_wrong');
         if (validScores.length >= 2 && correctRuns.length > 0 && correctRuns.length < validScores.length) outcomes.push('partially_correct');
         const rareThreshold = Math.max(1, Math.floor(state.runs.length * 0.25));
         if (correctRuns.length > 0 && correctRuns.length <= rareThreshold) outcomes.push('rarely_solved');
@@ -10916,33 +11010,28 @@
             const hasEditedMetric = rowData.some(rowHasEditedMetric);
             if (!hasEditedMetric) continue;
           } else if (state.itemFilter === 'all_correct') {
-            // All runs meet threshold (correct)
-            const isBoolean = state.metricIsBoolean[state.selectedItemsMetric];
-            const correctThreshold = isBoolean ? 0.9999 : state.metricThresholds[state.selectedItemsMetric];
-            if (validScores.length < 2 || !validScores.every(s => s >= correctThreshold)) continue;
+            // All runs pass (direction-aware; no direction = no pass)
+            const passes = score => metricPassesFor(state.selectedItemsMetric, score) === true;
+            if (validScores.length < 2 || !validScores.every(passes)) continue;
           } else if (state.itemFilter === 'all_wrong') {
-            // No run meets threshold (not correct)
-            const isBoolean = state.metricIsBoolean[state.selectedItemsMetric];
-            const correctThreshold = isBoolean ? 0.9999 : state.metricThresholds[state.selectedItemsMetric];
-            if (validScores.length < 2 || validScores.some(s => s >= correctThreshold)) continue;
+            // No run passes
+            const fails = score => metricPassesFor(state.selectedItemsMetric, score) === false;
+            if (validScores.length < 2 || !validScores.every(fails)) continue;
           } else if (state.itemFilter === 'rarely_solved') {
-            // 25% or fewer runs meet threshold
-            const isBoolean = state.metricIsBoolean[state.selectedItemsMetric];
-            const correctThreshold = isBoolean ? 0.9999 : state.metricThresholds[state.selectedItemsMetric];
-            const numCorrect = scores.filter(s => s !== null && s >= correctThreshold).length;
+            // 25% or fewer runs pass
+            const passes = score => metricPassesFor(state.selectedItemsMetric, score) === true;
+            const numCorrect = scores.filter(s => s !== null && passes(s)).length;
             const rareThreshold = Math.max(1, Math.floor(state.runs.length * 0.25));
             if (numCorrect === 0 || numCorrect > rareThreshold) continue;
           } else if (state.itemFilter === 'unique_solve') {
-            // Exactly 1 run meets threshold
-            const isBoolean = state.metricIsBoolean[state.selectedItemsMetric];
-            const correctThreshold = isBoolean ? 0.9999 : state.metricThresholds[state.selectedItemsMetric];
-            const numCorrect = scores.filter(s => s !== null && s >= correctThreshold).length;
+            // Exactly 1 run passes
+            const passes = score => metricPassesFor(state.selectedItemsMetric, score) === true;
+            const numCorrect = scores.filter(s => s !== null && passes(s)).length;
             if (numCorrect !== 1) continue;
           } else if (state.itemFilter === 'partially_correct') {
-            // #12: Some but not all runs met threshold
-            const isBoolean = state.metricIsBoolean[state.selectedItemsMetric];
-            const correctThreshold = isBoolean ? 0.9999 : state.metricThresholds[state.selectedItemsMetric];
-            const numCorrect = scores.filter(s => s !== null && s >= correctThreshold).length;
+            // #12: Some but not all runs passed
+            const passes = score => metricPassesFor(state.selectedItemsMetric, score) === true;
+            const numCorrect = scores.filter(s => s !== null && passes(s)).length;
             if (numCorrect === 0 || numCorrect === validScores.length || validScores.length < 2) continue;
           } else if (state.itemFilter.startsWith(GROUPED_OUTCOME_ITEM_FILTER_PREFIX)) {
             if (!groupedBucketItems || !groupedBucketItems.has(itemId)) continue;
@@ -10950,9 +11039,8 @@
 
           // #20: Apply pass rate filter
           if (state.passRateOp) {
-            const isBoolean = state.metricIsBoolean[state.selectedItemsMetric];
-            const correctThreshold = isBoolean ? 0.9999 : state.metricThresholds[state.selectedItemsMetric];
-            const numCorrect = scores.filter(s => s !== null && s >= correctThreshold).length;
+            const passes = score => metricPassesFor(state.selectedItemsMetric, score) === true;
+            const numCorrect = scores.filter(s => s !== null && passes(s)).length;
             const target = state.passRateValue;
             if (state.passRateOp === 'lte' && numCorrect > target) continue;
             if (state.passRateOp === 'gte' && numCorrect < target) continue;
@@ -10973,9 +11061,7 @@
             } else if (state.winnerFilter.startsWith('only_')) {
               // Only show items where ONLY this run met threshold
               const runIdx = parseInt(state.winnerFilter.replace('only_', ''), 10);
-              const isBoolean = state.metricIsBoolean[state.selectedItemsMetric];
-              const correctThreshold = isBoolean ? 0.9999 : state.metricThresholds[state.selectedItemsMetric];
-              const correctRuns = scores.map((s, idx) => s !== null && s >= correctThreshold ? idx : -1).filter(x => x >= 0);
+              const correctRuns = scores.map((s, idx) => s !== null && metricPassesFor(state.selectedItemsMetric, s) === true ? idx : -1).filter(x => x >= 0);
               if (correctRuns.length !== 1 || correctRuns[0] !== runIdx) continue;
             }
           }
@@ -11207,12 +11293,12 @@
             && meta[k] !== undefined && meta[k] !== null && meta[k] !== '');
           if (!metaKeys.length) return '';
           const obj = {};
-          metaKeys.forEach(k => { obj[k] = _parseMetaDeep(meta[k]); });
+          metaKeys.forEach(k => { obj[window.QymMetrics.metricMetaDisplayKey(k, meta)] = _parseMetaDeep(meta[k]); });
           const v = window.QymMetrics.parseScoreValue((metricVals || [])[i]);
           let badge = '';
           if (v !== null) {
             const mType = state.metricTypes?.[name] || 'score';
-            const cls = window.QymMetrics.getMetricColorClass(v, mType);
+            const cls = metricColorClassFor(name, v, mType);
             badge = `<span class="metric-score-value qym-score-value ${cls}">${window.QymMetrics.formatMetricObservation(v, mType, state.metricSpecs?.[name])}</span>`;
           }
           const bid = `det_${safeId}_${i}`;
@@ -11276,7 +11362,7 @@
           return {
             raw,
             parsed,
-            cls: parsed === null ? '' : window.QymMetrics.getMetricColorClass(parsed, type),
+            cls: parsed === null ? '' : metricColorClassFor(name, parsed, type),
             display: parsed === null ? '\u2014' : window.QymMetrics.formatMetricObservation(parsed, type, state.metricSpecs?.[name]),
             meta: (row.metric_meta || {})[name] || {},
           };
@@ -11291,11 +11377,9 @@
             // The exception belongs to this metric, not to the task verdict.
             verdict = 'metric-error';
           } else if (metric && (state.metricTypes?.[metric] || 'score') !== 'numeric') {
-            const score = scoreData(row, runIdx, metric).parsed;
-            const threshold = state.metricIsBoolean[metric]
-              ? 0.9999
-              : (state.metricThresholds[metric] ?? 0.8);
-            if (score !== null) verdict = score >= threshold ? 'pass' : 'fail';
+            // Direction-aware; a metric without a direction gets no verdict.
+            const passed = metricPassesFor(metric, scoreData(row, runIdx, metric).parsed);
+            if (passed !== null) verdict = passed ? 'pass' : 'fail';
           }
           return verdict;
         };
@@ -11314,11 +11398,21 @@
           const title = `${label} on ${metric}`;
           return `<span class="qym-tag ${verdict === 'pass' ? 'qym-tag--success' : 'qym-tag--danger'}" title="${escapeAttr(title)}">${label}</span>`;
         };
+        // Diagnosis targets failures. Without a declared direction there is
+        // no Pass/Fail, so it keeps the analyzer's higher-is-better rule.
+        const needsDiagnosis = (row, runIdx) => {
+          const verdict = verdictStateFor(row, runIdx);
+          if (['fail', 'error', 'metric-error'].includes(verdict)) return true;
+          const metric = state.selectedItemsMetric;
+          if (verdict || !metric || metricDirectionFor(metric) || (state.metricTypes?.[metric] || 'score') === 'numeric') return false;
+          const score = scoreData(row, runIdx, metric).parsed;
+          const threshold = state.metricIsBoolean[metric] ? 0.9999 : (state.metricThresholds[metric] ?? 0.8);
+          return score !== null && score < threshold;
+        };
         const rootCauseBlockFor = (row, runIdx) => {
           const scope = compareRootCauseScope(row, runIdx);
           const issues = rootCauseIssues(scope.analysis);
-          const verdict = verdictStateFor(row, runIdx);
-          if (!issues.length && (IS_COMPARE_EXPORT || !['fail', 'error', 'metric-error'].includes(verdict))) return '';
+          if (!issues.length && (IS_COMPARE_EXPORT || !needsDiagnosis(row, runIdx))) return '';
           const issueHtml = issues.length
             ? '<div class="compare-issue-list" role="list" aria-label="Root-cause issues">' + issues.map((issue, issueIndex) => {
                 const issueColor = rootCauseColor(issue.category);
@@ -11348,11 +11442,18 @@
               && state.visibleMetricMetaFields[key] !== false
               && score.meta[key] !== undefined && score.meta[key] !== null && score.meta[key] !== '');
             const hasMetricExecutionError = window.QymMetrics.hasMetricError(row, name);
-            if (score.parsed === null && !hasMeta && !hasMetricExecutionError) return '';
+            const rawText = score.raw == null ? '' : String(score.raw);
+            // A stored score that is not a number keeps its chip and edit
+            // control so it can be fixed (C009).
+            const invalidStored = score.parsed === null && rawText.trim() !== '';
+            const modified = String(score.meta.modified || '').toLowerCase() === 'true';
+            if (score.parsed === null && !hasMeta && !hasMetricExecutionError && !invalidStored && !modified) return '';
             const metricErrorClass = hasMetricExecutionError ? ' metric-execution-error' : '';
             const metricErrorIndicator = hasMetricExecutionError ? renderCompareMetricErrorIndicator(name) : '';
             // An exception is not a judged score (0 would render as False).
             const scoreHtml = hasMetricExecutionError ? ''
+              : invalidStored
+              ? `<span class="metric-score-value metric-score-invalid" title="${escapeAttr('Stored score "' + rawText + '" is not a number. Edit it to fix it.')}">${escapeHtml(rawText.length > 12 ? rawText.slice(0, 12) + '\u2026' : rawText)}</span>`
               : `<span class="metric-score-value qym-score-value ${score.cls}">${score.display}</span>`;
             const active = activeMetric === name;
             const edited = String(score.meta.modified || '').toLowerCase() === 'true';
@@ -11413,7 +11514,7 @@
               if (!['modified', 'original_score'].includes(key)
                   && state.visibleMetricMetaFields[key] !== false
                   && score.meta[key] !== undefined && score.meta[key] !== null && score.meta[key] !== '') {
-                detail[key] = _parseMetaDeep(score.meta[key]);
+                detail[window.QymMetrics.metricMetaDisplayKey(key, score.meta)] = _parseMetaDeep(score.meta[key]);
               }
             });
             const content = Object.keys(detail).length
@@ -11501,7 +11602,7 @@
               if (v === null) return '';
 
               const itemMType = state.metricTypes?.[name] || 'score';
-              const cls = window.QymMetrics.getMetricColorClass(v, itemMType);
+              const cls = metricColorClassFor(name, v, itemMType);
               const isReducedBoolean = itemMType === 'boolean' && Number(run.run?.samples || 1) > 1;
               const display = isReducedBoolean
                 ? window.QymMetrics.formatMetricValue(v, 'score')
@@ -11573,11 +11674,8 @@
               if (mIdx !== -1) {
                 const pfScore = metricVals[mIdx];
                 const pfVal = window.QymMetrics.parseScoreValue(pfScore);
-                if (pfVal !== null) {
-                  const pfBoolean = state.metricIsBoolean[selectedMetric];
-                  const pfThreshold = pfBoolean ? 0.9999 : (state.metricThresholds[selectedMetric] || 0.8);
-                  pfClass = pfVal >= pfThreshold ? 'pass' : 'fail';
-                }
+                const passed = metricPassesFor(selectedMetric, pfVal);
+                if (passed !== null) pfClass = passed ? 'pass' : 'fail';
               }
             }
             const statusIndicator = pfClass
@@ -11745,7 +11843,7 @@
             const v = window.QymMetrics.parseScoreValue((row.metric_values || [])[mIdx]);
             if (v === null && !hasMetricExecutionError) return emptyPill;
             const mType = state.metricTypes?.[name] || 'score';
-            const cls = v === null ? '' : window.QymMetrics.getMetricColorClass(v, mType);
+            const cls = v === null ? '' : metricColorClassFor(name, v, mType);
             const display = v === null ? '\u2014' : window.QymMetrics.formatMetricObservation(v, mType, state.metricSpecs?.[name]);
             const metricErrorClass = hasMetricExecutionError ? ' metric-execution-error' : '';
             const metricErrorIndicator = hasMetricExecutionError ? renderCompareMetricErrorIndicator(name) : '';
@@ -12315,9 +12413,27 @@
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || data.error) {
-          throw new Error(data.detail || data.error || 'Failed to update metric');
+          const error = new Error(data.detail || data.error || 'Failed to update metric');
+          error.status = res.status;
+          throw error;
         }
         return data;
+      }
+
+      // A rejected score edit keeps the editor open with the reason beside
+      // the input (C009); typing again clears it.
+      function setScoreEditError(input, statusEl, message) {
+        if (statusEl) {
+          statusEl.textContent = message || '';
+          statusEl.classList.toggle('is-error', Boolean(message));
+        }
+        if (!input) return;
+        if (message) {
+          input.setAttribute('aria-invalid', 'true');
+          input.focus();
+        } else {
+          input.removeAttribute('aria-invalid');
+        }
       }
 
       function applyUpdatedRowToRun(runIdx, updatedRow) {
@@ -12423,6 +12539,7 @@
             if (event.key === 'Enter') input.closest('.metric-edit-controls')?.querySelector('.metric-edit-save')?.click();
             else if (event.key === 'Escape') input.closest('.metric-edit-controls')?.querySelector('.metric-edit-cancel')?.click();
           };
+          input.oninput = () => setScoreEditError(input, input.closest('.metric-edit-controls')?.querySelector('.metric-edit-status'), '');
         });
         root.querySelectorAll('.metric-edit-cancel').forEach(btn => {
           btn.onclick = (event) => {
@@ -12431,6 +12548,7 @@
             const cell = btn.closest('.metric-compare-row, .qym-metric-compare__cell');
             const input = controls?.querySelector('.metric-edit-input');
             if (input && input.dataset.originalValue !== undefined) input.value = input.dataset.originalValue;
+            setScoreEditError(input, controls?.querySelector('.metric-edit-status'), '');
             controls?.classList.add('hidden');
             cell?.classList.remove('editing');
           };
@@ -12450,18 +12568,32 @@
               if (status) status.textContent = 'Unavailable';
               return;
             }
+            const spec = run?.snapshot?.metric_specs?.[metricName] || run?.run?.metric_specs?.[metricName] || null;
+            const isPassRef = passRefBase(filePath) !== filePath;
+            const parsed = window.QymMetrics.parseMetricScoreInput(input.value, spec, {
+              reduced: Number(run?.run?.samples || 1) > 1 && !isPassRef,
+            });
+            if (!parsed.ok) {
+              setScoreEditError(input, status, parsed.message);
+              return;
+            }
+            setScoreEditError(input, status, '');
             btn.disabled = true;
             if (status) status.textContent = 'Saving...';
             try {
-              const result = await updateMetricScore(filePath, rowIndex, metricName, input.value, Number(run?.run?.metadata?.pass_revision || 0));
+              const result = await updateMetricScore(filePath, rowIndex, metricName, parsed.value, Number(run?.run?.metadata?.pass_revision || 0));
               if (result && result.row) {
                 applyUpdatedRowToRun(runIdx, result.row);
                 refreshComparisonStatsAfterEdit();
                 renderItems();
               }
             } catch (err) {
-              if (status) status.textContent = 'Error';
-              showToast('error', 'Could not update score', err.message);
+              if (err && err.status === 422) {
+                setScoreEditError(input, status, err.message);
+              } else {
+                if (status) status.textContent = 'Error';
+                showToast('error', 'Could not update score', err.message);
+              }
             } finally {
               btn.disabled = false;
               if (status && status.textContent === 'Saving...') status.textContent = '';
@@ -14520,7 +14652,9 @@
                   metricNames.forEach(function (metricName, index) {
                       metricScores[metricName] = window.QymMetrics.parseScoreValue((r.metric_values || [])[index]);
                       metricThresholds[metricName] = state.metricThresholds[metricName] == null ? 0.8 : state.metricThresholds[metricName];
-                      metricDirections[metricName] = (state.metricSpecs[metricName] && state.metricSpecs[metricName].direction) || 'maximize';
+                      // Analysis targeting keeps the backend's maximize default
+                      // for metrics without a declared direction.
+                      metricDirections[metricName] = metricDirectionFor(metricName) || 'maximize';
                   });
                   return {
                       item_id: r.item_id,

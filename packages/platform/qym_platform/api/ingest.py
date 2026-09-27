@@ -778,14 +778,16 @@ def _samples_from_config(run_config: Optional[Dict[str, Any]]) -> int:
 
 def _normalized_metric_spec(raw: Dict[str, Any]) -> Dict[str, Any]:
     score_type = str(raw.get("score_type") or "legacy")
-    direction = str(raw.get("direction") or "maximize")
+    # A missing direction is stored as NULL: the metric declared none and is
+    # shown neutrally. SDKs before 2026-09 always sent a default "maximize".
+    direction = str(raw["direction"]) if raw.get("direction") is not None else None
     sample_reducer = str(raw.get("sample_reducer") or "mean")
     run_reducer = str(raw.get("run_reducer") or "mean")
     if score_type not in {"boolean", "percentage", "count", "number", "legacy"}:
         raise HTTPException(
             status_code=422, detail=f"Invalid metric score_type: {score_type}"
         )
-    if direction not in {"maximize", "minimize"}:
+    if direction not in {None, "maximize", "minimize"}:
         raise HTTPException(
             status_code=422, detail=f"Invalid metric direction: {direction}"
         )
@@ -812,7 +814,29 @@ def _normalized_metric_spec(raw: Dict[str, Any]) -> Dict[str, Any]:
         "run_reducer": run_reducer,
         "unit": str(raw["unit"])[:80] if raw.get("unit") is not None else None,
         "precision": int(precision) if precision is not None else None,
+        "is_primary": raw.get("primary") is True,
     }
+
+
+def _metric_spec_unchanged(stored: RunMetricSpec, normalized: Dict[str, Any]) -> bool:
+    """Whether a re-sent spec matches the stored one.
+
+    Rows stored before direction and primary became optional hold the old
+    defaults (schema 1, "maximize", no primary flag); a newer SDK resuming
+    such a run sends schema 2 and ``None`` / ``False`` for them, which is the
+    same declaration.
+    """
+    for key, value in normalized.items():
+        current = getattr(stored, key)
+        if key == "schema_version" and current == 1 and value == 2:
+            continue
+        if key == "direction" and value is None and current == "maximize":
+            continue
+        if key == "is_primary" and current is None:
+            continue
+        if current != value:
+            return False
+    return True
 
 
 def _store_metric_specs(
@@ -835,8 +859,7 @@ def _store_metric_specs(
         normalized = _normalized_metric_spec(raw)
         current = existing.get(name)
         if current:
-            stored = {key: getattr(current, key) for key in normalized}
-            if stored != normalized:
+            if not _metric_spec_unchanged(current, normalized):
                 raise HTTPException(
                     status_code=409, detail=f"Metric spec changed during run: {name}"
                 )
