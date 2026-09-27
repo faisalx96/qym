@@ -732,14 +732,11 @@ window.QymPlayground = (function () {
   }
 
   function _esc(text) {
-    if (_opts.escapeHtml) return _opts.escapeHtml(text);
-    var d = document.createElement('div');
-    d.textContent = text || '';
-    return d.innerHTML;
+    return QymSafe.escapeHtml(text || '');
   }
 
   function _escAttr(text) {
-    return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return QymSafe.escapeHtml(String(text || ''));
   }
 
   function _formatCategoryExampleValue(value) {

@@ -7,11 +7,12 @@
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=runs-analysis-c1-20260804-16">
   <link rel="stylesheet" href="/static/shell.css">
+  <script src="/static/qym_safe.js?v=xss-rendering-20260928"></script>
   <script src="/static/auth.js"></script>
-  <script src="/static/shell.js?v=ui-consistency-20260730-15-runs-kpis"></script>
+  <script src="/static/shell.js?v=ui-consistency-20260730-15-xss-rendering"></script>
   <script src="/static/qym_table.js"></script>
   <script src="/static/metrics.js?v=metric-errors-20260914-1-metric-semantics"></script>
-  <script src="/static/trace_viewer.js?v=trace-retries-20260917-1"></script>
+  <script src="/static/trace_viewer.js?v=trace-retries-20260917-1-xss-rendering"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
     /* ============================================================
@@ -628,7 +629,7 @@
       .dsx-diff-field { grid-template-columns: 1fr; }
     }
   </style>
-  <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60">
+  <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60-xss-rendering">
   <script defer src="/static/ui_components.js?v=ui-consistency-20260803-28"></script>
 </head>
 <body>
@@ -730,7 +731,7 @@
       }
       return e;
     }
-    function escapeHtml(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+    function escapeHtml(s){ return QymSafe.escapeHtml(s == null ? '' : String(s)); }
     function dsxSearchControl(input){
       const wrap = el('div', { className: 'dsx-search-wrap qym-search-wrap' });
       wrap.appendChild(input);
@@ -3702,7 +3703,7 @@
 
       function fieldStatusDot(text, ok){
         const dot = el('div', { style: { textAlign: 'right', fontSize: 'var(--font-sm)', color: 'var(--text-muted)', marginTop: '4px' } });
-        dot.innerHTML = '<span class="dsx-json-dot' + (ok ? '' : ' invalid') + '"></span> ' + text;
+        dot.innerHTML = '<span class="dsx-json-dot' + (ok ? '' : ' invalid') + '"></span> ' + escapeHtml(text);
         return dot;
       }
       function buildJSONField(label, key){
@@ -3750,7 +3751,7 @@
         function sync(){ hl.innerHTML = highlightJSONHtml(ed.value) + '\n'; hl.scrollTop = ed.scrollTop; hl.scrollLeft = ed.scrollLeft; }
         function validate(){
           const res = coerceCellValue(ed.value, key === 'metadata' ? 'metadata' : key, false);
-          if (!res.ok) { code.classList.add('invalid'); dot.innerHTML = '<span class="dsx-json-dot invalid"></span> ' + (res.error || 'invalid'); return; }
+          if (!res.ok) { code.classList.add('invalid'); dot.innerHTML = '<span class="dsx-json-dot invalid"></span> ' + escapeHtml(res.error || 'invalid'); return; }
           code.classList.remove('invalid');
           const kind = typeof res.value === 'string' ? 'string' : (res.value === null ? 'empty' : 'valid JSON');
           dot.innerHTML = '<span class="dsx-json-dot"></span> ' + kind;

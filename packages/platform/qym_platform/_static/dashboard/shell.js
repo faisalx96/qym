@@ -133,10 +133,9 @@
   // UTILITY
   // ══════════════════════════════════════════════════
 
+  // One shared escaping rule (qym_safe.js): & < > " ' so it is attribute-safe.
   function esc(s) {
-    const d = document.createElement('div');
-    d.textContent = s || '';
-    return d.innerHTML;
+    return QymSafe.escapeHtml(s || '');
   }
 
   function getInitials(name) {
@@ -262,7 +261,7 @@
       +     (projectSlug
               ? '<div style="margin-top:16px;padding:10px 12px;border-radius:8px;background:var(--bg-elevated);border:1px solid var(--border-subtle);font-family:var(--font-mono);font-size:var(--font-base);color:var(--text-muted);">Slug: ' + esc(projectSlug) + '</div>'
               : '')
-      +     '<div style="margin-top:20px;"><a href="' + getAppRootPath() + '" class="shell-btn shell-btn-primary" style="display:inline-flex;text-decoration:none;">Back to Projects</a></div>'
+      +     '<div style="margin-top:20px;"><a href="' + esc(getAppRootPath()) + '" class="shell-btn shell-btn-primary" style="display:inline-flex;text-decoration:none;">Back to Projects</a></div>'
       +   '</div>'
       + '</div>';
   }
@@ -350,7 +349,7 @@
     const href = opts.href || '#';
     const badge = opts.badge ? '<span class="nav-item-badge ' + (opts.badgeClass || 'count') + '">' + esc(opts.badge) + '</span>' : '';
     const extraClass = opts.className ? ' ' + opts.className : '';
-    return '<a class="nav-item' + extraClass + '" href="' + href + '" data-tooltip="' + esc(label) + '" data-page="' + page + '">'
+    return '<a class="nav-item' + extraClass + '" href="' + esc(href) + '" data-tooltip="' + esc(label) + '" data-page="' + page + '">'
       + icon(iconName)
       + '<span class="nav-item-label">' + esc(label) + '</span>'
       + badge
@@ -379,9 +378,9 @@
     return ''
       // Logo
       + '<div class="sidebar-logo">'
-      +   '<a href="' + root + '">'
-      +     '<img src="' + root + 'static/qym_icon.png" alt="قيِّم" class="logo-icon-img" />'
-      +     '<img src="' + root + 'static/qym_text.png" alt="قيِّم" class="logo-text-img" />'
+      +   '<a href="' + esc(root) + '">'
+      +     '<img src="' + esc(root) + 'static/qym_icon.png" alt="قيِّم" class="logo-icon-img" />'
+      +     '<img src="' + esc(root) + 'static/qym_text.png" alt="قيِّم" class="logo-text-img" />'
       +   '</a>'
       + '</div>'
 
@@ -409,7 +408,7 @@
       +       '</div>'
       +     '</div>'
       +     '<div class="user-popover-list">'
-      +       '<a class="user-popover-item" href="' + root + 'profile">'
+      +       '<a class="user-popover-item" href="' + esc(root) + 'profile">'
       +         iconRaw('profile', 15, 15)
       +         ' Profile'
       +       '</a>'
@@ -525,7 +524,7 @@
       } else if (c.current) {
         html += '<span class="breadcrumb-item current">' + esc(c.label) + '</span>';
       } else {
-        html += '<a class="breadcrumb-item" href="' + c.href + '">' + esc(c.label) + '</a>';
+        html += '<a class="breadcrumb-item" href="' + esc(c.href) + '">' + esc(c.label) + '</a>';
       }
     }
     bcEl.innerHTML = html;
@@ -572,7 +571,7 @@
     var html = '';
     filtered.forEach(function (p) {
       var isActive = _currentProject && _currentProject.slug === p.slug;
-      html += '<a class="popover-item' + (isActive ? ' active' : '') + '" data-slug="' + esc(p.slug) + '" href="' + projectUrl(p.slug) + '">'
+      html += '<a class="popover-item' + (isActive ? ' active' : '') + '" data-slug="' + esc(p.slug) + '" href="' + esc(projectUrl(p.slug)) + '">'
         + '<span class="popover-item-icon">' + identiconHTML(p.slug, { cell: 2, gap: 1, showEmpty: false }) + '</span>'
         + '<span>' + esc(p.name) + '</span>'
         + (isActive ? '<span class="popover-item-check">' + iconRaw('check', 14, 14) + '</span>' : '')

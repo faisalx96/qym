@@ -29,17 +29,13 @@
 
   const el = id => document.getElementById(id);
 
+  // One shared escaping rule (qym_safe.js): & < > " ' in text and attributes.
   function escapeHtml(value) {
-    const node = document.createElement('div');
-    node.textContent = value == null ? '' : String(value);
-    return node.innerHTML;
+    return QymSafe.escapeHtml(value == null ? '' : String(value));
   }
 
   function escapeAttr(value) {
-    return escapeHtml(value)
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;')
-      .replace(/`/g, '&#96;');
+    return escapeHtml(value);
   }
 
   function apiUrl(path) {

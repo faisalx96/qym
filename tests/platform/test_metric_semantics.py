@@ -29,6 +29,8 @@ from test_dashboard_durable_summaries import database, item, run
 
 REPO = Path(__file__).resolve().parents[2]
 METRICS_JS = REPO / "packages/platform/qym_platform/_static/dashboard/metrics.js"
+# Pages load the shared escaping layer before any other script.
+SAFE_JS = REPO / "packages/platform/qym_platform/_static/dashboard/qym_safe.js"
 
 
 def run_metrics_js(body: str) -> None:
@@ -37,6 +39,8 @@ def run_metrics_js(body: str) -> None:
         pytest.skip("Node.js is required to check metrics.js")
     script = (
         "const assert = require('node:assert/strict'); const window = {};\n"
+        + SAFE_JS.read_text()
+        + "\nconst QymSafe = window.QymSafe;\n"
         + METRICS_JS.read_text()
         + "\nconst m = window.QymMetrics;\n"
         + body

@@ -15,9 +15,7 @@
     return Math.max(1, Math.round(ms * 1000)) + "\u00b5s";
   };
 
-  const esc = (s) => String(s == null ? "" : s)
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+  const esc = (s) => QymSafe.escapeHtml(s == null ? "" : String(s));
 
   // Row annotation: "mean 2.1s · n=12 · err=3". annPlain() drives the gutter
   // width math, annMarkup() renders it (err in the danger color) — one source
@@ -493,7 +491,7 @@
       if (g.n > 0) {
         const p5 = scale.x(g.p5_ms), p25 = scale.x(g.p25_ms), p75 = scale.x(g.p75_ms),
           p95 = scale.x(g.p95_ms), med = scale.x(g.median_ms), mean = scale.x(g.mean_ms);
-        const title = "<title>" + esc(g.step_type) + " (" + g.phase + ")\n" +
+        const title = "<title>" + esc(g.step_type) + " (" + esc(g.phase) + ")\n" +
           "n=" + g.n + ", err=" + g.error_count + "\n" +
           "p5 " + FMT(g.p5_ms) + " \u00b7 p25 " + FMT(g.p25_ms) +
           " \u00b7 median " + FMT(g.median_ms) + " \u00b7 p75 " + FMT(g.p75_ms) +
@@ -593,7 +591,7 @@
         }
         const p5 = scale.x(g.p5_ms), p25 = scale.x(g.p25_ms), p75 = scale.x(g.p75_ms),
           p95 = scale.x(g.p95_ms), medX = scale.x(g.median_ms), meanX = scale.x(g.mean_ms);
-        const title = "<title>" + esc(r.step_type) + " (" + r.phase + ") \u2014 " +
+        const title = "<title>" + esc(r.step_type) + " (" + esc(r.phase) + ") \u2014 " +
           esc(seriesLabel(state.activeSeries[li])) + "\nn=" + g.n + ", err=" + g.error_count +
           "\nmedian " + FMT(g.median_ms) + " \u00b7 mean " + FMT(g.mean_ms) +
           "\np5 " + FMT(g.p5_ms) + " \u00b7 p95 " + FMT(g.p95_ms) + "</title>";

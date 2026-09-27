@@ -433,14 +433,9 @@
     };
   }
 
+  // One shared escaping rule (qym_safe.js): & < > " ' so it is attribute-safe.
   function escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+    return QymSafe.escapeHtml(str || '');
   }
 
   const MODEL_REASONING_BADGE_TITLE = 'Reasoning model';
@@ -618,8 +613,8 @@
   }
 
   function truncateText(text, maxLen = null) {
-    // No truncation - return full text
-    return text || '';
+    // No truncation (CSS clips long names); the result is escaped HTML text.
+    return escapeHtml(text || '');
   }
 
   function getInitials(name) {
@@ -816,7 +811,7 @@
 
     let html = '';
     if (showSearch) {
-      html += `<div class="model-search-box qym-dropdown__search"><input type="text" class="model-search-input qym-control qym-search" placeholder="${searchPlaceholder || 'Search...'}" value="${escapeHtml(searchValue)}" /></div>`;
+      html += `<div class="model-search-box qym-dropdown__search"><input type="text" class="model-search-input qym-control qym-search" placeholder="${escapeHtml(searchPlaceholder || 'Search...')}" value="${escapeHtml(searchValue)}" /></div>`;
     }
     html += '<div class="ms-actions qym-dropdown__actions"><button class="ms-action-btn qym-dropdown__action" data-action="all">Select All</button><button class="ms-action-btn qym-dropdown__action" data-action="none">None</button></div>';
     html += values.map((v, idx) => {
@@ -1965,12 +1960,12 @@
     const width = value === null || value === undefined ? 0 : Math.max(safeRatio * 100, 2);
     const aggregateClass = isAggregate && !Number.isInteger(modelIdx) ? ' aggregate' : '';
     const modelAttr = Number.isInteger(modelIdx) ? ` data-model-idx="${modelIdx}"` : '';
-    const titleAttr = title ? ` title="${title}"` : '';
+    const titleAttr = title ? ` title="${escapeHtml(title)}"` : '';
     return `
-      <div class="${cellClass}"${titleAttr}>
+      <div class="${escapeHtml(cellClass)}"${titleAttr}>
         <div class="chart-mini-bar-track">
           <div class="chart-mini-bar-fill${aggregateClass}"${modelAttr} style="width:${width}%">
-            <span class="chart-mini-bar-label">${label}</span>
+            <span class="chart-mini-bar-label">${escapeHtml(label)}</span>
           </div>
         </div>
       </div>
@@ -2032,7 +2027,7 @@
     legendEl.innerHTML = state.allModels.map((model, idx) => {
       const isActive = state.filterModels.size === 0 || state.filterModels.has(model);
       return `
-        <div class="legend-item ${isActive ? '' : 'inactive'}" data-model="${model}" title="${getModelFilterOptionLabel(model)}">
+        <div class="legend-item ${isActive ? '' : 'inactive'}" data-model="${escapeHtml(model)}" title="${escapeHtml(getModelFilterOptionLabel(model))}">
           <span class="legend-color" style="background:${CHART_COLORS[idx % CHART_COLORS.length]}"></span>
           ${renderModelLabelForModelName(model)}
         </div>
@@ -2076,10 +2071,10 @@
 
       // Dataset tabs HTML
       const datasetTabsHtml = `
-        <div class="chart-dataset-tabs qym-tabs" id="${chartTabsetId}" role="tablist" aria-label="Datasets for ${taskName}">
+        <div class="chart-dataset-tabs qym-tabs" id="${chartTabsetId}" role="tablist" aria-label="Datasets for ${escapeHtml(taskName)}">
           ${datasets.map((d, datasetIndex) => `
-            <button type="button" role="tab" id="${chartTabsetId}-tab-${datasetIndex}" aria-controls="${chartPanelId}" class="chart-dataset-tab qym-tabs__tab ${d.dataset === combo.dataset ? 'active' : ''}" data-task="${taskName}" data-dataset="${d.dataset}" aria-selected="${d.dataset === combo.dataset}">
-              ${d.dataset} <span class="tab-count qym-tag qym-tag--count">${d.totalRuns}</span>
+            <button type="button" role="tab" id="${chartTabsetId}-tab-${datasetIndex}" aria-controls="${chartPanelId}" class="chart-dataset-tab qym-tabs__tab ${d.dataset === combo.dataset ? 'active' : ''}" data-task="${escapeHtml(taskName)}" data-dataset="${escapeHtml(d.dataset)}" aria-selected="${d.dataset === combo.dataset}">
+              ${escapeHtml(d.dataset)} <span class="tab-count qym-tag qym-tag--count">${Number(d.totalRuns) || 0}</span>
             </button>
           `).join('')}
         </div>
@@ -2173,7 +2168,7 @@
         return `
           <div class="chart-task-section">
             <div class="chart-task-header">
-              <span class="chart-task-name">${taskName}</span>
+              <span class="chart-task-name">${escapeHtml(taskName)}</span>
               <span class="chart-task-meta">${totalTaskRuns} runs \u00b7 ${allTaskModels.size} models</span>
             </div>
             <div class="chart-card">
@@ -2324,7 +2319,7 @@
         const isActive = sortState.key === key;
         const arrow = isActive ? (sortState.dir === 'desc' ? '\u2193' : '\u2191') : '';
         const title = `${label} for grouped runs`;
-        return `<span class="chart-col-header chart-group-stat-header sortable-col ${isActive ? 'active' : ''}" data-card="${cardId}" data-sort="${key}" title="${title}"><span class="chart-col-header-label">${label}</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
+        return `<span class="chart-col-header chart-group-stat-header sortable-col ${isActive ? 'active' : ''}" data-card="${cardId}" data-sort="${escapeHtml(key)}" title="${escapeHtml(title)}"><span class="chart-col-header-label">${escapeHtml(label)}</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
       }).join('');
       const headerCells = displayColumns.map(column => {
         if (column === AVG_LATENCY_COLUMN_KEY) {
@@ -2340,7 +2335,7 @@
         const label = getMetricDisplayName(column);
         const isActive = sortState.key === column;
         const arrow = isActive ? (sortState.dir === 'desc' ? '\u2193' : '\u2191') : '';
-        return `<span class="chart-col-header sortable-col ${isActive ? 'active' : ''}" data-card="${cardId}" data-sort="${column}" title="${label}"><span class="chart-col-header-label">${label}</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
+        return `<span class="chart-col-header sortable-col ${isActive ? 'active' : ''}" data-card="${cardId}" data-sort="${escapeHtml(column)}" title="${escapeHtml(label)}"><span class="chart-col-header-label">${escapeHtml(label)}</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
       }).join('');
 
       function renderMetricValueCell(metricName, value, modelIdx, isAggregate = false) {
@@ -2350,7 +2345,7 @@
         const chartMType = state._metricTypes?.[metricName] || window.QymMetrics.detectMetricTypeFromAvg(value);
         if (!prefersBarChartMetric(metricName, chartMType)) {
           const display = window.QymMetrics.formatNumericValue(value);
-          return `<div class="chart-metric-cell"><span class="chart-numeric-value${isAggregate ? ' aggregate' : ''}">${display}</span></div>`;
+          return `<div class="chart-metric-cell"><span class="chart-numeric-value${isAggregate ? ' aggregate' : ''}">${escapeHtml(display)}</span></div>`;
         }
         if (chartMType === 'numeric') {
           const scaleMax = metricScaleMax[metricName] || value || 1;
@@ -2433,7 +2428,7 @@
           displayHtml = `${displayModel}<span class="run-timestamp">${dt.date} \u00b7 ${dt.time}</span>`;
         }
         const versionStr = runData.git_commit ? (runData.git_branch ? `${runData.git_branch}/${runData.git_commit}` : runData.git_commit) : '';
-        const versionTag = versionStr ? `<span class="chart-version-tag qym-tag">${versionStr}</span>` : '';
+        const versionTag = versionStr ? `<span class="chart-version-tag qym-tag">${escapeHtml(versionStr)}</span>` : '';
         const tooltipText = `Run name: ${hoverRunName}${versionStr ? `\nVersion: ${versionStr}` : ''}`;
         const dataCells = displayColumns.map(column => {
           if (column === AVG_LATENCY_COLUMN_KEY) {
@@ -2450,8 +2445,8 @@
         return `
           <div class="chart-table-row">
             <span class="chart-bar-label clickable-run ${isMultiRun ? 'multi-run' : ''}"
-                  data-file="${file_path}"
-                  title="${tooltipText}">${displayHtml}${versionTag}</span>
+                  data-file="${escapeHtml(file_path)}"
+                  title="${escapeHtml(tooltipText)}">${displayHtml}${versionTag}</span>
             ${dataCells}
           </div>
         `;
@@ -2556,7 +2551,7 @@
 
       function renderGroupStatBar(value, label, title, modelIdx) {
         if (value === undefined || value === null) {
-          return `<div class="chart-metric-cell chart-group-stat-cell" title="${title}"><span class="metric-na">\u2014</span></div>`;
+          return `<div class="chart-metric-cell chart-group-stat-cell" title="${escapeHtml(title)}"><span class="metric-na">\u2014</span></div>`;
         }
         return renderMiniBarCell({
           value,
@@ -2581,12 +2576,12 @@
         const K = entry?.K || runs.length;
         if (!entry || entry.status === 'loading') {
           const loadingTitles = {
-            [GROUP_PASS_AT_K_COLUMN_KEY]: `Loading Pass@${K} for ${escapeHtml(groupMetricName)}`,
-            [GROUP_CONSISTENCY_COLUMN_KEY]: `Loading consistency for ${escapeHtml(groupMetricName)}`,
-            [GROUP_RELIABILITY_COLUMN_KEY]: `Loading reliability for ${escapeHtml(groupMetricName)}`,
+            [GROUP_PASS_AT_K_COLUMN_KEY]: `Loading Pass@${K} for ${groupMetricName}`,
+            [GROUP_CONSISTENCY_COLUMN_KEY]: `Loading consistency for ${groupMetricName}`,
+            [GROUP_RELIABILITY_COLUMN_KEY]: `Loading reliability for ${groupMetricName}`,
           };
           return visibleGroupStatColumns
-            .map(col => `<div class="chart-metric-cell chart-group-stat-cell is-loading" title="${loadingTitles[col.key]}"><span class="metric-na">\u2014</span></div>`)
+            .map(col => `<div class="chart-metric-cell chart-group-stat-cell is-loading" title="${escapeHtml(loadingTitles[col.key])}"><span class="metric-na">\u2014</span></div>`)
             .join('');
         }
         if (entry.status !== 'ready' || !entry.stats) {
@@ -2867,7 +2862,7 @@
       return `
           <div class="chart-task-section">
             <div class="chart-task-header">
-              <span class="chart-task-name">${taskName}</span>
+              <span class="chart-task-name">${escapeHtml(taskName)}</span>
               <span class="chart-task-meta">${totalTaskRuns} runs \u00b7 ${allTaskModels.size} models \u00b7 ${metrics.length + visibleTraceMetrics.length} metrics</span>
             </div>
           <div class="chart-card">
@@ -3065,10 +3060,10 @@
     const analyzerHref = analyzerUrlForRun(run, passNumber);
     if (causeCount > 0) {
       const label = `${causeCount} cause${causeCount === 1 ? '' : 's'}`;
-      return `<a class="run-analysis-chip" href="${analyzerHref}" title="${label} found — open auto-analysis" aria-label="${label} found — open auto-analysis">${ANALYSIS_SPARK_ICON}${label}</a>`;
+      return `<a class="run-analysis-chip" href="${escapeHtml(analyzerHref)}" title="${label} found — open auto-analysis" aria-label="${label} found — open auto-analysis">${ANALYSIS_SPARK_ICON}${label}</a>`;
     }
     if (status !== 'RUNNING' && status !== 'PENDING') {
-      return `<a class="run-analysis-start" href="${analyzerHref}" title="Run auto-analysis" aria-label="Run auto-analysis">${ANALYSIS_SPARK_ICON}Analyze</a>`;
+      return `<a class="run-analysis-start" href="${escapeHtml(analyzerHref)}" title="Run auto-analysis" aria-label="Run auto-analysis">${ANALYSIS_SPARK_ICON}Analyze</a>`;
     }
     return '<span class="metric-na">—</span>';
   }
@@ -3523,51 +3518,51 @@
                 <span class="checkmark"></span>
               </label>
               ${run.samples > 1 ? `<button type="button" class="samples-toggle qym-icon-action${samplesOpen ? ' open' : ''}"
-                data-run-id="${run.run_id}" data-panel-id="${samplesPanelId}"
-                data-count="${run.samples}"
+                data-run-id="${escapeHtml(run.run_id)}" data-panel-id="${samplesPanelId}"
+                data-count="${escapeHtml(run.samples)}"
                 data-status="${escapeHtml(status)}"
                 data-live="${status === 'RUNNING' || status === 'PENDING' ? 'true' : 'false'}"
                 aria-expanded="${samplesOpen ? 'true' : 'false'}" aria-controls="${samplesPanelId}"
                 aria-label="${samplesOpen ? 'Collapse' : 'Expand'} ${run.samples} pass results"
                 title="${samplesOpen ? 'Collapse' : 'Expand'} ${run.samples} pass results"><svg class="samples-toggle-chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m4 6 4 4 4-4"></path></svg></button>`
                 : (anyRepeatRows ? '<span class="samples-toggle-spacer" aria-hidden="true"></span>' : '')}
-              <span class="run-id" title="${run.run_id}">${run.external_run_id ? truncateText(run.external_run_id, 30) : run.run_id.substring(0, 8)}</span>
+              <span class="run-id" title="${escapeHtml(run.run_id)}">${run.external_run_id ? truncateText(run.external_run_id, 30) : escapeHtml(run.run_id.substring(0, 8))}</span>
               ${run.samples > 1 ? `<span class="run-pass-count">x${run.samples}</span>` : ''}
             </div>
           </td>
           <td class="col-status">
-            ${status ? `<span class="status-badge qym-badge status-${status}" title="${escapeHtml(statusTooltip)}">${status}${passText}${parentProgressText}</span>` : ''}${status !== 'RUNNING' && status !== 'PENDING' ? renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : ' across all items') : ''}${(run.total_retries > 0 && status !== 'RUNNING' && status !== 'PENDING') ? `<span class="status-retries" title="${run.total_retries} total retr${run.total_retries === 1 ? 'y' : 'ies'}${retryScope}">${run.total_retries}↻</span>` : ''}
+            ${status ? `<span class="status-badge qym-badge status-${escapeHtml(status)}" title="${escapeHtml(statusTooltip)}">${escapeHtml(status)}${passText}${parentProgressText}</span>` : ''}${status !== 'RUNNING' && status !== 'PENDING' ? renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : ' across all items') : ''}${(run.total_retries > 0 && status !== 'RUNNING' && status !== 'PENDING') ? `<span class="status-retries" title="${run.total_retries} total retr${run.total_retries === 1 ? 'y' : 'ies'}${retryScope}">${run.total_retries}↻</span>` : ''}
           </td>
           <td class="col-task">
             <span class="tag qym-tag task" title="${escapeHtml(run.task_name || '')}">${run.task_name ? escapeHtml(run.task_name) : '—'}</span>
           </td>
           <td class="col-model">
-            <span class="tag qym-tag model" title="${run.model_name}">
+            <span class="tag qym-tag model" title="${escapeHtml(run.model_name)}">
               <span class="model-color-dot" style="background:${CHART_COLORS[state.allModels.indexOf(getRunModelKey(run)) % CHART_COLORS.length]}"></span>
               ${renderModelLabelForRun(run)}
             </span>
           </td>
           <td class="col-dataset">
-            <span class="tag qym-tag runs-dataset-tag" title="${run.dataset_name}">${truncateText(run.dataset_name, 25)}${window.QymShell ? QymShell.datasetVersionInline(run.dataset_version) + QymShell.datasetAliasTags(run.dataset_aliases) : ''}</span>
+            <span class="tag qym-tag runs-dataset-tag" title="${escapeHtml(run.dataset_name)}">${truncateText(run.dataset_name, 25)}${window.QymShell ? QymShell.datasetVersionInline(run.dataset_version) + QymShell.datasetAliasTags(run.dataset_aliases) : ''}</span>
           </td>
           <td class="col-owner">
             ${run.owner ? `
-              <span class="owner-name" title="${run.owner.email}">
-                <span class="owner-avatar">${getInitials(run.owner.display_name)}</span>
+              <span class="owner-name" title="${escapeHtml(run.owner.email)}">
+                <span class="owner-avatar">${escapeHtml(getInitials(run.owner.display_name))}</span>
                 ${truncateText(run.owner.display_name, 15)}
               </span>
             ` : '<span style="color:var(--text-muted)">—</span>'}
           </td>
           <td class="col-time">
             <span class="timestamp" title="${escapeHtml(dt.full)}">
-              <span class="date">${dt.date}</span>
+              <span class="date">${escapeHtml(dt.date)}</span>
               <span class="timestamp-sep">·</span>
-              <span class="time">${dt.time}</span>
+              <span class="time">${escapeHtml(dt.time)}</span>
             </span>
           </td>
           <td class="col-analysis" onclick="event.stopPropagation()">${renderAnalysisCell(run, status)}</td>
           <td class="col-version">
-            ${run.git_commit ? `<span class="version-badge qym-tag" title="${run.git_branch ? run.git_branch + '/' : ''}${run.git_commit}">${run.git_branch ? run.git_branch + '/' : ''}${run.git_commit}</span>` : '<span style="color:var(--text-muted)">—</span>'}
+            ${run.git_commit ? `<span class="version-badge qym-tag" title="${escapeHtml((run.git_branch ? run.git_branch + '/' : '') + run.git_commit)}">${escapeHtml((run.git_branch ? run.git_branch + '/' : '') + run.git_commit)}</span>` : '<span style="color:var(--text-muted)">—</span>'}
           </td>
           ${metricCells}${visibleTraceMetrics.length > 0 ? '<td class="col-trace-separator"></td>' : ''}
           ${visibleSystemColumns.has('latency') ? `<td class="col-latency">
@@ -4055,8 +4050,8 @@
             ? `<label class="custom-checkbox run-select-control" onclick="event.stopPropagation()"><input type="checkbox" class="pass-checkbox" data-pass-ref="${escapeHtml(passRef)}" ${passSelected ? 'checked' : ''} /><span class="checkmark"></span></label>`
             : ''}<span class="pass-indent"></span><span class="pass-member-id">${passLabel}</span>${passMeta ? `<span class="pass-member-items">${passMeta}</span>` : ''}</td>
           <td class="col-status">${badgeClass
-            ? `<span class="status-badge qym-badge status-${badgeClass}">${statusLabel}${progressLabel}</span>`
-            : `<span class="pass-member-status">${statusLabel}</span>`}${renderExecutionErrors(pass, ' in this pass')}${retries
+            ? `<span class="status-badge qym-badge status-${badgeClass}">${escapeHtml(statusLabel)}${progressLabel}</span>`
+            : `<span class="pass-member-status">${escapeHtml(statusLabel)}</span>`}${renderExecutionErrors(pass, ' in this pass')}${retries
             ? `<span class="status-retries" title="${retries} retr${retries === 1 ? 'y' : 'ies'} in this pass">${retries}↻</span>`
             : ''}</td>
           ${inherit('col-task')}
@@ -4064,7 +4059,7 @@
           ${inherit('col-dataset')}
           ${inherit('col-owner')}
           <td class="col-time">${passDate
-            ? `<span class="timestamp" title="${escapeHtml(passDate.full)}"><span class="date">${passDate.date}</span><span class="timestamp-sep">·</span><span class="time">${passDate.time}</span></span>`
+            ? `<span class="timestamp" title="${escapeHtml(passDate.full)}"><span class="date">${escapeHtml(passDate.date)}</span><span class="timestamp-sep">·</span><span class="time">${escapeHtml(passDate.time)}</span></span>`
             : '<span class="metric-na">—</span>'}</td>
           <td class="col-analysis" onclick="event.stopPropagation()">${renderAnalysisCell(parentRun, runStatus, firstPass, pass.analysis_cause_count)}</td>
           ${inherit('col-version')}
@@ -4490,20 +4485,20 @@
     return `
         <div class="grid-card ${isSelected ? 'selected' : ''}" data-file="${encodeURIComponent(run.file_path)}">
           <div class="grid-card-header">
-            <span class="grid-card-title" title="${run.run_id}">${stripProviderFromRunId(run.run_id)}</span>
-            <span class="grid-card-success ${successClass}">${formatPercent(run.success_rate)}</span>
+            <span class="grid-card-title" title="${escapeHtml(run.run_id)}">${escapeHtml(stripProviderFromRunId(run.run_id))}</span>
+            <span class="grid-card-success ${successClass}">${escapeHtml(formatPercent(run.success_rate))}</span>
           </div>
           <div class="grid-card-meta">
-            <span class="tag task">${run.task_name}</span>
-            <span class="tag model" title="${run.model_name}">${renderModelLabelForRun(run)}</span>
+            <span class="tag task">${escapeHtml(run.task_name)}</span>
+            <span class="tag model" title="${escapeHtml(run.model_name)}">${renderModelLabelForRun(run)}</span>
         </div>
           <div class="grid-card-bar">
             <div class="segment success" style="width:${successPct}%"></div>
             <div class="segment error" style="width:${errorPct}%"></div>
           </div>
           <div class="grid-card-footer">
-            <span>${run.total_items} items</span>
-            <span>${dt.date} ${dt.time}</span>
+            <span>${escapeHtml(run.total_items)} items</span>
+            <span>${escapeHtml(dt.date)} ${escapeHtml(dt.time)}</span>
           </div>
         </div>
       `;
@@ -4545,20 +4540,20 @@
 
       return `
         <div class="timeline-day">
-          <div class="timeline-date">${dateLabel}</div>
+          <div class="timeline-date">${escapeHtml(dateLabel)}</div>
           <div class="timeline-runs">
             ${dayRuns.map(run => {
               const dt = formatDate(run.timestamp);
               const successClass = getSuccessClass(run.success_rate);
               return `
                 <div class="timeline-run" data-file="${encodeURIComponent(run.file_path)}">
-                  <span class="timeline-time">${dt.time}</span>
+                  <span class="timeline-time">${escapeHtml(dt.time)}</span>
                   <div class="timeline-info">
-                    <span class="tag task">${run.task_name}</span>
-                    <span class="tag model" title="${run.model_name}">${renderModelLabelForRun(run)}</span>
-                    <span style="color:var(--text-muted);font-size:var(--font-sm);">${run.total_items} items</span>
+                    <span class="tag task">${escapeHtml(run.task_name)}</span>
+                    <span class="tag model" title="${escapeHtml(run.model_name)}">${renderModelLabelForRun(run)}</span>
+                    <span style="color:var(--text-muted);font-size:var(--font-sm);">${escapeHtml(run.total_items)} items</span>
                   </div>
-                  <span class="timeline-success ${successClass}">${formatPercent(run.success_rate)}</span>
+                  <span class="timeline-success ${successClass}">${escapeHtml(formatPercent(run.success_rate))}</span>
                 </div>
               `;
             }).join('')}
@@ -5488,14 +5483,14 @@
 
       // Helper to create info icon with tooltip (same as compare view)
       function infoIcon(tooltip) {
-        return `<button type="button" class="stat-info-icon qym-help-marker" aria-label="More information" aria-expanded="false">i<span class="stat-info-tooltip qym-help-tooltip" role="tooltip">${tooltip}</span></button>`;
+        return `<button type="button" class="stat-info-icon qym-help-marker" aria-label="More information" aria-expanded="false">i<span class="stat-info-tooltip qym-help-tooltip" role="tooltip">${escapeHtml(tooltip)}</span></button>`;
       }
 
       function renderModelStatTile(title, value, valueClass = '', tooltip = '') {
         return `
           <div class="model-stat-item">
-            <div class="stat-label">${title}${tooltip ? ` ${infoIcon(tooltip)}` : ''}</div>
-            <div class="stat-value ${valueClass}">${value}</div>
+            <div class="stat-label">${escapeHtml(title)}${tooltip ? ` ${infoIcon(tooltip)}` : ''}</div>
+            <div class="stat-value ${valueClass}">${escapeHtml(value)}</div>
           </div>
         `;
       }
@@ -5553,16 +5548,16 @@
         : '<div class="model-stats-empty">No summary metrics selected.</div>';
 
       return `
-        <div class="model-card" data-model="${model}">
+        <div class="model-card" data-model="${escapeHtml(model)}">
           <div class="model-card-header">
-            <div class="model-card-title" title="${getModelFilterOptionLabel(model)}">
+            <div class="model-card-title" title="${escapeHtml(getModelFilterOptionLabel(model))}">
               <span class="model-color-dot" style="background: ${color}"></span>
               ${renderModelLabelForModelName(model)}
             </div>
             <div class="model-card-runs">
               <span class="runs-count">${stats.selectedCount}/${globalK} runs</span>
               ${hasWarning ? `<span class="runs-warning" title="Only ${stats.totalAvailable} runs available (requested ${globalK})">⚠️</span>` : ''}
-              <button class="customize-btn" data-model="${model}" title="Customize run selection">Edit</button>
+              <button class="customize-btn" data-model="${escapeHtml(model)}" title="Customize run selection">Edit</button>
             </div>
           </div>
 
@@ -5580,7 +5575,7 @@
 
           <div class="model-card-footer">
             <span class="latency">${stats.totalItems} items</span>
-            <a href="#" class="compare-link" data-model="${model}">See item-by-item comparison →</a>
+            <a href="#" class="compare-link" data-model="${escapeHtml(model)}">See item-by-item comparison →</a>
           </div>
         </div>
       `;
@@ -5653,7 +5648,7 @@
             <div class="ranking-item">
               <span class="rank">${rank}</span>
               ${renderModelLabelForModelName(item.model)}
-              <span class="score ${scoreClass}">(${display})</span>
+              <span class="score ${scoreClass}">(${escapeHtml(display)})</span>
             </div>
           `;
         }).join('')}
@@ -5724,7 +5719,7 @@
           if (groupCount > 1 && key !== '__ungrouped__') {
             const group = groupSummaries.get(key);
             const label = group?.label || getRunDisplayName(groupRuns[0]);
-            html += `<div style="padding:6px 8px;font-size:var(--font-sm);color:var(--accent-primary);font-weight:600;border-bottom:1px solid var(--border-default);">${escapeHtml(label)} (${group?.total_runs ?? groupRuns.length} runs)</div>`;
+            html += `<div style="padding:6px 8px;font-size:var(--font-sm);color:var(--accent-primary);font-weight:600;border-bottom:1px solid var(--border-default);">${escapeHtml(label)} (${escapeHtml(group?.total_runs ?? groupRuns.length)} runs)</div>`;
           }
           for (const run of groupRuns) {
             const isSelected = selected.has(run.file_path);
@@ -5735,12 +5730,12 @@
             const runDisplayName = getRunDisplayName(run);
             html += `<label class="run-selection-item ${isSelected ? 'selected' : ''}">
               <input type="checkbox" data-file="${escapeHtml(run.file_path)}" ${isSelected ? 'checked' : ''} />
-              <div class="run-info"><div class="run-name" title="${escapeHtml(runDisplayName)}">${escapeHtml(runDisplayName)}</div><div class="run-date">${formatDate(run.timestamp).full}</div></div>
-              ${score !== undefined ? `<span class="run-score ${scoreClass}">${scoreDisplay}</span>` : ''}
+              <div class="run-info"><div class="run-name" title="${escapeHtml(runDisplayName)}">${escapeHtml(runDisplayName)}</div><div class="run-date">${escapeHtml(formatDate(run.timestamp).full)}</div></div>
+              ${score !== undefined ? `<span class="run-score ${scoreClass}">${escapeHtml(scoreDisplay)}</span>` : ''}
             </label>`;
           }
         }
-        listEl.innerHTML = `<div class="run-selection-header"><span class="selection-counter"><span id="selection-count">${selected.size}</span> / ${globalK} selected</span>${groupCount > 1 ? `<span>${groupCount} config groups</span>` : ''}<span data-selection-offpage></span></div><div class="run-selection-items">${html || '<p>No runs match these filters.</p>'}</div><div data-selection-pagination></div>`;
+        listEl.innerHTML = `<div class="run-selection-header"><span class="selection-counter"><span id="selection-count">${selected.size}</span> / ${escapeHtml(globalK)} selected</span>${groupCount > 1 ? `<span>${groupCount} config groups</span>` : ''}<span data-selection-offpage></span></div><div class="run-selection-items">${html || '<p>No runs match these filters.</p>'}</div><div data-selection-pagination></div>`;
         listEl.querySelectorAll('input[type="checkbox"]').forEach(checkbox => checkbox.addEventListener('change', () => {
           if (checkbox.checked && selected.size >= globalK) { checkbox.checked = false; return; }
           if (checkbox.checked) selected.add(checkbox.dataset.file);
@@ -5823,12 +5818,12 @@
 
         runListHtml += `
           <label class="run-selection-item ${isSelected ? 'selected' : ''}">
-            <input type="checkbox" data-file="${run.file_path}" ${isSelected ? 'checked' : ''} />
+            <input type="checkbox" data-file="${escapeHtml(run.file_path)}" ${isSelected ? 'checked' : ''} />
             <div class="run-info">
               <div class="run-name" title="${escapeHtml(runDisplayName)}">${escapeHtml(runDisplayName)}</div>
-              <div class="run-date">${dt.full}</div>
+              <div class="run-date">${escapeHtml(dt.full)}</div>
             </div>
-            ${score !== undefined ? `<span class="run-score ${scoreClass}">${scoreDisplay}</span>` : ''}
+            ${score !== undefined ? `<span class="run-score ${scoreClass}">${escapeHtml(scoreDisplay)}</span>` : ''}
           </label>
         `;
       }
@@ -7384,7 +7379,7 @@
     wrapper.style.display = '';
     trigger.textContent = state.currentProject && state.currentProject.name ? state.currentProject.name : 'Choose Project';
     menu.innerHTML = projects.map(project => `
-      <a class="project-switcher-item${state.currentProject && state.currentProject.slug === project.slug ? ' active' : ''}" data-project-switch="${escapeHtml(project.slug)}" href="${projectUrl(project.slug)}">
+      <a class="project-switcher-item${state.currentProject && state.currentProject.slug === project.slug ? ' active' : ''}" data-project-switch="${escapeHtml(project.slug)}" href="${escapeHtml(projectUrl(project.slug))}">
         <span>${escapeHtml(project.name)}</span>
         <span>${escapeHtml(project.role || '')}</span>
       </a>
@@ -7817,8 +7812,8 @@
     toast.innerHTML = `
       <div class="toast-icon">${icon}</div>
       <div class="toast-content">
-        <div class="toast-title">${title}</div>
-        ${message ? `<div class="toast-message">${message}</div>` : ''}
+        <div class="toast-title">${escapeHtml(title)}</div>
+        ${message ? `<div class="toast-message">${escapeHtml(message)}</div>` : ''}
       </div>
       <button class="toast-close qym-icon-action" type="button" aria-label="Close notification">×</button>
     `;

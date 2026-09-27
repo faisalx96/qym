@@ -34,6 +34,10 @@ def _run_javascript(script: str) -> None:
         [node],
         input=(
             "const assert = require('node:assert/strict');\n"
+            # Pages load the shared escaping layer (qym_safe.js) before any script.
+            "const QymSafe = (() => { const window = {};\n"
+            + (DASHBOARD / "qym_safe.js").read_text(encoding="utf-8")
+            + "\nreturn window.QymSafe; })();\n"
             "async function test() {\n" + script + "\n}\n"
             "test().catch(error => { console.error(error); process.exitCode = 1; });"
         ),

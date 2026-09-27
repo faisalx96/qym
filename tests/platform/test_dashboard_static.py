@@ -373,11 +373,11 @@ def test_live_repeat_progress_is_shown_on_the_active_pass_only() -> None:
     source = DASHBOARD_JS.read_text(encoding="utf-8")
 
     assert "const parentProgressText = run.samples > 1" in source
-    assert ">${status}${passText}${parentProgressText}</span>" in source
+    assert ">${escapeHtml(status)}${passText}${parentProgressText}</span>" in source
     assert "const completedCount = Number(pass.completed_count) || 0;" in source
     assert "const totalCount = Number(pass.items_total) || 0;" in source
     assert "Math.round((completedCount / totalCount) * 100)" in source
-    assert "${statusLabel}${progressLabel}</span>" in source
+    assert "${escapeHtml(statusLabel)}${progressLabel}</span>" in source
 
 
 def test_stopped_repeat_run_never_renders_a_running_pass() -> None:
@@ -1543,7 +1543,7 @@ def test_charts_grouped_view_uses_presets_for_version_model_splits() -> None:
     assert "GROUP_RELIABILITY_COLUMN_KEY" in charts_block
     assert "function isGroupStatSortKey(key)" in charts_block
     assert "chart-col-header chart-group-stat-header sortable-col" in charts_block
-    assert "data-sort=\"${key}\"" in charts_block
+    assert "data-sort=\"${escapeHtml(key)}\"" in charts_block
     assert "chart-table ${isGrouped ? 'chart-table-grouped' : ''}" in charts_block
     assert "${showGroupStatColumns ? groupStatHeaderCells : ''}\n                ${headerCells}" in charts_block
     assert "${groupStatCells}\n              ${dataCells}" in charts_block
@@ -1737,9 +1737,9 @@ def test_changed_route_assets_are_cache_versioned() -> None:
     runs_api = RUNS_API.read_text(encoding="utf-8")
 
     assert "/static/docs.css?v=ui-consistency-20260730-15" in docs
-    assert "/static/docs.js?v=ui-consistency-20260730-18" in docs
+    assert "/static/docs.js?v=ui-consistency-20260730-18-xss-rendering" in docs
     assert 'dashboard.css?v=ui-consistency-20260730-10"' in runs_api
-    assert 'shell.js?v=ui-consistency-20260730-10"' in runs_api
+    assert 'shell.js?v=ui-consistency-20260730-10-xss-rendering"' in runs_api
 
 
 def test_multiselects_share_search_actions_options_and_only_action() -> None:
@@ -2195,13 +2195,13 @@ def test_clear_filter_control_has_aligned_label_and_soft_count_pill() -> None:
     for page in DASHBOARD_DIR.glob("*.html"):
         source = page.read_text(encoding="utf-8")
         if page.name == "analyzer.html":
-            assert "dashboard.css?v=approved-subcategories-20260917-1" in source
-            assert "playground.js?v=approved-subcategories-20260917-1" in source
-            assert "ui_components.css?v=auto-analysis-selectors-20260811-1" in source
+            assert "dashboard.css?v=approved-subcategories-20260917-1-xss-rendering" in source
+            assert "playground.js?v=approved-subcategories-20260917-1-xss-rendering" in source
+            assert "ui_components.css?v=auto-analysis-selectors-20260811-1-xss-rendering" in source
             assert "ui_components.js?v=auto-analysis-selectors-20260811-1" in source
             continue
         if "ui_components.css?v=" in source:
-            assert "ui_components.css?v=ui-consistency-20260803-60" in source
+            assert "ui_components.css?v=ui-consistency-20260803-60-xss-rendering" in source
         if "ui_components.js?v=" in source:
             assert "ui_components.js?v=ui-consistency-20260803-28" in source
 
@@ -2713,7 +2713,7 @@ def test_compare_html_export_is_self_contained_and_export_safe() -> None:
 
     assert "async function inlineCompareExportAssets(html)" in source
     assert "(?:dashboard|shell|ui_components)\\.css" in source
-    assert "(?:metrics|trace_viewer|ui_components)\\.js" in source
+    assert "(?:qym_safe|metrics|trace_viewer|ui_components)\\.js" in source
     assert "(?:auth|shell|playground|run_details|step_latency)\\.js" in source
     assert "html.replace(match[0], () => '<style>" in source
     assert "html.replace(match[0], () => '<script>" in source
@@ -3392,7 +3392,7 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert '"type": "retrying"' in analysis_api
     assert "state.phase === 'retrying'" in playground
     assert "Retrying timed-out analysis…" in playground
-    assert "playground.js?v=approved-subcategories-20260917-1" in (
+    assert "playground.js?v=approved-subcategories-20260917-1-xss-rendering" in (
         DASHBOARD_DIR / "analyzer.html"
     ).read_text(encoding="utf-8")
     assert "Timeout retries: <strong>" in playground

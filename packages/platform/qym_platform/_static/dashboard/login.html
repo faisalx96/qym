@@ -422,7 +422,8 @@
       }
     }
   </style>
-  <link rel="stylesheet" href="__QYM_PREFIX__/static/ui_components.css?v=ui-consistency-20260803-60">
+  <link rel="stylesheet" href="__QYM_PREFIX__/static/ui_components.css?v=ui-consistency-20260803-60-xss-rendering">
+  <script src="__QYM_PREFIX__/static/qym_safe.js?v=xss-rendering-20260928"></script>
   <script defer src="__QYM_PREFIX__/static/ui_components.js?v=ui-consistency-20260803-28"></script>
 </head>
 <body>
@@ -483,7 +484,7 @@
       };
 
       function esc(v) {
-        return String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        return QymSafe.escapeHtml(String(v || ''));
       }
 
       function activeProviders() {

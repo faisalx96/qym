@@ -1203,8 +1203,9 @@ def _project_not_found_page(request: Request, project_slug: str) -> HTMLResponse
   <link rel="icon" type="image/png" href="{static_root}/qym_icon.png">
   <link rel="stylesheet" href="{static_root}/dashboard.css?v=ui-consistency-20260730-10">
   <link rel="stylesheet" href="{static_root}/shell.css">
+  <script src="{static_root}/qym_safe.js?v=xss-rendering-20260928"></script>
   <script src="{static_root}/auth.js"></script>
-  <script src="{static_root}/shell.js?v=ui-consistency-20260730-10"></script>
+  <script src="{static_root}/shell.js?v=ui-consistency-20260730-10-xss-rendering"></script>
 </head>
 <body>
   <main style="min-height:50vh;display:flex;align-items:center;justify-content:center;padding:32px;color:var(--text-muted);">
@@ -3776,6 +3777,7 @@ def export_run_html(
     )
     ui_components_js = (dashboard_dir / "ui_components.js").read_text(encoding="utf-8")
     metrics_js = (dashboard_dir / "metrics.js").read_text(encoding="utf-8")
+    safe_js = (dashboard_dir / "qym_safe.js").read_text(encoding="utf-8")
 
     # Inline dashboard.css
     run_html = re.sub(
@@ -3793,6 +3795,14 @@ def export_run_html(
     run_html = re.sub(
         r'\s*<link\s+rel="stylesheet"\s+href="/static/ui_components\.css(?:\?[^"]*)?">\s*',
         lambda _match: f"<style>\n{ui_components_css_content}\n</style>",
+        run_html,
+        count=1,
+    )
+
+    # Inline the shared escaping/text layer first: every other script uses it.
+    run_html = re.sub(
+        r'\s*<script\s+src="/static/qym_safe\.js(?:\?[^"]*)?"></script>\s*',
+        lambda _match: f"<script>\n{safe_js}\n</script>",
         run_html,
         count=1,
     )
@@ -3848,9 +3858,11 @@ def export_run_html(
         count=1,
     )
 
-    # Serialize data — escape </script> sequences in JSON to prevent premature tag closing
+    # Serialize data. Escape every "<" (JSON has none outside strings) so stored
+    # text can neither close this script ("</script>") nor switch the parser
+    # into a comment state that swallows it ("<!--<script>").
     data_json = json.dumps(data, ensure_ascii=False, default=str)
-    data_json = data_json.replace("</", "<\\/")
+    data_json = data_json.replace("<", "\\u003c")
 
     # Inject export flag + data before the main inline <script> block
     export_script = (

@@ -7,12 +7,13 @@
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=runs-analysis-c1-20260804-16">
   <link rel="stylesheet" href="/static/shell.css">
+  <script src="/static/qym_safe.js?v=xss-rendering-20260928"></script>
   <script src="/static/auth.js"></script>
-  <script src="/static/shell.js?v=ui-consistency-20260730-15-runs-kpis"></script>
+  <script src="/static/shell.js?v=ui-consistency-20260730-15-xss-rendering"></script>
   <script src="/static/metrics.js?v=metric-errors-20260914-1-metric-semantics"></script>
   <script src="/static/run_details.js?v=payload-perf-1"></script>
-  <script src="/static/trace_viewer.js?v=trace-retries-20260917-1"></script>
-  <script src="/static/step_latency.js?v=payload-perf-1"></script>
+  <script src="/static/trace_viewer.js?v=trace-retries-20260917-1-xss-rendering"></script>
+  <script src="/static/step_latency.js?v=empty-sections-20260911-2-xss-rendering"></script>
   <script src="/static/review_history.js?v=review-workflow-1"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
@@ -5706,7 +5707,7 @@
     .pass-cmp-vtable td.score-1 { color: var(--score-1); }
     .pass-cmp-actions { display: flex; gap: 6px; }
   </style>
-  <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60">
+  <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60-xss-rendering">
   <script defer src="/static/ui_components.js?v=ui-consistency-20260803-28"></script>
 </head>
 <body>
@@ -5789,6 +5790,12 @@
                   <span class="samples-view-toggle qym-segmented items-view-toggle" role="group" aria-label="Item detail view">
                     <button type="button" class="samples-view-btn qym-segmented__option active" data-items-view="cards" aria-pressed="true">Cards</button>
                     <button type="button" class="samples-view-btn qym-segmented__option" data-items-view="heatmap" aria-pressed="false">Heatmap</button>
+                  </span>
+                </div>
+                <div class="pop-line"><span>Text</span>
+                  <span class="qym-segmented" id="item-text-mode" role="group" aria-label="Input and output text">
+                    <button type="button" class="qym-segmented__option active" data-qym-text-mode="raw" aria-pressed="true" title="Show text exactly as stored">Raw</button>
+                    <button type="button" class="qym-segmented__option" data-qym-text-mode="rendered" aria-pressed="false" title="Render markdown in prose; code and SQL stay as stored">Rendered</button>
                   </span>
                 </div>
                 <div class="pop-line"><span>Sort</span>
@@ -6383,16 +6390,13 @@
         return [String(raw)];
       }
 
+      // One shared escaping rule (qym_safe.js): & < > " ' in text and attributes.
       function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text || '';
-        return div.innerHTML;
+        return QymSafe.escapeHtml(text || '');
       }
 
       function escapeAttr(text) {
-        return String(text ?? '')
-          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        return QymSafe.escapeHtml(String(text ?? ''));
       }
 
       const MODEL_REASONING_BADGE_TITLE = 'Reasoning model';
@@ -6451,7 +6455,7 @@
       }
 
       function infoIcon(tooltip) {
-        return '<button type="button" class="stat-info-icon qym-help-marker" aria-label="More information" aria-expanded="false">i<span class="stat-info-tooltip qym-help-tooltip" role="tooltip">' + tooltip + '</span></button>';
+        return '<button type="button" class="stat-info-icon qym-help-marker" aria-label="More information" aria-expanded="false">i<span class="stat-info-tooltip qym-help-tooltip" role="tooltip">' + escapeHtml(tooltip) + '</span></button>';
       }
 
       function formatTaskStart(ms) {
@@ -6551,14 +6555,14 @@
         ts = ts || {};
         var chips = [];
         var toolErrorCount = ts.tool_errors || ts.malformed_tool_calls || 0;
-        if (ts.tokens != null) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u26A1</span><span class="trace-chip-value">' + _fmtTraceNum(ts.tokens) + '</span><span class="trace-chip-label">Tokens</span></span>');
-        if (ts.cost > 0) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u26A1</span><span class="trace-chip-value">$' + ts.cost.toFixed(3) + '</span><span class="trace-chip-label">Cost</span></span>');
-        if (ts.llm_calls) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u26A1</span><span class="trace-chip-value">' + ts.llm_calls + '</span><span class="trace-chip-label">LLM Calls</span></span>');
-        if (ts.tool_calls) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u26A1</span><span class="trace-chip-value">' + ts.tool_calls + '</span><span class="trace-chip-label">Tool Calls</span></span>');
-        if (toolErrorCount > 0 || ts.tool_calls) chips.push('<span class="trace-chip' + (toolErrorCount > 0 ? ' trace-chip-err' : '') + '"><span class="trace-chip-icon">\u26A1</span><span class="trace-chip-value">' + toolErrorCount + '</span><span class="trace-chip-label">Tool Errors</span></span>');
-        if (ts.noisy_reasoning > 0) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u2728</span><span class="trace-chip-value">' + ts.noisy_reasoning + '</span><span class="trace-chip-label">Noisy Reasoning</span></span>');
-        if (ts.provider_errors > 0) chips.push('<span class="trace-chip trace-chip-err"><span class="trace-chip-icon">\u26A0</span><span class="trace-chip-value">' + ts.provider_errors + '</span><span class="trace-chip-label">Provider Errors</span></span>');
-        if ((retryCount || 0) > 0) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u21BB</span><span class="trace-chip-value">' + retryCount + '</span><span class="trace-chip-label">Retries</span></span>');
+        if (ts.tokens != null) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u26A1</span><span class="trace-chip-value">' + QymSafe.escapeHtml(_fmtTraceNum(ts.tokens)) + '</span><span class="trace-chip-label">Tokens</span></span>');
+        if (ts.cost > 0) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u26A1</span><span class="trace-chip-value">$' + QymSafe.escapeHtml(ts.cost.toFixed(3)) + '</span><span class="trace-chip-label">Cost</span></span>');
+        if (ts.llm_calls) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u26A1</span><span class="trace-chip-value">' + QymSafe.escapeHtml(ts.llm_calls) + '</span><span class="trace-chip-label">LLM Calls</span></span>');
+        if (ts.tool_calls) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u26A1</span><span class="trace-chip-value">' + QymSafe.escapeHtml(ts.tool_calls) + '</span><span class="trace-chip-label">Tool Calls</span></span>');
+        if (toolErrorCount > 0 || ts.tool_calls) chips.push('<span class="trace-chip' + (toolErrorCount > 0 ? ' trace-chip-err' : '') + '"><span class="trace-chip-icon">\u26A1</span><span class="trace-chip-value">' + QymSafe.escapeHtml(toolErrorCount) + '</span><span class="trace-chip-label">Tool Errors</span></span>');
+        if (ts.noisy_reasoning > 0) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u2728</span><span class="trace-chip-value">' + QymSafe.escapeHtml(ts.noisy_reasoning) + '</span><span class="trace-chip-label">Noisy Reasoning</span></span>');
+        if (ts.provider_errors > 0) chips.push('<span class="trace-chip trace-chip-err"><span class="trace-chip-icon">\u26A0</span><span class="trace-chip-value">' + QymSafe.escapeHtml(ts.provider_errors) + '</span><span class="trace-chip-label">Provider Errors</span></span>');
+        if ((retryCount || 0) > 0) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u21BB</span><span class="trace-chip-value">' + QymSafe.escapeHtml(retryCount) + '</span><span class="trace-chip-label">Retries</span></span>');
         if (chips.length === 0) return '';
         return '<div class="trace-chips-row">' + chips.join('') + '</div>';
       }
@@ -6578,14 +6582,9 @@
           const p = parsePythonDict(trimmed);
           if (p !== null) return formatObjectAsHtml(p);
         }
-        let html = escapeHtml(str);
-        html = html.replace(/```([\s\S]*?)```/g, '<pre style="background:var(--bg-elevated);padding:4px 8px;border-radius:4px;overflow-x:auto;margin:4px 0;">$1</pre>');
-        html = html.replace(/`([^`]+)`/g, '<code style="background:var(--bg-elevated);padding:1px 4px;border-radius:3px;">$1</code>');
-        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-        html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" style="color:var(--accent-primary);">$1</a>');
-        if (isRTL(str)) html = '<div dir="rtl" style="text-align:right;">' + html + '</div>';
-        return html;
+        // Plain preformatted text unless the Display menu's Raw / Rendered
+        // switch asks for markdown; SQL and code are never rewritten (qym_safe.js).
+        return QymSafe.textBlock(str, { dir: isRTL(str) ? 'rtl' : '' });
       }
 
       function parsePythonDict(str) {
@@ -7398,7 +7397,7 @@
               '</div>' +
             '</div>' +
             '<div class="hero-right">' +
-              '<div class="hero-status qym-badge ' + statusClass + '"><span class="hero-status-dot"></span>' + statusText +
+              '<div class="hero-status qym-badge ' + escapeAttr(statusClass) + '"><span class="hero-status-dot"></span>' + statusText +
                 ((!state.viewPass && samplesCount > 1 && (statusClass === 'running' || statusClass === 'pending'))
                   ? ' • pass ' + Math.min((parseInt(run.last_completed_pass, 10) || 0) + 1, samplesCount) + '/' + samplesCount
                   : '') +
@@ -10793,7 +10792,7 @@
         if (f.kind === 'metric') {
           operSel = _fbOperSelect(path, node, [['is', 'is']].concat(NUM_OPERS));
           if (node.oper === 'is') {
-            valueInp = '<select data-fb-p="' + path + '" data-fb-k="value" required class="' + (node.value ? 'fb-val-' + node.value : '') + '">'
+            valueInp = '<select data-fb-p="' + path + '" data-fb-k="value" required class="' + (node.value ? escapeAttr('fb-val-' + node.value) : '') + '">'
               + '<option value="" disabled' + (!node.value ? ' selected' : '') + '>Choose outcome…</option>'
               + ['passed', 'failed'].map(v => '<option' + (v === node.value ? ' selected' : '') + '>' + v + '</option>').join('')
               + '</select>';
@@ -12277,7 +12276,7 @@
           renderItems();
           // Flash success indicator on the feedback section
           setTimeout(function() {
-            var saved = document.querySelector('[data-feedback-item="' + itemId + '"]');
+            var saved = document.querySelector('[data-feedback-item="' + CSS.escape(String(itemId)) + '"]');
             if (saved) {
               var sec = saved.closest('.feedback-section');
               if (sec) { sec.classList.add('feedback-saved'); setTimeout(function() { sec.classList.remove('feedback-saved'); }, 800); }
@@ -13958,6 +13957,9 @@
           renderItems();
         });
       });
+
+      // Inputs, expected and outputs show as stored text by default (C013).
+      QymSafe.bindTextModeToggle(el('item-text-mode'), () => renderItems());
 
       el('filter-approval')?.addEventListener('change', (e) => {
         state.approvalFilter = e.target.value || null;

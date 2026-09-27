@@ -7,8 +7,9 @@
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=runs-analysis-c1-20260804-16">
   <link rel="stylesheet" href="/static/shell.css">
+  <script src="/static/qym_safe.js?v=xss-rendering-20260928"></script>
   <script src="/static/auth.js"></script>
-  <script src="/static/shell.js?v=ui-consistency-20260730-15-runs-kpis"></script>
+  <script src="/static/shell.js?v=ui-consistency-20260730-15-xss-rendering"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
     /* ═══════════════════════════════════════════════════
@@ -1254,7 +1255,7 @@
       text-align: right;
     }
   </style>
-  <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60">
+  <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60-xss-rendering">
   <script defer src="/static/ui_components.js?v=ui-consistency-20260803-28"></script>
 </head>
 <body>
@@ -1505,8 +1506,7 @@
     }
 
     function escapeHtml(str) {
-      if (!str) return '';
-      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      return QymSafe.escapeHtml(str || '');
     }
 
     const MODEL_REASONING_BADGE_TITLE = 'Reasoning model';
@@ -2115,7 +2115,7 @@
       const reviewer = c.reviewed_by ? (c.reviewed_by.display_name || c.reviewed_by.email) : '';
 
       return `
-        <div class="correction-card status-${st} ${isSelected ? 'selected' : ''}" data-id="${c.id}">
+        <div class="correction-card status-${escapeHtml(st)} ${isSelected ? 'selected' : ''}" data-id="${c.id}">
           <div class="card-header">
             <label class="custom-checkbox card-check">
             <input type="checkbox" data-check="${c.id}" ${isSelected ? 'checked' : ''}>
@@ -2124,7 +2124,7 @@
             <div class="card-meta">
               <span class="card-id">#${c.id}</span>
               <span class="card-item-id" title="${escapeHtml(c.item_id)}">${escapeHtml(truncate(c.item_id, 24))}</span>
-              <span class="card-status-badge qym-badge ${st}"><span class="dot"></span> ${st}</span>
+              <span class="card-status-badge qym-badge ${escapeHtml(st)}"><span class="dot"></span> ${escapeHtml(st)}</span>
               ${c.ai_confidence != null ? `<span class="card-confidence" title="AI confidence">${(c.ai_confidence * 100).toFixed(0)}%</span>` : ''}
             </div>
             <span class="card-provenance">${corrector ? `by ${escapeHtml(corrector)}` : ''} ${c.created_at ? formatDate(c.created_at) : ''}</span>

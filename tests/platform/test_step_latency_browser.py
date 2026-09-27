@@ -11,6 +11,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "packages/platform/qym_platform/_static/dashboard/step_latency.js"
+# Pages load the shared escaping layer before any other script.
+SAFE = ROOT / "packages/platform/qym_platform/_static/dashboard/qym_safe.js"
 
 
 @pytest.fixture(scope="module")
@@ -170,6 +172,7 @@ def panel(browser):
           });
         }"""
     )
+    page.add_script_tag(path=str(SAFE))
     page.add_script_tag(path=str(SCRIPT))
     yield Panel(page)
     context.close()

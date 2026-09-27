@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Auto-analysis</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=approved-subcategories-20260917-1-metric-semantics">
+  <link rel="stylesheet" href="/static/dashboard.css?v=approved-subcategories-20260917-1-xss-rendering">
   <link rel="stylesheet" href="/static/shell.css">
+  <script src="/static/qym_safe.js?v=xss-rendering-20260928"></script>
   <script src="/static/auth.js"></script>
-  <script src="/static/shell.js?v=accessibility-responsive-20260806"></script>
+  <script src="/static/shell.js?v=accessibility-responsive-20260806-xss-rendering"></script>
   <script src="/static/metrics.js?v=metric-errors-20260914-1-metric-semantics"></script>
   <script src="/static/qym_table.js"></script>
-  <script src="/static/playground.js?v=approved-subcategories-20260917-1-metric-semantics"></script>
+  <script src="/static/playground.js?v=approved-subcategories-20260917-1-xss-rendering"></script>
   <style>
     /* Typography and color roles follow docs/DESIGN_LANGUAGE.md. */
     .analysis-page {
@@ -3546,7 +3547,7 @@
             }
     }
   </style>
-  <link rel="stylesheet" href="/static/ui_components.css?v=auto-analysis-selectors-20260811-1">
+  <link rel="stylesheet" href="/static/ui_components.css?v=auto-analysis-selectors-20260811-1-xss-rendering">
   <script defer src="/static/ui_components.js?v=auto-analysis-selectors-20260811-1"></script>
 </head>
 <body>
@@ -3766,14 +3767,13 @@
         return window.location.pathname + '?' + nextParams.toString();
       }
 
+      // One shared escaping rule (qym_safe.js): & < > " ' in text and attributes.
       function escapeHtml(value) {
-        const node = document.createElement('div');
-        node.textContent = value == null ? '' : String(value);
-        return node.innerHTML;
+        return QymSafe.escapeHtml(value == null ? '' : String(value));
       }
 
       function escapeAttr(value) {
-        return escapeHtml(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        return escapeHtml(value);
       }
 
       function projectApprovalSignature(config) {
@@ -4982,7 +4982,7 @@
                 '<li class="analysis-run-context-item"><span class="analysis-run-context-label">Model</span><span class="analysis-run-context-value">' + runSummaryValue(run.model_name) + '</span></li>' +
                 '<li class="analysis-run-context-item"><span class="analysis-run-context-label">Dataset</span><span class="analysis-run-context-value">' + runSummaryValue(run.dataset_name) + '</span></li>' +
               '</ul>' + passSelectorHtml + '</div>' +
-            '<a class="analysis-secondary-link qym-inline-action qym-inline-action--neutral" href="' + selectedRunUrl(runId) + '">View run</a></div>' +
+            '<a class="analysis-secondary-link qym-inline-action qym-inline-action--neutral" href="' + escapeAttr(selectedRunUrl(runId)) + '">View run</a></div>' +
           '<div class="analysis-metrics"><div class="analysis-metric-heading"><span class="analysis-run-label">Metrics to analyze</span>' +
             '<span class="analysis-metric-actions"><button class="analysis-metric-action qym-inline-action qym-inline-action--neutral" id="analysis-metrics-all" type="button">Select all</button>' +
             '<button class="analysis-metric-action qym-inline-action qym-inline-action--neutral" id="analysis-metrics-none" type="button">Clear</button></span></div>' +

@@ -5,15 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Compare Runs</title>
   <link rel="icon" type="image/png" href="./static/qym_icon.png">
-<link rel="stylesheet" href="./static/dashboard.css?v=approved-subcategories-20260917-1-metric-semantics">
+<link rel="stylesheet" href="./static/dashboard.css?v=approved-subcategories-20260917-1-xss-rendering">
   <link rel="stylesheet" href="./static/shell.css">
+  <script src="./static/qym_safe.js?v=xss-rendering-20260928"></script>
   <script src="./static/auth.js"></script>
-  <script src="./static/shell.js?v=ui-consistency-20260730-15-runs-kpis"></script>
+  <script src="./static/shell.js?v=ui-consistency-20260730-15-xss-rendering"></script>
   <script src="./static/metrics.js?v=metric-errors-20260914-1-metric-semantics"></script>
   <script src="./static/run_details.js?v=payload-perf-1"></script>
-  <script src="./static/trace_viewer.js?v=trace-retries-20260917-1"></script>
-  <script src="./static/step_latency.js?v=payload-perf-1"></script>
-  <script src="./static/playground.js?v=approved-subcategories-20260917-1-metric-semantics"></script>
+  <script src="./static/trace_viewer.js?v=trace-retries-20260917-1-xss-rendering"></script>
+  <script src="./static/step_latency.js?v=empty-sections-20260911-2-xss-rendering"></script>
+  <script src="./static/playground.js?v=approved-subcategories-20260917-1-xss-rendering"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
     /* Compare-specific styles */
@@ -5115,7 +5116,7 @@
       }
     }
   </style>
-  <link rel="stylesheet" href="./static/ui_components.css?v=ui-consistency-20260803-60">
+  <link rel="stylesheet" href="./static/ui_components.css?v=ui-consistency-20260803-60-xss-rendering">
   <script defer src="./static/ui_components.js?v=ui-consistency-20260803-28"></script>
 </head>
 <body>
@@ -5246,6 +5247,12 @@
                         <option value="latency_asc">Latency &uarr;</option>
                         <option value="latency_desc">Latency &darr;</option>
                       </select>
+                    </div>
+                    <div class="pop-line"><span>Text</span>
+                      <span class="qym-segmented" id="item-text-mode" role="group" aria-label="Input and output text">
+                        <button type="button" class="qym-segmented__option active" data-qym-text-mode="raw" aria-pressed="true" title="Show text exactly as stored">Raw</button>
+                        <button type="button" class="qym-segmented__option" data-qym-text-mode="rendered" aria-pressed="false" title="Render markdown in prose; code and SQL stay as stored">Rendered</button>
+                      </span>
                     </div>
                     <div class="pop-sec">Columns</div>
                     <div class="pop-line" id="fp-meta-fields" style="display:none;"><span>Item fields</span>
@@ -8160,7 +8167,7 @@
           } else {
             tabsContainer.style.display = '';
             tabsContainer.innerHTML = state.allMetrics.map(metric =>
-              `<button type="button" class="metric-tab qym-segmented__option ${metric === state.selectedOverviewMetric ? 'active' : ''}" data-metric="${metric}" aria-pressed="${metric === state.selectedOverviewMetric}">${metric}</button>`
+              `<button type="button" class="metric-tab qym-segmented__option ${metric === state.selectedOverviewMetric ? 'active' : ''}" data-metric="${escapeAttr(metric)}" aria-pressed="${metric === state.selectedOverviewMetric}">${escapeHtml(metric)}</button>`
             ).join('');
 
             tabsContainer.querySelectorAll('.metric-tab').forEach(tab => {
@@ -8227,7 +8234,7 @@
             if (metricGroup) metricGroup.style.display = '';
             if (metricHeading) metricHeading.style.display = '';
             itemsMetricSelect.innerHTML = state.allMetrics.map(metric =>
-              `<option value="${metric}" ${metric === state.selectedItemsMetric ? 'selected' : ''}>${metric}</option>`
+              `<option value="${escapeAttr(metric)}" ${metric === state.selectedItemsMetric ? 'selected' : ''}>${escapeHtml(metric)}</option>`
             ).join('');
 
             itemsMetricSelect.addEventListener('change', (e) => {
@@ -8611,7 +8618,7 @@
         state.runs.forEach((run, idx) => {
           const info = run.run || {};
           const name = info.run_name || `Run ${idx + 1}`;
-          options += `<option value="win_${idx}">${name} Won</option>`;
+          options += `<option value="win_${idx}">${escapeHtml(name)} Won</option>`;
         });
 
         // Add "Only X Solved" options for unique insights
@@ -8619,7 +8626,7 @@
         state.runs.forEach((run, idx) => {
           const info = run.run || {};
           const name = info.run_name || `Run ${idx + 1}`;
-          options += `<option value="only_${idx}">Only ${name}</option>`;
+          options += `<option value="only_${idx}">Only ${escapeHtml(name)}</option>`;
         });
         options += '</optgroup>';
 
@@ -9222,7 +9229,7 @@
           const color = COLORS[idx % COLORS.length];
           return `<div class="legend-item">
             <div class="legend-dot" style="background: ${color}"></div>
-            <span>${runNames[idx]}:</span>
+            <span>${escapeHtml(runNames[idx])}:</span>
             <span class="legend-count">${stats.wins[idx]}</span>
           </div>`;
         }).join('');
@@ -9541,7 +9548,7 @@
                   <div class="compare-run-title-block">
                     <div class="compare-run-title-line">
                       <span class="compare-run-title">${escapeHtml(info.run_name || ('Run ' + (idx + 1)))}</span>
-                      <span class="compare-run-status qym-badge ${statusClass} ${statusToneClass}">
+                      <span class="compare-run-status qym-badge ${escapeAttr(statusClass)} ${statusToneClass}">
                         <span class="compare-run-status-dot"></span>${statusText}
                       </span>
                     </div>
@@ -12158,14 +12165,14 @@
         ts = ts || {};
         var chips = [];
         var toolErrorCount = ts.tool_errors || ts.malformed_tool_calls || 0;
-        if (ts.tokens != null) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u26A1</span><span class="trace-chip-value">' + _fmtTraceNum(ts.tokens) + '</span><span class="trace-chip-label">Tokens</span></span>');
-        if (ts.cost > 0) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u26A1</span><span class="trace-chip-value">$' + ts.cost.toFixed(3) + '</span><span class="trace-chip-label">Cost</span></span>');
-        if (ts.llm_calls) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u26A1</span><span class="trace-chip-value">' + ts.llm_calls + '</span><span class="trace-chip-label">LLM Calls</span></span>');
-        if (ts.tool_calls) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u26A1</span><span class="trace-chip-value">' + ts.tool_calls + '</span><span class="trace-chip-label">Tool Calls</span></span>');
-        if (toolErrorCount > 0 || ts.tool_calls) chips.push('<span class="trace-chip' + (toolErrorCount > 0 ? ' trace-chip-err' : '') + '"><span class="trace-chip-icon">\u26A1</span><span class="trace-chip-value">' + toolErrorCount + '</span><span class="trace-chip-label">Tool Errors</span></span>');
-        if (ts.noisy_reasoning > 0) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u2728</span><span class="trace-chip-value">' + ts.noisy_reasoning + '</span><span class="trace-chip-label">Noisy Reasoning</span></span>');
-        if (ts.provider_errors > 0) chips.push('<span class="trace-chip trace-chip-err"><span class="trace-chip-icon">\u26A0</span><span class="trace-chip-value">' + ts.provider_errors + '</span><span class="trace-chip-label">Provider Errors</span></span>');
-        if ((retryCount || 0) > 0) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u21BB</span><span class="trace-chip-value">' + retryCount + '</span><span class="trace-chip-label">Retries</span></span>');
+        if (ts.tokens != null) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u26A1</span><span class="trace-chip-value">' + QymSafe.escapeHtml(_fmtTraceNum(ts.tokens)) + '</span><span class="trace-chip-label">Tokens</span></span>');
+        if (ts.cost > 0) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u26A1</span><span class="trace-chip-value">$' + QymSafe.escapeHtml(ts.cost.toFixed(3)) + '</span><span class="trace-chip-label">Cost</span></span>');
+        if (ts.llm_calls) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u26A1</span><span class="trace-chip-value">' + QymSafe.escapeHtml(ts.llm_calls) + '</span><span class="trace-chip-label">LLM Calls</span></span>');
+        if (ts.tool_calls) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u26A1</span><span class="trace-chip-value">' + QymSafe.escapeHtml(ts.tool_calls) + '</span><span class="trace-chip-label">Tool Calls</span></span>');
+        if (toolErrorCount > 0 || ts.tool_calls) chips.push('<span class="trace-chip' + (toolErrorCount > 0 ? ' trace-chip-err' : '') + '"><span class="trace-chip-icon">\u26A1</span><span class="trace-chip-value">' + QymSafe.escapeHtml(toolErrorCount) + '</span><span class="trace-chip-label">Tool Errors</span></span>');
+        if (ts.noisy_reasoning > 0) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u2728</span><span class="trace-chip-value">' + QymSafe.escapeHtml(ts.noisy_reasoning) + '</span><span class="trace-chip-label">Noisy Reasoning</span></span>');
+        if (ts.provider_errors > 0) chips.push('<span class="trace-chip trace-chip-err"><span class="trace-chip-icon">\u26A0</span><span class="trace-chip-value">' + QymSafe.escapeHtml(ts.provider_errors) + '</span><span class="trace-chip-label">Provider Errors</span></span>');
+        if ((retryCount || 0) > 0) chips.push('<span class="trace-chip"><span class="trace-chip-icon">\u21BB</span><span class="trace-chip-value">' + QymSafe.escapeHtml(retryCount) + '</span><span class="trace-chip-label">Retries</span></span>');
         if (chips.length === 0) return '';
         return '<div class="trace-chips-row">' + chips.join('') + '</div>';
       }
@@ -12185,20 +12192,9 @@
           const parsed = parsePythonDict(trimmed);
           if (parsed !== null) return formatObjectAsHtml(parsed);
         }
-        // Apply basic markdown transforms (safe subset - no raw HTML)
-        let html = escapeHtml(str);
-        // Code blocks (triple backtick)
-        html = html.replace(/```([\s\S]*?)```/g, '<pre style="background:var(--bg-elevated);padding:4px 8px;border-radius:4px;overflow-x:auto;margin:4px 0;">$1</pre>');
-        // Inline code
-        html = html.replace(/`([^`]+)`/g, '<code style="background:var(--bg-elevated);padding:1px 4px;border-radius:3px;">$1</code>');
-        // Bold
-        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-        // Italic
-        html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-        // Links
-        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" style="color:var(--accent-primary);">$1</a>');
-        if (isRTL(str)) html = '<div dir="rtl" style="text-align:right;">' + html + '</div>';
-        return html;
+        // Plain preformatted text unless the Display menu's Raw / Rendered
+        // switch asks for markdown; SQL and code are never rewritten (qym_safe.js).
+        return QymSafe.textBlock(str, { dir: isRTL(str) ? 'rtl' : '' });
       }
 
       function parseMetaList(val) {
@@ -12230,10 +12226,9 @@
         return [String(raw)];
       }
 
+      // One shared escaping rule (qym_safe.js): & < > " ' in text and attributes.
       function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text || '';
-        return div.innerHTML;
+        return QymSafe.escapeHtml(text || '');
       }
       const COPY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
       const CHECK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
@@ -12246,12 +12241,7 @@
       const MODEL_REASONING_BADGE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6" /><path d="M10 21h4" /><path d="M12 2a7 7 0 0 0-4.2 12.6c.7.5 1.2 1.4 1.2 2.3V18h6v-1.1c0-.9.5-1.8 1.2-2.3A7 7 0 0 0 12 2Z" /></svg>';
 
       function escapeAttr(text) {
-        return String(text ?? '')
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;');
+        return QymSafe.escapeHtml(String(text ?? ''));
       }
 
       function hasReasoningTraceStats(traceStats) {
@@ -12831,7 +12821,7 @@
           renderItems();
           // Flash success indicator
           setTimeout(() => {
-            const saved = document.querySelector('[data-feedback-item="' + itemId + '"][data-feedback-run-idx="' + runIdx + '"]');
+            const saved = document.querySelector('[data-feedback-item="' + CSS.escape(String(itemId)) + '"][data-feedback-run-idx="' + runIdx + '"]');
             if (saved) {
               const sec = saved.closest('.feedback-section');
               if (sec) { sec.classList.add('feedback-saved'); setTimeout(() => sec.classList.remove('feedback-saved'), 800); }
@@ -13837,6 +13827,9 @@
         renderItems();
       });
 
+      // Inputs, expected and outputs show as stored text by default (C013).
+      QymSafe.bindTextModeToggle(el('item-text-mode'), () => renderItems());
+
       el('item-filter').addEventListener('change', (e) => {
         state.itemFilter = e.target.value;
         state.page = 1;
@@ -14742,7 +14735,7 @@
           html = html.replace(match[0], () => '<style>\n' + css + '\n</style>');
         }
 
-        const scriptTags = Array.from(html.matchAll(/<script\s+(?:defer\s+)?src="((?:\.\/|\/)static\/(?:metrics|trace_viewer|ui_components)\.js(?:\?[^"]*)?)"><\/script>/g));
+        const scriptTags = Array.from(html.matchAll(/<script\s+(?:defer\s+)?src="((?:\.\/|\/)static\/(?:qym_safe|metrics|trace_viewer|ui_components)\.js(?:\?[^"]*)?)"><\/script>/g));
         for (const match of scriptTags) {
           const js = await fetchStaticTextForExport(match[1]);
           html = html.replace(match[0], () => '<script>\n' + escapeInlineScriptContent(js) + '\n</' + 'script>');
@@ -14777,10 +14770,13 @@
             let html = await resp.text();
             html = await inlineCompareExportAssets(html);
 
-            // Inject export data and mode flag before closing </head>
+            // Inject export data and mode flag before closing </head>. Every '<'
+            // is escaped so stored text cannot end or comment out this script,
+            // and the splice uses a function: a replacement string would expand
+            // "$'", "$`" and "$&" found in run data into page markup.
             const exportScript = '<script>window.__QYM_COMPARE_EXPORT__ = true; window.__QYM_COMPARE_DATA__ = ' +
-              dataJson.replace(/<\//g, '<\\/') + ';</' + 'script>';
-            html = html.replace('</head>', exportScript + '</head>');
+              dataJson.replace(/</g, '\\u003c') + ';</' + 'script>';
+            html = html.replace('</head>', () => exportScript + '</head>');
 
             // Create downloadable blob
             const blob = new Blob([html], { type: 'text/html;charset=utf-8' });

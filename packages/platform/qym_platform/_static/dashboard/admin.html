@@ -7,8 +7,9 @@
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=runs-analysis-c1-20260804-16">
   <link rel="stylesheet" href="/static/shell.css">
+  <script src="/static/qym_safe.js?v=xss-rendering-20260928"></script>
   <script src="/static/auth.js"></script>
-  <script src="/static/shell.js?v=ui-consistency-20260730-15-runs-kpis"></script>
+  <script src="/static/shell.js?v=ui-consistency-20260730-15-xss-rendering"></script>
   <style>
     .admin-page { }
     .admin-header { margin-bottom: var(--space-xl); }
@@ -121,7 +122,7 @@
     .maint-status--succeeded { color: var(--success); }
     .self-warning { background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 6px; padding: var(--space-sm) var(--space-md); font-size: var(--font-sm); color: var(--text-muted); }
   </style>
-  <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60">
+  <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60-xss-rendering">
   <script defer src="/static/ui_components.js?v=ui-consistency-20260803-28"></script>
 </head>
 <body>
@@ -302,9 +303,7 @@
       }
 
       function escapeHtml(value) {
-        return String(value == null ? '' : value)
-          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        return QymSafe.escapeHtml(value == null ? '' : String(value));
       }
 
       let state = { users: [], projects: [], liveRuns: [], liveRunsTotal: 0, recentRuns: [], recentRunsPage: 0, recentRunsPageSize: 6, recentRunsTotal: 0, me: null, editingUserId: null, editUserBusy: false, localAuthEnabled: false };
@@ -469,7 +468,7 @@
             : (run.progress_completed ? String(run.progress_completed) : '—');
           return `<tr>
             ${includeProject ? `<td style="font-weight:500;color:var(--text-primary)">${escapeHtml(projectLabel(run))}</td>` : ''}
-            <td><a class="run-link" href="${runUrl(run)}">${escapeHtml(runName(run))}</a><div class="row-meta">${escapeHtml(run.task_name || '')}</div></td>
+            <td><a class="run-link" href="${escapeHtml(runUrl(run))}">${escapeHtml(runName(run))}</a><div class="row-meta">${escapeHtml(run.task_name || '')}</div></td>
             <td>${escapeHtml(ownerLabel(run))}</td>
             <td>${statusPill(run.status)}</td>
             <td><span class="row-meta">${escapeHtml(itemLabel)}</span></td>
@@ -513,7 +512,7 @@
             : `${root}/run/${encodeURIComponent(run.run_id)}`;
           return `<tr>
             <td style="font-weight:500;color:var(--text-primary)">${escapeHtml(projectLabel(run))}</td>
-            <td><a class="run-link" href="${runUrl}">${escapeHtml(runName(run))}</a><div class="row-meta">${escapeHtml(run.task_name || '')}</div></td>
+            <td><a class="run-link" href="${escapeHtml(runUrl)}">${escapeHtml(runName(run))}</a><div class="row-meta">${escapeHtml(run.task_name || '')}</div></td>
             <td>${escapeHtml(ownerLabel(run))}</td>
             <td><span class="live-status"><span class="live-status-dot"></span>${escapeHtml(run.status || 'RUNNING')}</span></td>
             <td><span class="live-progress">${escapeHtml(progressLabel(run))}</span></td>
@@ -579,7 +578,7 @@
             <td>${escapeHtml(String(p.member_count || 0))}</td>
             <td><div class="row-actions">
               ${p.is_active
-                ? `<a class="btn btn-secondary" href="${(window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '')}/projects/${encodeURIComponent(p.slug)}/settings" style="padding:4px 10px;font-size:var(--font-sm)">Settings</a>
+                ? `<a class="btn btn-secondary" href="${escapeHtml((window.__QYM_ROOT_PATH__ || '').replace(/\/$/, ''))}/projects/${encodeURIComponent(p.slug)}/settings" style="padding:4px 10px;font-size:var(--font-sm)">Settings</a>
               <button class="btn btn-secondary" style="padding:4px 10px;font-size:var(--font-sm)" data-project-archive="${escapeHtml(p.id)}">Archive</button>`
                 : `<button class="btn btn-secondary" style="padding:4px 10px;font-size:var(--font-sm)" data-project-unarchive="${escapeHtml(p.id)}">Unarchive</button>`}
             </div></td>

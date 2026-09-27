@@ -53,6 +53,8 @@ def run_compare_js(body: str, *, render: bool = False) -> None:
         script = (
             "const assert = require('node:assert/strict'); const window = {}; "
             "const comparisonRowIndexes = new WeakMap();\n"
+            + (DASHBOARD / "qym_safe.js").read_text()
+            + "\nconst QymSafe = window.QymSafe;\n"
             + (DASHBOARD / "metrics.js").read_text()
         + "\n" + "\n".join(functions) + "\n"
         + (RENDER_FIXTURE_JS if render else "") + body

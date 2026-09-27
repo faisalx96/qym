@@ -7,8 +7,9 @@
   <link rel="icon" type="image/png" href="./static/qym_icon.png">
   <link rel="stylesheet" href="./static/dashboard.css?v=runs-analysis-c1-20260804-16">
   <link rel="stylesheet" href="./static/shell.css">
+  <script src="./static/qym_safe.js?v=xss-rendering-20260928"></script>
   <script src="./static/auth.js"></script>
-  <script src="./static/shell.js?v=ui-consistency-20260730-15-runs-kpis"></script>
+  <script src="./static/shell.js?v=ui-consistency-20260730-15-xss-rendering"></script>
   <style>
     .trash-container {
       padding: var(--space-lg) var(--space-xl);
@@ -230,7 +231,7 @@
       }
     }
   </style>
-  <link rel="stylesheet" href="./static/ui_components.css?v=ui-consistency-20260803-60">
+  <link rel="stylesheet" href="./static/ui_components.css?v=ui-consistency-20260803-60-xss-rendering">
   <script defer src="./static/ui_components.js?v=ui-consistency-20260803-28"></script>
 </head>
 <body>
@@ -291,12 +292,7 @@
       const el = (id) => document.getElementById(id);
 
       function escapeHtml(value) {
-        return String(value == null ? '' : value)
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;');
+        return QymSafe.escapeHtml(value == null ? '' : String(value));
       }
 
       const MODEL_REASONING_BADGE_TITLE = 'Reasoning model';
