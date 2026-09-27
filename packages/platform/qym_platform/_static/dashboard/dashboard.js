@@ -1416,7 +1416,9 @@
   // DATA PROCESSING
   // ═══════════════════════════════════════════════════
 
-  function renderExecutionErrors(run, scope = '', onlyMetric = null) {
+  // `scoredDisplay` is the metric's mean without its scorer errors, shown in
+  // the tooltip so readers can see how far counting errors as 0 moved it.
+  function renderExecutionErrors(run, scope = '', onlyMetric = null, scoredDisplay = null) {
     const known = run.task_error_count != null && run.metric_error_count != null;
     if (!known) {
       const count = Number(run.execution_error_count ?? run.error_count ?? 0);
@@ -1429,7 +1431,9 @@
         ? run.metric_error_counts?.[onlyMetric] || 0
         : run[`${kind}_error_count`] || 0);
       if (!count) return '';
-      const label = `${count} ${kind} error${count === 1 ? '' : 's'}${onlyMetric ? ` in ${onlyMetric}` : ''}${scope}`;
+      const label = onlyMetric
+        ? `${count} ${onlyMetric} scorer error${count === 1 ? '' : 's'}${scope}, counted as 0%${scoredDisplay ? `. Mean without ${count === 1 ? 'it' : 'them'}: ${scoredDisplay}` : ''}`
+        : `${count} ${kind} error${count === 1 ? '' : 's'}${scope}`;
       const details = { kind, count, scope, metrics: onlyMetric
         ? { [onlyMetric]: count } : run.metric_error_counts || {} };
       return `<button type="button" class="status-errors status-error-detail${kind === 'metric' ? ' status-metric-errors' : ''}${onlyMetric ? ' metric-error-indicator' : ''}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" data-execution-errors="${escapeHtml(JSON.stringify(details))}">${onlyMetric ? '' : count}⚠</button>`;
@@ -1447,7 +1451,7 @@
     modal.setAttribute('role', 'dialog');
     modal.setAttribute('aria-modal', 'true');
     modal.setAttribute('aria-labelledby', 'execution-error-title');
-    modal.innerHTML = `<div class="modal-content modal-small"><div class="modal-header"><h2 id="execution-error-title">${task ? 'Task' : 'Metric'} errors</h2><button class="modal-close qym-icon-action" aria-label="Close error details">×</button></div><div class="modal-body"><p>${details.count} ${task ? 'task execution' : 'metric check'}${details.count === 1 ? '' : 's'} failed${escapeHtml(details.scope)}.</p>${task ? '' : `<dl class="execution-error-breakdown">${Object.entries(details.metrics).map(([name, count]) => `<div><dt>${escapeHtml(name)}</dt><dd>${Number(count)}</dd></div>`).join('')}</dl>`}<p class="execution-error-note">${task ? 'Metrics skipped after a task failure are not metric errors.' : 'Task outputs are available. Each failed metric check is counted once per item and pass.'}</p></div></div>`;
+    modal.innerHTML = `<div class="modal-content modal-small"><div class="modal-header"><h2 id="execution-error-title">${task ? 'Task' : 'Metric'} errors</h2><button class="modal-close qym-icon-action" aria-label="Close error details">×</button></div><div class="modal-body"><p>${details.count} ${task ? 'task execution' : 'metric check'}${details.count === 1 ? '' : 's'} failed${escapeHtml(details.scope)}.</p>${task ? '' : `<dl class="execution-error-breakdown">${Object.entries(details.metrics).map(([name, count]) => `<div><dt>${escapeHtml(name)}</dt><dd>${Number(count)}</dd></div>`).join('')}</dl>`}<p class="execution-error-note">${task ? 'Metrics skipped after a task failure are not metric errors.' : 'Task outputs are available. Each failed metric check is counted once per item and pass, and counts as 0% in the run mean.'}</p></div></div>`;
     document.body.appendChild(modal);
     const close = () => { modal.remove(); if (button.isConnected) button.focus(); };
     const closeButton = modal.querySelector('button');
@@ -3370,7 +3374,11 @@
         const noiseHtml = lowSamples
           ? `<button type="button" class="metric-noise-warn qym-help-marker" aria-label="Explain high-noise estimate" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">${escapeHtml(noiseCopy)}</span></button>`
           : '';
-        return `<td class="col-metric-value"><span class="metric-score ${metricClass}">${display}</span>${renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : '', metric)}${noiseHtml}</td>`;
+        const scoredValue = run.metric_scored_averages?.[metric];
+        const scoredDisplay = scoredValue === undefined || scoredValue === null
+          ? null
+          : window.QymMetrics.formatMetricValueSmart(scoredValue, mType, peerValues);
+        return `<td class="col-metric-value"><span class="metric-score ${metricClass}">${display}</span>${renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : '', metric, scoredDisplay)}${noiseHtml}</td>`;
       }).join('');
 
       const status = run.status || '';

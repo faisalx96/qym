@@ -22,13 +22,13 @@ from qym_platform.db.models import (
     Project,
     Run,
     RunItem,
-    RunItemScore,
     RunMetricSpec,
     RunWorkflowStatus,
 )
 from qym_platform.deps import get_db
 from qym_platform.permissions import has_project_access
 from qym_platform.settings import PlatformSettings
+from qym_platform.services.run_means import MetricTotals, raw_metric_totals, run_metric_mean
 
 
 router = APIRouter(tags=["insights"])
@@ -264,28 +264,7 @@ def project_insights(
     ):
         latencies[run_id].append(float(latency))
 
-    score_rows = (
-        db.query(
-            RunItemScore.run_id,
-            RunItemScore.metric_name,
-            func.sum(RunItemScore.score_numeric).label("score_sum"),
-            func.count(RunItemScore.score_numeric).label("score_count"),
-        )
-        .join(
-            RunItem,
-            (RunItem.run_id == RunItemScore.run_id)
-            & (RunItem.item_id == RunItemScore.item_id),
-        )
-        .filter(RunItemScore.run_id.in_(run_ids), RunItem.error.is_(None))
-        .group_by(RunItemScore.run_id, RunItemScore.metric_name)
-        .all()
-    )
-    scores: dict[str, dict[str, dict[str, float]]] = defaultdict(dict)
-    for row in score_rows:
-        scores[row.run_id][row.metric_name] = {
-            "sum": float(row.score_sum or 0.0),
-            "count": float(row.score_count or 0.0),
-        }
+    score_totals = raw_metric_totals(db, run_ids)
 
     specs: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
     for spec in (
@@ -314,10 +293,11 @@ def project_insights(
         denominator_by_metric: dict[str, int] = {}
         averages: dict[str, float | None] = {}
         for metric_name in run.metrics or []:
-            score = scores.get(run.id, {}).get(metric_name, {"sum": 0.0, "count": 0.0})
-            denominator = int(score["count"] + stats["errors"])
-            denominator_by_metric[metric_name] = denominator
-            averages[metric_name] = score["sum"] / denominator if denominator else None
+            totals = score_totals.get(run.id, {}).get(metric_name) or MetricTotals()
+            denominator_by_metric[metric_name] = (
+                totals.score_count + totals.unscored_errors + int(stats["errors"])
+            )
+            averages[metric_name] = run_metric_mean(totals, int(stats["errors"]))
 
         started_at = run.started_at or run.created_at
         duration_ms = None

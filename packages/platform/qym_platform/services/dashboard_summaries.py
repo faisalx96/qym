@@ -32,6 +32,11 @@ from qym_platform.services.dashboard_outbox import (
     execution_event_query,
     execution_event_object,
 )
+from qym_platform.services.run_means import (
+    MetricTotals,
+    metric_mean_fields,
+    run_metric_mean,
+)
 from sqlalchemy import and_, case, delete, func, insert, or_, select, tuple_, update
 from sqlalchemy.orm import Session, aliased
 
@@ -1002,6 +1007,17 @@ def ensure_pending_summary(db, run_id, version):
         db.flush()
 
 
+# Bump when published summary fields change; older summaries are refreshed
+# from numeric projection records (2: run means count scorer errors as 0).
+SUMMARY_SHAPE = 2
+
+
+def _outdated_shape(data):
+    data = data or {}
+    shape = int(data.get("summary_shape") or 0)
+    return "task_error_count" not in data or shape < SUMMARY_SHAPE
+
+
 def refresh_run_summary(db, run_id, version):
     """Build display numbers from numeric state and current small dimensions."""
     dimension, run = _sync_dimension(db, run_id, version)
@@ -1026,8 +1042,16 @@ def refresh_run_summary(db, run_id, version):
     )
     median_latency = _median(db, latency, Record.latency_ms)
     item_alias = aliased(Record)
+    errored = Record.error > 0
     metric_rows = db.execute(
-        select(Record.metric_key, func.sum(Record.score), func.count(Record.score))
+        select(
+            Record.metric_key,
+            func.sum(Record.score),
+            func.count(Record.score),
+            func.sum(case((errored, Record.score))),
+            func.count(case((and_(errored, Record.score.isnot(None)), 1))),
+            func.count(case((and_(errored, Record.score.is_(None)), 1))),
+        )
         .join(
             item_alias,
             and_(
@@ -1044,18 +1068,19 @@ def refresh_run_summary(db, run_id, version):
         )
         .group_by(Record.metric_key)
     ).all()
-    metric_agg = {
-        metric: (total or 0, count or 0) for metric, total, count in metric_rows
-    }
-    metric_means = {
-        metric: (
-            metric_agg.get(metric, (0, 0))[0]
-            / (metric_agg.get(metric, (0, 0))[1] + summary.error_count)
-            if metric_agg.get(metric, (0, 0))[1] + summary.error_count
-            else 0.0
+    metric_totals = {
+        metric: MetricTotals(
+            score_sum=float(total or 0.0),
+            score_count=int(count or 0),
+            error_score_sum=float(error_total or 0.0),
+            error_score_count=int(error_count or 0),
+            unscored_errors=int(unscored or 0),
         )
-        for metric in run.metrics or []
+        for metric, total, count, error_total, error_count, unscored in metric_rows
     }
+    metric_means = metric_mean_fields(
+        run.metrics or [], metric_totals, summary.error_count
+    )
     execution_error_count, execution_errors_by_pass = _execution_error_counts(
         db, run_id, run.samples
     )
@@ -1119,19 +1144,35 @@ def refresh_run_summary(db, run_id, version):
             )
         }
         primary = (run.metrics or [None])[0]
-        means = dict(
-            db.execute(
-                select(Record.pass_number, func.avg(Record.score))
+        # Same rule as run means: a scorer error without a score counts as 0.
+        means = {
+            number: run_metric_mean(
+                MetricTotals(
+                    score_sum=float(total or 0.0),
+                    score_count=int(count or 0),
+                    unscored_errors=int(unscored or 0),
+                ),
+                0,
+            )
+            for number, total, count, unscored in db.execute(
+                select(
+                    Record.pass_number,
+                    func.sum(Record.score),
+                    func.count(Record.score),
+                    func.count(
+                        case((and_(Record.error > 0, Record.score.is_(None)), 1))
+                    ),
+                )
                 .where(
                     Record.run_key == run_id,
                     Record.record_kind == "pass_score",
                     Record.metric_key == primary,
                     Record.present.is_(True),
-                    Record.score.isnot(None),
+                    or_(Record.score.isnot(None), Record.error > 0),
                 )
                 .group_by(Record.pass_number)
             ).all()
-        )
+        }
         pass_causes = dict(
             db.execute(
                 select(
@@ -1189,7 +1230,8 @@ def refresh_run_summary(db, run_id, version):
         completed_success,
     )
     summary.data = {
-        "metric_averages": metric_means,
+        "summary_shape": SUMMARY_SHAPE,
+        **metric_means,
         "total_items": summary.count,
         "progress_completed": summary.terminal_count,
         "progress_total": expected,
@@ -1293,11 +1335,11 @@ def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
             if partition.backfill_complete:
                 if run is None or (
                     summary is not None
-                    and "task_error_count" not in (summary.data or {})
+                    and _outdated_shape(summary.data)
                     and partition.queue_state != "repair_required"
                 ):
                     # Upgrade the published shape from numeric projection rows.
-                    # Migration 0058 queues existing summaries without replaying history.
+                    # Migrations 0058/0060 queue existing summaries without replaying history.
                     dimension = db.get(Dimension, run_id)
                     hours = {_hour(dimension.timestamp)} if dimension else set()
                     if run:
@@ -1416,7 +1458,11 @@ def reconcile_summary_shapes(db, *, limit=100):
         .where(
             Run.deleted_at.is_(None),
             Summary.projection_revision > 0,
-            Summary.data["task_error_count"].as_integer().is_(None),
+            or_(
+                Summary.data["task_error_count"].as_integer().is_(None),
+                Summary.data["summary_shape"].as_integer().is_(None),
+                Summary.data["summary_shape"].as_integer() < SUMMARY_SHAPE,
+            ),
         )
     )
     eligible = (

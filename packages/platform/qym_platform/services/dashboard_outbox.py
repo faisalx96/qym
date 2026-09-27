@@ -11,6 +11,8 @@ from uuid import uuid4
 from sqlalchemy import case, event, insert, or_, select
 from sqlalchemy.orm import Session
 
+from qym_platform.services.run_means import is_metric_error
+
 _installed = False
 NUMERIC_FIELDS = (
     "observed",
@@ -33,17 +35,7 @@ def _number(value):
         return None
 
 
-def _metric_execution_error(value: Any) -> bool:
-    """Return whether metric metadata represents a raised execution error."""
-    if not isinstance(value, dict):
-        return False
-    status = str(value.get("status") or "").strip().lower()
-    if status in {"error", "failed", "timeout"}:
-        return True
-    error = value.get("error")
-    if isinstance(error, str):
-        return bool(error.strip())
-    return bool(error)
+_metric_execution_error = is_metric_error
 
 
 EXECUTION_EVENT_TYPES = {

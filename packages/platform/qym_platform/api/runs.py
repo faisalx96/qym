@@ -69,6 +69,15 @@ from qym_platform.services.run_lifecycle import (
     reconcile_stale_running_run,
 )
 from qym_platform.services.run_payloads import compact_row, detail_item_ids, search_conditions
+from qym_platform.services.run_means import (
+    METRIC_ERROR_STATUSES,
+    MetricTotals,
+    is_metric_error,
+    metric_error_candidates,
+    metric_mean_fields,
+    raw_metric_totals,
+    run_metric_mean,
+)
 from qym_platform.services.repeat_passes import (
     RepeatPassDeletionError,
     delete_repeat_pass,
@@ -128,18 +137,8 @@ def _metric_specs_for_runs(
     return result
 
 
-_EXECUTION_ERROR_STATUSES = {"error", "failed", "timeout"}
-
-
-def _is_metric_execution_error(meta: Any) -> bool:
-    """Distinguish a raised metric error from an ordinary zero/failed score."""
-    if isinstance(meta, dict):
-        status = str(meta.get("status") or "").strip().lower()
-        if status in _EXECUTION_ERROR_STATUSES:
-            return True
-        error = meta.get("error")
-        return bool(error.strip()) if isinstance(error, str) else bool(error)
-    return False
+_EXECUTION_ERROR_STATUSES = set(METRIC_ERROR_STATUSES)
+_is_metric_execution_error = is_metric_error
 
 
 def _execution_error_pairs_for_runs(
@@ -1684,26 +1683,11 @@ def _compute_run_summary(db: Session, run: Run) -> Dict[str, Any]:
     median_latency_ms = _median(latencies)
 
     metrics = list(run.metrics or [])
-    metric_averages: Dict[str, float] = {m: 0.0 for m in metrics}
-    if metrics and total_items:
-        # Pull all scores for this run
-        scores = db.query(RunItemScore).filter(RunItemScore.run_id == run.id).all()
-        by_item_metric: Dict[tuple[str, str], RunItemScore] = {
-            (s.item_id, s.metric_name): s for s in scores
-        }
-        for m in metrics:
-            ssum = 0.0
-            scount = 0
-            for it in items:
-                if it.item_id in error_items:
-                    ssum += 0.0
-                    scount += 1
-                    continue
-                s = by_item_metric.get((it.item_id, m))
-                if s and s.score_numeric is not None:
-                    ssum += float(s.score_numeric)
-                    scount += 1
-            metric_averages[m] = (ssum / scount) if scount else 0.0
+    metric_means = metric_mean_fields(
+        metrics,
+        raw_metric_totals(db, [run.id]).get(run.id, {}) if total_items else {},
+        error_count,
+    )
 
     # Get owner user info
     owner = db.query(User).filter(User.id == run.owner_user_id).first()
@@ -1760,7 +1744,7 @@ def _compute_run_summary(db: Session, run: Run) -> Dict[str, Any]:
         "timestamp": _iso(run.started_at or run.created_at),
         "file_path": run.id,  # legacy UI uses file_path as opaque identifier
         "metrics": metrics,
-        "metric_averages": metric_averages,
+        **metric_means,
         "total_items": total_items,
         # Progress signals for list view (esp. RUNNING).
         "progress_completed": completed_count,
@@ -2446,37 +2430,8 @@ def legacy_list_runs(
             },
         )["median_latency"] = _median(values)
 
-    # --- Batch query: score sums per run+metric ---
-    # Match run-detail semantics:
-    # - errored items count as 0
-    # - scored items count normally
-    # - in-flight / unscored items are excluded from the denominator
-    score_agg_rows = (
-        db.query(
-            RunItemScore.run_id,
-            RunItemScore.metric_name,
-            func.sum(RunItemScore.score_numeric).label("score_sum"),
-            func.count(RunItemScore.score_numeric).label("score_count"),
-        )
-        .join(
-            RunItem,
-            (RunItem.run_id == RunItemScore.run_id)
-            & (RunItem.item_id == RunItemScore.item_id),
-        )
-        .filter(
-            RunItemScore.run_id.in_(run_ids),
-            RunItem.error.is_(None),
-        )
-        .group_by(RunItemScore.run_id, RunItemScore.metric_name)
-        .all()
-    )
-    # Build nested map: run_id -> {metric_name: {"sum": ..., "count": ...}}
-    score_agg: Dict[str, Dict[str, Dict[str, float]]] = {}
-    for row in score_agg_rows:
-        score_agg.setdefault(row.run_id, {})[row.metric_name] = {
-            "sum": float(row.score_sum) if row.score_sum is not None else 0.0,
-            "count": float(row.score_count or 0),
-        }
+    # --- Batch query: score totals per run+metric (errors count as 0) ---
+    score_totals = raw_metric_totals(db, run_ids)
 
     # Repeat-run summaries power the pass-dot strip on the runs list. Detailed
     # uncertainty belongs on the run page, where its meaning can be explained;
@@ -2726,18 +2681,9 @@ def legacy_list_runs(
                 expected_total = None
 
         metrics = list(r.metrics or [])
-        run_score_agg = score_agg.get(r.id, {})
-        metric_averages = {
-            m: (
-                (
-                    run_score_agg.get(m, {}).get("sum", 0.0)
-                    / (run_score_agg.get(m, {}).get("count", 0.0) + error_count)
-                )
-                if (run_score_agg.get(m, {}).get("count", 0.0) + error_count)
-                else 0.0
-            )
-            for m in metrics
-        }
+        metric_means = metric_mean_fields(
+            metrics, score_totals.get(r.id, {}), error_count
+        )
 
         # Owner info
         owner = user_map.get(r.owner_user_id)
@@ -2796,7 +2742,7 @@ def legacy_list_runs(
             "file_path": r.id,
             "metrics": metrics,
             "metric_specs": metric_specs_by_run.get(r.id, {}),
-            "metric_averages": metric_averages,
+            **metric_means,
             "total_items": total_items,
             "progress_completed": completed_count,
             "progress_total": expected_total,
@@ -3982,7 +3928,7 @@ def run_passes(
             RunItemPassScore.pass_number,
             RunItemPassScore.metric_name,
             func.avg(RunItemPassScore.score_numeric),
-            func.count(RunItemPassScore.id),
+            func.count(RunItemPassScore.score_numeric),
         )
         .filter(
             RunItemPassScore.run_id == run.id,
@@ -3991,13 +3937,41 @@ def run_passes(
         .group_by(RunItemPassScore.pass_number, RunItemPassScore.metric_name)
         .all()
     )
+    # Scorer errors without a score count as 0 (services/run_means.py).
+    unscored_errors: Dict[tuple[int, str], int] = defaultdict(int)
+    for pass_number, metric_name, status, error in (
+        db.query(
+            RunItemPassScore.pass_number,
+            RunItemPassScore.metric_name,
+            RunItemPassScore.meta["status"].as_string(),
+            RunItemPassScore.meta["error"],
+        )
+        .filter(
+            RunItemPassScore.run_id == run.id,
+            RunItemPassScore.score_numeric.is_(None),
+            metric_error_candidates(RunItemPassScore),
+        )
+        .all()
+    ):
+        if is_metric_error({"status": status, "error": error}):
+            unscored_errors[(int(pass_number), metric_name)] += 1
+    pass_totals: Dict[tuple[int, str], MetricTotals] = {
+        (int(pass_number), metric_name): MetricTotals(
+            score_sum=float(avg_val or 0.0) * int(cnt or 0), score_count=int(cnt or 0)
+        )
+        for pass_number, metric_name, avg_val, cnt in score_rows
+    }
+    for key, unscored in unscored_errors.items():
+        pass_totals.setdefault(key, MetricTotals()).unscored_errors = unscored
     metric_means: Dict[int, Dict[str, float]] = {}
     counts: Dict[int, int] = {}
-    for pass_number, metric_name, avg_val, cnt in score_rows:
-        metric_means.setdefault(int(pass_number), {})[metric_name] = (
-            float(avg_val) if avg_val is not None else None
+    for (pass_number, metric_name), totals in pass_totals.items():
+        metric_means.setdefault(pass_number, {})[metric_name] = run_metric_mean(
+            totals, 0
         )
-        counts[int(pass_number)] = max(counts.get(int(pass_number), 0), int(cnt or 0))
+        counts[pass_number] = max(
+            counts.get(pass_number, 0), totals.score_count + totals.unscored_errors
+        )
 
     pass_analysis_rows = (
         db.query(RunItemPassScore.pass_number, RunItemPassScore.meta)

@@ -685,6 +685,11 @@
       width: 75%;
       border-radius: 4px 4px 1px 1px;
     }
+    /* Scorer errors counted into this bucket sit on top, striped. */
+    .dist-chart-col .bar-fill.has-errors { overflow: hidden; }
+    .dist-chart-col .bar-fill-errors {
+      background: repeating-linear-gradient(135deg, var(--metric-error) 0 3px, color-mix(in srgb, var(--metric-error) 65%, #000) 3px 6px);
+    }
     .dist-chart-col .bar-label {
       font-size: var(--font-xs);
       font-weight: 500;
@@ -1111,6 +1116,17 @@
       text-transform: none;
       letter-spacing: 0.2px;
     }
+    .metric-card-error-note {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 3px;
+      font-size: var(--font-sm);
+      color: var(--text-muted);
+      white-space: nowrap;
+      cursor: help;
+    }
+    .metric-card-error-glyph { color: var(--metric-error); }
     /* ── Numeric metric stats row ── */
     .metric-numeric-stats {
       display: grid;
@@ -1173,6 +1189,13 @@
       background: var(--error);
       color: #fff;
     }
+    /* Scorer errors: counted as fail, drawn apart so they read as errors. */
+    .metric-bool-seg.error-seg {
+      background: repeating-linear-gradient(135deg, var(--metric-error) 0 5px, color-mix(in srgb, var(--metric-error) 70%, #000) 5px 10px);
+      color: var(--bg-base);
+      cursor: help;
+    }
+    .metric-bool-seg.error-seg:hover { opacity: 1; }
     .metric-bool-legend {
       display: flex;
       justify-content: space-between;
@@ -1192,6 +1215,7 @@
     }
     .metric-bool-dot.pass { background: var(--success); }
     .metric-bool-dot.fail { background: var(--error); }
+    .metric-bool-dot.error { background: var(--metric-error); }
     .metric-card-badge {
       font-size: var(--font-xs);
       font-family: var(--font-mono);
@@ -6163,7 +6187,7 @@
       const FILTER_TRASH_ICON = '<svg class="qym-filter-trash-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
 
       function renderMetricErrorIndicator(metricName) {
-        const title = 'Metric execution failed: ' + metricName;
+        const title = 'Metric execution failed: ' + metricName + '. Counted as 0% in the mean.';
         return '<span class="qym-tag qym-tag--danger metric-error-indicator" title="' + escapeAttr(title) + '" role="img" aria-label="' + escapeAttr(title) + '">' + FAILURE_ICON + '</span>';
       }
 
@@ -8693,12 +8717,30 @@
           const mIdx = state.allMetrics.indexOf(metric);
           const mType = state.metricTypes[metric] || 'score';
           let sum = 0, cnt = 0, min = Infinity, max = -Infinity;
+          // Scorer errors count as 0 in the mean (same rule as the server);
+          // track them so the card can say how many and what the mean is without them.
+          let errCnt = 0, errSum = 0;
+          const errBuckets = new Array(11).fill(0);
           for (const row of rows) {
-            const { score } = window.QymMetrics.getRowScore(row, mIdx, metric);
+            const { score, isError } = window.QymMetrics.getRowScore(row, mIdx, metric);
             if (score !== null) { sum += score; cnt++; if (score < min) min = score; if (score > max) max = score; }
+            if (score !== null && isError && !window.QymMetrics.isTaskErrorRow(row)) {
+              errCnt++; errSum += score;
+              errBuckets[Math.min(10, Math.floor(Math.round(score * 100) / 10))]++;
+            }
           }
           if (cnt === 0) continue;
           const avg = sum / cnt;
+          // Without scorer errors; task errors still count as 0.
+          const scoredCnt = cnt - errCnt;
+          const errorNote = errCnt > 0
+            ? '<div class="metric-card-error-note" title="' + escapeAttr(
+                'The ' + metric + ' scorer failed on ' + errCnt + ' item' + (errCnt === 1 ? '' : 's') +
+                '. They count as 0% in this mean.' +
+                (scoredCnt > 0 ? ' Mean without them: ' + formatPercent((sum - errSum) / scoredCnt) + '.' : '')
+              ) + '"><span class="metric-card-error-glyph" aria-hidden="true">⚠</span>' +
+              errCnt + ' scorer error' + (errCnt === 1 ? '' : 's') + ' · counted as 0%</div>'
+            : '';
 
           if (mType === 'numeric') {
             // ── Numeric: show min / avg / max / total ──
@@ -8725,9 +8767,11 @@
           } else if (mType === 'boolean') {
             // ── Boolean: pass/fail split bar ──
             const passCount = Math.round(avg * cnt);
-            const failCount = cnt - passCount;
+            const errorCount = Math.min(errCnt, cnt - passCount);
+            const failCount = cnt - passCount - errorCount;
             const passPct = (avg * 100).toFixed(0);
-            const failPct = (100 - avg * 100).toFixed(0);
+            const failPct = ((failCount / cnt) * 100).toFixed(0);
+            const errorPct = ((errorCount / cnt) * 100).toFixed(0);
             cards += '<div class="metric-card" style="animation-delay:' + (cardIdx * 50) + 'ms;">' +
               '<div class="metric-card-header">' +
                 '<div class="metric-card-gauge">' +
@@ -8735,6 +8779,7 @@
                   '<div class="metric-card-info">' +
                     '<div class="metric-card-value ' + scoreColorClass(avg) + '">' + formatPercent(avg) + '</div>' +
                     '<div class="metric-card-name">' + escapeHtml(metric) + '</div>' +
+                    errorNote +
                   '</div>' +
                 '</div>' +
                 '<span class="metric-card-badge">' + cnt + ' items</span>' +
@@ -8743,10 +8788,12 @@
                 '<div class="metric-bool-track">' +
                   (passCount > 0 ? '<div class="metric-bool-seg pass-seg" data-metric="' + escapeAttr(metric) + '" data-bool-filter="passed" style="flex:' + passCount + '" title="Click to filter passing items">' + (passCount > 1 ? passCount : '') + '</div>' : '') +
                   (failCount > 0 ? '<div class="metric-bool-seg fail-seg" data-metric="' + escapeAttr(metric) + '" data-bool-filter="failed" style="flex:' + failCount + '" title="Click to filter failing items">' + (failCount > 1 ? failCount : '') + '</div>' : '') +
+                  (errorCount > 0 ? '<div class="metric-bool-seg error-seg" style="flex:' + errorCount + '" title="' + errorCount + ' scorer error' + (errorCount === 1 ? '' : 's') + ', counted as fail">' + (errorCount > 1 ? errorCount : '') + '</div>' : '') +
                 '</div>' +
                 '<div class="metric-bool-legend">' +
                   '<span class="metric-bool-legend-item"><span class="metric-bool-dot pass"></span> Pass ' + passPct + '%</span>' +
                   '<span class="metric-bool-legend-item"><span class="metric-bool-dot fail"></span> Fail ' + failPct + '%</span>' +
+                  (errorCount > 0 ? '<span class="metric-bool-legend-item"><span class="metric-bool-dot error"></span> Scorer error ' + errorPct + '%, counted as fail</span>' : '') +
                 '</div>' +
               '</div>' +
             '</div>';
@@ -8768,9 +8815,14 @@
               const rangeMin = b / 10;
               const rangeMax = b === 10 ? 1.01 : (b + 1) / 10;
               const pct = totalWithScores > 0 ? ((count / totalWithScores) * 100).toFixed(0) : '0';
-              barsHtml += '<div class="dist-chart-col" data-metric="' + escapeAttr(metric) + '" data-bucket-min="' + rangeMin + '" data-bucket-max="' + rangeMax + '" title="' + label + ': ' + count + ' items (' + pct + '%) — Click to filter">' +
+              const errInBucket = Math.min(count, errBuckets[b]);
+              const errNote = errInBucket > 0 ? ' (' + errInBucket + ' scorer error' + (errInBucket === 1 ? '' : 's') + ', counted as ' + label + ')' : '';
+              const errH = errInBucket > 0 ? Math.max(2, Math.round(barH * errInBucket / count)) : 0;
+              barsHtml += '<div class="dist-chart-col" data-metric="' + escapeAttr(metric) + '" data-bucket-min="' + rangeMin + '" data-bucket-max="' + rangeMax + '" title="' + label + ': ' + count + ' items (' + pct + '%)' + errNote + ' — Click to filter">' +
                 '<span class="bar-count">' + (count > 0 ? count : '') + '</span>' +
-                '<div class="bar-fill" style="height:' + barH + 'px;background:' + color + ';"></div>' +
+                '<div class="bar-fill' + (errH ? ' has-errors' : '') + '" style="height:' + barH + 'px;background:' + color + ';">' +
+                  (errH ? '<div class="bar-fill-errors" style="height:' + errH + 'px"></div>' : '') +
+                '</div>' +
                 '<span class="bar-label">' + label + '</span>' +
               '</div>';
             }
@@ -8783,9 +8835,10 @@
                   '<div class="metric-card-info">' +
                     '<div class="metric-card-value ' + scoreColorClass(avg) + '">' + formatPercent(avg) + '</div>' +
                     '<div class="metric-card-name">' + escapeHtml(metric) + '</div>' +
+                    errorNote +
                   '</div>' +
                 '</div>' +
-                '<span class="metric-card-badge">' + totalWithScores + ' scored</span>' +
+                '<span class="metric-card-badge">' + (errCnt > 0 ? (totalWithScores - errCnt) + ' scored · ' + errCnt + ' err' : totalWithScores + ' scored') + '</span>' +
               '</div>' +
               barsHtml +
             '</div>';

@@ -3534,6 +3534,11 @@ body.chart-col-resize-active {
   min-width: 70px;
 }
 
+/* Keep a metric-error ⚠ on the same line as its score. */
+.runs-table td.col-metric-value {
+  white-space: nowrap;
+}
+
 .metric-score {
   font-family: var(--font-mono);
   font-size: var(--font-sm);
