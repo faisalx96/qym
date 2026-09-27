@@ -31,6 +31,7 @@ from qym_platform.db.base import Base
 from qym_platform.db.models import (
     ApiKey,
     Project,
+    ProjectMembership,
     Run,
     RunEvent,
     RunItem,
@@ -112,6 +113,18 @@ def _seed_api_key(
             id=project_id, name="Project 1", slug=project_id, created_by_user_id=user_id
         )
         session.add(project)
+    # Keys authenticate only while their owner is a member of the key's project.
+    if (
+        session.query(ProjectMembership)
+        .filter(
+            ProjectMembership.user_id == user_id,
+            ProjectMembership.project_id == project_id,
+        )
+        .first()
+        is None
+    ):
+        session.flush()
+        session.add(ProjectMembership(project_id=project_id, user_id=user_id))
     api_key = ApiKey(
         id=f"key-{token}",
         user_id=user_id,

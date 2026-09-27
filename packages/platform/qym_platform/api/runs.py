@@ -5351,6 +5351,9 @@ def submit_run(
     run = Run.active(db).filter(Run.id == run_id).first()
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
+    # A removed member keeps run ownership on record but loses the rights it gave.
+    if not has_project_access(db, principal, run.project_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     if run.owner_user_id != principal.user.id:
         raise HTTPException(status_code=403, detail="Only owner can submit")
     # Allow completed/failed runs and rejected runs that need another review pass.

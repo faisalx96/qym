@@ -20,7 +20,10 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    delete,
+    event,
 )
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column, object_session, relationship
 
@@ -110,6 +113,33 @@ class LocalAuthCredential(Base):
     # Set when an admin issues a temporary password; the next sign-in must
     # choose a new password before a session is created.
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+
+class UserSession(Base):
+    """Server-side record of one signed-in browser session.
+
+    The signed cookie carries a random session token; ``id`` is its SHA-256
+    digest. A cookie authenticates only while its row exists, so signing out,
+    changing the password, or disabling the user ends the session everywhere,
+    including in copies of the cookie.
+    """
+
+    __tablename__ = "user_sessions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    provider: Mapped[str] = mapped_column(String(50), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+@event.listens_for(LocalAuthCredential, "after_update")
+def _end_sessions_after_password_change(mapper, connection, target) -> None:
+    # An ORM update that stores a new password hash signs the user out of every
+    # browser in the same transaction. Bulk UPDATEs and new credentials bypass
+    # this hook and call end_user_sessions themselves.
+    if sa_inspect(target).attrs.password_hash.history.has_changes():
+        connection.execute(delete(UserSession.__table__).where(UserSession.user_id == target.user_id))
 
 
 class Project(Base):

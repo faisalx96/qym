@@ -549,7 +549,8 @@ def test_runless_project_deletion_removes_catalog_lineage_safely(
         session.commit()
 
     deleted = client.delete(
-        f"/v1/admin/projects/{project_id}", headers=_headers("admin@example.com")
+        f"/v1/admin/projects/{project_id}?confirm=catalog-delete",
+        headers=_headers("admin@example.com"),
     )
     assert deleted.status_code == 200
     with session_factory() as session:

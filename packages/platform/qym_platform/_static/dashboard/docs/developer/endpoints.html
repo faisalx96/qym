@@ -162,7 +162,9 @@ curl -s -X POST "https://qym.example.com/v1/datasets:upload" \
 <ul>
   <li><code>POST /v1/admin/projects</code> &mdash; create a project as admin.</li>
   <li><code>PATCH /v1/admin/projects/{project_id}</code> &mdash; rename / re-slug / toggle <code>is_active</code>.</li>
-  <li><code>DELETE /v1/admin/projects/{project_id}</code> &mdash; archive if the project has runs (<code>is_active=false</code>), otherwise hard-delete.</li>
+  <li><code>POST /v1/admin/projects/{project_id}/archive</code> and <code>POST /v1/admin/projects/{project_id}/unarchive</code> &mdash; hide or restore a project (<code>is_active</code>). Archiving never deletes anything; while archived, the project's API keys return <code>409</code>.</li>
+  <li><code>GET /v1/admin/projects/{project_id}/deletion</code> &mdash; what a delete would remove (<code>counts</code>), plus <code>can_delete</code> and <code>blocked_reason</code>.</li>
+  <li><code>DELETE /v1/admin/projects/{project_id}?confirm=&lt;name or slug&gt;</code> &mdash; permanently delete a project with its datasets, API keys, members, LLM connections and analysis settings. Requires <code>confirm</code> (<code>400</code> without it). Runs are never deleted with a project: one that still has runs, including runs in Trash, returns <code>409</code>.</li>
   <li><code>GET /v1/admin/users</code>, <code>POST /v1/admin/users</code>, <code>PUT /v1/admin/users/{user_id}</code>, and <code>DELETE /v1/admin/users/{user_id}</code> &mdash; user administration.</li>
   <li><code>POST /v1/admin/users/{user_id}/reset-password</code> &mdash; issue a one-time temporary password (<code>400</code> when email/password sign-in is off). The user must choose a new password at the next sign-in. Creates a password login for provider-only users. Audited as <code>user.password_reset</code>; the password itself is never stored or logged.</li>
 </ul>

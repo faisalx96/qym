@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from qym_platform.auth import Principal, require_ui_principal
-from qym_platform.auth_oidc import local_auth_enabled
+from qym_platform.auth_oidc import end_user_sessions, local_auth_enabled
 from qym_platform.api.projects import serialize_project_payloads
 from qym_platform.db.models import (
     AuditLog,
@@ -176,6 +176,9 @@ def admin_update_user(
         user.role = req.role
     if req.is_active is not None:
         user.is_active = req.is_active
+        if not req.is_active:
+            # A later re-enable must not revive sessions from before the disable.
+            end_user_sessions(db, user.id)
 
     db.commit()
     db.refresh(user)
@@ -191,6 +194,9 @@ def _store_temporary_password(db: Session, user: User, actor_id: str, password_h
         db.add(credential)
     credential.password_hash = password_hash
     credential.must_change_password = True
+    # A new credential is an INSERT, which the password hook does not see; a
+    # reset always signs the user out everywhere.
+    end_user_sessions(db, user.id)
 
     has_identity = (
         db.query(UserIdentity.id)

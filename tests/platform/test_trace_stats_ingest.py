@@ -25,6 +25,7 @@ from qym_platform.db.base import Base
 from qym_platform.db.models import (
     ApiKey,
     Project,
+    ProjectMembership,
     Run,
     RunItem,
     RunTraceAggregate,
@@ -79,7 +80,8 @@ def _seed_owner_and_run(
         run_metadata={},
         run_config={},
     )
-    session.add_all([user, project, api_key, run])
+    membership = ProjectMembership(project_id=project.id, user_id=user.id)
+    session.add_all([user, project, membership, api_key, run])
     session.commit()
     return project, run
 

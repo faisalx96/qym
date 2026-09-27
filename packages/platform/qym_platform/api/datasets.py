@@ -19,10 +19,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from qym_platform.auth import Principal, require_api_key_scope, require_ui_principal
+from qym_platform.auth import Principal, require_api_key_scope, require_ui_principal, resolve_api_key_principal
 from qym_platform.datetime_utils import to_api_timestamp, utc_now_naive
 from qym_platform.db.models import (
-    ApiKey,
     Dataset,
     DatasetAlias,
     DatasetItem,
@@ -39,7 +38,6 @@ from qym_platform.db.models import (
 from qym_platform.deps import get_db
 from qym_platform.item_identity import build_identity_fingerprint
 from qym_platform.permissions import has_project_access
-from qym_platform.security import api_key_prefix, verify_api_key
 from qym_platform.services.dataset_search import filter_dataset_item_search
 
 
@@ -107,19 +105,9 @@ def _principal_from_bearer(db: Session, authorization: Optional[str]) -> Optiona
     token = parts[1].strip()
     if not token:
         return None
-    row = (
-        db.query(ApiKey)
-        .filter(ApiKey.prefix == api_key_prefix(token))
-        .filter(ApiKey.revoked_at.is_(None))
-        .first()
-    )
-    if not row or not verify_api_key(token, row.key_hash):
-        raise HTTPException(status_code=401, detail="Invalid API key")
-    user = db.query(User).filter(User.id == row.user_id).first()
-    if not user or not user.is_active:
-        raise HTTPException(status_code=403, detail="User disabled")
-    scopes = tuple(str(scope).strip() for scope in (row.scopes or []) if str(scope).strip())
-    return Principal(user=user, auth_type="api_key", scopes=scopes, project_id=row.project_id)
+    # Same checks as every other key-authenticated route: revocation, active
+    # owner, the owner's current membership and an active project.
+    return resolve_api_key_principal(db, token)
 
 
 def dataset_principal(
@@ -148,19 +136,22 @@ def _require_scope(principal: Principal, scope: str) -> None:
 
 
 def _project_for_request(db: Session, principal: Principal, project_slug: Optional[str]) -> Project:
+    # Archived projects are hidden like on the run routes: their datasets can be
+    # neither read nor changed until an admin unarchives the project.
+    active = db.query(Project).filter(Project.is_active.is_(True))
     if principal.project_id:
-        project = db.query(Project).filter(Project.id == principal.project_id).first()
+        project = active.filter(Project.id == principal.project_id).first()
         if not project:
             raise HTTPException(status_code=403, detail="API key project not found")
         return project
     if project_slug:
-        project = db.query(Project).filter(Project.slug == project_slug).first()
+        project = active.filter(Project.slug == project_slug).first()
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         if not has_project_access(db, principal, project.id):
             raise HTTPException(status_code=403, detail="Access denied")
         return project
-    project = db.query(Project).order_by(Project.name).first()
+    project = active.order_by(Project.name).first()
     if not project:
         raise HTTPException(status_code=404, detail="No project found")
     if not has_project_access(db, principal, project.id):

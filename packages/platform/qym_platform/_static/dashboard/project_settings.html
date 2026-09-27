@@ -380,14 +380,14 @@
     <!-- Danger Zone -->
     <div class="settings-panel" id="panel-danger" role="tabpanel" aria-labelledby="settings-tab-danger" hidden>
       <div class="card danger-card">
-        <div class="card-header"><div><div class="card-title" style="color:var(--error);">Danger Zone</div><div class="card-subtitle">Irreversible actions — proceed with caution</div></div></div>
+        <div class="card-header"><div><div class="card-title" style="color:var(--error);">Danger Zone</div><div class="card-subtitle">Admin actions. Archiving can be undone; deleting cannot.</div></div></div>
         <div class="card-body">
           <div class="danger-row">
-            <div><div class="danger-label">Archive this project</div><div class="danger-desc">Disable the project and hide it from navigation. Runs and data are preserved.</div></div>
+            <div><div class="danger-label">Archive this project</div><div class="danger-desc">Hide the project and stop its API keys. Runs, datasets, members and settings are kept, and an admin can unarchive it from Admin → Projects.</div></div>
             <button class="btn btn-secondary" id="archive-project-btn" type="button" style="flex-shrink:0">Archive</button>
           </div>
           <div class="danger-row">
-            <div><div class="danger-label">Delete this project</div><div class="danger-desc">Permanently delete this project, all runs, and associated data. This cannot be undone.</div></div>
+            <div><div class="danger-label">Delete this project</div><div class="danger-desc">Permanently delete the project with its datasets, API keys, members, LLM connections and analysis settings. A project with runs cannot be deleted until its runs are deleted and purged from Trash; archive it instead.</div></div>
             <button class="btn" id="delete-project-btn" type="button" style="background:var(--error);color:white;border:none;flex-shrink:0">Delete</button>
           </div>
         </div>
@@ -763,8 +763,30 @@
         });
         document.querySelectorAll('[data-member-remove]').forEach(btn => {
           btn.addEventListener('click', async () => {
-            if (!confirm('Remove this member?')) return;
-            await fetchJson(`v1/projects/${state.project.id}/members/${btn.dataset.memberRemove}`, { method: 'DELETE' });
+            const uid = btn.dataset.memberRemove;
+            const member = state.members.find(m => m.user_id === uid);
+            const who = member ? (member.display_name || member.email) : 'This member';
+            // Removal revokes the person's keys for this project on the server.
+            const keys = state.apiKeys.filter(k => !k.revoked_at && k.creator?.id === uid);
+            const lines = [
+              `${who} will lose access to this project.`,
+              keys.length
+                ? `Their ${plural(keys.length, 'active API key')} for this project (${keys.map(k => k.name || 'default').join(', ')}) will be revoked.`
+                : 'They have no active API keys in this project.',
+              'Runs they created stay in the project.',
+            ];
+            if (window.QymShell && window.QymShell.openConfirmDialog) {
+              const confirmation = await window.QymShell.openConfirmDialog({
+                title: 'Remove member?',
+                description: lines,
+                confirmLabel: 'Remove member',
+                confirmClass: 'shell-btn-danger',
+              });
+              if (!confirmation || !confirmation.confirmed) return;
+            } else if (!confirm(lines.join('\n'))) {
+              return;
+            }
+            await fetchJson(`v1/projects/${state.project.id}/members/${uid}`, { method: 'DELETE' });
             await load();
           });
         });
@@ -1096,11 +1118,11 @@
         else if (t.dataset.connDelete) deleteConnection(t.dataset.connDelete);
       });
 
-      function handleProjectRemovalSuccess(result) {
+      function handleProjectRemovalSuccess(message) {
         if (window.QymShell && window.QymShell.removeProject) {
           window.QymShell.removeProject(state.project);
           if (window.QymShell.toast) {
-            window.QymShell.toast(result && result.deleted ? 'Project deleted' : 'Project archived', 'success');
+            window.QymShell.toast(message, 'success');
           }
           window.QymShell.navigateTo('/');
           return;
@@ -1117,22 +1139,50 @@
         alert(message);
       }
 
-      // Danger zone
+      // Danger zone. Archive and Delete call separate endpoints: archive only
+      // hides the project (reversible); delete removes it and is refused while
+      // the project still has runs.
+      function plural(count, noun) {
+        return `${count} ${noun}${count === 1 ? '' : 's'}`;
+      }
+
+      function deletionSummary(name, counts) {
+        const parts = [
+          ['datasets', 'dataset'],
+          ['api_keys', 'active API key'],
+          ['members', 'member'],
+          ['llm_connections', 'LLM connection'],
+          ['rule_versions', 'analysis rule version'],
+          ['analyzer_documents', 'reference document'],
+        ].filter(([key]) => counts[key]).map(([key, noun]) => plural(counts[key], noun));
+        parts.push('its prompt and category settings');
+        const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0];
+        return `This permanently deletes "${name}" with ${list}.`;
+      }
+
+      async function archiveProject() {
+        await fetchJson(`v1/admin/projects/${state.project.id}/archive`, { method: 'POST' });
+        handleProjectRemovalSuccess('Project archived');
+      }
+
       document.getElementById('archive-project-btn').addEventListener('click', async () => {
         if (!state.project) return;
+        const name = state.project.name;
         if (window.QymShell && window.QymShell.openConfirmDialog) {
           const confirmation = await window.QymShell.openConfirmDialog({
-            title: 'Archive Project',
-            description: 'This project will be hidden from navigation, but its runs and data will be preserved.',
-            confirmLabel: 'Archive Project',
+            title: 'Archive project?',
+            description: [
+              `"${name}" will be hidden from navigation and its API keys will stop working.`,
+              'Runs, datasets, members and settings are kept. An admin can unarchive it from Admin → Projects.',
+            ],
+            confirmLabel: 'Archive project',
           });
           if (!confirmation || !confirmation.confirmed) return;
-        } else if (!confirm('Archive this project? It will be hidden from navigation but data is preserved.')) {
+        } else if (!confirm(`Archive "${name}"? It will be hidden and its API keys will stop working. Nothing is deleted, and an admin can unarchive it.`)) {
           return;
         }
         try {
-          const result = await fetchJson(`v1/admin/projects/${state.project.id}`, { method: 'DELETE' });
-          handleProjectRemovalSuccess(result);
+          await archiveProject();
         } catch (err) {
           showProjectRemovalError(err);
         }
@@ -1141,29 +1191,57 @@
       document.getElementById('delete-project-btn').addEventListener('click', async () => {
         if (!state.project) return;
         const name = state.project.name;
-        if (window.QymShell && window.QymShell.openConfirmDialog) {
+        const hasDialog = !!(window.QymShell && window.QymShell.openConfirmDialog);
+        let preview;
+        try {
+          preview = await fetchJson(`v1/admin/projects/${state.project.id}/deletion`);
+        } catch (err) {
+          showProjectRemovalError(err);
+          return;
+        }
+        if (!preview) return;
+        if (!preview.can_delete) {
+          let archiveInstead = false;
+          if (hasDialog) {
+            const choice = await window.QymShell.openConfirmDialog({
+              title: 'This project cannot be deleted yet',
+              description: [preview.blocked_reason],
+              cancelLabel: 'Close',
+              confirmLabel: 'Archive instead',
+            });
+            archiveInstead = !!(choice && choice.confirmed);
+          } else {
+            archiveInstead = confirm(`${preview.blocked_reason}\n\nArchive the project instead?`);
+          }
+          if (!archiveInstead) return;
+          try {
+            await archiveProject();
+          } catch (err) {
+            showProjectRemovalError(err);
+          }
+          return;
+        }
+        const summary = deletionSummary(name, preview.counts || {});
+        if (hasDialog) {
           const confirmation = await window.QymShell.openConfirmDialog({
-            title: 'Delete Project',
-            description: [
-              `This will remove "${name}" from your project list immediately.`,
-              'If the project has runs, the backend will archive it instead of hard-deleting it.',
-            ],
+            title: 'Delete project?',
+            description: [summary, 'This cannot be undone.'],
             note: 'Type the project name exactly to confirm.',
-            inputLabel: 'Project Name',
+            inputLabel: 'Project name',
             inputPlaceholder: name,
             requireText: name,
             mismatchMessage: 'Project name does not match.',
-            confirmLabel: 'Delete Project',
+            confirmLabel: 'Delete project',
             confirmClass: 'shell-btn-danger',
           });
           if (!confirmation || !confirmation.confirmed) return;
         } else {
-          const input = prompt(`This will permanently delete "${name}" and all its data.\n\nType the project name to confirm:`);
+          const input = prompt(`${summary} This cannot be undone.\n\nType the project name to confirm:`);
           if (input !== name) { if (input !== null) alert('Name did not match. Delete cancelled.'); return; }
         }
         try {
-          const result = await fetchJson(`v1/admin/projects/${state.project.id}`, { method: 'DELETE' });
-          handleProjectRemovalSuccess(result);
+          await fetchJson(`v1/admin/projects/${state.project.id}?confirm=${encodeURIComponent(name)}`, { method: 'DELETE' });
+          handleProjectRemovalSuccess('Project deleted');
         } catch (err) {
           showProjectRemovalError(err);
         }

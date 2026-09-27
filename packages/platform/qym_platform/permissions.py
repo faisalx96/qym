@@ -61,6 +61,9 @@ def can_approve_run(db: Session, principal: Principal, run: Run) -> bool:
 def can_delete_run(db: Session, principal: Principal, run: Run) -> bool:
     if principal.auth_type == "none" or principal.user.role == UserRole.ADMIN:
         return True
+    # Ownership grants rights only while the owner is still a project member.
+    if not has_project_access(db, principal, run.project_id):
+        return False
     if run.owner_user_id == principal.user.id:
         return True
     return is_project_manager(db, principal, run.project_id)

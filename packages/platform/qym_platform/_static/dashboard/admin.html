@@ -578,24 +578,55 @@
             <td>${p.is_active ? '<span style="color:var(--success)">Active</span>' : '<span style="color:var(--text-muted)">Archived</span>'}</td>
             <td>${escapeHtml(String(p.member_count || 0))}</td>
             <td><div class="row-actions">
-              <a class="btn btn-secondary" href="${(window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '')}/projects/${encodeURIComponent(p.slug)}/settings" style="padding:4px 10px;font-size:var(--font-sm)">Settings</a>
-              <button class="btn btn-danger" style="padding:4px 10px;font-size:var(--font-sm)" data-project-delete="${escapeHtml(p.id)}">Archive</button>
+              ${p.is_active
+                ? `<a class="btn btn-secondary" href="${(window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '')}/projects/${encodeURIComponent(p.slug)}/settings" style="padding:4px 10px;font-size:var(--font-sm)">Settings</a>
+              <button class="btn btn-secondary" style="padding:4px 10px;font-size:var(--font-sm)" data-project-archive="${escapeHtml(p.id)}">Archive</button>`
+                : `<button class="btn btn-secondary" style="padding:4px 10px;font-size:var(--font-sm)" data-project-unarchive="${escapeHtml(p.id)}">Unarchive</button>`}
             </div></td>
           </tr>`).join('');
 
-        document.querySelectorAll('[data-project-delete]').forEach(btn => {
-          btn.addEventListener('click', async () => {
-            if (!confirm('Archive this project?')) return;
-            const msgEl = document.getElementById('project-message');
-            if (msgEl) { msgEl.style.color = ''; msgEl.textContent = 'Archiving...'; }
-            try {
-              const result = await fetchJson(`v1/admin/projects/${btn.dataset.projectDelete}`, { method: 'DELETE' });
-              if (msgEl) msgEl.textContent = result && result.deleted ? 'Project deleted' : 'Project archived';
-              await load();
-            } catch (err) {
-              if (msgEl) { msgEl.style.color = 'var(--error)'; msgEl.textContent = 'Failed: ' + (err.message || 'Unknown error'); }
+        // Archive only hides a project (never deletes); deletion lives in the
+        // project's Settings → Danger Zone with its own typed confirmation.
+        async function setArchived(projectId, archived) {
+          const project = state.projects.find(p => p.id === projectId);
+          const name = project ? project.name : 'this project';
+          if (archived) {
+            const lines = [
+              `"${name}" will be hidden from navigation and its API keys will stop working.`,
+              'Runs, datasets, members and settings are kept. You can unarchive it here.',
+            ];
+            if (window.QymShell && window.QymShell.openConfirmDialog) {
+              const confirmation = await window.QymShell.openConfirmDialog({
+                title: 'Archive project?',
+                description: lines,
+                confirmLabel: 'Archive project',
+              });
+              if (!confirmation || !confirmation.confirmed) return;
+            } else if (!confirm(lines.join('\n'))) {
+              return;
             }
-          });
+          }
+          const msgEl = document.getElementById('project-message');
+          if (msgEl) { msgEl.style.color = ''; msgEl.textContent = archived ? 'Archiving...' : 'Unarchiving...'; }
+          try {
+            const result = await fetchJson(`v1/admin/projects/${projectId}/${archived ? 'archive' : 'unarchive'}`, { method: 'POST' });
+            // Keep the sidebar project switcher in step with the change.
+            if (window.QymShell) {
+              if (archived && window.QymShell.removeProject) window.QymShell.removeProject({ id: projectId });
+              if (!archived && result && window.QymShell.upsertProject) window.QymShell.upsertProject(result);
+            }
+            if (msgEl) msgEl.textContent = archived ? `Archived "${name}"` : `Unarchived "${name}"`;
+            await load();
+          } catch (err) {
+            if (msgEl) { msgEl.style.color = 'var(--error)'; msgEl.textContent = 'Failed: ' + (err.message || 'Unknown error'); }
+          }
+        }
+
+        document.querySelectorAll('[data-project-archive]').forEach(btn => {
+          btn.addEventListener('click', () => setArchived(btn.dataset.projectArchive, true));
+        });
+        document.querySelectorAll('[data-project-unarchive]').forEach(btn => {
+          btn.addEventListener('click', () => setArchived(btn.dataset.projectUnarchive, false));
         });
       }
 

@@ -9,7 +9,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from qym_platform.auth_oidc import origin_matches_base, session_auth_enabled
+from qym_platform.auth_oidc import SESSION_MAX_AGE_SECONDS, origin_matches_base, session_auth_enabled
+from qym_platform.middleware.cache_control import NoStoreMiddleware
 from qym_platform.api.auth import router as auth_router
 from qym_platform.settings import PlatformSettings
 from qym_platform.api.web import router as web_router
@@ -84,6 +85,9 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
 
     # Run lists and detail payloads are large JSON; gzip cuts them ~5-10x.
     app.add_middleware(GZipMiddleware, minimum_size=1024)
+    # Private pages and API data must not be replayed from the browser cache
+    # (e.g. Back after signing out); static assets stay cacheable.
+    app.add_middleware(NoStoreMiddleware)
 
     if settings.request_timing:
         from qym_platform.db.session import engine as _engine
@@ -101,6 +105,7 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
             same_site="lax",
             https_only=str(settings.environment).lower() not in {"dev", "test", "local"},
             session_cookie="qym_session",
+            max_age=SESSION_MAX_AGE_SECONDS,
         )
 
         @app.middleware("http")

@@ -7,16 +7,25 @@ import secrets
 from typing import Any, Dict, Iterable, Optional
 from uuid import NAMESPACE_URL, uuid5
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from qym_platform.auth import Principal, require_ui_principal
 from qym_platform.datetime_utils import to_api_timestamp, utc_now_naive
 from qym_platform.db.models import (
+    AnalyzerDocument,
     ApiKey,
+    AuditLog,
+    Dataset,
+    DatasetAlias,
+    DatasetItem,
+    DatasetItemRevision,
+    DatasetVersion,
+    DatasetVersionChange,
     Project,
     ProjectAnalysisCategoryCatalogVersion,
     ProjectAnalysisPromptSettings,
     ProjectAnalysisRuleAlias,
+    ProjectAnalysisRuleMergeParent,
     ProjectAnalysisRuleVersion,
     ProjectLlmConnection,
     ProjectMembership,
@@ -50,7 +59,7 @@ from qym_platform.services.analysis_prompts import (
     serialize_analysis_prompt_settings,
 )
 from qym_platform.services.root_cause_categories import DEFAULT_ROOT_CAUSE_TAXONOMY
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -930,9 +939,37 @@ def remove_project_member(
     if not member:
         raise HTTPException(status_code=404, detail="Membership not found")
     _ensure_not_last_manager(db, project_id, user_id, None)
+    # The person's keys for this project stop working with their membership.
+    now = utc_now_naive()
+    keys = (
+        db.query(ApiKey)
+        .filter(
+            ApiKey.project_id == project_id,
+            ApiKey.user_id == user_id,
+            ApiKey.revoked_at.is_(None),
+        )
+        .all()
+    )
+    for key in keys:
+        key.revoked_at = now
+    db.add(
+        AuditLog(
+            actor_user_id=principal.user.id,
+            action="project.member_removed",
+            entity_type="project_membership",
+            entity_id=f"{project_id}:{user_id}",
+            before={"role": member.role.value},
+            after={"revoked_api_key_ids": [key.id for key in keys]},
+        )
+    )
     db.delete(member)
     db.commit()
-    return {"ok": True, "project_id": project_id, "user_id": user_id}
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "user_id": user_id,
+        "revoked_api_keys": len(keys),
+    }
 
 
 @router.get("/v1/projects/{project_id}/api-keys")
@@ -1088,24 +1125,139 @@ def update_project(
     return _project_payload(db, project, principal)
 
 
-@router.delete("/v1/admin/projects/{project_id}")
-def archive_project(
-    project_id: str,
-    db: Session = Depends(get_db),
-    principal: Principal = Depends(require_ui_principal),
-) -> Dict[str, Any]:
-    _require_admin(principal)
-    project = _get_project(db, project_id)
-    has_runs = db.query(Run.id).filter(Run.project_id == project.id).first() is not None
-    if has_runs:
-        project.is_active = False
-        db.commit()
-        return {"ok": True, "project_id": project.id, "archived": True}
-    db.query(ApiKey).filter(ApiKey.project_id == project.id).delete()
+def _audit_project(
+    db: Session, principal: Principal, project: Project, action: str, after: Dict[str, Any]
+) -> None:
+    db.add(
+        AuditLog(
+            actor_user_id=principal.user.id,
+            action=action,
+            entity_type="project",
+            entity_id=project.id,
+            before={"name": project.name, "slug": project.slug, "is_active": project.is_active},
+            after=after,
+        )
+    )
+
+
+def _project_deletion_counts(db: Session, project_id: str) -> Dict[str, int]:
+    """What deleting the project would remove (``runs``/``runs_in_trash`` block it)."""
+
+    def count(query) -> int:
+        return int(query.scalar() or 0)
+
+    return {
+        "runs": count(
+            db.query(func.count(Run.id)).filter(
+                Run.project_id == project_id, Run.deleted_at.is_(None)
+            )
+        ),
+        "runs_in_trash": count(
+            db.query(func.count(Run.id)).filter(
+                Run.project_id == project_id, Run.deleted_at.isnot(None)
+            )
+        ),
+        "datasets": count(
+            db.query(func.count(Dataset.id)).filter(
+                Dataset.project_id == project_id, Dataset.deleted_at.is_(None)
+            )
+        ),
+        "api_keys": count(
+            db.query(func.count(ApiKey.id)).filter(
+                ApiKey.project_id == project_id, ApiKey.revoked_at.is_(None)
+            )
+        ),
+        "members": count(
+            db.query(func.count(ProjectMembership.id)).filter(
+                ProjectMembership.project_id == project_id
+            )
+        ),
+        "llm_connections": count(
+            db.query(func.count(ProjectLlmConnection.id)).filter(
+                ProjectLlmConnection.project_id == project_id
+            )
+        ),
+        "rule_versions": count(
+            db.query(func.count(ProjectAnalysisRuleVersion.id)).filter(
+                ProjectAnalysisRuleVersion.project_id == project_id
+            )
+        ),
+        "analyzer_documents": count(
+            db.query(func.count(AnalyzerDocument.id)).filter(
+                AnalyzerDocument.project_id == project_id
+            )
+        ),
+    }
+
+
+def _deletion_blocker(counts: Dict[str, int]) -> Optional[str]:
+    runs, trashed = counts["runs"], counts["runs_in_trash"]
+    if not runs and not trashed:
+        return None
+    parts = []
+    if runs:
+        parts.append(f"{runs} run{'s' if runs != 1 else ''}")
+    if trashed:
+        parts.append(f"{trashed} run{'s' if trashed != 1 else ''} in Trash")
+    # Deleted runs keep blocking until retention purges them, so say when.
+    grace_days = PlatformSettings().deleted_run_grace_days
+    if grace_days > 0:
+        purge = f"deleted runs are purged {grace_days} day{'s' if grace_days != 1 else ''} after deletion"
+    else:
+        purge = "automatic Trash purging is turned off on this platform"
+    return (
+        f"This project still has {' and '.join(parts)}. Runs are never deleted with "
+        "a project: it can be deleted only once all its runs are deleted and purged "
+        f"from Trash ({purge}). Archive it instead to hide it now and keep its data."
+    )
+
+
+def _delete_project_rows(db: Session, project_id: str) -> None:
+    """Remove everything a run-less project owns, children before parents."""
+    db.query(ApiKey).filter(ApiKey.project_id == project_id).delete(
+        synchronize_session=False
+    )
+    db.query(ProjectLlmConnection).filter(
+        ProjectLlmConnection.project_id == project_id
+    ).delete(synchronize_session=False)
+    db.query(AnalyzerDocument).filter(AnalyzerDocument.project_id == project_id).delete(
+        synchronize_session=False
+    )
+
+    # Datasets: revisions and changes point at items/versions, versions at one
+    # another, so detach the lineage before deleting versions.
+    dataset_ids = select(Dataset.id).where(Dataset.project_id == project_id)
+    version_ids = select(DatasetVersion.id).where(
+        DatasetVersion.dataset_id.in_(dataset_ids)
+    )
+    db.query(DatasetItemRevision).filter(
+        DatasetItemRevision.dataset_version_id.in_(version_ids)
+    ).delete(synchronize_session=False)
+    db.query(DatasetVersionChange).filter(
+        DatasetVersionChange.dataset_version_id.in_(version_ids)
+        | DatasetVersionChange.parent_version_id.in_(version_ids)
+    ).delete(synchronize_session=False)
+    db.query(DatasetAlias).filter(DatasetAlias.dataset_id.in_(dataset_ids)).delete(
+        synchronize_session=False
+    )
+    db.query(DatasetItem).filter(DatasetItem.dataset_version_id.in_(version_ids)).delete(
+        synchronize_session=False
+    )
+    db.query(DatasetVersion).filter(DatasetVersion.dataset_id.in_(dataset_ids)).update(
+        {DatasetVersion.parent_version_id: None, DatasetVersion.base_version_id: None},
+        synchronize_session=False,
+    )
+    db.query(DatasetVersion).filter(DatasetVersion.dataset_id.in_(dataset_ids)).delete(
+        synchronize_session=False
+    )
+    db.query(Dataset).filter(Dataset.project_id == project_id).delete(
+        synchronize_session=False
+    )
+
     # Catalog versions reference one another (parent/restored lineage), so
     # detach those self-references before deleting the project's rows.
     db.query(ProjectAnalysisCategoryCatalogVersion).filter(
-        ProjectAnalysisCategoryCatalogVersion.project_id == project.id
+        ProjectAnalysisCategoryCatalogVersion.project_id == project_id
     ).update(
         {
             ProjectAnalysisCategoryCatalogVersion.parent_version_id: None,
@@ -1113,23 +1265,133 @@ def archive_project(
         },
         synchronize_session=False,
     )
-    db.flush()
     db.query(ProjectAnalysisCategoryCatalogVersion).filter(
-        ProjectAnalysisCategoryCatalogVersion.project_id == project.id
+        ProjectAnalysisCategoryCatalogVersion.project_id == project_id
     ).delete(synchronize_session=False)
-    db.flush()
+
+    # Rule versions: aliases and merge edges first, then the lineage.
+    rule_version_ids = select(ProjectAnalysisRuleVersion.id).where(
+        ProjectAnalysisRuleVersion.project_id == project_id
+    )
     db.query(ProjectAnalysisRuleAlias).filter(
-        ProjectAnalysisRuleAlias.project_id == project.id
-    ).delete()
+        ProjectAnalysisRuleAlias.project_id == project_id
+    ).delete(synchronize_session=False)
+    db.query(ProjectAnalysisRuleMergeParent).filter(
+        ProjectAnalysisRuleMergeParent.version_id.in_(rule_version_ids)
+        | ProjectAnalysisRuleMergeParent.parent_version_id.in_(rule_version_ids)
+    ).delete(synchronize_session=False)
     db.query(ProjectAnalysisRuleVersion).filter(
-        ProjectAnalysisRuleVersion.project_id == project.id
-    ).delete()
+        ProjectAnalysisRuleVersion.project_id == project_id
+    ).update(
+        {
+            ProjectAnalysisRuleVersion.parent_version_id: None,
+            ProjectAnalysisRuleVersion.base_version_id: None,
+        },
+        synchronize_session=False,
+    )
+    db.query(ProjectAnalysisRuleVersion).filter(
+        ProjectAnalysisRuleVersion.project_id == project_id
+    ).delete(synchronize_session=False)
+
     db.query(ProjectAnalysisPromptSettings).filter(
-        ProjectAnalysisPromptSettings.project_id == project.id
-    ).delete()
+        ProjectAnalysisPromptSettings.project_id == project_id
+    ).delete(synchronize_session=False)
     db.query(ProjectMembership).filter(
-        ProjectMembership.project_id == project.id
-    ).delete()
-    db.delete(project)
-    db.commit()
-    return {"ok": True, "project_id": project.id, "deleted": True}
+        ProjectMembership.project_id == project_id
+    ).delete(synchronize_session=False)
+    db.query(Project).filter(Project.id == project_id).delete(synchronize_session=False)
+
+
+@router.post("/v1/admin/projects/{project_id}/archive")
+def archive_project(
+    project_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Hide a project and pause its API keys. Never deletes anything."""
+    _require_admin(principal)
+    project = _get_project(db, project_id)
+    if project.is_active:
+        _audit_project(db, principal, project, "project.archived", {"is_active": False})
+        project.is_active = False
+        db.commit()
+    return {"ok": True, "project_id": project.id, "archived": True}
+
+
+@router.post("/v1/admin/projects/{project_id}/unarchive")
+def unarchive_project(
+    project_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    _require_admin(principal)
+    project = _get_project(db, project_id)
+    if not project.is_active:
+        _audit_project(db, principal, project, "project.unarchived", {"is_active": True})
+        project.is_active = True
+        db.commit()
+        db.refresh(project)
+    return _project_payload(db, project, principal)
+
+
+@router.get("/v1/admin/projects/{project_id}/deletion")
+def project_deletion_preview(
+    project_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """What a delete would remove, and why it is blocked if it is."""
+    _require_admin(principal)
+    project = _get_project(db, project_id)
+    counts = _project_deletion_counts(db, project.id)
+    blocker = _deletion_blocker(counts)
+    return {
+        "project_id": project.id,
+        "name": project.name,
+        "slug": project.slug,
+        "counts": counts,
+        "can_delete": blocker is None,
+        "blocked_reason": blocker,
+    }
+
+
+@router.delete("/v1/admin/projects/{project_id}")
+def delete_project(
+    project_id: str,
+    confirm: str = Query(
+        default="", description="The project's name or slug, typed to confirm."
+    ),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Permanently delete a project that has no runs.
+
+    Removes its datasets, API keys, members, LLM connections, analysis rules,
+    catalogs, prompts and reference documents. Runs are never deleted here: a
+    project that still has runs (including runs in Trash) returns 409; archive
+    it instead.
+    """
+    _require_admin(principal)
+    project = _get_project(db, project_id)
+    typed = (confirm or "").strip()
+    if not typed or typed not in {project.name.strip(), project.slug}:
+        raise HTTPException(
+            status_code=400,
+            detail="Confirm deletion by passing the project name or slug as `confirm`",
+        )
+    counts = _project_deletion_counts(db, project.id)
+    blocker = _deletion_blocker(counts)
+    if blocker:
+        raise HTTPException(status_code=409, detail=blocker)
+    _audit_project(db, principal, project, "project.deleted", {"deleted": counts})
+    try:
+        _delete_project_rows(db, project.id)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Other data still references this project (for example runs in "
+            "another project that use its datasets); nothing was deleted.",
+        ) from exc
+    return {"ok": True, "project_id": project_id, "deleted": True, "counts": counts}

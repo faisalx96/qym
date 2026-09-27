@@ -181,6 +181,9 @@ class _ProjectAnalysisScope:
 
 def _can_operate_analyzer(db: Session, principal: Principal, run: Run) -> bool:
     """Allow analyzer spending/mutation to the run owner or project managers."""
+    # Ownership counts only while the owner is still a project member.
+    if not has_project_access(db, principal, run.project_id):
+        return False
     return run.owner_user_id == principal.user.id or is_project_manager(
         db, principal, run.project_id
     )

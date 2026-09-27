@@ -42,7 +42,41 @@ def test_alembic_has_one_upgrade_head() -> None:
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["0060"]
+    assert heads == ["0061"]
+
+
+def test_user_sessions_migration_creates_and_drops_the_session_table(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    migration = _load_migration("0061_user_sessions.py")
+    engine = sa.create_engine("sqlite://")
+    metadata = sa.MetaData()
+    sa.Table("users", metadata, sa.Column("id", sa.String(length=36), primary_key=True))
+    metadata.create_all(engine)
+
+    with engine.begin() as connection:
+        monkeypatch.setattr(
+            migration, "op", Operations(MigrationContext.configure(connection))
+        )
+        migration.upgrade()
+        inspector = sa.inspect(connection)
+        assert {c["name"] for c in inspector.get_columns("user_sessions")} == {
+            "id",
+            "user_id",
+            "provider",
+            "created_at",
+            "last_seen_at",
+        }
+        assert {i["name"] for i in inspector.get_indexes("user_sessions")} == {
+            "ix_user_sessions_user_id",
+            "ix_user_sessions_last_seen_at",
+        }
+        (foreign_key,) = inspector.get_foreign_keys("user_sessions")
+        assert foreign_key["referred_table"] == "users"
+        assert foreign_key["options"].get("ondelete") == "CASCADE"
+
+        migration.downgrade()
+        assert "user_sessions" not in sa.inspect(connection).get_table_names()
 
 
 def test_subcategory_taxonomy_migration_preserves_rows_and_defaults_json(

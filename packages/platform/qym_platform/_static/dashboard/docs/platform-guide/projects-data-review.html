@@ -10,16 +10,16 @@
   <thead><tr><th>Tab</th><th>Purpose</th></tr></thead>
   <tbody>
     <tr><td><strong>General</strong></td><td>Name, slug, description, current role, member count, and status.</td></tr>
-    <tr><td><strong>Members</strong></td><td>Add people and assign MEMBER or MANAGER. Only managers/admins can change membership, and the final manager cannot be removed or demoted.</td></tr>
+    <tr><td><strong>Members</strong></td><td>Add people and assign MEMBER or MANAGER. Only managers/admins can change membership, and the final manager cannot be removed or demoted. Removing a member revokes their API keys for the project.</td></tr>
     <tr><td><strong>API Keys</strong></td><td>Create project-bound Bearer keys, identify them by name/prefix, and revoke eligible keys.</td></tr>
     <tr><td><strong>LLM Connections</strong></td><td>Add, edit, test, choose a default, or remove providers used by AI-assisted root-cause analysis.</td></tr>
-    <tr><td><strong>Danger Zone</strong></td><td>Archive or request deletion of the project.</td></tr>
+    <tr><td><strong>Danger Zone</strong></td><td>Admins can archive the project (reversible) or delete it permanently.</td></tr>
   </tbody>
 </table>
 
 <div class="docs-callout warn">
   <svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-  <p><span class="docs-callout-title">Projects with runs are archived, not hard-deleted.</span> Their history remains intact and the project disappears from active navigation. Only an empty project can be removed physically.</p>
+  <p><span class="docs-callout-title">Archive hides; Delete removes.</span> Archiving hides the project from navigation and stops its API keys, but deletes nothing; an admin can unarchive it from Admin &rarr; Projects. Deleting is permanent and removes the project's datasets, API keys, members, LLM connections and analysis settings after you type the project name. A project that still has runs, including runs in Trash, cannot be deleted: its runs must be deleted and then purged from Trash after the deleted-run grace period. Until then, archive it.</p>
 </div>
 
 <h2>API keys</h2>
