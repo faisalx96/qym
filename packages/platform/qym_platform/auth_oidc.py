@@ -45,6 +45,8 @@ def enabled_provider_names(settings: PlatformSettings) -> list[str]:
         enabled.append("google")
     if settings.auth_github_client_id and settings.auth_github_client_secret:
         enabled.append("github")
+    if settings.auth_gitlab_url and settings.auth_gitlab_client_id and settings.auth_gitlab_client_secret:
+        enabled.append("gitlab")
     return enabled
 
 
@@ -61,6 +63,12 @@ def provider_catalog(settings: PlatformSettings) -> list[dict[str, Any]]:
             "id": "github",
             "label": "Continue with GitHub",
             "enabled": "github" in enabled,
+            "kind": "social",
+        },
+        {
+            "id": "gitlab",
+            "label": "Continue with GitLab",
+            "enabled": "gitlab" in enabled,
             "kind": "social",
         },
         {
@@ -235,6 +243,17 @@ def _oauth_client(settings: PlatformSettings, provider: str):
             api_base_url="https://api.github.com/",
             client_kwargs={"scope": "read:user user:email"},
         )
+    elif provider == "gitlab":
+        # Without an instance URL, discovery would fetch a relative path and 500.
+        if "gitlab" not in enabled_provider_names(settings):
+            raise HTTPException(status_code=400, detail="gitlab login is not configured")
+        oauth.register(
+            name="gitlab",
+            client_id=settings.auth_gitlab_client_id,
+            client_secret=settings.auth_gitlab_client_secret,
+            server_metadata_url=f"{settings.auth_gitlab_url.rstrip('/')}/.well-known/openid-configuration",
+            client_kwargs={"scope": "openid email profile"},
+        )
     else:
         raise HTTPException(status_code=404, detail="Unknown provider")
 
@@ -254,28 +273,51 @@ async def begin_provider_login(request: Request, provider: str, settings: Platfo
     return await client.authorize_redirect(request, redirect_uri)
 
 
+_OIDC_PROVIDER_LABELS = {"google": "Google", "gitlab": "GitLab"}
+
+
+def _claim_is_true(value: Any) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    return value is True
+
+
+def oidc_identity_from_claims(provider: str, claims: Dict[str, Any]) -> ProviderIdentity:
+    """Build an identity from standard OIDC claims, requiring a verified email."""
+    label = _OIDC_PROVIDER_LABELS[provider]
+    email = str(claims.get("email") or "").strip().lower()
+    if not email or not _claim_is_true(claims.get("email_verified")):
+        raise HTTPException(status_code=401, detail=f"{label} account must provide a verified email")
+    subject = str(claims.get("sub") or "").strip()
+    if not subject:
+        raise HTTPException(status_code=401, detail=f"{label} identity is missing subject")
+    display_name = str(
+        claims.get("name") or claims.get("given_name") or claims.get("preferred_username") or claims.get("nickname") or ""
+    ).strip()
+    return ProviderIdentity(
+        provider=provider,
+        subject=subject,
+        email=email,
+        email_verified=True,
+        display_name=display_name,
+        raw_claims=claims,
+    )
+
+
 async def exchange_provider_identity(request: Request, provider: str, settings: PlatformSettings) -> ProviderIdentity:
     client = _oauth_client(settings, provider)
     token = await client.authorize_access_token(request)
 
-    if provider == "google":
-        userinfo = token.get("userinfo")
-        if not userinfo:
-            userinfo = await client.userinfo(token=token)
-        email = str(userinfo.get("email") or "").strip().lower()
-        if not email or not bool(userinfo.get("email_verified")):
-            raise HTTPException(status_code=401, detail="Google account must provide a verified email")
-        subject = str(userinfo.get("sub") or "").strip()
-        if not subject:
-            raise HTTPException(status_code=401, detail="Google identity is missing subject")
-        return ProviderIdentity(
-            provider="google",
-            subject=subject,
-            email=email,
-            email_verified=True,
-            display_name=str(userinfo.get("name") or userinfo.get("given_name") or "").strip(),
-            raw_claims=dict(userinfo),
-        )
+    if provider in _OIDC_PROVIDER_LABELS:
+        claims = dict(token.get("userinfo") or {})
+        # GitLab only puts email claims in the ID token for users with a public
+        # email; the userinfo endpoint always returns the primary email.
+        if not claims.get("email") or "email_verified" not in claims:
+            fetched = dict(await client.userinfo(token=token))
+            if claims.get("sub") and str(fetched.get("sub") or "") != str(claims["sub"]):
+                raise HTTPException(status_code=401, detail="Provider userinfo does not match the ID token")
+            claims = {**claims, **fetched}
+        return oidc_identity_from_claims(provider, claims)
 
     if provider == "github":
         profile_response = await client.get("user", token=token)

@@ -25,7 +25,7 @@ if "openai" not in sys.modules:
 from qym_platform.app import create_app
 from qym_platform.auth_oidc import ProviderIdentity
 from qym_platform.db.base import Base
-from qym_platform.db.models import LocalAuthCredential, User, UserIdentity, UserRole
+from qym_platform.db.models import AuditLog, LocalAuthCredential, User, UserIdentity, UserRole
 from qym_platform.deps import get_db
 from qym_platform.security import hash_password
 from qym_platform.settings import PlatformSettings
@@ -63,6 +63,9 @@ def _configure_env(
 
     monkeypatch.delenv("QYM_AUTH_GITHUB_CLIENT_ID", raising=False)
     monkeypatch.delenv("QYM_AUTH_GITHUB_CLIENT_SECRET", raising=False)
+    monkeypatch.delenv("QYM_AUTH_GITLAB_URL", raising=False)
+    monkeypatch.delenv("QYM_AUTH_GITLAB_CLIENT_ID", raising=False)
+    monkeypatch.delenv("QYM_AUTH_GITLAB_CLIENT_SECRET", raising=False)
 
 
 @pytest.fixture()
@@ -99,12 +102,14 @@ def _client(session_factory):
         app.dependency_overrides.clear()
 
 
-def _create_local_user(session_factory, email: str, password: str, *, active: bool = True) -> str:
+def _create_local_user(
+    session_factory, email: str, password: str, *, active: bool = True, role: UserRole = UserRole.MEMBER
+) -> str:
     with session_factory() as session:
         user = User(
             email=email,
             display_name="Local User",
-            role=UserRole.MEMBER,
+            role=role,
             is_active=active,
         )
         session.add(user)
@@ -352,3 +357,152 @@ def test_local_auth_requires_session_secret(monkeypatch):
                 environment="test",
             )
         )
+
+
+def _login(client, email: str, password: str):
+    return client.post(
+        "/v1/auth/login/password",
+        json={"email": email, "password": password},
+        headers=ORIGIN_HEADERS,
+    )
+
+
+def _reset_password(client, user_id: str):
+    return client.post(f"/v1/admin/users/{user_id}/reset-password", headers=ORIGIN_HEADERS)
+
+
+def test_admin_password_reset_requires_new_password_before_session(session_factory, monkeypatch):
+    admin_id = _create_local_user(session_factory, "admin@example.com", "admin-pass-123", role=UserRole.ADMIN)
+    member_id = _create_local_user(session_factory, "member@example.com", "forgotten-pass-1")
+    _configure_env(monkeypatch, auth_mode="oidc", auth_local_enabled=True)
+
+    with _client(session_factory) as admin_client:
+        assert _login(admin_client, "admin@example.com", "admin-pass-123").status_code == 200
+        reset = _reset_password(admin_client, member_id)
+    assert reset.status_code == 200
+    assert reset.headers["cache-control"] == "no-store"
+    temporary_password = reset.json()["temporary_password"]
+    assert len(temporary_password) >= 16
+
+    with _client(session_factory) as client:
+        assert _login(client, "member@example.com", "forgotten-pass-1").status_code == 401
+
+        gated = _login(client, "member@example.com", temporary_password)
+        assert gated.status_code == 403
+        assert gated.json()["code"] == "password_change_required"
+        assert client.get("/v1/me").status_code == 401
+
+        def change(current: str, new: str):
+            return client.post(
+                "/v1/auth/password/change?next=/overview",
+                json={"email": "member@example.com", "current_password": current, "new_password": new},
+                headers=ORIGIN_HEADERS,
+            )
+
+        assert change("wrong-temp-pass", "brand-new-pass-1").status_code == 401
+        assert change(temporary_password, temporary_password).status_code == 400
+        assert change(temporary_password, "short").status_code == 400
+        assert client.get("/v1/me").status_code == 401
+
+        changed = change(temporary_password, "brand-new-pass-1")
+        assert changed.status_code == 200
+        assert changed.json() == {"ok": True, "next": "/overview"}
+        me = client.get("/v1/me")
+        assert me.status_code == 200
+        assert me.json()["email"] == "member@example.com"
+
+    with _client(session_factory) as client:
+        assert _login(client, "member@example.com", temporary_password).status_code == 401
+        assert _login(client, "member@example.com", "brand-new-pass-1").status_code == 200
+
+    with session_factory() as session:
+        credential = session.get(LocalAuthCredential, member_id)
+        assert credential.must_change_password is False
+        audit = session.query(AuditLog).filter(AuditLog.action == "user.password_reset").one()
+        assert audit.actor_user_id == admin_id
+        assert audit.entity_id == member_id
+        assert audit.before == {"had_password": True}
+        assert temporary_password not in str(audit.after)
+
+
+def test_admin_password_reset_gives_provider_only_user_a_password_login(session_factory, monkeypatch):
+    _create_local_user(session_factory, "admin@example.com", "admin-pass-123", role=UserRole.ADMIN)
+    with session_factory() as session:
+        user = User(email="gitlab@example.com", display_name="GitLab User", role=UserRole.MEMBER, is_active=True)
+        session.add(user)
+        session.flush()
+        session.add(UserIdentity(user_id=user.id, provider="gitlab", subject="42", email=user.email, raw_claims={}))
+        session.commit()
+        user_id = user.id
+    _configure_env(monkeypatch, auth_mode="oidc", auth_local_enabled=True)
+
+    with _client(session_factory) as client:
+        assert _login(client, "admin@example.com", "admin-pass-123").status_code == 200
+        reset = _reset_password(client, user_id)
+        assert reset.status_code == 200
+        # A second reset replaces the first temporary password.
+        second = _reset_password(client, user_id)
+        assert second.status_code == 200
+
+    with _client(session_factory) as client:
+        assert _login(client, "gitlab@example.com", reset.json()["temporary_password"]).status_code == 401
+        gated = _login(client, "gitlab@example.com", second.json()["temporary_password"])
+        assert gated.status_code == 403
+        assert gated.json()["code"] == "password_change_required"
+
+    with session_factory() as session:
+        providers = {
+            row.provider for row in session.query(UserIdentity).filter(UserIdentity.user_id == user_id)
+        }
+        assert providers == {"gitlab", "local_password"}
+        audits = session.query(AuditLog).filter(AuditLog.action == "user.password_reset").order_by(AuditLog.id).all()
+        assert [row.before for row in audits] == [{"had_password": False}, {"had_password": True}]
+
+
+def test_admin_password_reset_requires_admin(session_factory, monkeypatch):
+    _create_local_user(session_factory, "member@example.com", "member-pass-123")
+    other_id = _create_local_user(session_factory, "other@example.com", "other-pass-123")
+    _configure_env(monkeypatch, auth_mode="oidc", auth_local_enabled=True)
+
+    with _client(session_factory) as client:
+        assert _reset_password(client, other_id).status_code == 401
+        assert _login(client, "member@example.com", "member-pass-123").status_code == 200
+        assert _reset_password(client, other_id).status_code == 403
+
+    with _client(session_factory) as client:
+        assert _login(client, "other@example.com", "other-pass-123").status_code == 200
+
+
+def test_admin_password_reset_rejects_unknown_user_and_disabled_local_auth(session_factory, monkeypatch):
+    _create_local_user(session_factory, "admin@example.com", "admin-pass-123", role=UserRole.ADMIN)
+    member_id = _create_local_user(session_factory, "member@example.com", "member-pass-123")
+    admin_headers = {**ORIGIN_HEADERS, "X-User-Email": "admin@example.com"}
+
+    _configure_env(monkeypatch, auth_mode="proxy_headers", auth_local_enabled=True)
+    with _client(session_factory) as client:
+        response = client.post("/v1/admin/users/missing-user/reset-password", headers=admin_headers)
+        assert response.status_code == 404
+
+    _configure_env(monkeypatch, auth_mode="proxy_headers", auth_local_enabled=False)
+    with _client(session_factory) as client:
+        response = client.post(f"/v1/admin/users/{member_id}/reset-password", headers=admin_headers)
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Email/password auth is not enabled"
+
+    with session_factory() as session:
+        assert session.get(LocalAuthCredential, member_id).must_change_password is False
+
+
+def test_change_password_rotates_a_known_password(session_factory, monkeypatch):
+    _create_local_user(session_factory, "local@example.com", "old-pass-1234")
+    _configure_env(monkeypatch, auth_local_enabled=True)
+
+    with _client(session_factory) as client:
+        response = client.post(
+            "/v1/auth/password/change",
+            json={"email": "local@example.com", "current_password": "old-pass-1234", "new_password": "new-pass-1234"},
+            headers=ORIGIN_HEADERS,
+        )
+        assert response.status_code == 200
+        assert _login(client, "local@example.com", "old-pass-1234").status_code == 401
+        assert _login(client, "local@example.com", "new-pass-1234").status_code == 200

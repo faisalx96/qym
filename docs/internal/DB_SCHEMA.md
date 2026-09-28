@@ -6,7 +6,7 @@ The canonical models are in `packages/platform/qym_platform/db/models.py`; Alemb
 
 - `users`: global identity, active flag, and `MEMBER` / `ADMIN` role.
 - `user_identities`: provider/subject mappings for OIDC and local identities.
-- `local_auth_credentials`: password hashes and local-login timestamps.
+- `local_auth_credentials`: password hashes, local-login timestamps, and the `must_change_password` flag set by an admin reset.
 - `projects`: project access boundary and active/archive state.
 - `project_memberships`: one `MEMBER` / `MANAGER` role per user and project.
 - `api_keys`: project-bound key prefix, PBKDF2 hash, creator, recorded scopes, and revocation time. Scopes are stored but are not currently enforced.

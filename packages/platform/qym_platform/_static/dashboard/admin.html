@@ -101,6 +101,12 @@
     .edit-user-body .form-select { padding-right: 30px; }
     .edit-user-checkbox { display: flex; align-items: center; gap: var(--space-sm); font-size: var(--font-sm); color: var(--text-secondary); cursor: pointer; }
     .edit-user-error { color: var(--error); font-size: var(--font-sm); min-height: 16px; }
+    .edit-user-reset-row { display: flex; align-items: center; gap: var(--space-md); }
+    .edit-user-reset-row .btn { flex: none; padding: 4px 10px; font-size: var(--font-sm); }
+    .edit-user-help { font-size: var(--font-sm); color: var(--text-muted); line-height: 1.4; }
+    .edit-user-temp { display: flex; align-items: center; gap: var(--space-xs); }
+    .edit-user-body .edit-user-temp .form-input { font-family: var(--font-mono); color: var(--text-primary); }
+    .edit-user-temp .qym-icon-action svg { width: 14px; height: 14px; }
     .maint-meta { color: var(--text-muted); font-size: var(--font-sm); margin: var(--space-sm) 0; }
     .maint-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
     @media (max-width: 1100px) { .maint-grid { grid-template-columns: minmax(0, 1fr); } }
@@ -262,6 +268,20 @@
           <input type="checkbox" id="edit-user-active" />
           <span>Active</span>
         </label>
+        <div class="form-group" id="edit-user-password-group" style="display:none">
+          <span class="form-label">Password</span>
+          <div class="edit-user-reset-row">
+            <button class="btn btn-secondary" type="button" id="edit-user-reset-password">Reset Password</button>
+            <span class="edit-user-help">Creates a one-time password. The user must choose a new password at the next sign-in.</span>
+          </div>
+          <div id="edit-user-temp-block" style="display:none">
+            <div class="edit-user-temp">
+              <input class="form-input" id="edit-user-temp-value" type="text" readonly autocomplete="off" aria-label="Temporary password" />
+              <button class="qym-icon-action copy-btn" type="button" id="edit-user-temp-copy" aria-label="Copy temporary password" title="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+            </div>
+            <p class="edit-user-help">Give this password to the user through a trusted channel. It is not shown again.</p>
+          </div>
+        </div>
         <div id="edit-user-self-note" class="self-warning" style="display:none">You are editing your own account. The role selector is locked to prevent locking yourself out.</div>
         <div class="edit-user-error" id="edit-user-error"></div>
       </div>
@@ -287,7 +307,7 @@
           .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
       }
 
-      let state = { users: [], projects: [], liveRuns: [], liveRunsTotal: 0, recentRuns: [], recentRunsPage: 0, recentRunsPageSize: 6, recentRunsTotal: 0, me: null, editingUserId: null };
+      let state = { users: [], projects: [], liveRuns: [], liveRunsTotal: 0, recentRuns: [], recentRunsPage: 0, recentRunsPageSize: 6, recentRunsTotal: 0, me: null, editingUserId: null, localAuthEnabled: false };
       const stoppingRuns = new Set();
       const forceStoppedRuns = new Map();
       let liveRequest = 0;
@@ -306,13 +326,15 @@
       }
 
       async function load() {
-        const [me, users, projectsPayload] = await Promise.all([
+        const [me, users, projectsPayload, authPayload] = await Promise.all([
           fetchJson('v1/me'),
           fetchJson('v1/admin/users'),
           fetchJson('v1/projects'),
+          fetchJson('v1/auth/providers').catch(() => null),
         ]);
         if (!me || me.role !== 'ADMIN') throw new Error('Admin access required');
         state.me = me;
+        state.localAuthEnabled = !!(authPayload && authPayload.local_auth && authPayload.local_auth.enabled);
         state.users = users || [];
         state.projects = (projectsPayload && projectsPayload.projects) || [];
 
@@ -628,13 +650,59 @@
         activeCheckbox.checked = !!user.is_active;
         activeCheckbox.disabled = isSelf;
         document.getElementById('edit-user-self-note').style.display = isSelf ? 'block' : 'none';
+        document.getElementById('edit-user-password-group').style.display = state.localAuthEnabled && !isSelf ? 'flex' : 'none';
+        document.getElementById('edit-user-temp-block').style.display = 'none';
+        document.getElementById('edit-user-temp-value').value = '';
         document.getElementById('edit-user-error').textContent = '';
         document.getElementById('edit-user-modal').style.display = 'flex';
       }
 
       function closeEditUserModal() {
         document.getElementById('edit-user-modal').style.display = 'none';
+        document.getElementById('edit-user-temp-value').value = '';
         state.editingUserId = null;
+      }
+
+      async function resetUserPassword() {
+        const userId = state.editingUserId;
+        const user = state.users.find(u => u.id === userId);
+        if (!user) return;
+        const errEl = document.getElementById('edit-user-error');
+        errEl.textContent = '';
+        const description = [
+          `Reset the password for ${user.email}? The current password stops working now.`,
+          'You will get a one-time password to give to the user. They must choose a new password when they sign in.',
+        ];
+        const confirmation = window.QymShell?.openConfirmDialog
+          ? await window.QymShell.openConfirmDialog({ title: 'Reset password', description, confirmLabel: 'Reset password', confirmClass: 'shell-btn-danger' })
+          : { confirmed: window.confirm(description.join('\n\n')) };
+        if (!confirmation.confirmed || state.editingUserId !== userId) return;
+
+        const resetBtn = document.getElementById('edit-user-reset-password');
+        resetBtn.disabled = true;
+        try {
+          const result = await fetchJson(`v1/admin/users/${encodeURIComponent(userId)}/reset-password`, { method: 'POST' });
+          if (state.editingUserId !== userId) return;
+          document.getElementById('edit-user-temp-value').value = result.temporary_password || '';
+          document.getElementById('edit-user-temp-block').style.display = 'block';
+        } catch (err) {
+          errEl.textContent = err.message || 'Failed to reset password';
+        } finally {
+          resetBtn.disabled = false;
+        }
+      }
+
+      async function copyTemporaryPassword() {
+        const input = document.getElementById('edit-user-temp-value');
+        const copyBtn = document.getElementById('edit-user-temp-copy');
+        try {
+          await navigator.clipboard.writeText(input.value);
+        } catch (err) {
+          input.select();
+          document.execCommand('copy');
+        }
+        copyBtn.classList.add('copied');
+        setTimeout(() => copyBtn.classList.remove('copied'), 1500);
       }
 
       async function saveEditUser() {
@@ -789,11 +857,13 @@
       document.getElementById('edit-user-close').addEventListener('click', closeEditUserModal);
       document.getElementById('edit-user-cancel').addEventListener('click', closeEditUserModal);
       document.getElementById('edit-user-save').addEventListener('click', saveEditUser);
+      document.getElementById('edit-user-reset-password').addEventListener('click', resetUserPassword);
+      document.getElementById('edit-user-temp-copy').addEventListener('click', copyTemporaryPassword);
       document.getElementById('edit-user-modal').addEventListener('click', (e) => {
         if (e.target === e.currentTarget) closeEditUserModal();
       });
       document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && document.getElementById('edit-user-modal').style.display === 'flex') {
+        if (e.key === 'Escape' && !document.getElementById('shell-confirm-dialog') && document.getElementById('edit-user-modal').style.display === 'flex') {
           closeEditUserModal();
         }
       });

@@ -28,9 +28,12 @@ if "openai" not in sys.modules:
     sys.modules["openai"] = MagicMock()
 
 from qym_platform.app import create_app
-from qym_platform.auth_oidc import ProviderIdentity
+from qym_platform import auth_oidc
+from qym_platform.auth_oidc import ProviderIdentity, oidc_identity_from_claims
 from qym_platform.db.base import Base
-from qym_platform.db.models import User, UserIdentity, UserRole
+from qym_platform.db.models import LocalAuthCredential, User, UserIdentity, UserRole
+from qym_platform.security import hash_password
+from qym_platform.settings import PlatformSettings
 from qym_platform.deps import get_db
 
 
@@ -243,3 +246,183 @@ def test_bootstrap_admin_promotes_first_authenticated_user(client, session_facto
     )
     assert second.status_code == 200
     assert second.json()["role"] == "ADMIN"
+
+
+GITLAB_URL = "https://gitlab.corp.example"
+
+
+def _enable_gitlab(monkeypatch, url: str = GITLAB_URL) -> None:
+    monkeypatch.setenv("QYM_AUTH_GITLAB_URL", url)
+    monkeypatch.setenv("QYM_AUTH_GITLAB_CLIENT_ID", "gitlab-client")
+    monkeypatch.setenv("QYM_AUTH_GITLAB_CLIENT_SECRET", "gitlab-secret")
+
+
+class _FakeGitLabClient:
+    def __init__(self, token, userinfo=None):
+        self.token = token
+        self._userinfo = userinfo
+        self.userinfo_calls = 0
+        self.redirect_uri = None
+
+    async def authorize_redirect(self, request, redirect_uri, **kwargs):
+        from fastapi.responses import RedirectResponse
+
+        self.redirect_uri = redirect_uri
+        return RedirectResponse(f"{GITLAB_URL}/oauth/authorize", status_code=302)
+
+    async def authorize_access_token(self, request):
+        return self.token
+
+    async def userinfo(self, token):
+        self.userinfo_calls += 1
+        return self._userinfo
+
+
+def test_gitlab_provider_requires_url_and_client_credentials(client, monkeypatch):
+    def gitlab_entry():
+        providers = client.get("/v1/auth/providers").json()["providers"]
+        return next(item for item in providers if item["id"] == "gitlab")
+
+    monkeypatch.delenv("QYM_AUTH_GITLAB_URL", raising=False)
+    monkeypatch.delenv("QYM_AUTH_GITLAB_CLIENT_ID", raising=False)
+    monkeypatch.delenv("QYM_AUTH_GITLAB_CLIENT_SECRET", raising=False)
+    assert gitlab_entry()["enabled"] is False
+
+    _enable_gitlab(monkeypatch, url="")
+    assert gitlab_entry()["enabled"] is False
+
+    _enable_gitlab(monkeypatch)
+    entry = gitlab_entry()
+    assert entry["enabled"] is True
+    assert entry["label"] == "Continue with GitLab"
+
+    monkeypatch.setenv("QYM_AUTH_MODE", "proxy_headers")
+    assert gitlab_entry()["enabled"] is False
+
+
+def test_gitlab_client_uses_instance_discovery_document(monkeypatch):
+    _enable_gitlab(monkeypatch, url=f"{GITLAB_URL}/")
+    oauth_client = auth_oidc._oauth_client(PlatformSettings(), "gitlab")
+    assert oauth_client._server_metadata_url == f"{GITLAB_URL}/.well-known/openid-configuration"
+    assert oauth_client.client_kwargs["scope"] == "openid email profile"
+
+
+def test_gitlab_login_without_instance_url_is_a_client_error(client, monkeypatch):
+    _enable_gitlab(monkeypatch, url="")
+
+    response = client.get("/v1/auth/login/gitlab", follow_redirects=False)
+    assert response.status_code == 400
+    assert response.json()["detail"] == "gitlab login is not configured"
+
+
+def test_gitlab_login_redirects_with_gitlab_callback(client, monkeypatch):
+    _enable_gitlab(monkeypatch)
+    fake = _FakeGitLabClient(token={})
+    monkeypatch.setattr(auth_oidc, "_oauth_client", lambda settings, provider: fake)
+
+    response = client.get("/v1/auth/login/gitlab?next=/runs", follow_redirects=False)
+    assert response.status_code == 302
+    assert response.headers["location"].startswith(GITLAB_URL)
+    assert fake.redirect_uri == "http://testserver/v1/auth/callback/gitlab"
+
+
+def test_gitlab_exchange_reads_userinfo_when_id_token_has_no_email(monkeypatch):
+    import asyncio
+
+    _enable_gitlab(monkeypatch)
+    fake = _FakeGitLabClient(
+        token={"userinfo": {"sub": "42", "nickname": "dev"}},
+        userinfo={"sub": "42", "email": "Dev@Corp.Example", "email_verified": True, "name": "Dev Person"},
+    )
+    monkeypatch.setattr(auth_oidc, "_oauth_client", lambda settings, provider: fake)
+
+    identity = asyncio.run(auth_oidc.exchange_provider_identity(MagicMock(), "gitlab", PlatformSettings()))
+    assert fake.userinfo_calls == 1
+    assert identity.provider == "gitlab"
+    assert identity.subject == "42"
+    assert identity.email == "dev@corp.example"
+    assert identity.display_name == "Dev Person"
+
+
+def test_gitlab_exchange_uses_id_token_email_without_userinfo_call(monkeypatch):
+    import asyncio
+
+    _enable_gitlab(monkeypatch)
+    fake = _FakeGitLabClient(
+        token={"userinfo": {"sub": "7", "email": "id@corp.example", "email_verified": True, "preferred_username": "idtok"}}
+    )
+    monkeypatch.setattr(auth_oidc, "_oauth_client", lambda settings, provider: fake)
+
+    identity = asyncio.run(auth_oidc.exchange_provider_identity(MagicMock(), "gitlab", PlatformSettings()))
+    assert fake.userinfo_calls == 0
+    assert identity.email == "id@corp.example"
+    assert identity.display_name == "idtok"
+
+
+def test_gitlab_exchange_rejects_userinfo_for_another_subject(monkeypatch):
+    import asyncio
+
+    _enable_gitlab(monkeypatch)
+    fake = _FakeGitLabClient(
+        token={"userinfo": {"sub": "42"}},
+        userinfo={"sub": "99", "email": "other@corp.example", "email_verified": True},
+    )
+    monkeypatch.setattr(auth_oidc, "_oauth_client", lambda settings, provider: fake)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(auth_oidc.exchange_provider_identity(MagicMock(), "gitlab", PlatformSettings()))
+    assert exc_info.value.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "claims",
+    [
+        {"sub": "1", "email": "a@corp.example", "email_verified": False},
+        {"sub": "1", "email": "a@corp.example", "email_verified": "false"},
+        {"sub": "1", "email": "a@corp.example"},
+        {"sub": "1", "email_verified": True},
+        {"email": "a@corp.example", "email_verified": True},
+    ],
+)
+def test_gitlab_identity_requires_verified_email_and_subject(claims):
+    with pytest.raises(HTTPException) as exc_info:
+        oidc_identity_from_claims("gitlab", claims)
+    assert exc_info.value.status_code == 401
+    assert "GitLab" in exc_info.value.detail
+
+
+def test_gitlab_identity_accepts_string_true_email_verified():
+    identity = oidc_identity_from_claims("gitlab", {"sub": "1", "email": "a@corp.example", "email_verified": "true"})
+    assert identity.email_verified is True
+
+
+def test_gitlab_callback_links_existing_password_account(client, session_factory, monkeypatch):
+    from qym_platform.api import auth as auth_api
+
+    _enable_gitlab(monkeypatch)
+    with session_factory() as session:
+        user = User(email="dev@corp.example", display_name="Dev", role=UserRole.MEMBER, is_active=True)
+        session.add(user)
+        session.flush()
+        session.add(LocalAuthCredential(user_id=user.id, password_hash=hash_password("existing-pass-1")))
+        session.commit()
+        user_id = user.id
+
+    async def fake_exchange(request, provider, settings):
+        return oidc_identity_from_claims(
+            provider, {"sub": "42", "email": "dev@corp.example", "email_verified": True, "name": "Dev"}
+        )
+
+    monkeypatch.setattr(auth_api, "exchange_provider_identity", fake_exchange)
+
+    response = client.get("/v1/auth/callback/gitlab", follow_redirects=False)
+    assert response.status_code == 303
+    me = client.get("/v1/me").json()
+    assert me["id"] == user_id
+    assert me["auth_provider"] == "gitlab"
+
+    with session_factory() as session:
+        assert session.query(User).filter(User.email == "dev@corp.example").count() == 1
+        identity = session.query(UserIdentity).filter(UserIdentity.provider == "gitlab").one()
+        assert identity.user_id == user_id
+        assert identity.subject == "42"

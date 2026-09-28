@@ -33,6 +33,11 @@ class PlatformSettings(BaseSettings):
     auth_google_client_secret: str = Field(default="")
     auth_github_client_id: str = Field(default="")
     auth_github_client_secret: str = Field(default="")
+    # Self-hosted GitLab (OIDC). The URL is the instance issuer, e.g.
+    # https://gitlab.example.com; discovery reads /.well-known/openid-configuration.
+    auth_gitlab_url: str = Field(default="")
+    auth_gitlab_client_id: str = Field(default="")
+    auth_gitlab_client_secret: str = Field(default="")
 
     # Database (required - no SQLite fallback)
     database_url: str = Field(description="PostgreSQL connection string (required)")

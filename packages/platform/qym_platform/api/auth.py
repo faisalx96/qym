@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -86,6 +86,16 @@ def _invalid_credentials() -> HTTPException:
     return HTTPException(status_code=401, detail="Invalid email or password")
 
 
+def _verified_local_credential(db: Session, email: str, password: str) -> tuple[User, LocalAuthCredential]:
+    user = db.query(User).filter(User.email == _normalize_email(email)).first()
+    if not user or not user.is_active:
+        raise _invalid_credentials()
+    credential = db.query(LocalAuthCredential).filter(LocalAuthCredential.user_id == user.id).first()
+    if not credential or not verify_password(password, credential.password_hash):
+        raise _invalid_credentials()
+    return user, credential
+
+
 @router.get("/login", response_model=None)
 def login_page(
     request: Request,
@@ -153,25 +163,60 @@ class PasswordSignupRequest(PasswordLoginRequest):
     display_name: str = ""
 
 
-@router.post("/v1/auth/login/password")
+class PasswordChangeRequest(BaseModel):
+    email: str
+    current_password: str
+    new_password: str
+
+
+@router.post("/v1/auth/login/password", response_model=None)
 def auth_login_password(
     payload: PasswordLoginRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> Any:
+    settings = PlatformSettings()
+    _ensure_local_auth_enabled(settings)
+
+    user, credential = _verified_local_credential(db, payload.email, payload.password)
+    if credential.must_change_password:
+        # A temporary password only unlocks the change-password step; no session yet.
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={
+                "detail": "Set a new password to finish signing in.",
+                "code": "password_change_required",
+            },
+        )
+
+    credential.last_login_at = datetime.utcnow()
+    db.commit()
+    set_authenticated_session(request, user, "local_password")
+    return {"ok": True, "next": _resolve_next(request)}
+
+
+@router.post("/v1/auth/password/change")
+def auth_change_password(
+    payload: PasswordChangeRequest,
     request: Request,
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     settings = PlatformSettings()
     _ensure_local_auth_enabled(settings)
 
-    email = _normalize_email(payload.email)
-    user = db.query(User).filter(User.email == email).first()
-    if not user or not user.is_active:
-        raise _invalid_credentials()
+    user, credential = _verified_local_credential(db, payload.email, payload.current_password)
+    if payload.new_password == payload.current_password:
+        raise HTTPException(status_code=400, detail="The new password must be different from the current password")
+    try:
+        password_hash = hash_password(payload.new_password)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    credential = db.query(LocalAuthCredential).filter(LocalAuthCredential.user_id == user.id).first()
-    if not credential or not verify_password(payload.password, credential.password_hash):
-        raise _invalid_credentials()
-
-    credential.last_login_at = datetime.utcnow()
+    now = datetime.utcnow()
+    credential.password_hash = password_hash
+    credential.must_change_password = False
+    credential.updated_at = now
+    credential.last_login_at = now
     db.commit()
     set_authenticated_session(request, user, "local_password")
     return {"ok": True, "next": _resolve_next(request)}
