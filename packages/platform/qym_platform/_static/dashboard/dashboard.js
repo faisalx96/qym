@@ -1870,11 +1870,16 @@
         runs.sort((a, b) => b.execution_error_count - a.execution_error_count);
         break;
       case 'run-asc':
-        runs.sort((a, b) => a.run_id.localeCompare(b.run_id));
+      case 'run-desc': {
+        // Same key as the server and the Run cell: external id, else run id.
+        const runLabel = run => String(run.external_run_id || run.run_id || '');
+        const sign = state.sortKey === 'run-desc' ? -1 : 1;
+        runs.sort((a, b) => sign * (
+          runLabel(a).localeCompare(runLabel(b), undefined, { sensitivity: 'base' })
+          || String(a.run_id || '').localeCompare(String(b.run_id || ''))
+        ));
         break;
-      case 'run-desc':
-        runs.sort((a, b) => b.run_id.localeCompare(a.run_id));
-        break;
+      }
       case 'latency-desc':
         runs.sort((a, b) => (b.avg_latency_ms || 0) - (a.avg_latency_ms || 0));
         break;
@@ -4612,7 +4617,14 @@
         parts.push(`dataset: ${summarizeFilterSelection(state.filterDatasets, getDatasetFilterLabel)}`);
       }
       if (state.filterModels.size > 0 && !state.filterModels.has('__none__')) {
-        parts.push(`model: ${summarizeFilterSelection(state.filterModels, stripModelProvider)}`);
+        // Same names as the dropdown: model keys carry an internal
+        // "|||plain"/"|||reasoning" suffix, shown as a "(reasoning)" marker.
+        const models = [...state.filterModels].map(value => {
+          const name = getModelFilterOptionLabel(value);
+          const short = name.length > 20 ? name.slice(0, 20) + '...' : name;
+          return parseModelVariantKey(value).hasReasoning ? `${short} (reasoning)` : short;
+        });
+        parts.push(`model: ${models.join(', ')}`);
       } else if (state.filterModels.has('__none__')) {
         parts.push('model: none');
       }
@@ -6179,6 +6191,21 @@
     openUrl(apiUrl('compare?' + params.toString()), e);
   }
 
+  // Only pass deletions are permanent; whole runs go to Deleted Runs.
+  function setDeleteWarning(text) {
+    const warningEl = el('delete-modal-warning');
+    if (!warningEl) return;
+    warningEl.textContent = text;
+    warningEl.style.display = text ? '' : 'none';
+  }
+
+  function restoreWindowCopy(graceDays, plural) {
+    if (!(graceDays > 0)) return '';
+    return plural
+      ? `An admin can restore deleted runs for ${graceDays} day${graceDays === 1 ? '' : 's'}; then they are permanently removed.`
+      : `An admin can restore it for ${graceDays} day${graceDays === 1 ? '' : 's'}; then it is permanently removed.`;
+  }
+
   function confirmDeleteRun(filePath, runId) {
     const modal = el('delete-modal');
     const titleEl = el('delete-modal-title');
@@ -6188,6 +6215,8 @@
 
     if (titleEl) titleEl.textContent = 'Delete run';
     if (descriptionEl) descriptionEl.textContent = 'Are you sure you want to delete this run? An admin can restore it from Deleted Runs until retention permanently removes it.';
+    // A deleted run can be restored, so no "cannot be undone" warning.
+    setDeleteWarning('');
     runNameEl.textContent = runId;
     modal.style.display = 'flex';
 
@@ -6213,7 +6242,7 @@
           // Remove from selection if selected
           state.selectedRuns.delete(filePath);
           showToast('success', 'Run deleted', graceDays > 0
-            ? `The run was moved to the trash. An admin can restore it for ${graceDays} day${graceDays === 1 ? '' : 's'}; then it is permanently removed.`
+            ? `The run was moved to the trash. ${restoreWindowCopy(graceDays, false)}`
             : 'The run was moved to the trash.');
           // Refresh data
           await fetchRuns({ refreshAllPages: true });
@@ -6267,6 +6296,9 @@
     if (titleEl) titleEl.textContent = 'Delete selection';
     if (descriptionEl) descriptionEl.textContent = `Are you sure you want to delete the selected ${selectionParts.join(' and ')}?`
       + (runRefs.length ? ' An admin can restore deleted runs from Deleted Runs until retention permanently removes them.' : '');
+    setDeleteWarning(passRefs.length
+      ? `Deleted passes cannot be restored.${runRefs.length ? ' Deleted runs can.' : ''}`
+      : '');
     runNameEl.textContent = `${selectionParts.join(' and ')} selected`;
     modal.style.display = 'flex';
 
@@ -6279,6 +6311,8 @@
       newConfirmBtn.textContent = 'Deleting...';
 
       let successCount = 0;
+      let deletedRunCount = 0;
+      let graceDays = 0;
       let errorCount = selectionErrors.length;
       const errors = [...selectionErrors];
 
@@ -6311,7 +6345,10 @@
           });
 
           if (response.ok) {
+            const result = await response.json().catch(() => ({}));
+            graceDays = Math.max(graceDays, Number(result.purge_after_days) || 0);
             successCount++;
+            deletedRunCount++;
             state.selectedRuns.delete(filePath);
           } else {
             errorCount++;
@@ -6334,7 +6371,8 @@
       if (errorCount > 0) {
         showToast('error', 'Selection partially deleted', `Deleted ${successCount}; failed ${errorCount}. ${errors[0] || ''}`);
       } else {
-        showToast('success', 'Selection deleted', `Deleted ${successCount} selected item${successCount === 1 ? '' : 's'}.`);
+        const restore = deletedRunCount ? restoreWindowCopy(graceDays, true) : '';
+        showToast('success', 'Selection deleted', `Deleted ${successCount} selected item${successCount === 1 ? '' : 's'}.${restore ? ' ' + restore : ''}`);
       }
     });
   }
@@ -6395,8 +6433,11 @@
             (isUnapprove || isUnreject) ? `Run returned to ${restored}` : (isApprove ? 'Run approved' : 'Run rejected'),
           );
         } else {
-          const data = await response.json();
+          const data = await response.json().catch(() => ({}));
           showToast('error', `${isUnapprove ? 'Unapprove' : (isUnreject ? 'Unreject' : (isApprove ? 'Approve' : 'Reject'))} Failed`, data.detail || 'Unknown error');
+          // A 409 means the row showed an old review state; refresh it so it
+          // stops offering the action.
+          if (response.status === 409) fetchRuns({ refreshAllPages: true }).catch(() => {});
         }
       } catch (err) {
         showToast('error', `${isUnapprove ? 'Unapprove' : (isUnreject ? 'Unreject' : (isApprove ? 'Approve' : 'Reject'))} Failed`, err.message || 'Unknown error');
@@ -7065,9 +7106,12 @@
     const retained = [...retainedIds];
     // The overview (catalog + facets) is the expensive half of a poll; only ask
     // for it again when the projection revision moved or the filter changed.
+    // A page that was still publishing (e.g. right after a review action)
+    // means the cached overview's facets and KPIs are behind too.
     const overviewStale = !state.dashboardOverview
       || state.dashboardOverviewFilterKey !== filterKey
       || state.dashboardOverview?.freshness?.updating
+      || state.dashboardPage?.freshness?.updating
       || (Date.now() - (state._overviewFetchedAt || 0)) > 60000;
     const payload = {
       project_slug: state.currentProject?.slug || getProjectSlugFromPath() || '',
@@ -8072,7 +8116,10 @@
     try {
       // While the summary worker is publishing, back off 2s -> 4s -> 8s -> 15s
       // instead of hammering the server every 2s for the whole backfill.
-      const updating = !!state.dashboardOverview?.freshness?.updating;
+      // The page reports it too: after a review action only the page is
+      // re-requested, and the cached overview still says "not updating".
+      const updating = !!(state.dashboardPage?.freshness?.updating
+        || state.dashboardOverview?.freshness?.updating);
       if (updating) {
         state._updatingPolls = (state._updatingPolls || 0) + 1;
       } else {

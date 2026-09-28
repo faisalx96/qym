@@ -247,7 +247,14 @@ def _sort_columns():
         "status": func.coalesce(
             Summary.data["execution_error_count"].as_float(), errors
         ),
-        "run": Dimension.run_key,
+        # The Run column shows the external run id, else the run id: sort by
+        # that text (case-folded), not by the hidden id alone.
+        "run": func.lower(
+            func.coalesce(
+                func.nullif(Dimension.descriptor["external_run_id"].as_string(), ""),
+                Dimension.run_key,
+            )
+        ),
         "latency": Summary.avg_latency_ms,
         "median-latency": Summary.median_latency_ms,
         "duration": func.coalesce(Summary.data["duration_ms"].as_float(), 0),

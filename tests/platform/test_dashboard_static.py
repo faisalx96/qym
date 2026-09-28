@@ -1739,8 +1739,22 @@ def test_changed_route_assets_are_cache_versioned() -> None:
 
     assert "/static/docs.css?v=ui-consistency-20260730-15" in docs
     assert "/static/docs.js?v=ui-consistency-20260730-18-xss-rendering" in docs
-    assert 'dashboard.css?v=ui-consistency-20260730-10"' in runs_api
-    assert 'shell.js?v=ui-consistency-20260730-10-xss-rendering"' in runs_api
+    # The project-not-found page loads the same shared shell assets as the
+    # dashboard pages, every one of them versioned.
+    for asset in ("dashboard.css", "shell.css", "auth.js", "shell.js"):
+        assert f'{{static_root}}/{asset}?v=p0-integration-20260929"' in runs_api
+
+
+def test_every_page_versions_the_shared_shell_assets() -> None:
+    """shell.css and auth.js changed without a version, so browsers could keep
+    a stale copy next to the new shell.js/kpis.js after a deploy."""
+    import re as _re
+
+    for page in DASHBOARD_DIR.glob("*.html"):
+        source = page.read_text(encoding="utf-8")
+        for asset in ("shell.css", "auth.js", "shell.js", "dashboard.css"):
+            for match in _re.finditer(r'(?:href|src)="[^"]*/static/' + _re.escape(asset) + r'([^"]*)"', source):
+                assert match.group(1).startswith("?v="), f"{page.name}: {asset} unversioned"
 
 
 def test_multiselects_share_search_actions_options_and_only_action() -> None:
@@ -2196,8 +2210,8 @@ def test_clear_filter_control_has_aligned_label_and_soft_count_pill() -> None:
     for page in DASHBOARD_DIR.glob("*.html"):
         source = page.read_text(encoding="utf-8")
         if page.name == "analyzer.html":
-            assert "dashboard.css?v=approved-subcategories-20260917-1-xss-rendering" in source
-            assert "playground.js?v=approved-subcategories-20260917-1-xss-rendering" in source
+            assert "dashboard.css?v=p0-integration-20260929" in source
+            assert "playground.js?v=p0-integration-20260929" in source
             assert "ui_components.css?v=auto-analysis-selectors-20260811-1-xss-rendering" in source
             assert "ui_components.js?v=auto-analysis-selectors-20260811-1" in source
             continue
@@ -3393,7 +3407,7 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert '"type": "retrying"' in analysis_api
     assert "state.phase === 'retrying'" in playground
     assert "Retrying timed-out analysis…" in playground
-    assert "playground.js?v=approved-subcategories-20260917-1-xss-rendering" in (
+    assert "playground.js?v=p0-integration-20260929" in (
         DASHBOARD_DIR / "analyzer.html"
     ).read_text(encoding="utf-8")
     assert "Timeout retries: <strong>" in playground

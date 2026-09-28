@@ -221,6 +221,8 @@ def test_run_html_export_inlines_the_shared_layer_and_opens_offline(browser, tmp
     assert response.status_code == 200, response.text
     html = response.text
     assert '<script src="/static/qym_safe.js' not in html
+    # Nothing is left to load from the server (review history, step latency).
+    assert 'src="/static/' not in html
     assert html.index("global.QymSafe = {") < html.index("window.QymMetrics")
     target = tmp_path / "run.html"
     target.write_text(html, encoding="utf-8")
@@ -228,6 +230,12 @@ def test_run_html_export_inlines_the_shared_layer_and_opens_offline(browser, tmp
     page = context.new_page()
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
+    page.on(
+        "requestfailed",
+        lambda request: errors.append("request failed: " + request.url)
+        if request.url.startswith("file:")
+        else None,
+    )
     try:
         page.goto(target.as_uri())
         page.wait_for_function(

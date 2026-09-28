@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Runs</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=run-means-20260927">
-  <link rel="stylesheet" href="/static/shell.css">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p0-integration-20260929">
+  <link rel="stylesheet" href="/static/shell.css?v=p0-integration-20260929">
   <script src="/static/qym_safe.js?v=xss-rendering-20260928"></script>
-  <script src="/static/auth.js"></script>
-  <script src="/static/shell.js?v=ui-consistency-20260730-15-xss-rendering"></script>
+  <script src="/static/auth.js?v=p0-integration-20260929"></script>
+  <script src="/static/shell.js?v=p0-integration-20260929"></script>
   <script src="/static/kpis.js?v=runs-kpis-20260927"></script>
   <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60-xss-rendering">
   <script defer src="/static/ui_components.js?v=ui-consistency-20260803-28"></script>
@@ -156,7 +156,7 @@
       <div class="modal-body">
         <p id="delete-modal-description">Are you sure you want to delete this run?</p>
         <p class="delete-run-name" id="delete-run-name"></p>
-        <p class="warning-text">This action cannot be undone.</p>
+        <p class="warning-text" id="delete-modal-warning" style="display:none;"></p>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="document.getElementById('delete-modal').style.display='none'">Cancel</button>

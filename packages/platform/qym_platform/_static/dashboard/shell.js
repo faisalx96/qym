@@ -1266,6 +1266,18 @@
     var parser = new DOMParser();
     var doc = parser.parseFromString(html, 'text/html');
 
+    // Relative asset URLs (compare.html and trash.html use ./static/) belong
+    // to the fetched page. The parsed document resolves them against the
+    // page we are leaving, which 404s from nested routes such as
+    // /projects/<slug>/runs and forced a full reload.
+    var pageUrl = new URL(url, window.location.href);
+    function resolveForPage(value) {
+      try { return new URL(value, pageUrl).href; } catch (e) { return value; }
+    }
+    doc.body.querySelectorAll('link[href]').forEach(function (link) {
+      link.setAttribute('href', resolveForPage(link.getAttribute('href')));
+    });
+
     // Update page title
     var newTitle = doc.querySelector('title');
     if (newTitle) document.title = newTitle.textContent;
@@ -1296,7 +1308,7 @@
     allScripts.forEach(function (script) {
       if (script.src && (script.src.indexOf('shell.js') !== -1 || script.src.indexOf('auth.js') !== -1)) return;
       scriptInfos.push({
-        src: script.src || null,
+        src: script.getAttribute('src') ? resolveForPage(script.getAttribute('src')) : null,
         text: script.textContent || '',
         type: script.type || '',
       });

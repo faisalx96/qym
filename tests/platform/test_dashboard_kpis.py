@@ -269,3 +269,28 @@ def test_kpis_follow_published_projection_errors(database):
     assert kpis["execution_success"] == pytest.approx(4 / 5)
     assert kpis["execution_success"] != pytest.approx(sum(rates) / len(rates))
     assert kpis["runs_with_errors"] == 2
+
+
+def test_run_column_sorts_by_the_name_it_shows(dataset):
+    """Sorting by "Run name" used the hidden run id (pre-existing)."""
+    from qym_platform.db.dashboard_models import DashboardRunDimension as Dimension
+
+    engine, client, _ = dataset
+    # Id order a < b < c; the names shown are in the opposite order, and one
+    # run has no external id (its id is shown instead).
+    names = {"aaa-111": "zulu-run", "bbb-222": "Mid-run", "ccc-333": "alpha-run", "ddd-444": ""}
+    with Session(engine) as db:
+        for index, run_id in enumerate(names):
+            add_run(db, run_id, data=published(10, 10), index=index)
+        db.flush()
+        for run_id, name in names.items():
+            dim = db.get(Dimension, run_id)
+            dim.descriptor = {**dim.descriptor, "external_run_id": name, "run_name": name}
+        db.commit()
+    order = {}
+    for sort in ("run-asc", "run-desc"):
+        response = get(client, sort=sort)
+        assert response.status_code == 200, response.text
+        order[sort] = [row["run_id"] for row in response.json()["rows"]]
+    assert order["run-asc"] == ["ccc-333", "ddd-444", "bbb-222", "aaa-111"]
+    assert order["run-desc"] == list(reversed(order["run-asc"]))
