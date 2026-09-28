@@ -25,7 +25,14 @@ from qym_platform.db.models import (
 from qym_platform.services.metric_semantics import declared_direction
 from sqlalchemy.orm import Session
 from test_compare_error_counts import run_compare_js
-from test_dashboard_durable_summaries import database, item, run
+from test_dashboard_durable_summaries import (
+    database,
+    drain,
+    item,
+    legacy,
+    projected,
+    run,
+)
 
 REPO = Path(__file__).resolve().parents[2]
 METRICS_JS = REPO / "packages/platform/qym_platform/_static/dashboard/metrics.js"
@@ -433,3 +440,45 @@ def test_group_metrics_without_primary_use_the_first_metric(database):
     assert payload["direction"] == "maximize"
     assert empty["direction"] is None
     assert empty["threshold"] == pytest.approx(0.8)
+
+
+def test_pass_summaries_score_the_declared_primary_metric(database):
+    """The runs list drawer paints pass_summaries first; its value must be
+    the declared primary metric's, and say which metric it is."""
+    with Session(database) as db:
+        _seed_repeat(db, direction="minimize", primary=True)
+        principal = Principal(user=db.get(User, "u"), auth_type="none")
+        passes = runs_api.run_passes("r", db, principal)["passes"]
+    expected = {p["pass_number"]: p["metric_means"]["empty"] for p in passes}
+    assert expected == {1: pytest.approx(0.5), 2: pytest.approx(0.0)}
+    drain(database)
+    for name, summary in (("projected", projected(database)), ("legacy", legacy(database))):
+        summaries = summary["pass_summaries"]
+        assert [s["primary_metric"] for s in summaries] == ["empty", "empty"], name
+        assert {s["pass_number"]: s["primary_score"] for s in summaries} == expected, name
+
+
+def test_server_primary_metric_rule_matches_the_client():
+    from qym_platform.services.metric_semantics import primary_metric
+
+    assert primary_metric(["a", "b"], {}) == "a"
+    assert primary_metric(["a", "b"], {"b": {"primary": True}}) == "b"
+    assert primary_metric(["a", "b"], {"b": {"primary": False}}) == "a"
+    assert primary_metric([], {}) is None
+    run_metrics_js(r"""
+    assert.equal(m.defaultMetricName(['a', 'b'], {}), 'a');
+    assert.equal(m.defaultMetricName(['a', 'b'], {b: {primary: true}}), 'b');
+    assert.equal(m.defaultMetricName(['a', 'b'], {b: {primary: false}}), 'a');
+    """)
+
+
+def test_repeat_drawer_labels_optimistic_scores_and_seeds_the_threshold():
+    """The optimistic drawer used the first metric's value under the primary
+    column and an 80% threshold until the fetch landed (C008)."""
+    source = (REPO / "packages/platform/qym_platform/_static/dashboard/dashboard.js").read_text()
+    block = source[source.index("function buildSamplesDetailMarkup"):]
+    block = block[: block.index("const optimistic = !!data._optimistic;")]
+    assert "s.primary_metric" in block
+    assert "[scoredMetric]: s.primary_score" in block
+    assert "defaultPassThreshold(" in block
+    assert "group: { metric: primary, threshold: primaryThreshold }" in block

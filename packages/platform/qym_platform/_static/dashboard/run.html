@@ -10,7 +10,7 @@
   <script src="/static/qym_safe.js?v=xss-rendering-20260928"></script>
   <script src="/static/auth.js"></script>
   <script src="/static/shell.js?v=ui-consistency-20260730-15-xss-rendering"></script>
-  <script src="/static/metrics.js?v=metric-errors-20260914-1-metric-semantics"></script>
+  <script src="/static/metrics.js?v=p0-integration-20260929"></script>
   <script src="/static/run_details.js?v=payload-perf-1"></script>
   <script src="/static/trace_viewer.js?v=trace-retries-20260917-1-xss-rendering"></script>
   <script src="/static/step_latency.js?v=empty-sections-20260911-2-xss-rendering"></script>
@@ -1191,11 +1191,11 @@
       background: var(--error);
       color: #fff;
     }
-    /* Scorer errors: counted as fail, drawn apart so they read as errors. */
+    /* Task and scorer errors: counted as 0 (False), drawn apart so they read as errors. */
     .metric-bool-seg.error-seg {
       background: repeating-linear-gradient(135deg, var(--metric-error) 0 5px, color-mix(in srgb, var(--metric-error) 70%, #000) 5px 10px);
       color: var(--bg-base);
-      cursor: help;
+      cursor: pointer;
     }
     .metric-bool-seg.error-seg:hover { opacity: 1; }
     .metric-bool-legend {
@@ -8858,28 +8858,36 @@
           const mType = state.metricTypes[metric] || 'score';
           let sum = 0, cnt = 0, min = Infinity, max = -Infinity;
           // Scorer errors count as 0 in the mean (same rule as the server);
-          // track them so the card can say how many and what the mean is without them.
-          let errCnt = 0, errSum = 0;
+          // track them so the card can say how many and what the mean is
+          // without them. A repeat run counts errored passes, like the runs
+          // list, and re-reduces those items over their other passes.
+          const perPass = isRepeatAggregateView();
+          let errCnt = 0, errorRows = 0, cleanSum = 0, cleanCnt = 0;
           const errBuckets = new Array(11).fill(0);
           for (const row of rows) {
             const { score, isError } = window.QymMetrics.getRowScore(row, mIdx, metric);
             if (score !== null) { sum += score; cnt++; if (score < min) min = score; if (score > max) max = score; }
+            const clean = window.QymMetrics.scoreWithoutMetricErrors(row, mIdx, metric);
+            if (clean.score !== null) { cleanSum += clean.score; cleanCnt++; }
             if (score !== null && isError && !window.QymMetrics.isTaskErrorRow(row)) {
-              errCnt++; errSum += score;
+              errCnt += perPass ? clean.errors : 1;
+              errorRows++;
               errBuckets[Math.min(10, Math.floor(Math.round(score * 100) / 10))]++;
             }
           }
           if (cnt === 0) continue;
           const avg = sum / cnt;
           // Without scorer errors; task errors still count as 0.
-          const scoredCnt = cnt - errCnt;
+          const errUnit = perPass
+            ? (errCnt === 1 ? 'pass' : 'passes')
+            : (errCnt === 1 ? 'item' : 'items');
           const errorNote = errCnt > 0
             ? '<div class="metric-card-error-note" title="' + escapeAttr(
-                'The ' + metric + ' scorer failed on ' + errCnt + ' item' + (errCnt === 1 ? '' : 's') +
-                '. They count as 0% in this mean.' +
-                (scoredCnt > 0 ? ' Mean without them: ' + formatPercent((sum - errSum) / scoredCnt) + '.' : '')
+                'The ' + metric + ' scorer failed on ' + errCnt + ' ' + errUnit + '. ' +
+                (perPass ? 'Those passes count as 0% in this mean.' : 'They count as 0% in this mean.') +
+                (cleanCnt > 0 ? ' Mean without them: ' + formatPercent(cleanSum / cleanCnt) + '.' : '')
               ) + '"><span class="metric-card-error-glyph" aria-hidden="true">⚠</span>' +
-              errCnt + ' scorer error' + (errCnt === 1 ? '' : 's') + ' · counted as 0%</div>'
+              errCnt + ' scorer error' + (errCnt === 1 ? '' : 's') + (perPass ? ' across passes' : '') + ' · counted as 0%</div>'
             : '';
 
           if (mType === 'numeric') {
@@ -8909,26 +8917,55 @@
             // declares a direction: True passes when higher is better, False
             // when lower is better; otherwise True/False stay neutral (C008).
             const direction = metricDirectionOf(metric);
-            const trueCount = Math.round(avg * cnt);
-            const errorCount = Math.min(errCnt, cnt - trueCount);
-            const falseCount = cnt - trueCount - errorCount;
+            // Each item lands in exactly one segment, with the same rule the
+            // segment's filter applies: an item whose task or scorer failed
+            // is drawn apart as an error; the rest pass or fail by the
+            // declared direction (or split True/False without one). Errors
+            // count as 0 (False) in the mean and in pass/fail views (C015),
+            // which is a fail when higher is better and a pass when lower is.
+            let passCount = 0, failCount = 0, errorCount = 0, taskErrorCount = 0, cleanTrue = 0;
+            for (const row of rows) {
+              const { score, isError } = window.QymMetrics.getRowScore(row, mIdx, metric);
+              if (score === null) continue;
+              if (isError) {
+                errorCount++;
+                if (window.QymMetrics.isTaskErrorRow(row)) taskErrorCount++;
+                continue;
+              }
+              cleanTrue += score;
+              const passed = metricPassesFor(metric, score);
+              if (passed === true) passCount++;
+              else if (passed === false) failCount++;
+            }
+            const trueCount = Math.round(cleanTrue);
+            const falseCount = cnt - errorCount - trueCount;
             const pct = count => ((count / cnt) * 100).toFixed(0);
             const errorPct = pct(errorCount);
             const segments = direction === 'minimize'
               ? [
-                  { count: falseCount, cls: 'pass-seg', dot: 'pass', filter: 'passed', label: 'Pass (False)', title: 'Click to filter passing items' },
-                  { count: trueCount, cls: 'fail-seg', dot: 'fail', filter: 'failed', label: 'Fail (True)', title: 'Click to filter failing items' },
+                  { count: passCount, cls: 'pass-seg', dot: 'pass', filter: 'passed', label: 'Pass (False)', title: 'Click to filter passing items' },
+                  { count: failCount, cls: 'fail-seg', dot: 'fail', filter: 'failed', label: 'Fail (True)', title: 'Click to filter failing items' },
                 ]
               : direction === 'maximize'
               ? [
-                  { count: trueCount, cls: 'pass-seg', dot: 'pass', filter: 'passed', label: 'Pass', title: 'Click to filter passing items' },
-                  { count: falseCount, cls: 'fail-seg', dot: 'fail', filter: 'failed', label: 'Fail', title: 'Click to filter failing items' },
+                  { count: passCount, cls: 'pass-seg', dot: 'pass', filter: 'passed', label: 'Pass', title: 'Click to filter passing items' },
+                  { count: failCount, cls: 'fail-seg', dot: 'fail', filter: 'failed', label: 'Fail', title: 'Click to filter failing items' },
                 ]
               : [
                   { count: trueCount, cls: 'true-seg', dot: 'true', filter: '', label: 'True', title: 'True' },
                   { count: falseCount, cls: 'false-seg', dot: 'false', filter: '', label: 'False', title: 'False' },
                 ];
-            const errorLabel = direction ? 'counted as fail' : 'counted as False';
+            const scorerErrorCount = errorCount - taskErrorCount;
+            const errorKinds = [
+              scorerErrorCount ? scorerErrorCount + ' scorer error' + (scorerErrorCount === 1 ? '' : 's') : '',
+              taskErrorCount ? taskErrorCount + ' task error' + (taskErrorCount === 1 ? '' : 's') : '',
+            ].filter(Boolean).join(', ');
+            const errorLabel = direction === 'maximize'
+              ? 'counted as fail'
+              : direction === 'minimize' ? 'counted as False (pass)' : 'counted as False';
+            const errorTitle = errorKinds + ': counted as False (0) in the mean' +
+              (direction === 'maximize' ? ' and as fails' : direction === 'minimize' ? ' and, since lower is better, as passes' : '') +
+              '. Click to filter them.';
             cards += '<div class="metric-card" style="animation-delay:' + (cardIdx * 50) + 'ms;">' +
               '<div class="metric-card-header">' +
                 '<div class="metric-card-gauge">' +
@@ -8946,11 +8983,11 @@
                   segments.map(seg => seg.count > 0
                     ? '<div class="metric-bool-seg ' + seg.cls + '" data-metric="' + escapeAttr(metric) + '"' + (seg.filter ? ' data-bool-filter="' + seg.filter + '"' : '') + ' style="flex:' + seg.count + '" title="' + escapeAttr(seg.title) + '">' + (seg.count > 1 ? seg.count : '') + '</div>'
                     : '').join('') +
-                  (errorCount > 0 ? '<div class="metric-bool-seg error-seg" style="flex:' + errorCount + '" title="' + errorCount + ' scorer error' + (errorCount === 1 ? '' : 's') + ', ' + errorLabel + '">' + (errorCount > 1 ? errorCount : '') + '</div>' : '') +
+                  (errorCount > 0 ? '<div class="metric-bool-seg error-seg" data-metric="' + escapeAttr(metric) + '" data-bool-filter="metric_errors" style="flex:' + errorCount + '" title="' + escapeAttr(errorTitle) + '">' + (errorCount > 1 ? errorCount : '') + '</div>' : '') +
                 '</div>' +
                 '<div class="metric-bool-legend">' +
                   segments.map(seg => '<span class="metric-bool-legend-item"><span class="metric-bool-dot ' + seg.dot + '"></span> ' + seg.label + ' ' + pct(seg.count) + '%</span>').join('') +
-                  (errorCount > 0 ? '<span class="metric-bool-legend-item"><span class="metric-bool-dot error"></span> Scorer error ' + errorPct + '%, ' + errorLabel + '</span>' : '') +
+                  (errorCount > 0 ? '<span class="metric-bool-legend-item" title="' + escapeAttr(errorTitle) + '"><span class="metric-bool-dot error"></span> Error ' + errorPct + '%, ' + errorLabel + '</span>' : '') +
                 '</div>' +
               '</div>' +
             '</div>';
@@ -8973,7 +9010,11 @@
               const rangeMax = b === 10 ? 1.01 : (b + 1) / 10;
               const pct = totalWithScores > 0 ? ((count / totalWithScores) * 100).toFixed(0) : '0';
               const errInBucket = Math.min(count, errBuckets[b]);
-              const errNote = errInBucket > 0 ? ' (' + errInBucket + ' scorer error' + (errInBucket === 1 ? '' : 's') + ', counted as ' + label + ')' : '';
+              const errNote = errInBucket > 0
+                ? (perPass
+                    ? ' (' + errInBucket + ' with a failed scorer pass)'
+                    : ' (' + errInBucket + ' scorer error' + (errInBucket === 1 ? '' : 's') + ', counted as ' + label + ')')
+                : '';
               const errH = errInBucket > 0 ? Math.max(2, Math.round(barH * errInBucket / count)) : 0;
               barsHtml += '<div class="dist-chart-col" data-metric="' + escapeAttr(metric) + '" data-bucket-min="' + rangeMin + '" data-bucket-max="' + rangeMax + '" title="' + label + ': ' + count + ' items (' + pct + '%)' + errNote + ' — Click to filter">' +
                 '<span class="bar-count">' + (count > 0 ? count : '') + '</span>' +
@@ -8995,7 +9036,7 @@
                     errorNote +
                   '</div>' +
                 '</div>' +
-                '<span class="metric-card-badge">' + (errCnt > 0 ? (totalWithScores - errCnt) + ' scored · ' + errCnt + ' err' : totalWithScores + ' scored') + '</span>' +
+                '<span class="metric-card-badge">' + (errorRows > 0 ? (totalWithScores - errorRows) + ' scored · ' + errorRows + ' err' : totalWithScores + ' scored') + '</span>' +
               '</div>' +
               barsHtml +
             '</div>';
@@ -10990,17 +11031,22 @@
 
           // Score for this metric
           let score = null;
+          let scoreIsError = false;
           if (mIdx >= 0) {
             const result = window.QymMetrics.getRowScore(row, mIdx, metric);
             score = result.score;
+            scoreIsError = score !== null && result.isError;
           }
 
           // Item filter: pass/fail follows the metric's declared direction.
+          // Same buckets as the boolean bar's segments: an item whose task or
+          // scorer failed is only in metric_errors, never in passed/failed.
           if (state.itemFilter === 'passed') {
-            if (metricPassesFor(metric, score) !== true) continue;
+            if (scoreIsError || metricPassesFor(metric, score) !== true) continue;
           } else if (state.itemFilter === 'failed') {
-            const isError = window.QymMetrics.isErrorRow(row);
-            if (!isError && metricPassesFor(metric, score) !== false) continue;
+            if (scoreIsError || metricPassesFor(metric, score) !== false) continue;
+          } else if (state.itemFilter === 'metric_errors') {
+            if (!scoreIsError) continue;
           } else if (state.itemFilter === 'errors') {
             if (!window.QymMetrics.isErrorRow(row)) continue;
           } else if (state.itemFilter === 'edited_metrics') {

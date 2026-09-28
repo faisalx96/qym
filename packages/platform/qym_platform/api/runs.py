@@ -85,7 +85,7 @@ from qym_platform.services.run_review import (
     review_history,
     state_conflict,
 )
-from qym_platform.services.metric_semantics import declared_direction
+from qym_platform.services.metric_semantics import declared_direction, primary_metric
 from qym_platform.services.score_edits import (
     ScoreEditError,
     parse_score_edit,
@@ -98,7 +98,9 @@ from qym_platform.services.run_means import (
     metric_error_candidates,
     metric_mean_fields,
     raw_metric_totals,
+    reduce_pass_scores,
     run_metric_mean,
+    supersede_metric_error,
 )
 from qym_platform.services.retention import purge_due_at
 from qym_platform.services.repeat_passes import (
@@ -651,11 +653,18 @@ def _stringify(val: Any) -> str:
 def _repeat_aggregate_metric_meta(
     pass_values: Dict[int, Optional[float]],
     stored_meta: Optional[Dict[str, Any]] = None,
+    observed: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Describe a repeat reduction without presenting one pass as the mean."""
+    """Describe a repeat reduction without presenting one pass as the mean.
+
+    ``observed`` is how many passes the reduction counted (see
+    ``reduce_pass_scores``); by default, the passes with a score.
+    """
+    if observed is None:
+        observed = sum(value is not None for value in pass_values.values())
     meta: Dict[str, Any] = {
         "sample_reducer": "mean",
-        "samples_observed": sum(value is not None for value in pass_values.values()),
+        "samples_observed": int(observed),
     }
     for key, value in (stored_meta or {}).items():
         if key in {"modified", "original_score"} or key.startswith("pass_"):
@@ -2563,8 +2572,7 @@ def legacy_list_runs(
             k = int(getattr(r, "samples", 1) or 1)
             if k <= 1:
                 continue
-            metrics_list = list(r.metrics or [])
-            primary = metrics_list[0] if metrics_list else None
+            primary = primary_metric(r.metrics, metric_specs_by_run.get(r.id) or {})
             means = (pass_means.get(r.id) or {}).get(primary, {}) if primary else {}
             attempts = pass_attempts.get(r.id, {})
             errors = pass_errors.get(r.id, {})
@@ -2591,6 +2599,7 @@ def legacy_list_runs(
                     {
                         "pass_number": p,
                         "status": p_status,
+                        "primary_metric": primary,
                         "primary_score": means.get(p),
                         "error_count": errors.get(p, 0),
                         **error_details[r.id]["pass_error_counts"].get(
@@ -4378,10 +4387,7 @@ def run_group_metrics(
         spec.metric_name: spec
         for spec in db.query(RunMetricSpec).filter(RunMetricSpec.run_id == run.id)
     }
-    metric_name = metric or next(
-        (name for name in run.metrics or [] if getattr(specs.get(name), "is_primary", None)),
-        run.metrics[0] if run.metrics else None,
-    )
+    metric_name = metric or primary_metric(run.metrics, specs)
     if not metric_name:
         return {"error": "Run has no metrics"}
     # Passes follow the metric's declared direction. Without one the page
@@ -4782,29 +4788,47 @@ def update_metric(
         pass_meta = dict(pass_record.meta or {})
         pass_meta.setdefault("original_score", pass_record.score_numeric)
         pass_meta["modified"] = "true"
-        pass_record.meta = pass_meta
+        # The edited pass holds a reviewer's score, not a scorer failure.
+        pass_record.meta = supersede_metric_error(pass_meta)
         pass_record.score_numeric = numeric_val
 
-        # Re-reduce: run-level score = mean over all stored passes
-        siblings = (
-            db.query(RunItemPassScore)
-            .filter(
+        # Re-reduce with the ingest rule: the item value is the mean over its
+        # passes, a failed pass without a score counting as 0 (C015).
+        siblings = {
+            int(p.pass_number): p
+            for p in db.query(RunItemPassScore).filter(
                 RunItemPassScore.run_id == run.id,
                 RunItemPassScore.item_id == item.item_id,
                 RunItemPassScore.metric_name == metric_name,
             )
-            .all()
-        )
-        numerics = [p.score_numeric for p in siblings if p.score_numeric is not None]
-        reduced = round(sum(numerics) / len(numerics), 6) if numerics else None
+        }
+        # autoflush is off: a pass row created above is not in the query yet.
+        siblings[pass_number] = pass_record
+        reduced, observed = reduce_pass_scores(siblings.values())
+        reduced = round(reduced, 6) if reduced is not None else None
         score_record.score_numeric = reduced
         score_record.score_raw = reduced
         meta = _repeat_aggregate_metric_meta(
-            {int(p.pass_number): p.score_numeric for p in siblings}, meta
+            {number: p.score_numeric for number, p in siblings.items()},
+            meta,
+            observed=observed,
         )
     else:
         score_record.score_numeric = numeric_val
         score_record.score_raw = numeric_val
+        # A reviewer's score replaces a failed scorer's: the row stops
+        # counting as a scorer error; the failure is kept as original_*.
+        meta = supersede_metric_error(meta)
+        if run_samples <= 1:
+            # Imports can keep a pass-1 copy of a classic score, which the
+            # error counts also read.
+            for pass_copy in db.query(RunItemPassScore).filter(
+                RunItemPassScore.run_id == run.id,
+                RunItemPassScore.item_id == item.item_id,
+                RunItemPassScore.metric_name == metric_name,
+            ):
+                if is_metric_error(pass_copy.meta):
+                    pass_copy.meta = supersede_metric_error(dict(pass_copy.meta))
 
     score_record.meta = meta
     db.commit()

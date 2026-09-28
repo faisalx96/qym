@@ -45,6 +45,23 @@ def test_alembic_has_one_upgrade_head() -> None:
     assert heads == ["0063"]
 
 
+def test_migrations_name_their_own_revision_in_job_logs() -> None:
+    """Admins see "queued by migration NNNN" in the maintenance UI; after a
+    renumbering the text must still name the migration that queued the job."""
+    import re
+
+    config = Config()
+    config.set_main_option("script_location", str(MIGRATIONS_DIR))
+    wrong = []
+    for revision in ScriptDirectory.from_config(config).walk_revisions():
+        source = Path(revision.path).read_text(encoding="utf-8")
+        for named in re.findall(r"queued by migration (\w+)", source):
+            if named != revision.revision:
+                wrong.append((Path(revision.path).name, named))
+
+    assert wrong == []
+
+
 def test_user_sessions_migration_creates_and_drops_the_session_table(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

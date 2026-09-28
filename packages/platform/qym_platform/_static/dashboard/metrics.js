@@ -125,7 +125,9 @@ function parseScoreValue(metricValue) {
  *   (the mean over passes), so a boolean is a rate and a count may be fractional
  * @returns {{ok: true, value: number}|{ok: false, message: string}}
  */
-const SCORE_EDIT_HINTS = {
+// var, not const: shell.js re-runs this classic script on every in-app
+// navigation, and a second top-level const/let declaration throws.
+var SCORE_EDIT_HINTS = {
   boolean: 'Enter true or false (1 or 0).',
   percentage: 'Enter a value from 0 to 1, or 0% to 100%.',
   count: 'Enter a whole number, 0 or more.',
@@ -190,6 +192,42 @@ function getRowScore(row, metricIdx, metricName = null) {
   }
 
   return { score, isError: metricError };
+}
+
+/**
+ * A row's metric value with scorer errors left out, and how many scorer
+ * errors it held. Same rule as services/run_means.py (the published "mean
+ * without scorer errors"):
+ * - a classic row with a scorer error is left out (score null, errors 1);
+ * - a repeat row is re-reduced over its passes that did not error, and
+ *   ``errors`` counts the errored passes; a row whose every pass errored is
+ *   left out;
+ * - a task error is not a scorer error: it keeps its 0 (errors 0).
+ */
+function scoreWithoutMetricErrors(row, metricIdx, metricName) {
+  const { score, isError } = getRowScore(row, metricIdx, metricName);
+  if (score === null) return { score: null, errors: 0 };
+  if (!isError || isTaskErrorRow(row)) return { score, errors: 0 };
+  const passScores = row?.pass_scores?.[metricName];
+  const passMeta = row?.pass_metric_meta?.[metricName];
+  if (Array.isArray(passScores) && Array.isArray(passMeta) && passMeta.some(isMetricErrorMeta)) {
+    let sum = 0;
+    let count = 0;
+    let errors = 0;
+    passScores.forEach((raw, index) => {
+      if (isMetricErrorMeta(passMeta[index])) {
+        errors++;
+        return;
+      }
+      const value = parseScoreValue(raw);
+      if (value !== null) {
+        sum += value;
+        count++;
+      }
+    });
+    return { score: count ? sum / count : null, errors };
+  }
+  return { score: null, errors: 1 };
 }
 
 /** Index rows using the same first-match identity semantics as Array.find. */
@@ -413,7 +451,8 @@ function calculateMedian(values) {
  * Calculate strict grouped item outcomes for two K-run model groups.
  *
  * Only items present with a non-null score in all selected runs are eligible.
- * Errors are treated as score 0 via getRowScore(), so they count as failures.
+ * Errors count as 0 via getRowScore(), and their verdict follows that 0: a
+ * failure when higher is better, a pass when lower is better (C015 rule).
  *
  * @param {Object} options
  * @param {Array} options.runsData
@@ -445,7 +484,8 @@ function calculateGroupedOutcomeBuckets(options) {
  * Calculate grouped cohort comparison stats for two K-run groups.
  *
  * Only items present with a non-null score in every selected run are eligible.
- * Errors are treated as score 0 via getRowScore(), so they count as failures.
+ * Errors count as 0 via getRowScore(), and their verdict follows that 0: a
+ * failure when higher is better, a pass when lower is better (C015 rule).
  *
  * @param {Object} options
  * @param {Array} options.runsData
@@ -1092,6 +1132,7 @@ if (typeof window !== 'undefined') {
     hasMetricError,
     isErrorRow,
     getRowScore,
+    scoreWithoutMetricErrors,
     parseScoreValue,
     parseMetricScoreInput,
     indexRowsById,

@@ -220,3 +220,61 @@ def test_models_pass_threshold_defaults_to_the_metrics_own(browser):
         assert page.locator("#models-threshold-value").inner_text() == "70%"
     finally:
         fixture.close()
+
+
+def _minimize_boolean_with_errors(fixture):
+    """accuracy: lower is better; items 1, 2 scorer errors, 4 a task error,
+    5 and 6 True, the rest False."""
+    _set_specs(
+        fixture,
+        {
+            "accuracy": {"score_type": "boolean", "direction": "minimize"},
+            "count": {"score_type": "number", "direction": "maximize"},
+        },
+    )
+    for data in fixture.data.values():
+        for row in data["snapshot"]["rows"]:
+            i = row["index"]
+            row["status"], row["error"] = "completed", ""
+            row["metric_values"][0] = 1 if i in (5, 6) else 0
+            row["metric_meta"]["accuracy"] = {}
+            if i in (1, 2):
+                row["metric_meta"]["accuracy"] = {"status": "error", "error": "judge 429"}
+            if i == 4:
+                row["status"], row["error"] = "error", "task boom"
+
+
+def test_run_page_boolean_segments_match_their_filters_with_errors(browser):
+    """C008 x C015: an errored item sits in one segment only, the one its
+    filter lists; the legend says what errors count as."""
+    fixture = ViewFixture(browser, "run", count=10)
+    _minimize_boolean_with_errors(fixture)
+    try:
+        fixture.goto()
+        page = fixture.page
+        card = page.locator(".metric-card").filter(has=page.locator(".metric-bool-bar")).first
+        segments = {}
+        for kind in ("pass-seg", "fail-seg", "error-seg"):
+            seg = card.locator(f".metric-bool-seg.{kind}")
+            segments[kind] = int(seg.evaluate("el => el.style.flexGrow || el.style.flex.split(' ')[0]"))
+        assert segments == {"pass-seg": 5, "fail-seg": 2, "error-seg": 3}
+        legend = card.locator(".metric-bool-legend").inner_text()
+        assert "counted as False (pass)" in legend
+        assert "counted as fail" not in legend
+        listed = {}
+        for kind in ("pass-seg", "fail-seg", "error-seg"):
+            fixture.goto()
+            card = page.locator(".metric-card").filter(has=page.locator(".metric-bool-bar")).first
+            card.locator(f".metric-bool-seg.{kind}").click()
+            listed[kind] = sorted(
+                page.evaluate(
+                    "__viewTest.getFilteredItems().map(item => (item.row || item).index)"
+                )
+            )
+        assert listed == {
+            "pass-seg": [0, 3, 7, 8, 9],
+            "fail-seg": [5, 6],
+            "error-seg": [1, 2, 4],
+        }
+    finally:
+        fixture.close()

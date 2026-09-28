@@ -872,7 +872,7 @@ class Approval(Base):
     comment: Mapped[str] = mapped_column(Text, default="")
     # runs.status shows the review state while a run is in review. This keeps
     # the execution outcome (COMPLETED/FAILED) it had when it was submitted so
-    # withdrawing a decision restores it. NULL for reviews started before 0060.
+    # withdrawing a decision restores it. NULL for reviews started before 0062.
     execution_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 
 

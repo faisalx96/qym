@@ -32,8 +32,10 @@ from qym_platform.services.dashboard_outbox import (
     execution_event_query,
     execution_event_object,
 )
+from qym_platform.services.metric_semantics import primary_metric
 from qym_platform.services.run_means import (
     MetricTotals,
+    apply_repeat_pass_errors,
     metric_mean_fields,
     run_metric_mean,
 )
@@ -1008,14 +1010,75 @@ def ensure_pending_summary(db, run_id, version):
 
 
 # Bump when published summary fields change; older summaries are refreshed
-# from numeric projection records (2: run means count scorer errors as 0).
-SUMMARY_SHAPE = 2
+# from numeric projection records (2: run means count scorer errors as 0;
+# 3: repeat runs publish the mean without scorer errors, and pass summaries
+# name the declared primary metric).
+SUMMARY_SHAPE = 3
 
 
 def _outdated_shape(data):
     data = data or {}
     shape = int(data.get("summary_shape") or 0)
     return "task_error_count" not in data or shape < SUMMARY_SHAPE
+
+
+def _repeat_pass_errors(db, run_id):
+    """``apply_repeat_pass_errors`` input from numeric projection records.
+
+    Repeat runs keep scorer errors on pass records; only items with one
+    (and no task error) are read.
+    """
+    item_alias = aliased(Record)
+    affected = set(
+        db.execute(
+            select(Record.record_key, Record.metric_key)
+            .join(
+                item_alias,
+                and_(
+                    item_alias.record_key == Record.record_key,
+                    item_alias.record_kind == "item",
+                    item_alias.present.is_(True),
+                    item_alias.error == 0,
+                ),
+            )
+            .where(
+                Record.run_key == run_id,
+                Record.record_kind == "pass_score",
+                Record.present.is_(True),
+                Record.error > 0,
+            )
+            .distinct()
+        ).all()
+    )
+    if not affected:
+        return []
+    keys = sorted({key for key, _ in affected})
+    passes, values = {}, {}
+    for start in range(0, len(keys), 400):
+        for key, metric, kind, score, error in db.execute(
+            select(
+                Record.record_key,
+                Record.metric_key,
+                Record.record_kind,
+                Record.score,
+                Record.error,
+            ).where(
+                Record.run_key == run_id,
+                Record.present.is_(True),
+                Record.record_kind.in_(("score", "pass_score")),
+                Record.record_key.in_(keys[start : start + 400]),
+            )
+        ):
+            if (key, metric) not in affected:
+                continue
+            if kind == "pass_score":
+                passes.setdefault((key, metric), []).append((score, error > 0))
+            else:
+                values[(key, metric)] = score
+    return [
+        (metric, values.get((key, metric)), passes.get((key, metric), []))
+        for key, metric in sorted(affected)
+    ]
 
 
 def refresh_run_summary(db, run_id, version):
@@ -1078,6 +1141,8 @@ def refresh_run_summary(db, run_id, version):
         )
         for metric, total, count, error_total, error_count, unscored in metric_rows
     }
+    if int(run.samples or 1) > 1:
+        apply_repeat_pass_errors(metric_totals, _repeat_pass_errors(db, run_id))
     metric_means = metric_mean_fields(
         run.metrics or [], metric_totals, summary.error_count
     )
@@ -1143,7 +1208,9 @@ def refresh_run_summary(db, run_id, version):
                 ).group_by(Record.pass_number)
             )
         }
-        primary = (run.metrics or [None])[0]
+        primary = primary_metric(
+            run.metrics, (dimension.descriptor or {}).get("metric_specs") or {}
+        )
         # Same rule as run means: a scorer error without a score counts as 0.
         means = {
             number: run_metric_mean(
@@ -1201,6 +1268,7 @@ def refresh_run_summary(db, run_id, version):
                     has_data=p in means or p in attempt_counts,
                     run_status=dimension.status,
                 ),
+                "primary_metric": primary,
                 "primary_score": means.get(p),
                 "error_count": execution_errors_by_pass.get(p, 0),
                 **error_details["pass_error_counts"].get(

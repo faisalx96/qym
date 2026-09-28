@@ -593,7 +593,7 @@ def test_a_new_review_round_records_the_current_outcome(client, session_factory)
 def test_pre_upgrade_reviews_resolve_outcome_from_the_run_completed_event(
     client, session_factory, final_status, expected
 ):
-    """Reviews started before 0060 have no stored outcome (lazy backfill)."""
+    """Reviews started before 0062 have no stored outcome (lazy backfill)."""
     with session_factory() as db:
         run_id = _seed(db, status=RunWorkflowStatus.APPROVED)
         db.add(
@@ -988,7 +988,7 @@ def test_review_history_reconstructs_pre_history_reviews_and_checks_access(
 def test_history_of_a_pre_upgrade_review_keeps_its_start(
     client, session_factory, legacy_status
 ):
-    """A review begun before 0060 and finished after it shows both parts."""
+    """A review begun before 0062 and finished after it shows both parts."""
     with session_factory() as db:
         run_id = _seed(db, status=RunWorkflowStatus(legacy_status))
         approved = legacy_status == "APPROVED"
@@ -1215,7 +1215,7 @@ def test_review_history_migration_is_quick_ddl_and_reversible(monkeypatch):
         ROOT
         / "packages/platform/qym_platform/migrations/versions/0062_run_review_history.py"
     )
-    spec = importlib.util.spec_from_file_location("migration_0060", path)
+    spec = importlib.util.spec_from_file_location("migration_0062", path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
     assert (migration.revision, migration.down_revision) == ("0062", "0061")

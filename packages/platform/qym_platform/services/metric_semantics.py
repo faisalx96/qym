@@ -32,3 +32,23 @@ def declared_direction(spec: Any) -> Optional[str]:
     if get("score_type") == "legacy" and _schema_version(get("schema_version")) < 2:
         return None
     return "maximize"
+
+
+def primary_metric(metrics: Any, specs: Any) -> Optional[str]:
+    """The metric a run's views lead with (C008).
+
+    The metric whose spec is declared primary, else the first metric in
+    ``run.metrics`` (spec position) order. Same rule as ``metrics.js``
+    ``defaultMetricName``. ``specs`` maps metric names to ``RunMetricSpec``
+    rows or to spec payloads (``"primary"``).
+    """
+    names = [name for name in (metrics or []) if name]
+    for name in names:
+        spec = (specs or {}).get(name)
+        if isinstance(spec, dict):
+            declared = spec.get("primary", spec.get("is_primary"))
+        else:
+            declared = getattr(spec, "is_primary", None)
+        if declared is True:
+            return name
+    return names[0] if names else None

@@ -75,7 +75,7 @@ from qym_platform.item_identity import (
     build_identity_fingerprint,
     looks_like_positional_item_id,
 )
-from qym_platform.services.run_means import is_metric_error
+from qym_platform.services.run_means import reduce_pass_scores
 from qym_platform.services.run_lifecycle import (
     is_run_force_stopped,
     is_run_in_review,
@@ -1552,12 +1552,7 @@ def _ingest_events_sync(
 
     def _reduce_pass_scores(item_id, metric_name):
         # A pass whose scorer failed counts as 0 (services/run_means.py).
-        values = [
-            row.score_numeric if row.score_numeric is not None else 0.0
-            for row in passes_by_metric[(item_id, metric_name)].values()
-            if row.score_numeric is not None or is_metric_error(row.meta)
-        ]
-        return (sum(values) / len(values), len(values)) if values else (None, 0)
+        return reduce_pass_scores(passes_by_metric[(item_id, metric_name)].values())
 
     applied = 0
     trace_stats_dirty = False

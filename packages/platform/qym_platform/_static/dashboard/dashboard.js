@@ -3812,6 +3812,18 @@
         const listRun = runs.find(r => r.run_id === runId);
         const summaries = (listRun && Array.isArray(listRun.pass_summaries)) ? listRun.pass_summaries : [];
         const primary = listRun ? window.QymMetrics.defaultMetricName(listRun.metrics || [], listRun.metric_specs || {}) : null;
+        // primary_score belongs to the metric the server names; summaries
+        // published before it named one used the first metric.
+        const scoredMetric = (summaries.find(s => s && s.primary_metric) || {}).primary_metric
+          || (listRun && (listRun.metrics || [])[0]) || null;
+        // Same default the server's group metrics use, so the rule does not
+        // change when the fetch lands.
+        const primaryThreshold = primary
+          ? window.QymMetrics.defaultPassThreshold(
+            (listRun.metric_specs || {})[primary],
+            runMetricDirection(listRun, primary)
+          )
+          : undefined;
         if (summaries.length) {
           data = {
             _optimistic: true,
@@ -3821,8 +3833,8 @@
               passes: summaries.map(s => ({
                 pass_number: s.pass_number,
                 status: s.status,
-                metric_means: (primary && typeof s.primary_score === 'number')
-                  ? { [primary]: s.primary_score }
+                metric_means: (scoredMetric && typeof s.primary_score === 'number')
+                  ? { [scoredMetric]: s.primary_score }
                   : {},
                 items_scored: null,
                 error_count: s.error_count,
@@ -3833,7 +3845,7 @@
                 analysis_cause_count: s.analysis_cause_count,
               })),
             },
-            group: { metric: primary },
+            group: { metric: primary, threshold: primaryThreshold },
           };
         } else {
           return `<tr ${detailAttrs}>

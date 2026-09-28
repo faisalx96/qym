@@ -735,7 +735,8 @@ def test_run_page_supports_single_pass_scope() -> None:
     assert '"running_count": (' in api
     assert 'running_by_pass.get(p, 0) if status == "running" else 0' in api
     assert 'pass_number = request.get("pass_number")' in api
-    assert "Re-reduce: run-level score = mean over all stored passes" in api
+    # Re-reduced with the ingest rule (C015): services/run_means.py.
+    assert "reduce_pass_scores(siblings.values())" in api
 
 
 def test_repeat_and_compare_share_grouped_output_interaction() -> None:
