@@ -407,7 +407,87 @@ def test_redelivered_events_on_a_reviewed_run_stay_idempotent(client, session_fa
     response = _post_events(client, run_id, [delivered])
 
     assert response.status_code == 200
-    assert response.json() == {"ok": True, "applied": 0, "skipped": 1}
+    assert response.json() == {
+        "ok": True,
+        "applied": 0,
+        "skipped": 1,
+        "rejected": 0,
+        "rejected_events": [],
+    }
+
+
+def test_frozen_run_keeps_the_per_event_rejection_contract(client, session_factory):
+    """A reviewed run reports invalid lines like any other run (C005 + C014)."""
+    with session_factory() as db:
+        run_id = _seed(db)
+    _approve(client, run_id)
+    before = _snapshot(session_factory, run_id)
+    heartbeat = json.dumps(
+        _event(run_id, "run_heartbeat", {"heartbeat_at": "2026-09-02T00:00:00Z"})
+    )
+    headers = {"Authorization": f"Bearer {TOKEN}"}
+
+    mixed = client.post(
+        f"/v1/runs/{run_id}/events",
+        content=heartbeat + "\n{not json",
+        headers=headers,
+    )
+    assert mixed.status_code == 200, mixed.text
+    body = mixed.json()
+    assert (body["applied"], body["skipped"], body["rejected"]) == (0, 1, 1)
+    assert body["rejected_events"][0]["line"] == 2
+    assert "invalid JSON" in body["rejected_events"][0]["error"]
+
+    all_invalid = client.post(
+        f"/v1/runs/{run_id}/events", content="not json\n{nope", headers=headers
+    )
+    assert all_invalid.status_code == 422, all_invalid.text
+    assert all_invalid.json()["rejected"] == 2
+    assert [row["line"] for row in all_invalid.json()["rejected_events"]] == [1, 2]
+    assert _snapshot(session_factory, run_id) == before
+
+
+def test_split_retry_on_a_frozen_run_returns_the_full_contract(
+    client, session_factory
+):
+    """The isolation path sums each half's verdicts; a frozen half must carry them."""
+    from qym_platform.api import ingest
+    from qym_platform.auth import Principal
+
+    with session_factory() as db:
+        run_id = _seed(db)
+    _approve(client, run_id)
+    heartbeat = lambda seq: json.dumps(  # noqa: E731
+        _event(
+            run_id,
+            "run_heartbeat",
+            {"heartbeat_at": "2026-09-02T00:00:00Z"},
+            sequence=seq,
+        )
+    )
+    with session_factory() as db:
+        bind = db.get_bind()
+        owner = db.get(User, "owner-1")
+        principal = Principal(
+            user=User(id=owner.id), auth_type="api_key", project_id="project-1"
+        )
+
+    result = ingest._split_line_range(
+        run_id,
+        [heartbeat(1), heartbeat(2)],
+        0,
+        2,
+        bind,
+        principal,
+        ValueError("refused"),
+    )
+
+    assert result == {
+        "applied": 0,
+        "skipped": 2,
+        "rejected": 0,
+        "rejected_events": [],
+    }
 
 
 def test_withdrawn_approval_reopens_the_run_to_ingest(client, session_factory):

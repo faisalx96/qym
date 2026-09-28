@@ -57,11 +57,16 @@ def lock_repeat_run(db: Session, run_id: str) -> Run:
     # A bulk request calls the deletion service repeatedly in one transaction.
     # Persist its previous pass removal before refreshing the locked run.
     db.flush()
+    # FOR NO KEY UPDATE: it still serializes with ingest, reviews and other
+    # saves (they conflict with it), but it does not block inserts of rows
+    # that reference the run (FOR KEY SHARE). Editors lock an item and then
+    # insert such rows; a plain FOR UPDATE here, taken before the item locks,
+    # deadlocked against them on Postgres.
     run = (
         Run.active(db)
         .filter(Run.id == run_id)
         .populate_existing()
-        .with_for_update()
+        .with_for_update(key_share=True)
         .one_or_none()
     )
     if run is None:

@@ -643,6 +643,11 @@ _PAYLOAD_TYPE = {
 # the first few so a batch of garbage cannot produce a huge reply.
 MAX_REJECTION_DETAILS = 100
 _MAX_REJECTION_ERROR_CHARS = 300
+# Isolating a value the database refuses re-applies the batch in halves, up
+# to 2N-1 transactions for N events, each taking the run lock. SDKs send at
+# most 200 events per batch; bigger batches (only very old SDKs drained their
+# whole queue into one) are refused instead of split, which bounds the cost.
+MAX_ISOLATED_BATCH_EVENTS = 400
 # run_events.sequence and the item/attempt counters are 32-bit INTEGER columns
 # on Postgres. Larger values would fail the whole batch at INSERT time.
 _MAX_DB_INT = 2_147_483_647
@@ -1011,6 +1016,24 @@ def _ingest_events_worker(
     # clients retry a 5xx forever. Apply the batch again in halves, each in
     # its own transaction, until only the refused events are left out.
     lines = body.decode("utf-8").split("\n")
+    filled = sum(1 for line in lines if line.strip())
+    if filled > MAX_ISOLATED_BATCH_EVENTS:
+        # A 4xx, not a 5xx: SDKs then resend the events one by one, which
+        # applies the valid ones and rejects only the refused value.
+        return JSONResponse(
+            {
+                "ok": False,
+                "applied": 0,
+                "skipped": 0,
+                "detail": (
+                    f"The database refused a value in this batch of {filled} "
+                    f"events. Batches of more than {MAX_ISOLATED_BATCH_EVENTS} "
+                    "events are not split to find it; resend it in smaller "
+                    "batches."
+                ),
+            },
+            status_code=413,
+        )
     return _ingest_response(
         _split_line_range(run_id, lines, 0, len(lines), bind, principal, error)
     )
@@ -1310,8 +1333,15 @@ def _ingest_events_sync(
                 ),
                 headers={"X-Qym-Run-State": "in_review", "X-Qym-Run-Status": status},
             )
-        return JSONResponse(
-            {"ok": True, "applied": 0, "skipped": skipped + len(accepted)}
+        # Same response contract as any other batch: invalid lines keep their
+        # per-event verdicts, and an all-invalid batch is a 422.
+        return _ingest_response(
+            {
+                "applied": 0,
+                "skipped": skipped + len(accepted),
+                "rejected": len(rejections),
+                "rejected_events": rejections,
+            }
         )
 
     storage = ingest_settings()

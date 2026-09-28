@@ -550,3 +550,62 @@ def test_unicode_line_separator_inside_a_json_string_is_not_a_line_break(
     assert response.json()["applied"] == 1
     with Session(engine) as db:
         assert db.query(RunItem).one().input == f"first{separator}second"
+
+
+def _count_ingest_transactions(monkeypatch):
+    calls = []
+    original = ingest._ingest_events_sync
+
+    def counting(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(ingest, "_ingest_events_sync", counting)
+    return calls
+
+
+def test_isolation_cost_is_bounded_for_an_all_refused_batch(api, monkeypatch):
+    """Splitting costs at most 2N-1 transactions, and N is capped."""
+    engine, run_id, post = api
+    _emulate_postgres_value_checks(engine)
+    monkeypatch.setattr(ingest, "MAX_ISOLATED_BATCH_EVENTS", 40)
+    calls = _count_ingest_transactions(monkeypatch)
+    refused = [
+        _event(
+            run_id,
+            i + 1,
+            "item_started",
+            {"item_id": f"item-{i}", "index": i, "input": "bad\x00value"},
+        )
+        for i in range(40)
+    ]
+
+    response = post(refused)
+
+    assert response.status_code == 422, response.text
+    assert response.json()["rejected"] == 40
+    assert len(calls) <= 2 * 40 - 1
+    assert _counts(engine) == (0, 0)
+
+
+def test_oversized_batch_with_a_refused_value_is_not_split(api, monkeypatch):
+    engine, run_id, post = api
+    _emulate_postgres_value_checks(engine)
+    monkeypatch.setattr(ingest, "MAX_ISOLATED_BATCH_EVENTS", 40)
+    calls = _count_ingest_transactions(monkeypatch)
+    events = [_started(run_id, i + 1, i) for i in range(41)]
+    events[20] = _refused_value_event(run_id, 21, "nul_output")
+
+    response = post(events)
+
+    # One transaction, then a 4xx the SDK answers by resending event by event.
+    assert response.status_code == 413, response.text
+    assert "smaller batches" in response.json()["detail"]
+    assert len(calls) == 1
+    assert _counts(engine) == (0, 0)
+
+    # A clean batch of the same size still applies in one transaction.
+    calls.clear()
+    clean = [_started(run_id, i + 1, i) for i in range(41)]
+    assert post(clean).json()["applied"] == 41
+    assert len(calls) == 1
