@@ -137,18 +137,26 @@ def _require_api_key_project_access(db: Session, row: ApiKey, user: User) -> Non
         .filter(Project.id == row.project_id)
         .first()
     )
+    # X-Qym-Key-State tells SDKs the key itself is refused, so a run stops
+    # uploading instead of resending every event on its own.
     if found is None:
-        raise HTTPException(status_code=403, detail="API key project not found")
+        raise HTTPException(
+            status_code=403,
+            detail="API key project not found",
+            headers={"X-Qym-Key-State": "project_missing"},
+        )
     project_active, membership_id = found
     if not project_active:
         raise HTTPException(
             status_code=409,
             detail="Project is archived; its API keys stop working until an admin unarchives it",
+            headers={"X-Qym-Key-State": "project_archived"},
         )
     if membership_id is None and user.role != UserRole.ADMIN:
         raise HTTPException(
             status_code=403,
             detail="API key owner is no longer a member of this project",
+            headers={"X-Qym-Key-State": "owner_removed"},
         )
 
 
@@ -162,13 +170,25 @@ def resolve_api_key_principal(db: Session, token: str) -> Principal:
         .first()
     )
     if not row:
-        raise HTTPException(status_code=401, detail="Invalid API key")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid API key",
+            headers={"X-Qym-Key-State": "invalid"},
+        )
     if not _verify_api_key_cached(token, row.id, row.key_hash):
-        raise HTTPException(status_code=401, detail="Invalid API key")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid API key",
+            headers={"X-Qym-Key-State": "invalid"},
+        )
 
     user = db.query(User).filter(User.id == row.user_id).first()
     if not user or not user.is_active:
-        raise HTTPException(status_code=403, detail="User disabled")
+        raise HTTPException(
+            status_code=403,
+            detail="User disabled",
+            headers={"X-Qym-Key-State": "owner_disabled"},
+        )
     _require_api_key_project_access(db, row, user)
     scopes = tuple(str(scope).strip() for scope in (row.scopes or []) if str(scope).strip())
     return Principal(user=user, auth_type="api_key", scopes=scopes, project_id=row.project_id)

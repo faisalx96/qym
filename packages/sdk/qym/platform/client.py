@@ -165,6 +165,38 @@ def _is_poison_error(exc: BaseException) -> bool:
     return isinstance(code, int) and 400 <= code < 500 and code not in (408, 429)
 
 
+def _response_header(exc: BaseException, name: str) -> str:
+    headers = getattr(exc, "headers", None)
+    try:
+        return str(headers.get(name) or "").strip() if headers is not None else ""
+    except Exception:
+        return ""
+
+
+def _run_wide_rejection(exc: BaseException) -> Optional[str]:
+    """Why the platform refuses every upload for this run, or None.
+
+    These rejections are about the request, not the events in it: the run is
+    closed (410), under review, the key was revoked, or its project archived.
+    Resending the batch one event at a time can never succeed, so the stream
+    stops instead. Other 4xx answers stay per-event (isolated one by one).
+    """
+    code = getattr(exc, "code", None)
+    if code == 410:
+        return "HTTP 410: the run is closed to updates"
+    run_state = _response_header(exc, "X-Qym-Run-State").lower()
+    if code == 409 and run_state == "in_review":
+        status = _response_header(exc, "X-Qym-Run-Status") or "under review"
+        return (
+            f"HTTP 409: the run is under review ({status}); its results stay "
+            "frozen until a project manager withdraws the review decision"
+        )
+    key_state = _response_header(exc, "X-Qym-Key-State").lower()
+    if code == 401 or (isinstance(code, int) and 400 <= code < 500 and key_state):
+        return _http_error_reason(exc)
+    return None
+
+
 @dataclass
 class PlatformRunHandle:
     run_id: str
@@ -269,9 +301,10 @@ class PlatformEventStream:
                 self.sent_events += 1 - self._record_rejections(response, [evt])
                 return
             except Exception as e:
-                if getattr(e, "code", None) == 410:
+                run_wide = _run_wide_rejection(e)
+                if run_wide:
                     self.dropped_events += 1
-                    self._disable_uploads()
+                    self._disable_uploads(run_wide)
                     return
                 if _is_poison_error(e):
                     # Deterministic rejection: another attempt cannot succeed.
@@ -305,7 +338,7 @@ class PlatformEventStream:
             self._first_rejection = f"{evt.get('type', 'event')}: {reason}"
             print(
                 f"qym: WARNING: the platform rejected a run event "
-                f"({self._first_rejection}). Other events are still uploaded.",
+                f"({self._first_rejection}). Valid events are still uploaded.",
                 file=sys.stderr,
             )
 
@@ -326,18 +359,22 @@ class PlatformEventStream:
             self._record_rejection(evt, str(detail.get("error") or "rejected"))
         return count
 
-    def _disable_uploads(self) -> None:
+    def _disable_uploads(
+        self, reason: str = "HTTP 410: the run is closed to updates"
+    ) -> None:
         """Latch a permanent server rejection across every delivery path."""
         with self._state_lock:
             if self._remote_closed.is_set():
                 return
             self._remote_closed.set()
             self._accepting = False
-            self._delivery_error = RuntimeError("Platform run is closed to updates")
+            self._delivery_error = RuntimeError(
+                f"Platform run no longer accepts updates ({reason})"
+            )
             self._stop.set()
         self.dropped_events += self._q.discard()
         print(
-            f"qym: platform run {self.run_id} is closed to updates (HTTP 410). "
+            f"qym: platform run {self.run_id} no longer accepts updates ({reason}). "
             "Uploads and heartbeats stopped. Local evaluation may continue.",
             file=sys.stderr,
         )
@@ -591,9 +628,10 @@ class PlatformEventStream:
                     self.sent_events += 1 - self._record_rejections(response, [evt])
                     break
                 except Exception as e2:
-                    if getattr(e2, "code", None) == 410:
+                    run_wide = _run_wide_rejection(e2)
+                    if run_wide:
                         self.dropped_events += len(entries) - index
-                        self._disable_uploads()
+                        self._disable_uploads(run_wide)
                         return
                     if _is_poison_error(e2):
                         self._record_rejection(evt, _http_error_reason(e2))
@@ -710,9 +748,10 @@ class PlatformEventStream:
                 except Exception as e:
                     retry_count += 1
                     self._consecutive_failures += 1
-                    if getattr(e, "code", None) == 410:
+                    run_wide = _run_wide_rejection(e)
+                    if run_wide:
                         self.dropped_events += len(batch)
-                        self._disable_uploads()
+                        self._disable_uploads(run_wide)
                         _clear_batch()
                     elif _is_poison_error(e):
                         # Deterministic 4xx: retrying the batch verbatim can
@@ -721,6 +760,9 @@ class PlatformEventStream:
                         self._send_events_individually(batch)
                         _clear_batch()
                         retry_count = 0
+                        # The batch was handled; keep the send cadence so the
+                        # next events batch up again instead of going one by one.
+                        last_flush = time.time()
                     elif (
                         self._stop.is_set()
                         and self._consecutive_failures >= self.CLOSE_GIVEUP_FAILURES

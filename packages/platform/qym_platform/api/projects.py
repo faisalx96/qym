@@ -1106,8 +1106,9 @@ def update_project(
 ) -> Dict[str, Any]:
     _require_admin(principal)
     project = _get_project(db, project_id)
-    if req.name is not None:
-        project.name = req.name.strip()
+    changes: Dict[str, Any] = {}
+    if req.name is not None and req.name.strip() != project.name:
+        changes["name"] = req.name.strip()
     if req.slug is not None:
         next_slug = _slugify(req.slug)
         conflict = (
@@ -1117,9 +1118,19 @@ def update_project(
         )
         if conflict:
             raise HTTPException(status_code=400, detail="Project slug already exists")
-        project.slug = next_slug
-    if req.is_active is not None:
-        project.is_active = req.is_active
+        if next_slug != project.slug:
+            changes["slug"] = next_slug
+    # Audit against the state before any change. Toggling is_active here cuts
+    # off or restores every API key of the project, exactly like the archive
+    # and unarchive endpoints, so it records the same audit action.
+    if changes:
+        _audit_project(db, principal, project, "project.updated", dict(changes))
+    if req.is_active is not None and req.is_active != project.is_active:
+        action = "project.unarchived" if req.is_active else "project.archived"
+        _audit_project(db, principal, project, action, {"is_active": req.is_active})
+        changes["is_active"] = req.is_active
+    for field, value in changes.items():
+        setattr(project, field, value)
     db.commit()
     db.refresh(project)
     return _project_payload(db, project, principal)

@@ -342,6 +342,40 @@ def test_blocked_delete_says_when_trash_stops_blocking(client, session_factory, 
     assert "until its runs are deleted and purged from Trash" in settings
 
 
+def test_patch_toggling_is_active_is_audited_like_archive(client, session_factory):
+    """PATCH is_active cuts off or restores API keys, so it leaves the same trail."""
+    project_id = _create_project(client, session_factory, "patched")
+    url = f"/v1/admin/projects/{project_id}"
+
+    archived = client.patch(url, json={"is_active": False}, headers=ADMIN)
+    assert archived.status_code == 200
+    assert archived.json()["is_active"] is False
+    # A no-op PATCH writes nothing.
+    assert client.patch(url, json={"is_active": False}, headers=ADMIN).status_code == 200
+    restored = client.patch(url, json={"is_active": True}, headers=ADMIN)
+    assert restored.json()["is_active"] is True
+    renamed = client.patch(
+        url, json={"name": "Renamed", "slug": "renamed"}, headers=ADMIN
+    )
+    assert (renamed.json()["name"], renamed.json()["slug"]) == ("Renamed", "renamed")
+
+    with session_factory() as db:
+        rows = (
+            db.query(AuditLog)
+            .filter(AuditLog.entity_type == "project", AuditLog.entity_id == project_id)
+            .order_by(AuditLog.id)
+            .all()
+        )
+        trail = [(row.action, row.before["is_active"], row.after) for row in rows]
+        assert trail == [
+            ("project.archived", True, {"is_active": False}),
+            ("project.unarchived", False, {"is_active": True}),
+            ("project.updated", True, {"name": "Renamed", "slug": "renamed"}),
+        ]
+        assert rows[-1].before["slug"] == "patched"
+        assert all(row.actor_user_id == "admin" for row in rows)
+
+
 def test_project_lifecycle_endpoints_are_admin_only(client, session_factory):
     project_id = _create_project(client, session_factory, "guarded")
     for method, url in (
