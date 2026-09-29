@@ -282,8 +282,13 @@ def _claim_is_true(value: Any) -> bool:
     return value is True
 
 
-def oidc_identity_from_claims(provider: str, claims: Dict[str, Any]) -> ProviderIdentity:
-    """Build an identity from standard OIDC claims, requiring a verified email."""
+def oidc_identity_from_claims(provider: str, claims: Dict[str, Any], issuer: str = "") -> ProviderIdentity:
+    """Build an identity from standard OIDC claims, requiring a verified email.
+
+    ``issuer`` scopes the subject: a ``sub`` is only unique within its issuer,
+    and the GitLab issuer is configurable, so GitLab subjects are stored as
+    ``<issuer>#<sub>`` (an OIDC issuer never contains a fragment).
+    """
     label = _OIDC_PROVIDER_LABELS[provider]
     email = str(claims.get("email") or "").strip().lower()
     if not email or not _claim_is_true(claims.get("email_verified")):
@@ -291,6 +296,8 @@ def oidc_identity_from_claims(provider: str, claims: Dict[str, Any]) -> Provider
     subject = str(claims.get("sub") or "").strip()
     if not subject:
         raise HTTPException(status_code=401, detail=f"{label} identity is missing subject")
+    if issuer:
+        subject = f"{issuer}#{subject}"
     display_name = str(
         claims.get("name") or claims.get("given_name") or claims.get("preferred_username") or claims.get("nickname") or ""
     ).strip()
@@ -310,6 +317,13 @@ async def exchange_provider_identity(request: Request, provider: str, settings: 
 
     if provider in _OIDC_PROVIDER_LABELS:
         claims = dict(token.get("userinfo") or {})
+        issuer = ""
+        if provider == "gitlab":
+            # Authlib validated the ID token's iss against the discovery issuer.
+            # Read it before the userinfo merge so a userinfo body cannot set it.
+            issuer = str(claims.get("iss") or "").strip()
+            if not issuer:
+                raise HTTPException(status_code=401, detail="GitLab identity is missing issuer")
         # GitLab only puts email claims in the ID token for users with a public
         # email; the userinfo endpoint always returns the primary email.
         if not claims.get("email") or "email_verified" not in claims:
@@ -317,7 +331,7 @@ async def exchange_provider_identity(request: Request, provider: str, settings: 
             if claims.get("sub") and str(fetched.get("sub") or "") != str(claims["sub"]):
                 raise HTTPException(status_code=401, detail="Provider userinfo does not match the ID token")
             claims = {**claims, **fetched}
-        return oidc_identity_from_claims(provider, claims)
+        return oidc_identity_from_claims(provider, claims, issuer=issuer)
 
     if provider == "github":
         profile_response = await client.get("user", token=token)

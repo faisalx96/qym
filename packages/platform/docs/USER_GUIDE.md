@@ -45,9 +45,22 @@ Operators choose one UI authentication mode with `QYM_AUTH_MODE`:
 |---|---|
 | `none` | Local development. qym creates/reuses `dev@local` as an admin. |
 | `proxy_headers` | Trusts `X-User-Email` or `X-Email` from an authentication proxy. |
-| `oidc` | Uses configured Google and/or GitHub sign-in. |
+| `oidc` | Uses configured Google, GitHub, and/or self-hosted GitLab sign-in. |
 
 Email/password sign-in can be enabled alongside any non-`none` mode. SAML and generic enterprise SSO are not implemented.
+
+Self-hosted GitLab sign-in needs `QYM_AUTH_GITLAB_URL` (the GitLab issuer, for example `https://gitlab.example.com`), `QYM_AUTH_GITLAB_CLIENT_ID`, and `QYM_AUTH_GITLAB_CLIENT_SECRET`. Register a confidential GitLab OAuth application with the scopes `openid`, `email`, and `profile` and the redirect URI `<QYM_BASE_URL>/v1/auth/callback/gitlab`. A malformed `QYM_AUTH_GITLAB_URL` stops the platform at startup.
+
+A first provider sign-in joins the existing account with the same verified email. For GitLab, this trusts the instance's email verification: enable GitLab sign-in only when users cannot set an unconfirmed email (email confirmation on, or emails managed by LDAP or admins). Otherwise a GitLab user could claim another person's account, including an admin's.
+
+#### Forgotten passwords
+
+Users cannot reset their own password. An admin opens **Admin → Users → Edit** and chooses **Reset Password**:
+
+1. The editor shows a temporary password once. Copy it and give it to the user through a trusted channel.
+2. The user signs in with the temporary password and must choose a new password before the sign-in completes.
+
+A temporary password works once, and a later reset replaces it. For a user who only signed in through a provider, the reset also creates a password login.
 
 Session-based deployments require `QYM_AUTH_SESSION_SECRET`. Browser writes are protected by a same-origin check; configure the externally visible `QYM_BASE_URL` correctly when the app is behind a proxy.
 

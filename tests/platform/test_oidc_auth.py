@@ -331,7 +331,7 @@ def test_gitlab_exchange_reads_userinfo_when_id_token_has_no_email(monkeypatch):
 
     _enable_gitlab(monkeypatch)
     fake = _FakeGitLabClient(
-        token={"userinfo": {"sub": "42", "nickname": "dev"}},
+        token={"userinfo": {"iss": GITLAB_URL, "sub": "42", "nickname": "dev"}},
         userinfo={"sub": "42", "email": "Dev@Corp.Example", "email_verified": True, "name": "Dev Person"},
     )
     monkeypatch.setattr(auth_oidc, "_oauth_client", lambda settings, provider: fake)
@@ -339,7 +339,7 @@ def test_gitlab_exchange_reads_userinfo_when_id_token_has_no_email(monkeypatch):
     identity = asyncio.run(auth_oidc.exchange_provider_identity(MagicMock(), "gitlab", PlatformSettings()))
     assert fake.userinfo_calls == 1
     assert identity.provider == "gitlab"
-    assert identity.subject == "42"
+    assert identity.subject == f"{GITLAB_URL}#42"
     assert identity.email == "dev@corp.example"
     assert identity.display_name == "Dev Person"
 
@@ -349,12 +349,13 @@ def test_gitlab_exchange_uses_id_token_email_without_userinfo_call(monkeypatch):
 
     _enable_gitlab(monkeypatch)
     fake = _FakeGitLabClient(
-        token={"userinfo": {"sub": "7", "email": "id@corp.example", "email_verified": True, "preferred_username": "idtok"}}
+        token={"userinfo": {"iss": GITLAB_URL, "sub": "7", "email": "id@corp.example", "email_verified": True, "preferred_username": "idtok"}}
     )
     monkeypatch.setattr(auth_oidc, "_oauth_client", lambda settings, provider: fake)
 
     identity = asyncio.run(auth_oidc.exchange_provider_identity(MagicMock(), "gitlab", PlatformSettings()))
     assert fake.userinfo_calls == 0
+    assert identity.subject == f"{GITLAB_URL}#7"
     assert identity.email == "id@corp.example"
     assert identity.display_name == "idtok"
 
@@ -364,7 +365,7 @@ def test_gitlab_exchange_rejects_userinfo_for_another_subject(monkeypatch):
 
     _enable_gitlab(monkeypatch)
     fake = _FakeGitLabClient(
-        token={"userinfo": {"sub": "42"}},
+        token={"userinfo": {"iss": GITLAB_URL, "sub": "42"}},
         userinfo={"sub": "99", "email": "other@corp.example", "email_verified": True},
     )
     monkeypatch.setattr(auth_oidc, "_oauth_client", lambda settings, provider: fake)
@@ -410,7 +411,9 @@ def test_gitlab_callback_links_existing_password_account(client, session_factory
 
     async def fake_exchange(request, provider, settings):
         return oidc_identity_from_claims(
-            provider, {"sub": "42", "email": "dev@corp.example", "email_verified": True, "name": "Dev"}
+            provider,
+            {"sub": "42", "email": "dev@corp.example", "email_verified": True, "name": "Dev"},
+            issuer=GITLAB_URL,
         )
 
     monkeypatch.setattr(auth_api, "exchange_provider_identity", fake_exchange)
@@ -425,4 +428,154 @@ def test_gitlab_callback_links_existing_password_account(client, session_factory
         assert session.query(User).filter(User.email == "dev@corp.example").count() == 1
         identity = session.query(UserIdentity).filter(UserIdentity.provider == "gitlab").one()
         assert identity.user_id == user_id
-        assert identity.subject == "42"
+        assert identity.subject == f"{GITLAB_URL}#42"
+
+
+def _gitlab_sign_in(client, monkeypatch, claims):
+    """Run the real exchange and callback with a fake GitLab token."""
+    fake = _FakeGitLabClient(token={"userinfo": dict(claims)})
+    monkeypatch.setattr(auth_oidc, "_oauth_client", lambda settings, provider: fake)
+    client.post("/v1/auth/logout", headers={"Origin": "http://testserver"})
+    return client.get("/v1/auth/callback/gitlab", follow_redirects=False)
+
+
+def test_gitlab_subject_is_scoped_to_its_issuer(client, session_factory, monkeypatch):
+    # Repointing QYM_AUTH_GITLAB_URL at another instance must not let that
+    # instance's user 1 sign in as the first instance's user 1.
+    other_gitlab = "https://gitlab-b.corp.example"
+    _enable_gitlab(monkeypatch)
+    response = _gitlab_sign_in(
+        client,
+        monkeypatch,
+        {"iss": GITLAB_URL, "sub": "1", "email": "root@corp.example", "email_verified": True},
+    )
+    assert response.status_code == 303
+    admin_id = client.get("/v1/me").json()["id"]
+    with session_factory() as session:
+        session.get(User, admin_id).role = UserRole.ADMIN
+        session.commit()
+
+    _enable_gitlab(monkeypatch, url=other_gitlab)
+    response = _gitlab_sign_in(
+        client,
+        monkeypatch,
+        {"iss": other_gitlab, "sub": "1", "email": "someone@b.example", "email_verified": True},
+    )
+    assert response.status_code == 303
+    me = client.get("/v1/me").json()
+    assert me["id"] != admin_id
+    assert me["email"] == "someone@b.example"
+    assert me["role"] == "MEMBER"
+
+    with session_factory() as session:
+        subjects = sorted(row.subject for row in session.query(UserIdentity).filter(UserIdentity.provider == "gitlab"))
+    assert subjects == sorted([f"{GITLAB_URL}#1", f"{other_gitlab}#1"])
+
+
+def test_gitlab_same_issuer_and_subject_keeps_account_after_email_change(client, monkeypatch):
+    _enable_gitlab(monkeypatch)
+    _gitlab_sign_in(
+        client,
+        monkeypatch,
+        {"iss": GITLAB_URL, "sub": "5", "email": "old@corp.example", "email_verified": True},
+    )
+    first_id = client.get("/v1/me").json()["id"]
+
+    response = _gitlab_sign_in(
+        client,
+        monkeypatch,
+        {"iss": GITLAB_URL, "sub": "5", "email": "new@corp.example", "email_verified": True},
+    )
+    assert response.status_code == 303
+    assert client.get("/v1/me").json()["id"] == first_id
+
+
+def test_gitlab_issuer_comes_from_id_token_not_userinfo(monkeypatch):
+    import asyncio
+
+    _enable_gitlab(monkeypatch)
+    fake = _FakeGitLabClient(
+        token={"userinfo": {"iss": GITLAB_URL, "sub": "42"}},
+        userinfo={
+            "iss": "https://attacker.example",
+            "sub": "42",
+            "email": "dev@corp.example",
+            "email_verified": True,
+        },
+    )
+    monkeypatch.setattr(auth_oidc, "_oauth_client", lambda settings, provider: fake)
+
+    identity = asyncio.run(auth_oidc.exchange_provider_identity(MagicMock(), "gitlab", PlatformSettings()))
+    assert identity.subject == f"{GITLAB_URL}#42"
+
+
+def test_gitlab_exchange_rejects_id_token_without_issuer(monkeypatch):
+    import asyncio
+
+    _enable_gitlab(monkeypatch)
+    fake = _FakeGitLabClient(
+        token={"userinfo": {"sub": "42", "email": "dev@corp.example", "email_verified": True}},
+    )
+    monkeypatch.setattr(auth_oidc, "_oauth_client", lambda settings, provider: fake)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(auth_oidc.exchange_provider_identity(MagicMock(), "gitlab", PlatformSettings()))
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail == "GitLab identity is missing issuer"
+
+
+def test_google_subject_is_not_issuer_scoped(monkeypatch):
+    import asyncio
+
+    fake = _FakeGitLabClient(
+        token={
+            "userinfo": {
+                "iss": "https://accounts.google.com",
+                "sub": "google-sub",
+                "email": "user@example.com",
+                "email_verified": True,
+            }
+        }
+    )
+    monkeypatch.setattr(auth_oidc, "_oauth_client", lambda settings, provider: fake)
+
+    identity = asyncio.run(auth_oidc.exchange_provider_identity(MagicMock(), "google", PlatformSettings()))
+    assert identity.subject == "google-sub"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        "   ",
+        "https://gitlab.corp.example",
+        "https://gitlab.corp.example/",
+        "https://corp.example/gitlab",
+        "http://gitlab.internal:8080",
+    ],
+)
+def test_gitlab_url_setting_accepts_http_urls(monkeypatch, value):
+    monkeypatch.setenv("QYM_AUTH_GITLAB_URL", value)
+    assert PlatformSettings(database_url="sqlite://").auth_gitlab_url == value.strip()
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "gitlab.corp.example",
+        "ftp://gitlab.corp.example",
+        "https://",
+        "https://gitlab.corp.example/?tenant=a",
+        "https://gitlab.corp.example/#frag",
+        "https://gitlab.corp.example:notaport",
+        "https://git lab.corp.example",
+        "https://gitlab.corp.example/.well-known/openid-configuration",
+    ],
+)
+def test_gitlab_url_setting_rejects_malformed_values(monkeypatch, value):
+    from pydantic import ValidationError
+
+    monkeypatch.setenv("QYM_AUTH_GITLAB_URL", value)
+    with pytest.raises(ValidationError) as exc_info:
+        PlatformSettings(database_url="sqlite://")
+    assert "QYM_AUTH_GITLAB_URL" in str(exc_info.value)

@@ -8,6 +8,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
+from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -205,6 +206,7 @@ def auth_change_password(
     _ensure_local_auth_enabled(settings)
 
     user, credential = _verified_local_credential(db, payload.email, payload.current_password)
+    verified_hash = bytes(credential.password_hash)
     if payload.new_password == payload.current_password:
         raise HTTPException(status_code=400, detail="The new password must be different from the current password")
     try:
@@ -212,11 +214,22 @@ def auth_change_password(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    # Write only if the hash is still the one verified above. A reset or another
+    # change that committed in between makes this match no row, so a temporary
+    # password is consumed once and a stale request cannot overwrite a newer one.
     now = datetime.utcnow()
-    credential.password_hash = password_hash
-    credential.must_change_password = False
-    credential.updated_at = now
-    credential.last_login_at = now
+    result = db.execute(
+        update(LocalAuthCredential)
+        .where(
+            LocalAuthCredential.user_id == user.id,
+            LocalAuthCredential.password_hash == verified_hash,
+        )
+        .values(password_hash=password_hash, must_change_password=False, updated_at=now, last_login_at=now)
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        db.rollback()
+        raise _invalid_credentials()
     db.commit()
     set_authenticated_session(request, user, "local_password")
     return {"ok": True, "next": _resolve_next(request)}

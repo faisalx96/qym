@@ -307,7 +307,7 @@
           .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
       }
 
-      let state = { users: [], projects: [], liveRuns: [], liveRunsTotal: 0, recentRuns: [], recentRunsPage: 0, recentRunsPageSize: 6, recentRunsTotal: 0, me: null, editingUserId: null, localAuthEnabled: false };
+      let state = { users: [], projects: [], liveRuns: [], liveRunsTotal: 0, recentRuns: [], recentRunsPage: 0, recentRunsPageSize: 6, recentRunsTotal: 0, me: null, editingUserId: null, editUserBusy: false, localAuthEnabled: false };
       const stoppingRuns = new Set();
       const forceStoppedRuns = new Map();
       let liveRequest = 0;
@@ -635,7 +635,23 @@
         });
       }
 
+      // While a save or reset request is pending, the editor must stay open on
+      // the same user: a reset is committed before its one-time password
+      // arrives, so closing or saving early would lose that password. The
+      // fields lock too, so edits made during a save are not silently dropped.
+      function setEditUserBusy(busy) {
+        state.editUserBusy = busy;
+        for (const id of ['edit-user-save', 'edit-user-reset-password', 'edit-user-cancel', 'edit-user-close', 'edit-user-email', 'edit-user-name']) {
+          document.getElementById(id).disabled = busy;
+        }
+        const isSelf = !!(state.me && state.me.id === state.editingUserId);
+        for (const id of ['edit-user-role', 'edit-user-active']) {
+          document.getElementById(id).disabled = busy || isSelf;
+        }
+      }
+
       function openEditUserModal(userId) {
+        if (state.editUserBusy) return;
         const user = state.users.find(u => u.id === userId);
         if (!user) return;
         state.editingUserId = userId;
@@ -658,12 +674,14 @@
       }
 
       function closeEditUserModal() {
+        if (state.editUserBusy) return;
         document.getElementById('edit-user-modal').style.display = 'none';
         document.getElementById('edit-user-temp-value').value = '';
         state.editingUserId = null;
       }
 
       async function resetUserPassword() {
+        if (state.editUserBusy) return;
         const userId = state.editingUserId;
         const user = state.users.find(u => u.id === userId);
         if (!user) return;
@@ -676,10 +694,9 @@
         const confirmation = window.QymShell?.openConfirmDialog
           ? await window.QymShell.openConfirmDialog({ title: 'Reset password', description, confirmLabel: 'Reset password', confirmClass: 'shell-btn-danger' })
           : { confirmed: window.confirm(description.join('\n\n')) };
-        if (!confirmation.confirmed || state.editingUserId !== userId) return;
+        if (!confirmation.confirmed || state.editingUserId !== userId || state.editUserBusy) return;
 
-        const resetBtn = document.getElementById('edit-user-reset-password');
-        resetBtn.disabled = true;
+        setEditUserBusy(true);
         try {
           const result = await fetchJson(`v1/admin/users/${encodeURIComponent(userId)}/reset-password`, { method: 'POST' });
           if (state.editingUserId !== userId) return;
@@ -688,7 +705,7 @@
         } catch (err) {
           errEl.textContent = err.message || 'Failed to reset password';
         } finally {
-          resetBtn.disabled = false;
+          setEditUserBusy(false);
         }
       }
 
@@ -706,7 +723,7 @@
       }
 
       async function saveEditUser() {
-        if (!state.editingUserId) return;
+        if (!state.editingUserId || state.editUserBusy) return;
         const errEl = document.getElementById('edit-user-error');
         errEl.textContent = '';
 
@@ -718,8 +735,9 @@
         if (!email) { errEl.textContent = 'Email is required'; return; }
 
         const saveBtn = document.getElementById('edit-user-save');
-        saveBtn.disabled = true;
+        setEditUserBusy(true);
         saveBtn.textContent = 'Saving...';
+        let saved = false;
         try {
           const body = { email, display_name: displayName, role, is_active: isActive };
           const isSelf = state.me && state.me.id === state.editingUserId;
@@ -732,16 +750,18 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
           });
-          closeEditUserModal();
-          const msgEl = document.getElementById('user-message');
-          if (msgEl) { msgEl.style.color = ''; msgEl.textContent = 'User updated'; }
-          await load();
+          saved = true;
         } catch (err) {
           errEl.textContent = err.message || 'Failed to update user';
         } finally {
-          saveBtn.disabled = false;
+          setEditUserBusy(false);
           saveBtn.textContent = 'Save Changes';
         }
+        if (!saved) return;
+        closeEditUserModal();
+        const msgEl = document.getElementById('user-message');
+        if (msgEl) { msgEl.style.color = ''; msgEl.textContent = 'User updated'; }
+        await load();
       }
 
       document.getElementById('admin-new-project-btn').addEventListener('click', () => {

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from pydantic import Field
+from urllib.parse import urlsplit
+
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -38,6 +40,26 @@ class PlatformSettings(BaseSettings):
     auth_gitlab_url: str = Field(default="")
     auth_gitlab_client_id: str = Field(default="")
     auth_gitlab_client_secret: str = Field(default="")
+
+    @field_validator("auth_gitlab_url")
+    @classmethod
+    def _validate_gitlab_url(cls, value: str) -> str:
+        # Fail at startup instead of serving a GitLab button whose discovery 500s.
+        value = (value or "").strip()
+        if not value:
+            return ""
+        try:
+            parts = urlsplit(value)
+            parts.port  # raises ValueError for a malformed port
+        except ValueError as exc:
+            raise ValueError(f"QYM_AUTH_GITLAB_URL is not a valid URL: {exc}") from exc
+        if parts.scheme not in {"http", "https"} or not parts.hostname:
+            raise ValueError("QYM_AUTH_GITLAB_URL must be an http(s) URL with a host, e.g. https://gitlab.example.com")
+        if "?" in value or "#" in value or any(char.isspace() for char in value):
+            raise ValueError("QYM_AUTH_GITLAB_URL must not contain a query, fragment, or whitespace")
+        if "/.well-known/" in parts.path + "/":
+            raise ValueError("QYM_AUTH_GITLAB_URL is the GitLab base URL, not its /.well-known/ discovery URL")
+        return value
 
     # Database (required - no SQLite fallback)
     database_url: str = Field(description="PostgreSQL connection string (required)")
