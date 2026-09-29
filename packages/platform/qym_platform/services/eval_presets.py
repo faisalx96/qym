@@ -23,11 +23,16 @@ Rules the database does not enforce and this module does:
 Bindings to connections that were deleted (or hidden from experiments) are reported as
 **warnings**, never errors, both when saving and when reading a version, so the UI can
 show them and the launch form can require re-picking the model (§9.1).
+
+A document authored on another schema hash is carried onto the current one with
+:func:`remap` (§9.3); :func:`remap_version` does it for a stored version without
+touching it.
 """
 
 from __future__ import annotations
 
 import copy
+from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from qym_platform.datetime_utils import to_api_timestamp, utc_now_naive
@@ -44,9 +49,17 @@ from qym_platform.db.models import (
 from qym_platform.services.eval_config import binding_kind, validate_config_document
 from qym_platform.services.eval_model_slots import (
     descriptor_for_schema,
+    detect_model_slots,
     list_model_slots,
+    missing_pointers,
+    propose_endpoint_slot,
 )
-from qym_platform.services.eval_schema_form import escape_pointer_segment
+from qym_platform.services.eval_schema_form import (
+    escape_pointer_segment,
+    json_pointer,
+    match_pointer,
+    split_pointer,
+)
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -522,6 +535,409 @@ def publish_version(
     _set_current(preset, version)
     _flush(db, "Another version was published at the same time; reload and retry")
     return version, warnings
+
+
+# --------------------------------------------------------------------------- remap
+
+# Document and section roots: never dropped wholesale by the validation pass.
+_REMAP_ROOTS = ("", "/evaluator", "/env_overrides", "/slot_bindings")
+_MAX_REMAP_PASSES = 10
+# Errors about a whole collection or a sweep: dropping values cannot fix them.
+_UNFIXABLE_RULES = ("sweep", "required_keys", "min_items")
+
+
+def _is_collection_item(descriptor: Mapping[str, Any], pointer: str) -> bool:
+    """True for an entry of an open-ended map (``/env_overrides/…/endpoints/fast``)."""
+    prefix = "/env_overrides/"
+    if not pointer.startswith(prefix):
+        return False
+    template = match_pointer(dict(descriptor), pointer[len(prefix) - 1 :])
+    entry = (descriptor.get("fields") or {}).get(template) if template else None
+    if not entry or entry.get("kind") == "role_table":
+        return False
+    last = entry["path"][-1]
+    return len(last) > 2 and last[0] == "{" and last[-1] == "}"
+
+
+@dataclass
+class RemapResult:
+    """A config document re-mapped onto another schema (plan §9.3).
+
+    ``config`` is the remapped document, pinned to the target hash. ``dropped`` lists
+    every setting that did not survive, each shaped like an ``eval_config`` error::
+
+        {"section": "env_overrides" | "evaluator" | "slot_bindings" | "document",
+         "pointer": "/env_overrides/LLM_OVERRIDES/brief",   # in the source document
+         "form_pointer": "/env_overrides/LLM_OVERRIDES/{role}",  # source descriptor
+         "params": {"role": "brief"},
+         "label": "LLM_OVERRIDES.brief",                  # short name for the summary
+         "reason": "removed" | "invalid" | "slot_removed" | "slot_stale",
+         "rule": "removed" | <eval_config rule>, "message": "…",
+         "slot_key": "endpoint:fast"}                     # bindings only
+
+    Values are never echoed. ``errors`` holds validation errors that dropping values
+    cannot fix (e.g. a field the target schema newly requires); ``summary`` is the
+    human line ("3 settings no longer supported: …") or ``None``.
+    """
+
+    config: Dict[str, Any]
+    dropped: List[Dict[str, Any]] = field(default_factory=list)
+    errors: List[Dict[str, Any]] = field(default_factory=list)
+    from_schema_hash: Optional[str] = None
+    to_schema_hash: Optional[str] = None
+
+    @property
+    def summary(self) -> Optional[str]:
+        if not self.dropped:
+            return None
+        count = len(self.dropped)
+        noun = "setting" if count == 1 else "settings"
+        labels = ", ".join(item["label"] for item in self.dropped)
+        return f"{count} {noun} no longer supported: {labels}"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "from_schema_hash": self.from_schema_hash,
+            "to_schema_hash": self.to_schema_hash,
+            "config": copy.deepcopy(self.config),
+            "dropped": copy.deepcopy(self.dropped),
+            "errors": copy.deepcopy(self.errors),
+            "summary": self.summary,
+            "ok": not self.errors,
+        }
+
+
+def _label(pointer: str, slot_key: Optional[str] = None) -> str:
+    if slot_key is not None:
+        return f"model slot {slot_key}"
+    segments = split_pointer(pointer)
+    if segments[:1] == ["env_overrides"]:
+        segments = segments[1:]
+    return ".".join(segments) or pointer
+
+
+def _source_location(
+    descriptor: Optional[Mapping[str, Any]], pointer: str
+) -> Tuple[str, Dict[str, str]]:
+    """Form pointer and template params of a document pointer on the source form."""
+    prefix = "/env_overrides"
+    if descriptor is None or not pointer.startswith(prefix + "/"):
+        return pointer, {}
+    relative = pointer[len(prefix) :]
+    template = match_pointer(dict(descriptor), relative)
+    if template is None:
+        return pointer, {}
+    params = {}
+    for seg, tmpl in zip(split_pointer(relative), split_pointer(template)):
+        if len(tmpl) > 2 and tmpl[0] == "{" and tmpl[-1] == "}":
+            params[tmpl[1:-1]] = seg
+    return prefix + template, params
+
+
+def _dropped(
+    pointer: str,
+    reason: str,
+    rule: str,
+    message: str,
+    *,
+    source_descriptor: Optional[Mapping[str, Any]],
+    slot_key: Optional[str] = None,
+) -> Dict[str, Any]:
+    section = split_pointer(pointer)[0] if pointer else "document"
+    if section not in ("env_overrides", "evaluator", "slot_bindings"):
+        section = "document"
+    form_pointer, params = _source_location(source_descriptor, pointer)
+    item: Dict[str, Any] = {
+        "section": section,
+        "pointer": pointer,
+        "form_pointer": form_pointer,
+        "params": params,
+        "label": _label(pointer, slot_key),
+        "reason": reason,
+        "rule": rule,
+        "message": message,
+    }
+    if slot_key is not None:
+        item["slot_key"] = slot_key
+    return item
+
+
+def _remap_env(
+    value: Any,
+    relative: str,
+    descriptor: Mapping[str, Any],
+    dropped: List[Tuple[str, str, str]],
+) -> Any:
+    """Keep the parts of ``value`` whose pointer exists in ``descriptor``.
+
+    Returns the kept value, or ``None`` when nothing survives. A field (including a
+    ``json`` field) is kept whole; its type is checked by the validation pass.
+    """
+    template = match_pointer(dict(descriptor), relative) if relative else ""
+    if template is None:
+        dropped.append((relative, "removed", "No longer in the environment's schema"))
+        return None
+    entry = (descriptor.get("fields") or {}).get(template) if template else None
+    if entry is not None and entry.get("kind") == "field":
+        return value
+    if not isinstance(value, Mapping):
+        dropped.append((relative, "invalid", "Now a group of settings, not a value"))
+        return None
+    kept: Dict[str, Any] = {}
+    for key, child in value.items():
+        child_ptr = relative + "/" + escape_pointer_segment(str(key))
+        if child is None:
+            # An explicit "inherit" stays as authored, or silently goes with its field.
+            if match_pointer(dict(descriptor), child_ptr) is not None:
+                kept[key] = None
+            continue
+        result = _remap_env(child, child_ptr, descriptor, dropped)
+        if result is not None:
+            kept[key] = result
+    if value and not kept:
+        return None  # emptied by drops: inherit
+    return kept
+
+
+def _slot_status(slot: Any) -> Optional[str]:
+    status = slot.get("status") if isinstance(slot, Mapping) else slot.status
+    return getattr(status, "value", status)
+
+
+def _slot_attr(slot: Any, name: str) -> Any:
+    return slot.get(name) if isinstance(slot, Mapping) else getattr(slot, name, None)
+
+
+def _remap_bindings(
+    bindings: Mapping[str, Any],
+    descriptor: Mapping[str, Any],
+    slots: Sequence[Any],
+    dropped: List[Tuple[str, str, str, str]],
+) -> Dict[str, Any]:
+    """Carry bindings forward by ``slot_key`` (§7.3)."""
+    index = {_slot_attr(s, "slot_key"): s for s in slots if _slot_attr(s, "slot_key")}
+    kept: Dict[str, Any] = {}
+    for slot_key, binding in bindings.items():
+        slot_key = str(slot_key)
+        slot = index.get(slot_key)
+        field_map: Optional[Mapping[str, Any]] = None
+        if slot is not None and _slot_status(slot) == EvalModelSlotStatus.STALE.value:
+            if binding_kind(binding) != "inherit":
+                dropped.append(
+                    (
+                        slot_key,
+                        "slot_stale",
+                        "slot_stale",
+                        f"Model slot {slot_key!r} lost its fields in the new "
+                        "schema; group LLM settings again and re-pick the model",
+                    )
+                )
+            continue
+        if slot is not None:
+            field_map = _slot_attr(slot, "field_map") or {}
+        else:
+            prefix, _, name = slot_key.partition(":")
+            proposal = (
+                propose_endpoint_slot(descriptor, name)
+                if prefix == "endpoint" and name
+                else None
+            )
+            field_map = proposal.field_map if proposal is not None else None
+        if field_map is None or missing_pointers(descriptor, field_map):
+            if binding_kind(binding) != "inherit":
+                dropped.append(
+                    (
+                        slot_key,
+                        "slot_removed",
+                        "slot_removed",
+                        f"Model slot {slot_key!r} no longer exists",
+                    )
+                )
+            continue
+        kept[slot_key] = copy.deepcopy(binding)
+    return kept
+
+
+def _pop_pointer(document: Dict[str, Any], pointer: str) -> bool:
+    """Remove the value at ``pointer``; prune objects it leaves empty in a section."""
+    segments = split_pointer(pointer)
+    if not segments:
+        return False
+    parents: List[Tuple[Dict[str, Any], str]] = []
+    node: Any = document
+    for segment in segments[:-1]:
+        if not isinstance(node, dict) or segment not in node:
+            return False
+        parents.append((node, segment))
+        node = node[segment]
+    if not isinstance(node, dict) or segments[-1] not in node:
+        return False
+    del node[segments[-1]]
+    # Prune emptied objects below the section root (``env_overrides`` itself stays).
+    while len(parents) > 1 and node == {}:
+        parent, key = parents.pop()
+        if parents[0][1] != "env_overrides":
+            break
+        del parent[key]
+        node = parent
+    return True
+
+
+def remap(
+    config: Mapping[str, Any],
+    from_schema: Optional[EvalEnvironmentSchema],
+    to_schema: EvalEnvironmentSchema,
+    *,
+    to_slots: Optional[Sequence[Any]] = None,
+    require_dataset: bool = False,
+) -> RemapResult:
+    """Re-map a §8.1 document authored on ``from_schema`` onto ``to_schema`` (§9.3).
+
+    - keeps values whose pointer still exists (templated endpoint/role pointers
+      included) and still validates on ``to_schema``;
+    - drops the rest and lists them in ``dropped``;
+    - leaves fields new in ``to_schema`` unset (inherit);
+    - carries slot bindings forward by ``slot_key``: a binding whose slot is gone,
+      ``stale`` or whose fields no longer resolve is dropped.
+
+    ``to_slots`` are the target schema's slot rows or dicts (stale ones included, so
+    they are reported as such); by default the detected slots of ``to_schema``.
+    ``from_schema`` only supplies form pointers for the dropped list and may be
+    ``None``. Pure: nothing is read from or written to the database, and ``config``
+    is not modified. Sweeps are not expanded; a document holding them keeps them and
+    reports them in ``errors``.
+    """
+    if not isinstance(config, Mapping):
+        raise ValueError("The config document must be an object")
+    to_descriptor = descriptor_for_schema(to_schema)
+    from_descriptor = (
+        descriptor_for_schema(from_schema) if from_schema is not None else None
+    )
+    if to_slots is None:
+        to_slots = [p.to_dict() for p in detect_model_slots(to_descriptor)]
+
+    document = copy.deepcopy(dict(config))
+    document["schema_hash"] = to_schema.schema_hash
+    dropped: List[Dict[str, Any]] = []
+
+    env_dropped: List[Tuple[str, str, str]] = []
+    env = document.get("env_overrides")
+    if isinstance(env, Mapping):
+        document["env_overrides"] = (
+            _remap_env(env, "", to_descriptor, env_dropped) or {}
+        )
+    for relative, reason, message in env_dropped:
+        rule = "removed" if reason == "removed" else "type"
+        dropped.append(
+            _dropped(
+                "/env_overrides" + relative,
+                reason,
+                rule,
+                message,
+                source_descriptor=from_descriptor,
+            )
+        )
+
+    binding_dropped: List[Tuple[str, str, str, str]] = []
+    bindings = document.get("slot_bindings")
+    if isinstance(bindings, Mapping):
+        document["slot_bindings"] = _remap_bindings(
+            bindings, to_descriptor, to_slots, binding_dropped
+        )
+    for slot_key, reason, rule, message in binding_dropped:
+        dropped.append(
+            _dropped(
+                _binding_pointer(slot_key),
+                reason,
+                rule,
+                message,
+                source_descriptor=from_descriptor,
+                slot_key=slot_key,
+            )
+        )
+
+    # Drop whatever still fails validation on the target; cross-field rules can
+    # cascade (a dropped endpoint invalidates a role's reference), hence the loop.
+    active_slots = [s for s in to_slots if _slot_status(s) != "stale"]
+    errors: List[Dict[str, Any]] = []
+    for attempt in range(_MAX_REMAP_PASSES + 1):
+        result = validate_config_document(
+            document,
+            env_schema=to_schema.schema_json or {},
+            slots=active_slots,
+            descriptor=to_descriptor,
+            schema_hash=to_schema.schema_hash,
+            require_dataset=require_dataset,
+        )
+        errors = []
+        if attempt == _MAX_REMAP_PASSES:
+            errors = list(result.errors)  # out of passes: report what is left
+            break
+        progressed = False
+        for error in result.errors:
+            slot_key = error.get("slot_key")
+            pointer = (
+                _binding_pointer(slot_key)
+                if slot_key is not None
+                else error.get("pointer") or ""
+            )
+            removed = (
+                error.get("rule") not in _UNFIXABLE_RULES
+                and pointer not in _REMAP_ROOTS
+                and _pop_pointer(document, pointer)
+            )
+            if not removed and error.get("rule") == "required" and slot_key is None:
+                # A collection entry missing a key it needs (an endpoint whose model
+                # binding was dropped) goes as a whole; other objects keep their
+                # values and the missing key is reported.
+                parent = json_pointer(split_pointer(pointer)[:-1])
+                if _is_collection_item(to_descriptor, parent) and _pop_pointer(
+                    document, parent
+                ):
+                    pointer, removed = parent, True
+            if not removed:
+                errors.append(error)
+                continue
+            progressed = True
+            dropped.append(
+                _dropped(
+                    pointer,
+                    "invalid",
+                    error.get("rule") or "schema",
+                    error.get("message") or "Invalid value",
+                    source_descriptor=from_descriptor,
+                    slot_key=slot_key,
+                )
+            )
+        if not progressed:
+            break
+    return RemapResult(
+        config=document,
+        dropped=dropped,
+        errors=errors,
+        from_schema_hash=(
+            from_schema.schema_hash
+            if from_schema is not None
+            else (config.get("schema_hash") or None)
+        ),
+        to_schema_hash=to_schema.schema_hash,
+    )
+
+
+def remap_version(
+    db: Session,
+    version: EvalConfigPresetVersion,
+    to_schema: EvalEnvironmentSchema,
+) -> RemapResult:
+    """Re-map a stored version onto ``to_schema``; the version is left untouched."""
+    from_schema = db.get(EvalEnvironmentSchema, version.schema_id)
+    return remap(
+        version.config or {},
+        from_schema,
+        to_schema,
+        # The persisted slots, as ``prepare_config`` validates against them.
+        to_slots=list_model_slots(db, to_schema.id),
+    )
 
 
 # --------------------------------------------------------------------------- payloads

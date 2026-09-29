@@ -4,14 +4,15 @@ Routes live under ``/v1/projects/{project_id}/eval-environments/{env_id}/presets
 Project members read every preset and create ``saved`` ones; a saved preset's creator
 or a project manager publishes its next version; only project managers (or platform
 admins) create or publish the ``official`` preset. Versions are append-only: there is
-no route that updates or deletes one.
+no route that updates or deletes one. ``GET …/versions/{n}?remap=current`` returns a
+version re-mapped onto the environment's current schema without storing it (§9.3).
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from qym_platform.api.eval_environments import _current_schema, _get_environment
 from qym_platform.api.projects import _require_project_access, _require_project_manager
@@ -201,9 +202,15 @@ def get_preset_version(
     env_id: str,
     preset_id: str,
     version: int,
+    remap: Optional[str] = Query(default=None, pattern="^current$"),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
+    """One version; ``?remap=current`` adds it re-mapped onto the current schema.
+
+    The stored version is never changed; ``remap`` holds the remapped document and
+    the settings that were dropped (plan §9.3).
+    """
     _require_project_access(db, principal, project_id)
     env = _get_environment(db, project_id, env_id)
     try:
@@ -211,7 +218,13 @@ def get_preset_version(
         row = eval_presets.get_version(db, preset, version)
     except PresetError as exc:
         raise _http(exc)
-    return {"version": eval_presets.version_payloads(db, env, [row])[0]}
+    payload: Dict[str, Any] = {
+        "version": eval_presets.version_payloads(db, env, [row])[0]
+    }
+    if remap == "current":
+        schema = _current_schema(db, env)
+        payload["remap"] = eval_presets.remap_version(db, row, schema).to_dict()
+    return payload
 
 
 @router.post(_PREFIX + "/{preset_id}/versions")
