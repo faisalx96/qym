@@ -7,7 +7,7 @@ import secrets
 from typing import Any, Dict, Iterable, Optional
 from uuid import NAMESPACE_URL, uuid5
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from qym_platform.auth import Principal, require_ui_principal
 from qym_platform.datetime_utils import to_api_timestamp, utc_now_naive
@@ -49,6 +49,7 @@ from qym_platform.services.analysis_prompts import (
     DEFAULT_ANALYSIS_PROMPTS,
     serialize_analysis_prompt_settings,
 )
+from qym_platform.services.llm_connections import project_connections_query
 from qym_platform.services.root_cause_categories import DEFAULT_ROOT_CAUSE_TAXONOMY
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -388,6 +389,9 @@ class LlmConnectionRequest(BaseModel):
     llm_model: str = Field(default="gpt-4o-mini")
     # New key, or the sentinel "__KEEP__" on edit to preserve the stored key, or "" to clear.
     llm_api_key: str = Field(default="")
+    # Offered in the experiments model picker. Omitted on create means true; omitted on
+    # edit keeps the stored value.
+    available_for_experiments: Optional[bool] = None
 
 
 class AnalysisPromptSettingsRequest(BaseModel):
@@ -430,6 +434,7 @@ def _serialize_connection(conn: ProjectLlmConnection) -> Dict[str, Any]:
             ("••••" + conn.llm_api_key_last4) if conn.llm_api_key_last4 else ""
         ),
         "is_default": conn.is_default,
+        "available_for_experiments": conn.available_for_experiments is not False,
         "created_at": to_api_timestamp(conn.created_at),
         "updated_at": to_api_timestamp(conn.updated_at),
     }
@@ -458,10 +463,14 @@ def _apply_connection_key(
     is_new: bool,
     settings: PlatformSettings,
 ) -> None:
-    """Set base_url/model/name and resolve the API key (new / keep / clear)."""
+    """Set name/base_url/model/availability and resolve the key (new / keep / clear)."""
     conn.name = req.name.strip()
     conn.llm_base_url = _validate_llm_base_url(req.llm_base_url, settings)
     conn.llm_model = req.llm_model.strip()
+    if req.available_for_experiments is not None:
+        conn.available_for_experiments = req.available_for_experiments
+    elif is_new:
+        conn.available_for_experiments = True
 
     api_key = req.llm_api_key.strip()
     if api_key == "__KEEP__":
@@ -489,18 +498,14 @@ def _apply_connection_key(
 @router.get("/v1/projects/{project_id}/llm-connections")
 def list_llm_connections(
     project_id: str,
+    available_for_experiments: Optional[bool] = Query(None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_project_access(db, principal, project_id)
-    conns = (
-        db.query(ProjectLlmConnection)
-        .filter(ProjectLlmConnection.project_id == project_id)
-        .order_by(
-            ProjectLlmConnection.is_default.desc(), ProjectLlmConnection.created_at
-        )
-        .all()
-    )
+    conns = project_connections_query(
+        db, project_id, available_for_experiments=available_for_experiments
+    ).all()
     return {"connections": [_serialize_connection(c) for c in conns]}
 
 
