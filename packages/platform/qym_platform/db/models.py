@@ -107,6 +107,9 @@ class LocalAuthCredential(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Set when an admin issues a temporary password; the next sign-in must
+    # choose a new password before a session is created.
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
 class Project(Base):

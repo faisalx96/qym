@@ -2,14 +2,25 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from qym_platform.auth import Principal, require_ui_principal
+from qym_platform.auth_oidc import local_auth_enabled
 from qym_platform.api.projects import serialize_project_payloads
-from qym_platform.db.models import Project, ProjectMembership, User, UserRole
+from qym_platform.db.models import (
+    AuditLog,
+    LocalAuthCredential,
+    Project,
+    ProjectMembership,
+    User,
+    UserIdentity,
+    UserRole,
+)
 from qym_platform.deps import get_db
+from qym_platform.security import generate_temporary_password, hash_password
 from qym_platform.settings import PlatformSettings
 
 
@@ -169,6 +180,77 @@ def admin_update_user(
     db.commit()
     db.refresh(user)
     return {"id": user.id, "email": user.email, "ok": True}
+
+
+def _store_temporary_password(db: Session, user: User, actor_id: str, password_hash: bytes) -> None:
+    credential = db.query(LocalAuthCredential).filter(LocalAuthCredential.user_id == user.id).first()
+    had_password = credential is not None
+    if credential is None:
+        # Users who only signed in through a provider get a password login too.
+        credential = LocalAuthCredential(user_id=user.id, password_hash=b"")
+        db.add(credential)
+    credential.password_hash = password_hash
+    credential.must_change_password = True
+
+    has_identity = (
+        db.query(UserIdentity.id)
+        .filter(UserIdentity.user_id == user.id, UserIdentity.provider == "local_password")
+        .first()
+        is not None
+    )
+    if not has_identity:
+        db.add(
+            UserIdentity(
+                user_id=user.id,
+                provider="local_password",
+                subject=user.id,
+                email=user.email,
+                raw_claims={"email": user.email, "auth_type": "local_password"},
+            )
+        )
+    db.add(
+        AuditLog(
+            actor_user_id=actor_id,
+            action="user.password_reset",
+            entity_type="user",
+            entity_id=user.id,
+            before={"had_password": had_password},
+            after={"must_change_password": True},
+        )
+    )
+
+
+@router.post("/v1/admin/users/{user_id}/reset-password")
+def admin_reset_user_password(
+    user_id: str,
+    response: Response,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Issue a one-time password; the user must choose a new one at next sign-in."""
+    _require_admin(principal)
+    if not local_auth_enabled(PlatformSettings()):
+        raise HTTPException(status_code=400, detail="Email/password auth is not enabled")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    temporary_password = generate_temporary_password()
+    password_hash = hash_password(temporary_password)
+    actor_id = principal.user.id
+    # Two first resets can both see no credential. The second insert then fails
+    # on the unique key; one retry updates the committed row, so the last reset wins.
+    for attempt in range(2):
+        try:
+            _store_temporary_password(db, user, actor_id, password_hash)
+            db.commit()
+            break
+        except IntegrityError:
+            db.rollback()
+            if attempt:
+                raise
+    response.headers["Cache-Control"] = "no-store"
+    return {"ok": True, "user_id": user.id, "temporary_password": temporary_password}
 
 
 @router.delete("/v1/admin/users/{user_id}")

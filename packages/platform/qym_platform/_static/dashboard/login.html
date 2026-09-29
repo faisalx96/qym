@@ -338,6 +338,7 @@
     .provider-icon svg { width: 18px; height: 18px; display: block; }
     .provider-google .provider-icon { background: #fff; border-color: rgba(255, 255, 255, 0.2); }
     .provider-github .provider-icon { background: rgba(255, 255, 255, 0.06); }
+    .provider-gitlab .provider-icon { background: rgba(252, 109, 38, 0.10); }
     .provider-sso .provider-icon { background: linear-gradient(135deg, rgba(0, 168, 255, 0.12), rgba(168, 85, 247, 0.12)); }
 
     .provider-info {
@@ -463,6 +464,7 @@
       var root = document.getElementById('auth-root');
       var state = {
         mode: 'signin',
+        pending: null,
         loading: false,
         localEnabled: false,
         signupEnabled: false,
@@ -475,6 +477,7 @@
         arrow: '<svg viewBox="0 0 20 20" fill="none"><path d="M7 5l5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
         google: '<svg viewBox="0 0 24 24"><path fill="#EA4335" d="M12 10.2v3.96h5.5c-.24 1.28-.98 2.37-2.08 3.1l3.36 2.61c1.96-1.81 3.09-4.47 3.09-7.63 0-.73-.06-1.43-.19-2.11H12z"/><path fill="#4285F4" d="M12 22c2.79 0 5.13-.92 6.84-2.5l-3.36-2.61c-.93.63-2.11 1-3.48 1-2.68 0-4.95-1.81-5.76-4.24H2.77v2.66A9.99 9.99 0 0012 22z"/><path fill="#FBBC05" d="M6.24 13.65A5.99 5.99 0 015.92 12c0-.57.08-1.12.22-1.65V7.69H2.77A9.99 9.99 0 002 12c0 1.61.39 3.13 1.08 4.46l3.16-2.81z"/><path fill="#34A853" d="M12 6.11c1.52 0 2.89.52 3.97 1.54l2.98-2.98C17.12 2.98 14.79 2 12 2A9.99 9.99 0 002.77 7.69l3.37 2.66C7.05 7.92 9.32 6.11 12 6.11z"/></svg>',
         github: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.72.5 12.15c0 5.15 3.3 9.52 7.89 11.06.58.11.79-.26.79-.58v-2.24c-3.21.71-3.89-1.39-3.89-1.39-.52-1.36-1.28-1.72-1.28-1.72-1.04-.73.08-.72.08-.72 1.15.08 1.75 1.2 1.75 1.2 1.02 1.79 2.69 1.28 3.35.98.1-.76.4-1.28.72-1.58-2.56-.3-5.26-1.31-5.26-5.85 0-1.29.46-2.34 1.2-3.17-.12-.3-.52-1.52.12-3.17 0 0 .98-.32 3.22 1.21a10.93 10.93 0 015.86 0c2.24-1.53 3.22-1.21 3.22-1.21.64 1.65.24 2.87.12 3.17.75.83 1.2 1.88 1.2 3.17 0 4.55-2.7 5.55-5.28 5.84.41.36.78 1.07.78 2.16v3.21c0 .32.21.69.8.58 4.58-1.54 7.88-5.91 7.88-11.06C23.5 5.72 18.35.5 12 .5z"/></svg>',
+        gitlab: '<svg viewBox="0 0 24 24"><path fill="#FC6D26" d="m23.6 9.59-.03-.09L20.3.98a.85.85 0 0 0-.34-.4.87.87 0 0 0-1 .05.87.87 0 0 0-.29.44l-2.2 6.75H7.54L5.33 1.07a.86.86 0 0 0-.29-.44.87.87 0 0 0-1-.05.86.86 0 0 0-.34.4L.43 9.5l-.03.09a6.07 6.07 0 0 0 2.01 7.01l.01.01.03.02 4.98 3.73 2.46 1.86 1.5 1.13a1.01 1.01 0 0 0 1.22 0l1.5-1.13 2.46-1.86 5.01-3.75.01-.01a6.07 6.07 0 0 0 2.01-7z"/></svg>',
         sso: '<svg viewBox="0 0 24 24" fill="none"><path d="M4 19h16M6 19V9l6-4 6 4v10M9 13h1m4 0h1m-6 3h1m4 0h1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
         email: '<svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16v10H4z" stroke="currentColor" stroke-width="1.8"/><path d="M4.5 8l7.5 6 7.5-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
       };
@@ -491,6 +494,7 @@
         var key = String(id || '').toLowerCase();
         if (key === 'google') return { key: 'google', icon: icons.google, desc: 'Use your Google identity to continue' };
         if (key === 'github') return { key: 'github', icon: icons.github, desc: 'Use your GitHub account to continue' };
+        if (key === 'gitlab') return { key: 'gitlab', icon: icons.gitlab, desc: 'Use your GitLab account to continue' };
         if (key === 'sso') return { key: 'sso', icon: icons.sso, desc: 'Enterprise identity provider' };
         return { key: 'generic', icon: icons.email, desc: 'Continue with this provider' };
       }
@@ -501,8 +505,30 @@
         return 'Continue with ' + id.charAt(0).toUpperCase() + id.slice(1);
       }
 
+      function changePasswordSection() {
+        var statusClass = state.messageType ? 'auth-status ' + state.messageType : 'auth-status';
+        return ''
+          + '<div class="auth-panel">'
+          + '  <div class="auth-switch">'
+          + '    <div class="auth-switch-copy">'
+          + '      <div class="auth-switch-title">An admin reset the password for ' + esc(state.pending.email) + '. Choose a new password to finish signing in.</div>'
+          + '    </div>'
+          + '    <button class="auth-switch-btn" type="button" data-cancel-change="1">Cancel</button>'
+          + '  </div>'
+          + '  <form class="auth-form" id="local-auth-form">'
+          + '    <input type="email" name="username" autocomplete="username" value="' + esc(state.pending.email) + '" hidden>'
+          + '    <div class="field"><label class="field-label" for="new-password">New password</label><input class="field-input" id="new-password" name="new_password" type="password" autocomplete="new-password" placeholder="At least 8 characters" minlength="8" required></div>'
+          + '    <div class="field"><label class="field-label" for="confirm-password">Confirm new password</label><input class="field-input" id="confirm-password" name="confirm_password" type="password" autocomplete="new-password" placeholder="Enter the new password again" minlength="8" required></div>'
+          + '    <div class="field-help">Passwords must be at least 8 characters.</div>'
+          + '    <button class="auth-submit" type="submit"' + (state.loading ? ' disabled' : '') + '>' + (state.loading ? 'Saving...' : 'Set password and sign in') + '</button>'
+          + '    <div class="' + statusClass + '" role="status" aria-live="polite">' + esc(state.message) + '</div>'
+          + '  </form>'
+          + '</div>';
+      }
+
       function localSection() {
         if (!state.localEnabled) return '';
+        if (state.mode === 'change' && state.pending) return changePasswordSection();
 
         var isSignup = state.mode === 'signup';
         var submitLabel = state.loading
@@ -530,7 +556,9 @@
             : '')
           + '    <div class="field"><label class="field-label" for="email">Email</label><input class="field-input" id="email" name="email" type="email" autocomplete="email" placeholder="name@company.com" required></div>'
           + '    <div class="field"><label class="field-label" for="password">Password</label><input class="field-input" id="password" name="password" type="password" autocomplete="' + (isSignup ? 'new-password' : 'current-password') + '" placeholder="' + (isSignup ? 'At least 8 characters' : 'Enter your password') + '" required></div>'
-          + (isSignup ? '    <div class="field-help">Passwords must be at least 8 characters.</div>' : '')
+          + (isSignup
+            ? '    <div class="field-help">Passwords must be at least 8 characters.</div>'
+            : '    <div class="field-help">Forgot your password? Ask an admin to reset it.</div>')
           + '    <button class="auth-submit" type="submit"' + (state.loading ? ' disabled' : '') + '>' + esc(submitLabel) + '</button>'
           + '    <div class="' + statusClass + '" role="status" aria-live="polite">' + esc(state.message) + '</div>'
           + '  </form>'
@@ -580,9 +608,78 @@
           });
         }
 
+        var cancelChange = document.querySelector('[data-cancel-change]');
+        if (cancelChange) {
+          cancelChange.addEventListener('click', function () {
+            state.mode = 'signin';
+            state.pending = null;
+            state.message = '';
+            state.messageType = '';
+            render();
+          });
+        }
+
         var form = document.getElementById('local-auth-form');
         if (form) {
           form.addEventListener('submit', submitLocalAuth);
+        }
+      }
+
+      function showError(message) {
+        state.message = message;
+        state.messageType = 'error';
+        state.loading = false;
+        render();
+      }
+
+      async function postJson(path, payload) {
+        var response = await fetch(withPrefix(path) + '?next=' + encodeURIComponent(next), {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        var data = await response.json().catch(function () { return {}; });
+        return { response: response, data: data };
+      }
+
+      async function submitPasswordChange(form) {
+        var formData = new FormData(form);
+        var newPassword = String(formData.get('new_password') || '');
+        if (newPassword !== String(formData.get('confirm_password') || '')) {
+          showError('The passwords do not match.');
+          return;
+        }
+
+        state.loading = true;
+        state.message = '';
+        state.messageType = '';
+        render();
+
+        try {
+          var result = await postJson('/v1/auth/password/change', {
+            email: state.pending.email,
+            current_password: state.pending.password,
+            new_password: newPassword
+          });
+          if (result.response.status === 401) {
+            // The temporary password changed or expired; start over.
+            state.mode = 'signin';
+            state.pending = null;
+            showError('Your temporary password is no longer valid. Ask an admin for a new one.');
+            return;
+          }
+          if (!result.response.ok) {
+            showError(String(result.data.detail || 'Could not change the password. Please try again.'));
+            return;
+          }
+          state.pending = null;
+          state.message = 'Password changed. Redirecting...';
+          state.messageType = 'success';
+          render();
+          window.location.href = result.data.next || (QYM_PREFIX + '/');
+        } catch (err) {
+          showError('Could not complete the request. Please try again.');
         }
       }
 
@@ -591,6 +688,10 @@
         if (state.loading) return;
 
         var form = event.currentTarget;
+        if (state.mode === 'change' && state.pending) {
+          await submitPasswordChange(form);
+          return;
+        }
         var formData = new FormData(form);
         var payload = {
           email: String(formData.get('email') || ''),
@@ -606,19 +707,21 @@
         render();
 
         try {
-          var endpoint = withPrefix(state.mode === 'signup' ? '/v1/auth/signup/password' : '/v1/auth/login/password');
-          var response = await fetch(endpoint + '?next=' + encodeURIComponent(next), {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-          var data = await response.json().catch(function () { return {}; });
-          if (!response.ok) {
-            state.message = String(data.detail || 'Authentication failed. Please try again.');
-            state.messageType = 'error';
+          var result = await postJson(state.mode === 'signup' ? '/v1/auth/signup/password' : '/v1/auth/login/password', payload);
+          var data = result.data;
+          if (result.response.status === 403 && data.code === 'password_change_required') {
+            state.mode = 'change';
+            state.pending = { email: payload.email, password: payload.password };
+            state.message = '';
+            state.messageType = '';
             state.loading = false;
             render();
+            var newPasswordInput = document.getElementById('new-password');
+            if (newPasswordInput) newPasswordInput.focus();
+            return;
+          }
+          if (!result.response.ok) {
+            showError(String(data.detail || 'Authentication failed. Please try again.'));
             return;
           }
           state.message = state.mode === 'signup' ? 'Account created. Redirecting...' : 'Signed in. Redirecting...';
@@ -626,10 +729,7 @@
           render();
           window.location.href = data.next || (QYM_PREFIX + '/');
         } catch (err) {
-          state.message = 'Could not complete the request. Please try again.';
-          state.messageType = 'error';
-          state.loading = false;
-          render();
+          showError('Could not complete the request. Please try again.');
         }
       }
 
