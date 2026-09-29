@@ -53,7 +53,8 @@ Seams for later issues (all constructor arguments):
   decrypts ``experiment.secrets_encrypted`` (Fernet JSON ``{ref: key}``).
 - ``CANCELLING`` jobs are not claimed here. Remote cancel is #19. A cancel requested
   while a submit was in flight moves the job to ``CANCELLING`` right after the ``202``.
-- Remote queue snapshots (#20) and ingest linking (#17) are separate.
+- Remote queue snapshots (#20) run in the sibling ``RemoteQueueSnapshotter``
+  (``services.eval_remote_queue``). Ingest linking (#17) is separate.
 """
 
 from __future__ import annotations

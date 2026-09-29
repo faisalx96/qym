@@ -1,7 +1,7 @@
 """Standalone background worker: ``python -m qym_platform.worker``.
 
-Runs the dashboard summary loop, the maintenance loop and the Evaluation Service
-dispatcher without serving HTTP.
+Runs the dashboard summary loop, the maintenance loop, the Evaluation Service
+dispatcher and its remote queue snapshotter without serving HTTP.
 This process is optional. The default ``QYM_ROLE=all`` runs both loops inside
 the API process. To split them, deploy this as its own pod/container with
 ``QYM_ROLE=worker`` and run the API pods with ``QYM_ROLE=api``. Migrations are
@@ -20,6 +20,7 @@ from sqlalchemy.orm import configure_mappers, sessionmaker
 from qym_platform.db.session import build_engine
 from qym_platform.services.dashboard_summaries import DashboardSummaryWorker
 from qym_platform.services.eval_dispatcher import EvalDispatcher
+from qym_platform.services.eval_remote_queue import RemoteQueueSnapshotter
 from qym_platform.services.maintenance import MaintenanceWorker
 from qym_platform.settings import PlatformSettings
 
@@ -37,6 +38,7 @@ def main() -> int:
     summary = DashboardSummaryWorker(sessions)
     maintenance = MaintenanceWorker(sessions, engine)
     dispatcher = EvalDispatcher(sessions)
+    snapshots = RemoteQueueSnapshotter(sessions)
     stop = threading.Event()
 
     def _stop(*_args) -> None:
@@ -47,6 +49,7 @@ def main() -> int:
     summary.start()
     maintenance.start()
     dispatcher.start()
+    snapshots.start()
     logging.getLogger(__name__).info("qym worker started (role=%s)", settings.role)
     try:
         while not stop.is_set():
@@ -60,7 +63,11 @@ def main() -> int:
             if not dispatcher.is_alive():
                 logging.getLogger(__name__).error("eval dispatcher died; restarting")
                 dispatcher.start()
+            if not snapshots.is_alive():
+                logging.getLogger(__name__).error("remote queue snapshotter died; restarting")
+                snapshots.start()
     finally:
+        snapshots.stop()
         dispatcher.stop()
         maintenance.stop()
         summary.stop()
