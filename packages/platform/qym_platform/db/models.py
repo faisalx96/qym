@@ -20,6 +20,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column, object_session, relationship
@@ -69,6 +70,36 @@ class AnalysisRuleVersionStatus(str, enum.Enum):
 class ApprovalDecision(str, enum.Enum):
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
+
+
+class EvalPriority(str, enum.Enum):
+    """Evaluation Service job priority (``HIGH`` preempts lower jobs remotely)."""
+
+    LOW = "LOW"
+    NORMAL = "NORMAL"
+    HIGH = "HIGH"
+
+
+class EvalModelSlotKind(str, enum.Enum):
+    ENDPOINT = "endpoint"
+    FLAT = "flat"
+
+
+class EvalModelSlotStatus(str, enum.Enum):
+    PROPOSED = "proposed"
+    CONFIRMED = "confirmed"
+    STALE = "stale"
+
+
+def _string_enum(enum_cls: type[enum.Enum], length: int) -> Enum:
+    """VARCHAR-backed enum storing member values; no native PostgreSQL type."""
+    return Enum(
+        enum_cls,
+        native_enum=False,
+        length=length,
+        values_callable=lambda members: [member.value for member in members],
+        validate_strings=True,
+    )
 
 
 class User(Base):
@@ -380,6 +411,10 @@ class ProjectLlmConnection(Base):
     llm_api_key_encrypted: Mapped[str] = mapped_column(Text, default="")
     llm_api_key_last4: Mapped[str] = mapped_column(String(8), default="")
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Lets a project keep analyzer-only connections out of the experiment model picker.
+    available_for_experiments: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="1", nullable=False
+    )
     created_by_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -407,6 +442,186 @@ class ProjectAnalysisPromptSettings(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+
+class EvalEnvironment(Base):
+    """A remote Evaluation Service deployment registered in one project.
+
+    ``base_url`` is the normalized service prefix (no trailing ``/``, without
+    ``/evals``). An active URL belongs to exactly one project, because the
+    deployment ingests runs with that project's qym API key. The service key is
+    stored Fernet-encrypted via ``qym_platform.secrets`` and never returned.
+    """
+
+    __tablename__ = "eval_environments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(
+        Text, default="", server_default="", nullable=False
+    )
+    base_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    api_key_encrypted: Mapped[str] = mapped_column(
+        Text, default="", server_default="", nullable=False
+    )
+    api_key_last4: Mapped[str] = mapped_column(
+        String(8), default="", server_default="", nullable=False
+    )
+    default_priority: Mapped[EvalPriority] = mapped_column(
+        _string_enum(EvalPriority, 10),
+        default=EvalPriority.NORMAL,
+        server_default=EvalPriority.NORMAL.value,
+        nullable=False,
+    )
+    max_priority: Mapped[EvalPriority] = mapped_column(
+        _string_enum(EvalPriority, 10),
+        default=EvalPriority.NORMAL,
+        server_default=EvalPriority.NORMAL.value,
+        nullable=False,
+    )
+    max_inflight_jobs: Mapped[int] = mapped_column(
+        Integer, default=5, server_default="5", nullable=False
+    )
+    # Opt-in to send decrypted ProjectLlmConnection keys to this environment.
+    allow_connection_keys: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    current_schema_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey(
+            "eval_environment_schemas.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_eval_environments_current_schema",
+        ),
+        nullable=True,
+    )
+    # Best-run ranking defaults; NULL falls back to the project default.
+    ranking_metric: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    ranking_k: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    health_status: Mapped[str] = mapped_column(
+        String(20), default="unknown", server_default="unknown", nullable=False
+    )
+    health_checked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    health_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="1", nullable=False
+    )
+    created_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "name", name="uq_eval_environment_project_name"),
+        # Platform-wide: an active environment URL can't be registered twice.
+        Index(
+            "ux_eval_environments_active_base_url",
+            "base_url",
+            unique=True,
+            postgresql_where=text("is_active"),
+            sqlite_where=text("is_active"),
+        ),
+        CheckConstraint(
+            "max_inflight_jobs >= 1", name="ck_eval_environments_max_inflight_jobs"
+        ),
+        CheckConstraint(
+            "default_priority IN ('LOW', 'NORMAL', 'HIGH')",
+            name="ck_eval_environments_default_priority",
+        ),
+        CheckConstraint(
+            "max_priority IN ('LOW', 'NORMAL', 'HIGH')",
+            name="ck_eval_environments_max_priority",
+        ),
+    )
+
+
+class EvalEnvironmentSchema(Base):
+    """Immutable history of an environment's ``env-overrides`` JSON Schema.
+
+    A refresh that yields a new ``schema_hash`` (sha256 of canonical JSON)
+    inserts a row; existing rows are never rewritten apart from ``fetched_at``.
+    """
+
+    __tablename__ = "eval_environment_schemas"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    environment_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_environments.id", ondelete="CASCADE"), index=True
+    )
+    schema_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_json: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, nullable=False)
+    form_descriptor: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        BIG_JSON, nullable=True
+    )
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "environment_id", "schema_hash", name="uq_eval_environment_schema_hash"
+        ),
+    )
+
+
+class EvalModelSlot(Base):
+    """A proposed or confirmed grouping of LLM fields in an environment schema."""
+
+    __tablename__ = "eval_model_slots"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    environment_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_environments.id", ondelete="CASCADE"), index=True
+    )
+    schema_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_environment_schemas.id", ondelete="CASCADE"), index=True
+    )
+    slot_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    kind: Mapped[EvalModelSlotKind] = mapped_column(
+        _string_enum(EvalModelSlotKind, 10), nullable=False
+    )
+    label: Mapped[str] = mapped_column(
+        String(200), default="", server_default="", nullable=False
+    )
+    # {"model": "<json-pointer>", "base_url": "<ptr>|null", "api_key": "<ptr>|null"}
+    field_map: Mapped[dict[str, Any]] = mapped_column(
+        BIG_JSON, default=dict, nullable=False
+    )
+    # {"timeout": "<ptr>", "max_attempts": "<ptr>", ...} left editable per slot.
+    transport_fields: Mapped[dict[str, Any]] = mapped_column(
+        BIG_JSON, default=dict, nullable=False
+    )
+    required: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    status: Mapped[EvalModelSlotStatus] = mapped_column(
+        _string_enum(EvalModelSlotStatus, 10),
+        default=EvalModelSlotStatus.PROPOSED,
+        server_default=EvalModelSlotStatus.PROPOSED.value,
+        nullable=False,
+    )
+    confirmed_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    __table_args__ = (
+        UniqueConstraint("schema_id", "slot_key", name="uq_eval_model_slot_schema_key"),
+        CheckConstraint("kind IN ('endpoint', 'flat')", name="ck_eval_model_slots_kind"),
+        CheckConstraint(
+            "status IN ('proposed', 'confirmed', 'stale')",
+            name="ck_eval_model_slots_status",
+        ),
     )
 
 
