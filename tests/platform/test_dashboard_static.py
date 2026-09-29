@@ -1752,9 +1752,10 @@ def test_changed_route_assets_are_cache_versioned() -> None:
     assert "/static/docs.js?v=ui-consistency-20260730-18-xss-rendering" in docs
     # The project-not-found page loads the same shared shell assets as the
     # dashboard pages, every one of them versioned.
-    for asset in ("shell.css", "auth.js", "shell.js"):
+    for asset in ("shell.css", "auth.js"):
         assert f'{{static_root}}/{asset}?v=p0-integration-20260929"' in runs_api
     assert '{static_root}/dashboard.css?v=p0-integration-20260929-frozen-columns"' in runs_api
+    assert '{static_root}/shell.js?v=p0-integration-20260929-archive-readonly"' in runs_api
 
 
 def test_every_page_versions_the_shared_shell_assets() -> None:

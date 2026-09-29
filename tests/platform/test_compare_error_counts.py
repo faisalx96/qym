@@ -34,7 +34,7 @@ def run_compare_js(body: str, *, render: bool = False) -> None:
             "escapeAttr", "makeSafeDomId", "_parseMetaDeep", "passRefBase",
             "compareExecutionErrorInfo", "renderCompareErrorIndicator",
             "renderCompareMetricErrorIndicator", "renderCompareOutputGroup",
-            "renderItemComparisonCard",
+            "renderItemComparisonCard", "compareRunReadOnly",
         )
     functions = []
     if render:

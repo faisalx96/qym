@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/static/shell.css?v=p0-integration-20260929">
   <script src="/static/qym_safe.js?v=xss-rendering-20260928"></script>
   <script src="/static/auth.js?v=p0-integration-20260929"></script>
-  <script src="/static/shell.js?v=p0-integration-20260929"></script>
+  <script src="/static/shell.js?v=p0-integration-20260929-archive-readonly"></script>
   <style>
     .settings-page { }
     .settings-header { margin-bottom: var(--space-xl); }
@@ -384,7 +384,7 @@
         <div class="card-header"><div><div class="card-title" style="color:var(--error);">Danger Zone</div><div class="card-subtitle">Admin actions. Archiving can be undone; deleting cannot.</div></div></div>
         <div class="card-body">
           <div class="danger-row">
-            <div><div class="danger-label">Archive this project</div><div class="danger-desc">Hide the project and stop its API keys. Runs, datasets, members and settings are kept, and an admin can unarchive it from Admin → Projects.</div></div>
+            <div><div class="danger-label">Archive this project</div><div class="danger-desc">Hide the project, stop its API keys and make it read-only. Runs, datasets, members and settings are kept, and an admin can unarchive it from Admin → Projects.</div></div>
             <button class="btn btn-secondary" id="archive-project-btn" type="button" style="flex-shrink:0">Archive</button>
           </div>
           <div class="danger-row">
@@ -1167,14 +1167,15 @@
       document.getElementById('archive-project-btn').addEventListener('click', async () => {
         if (!state.project) return;
         const name = state.project.name;
-        if (window.QymShell && window.QymShell.openConfirmDialog) {
-          const confirmation = await window.QymShell.openConfirmDialog({
-            title: 'Archive project?',
+        if (window.QymShell && window.QymShell.confirmArchiveProject) {
+          // Lists runs still in progress: archiving loses their remaining results.
+          const confirmation = await window.QymShell.confirmArchiveProject({
+            id: state.project.id,
+            name,
             description: [
               `"${name}" will be hidden from navigation and its API keys will stop working.`,
-              'Runs, datasets, members and settings are kept. An admin can unarchive it from Admin → Projects.',
+              'Runs, datasets, members and settings are kept and stay readable, but nothing can be changed until an admin unarchives it from Admin → Projects.',
             ],
-            confirmLabel: 'Archive project',
           });
           if (!confirmation || !confirmation.confirmed) return;
         } else if (!confirm(`Archive "${name}"? It will be hidden and its API keys will stop working. Nothing is deleted, and an admin can unarchive it.`)) {

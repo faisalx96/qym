@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="./static/shell.css?v=p0-integration-20260929">
   <script src="./static/qym_safe.js?v=xss-rendering-20260928"></script>
   <script src="./static/auth.js?v=p0-integration-20260929"></script>
-  <script src="./static/shell.js?v=p0-integration-20260929"></script>
+  <script src="./static/shell.js?v=p0-integration-20260929-archive-readonly"></script>
   <script src="./static/metrics.js?v=p0-integration-20260929-minimize-errors"></script>
   <script src="./static/run_details.js?v=payload-perf-1"></script>
   <script src="./static/trace_viewer.js?v=trace-retries-20260917-1-xss-rendering"></script>
@@ -23,6 +23,21 @@
       overflow-y: auto;
       height: calc(100vh - 100px);
     }
+    /* Runs of archived projects stay readable; their edit controls go away. */
+    .compare-read-only-notice {
+      margin-bottom: var(--space-md);
+      padding: var(--space-sm) var(--space-md);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-left: 3px solid var(--warning);
+      border-radius: var(--radius-md);
+      color: var(--text-secondary);
+      font-size: var(--font-base);
+      line-height: 1.5;
+    }
+    .compare-read-only-notice strong { color: var(--text-primary); font-weight: 600; }
+    /* Auto-Analyze works on the first run; it cannot save to a read-only one. */
+    body.compare-first-run-read-only .auto-analyze-btn { display: none !important; }
 
     .compare-header-bar {
       display: flex;
@@ -5994,6 +6009,37 @@
         });
       }
 
+      // A run of an archived project is read-only (the server answers 409 to
+      // any write), so its columns show no edit controls.
+      function compareRunReadOnly(runIdx) {
+        return !IS_COMPARE_EXPORT && !!state.runs[runIdx]?.run?.project?.archived;
+      }
+
+      function renderReadOnlyNotice() {
+        const content = el('compare-content');
+        if (!content) return;
+        document.body.classList.toggle('compare-first-run-read-only', compareRunReadOnly(0));
+        let notice = content.querySelector('.compare-read-only-notice');
+        const names = state.runs
+          .map((run, idx) => (compareRunReadOnly(idx) ? (run.run?.run_name || `Run ${idx + 1}`) : null))
+          .filter(Boolean);
+        if (!names.length) {
+          if (notice) notice.remove();
+          return;
+        }
+        if (!notice) {
+          notice = document.createElement('div');
+          notice.className = 'compare-read-only-notice';
+          notice.setAttribute('role', 'note');
+          const header = content.querySelector('.compare-header-bar');
+          content.insertBefore(notice, header ? header.nextSibling : content.firstChild);
+        }
+        const message = names.length === 1
+          ? `"${names[0]}" belongs to an archived project, so its scores and diagnoses cannot be changed until an admin unarchives the project.`
+          : `${names.length} of these runs belong to archived projects (${names.map(name => `"${name}"`).join(', ')}), so their scores and diagnoses cannot be changed until those projects are unarchived.`;
+        notice.innerHTML = '<strong>Read-only.</strong> ' + escapeHtml(message);
+      }
+
       function renderCompareCohortBanner() {
         const container = el('compare-cohort-banner');
         if (!container) return;
@@ -8768,6 +8814,7 @@
         syncStepLatency();
         renderCompareModeTabs();
         renderCompareCohortBanner();
+        renderReadOnlyNotice();
         renderSummaries();
         renderComparisonStats();
         renderMetricsTable();
@@ -11496,7 +11543,7 @@
                 '</article>';
               }).join('') + '</div>'
             : '<span class="compare-issue-empty">No root-cause issues assigned.</span>';
-          const editButton = IS_COMPARE_EXPORT
+          const editButton = IS_COMPARE_EXPORT || compareRunReadOnly(runIdx)
             ? ''
             : `<button class="root-cause-assign-btn compare-issue-edit" data-rc-issues-item="${escapeAttr(itemId)}" data-rc-issues-run-idx="${runIdx}" data-rc-issues-metric="${escapeAttr(scope.metricName)}" type="button">Edit issues</button>`;
           const metricLabel = scope.metricName ? ' · ' + escapeHtml(scope.metricName) : '';
@@ -11526,7 +11573,7 @@
               : `<span class="metric-score-value qym-score-value ${score.cls}">${score.display}</span>`;
             const active = activeMetric === name;
             const edited = String(score.meta.modified || '').toLowerCase() === 'true';
-            return `<div class="det-toggle metric-compare-row${metricErrorClass}${active ? ' active' : ''}"><button type="button" class="metric-compare-trigger${active ? ' active' : ''}" data-output-metric="${escapeAttr(name)}" aria-expanded="${active}"><span class="det-caret"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 3.5 5 4.5-5 4.5"/></svg></span><span class="det-metric">${escapeHtml(name)}</span>${scoreHtml}${metricErrorIndicator}</button><span class="metric-edit-controls qym-metric-edit-controls hidden"><input class="metric-edit-input" type="text" value="${escapeAttr(score.raw == null ? '' : String(score.raw))}" data-run-idx="${runIdx}" data-row-index="${escapeAttr(String(row.index ?? 0))}" data-metric="${escapeAttr(name)}" aria-label="New Run ${runIdx + 1} ${escapeAttr(name)} score"><button class="metric-edit-save qym-metric-edit-action" data-run-idx="${runIdx}" data-row-index="${escapeAttr(String(row.index ?? 0))}" data-metric="${escapeAttr(name)}" title="Save" aria-label="Save Run ${runIdx + 1} ${escapeAttr(name)}">${SAVE_ICON}</button><button class="metric-edit-cancel qym-metric-edit-action" type="button" title="Cancel" aria-label="Cancel editing">${CLOSE_ICON}</button><span class="metric-edit-status" aria-live="polite"></span></span><button class="metric-edit-open qym-icon-action" type="button" aria-label="Edit Run ${runIdx + 1} ${escapeAttr(name)}" title="Edit">${EDIT_ICON}</button>${edited ? '<span class="metric-edit-badge">Edited</span>' : ''}</div>`;
+            return `<div class="det-toggle metric-compare-row${metricErrorClass}${active ? ' active' : ''}"><button type="button" class="metric-compare-trigger${active ? ' active' : ''}" data-output-metric="${escapeAttr(name)}" aria-expanded="${active}"><span class="det-caret"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 3.5 5 4.5-5 4.5"/></svg></span><span class="det-metric">${escapeHtml(name)}</span>${scoreHtml}${metricErrorIndicator}</button>${compareRunReadOnly(runIdx) ? '' : `<span class="metric-edit-controls qym-metric-edit-controls hidden"><input class="metric-edit-input" type="text" value="${escapeAttr(score.raw == null ? '' : String(score.raw))}" data-run-idx="${runIdx}" data-row-index="${escapeAttr(String(row.index ?? 0))}" data-metric="${escapeAttr(name)}" aria-label="New Run ${runIdx + 1} ${escapeAttr(name)} score"><button class="metric-edit-save qym-metric-edit-action" data-run-idx="${runIdx}" data-row-index="${escapeAttr(String(row.index ?? 0))}" data-metric="${escapeAttr(name)}" title="Save" aria-label="Save Run ${runIdx + 1} ${escapeAttr(name)}">${SAVE_ICON}</button><button class="metric-edit-cancel qym-metric-edit-action" type="button" title="Cancel" aria-label="Cancel editing">${CLOSE_ICON}</button><span class="metric-edit-status" aria-live="polite"></span></span><button class="metric-edit-open qym-icon-action" type="button" aria-label="Edit Run ${runIdx + 1} ${escapeAttr(name)}" title="Edit">${EDIT_ICON}</button>`}${edited ? '<span class="metric-edit-badge">Edited</span>' : ''}</div>`;
           }).filter(Boolean).join('');
           return buttons ? `<div class="metric-det-zone"><div class="metric-det-chips">${buttons}</div></div>` : '';
         };
@@ -11678,7 +11725,7 @@
                 : window.QymMetrics.formatMetricObservation(v, itemMType, state.metricSpecs?.[name]);
               const isSelected = name === selectedMetric;
               const meta = metricMeta[name] || {};
-              const editBtn = `<button class="metric-edit-open qym-icon-action" data-run-idx="${runIdx}" data-row-index="${escapeAttr(String(row.index ?? 0))}" data-metric="${escapeAttr(name)}" aria-label="Edit ${escapeAttr(name)}" title="Edit">✎</button>`;
+              const editBtn = compareRunReadOnly(runIdx) ? '' : `<button class="metric-edit-open qym-icon-action" data-run-idx="${runIdx}" data-row-index="${escapeAttr(String(row.index ?? 0))}" data-metric="${escapeAttr(name)}" aria-label="Edit ${escapeAttr(name)}" title="Edit">✎</button>`;
               const editedBadge = String(meta.modified || '').toLowerCase() === 'true'
                 ? '<span class="metric-edit-badge">Edited</span>'
                 : '';
@@ -11774,19 +11821,23 @@
                     '</article>';
                   }).join('') + '</div>'
                 : '<span class="feedback-placeholder">No root-cause issues assigned.</span>';
-              const editIssues = `<button class="root-cause-assign-btn compare-issue-edit" data-rc-issues-item="${escapeAttr(itemId)}" data-rc-issues-run-idx="${runIdx}" data-rc-issues-metric="${escapeAttr(issueScope.metricName)}" type="button">Edit issues</button>`;
+              const editIssues = compareRunReadOnly(runIdx) ? '' : `<button class="root-cause-assign-btn compare-issue-edit" data-rc-issues-item="${escapeAttr(itemId)}" data-rc-issues-run-idx="${runIdx}" data-rc-issues-metric="${escapeAttr(issueScope.metricName)}" type="button">Edit issues</button>`;
               let solBadgeHtml = '';
               if (rowSol) {
                 const solColor = SOLUTION_COLORS[rowSol] || '#60a5fa';
                 const solSource = row.item_metadata?.solution_source || '';
                 const solIsAi = solSource === 'ai';
                 const solIcon = solIsAi ? '<span class="ai-indicator">\uD83E\uDD16</span>' : '';
+                // A read-only run shows its solution without the change action.
+                const solTrigger = compareRunReadOnly(runIdx)
+                  ? `title="Solution: ${escapeAttr(rowSol)}"`
+                  : `data-sol-item="${escapeAttr(itemId)}" data-sol-run-idx="${runIdx}" title="Solution: ${escapeAttr(rowSol)}. Click to change."`;
                 solBadgeHtml = `<div class="rc-badge-group" style="max-width:100%;">
                   <span class="rc-sol-label sol-label">\uD83D\uDEE0 SOLUTION</span>
-                  <span class="meta-badge badge-solution${solIsAi ? ' ai-suggested' : ''}" data-sol-item="${escapeAttr(itemId)}" data-sol-run-idx="${runIdx}" style="border-color:${solColor}40;color:${solColor};background:${solColor}15;max-width:100%;box-sizing:border-box;display:inline-flex;" title="Solution: ${escapeAttr(rowSol)}. Click to change.">${solIcon}${escapeHtml(rowSol)}</span>
+                  <span class="meta-badge badge-solution${solIsAi ? ' ai-suggested' : ''}" ${solTrigger} style="border-color:${solColor}40;color:${solColor};background:${solColor}15;max-width:100%;box-sizing:border-box;display:inline-flex;">${solIcon}${escapeHtml(rowSol)}</span>
                   ${rowSolNote ? `<div class="sol-note-text">${escapeHtml(rowSolNote)}</div>` : ''}
                 </div>`;
-              } else if (!itemPassed) {
+              } else if (!itemPassed && !compareRunReadOnly(runIdx)) {
                 solBadgeHtml = `<div class="rc-badge-group" style="max-width:100%;">
                   <span class="rc-sol-label sol-label">\uD83D\uDEE0 SOLUTION</span>
                   <button class="solution-assign-btn" data-sol-item="${escapeAttr(itemId)}" data-sol-run-idx="${runIdx}" title="Suggest solution"><span class="badge-icon">+</span>Solution</button>

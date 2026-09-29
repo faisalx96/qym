@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 import secrets
+from datetime import timedelta
 from typing import Any, Dict, Iterable, Optional
 from uuid import NAMESPACE_URL, uuid5
 
@@ -31,6 +32,7 @@ from qym_platform.db.models import (
     ProjectMembership,
     ProjectRole,
     Run,
+    RunWorkflowStatus,
     User,
     UserRole,
 )
@@ -46,6 +48,7 @@ from qym_platform.permissions import (
     get_project_membership,
     has_project_access,
     is_project_manager,
+    require_project_writable,
 )
 from qym_platform.secrets import (
     build_llm_config_storage,
@@ -521,6 +524,7 @@ def create_llm_connection(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_project_manager(db, principal, project_id)
+    require_project_writable(db, project_id)
     settings = PlatformSettings()
     existing = (
         db.query(ProjectLlmConnection)
@@ -553,6 +557,7 @@ def update_llm_connection(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_project_manager(db, principal, project_id)
+    require_project_writable(db, project_id)
     settings = PlatformSettings()
     conn = _get_connection(db, project_id, connection_id)
     _apply_connection_key(conn, req, is_new=False, settings=settings)
@@ -575,6 +580,7 @@ def delete_llm_connection(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_project_manager(db, principal, project_id)
+    require_project_writable(db, project_id)
     conn = _get_connection(db, project_id, connection_id)
     was_default = conn.is_default
     db.delete(conn)
@@ -601,6 +607,7 @@ def set_default_llm_connection(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_project_manager(db, principal, project_id)
+    require_project_writable(db, project_id)
     conn = _get_connection(db, project_id, connection_id)
     db.query(ProjectLlmConnection).filter(
         ProjectLlmConnection.project_id == project_id
@@ -681,6 +688,7 @@ def update_analysis_prompts(
 ) -> Dict[str, Any]:
     """Persist project analysis prompts for use by subsequent LLM requests."""
     _require_project_manager(db, principal, project_id)
+    require_project_writable(db, project_id)
     values = {
         "llm_analyzer_system_prompt": _normalise_analysis_prompt(
             req.llm_analyzer, "LLM analyzer"
@@ -719,6 +727,7 @@ def update_analysis_prompt(
 ) -> Dict[str, Any]:
     """Persist one project analysis prompt without touching the other fields."""
     _require_project_manager(db, principal, project_id)
+    require_project_writable(db, project_id)
     field_and_label = ANALYSIS_PROMPT_FIELDS.get(prompt_key)
     if field_and_label is None:
         raise HTTPException(status_code=404, detail="Unknown analysis prompt")
@@ -860,6 +869,7 @@ def add_project_member(
     _require_project_access(db, principal, project_id)
     if not can_manage_project_members(db, principal, project_id):
         raise HTTPException(status_code=403, detail="Manager only")
+    require_project_writable(db, project_id)
     project = _get_project(db, project_id)
     user = db.query(User).filter(User.id == req.user_id).first()
     if not user:
@@ -899,6 +909,7 @@ def update_project_member(
     _require_project_access(db, principal, project_id)
     if not can_manage_project_members(db, principal, project_id):
         raise HTTPException(status_code=403, detail="Manager only")
+    require_project_writable(db, project_id)
     member = (
         db.query(ProjectMembership)
         .filter(
@@ -1015,6 +1026,7 @@ def create_project_api_key(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_project_access(db, principal, project_id)
+    require_project_writable(db, project_id)
     token = secrets.token_urlsafe(32)
     row = ApiKey(
         user_id=principal.user.id,
@@ -1343,6 +1355,61 @@ def unarchive_project(
         db.commit()
         db.refresh(project)
     return _project_payload(db, project, principal)
+
+
+# How many in-progress runs the Archive dialog names; it adds "and N more".
+_ARCHIVE_PREVIEW_RUN_LIMIT = 5
+
+
+@router.get("/v1/admin/projects/{project_id}/archive-preview")
+def project_archive_preview(
+    project_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Runs still in progress, which archiving would cut off.
+
+    Archiving stops the project's API keys at once, so a run that is still
+    sending results loses the rest of them; unarchiving does not bring them
+    back. A run whose lease already expired is not sending anymore, and
+    neither is a PENDING run left over from an old version that never started.
+    """
+    _require_admin(principal)
+    project = _get_project(db, project_id)
+    cutoff = utc_now_naive() - timedelta(
+        seconds=max(1, PlatformSettings().run_stale_timeout_seconds)
+    )
+    in_progress = db.query(Run).filter(
+        Run.project_id == project.id,
+        Run.deleted_at.is_(None),
+        Run.status.in_((RunWorkflowStatus.RUNNING, RunWorkflowStatus.PENDING)),
+        func.coalesce(Run.last_event_at, Run.started_at, Run.created_at) > cutoff,
+    )
+    total = in_progress.count()
+    rows = (
+        in_progress.with_entities(
+            Run.id, Run.external_run_id, Run.run_config, Run.started_at, Run.created_at
+        )
+        .order_by(func.coalesce(Run.started_at, Run.created_at).desc(), Run.id)
+        .limit(_ARCHIVE_PREVIEW_RUN_LIMIT)
+        .all()
+    )
+    running_runs = []
+    for row in rows:
+        config = row.run_config if isinstance(row.run_config, dict) else {}
+        running_runs.append(
+            {
+                "run_id": row.id,
+                "run_name": str(config.get("run_name") or row.external_run_id or row.id),
+                "started_at": to_api_timestamp(row.started_at or row.created_at),
+            }
+        )
+    return {
+        "project_id": project.id,
+        "name": project.name,
+        "running_count": total,
+        "running_runs": running_runs,
+    }
 
 
 @router.get("/v1/admin/projects/{project_id}/deletion")

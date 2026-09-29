@@ -783,6 +783,7 @@
         +     descriptions.map(function (line) {
                 return '<p class="shell-modal-description">' + esc(line) + '</p>';
               }).join('')
+        +     confirmWarningHtml(options.warning)
         +     (options.note ? '<div class="shell-modal-note">' + esc(options.note) + '</div>' : '')
         +     (needsInput
                 ? '<div class="shell-form-group" style="margin-top:var(--space-md)">'
@@ -867,6 +868,89 @@
       });
       document.addEventListener('keydown', onKeyDown);
       refreshState();
+    });
+  }
+
+  // A consequence the reader must see before confirming: a lead sentence, an
+  // explanation and an optional list ({ title, meta } rows, then "and N more").
+  function confirmWarningHtml(warning) {
+    if (!warning) return '';
+    var items = Array.isArray(warning.items) ? warning.items : [];
+    var more = Number(warning.more) || 0;
+    var rows = items.map(function (item) {
+      return '<li style="color:var(--text-secondary);font-size:var(--font-sm);line-height:1.5;">'
+        + '<span style="color:var(--text-primary);">' + esc(item.title) + '</span>'
+        + (item.meta ? ' <span style="color:var(--text-muted);">· ' + esc(item.meta) + '</span>' : '')
+        + '</li>';
+    });
+    if (more > 0) {
+      rows.push('<li style="color:var(--text-muted);font-size:var(--font-sm);line-height:1.5;">and ' + esc(String(more)) + ' more</li>');
+    }
+    return '<div class="shell-modal-warning" role="note" style="margin-top:var(--space-md);padding:var(--space-sm) var(--space-md);'
+      + 'background:var(--bg-elevated);border:1px solid var(--border-subtle);border-left:3px solid var(--warning);border-radius:var(--radius-md);">'
+      + '<p style="margin:0;color:var(--text-secondary);font-size:var(--font-sm);line-height:1.5;">'
+      + (warning.lead ? '<strong style="color:var(--warning);font-weight:600;">' + esc(warning.lead) + '</strong> ' : '')
+      + esc(warning.text || '') + '</p>'
+      + (rows.length
+        ? '<ul aria-label="' + esc(warning.itemsLabel || 'Details') + '" style="margin:var(--space-sm) 0 0;padding-left:var(--space-lg);">' + rows.join('') + '</ul>'
+        : '')
+      + '</div>';
+  }
+
+  function formatDateTime(value) {
+    var date = value ? new Date(value) : null;
+    if (!date || isNaN(date.getTime())) return '';
+    return date.toLocaleString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+  }
+
+  // Archive confirmation shared by Project Settings and Admin > Projects.
+  // Archiving cuts off the project's API keys at once, so a run that is still
+  // sending results loses the rest of them (unarchiving does not bring them
+  // back): list those runs before the confirm button. Resolves like
+  // openConfirmDialog.
+  async function confirmArchiveProject(project) {
+    project = project || {};
+    var name = project.name || 'this project';
+    var preview = null;
+    try {
+      var res = await fetch(apiUrl('v1/admin/projects/' + encodeURIComponent(project.id) + '/archive-preview'), {
+        credentials: 'same-origin',
+      });
+      if (res.ok) preview = await res.json();
+    } catch (_err) {
+      preview = null;
+    }
+    var warning = null;
+    if (!preview) {
+      warning = {
+        lead: 'Runs in progress could not be checked.',
+        text: 'Archiving stops the project\'s API keys at once, so the remaining results of any run still in progress will be lost. Unarchiving does not bring them back.',
+      };
+    } else if (preview.running_count > 0) {
+      var count = Number(preview.running_count) || 0;
+      var runs = Array.isArray(preview.running_runs) ? preview.running_runs : [];
+      warning = {
+        lead: count === 1 ? '1 run is still in progress.' : count + ' runs are still in progress.',
+        text: 'Archiving stops the project\'s API keys at once, so ' + (count === 1 ? 'its' : 'their')
+          + ' remaining results will be lost. Unarchiving does not bring them back.',
+        itemsLabel: 'Runs in progress',
+        items: runs.map(function (run) {
+          var started = formatDateTime(run.started_at);
+          return { title: run.run_name || run.run_id, meta: started ? 'started ' + started : '' };
+        }),
+        more: Math.max(0, count - runs.length),
+      };
+    }
+    return openConfirmDialog({
+      title: 'Archive project?',
+      description: project.description || [
+        '"' + name + '" will be hidden from navigation and its API keys will stop working.',
+      ],
+      warning: warning,
+      confirmLabel: warning ? 'Archive anyway' : 'Archive project',
+      confirmClass: warning ? 'shell-btn-danger' : 'shell-btn-primary',
     });
   }
 
@@ -1687,6 +1771,7 @@
     navigateTo: navigateTo,
     openCreateProjectDialog: openCreateProjectDialog,
     openConfirmDialog: openConfirmDialog,
+    confirmArchiveProject: confirmArchiveProject,
     upsertProject: upsertProject,
     removeProject: removeProject,
     projectExists: projectExists,

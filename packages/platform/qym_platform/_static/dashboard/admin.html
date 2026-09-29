@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/static/shell.css?v=p0-integration-20260929">
   <script src="/static/qym_safe.js?v=xss-rendering-20260928"></script>
   <script src="/static/auth.js?v=p0-integration-20260929"></script>
-  <script src="/static/shell.js?v=p0-integration-20260929"></script>
+  <script src="/static/shell.js?v=p0-integration-20260929-archive-readonly"></script>
   <style>
     .admin-page { }
     .admin-header { margin-bottom: var(--space-xl); }
@@ -592,13 +592,14 @@
           if (archived) {
             const lines = [
               `"${name}" will be hidden from navigation and its API keys will stop working.`,
-              'Runs, datasets, members and settings are kept. You can unarchive it here.',
+              'Runs, datasets, members and settings are kept and stay readable, but nothing can be changed until you unarchive it here.',
             ];
-            if (window.QymShell && window.QymShell.openConfirmDialog) {
-              const confirmation = await window.QymShell.openConfirmDialog({
-                title: 'Archive project?',
+            if (window.QymShell && window.QymShell.confirmArchiveProject) {
+              // Lists runs still in progress: archiving loses their remaining results.
+              const confirmation = await window.QymShell.confirmArchiveProject({
+                id: projectId,
+                name,
                 description: lines,
-                confirmLabel: 'Archive project',
               });
               if (!confirmation || !confirmation.confirmed) return;
             } else if (!confirm(lines.join('\n'))) {

@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="./static/shell.css?v=p0-integration-20260929">
   <script src="./static/qym_safe.js?v=xss-rendering-20260928"></script>
   <script src="./static/auth.js?v=p0-integration-20260929"></script>
-  <script src="./static/shell.js?v=p0-integration-20260929"></script>
+  <script src="./static/shell.js?v=p0-integration-20260929-archive-readonly"></script>
   <style>
     .trash-container {
       padding: var(--space-lg) var(--space-xl);
@@ -149,6 +149,10 @@
       font-size: var(--font-sm);
       color: var(--text-muted);
       margin-top: 3px;
+    }
+
+    .trash-run-archived {
+      margin-top: var(--space-xs);
     }
 
     .trash-chip {
@@ -512,6 +516,7 @@
                       <td>
                         <div class="trash-run-name">${escapeHtml(runName)}</div>
                         <div class="trash-run-id">${escapeHtml(run.id)}</div>
+                        ${run.project_archived ? '<div class="trash-run-archived"><span class="qym-tag qym-tag--warning">Project archived</span></div>' : ''}
                       </td>
                       <td><span class="trash-chip" title="${escapeHtml(run.task || '')}">${escapeHtml(run.task || '—')}</span></td>
                       <td><span class="trash-chip" title="${escapeHtml(run.model || '')}">${renderModelLabel(run.model || '—', hasReasoningTraceStats(run.trace_stats))}</span></td>
@@ -530,7 +535,10 @@
                       </td>
                       <td>${renderPurgeCell(purge)}</td>
                       <td class="trash-actions">
-                        <button class="btn btn-secondary restore-btn" type="button" data-run-id="${escapeHtml(run.id)}">Restore</button>
+                        ${run.project_archived
+                          // Archived projects are read-only: unarchive the project first.
+                          ? '<button class="btn btn-secondary restore-btn" type="button" disabled title="Project is archived; unarchive it to restore this run">Restore</button>'
+                          : `<button class="btn btn-secondary restore-btn" type="button" data-run-id="${escapeHtml(run.id)}">Restore</button>`}
                       </td>
                     </tr>
                   `;
@@ -540,7 +548,7 @@
           </div>
         `;
 
-        content.querySelectorAll('.restore-btn').forEach((button) => {
+        content.querySelectorAll('.restore-btn[data-run-id]').forEach((button) => {
           button.addEventListener('click', () => restoreRun(button.dataset.runId));
         });
       }

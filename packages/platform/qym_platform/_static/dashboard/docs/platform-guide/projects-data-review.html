@@ -19,7 +19,7 @@
 
 <div class="docs-callout warn">
   <svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-  <p><span class="docs-callout-title">Archive hides; Delete removes.</span> Archiving hides the project from navigation and stops its API keys, but deletes nothing; an admin can unarchive it from Admin &rarr; Projects. Deleting is permanent and removes the project's datasets, API keys, members, LLM connections and analysis settings after you type the project name. A project that still has runs, including runs in Trash, cannot be deleted: its runs must be deleted and then purged from Trash after the deleted-run grace period. Until then, archive it.</p>
+  <p><span class="docs-callout-title">Archive hides; Delete removes.</span> Archiving hides the project from navigation, stops its API keys and makes it read-only, but deletes nothing: its runs stay readable (run page, compare, review history, exports) and nothing can be changed until an admin unarchives it from Admin &rarr; Projects. Runs still in progress lose their remaining results when their keys stop, so the Archive dialog lists them first. Deleting is permanent and removes the project's datasets, API keys, members, LLM connections and analysis settings after you type the project name. A project that still has runs, including runs in Trash, cannot be deleted: its runs must be deleted and then purged from Trash after the deleted-run grace period. Until then, archive it.</p>
 </div>
 
 <h2>API keys</h2>

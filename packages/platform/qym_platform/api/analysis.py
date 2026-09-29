@@ -53,12 +53,15 @@ from qym_platform.llm_endpoint_security import (
     validate_llm_base_url,
 )
 from qym_platform.permissions import (
+    ARCHIVED_PROJECT_DETAIL,
     apply_reviewable_run_filter,
     can_delete_run,
     can_review_run,
     can_view_run,
     has_project_access,
+    is_project_archived,
     is_project_manager,
+    require_project_writable,
 )
 from qym_platform.secrets import resolve_llm_api_key
 from qym_platform.services.analysis_aggregation import (
@@ -1476,10 +1479,9 @@ def _check_pass_version(db: Session, run: Run, selected_pass: int | None,
     except (TypeError, ValueError) as exc:
         raise HTTPException(400, "Invalid pass_number") from exc
     if lock:
-        try:
-            run = lock_repeat_run(db, run.id)
-        except RepeatPassDeletionError as exc:
-            raise HTTPException(exc.status_code, exc.detail) from exc
+        # The pass save phase: like every save lock, it also refuses a project
+        # that was archived while the model ran.
+        run = _lock_run_for_save(db, run)
     if not pass_revision_matches(run, expected):
         raise HTTPException(409, "Pass numbers changed. Reload before editing this pass.")
     _require_selected_pass_for_repeat_run(run, selected_pass)
@@ -2838,12 +2840,15 @@ def _lock_run_for_save(db: Session, run: Run) -> Run:
 
     Serializes saves for one run (in the Run -> item lock order used by
     ingest and review) and makes run-level writes build on current state
-    instead of the snapshot loaded before the model call.
+    instead of the snapshot loaded before the model call. A project archived
+    while the model ran is read-only by now, so the save is refused.
     """
     try:
-        return lock_repeat_run(db, run.id)
+        locked = lock_repeat_run(db, run.id)
     except RepeatPassDeletionError as exc:
         raise HTTPException(exc.status_code, exc.detail) from exc
+    require_project_writable(db, locked.project_id)
+    return locked
 
 
 async def _aggregate_pass_analysis_results(
@@ -3975,6 +3980,8 @@ async def _run_analysis_job(
         principal = Principal(user=user, auth_type=job.auth_type)
         if not _can_operate_analyzer(db, principal, run):
             raise RuntimeError("Analysis access is no longer available.")
+        if is_project_archived(db, run.project_id):
+            raise RuntimeError(ARCHIVED_PROJECT_DETAIL)
 
         _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
         llm_config = _get_llm_config(db, run.project_id, request.connection_id)
@@ -4400,6 +4407,7 @@ async def aggregate_saved_analysis_results(
         raise HTTPException(status_code=404, detail="Run not found")
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
     _require_selected_pass_for_repeat_run(run, request.pass_number)
     _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
 
@@ -4494,6 +4502,7 @@ async def start_analysis_job(
         raise HTTPException(status_code=404, detail="Run not found")
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
     _require_selected_pass_for_repeat_run(run, request.pass_number)
     _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
 
@@ -4624,6 +4633,7 @@ async def analyze_run_items(
         raise HTTPException(status_code=404, detail="Run not found")
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
     _require_selected_pass_for_repeat_run(run, request.pass_number)
     _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
     llm_config = _get_llm_config(db, run.project_id, request.connection_id)
@@ -4825,6 +4835,7 @@ async def analyze_run_items_stream(
         raise HTTPException(status_code=404, detail="Run not found")
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
     _require_selected_pass_for_repeat_run(run, request.pass_number)
     _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
     llm_config = _get_llm_config(db, run.project_id, request.connection_id)
@@ -5224,6 +5235,7 @@ async def upload_analysis_document(
 ) -> Dict[str, Any]:
     """Extract and save retained document text without analyzer shortening."""
     run = _document_library_run(db, principal, run_id, modify=True)
+    require_project_writable(db, run.project_id)
     action = large_document_action if isinstance(large_document_action, str) else "ask"
     if action == "truncate":
         raise HTTPException(
@@ -5312,6 +5324,7 @@ def select_analysis_document(
 ) -> Dict[str, Any]:
     """Persist whether a project document is available to analyzer prompts."""
     run = _document_library_run(db, principal, run_id, modify=True)
+    require_project_writable(db, run.project_id)
     document = (
         db.query(AnalyzerDocument)
         .filter(
@@ -5354,6 +5367,7 @@ def delete_analysis_document(
             status_code=403,
             detail="Only the uploader or a project manager can delete this document",
         )
+    require_project_writable(db, run.project_id)
     db.delete(document)
     db.commit()
     return {"ok": True, "document_id": document_id}
@@ -5871,6 +5885,7 @@ def update_analysis_context(
     run = _resolve_analysis_scope(db, principal, run_id)
     if not is_project_manager(db, principal, run.project_id):
         raise HTTPException(status_code=403, detail="Project manager access required")
+    require_project_writable(db, run.project_id)
     project = db.get(Project, run.project_id)
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -5922,6 +5937,7 @@ async def _infer_project_analysis_rules_impl(
         raise HTTPException(
             status_code=403, detail="Project manager access required"
         )
+    require_project_writable(db, run.project_id)
     project = db.get(Project, run.project_id)
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -6105,6 +6121,9 @@ async def _infer_project_analysis_rules_impl(
         if progress_job.cancel_requested:
             raise asyncio.CancelledError()
 
+    # The project may have been archived while the rule writer ran; it is
+    # read-only now, so nothing is saved.
+    require_project_writable(db, project.id)
     if target_version is not None:
         # Save phase: the target may have been edited or published while the
         # rule writer ran. Re-read it under lock and append to current rules.
@@ -6258,6 +6277,7 @@ async def _start_rule_inference_job(
 ) -> JSONResponse:
     """Validate access and enqueue one project rule-generation job."""
     scope = _require_rule_inference_scope(db, principal, scope_id)
+    require_project_writable(db, scope.project_id)
     if not (request.include_documents or request.include_examples):
         raise HTTPException(
             status_code=422,
@@ -6409,6 +6429,7 @@ def create_project_analysis_rule_version(
         raise HTTPException(
             status_code=403, detail="Project manager access required"
         )
+    require_project_writable(db, run.project_id)
     parent = None
     if request.from_version:
         parent = _resolve_analysis_rule_version(
@@ -6451,6 +6472,7 @@ def publish_project_analysis_rule_version(
         raise HTTPException(
             status_code=403, detail="Project manager access required"
         )
+    require_project_writable(db, run.project_id)
     version = _resolve_analysis_rule_version(db, run.project_id, version_ref)
     if _rule_status(version) != AnalysisRuleVersionStatus.DRAFT.value:
         raise HTTPException(
@@ -6501,6 +6523,7 @@ def set_project_analysis_rule_alias(
         raise HTTPException(
             status_code=403, detail="Project manager access required"
         )
+    require_project_writable(db, run.project_id)
     version = _resolve_analysis_rule_version(db, run.project_id, request.version)
     alias = _set_analysis_rule_alias(
         db,
@@ -6591,6 +6614,7 @@ def merge_project_analysis_rule_versions(
         raise HTTPException(
             status_code=403, detail="Project manager access required"
         )
+    require_project_writable(db, run.project_id)
     target = _resolve_analysis_rule_version(db, run.project_id, target_ref)
     source = _resolve_analysis_rule_version(
         db, run.project_id, request.source_version
@@ -6682,6 +6706,7 @@ def activate_project_analysis_rule_version(
         raise HTTPException(
             status_code=403, detail="Project manager access required"
         )
+    require_project_writable(db, run.project_id)
     version = (
         db.query(ProjectAnalysisRuleVersion)
         .filter(
@@ -6729,6 +6754,7 @@ def delete_project_analysis_rule_version(
             status_code=403,
             detail="Run owner or project manager access required",
         )
+    require_project_writable(db, run.project_id)
     version = (
         db.query(ProjectAnalysisRuleVersion)
         .filter(
@@ -6826,6 +6852,7 @@ def restore_project_analysis_rule_version(
     run = _resolve_analysis_scope(db, principal, run_id)
     if principal.user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Admin only")
+    require_project_writable(db, run.project_id)
     version = (
         db.query(ProjectAnalysisRuleVersion)
         .filter(
@@ -6865,6 +6892,7 @@ def permanently_delete_project_analysis_rule_version(
     run = _resolve_analysis_scope(db, principal, run_id)
     if principal.user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Admin only")
+    require_project_writable(db, run.project_id)
     version = (
         db.query(ProjectAnalysisRuleVersion)
         .filter(
@@ -9119,6 +9147,7 @@ def update_correction(
         raise HTTPException(status_code=404, detail="Run not found")
     if not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
     item = (
         db.query(RunItem)
         .filter(RunItem.run_id == c.run_id, RunItem.item_id == c.item_id)
@@ -9272,6 +9301,7 @@ def approve_correction(
     run = Run.active(db).filter(Run.id == correction.run_id).first()
     if not run or not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
     item = (
         db.query(RunItem)
         .filter(
@@ -9344,6 +9374,7 @@ def approve_metric_analysis(
     run = Run.active(db).filter(Run.id == run_id).first()
     if not run or not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
     _check_pass_version(db, run, request.get("pass_number"),
                         request.get("expected_pass_version"), lock=True)
 
@@ -9489,6 +9520,7 @@ def reject_correction(
     run = Run.active(db).filter(Run.id == c.run_id).first()
     if not run or not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
 
     _reject_candidate(
         db,
@@ -9516,6 +9548,7 @@ def reset_correction(
     run = Run.active(db).filter(Run.id == c.run_id).first()
     if not run or not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
 
     lock_issue_correction(db, c)
     _reset_candidate(
@@ -9566,6 +9599,7 @@ def bulk_correction_action(
         run = runs_by_id.get(correction.run_id)
         if not run or not can_review_run(db, principal, run):
             raise HTTPException(status_code=403, detail="Access denied")
+        require_project_writable(db, run.project_id)
 
     now = utc_now_naive()
     reviewer_id = principal.user.id if principal.auth_type != "none" else None
@@ -9633,6 +9667,7 @@ def delete_correction(
     run = Run.active(db).filter(Run.id == c.run_id).first()
     if not run or not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
     _delete_active_candidate(
         db,
         correction=c,

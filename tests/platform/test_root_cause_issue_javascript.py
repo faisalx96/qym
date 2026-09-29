@@ -383,6 +383,7 @@ def test_compare_displays_and_saves_the_same_scope(scope_kind: str) -> None:
             "errorsLeftOutFor",
             "metricColorClassFor",
             "renderCompareOutputGroup",
+            "compareRunReadOnly",
             "wireRootCauseHandlers",
             "saveRootCauseIssues",
         )

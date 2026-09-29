@@ -59,6 +59,7 @@ from qym_platform.permissions import (
     can_review_run,
     can_view_run,
     has_project_access,
+    require_project_writable,
 )
 from qym_platform.services.issue_reviews import change_metric_issue, reconcile_issue_edits
 from qym_platform.services.run_lifecycle import (
@@ -1234,7 +1235,7 @@ def _project_not_found_page(request: Request, project_slug: str) -> HTMLResponse
   <link rel="stylesheet" href="{static_root}/shell.css?v=p0-integration-20260929">
   <script src="{static_root}/qym_safe.js?v=xss-rendering-20260928"></script>
   <script src="{static_root}/auth.js?v=p0-integration-20260929"></script>
-  <script src="{static_root}/shell.js?v=p0-integration-20260929"></script>
+  <script src="{static_root}/shell.js?v=p0-integration-20260929-archive-readonly"></script>
 </head>
 <body>
   <main style="min-height:50vh;display:flex;align-items:center;justify-content:center;padding:32px;color:var(--text-muted);">
@@ -2216,8 +2217,36 @@ def project_run_ui(
 ) -> Any:
     guarded = _guard_project_page(request, db, project_slug)
     if guarded:
+        if guarded.status_code == 404:
+            archived = _archived_project_run_redirect(request, db, project_slug, run_id)
+            if archived:
+                return archived
         return guarded
     return run_ui(run_id=run_id, request=request, db=db)
+
+
+def _archived_project_run_redirect(
+    request: Request, db: Session, project_slug: str, run_id: str
+) -> RedirectResponse | None:
+    """Send a run link of an archived project to its read-only run page.
+
+    The archived project stays hidden, but its runs stay readable by id, so
+    live links printed by the SDK and bookmarks keep opening the run.
+    Anyone who cannot view the run still gets "Project not found".
+    """
+    run = _visible_run_for_redirect(db, request, run_id)
+    if run is None:
+        return None
+    project = db.get(Project, run.project_id)
+    if project is None or project.is_active or project.slug != project_slug:
+        return None
+    url = (
+        _analysis_project_base(request).rstrip("/")
+        + "/run/"
+        + quote(run.id, safe="")
+        + (f"?{request.url.query}" if request.url.query else "")
+    )
+    return RedirectResponse(url=url, status_code=307)
 
 
 def _published_run_rows(db: Session, run_ids: List[str]) -> Dict[str, Dict[str, Any]]:
@@ -3806,7 +3835,13 @@ def _build_run_data(
         }
     project_info = None
     if project:
-        project_info = {"id": project.id, "slug": project.slug, "name": project.name}
+        project_info = {
+            "id": project.id,
+            "slug": project.slug,
+            "name": project.name,
+            # Archived projects are read-only: the page hides its edit controls.
+            "archived": not project.is_active,
+        }
 
     started_at = run.started_at or run.created_at
     ended_at = run.ended_at
@@ -4059,6 +4094,19 @@ def list_deleted_runs(
         for u in db.query(User).filter(User.id.in_(deleter_ids)).all():
             deleters[u.id] = u.display_name or u.email
 
+    # Runs of archived projects cannot be restored until the project is.
+    project_ids = {r.project_id for r in deleted_runs}
+    archived_projects = (
+        {
+            row[0]
+            for row in db.query(Project.id).filter(
+                Project.id.in_(project_ids), Project.is_active.is_(False)
+            )
+        }
+        if project_ids
+        else set()
+    )
+
     dataset_info = _dataset_version_info_map(db, deleted_runs)
     result = []
     for r in deleted_runs:
@@ -4087,6 +4135,7 @@ def list_deleted_runs(
                 "deleted_by_name": deleters.get(r.deleted_by_user_id, ""),
                 "created_at": to_api_timestamp(r.created_at),
                 "purge_at": to_api_timestamp(purge_due_at(r.deleted_at, grace_days)),
+                "project_archived": r.project_id in archived_projects,
             }
         )
     return result
@@ -4372,6 +4421,7 @@ def delete_run_pass(
     run = _lock_pass_mutation_run(db, run_id, expected_pass_version)
     if not can_modify_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
 
     try:
         result = delete_repeat_pass(
@@ -4399,6 +4449,7 @@ def delete_run_passes(
     run = _lock_pass_mutation_run(db, run_id, payload.get("expected_pass_version"))
     if not can_modify_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
 
     raw_pass_numbers = payload.get("pass_numbers")
     if not isinstance(raw_pass_numbers, list) or not raw_pass_numbers:
@@ -4793,6 +4844,7 @@ def update_metric(
         raise HTTPException(status_code=404, detail="Run not found")
     if not can_modify_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
 
     run_samples = int(run.samples or 1)
     repeat_context = has_repeat_pass_context(run)
@@ -5162,6 +5214,7 @@ def update_root_cause_issue(
     permission = can_review_run if request.get("action") == "approve" else can_modify_run
     if not permission(db, principal, run):
         raise HTTPException(403, "Access denied")
+    require_project_writable(db, run.project_id)
     item = db.query(RunItem).filter(RunItem.run_id == run.id, RunItem.item_id == item_id).first()
     if item is None:
         raise HTTPException(404, "Item not found")
@@ -5236,6 +5289,7 @@ def update_root_cause(
         raise HTTPException(status_code=404, detail="Run not found")
     if not can_modify_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
 
     item = (
         db.query(RunItem)
@@ -5489,6 +5543,7 @@ def force_stop_run(
     )
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
+    require_project_writable(db, run.project_id)
     stopped = False
     if not is_run_force_stopped(run):
         if not can_force_stop_run(run):
@@ -5546,6 +5601,7 @@ def delete_run(
         raise HTTPException(status_code=404, detail="Run not found")
     if not can_delete_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Permission denied")
+    require_project_writable(db, run.project_id)
 
     # Soft-delete only. All evaluation, analysis, and review history remains
     # available if an administrator restores the run before retention purges
@@ -5597,6 +5653,7 @@ def restore_run(
     )
     if not run:
         raise HTTPException(status_code=404, detail="Deleted run not found")
+    require_project_writable(db, run.project_id)
 
     run.deleted_at = None
     _set_dashboard_visibility(db, run.id, True)
@@ -5628,6 +5685,7 @@ def submit_run(
         raise HTTPException(status_code=403, detail="Access denied")
     if run.owner_user_id != principal.user.id:
         raise HTTPException(status_code=403, detail="Only owner can submit")
+    require_project_writable(db, run.project_id)
     # Allow completed/failed runs and rejected runs that need another review pass.
     if run.status not in SUBMITTABLE_STATUSES:
         raise state_conflict(
@@ -5689,6 +5747,7 @@ def _decide_run(
         raise HTTPException(
             status_code=403, detail=f"Only a project manager or admin can {action}"
         )
+    require_project_writable(db, run.project_id)
     if run.status != expected:
         raise state_conflict(
             run, f"Only {expected.value} runs can be {_DECISION_PAST[action]}"

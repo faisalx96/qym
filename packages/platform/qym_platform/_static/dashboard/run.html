@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/static/shell.css?v=p0-integration-20260929">
   <script src="/static/qym_safe.js?v=xss-rendering-20260928"></script>
   <script src="/static/auth.js?v=p0-integration-20260929"></script>
-  <script src="/static/shell.js?v=p0-integration-20260929"></script>
+  <script src="/static/shell.js?v=p0-integration-20260929-archive-readonly"></script>
   <script src="/static/metrics.js?v=p0-integration-20260929-minimize-errors"></script>
   <script src="/static/run_details.js?v=payload-perf-1"></script>
   <script src="/static/trace_viewer.js?v=trace-retries-20260917-1-xss-rendering"></script>
@@ -21,6 +21,29 @@
       padding: var(--space-lg);
       overflow-y: auto;
       height: calc(100vh - 100px);
+    }
+    /* Archived project: the run stays readable, its edit controls go away. */
+    .run-read-only-notice {
+      margin-bottom: var(--space-md);
+      padding: var(--space-sm) var(--space-md);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-left: 3px solid var(--warning);
+      border-radius: var(--radius-md);
+      color: var(--text-secondary);
+      font-size: var(--font-base);
+      line-height: 1.5;
+    }
+    .run-read-only-notice strong { color: var(--text-primary); font-weight: 600; }
+    body.run-read-only .metric-edit-open,
+    body.run-read-only .metric-edit-controls,
+    body.run-read-only .auto-analyze-btn,
+    body.run-read-only .aggregate-results-btn,
+    body.run-read-only .rc-approve-btn,
+    body.run-read-only [data-metric-add-issue],
+    body.run-read-only [data-approve-issue],
+    body.run-read-only [data-metric-issues-item] {
+      display: none !important;
     }
     .run-header-bar {
       display: flex;
@@ -6941,6 +6964,7 @@
           processRun();
           initializeRunDetails();
           render();
+          applyReadOnlyMode();
         } catch (err) {
           console.error('Failed to load run:', err);
           showError('Network Error', 'Could not connect to the server.');
@@ -14525,6 +14549,24 @@
       });
 
       // ── Export mode: hide mutation UI ──
+      // An archived project is read-only: say so once and hide the controls
+      // that would change the run (the server answers 409 to any write).
+      function isProjectReadOnly() {
+        return !IS_EXPORT && !!(state.run && state.run.project && state.run.project.archived);
+      }
+
+      function applyReadOnlyMode() {
+        if (!isProjectReadOnly()) return;
+        document.body.classList.add('run-read-only');
+        const content = el('run-content');
+        if (!content || content.querySelector('.run-read-only-notice')) return;
+        const notice = document.createElement('div');
+        notice.className = 'run-read-only-notice';
+        notice.setAttribute('role', 'note');
+        notice.innerHTML = '<strong>Read-only.</strong> This run belongs to an archived project. You can view and export it, but scores, diagnoses and reviews cannot be changed until an admin unarchives the project.';
+        content.insertBefore(notice, content.firstChild);
+      }
+
       function applyExportMode() {
         // Add warning banner
         var container = document.querySelector('.run-container');
