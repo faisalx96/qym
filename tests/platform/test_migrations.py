@@ -42,7 +42,7 @@ def test_alembic_has_one_upgrade_head() -> None:
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["0060"]
+    assert heads == ["0061"]
 
 
 def test_subcategory_taxonomy_migration_preserves_rows_and_defaults_json(
@@ -461,3 +461,347 @@ def test_eval_environments_migration_postgres_upgrade_and_downgrade(
 
         migration.upgrade()
         assert EVAL_TABLES <= set(sa.inspect(connection).get_table_names())
+
+
+EXPERIMENT_TABLES = {
+    "eval_experiments",
+    "eval_experiment_jobs",
+    "eval_remote_queue_snapshots",
+}
+RUN_EXPERIMENT_COLUMNS = {"origin", "experiment_job_id"}
+RUN_EXPERIMENT_INDEXES = {"ix_runs_origin", "ix_runs_experiment_job_id"}
+
+
+def _eval_experiment_prerequisites(
+    engine: sa.engine.Engine, monkeypatch: pytest.MonkeyPatch
+) -> ModuleType:
+    """Build the minimal pre-0061 schema (0060 plus ``runs`` with legacy rows)."""
+    _eval_environment_prerequisites(engine)
+    metadata = sa.MetaData()
+    sa.Table(
+        "runs",
+        metadata,
+        sa.Column("id", sa.String(36), primary_key=True),
+        sa.Column("project_id", sa.String(36), nullable=False),
+        sa.Column("task", sa.String(200), nullable=False),
+    )
+    metadata.create_all(engine)
+    previous = _load_migration("0060_eval_environments.py")
+    with engine.begin() as connection:
+        connection.execute(
+            sa.text(
+                "INSERT INTO runs (id, project_id, task) "
+                "VALUES ('r1', 'p1', 'legacy'), ('r2', 'p1', 'legacy')"
+            )
+        )
+        monkeypatch.setattr(
+            previous, "op", Operations(MigrationContext.configure(connection))
+        )
+        previous.upgrade()
+        _insert_environment(connection, "e1")
+        connection.execute(
+            sa.text(
+                "INSERT INTO eval_environment_schemas (id, environment_id, "
+                "schema_hash, schema_json, fetched_at, first_seen_at) "
+                "VALUES ('s1', 'e1', :hash, '{}', :ts, :ts)"
+            ),
+            {"hash": "a" * 64, "ts": TS},
+        )
+    return _load_migration("0061_eval_experiments.py")
+
+
+def _insert_row(connection: sa.Connection, table: str, **row: Any) -> None:
+    columns = ", ".join(row)
+    params = ", ".join(f":{key}" for key in row)
+    connection.execute(
+        sa.text(f"INSERT INTO {table} ({columns}) VALUES ({params})"), row
+    )
+
+
+def _insert_experiment(connection: sa.Connection, xid: str, **values: Any) -> None:
+    _insert_row(
+        connection,
+        "eval_experiments",
+        **{
+            "id": xid,
+            "project_id": "p1",
+            "created_by_user_id": "u",
+            "name": xid,
+            "environment_ids": '["e1"]',
+            "base_source": '{"kind": "blank"}',
+            "spec": "{}",
+            "created_at": TS,
+            "updated_at": TS,
+            **values,
+        },
+    )
+
+
+def _insert_job(connection: sa.Connection, job_id: str, **values: Any) -> None:
+    _insert_row(
+        connection,
+        "eval_experiment_jobs",
+        **{
+            "id": job_id,
+            "experiment_id": "x1",
+            "environment_id": "e1",
+            "combo_index": 0,
+            "params": "{}",
+            "request_body": "{}",
+            "schema_id": "s1",
+            "created_at": TS,
+            "updated_at": TS,
+            **values,
+        },
+    )
+
+
+def _assert_eval_experiment_constraints(connection: sa.Connection) -> None:
+    """Exercise 0061 backfill, defaults, uniqueness, checks and FK actions."""
+
+    def scalar(sql: str) -> Any:
+        return connection.execute(sa.text(sql)).scalar_one()
+
+    def rejected(insert: Any, row_id: str, **values: Any) -> None:
+        with pytest.raises(sa.exc.IntegrityError):
+            with connection.begin_nested():
+                insert(connection, row_id, **values)
+
+    def statement_rejected(sql: str) -> None:
+        with pytest.raises(sa.exc.IntegrityError):
+            with connection.begin_nested():
+                connection.execute(sa.text(sql))
+
+    # Existing runs are backfilled as local and unlinked.
+    rows = connection.execute(
+        sa.text("SELECT origin, experiment_job_id FROM runs ORDER BY id")
+    ).all()
+    assert [tuple(row) for row in rows] == [("local", None), ("local", None)]
+    statement_rejected("UPDATE runs SET origin = 'remote'")
+
+    _insert_experiment(connection, "x1")
+    experiment = (
+        connection.execute(sa.text("SELECT * FROM eval_experiments")).mappings().one()
+    )
+    assert experiment["priority"] == "NORMAL"
+    assert experiment["status"] == "QUEUED"
+    assert experiment["job_count"] == 0
+    assert experiment["description"] == ""
+    assert experiment["secrets_encrypted"] is None
+    rejected(_insert_experiment, "bad-priority", priority="URGENT")
+    rejected(_insert_experiment, "bad-status", status="DONE")
+    rejected(_insert_experiment, "bad-count", job_count=-1)
+
+    _insert_job(connection, "j1")
+    job = (
+        connection.execute(sa.text("SELECT * FROM eval_experiment_jobs"))
+        .mappings()
+        .one()
+    )
+    assert job["status"] == "QUEUED"
+    assert job["submit_attempts"] == 0
+    for column in ("run_id", "lease_owner", "wait_reason", "cancel_requested_at"):
+        assert job[column] is None
+    # One job per (experiment, environment, combo).
+    rejected(_insert_job, "j1-dup")
+    _insert_job(connection, "j2", combo_index=1)
+    rejected(_insert_job, "bad-status", combo_index=2, status="DONE")
+    rejected(_insert_job, "bad-combo", combo_index=-1)
+    rejected(_insert_job, "bad-env", combo_index=3, environment_id="missing")
+
+    # Link run r1 <-> job j1; a run links to at most one job.
+    connection.execute(
+        sa.text("UPDATE eval_experiment_jobs SET run_id = 'r1' WHERE id = 'j1'")
+    )
+    statement_rejected("UPDATE eval_experiment_jobs SET run_id = 'r1' WHERE id = 'j2'")
+    connection.execute(
+        sa.text(
+            "UPDATE runs SET origin = 'official', experiment_job_id = 'j1' "
+            "WHERE id = 'r1'"
+        )
+    )
+    statement_rejected("UPDATE runs SET experiment_job_id = 'missing' WHERE id = 'r2'")
+
+    # Deleting a run unlinks its job; deleting a job unlinks its run.
+    connection.execute(
+        sa.text("UPDATE eval_experiment_jobs SET run_id = 'r2' WHERE id = 'j2'")
+    )
+    connection.execute(sa.text("DELETE FROM runs WHERE id = 'r2'"))
+    assert scalar("SELECT run_id FROM eval_experiment_jobs WHERE id = 'j2'") is None
+    connection.execute(sa.text("DELETE FROM eval_experiment_jobs WHERE id = 'j1'"))
+    assert scalar("SELECT experiment_job_id FROM runs WHERE id = 'r1'") is None
+    assert scalar("SELECT origin FROM runs WHERE id = 'r1'") == "official"
+
+    snapshot = {"environment_id": "e1", "fetched_at": TS, "items": "[]"}
+    _insert_row(connection, "eval_remote_queue_snapshots", **snapshot)
+    with pytest.raises(sa.exc.IntegrityError):
+        with connection.begin_nested():
+            _insert_row(connection, "eval_remote_queue_snapshots", **snapshot)
+
+    # Deleting an experiment cascades to its jobs.
+    connection.execute(sa.text("DELETE FROM eval_experiments WHERE id = 'x1'"))
+    assert scalar("SELECT COUNT(*) FROM eval_experiment_jobs") == 0
+
+    # A project hard-delete reaches jobs through both experiments and
+    # environments; it must succeed and take the snapshot with it.
+    _insert_experiment(connection, "x2")
+    _insert_job(connection, "j3", experiment_id="x2", run_id="r1")
+    connection.execute(sa.text("DELETE FROM project_llm_connections"))
+    connection.execute(sa.text("DELETE FROM projects WHERE id = 'p1'"))
+    for table in ("eval_environments", "eval_experiments", "eval_experiment_jobs"):
+        assert scalar(f"SELECT COUNT(*) FROM {table}") == 0
+    assert scalar("SELECT COUNT(*) FROM eval_remote_queue_snapshots") == 0
+    assert scalar("SELECT COUNT(*) FROM runs") == 1
+
+
+def _assert_eval_experiments_dropped(connection: sa.Connection) -> None:
+    inspector = sa.inspect(connection)
+    assert not set(inspector.get_table_names()) & EXPERIMENT_TABLES
+    assert EVAL_TABLES <= set(inspector.get_table_names())
+    assert not RUN_EXPERIMENT_COLUMNS & {
+        column["name"] for column in inspector.get_columns("runs")
+    }
+    assert not RUN_EXPERIMENT_INDEXES & {
+        index["name"] for index in inspector.get_indexes("runs")
+    }
+    assert connection.execute(sa.text("SELECT COUNT(*) FROM runs")).scalar_one() == 1
+
+
+def _assert_run_origin_indexed(connection: sa.Connection) -> None:
+    indexes = {
+        index["name"]: index["column_names"]
+        for index in sa.inspect(connection).get_indexes("runs")
+    }
+    assert indexes["ix_runs_origin"] == ["origin"]
+    assert indexes["ix_runs_experiment_job_id"] == ["experiment_job_id"]
+
+
+def test_eval_experiments_migration_sqlite_upgrade_and_downgrade(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = sa.create_engine("sqlite://")
+    migration = _eval_experiment_prerequisites(engine, monkeypatch)
+
+    with engine.begin() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+        monkeypatch.setattr(
+            migration, "op", Operations(MigrationContext.configure(connection))
+        )
+        migration.upgrade()
+
+        inspector = sa.inspect(connection)
+        assert EXPERIMENT_TABLES <= set(inspector.get_table_names())
+        # SQLAlchemy doesn't reflect options of an inline (ADD COLUMN) FK.
+        fks = connection.exec_driver_sql("PRAGMA foreign_key_list(runs)").all()
+        assert [(fk[2], fk[3], fk[6]) for fk in fks] == [
+            ("eval_experiment_jobs", "experiment_job_id", "SET NULL")
+        ]
+        _assert_run_origin_indexed(connection)
+        _assert_eval_experiment_constraints(connection)
+
+        migration.downgrade()
+        _assert_eval_experiments_dropped(connection)
+
+        # Re-upgrading after a downgrade is clean and backfills again.
+        migration.upgrade()
+        assert EXPERIMENT_TABLES <= set(sa.inspect(connection).get_table_names())
+        origins = connection.execute(sa.text("SELECT origin FROM runs")).scalars()
+        assert set(origins) == {"local"}
+
+    engine.dispose()
+
+
+def _eval_experiment_model_diffs(connection: sa.Connection) -> list[Any]:
+    """Diff the ORM models against the 0060/0061 tables and ``runs`` additions."""
+    from alembic.autogenerate import compare_metadata
+    from qym_platform.db.base import Base
+
+    sqlite = connection.dialect.name == "sqlite"
+
+    def include_object(obj, name, kind, reflected, compare_to):  # type: ignore[no-untyped-def]
+        table = obj if kind == "table" else getattr(obj, "table", None)
+        if table is None:
+            return False
+        if table.name in EVAL_TABLES | EXPERIMENT_TABLES:
+            return True
+        if table.name != "runs":
+            return False
+        # The test ``runs`` table is minimal: compare only what 0061 adds.
+        if kind == "column":
+            return name in RUN_EXPERIMENT_COLUMNS
+        if kind == "index":
+            return name in RUN_EXPERIMENT_INDEXES
+        if kind == "foreign_key_constraint":
+            # SQLite reflects the inline FK without its name or ON DELETE, so
+            # it is checked with PRAGMA there and compared on PostgreSQL.
+            columns = {column.name for column in obj.columns}
+            return not sqlite and columns == {"experiment_job_id"}
+        return kind == "table"
+
+    context = MigrationContext.configure(
+        connection, opts={"compare_type": True, "include_object": include_object}
+    )
+    return compare_metadata(context, Base.metadata)
+
+
+def test_eval_experiments_migration_matches_models(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The ORM models and migration 0061 describe the same schema."""
+    from qym_platform.db import models
+
+    engine = sa.create_engine("sqlite://")
+    migration = _eval_experiment_prerequisites(engine, monkeypatch)
+
+    with engine.begin() as connection:
+        monkeypatch.setattr(
+            migration, "op", Operations(MigrationContext.configure(connection))
+        )
+        migration.upgrade()
+        assert _eval_experiment_model_diffs(connection) == []
+
+    origin = models.Run.__table__.c.origin
+    assert origin.server_default is not None and not origin.nullable
+    fk = next(iter(models.Run.__table__.c.experiment_job_id.foreign_keys))
+    assert fk.ondelete == "SET NULL" and fk.use_alter
+    engine.dispose()
+
+
+def test_eval_experiments_migration_postgres_upgrade_and_downgrade(
+    monkeypatch: pytest.MonkeyPatch, postgres_engine: sa.engine.Engine
+) -> None:
+    migration = _eval_experiment_prerequisites(postgres_engine, monkeypatch)
+
+    with postgres_engine.begin() as connection:
+        monkeypatch.setattr(
+            migration, "op", Operations(MigrationContext.configure(connection))
+        )
+        migration.upgrade()
+
+        inspector = sa.inspect(connection)
+        assert EXPERIMENT_TABLES <= set(inspector.get_table_names())
+        run_fk = next(
+            fk
+            for fk in inspector.get_foreign_keys("runs")
+            if fk["name"] == "fk_runs_experiment_job_id"
+        )
+        assert run_fk["referred_table"] == "eval_experiment_jobs"
+        assert run_fk["options"].get("ondelete") == "SET NULL"
+        assert "ck_runs_origin" in {
+            check["name"] for check in inspector.get_check_constraints("runs")
+        }
+        spec = next(
+            column
+            for column in inspector.get_columns("eval_experiments")
+            if column["name"] == "spec"
+        )
+        assert spec["type"].__class__.__name__ == "JSONB"
+        _assert_run_origin_indexed(connection)
+        assert _eval_experiment_model_diffs(connection) == []
+        _assert_eval_experiment_constraints(connection)
+
+        migration.downgrade()
+        _assert_eval_experiments_dropped(connection)
+
+        migration.upgrade()
+        assert EXPERIMENT_TABLES <= set(sa.inspect(connection).get_table_names())

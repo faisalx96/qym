@@ -91,6 +91,39 @@ class EvalModelSlotStatus(str, enum.Enum):
     STALE = "stale"
 
 
+class EvalExperimentStatus(str, enum.Enum):
+    """Aggregate status of an experiment across its jobs."""
+
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    PARTIAL = "PARTIAL"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class EvalJobStatus(str, enum.Enum):
+    """Platform-side status of one experiment job (dispatcher state machine)."""
+
+    QUEUED = "QUEUED"
+    SUBMITTING = "SUBMITTING"
+    SUBMITTED = "SUBMITTED"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    BLOCKED = "BLOCKED"
+    CANCELLING = "CANCELLING"
+    CANCELLED = "CANCELLED"
+    TIMED_OUT = "TIMED_OUT"
+
+
+class RunOrigin(str, enum.Enum):
+    """``official`` only when ingest verified a platform launch token."""
+
+    LOCAL = "local"
+    OFFICIAL = "official"
+
+
 def _string_enum(enum_cls: type[enum.Enum], length: int) -> Enum:
     """VARCHAR-backed enum storing member values; no native PostgreSQL type."""
     return Enum(
@@ -625,6 +658,184 @@ class EvalModelSlot(Base):
     )
 
 
+class EvalExperiment(Base):
+    """One launch: a sweep of config combinations over one or more environments.
+
+    ``spec`` is the config document with sweeps; secrets appear in it only as
+    refs, and ``secrets_encrypted`` holds the Fernet blob ``{ref_id: value}``
+    for temporary-model keys until every job is terminal.
+    """
+
+    __tablename__ = "eval_experiments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    created_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(
+        Text, default="", server_default="", nullable=False
+    )
+    environment_ids: Mapped[list[str]] = mapped_column(
+        BIG_JSON, default=list, nullable=False
+    )
+    # {"kind": "official" | "saved" | "best_run" | "blank" | "clone", ...}
+    base_source: Mapped[dict[str, Any]] = mapped_column(
+        BIG_JSON, default=dict, nullable=False
+    )
+    spec: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict, nullable=False)
+    secrets_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    priority: Mapped[EvalPriority] = mapped_column(
+        _string_enum(EvalPriority, 10),
+        default=EvalPriority.NORMAL,
+        server_default=EvalPriority.NORMAL.value,
+        nullable=False,
+    )
+    preemption_acknowledged_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
+    status: Mapped[EvalExperimentStatus] = mapped_column(
+        _string_enum(EvalExperimentStatus, 10),
+        default=EvalExperimentStatus.QUEUED,
+        server_default=EvalExperimentStatus.QUEUED.value,
+        nullable=False,
+    )
+    job_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+    cancelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    cancelled_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_eval_experiments_project_created", "project_id", "created_at"),
+        CheckConstraint(
+            "priority IN ('LOW', 'NORMAL', 'HIGH')", name="ck_eval_experiments_priority"
+        ),
+        CheckConstraint(
+            "status IN ('QUEUED', 'RUNNING', 'COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED')",
+            name="ck_eval_experiments_status",
+        ),
+        CheckConstraint("job_count >= 0", name="ck_eval_experiments_job_count"),
+    )
+
+
+class EvalExperimentJob(Base):
+    """One sweep combination submitted to one environment.
+
+    The dispatcher claims rows by ``(status, next_attempt_at)`` under a lease
+    (``lease_owner`` / ``lease_until``). ``run_id`` is set once ingest verifies
+    the launch token whose sha256 is ``launch_token_hash``.
+    """
+
+    __tablename__ = "eval_experiment_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    experiment_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_experiments.id", ondelete="CASCADE"), nullable=False
+    )
+    # Cascades so a project hard-delete succeeds; the API soft-disables an
+    # environment that jobs reference instead of deleting it.
+    environment_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_environments.id", ondelete="CASCADE"), nullable=False
+    )
+    combo_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Swept values for this combo (redacted; model slots as connection names).
+    params: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict, nullable=False)
+    # Materialized EvalJobCreate body with secret refs, never secret values.
+    request_body: Mapped[dict[str, Any]] = mapped_column(
+        BIG_JSON, default=dict, nullable=False
+    )
+    schema_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_environment_schemas.id", ondelete="CASCADE"), nullable=False
+    )
+    launch_token_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    remote_job_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    remote_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    remote_result: Mapped[Optional[dict[str, Any]]] = mapped_column(BIG_JSON, nullable=True)
+    remote_versioning: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        BIG_JSON, nullable=True
+    )
+    status: Mapped[EvalJobStatus] = mapped_column(
+        _string_enum(EvalJobStatus, 20),
+        default=EvalJobStatus.QUEUED,
+        server_default=EvalJobStatus.QUEUED.value,
+        nullable=False,
+    )
+    run_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("runs.id", ondelete="SET NULL"), nullable=True
+    )
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    submit_attempts: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    next_attempt_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    lease_owner: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    lease_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_polled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Why a non-terminal job isn't progressing, e.g. "inflight cap 5/5".
+    wait_reason: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    cancel_requested_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    cancelled_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    cancel_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "experiment_id",
+            "environment_id",
+            "combo_index",
+            name="uq_eval_experiment_job_combo",
+        ),
+        Index("ix_eval_experiment_jobs_status_next_attempt", "status", "next_attempt_at"),
+        Index("ix_eval_experiment_jobs_environment_status", "environment_id", "status"),
+        # A run links to at most one job (the launch token is single-use).
+        Index("ix_eval_experiment_jobs_run_id", "run_id", unique=True),
+        CheckConstraint("combo_index >= 0", name="ck_eval_experiment_jobs_combo_index"),
+        CheckConstraint(
+            "submit_attempts >= 0", name="ck_eval_experiment_jobs_submit_attempts"
+        ),
+        CheckConstraint(
+            "status IN ('QUEUED', 'SUBMITTING', 'SUBMITTED', 'RUNNING', 'SUCCEEDED', "
+            "'FAILED', 'BLOCKED', 'CANCELLING', 'CANCELLED', 'TIMED_OUT')",
+            name="ck_eval_experiment_jobs_status",
+        ),
+    )
+
+
+class EvalRemoteQueueSnapshot(Base):
+    """Latest redacted view of an environment's remote queue.
+
+    ``items`` keeps only ``{remote_job_id, status, priority, user_id,
+    created_at, run_name}`` per PENDING/RUNNING job; ``env_overrides`` and
+    ``eval_input`` are never stored.
+    """
+
+    __tablename__ = "eval_remote_queue_snapshots"
+
+    environment_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_environments.id", ondelete="CASCADE"), primary_key=True
+    )
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    fetch_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    items: Mapped[list[dict[str, Any]]] = mapped_column(BIG_JSON, default=list, nullable=False)
+
+
 class Run(Base):
     __tablename__ = "runs"
 
@@ -644,6 +855,24 @@ class Run(Base):
     run_config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     # Repeat runs: how many passes evaluate each item (1 = classic run).
     samples: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    # "official" only when ingest verified an Evaluation Service launch token.
+    origin: Mapped[RunOrigin] = mapped_column(
+        _string_enum(RunOrigin, 10),
+        default=RunOrigin.LOCAL,
+        server_default=RunOrigin.LOCAL.value,
+        nullable=False,
+        index=True,
+    )
+    experiment_job_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey(
+            "eval_experiment_jobs.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_runs_experiment_job_id",
+        ),
+        nullable=True,
+        index=True,
+    )
 
     status: Mapped[RunWorkflowStatus] = mapped_column(Enum(RunWorkflowStatus), default=RunWorkflowStatus.DRAFT, index=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
@@ -661,6 +890,10 @@ class Run(Base):
     scores: Mapped[list["RunItemScore"]] = relationship("RunItemScore", lazy="noload", foreign_keys="RunItemScore.run_id")
     approval_rel: Mapped[Optional["Approval"]] = relationship("Approval", uselist=False, lazy="noload", foreign_keys="Approval.run_id")
     owner_user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[owner_user_id], lazy="noload")
+
+    __table_args__ = (
+        CheckConstraint("origin IN ('local', 'official')", name="ck_runs_origin"),
+    )
 
     @classmethod
     def active(cls, db: Session):
