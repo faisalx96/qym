@@ -71,7 +71,7 @@
 
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); }
     .form-group { display: flex; flex-direction: column; gap: 6px; }
-    .form-group.full-width { grid-column: 1 / -1; }
+    .form-group.full-width, .shell-form-checkbox.full-width { grid-column: 1 / -1; }
     .form-label { font-size: var(--font-sm); font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; }
     .form-group .form-input { width: 100%; box-sizing: border-box; background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 6px; color: var(--text-primary); padding: var(--space-sm) var(--space-md); font-size: var(--font-sm); font-family: var(--font-sans); }
 
@@ -268,7 +268,7 @@
     <!-- LLM Connections -->
     <div class="settings-panel" id="panel-llm" role="tabpanel" aria-labelledby="settings-tab-llm" hidden>
       <div class="card">
-        <div class="card-header"><div><div class="card-title">LLM Connections</div><div class="card-subtitle">Providers for AI-assisted root cause analysis</div></div></div>
+        <div class="card-header"><div><div class="card-title">LLM Connections</div><div class="card-subtitle">Providers for root cause analysis and experiments</div></div></div>
         <div class="card-body flush">
           <table class="data-table">
             <thead><tr><th>Connection</th><th>Model</th><th>Endpoint</th><th>Key</th><th style="text-align:right">Actions</th></tr></thead>
@@ -283,6 +283,13 @@
             <div class="form-group full-width"><label class="form-label">Base URL</label><input class="form-input" id="llm-base-url" type="text" placeholder="https://api.openai.com/v1" /></div>
             <div class="form-group"><label class="form-label">Model</label><input class="form-input" id="llm-model" type="text" placeholder="gpt-4o" /></div>
             <div class="form-group"><label class="form-label">API Key</label><input class="form-input" id="llm-api-key" type="password" placeholder="sk-..." /></div>
+            <label class="shell-form-checkbox full-width" for="llm-available-for-experiments">
+              <input type="checkbox" id="llm-available-for-experiments" checked />
+              <span class="shell-form-checkbox-copy">
+                <span class="shell-form-checkbox-label">Available for experiments</span>
+                <span class="shell-form-checkbox-help">Offer this connection in the experiments model picker. Turn off to keep it for root cause analysis only.</span>
+              </span>
+            </label>
           </div>
           <div class="note" id="llm-note"></div>
           <div class="llm-message" id="llm-message"></div>
@@ -508,6 +515,7 @@
             <td>
               <span style="font-weight:600;color:var(--text-primary)">${escapeHtml(c.name)}</span>
               ${c.is_default ? '<span class="role-badge qym-tag qym-tag--role default" style="margin-left:10px">Default</span>' : ''}
+              ${c.available_for_experiments === false ? '<span class="qym-tag" style="margin-left:6px" title="Not offered in the experiments model picker">Analysis only</span>' : ''}
             </td>
             <td><span style="font-family:var(--font-mono);color:var(--text-secondary)">${escapeHtml(c.llm_model || '—')}</span></td>
             <td><span style="font-family:var(--font-mono);display:inline-block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle" title="${escapeHtml(c.llm_base_url || '')}">${escapeHtml(c.llm_base_url || '—')}</span></td>
@@ -969,6 +977,7 @@
         baseUrl: () => document.getElementById('llm-base-url'),
         model: () => document.getElementById('llm-model'),
         apiKey: () => document.getElementById('llm-api-key'),
+        forExperiments: () => document.getElementById('llm-available-for-experiments'),
         note: () => document.getElementById('llm-note'),
         msg: () => document.getElementById('llm-message'),
         title: () => document.getElementById('llm-form-title'),
@@ -984,6 +993,7 @@
         llmEls.model().value = '';
         llmEls.apiKey().value = '';
         llmEls.apiKey().placeholder = 'sk-...';
+        llmEls.forExperiments().checked = true;
         llmEls.note().textContent = '';
         llmEls.msg().textContent = '';
         llmEls.title().textContent = 'Add a connection';
@@ -1001,6 +1011,7 @@
         llmEls.model().value = c.llm_model || '';
         llmEls.apiKey().value = '';
         llmEls.apiKey().placeholder = c.llm_api_key_set ? 'Leave blank to keep current key' : 'sk-...';
+        llmEls.forExperiments().checked = c.available_for_experiments !== false;
         llmEls.note().textContent = c.llm_api_key_set ? `Stored key: ${c.llm_api_key_hint || 'configured'}` : '';
         llmEls.msg().textContent = '';
         llmEls.title().textContent = `Edit “${c.name}”`;
@@ -1019,6 +1030,7 @@
           llm_base_url: llmEls.baseUrl().value.trim() || 'https://api.openai.com/v1',
           llm_model: llmEls.model().value.trim() || 'gpt-4o-mini',
           llm_api_key: apiKey || (isEdit ? '__KEEP__' : ''),
+          available_for_experiments: llmEls.forExperiments().checked,
         };
         if (!payload.name) { llmEls.msg().textContent = 'Name is required'; return; }
         llmEls.msg().textContent = 'Saving…';
