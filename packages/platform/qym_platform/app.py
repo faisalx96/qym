@@ -49,6 +49,7 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     from qym_platform.db.session import SessionLocal, build_engine
     from qym_platform.deps import get_db
     from qym_platform.services.eval_dispatcher import EvalDispatcher
+    from qym_platform.services.eval_remote_queue import RemoteQueueSnapshotter
     from qym_platform.services.maintenance import MaintenanceWorker
     from sqlalchemy.orm import sessionmaker
 
@@ -61,6 +62,8 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     app.state.maintenance_worker = maintenance_worker
     eval_dispatcher = EvalDispatcher(worker_sessions)
     app.state.eval_dispatcher = eval_dispatcher
+    remote_queue_snapshotter = RemoteQueueSnapshotter(worker_sessions)
+    app.state.remote_queue_snapshotter = remote_queue_snapshotter
 
     @app.on_event("startup")
     def start_dashboard_summary_worker() -> None:
@@ -78,9 +81,12 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
             logging.getLogger("uvicorn.error").info("Maintenance worker started")
             eval_dispatcher.start()
             logging.getLogger("uvicorn.error").info("Eval dispatcher started")
+            remote_queue_snapshotter.start()
+            logging.getLogger("uvicorn.error").info("Remote queue snapshotter started")
 
     @app.on_event("shutdown")
     def stop_dashboard_summary_worker() -> None:
+        remote_queue_snapshotter.stop()
         eval_dispatcher.stop()
         maintenance_worker.stop()
         if dashboard_worker.stop():
