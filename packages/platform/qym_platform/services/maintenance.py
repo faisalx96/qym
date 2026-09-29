@@ -781,6 +781,66 @@ def _reclassify_metric_errors(ctx: JobContext) -> bool:
     return False
 
 
+@register(
+    "publish_ingest_flags",
+    description="Show the incomplete-data flag of runs finished before C024 in the runs list.",
+)
+def _publish_ingest_flags(ctx: JobContext) -> bool:
+    """Queue a runs-list refresh for runs whose metadata carries ``ingest_incomplete``.
+
+    The runs list reads the flag from each run's dashboard descriptor, which
+    the worker rebuilds only when the run changes. Runs flagged before the
+    descriptor carried the flag get a run-level change event: the worker
+    rebuilds the descriptor from the run row and republishes the summary from
+    its numeric records, without rescanning items. Runs are read in bounded
+    id windows.
+    """
+    from qym_platform.db.models import Run
+    from qym_platform.services.dashboard_outbox import enqueue_snapshots
+
+    window = max(1, int(ctx.params.get("window", 2000)))
+    cursor = str(ctx.progress.get("cursor") or "")
+    queued = int(ctx.progress.get("runs_queued") or 0)
+    with ctx.session() as db:
+        rows = db.execute(
+            select(
+                Run.id,
+                Run.project_id,
+                Run.run_metadata["ingest_incomplete"].as_string(),
+            )
+            .where(Run.id > cursor, Run.deleted_at.is_(None))
+            .order_by(Run.id)
+            .limit(window)
+        ).all()
+        flagged = [
+            (
+                dict(
+                    partition_key=run_id,
+                    project_key=project_id,
+                    record_key=run_id + ":run",
+                    record_kind="run",
+                    operation="UPSERT",
+                ),
+                [],
+            )
+            for run_id, project_id, flag in rows
+            if flag not in (None, "", "null")
+        ]
+        if flagged:
+            enqueue_snapshots(db.connection(), flagged)
+        db.commit()
+    queued += len(flagged)
+    ctx.progress["runs_queued"] = queued
+    if len(rows) < window:
+        ctx.progress["phase"] = "done"
+        ctx.progress["message"] = f"done: {queued:,} flagged runs queued for the runs list"
+        ctx.log(ctx.progress["message"])
+        return True
+    ctx.progress["cursor"] = rows[-1][0]
+    ctx.progress["message"] = f"runs up to {rows[-1][0]}; {queued:,} flagged runs queued"
+    return False
+
+
 def ingest_settings_for_maintenance():
     from qym_platform.settings import PlatformSettings
 

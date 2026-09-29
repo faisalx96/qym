@@ -60,10 +60,14 @@ def test_partial_success_counts_refused_events_and_does_not_resend(
     assert stream.sent_events == 2
     assert stream.rejected_events == 1
     assert stream.dropped_events == 1
-    assert stream.flush(0) is False
+    # A refused event was delivered: the platform flags the run instead, so
+    # the flush (and with it the run's completion) is not held (C024).
+    assert stream.undelivered_events == 0
+    assert stream.flush(0) is True
     err = capsys.readouterr().err
     assert "payload.latency_ms: Field required" in err
     assert "rejected by the platform" in err
+    assert "failed to upload" not in err
 
 
 def test_old_platform_response_without_verdict_counts_everything_sent(monkeypatch):
@@ -122,8 +126,51 @@ def test_isolated_events_are_not_retried_on_4xx(monkeypatch, status):
     stream.close()
     # One batch attempt, then exactly one isolated attempt per event.
     assert len(calls) == 4
-    assert stream.rejected_events == stream.dropped_events == 3
+    assert stream.dropped_events == 3
     assert not stream._thread.is_alive()
+    # A 4xx without per-event verdicts (unknown run, a proxy's limit) says
+    # nothing about the events: they count as undelivered and hold completion.
+    assert stream.rejected_events == 0
+    assert stream.undelivered_events == 3
+    assert stream.flush(0) is False
+
+
+def test_isolated_events_with_platform_verdicts_count_as_rejected(
+    monkeypatch, capsys
+):
+    """A 422 listing the refused events is a verdict: the run may complete (C024)."""
+    _limits(monkeypatch)
+    calls = []
+
+    def post(url, payload, key, **kwargs):
+        events = [json.loads(line) for line in payload.splitlines() if line]
+        calls.append(events)
+        body = {
+            "ok": False,
+            "applied": 0,
+            "skipped": 0,
+            "rejected": len(events),
+            "rejected_events": [
+                {"event_id": evt["event_id"], "error": "latency_ms: Field required"}
+                for evt in events
+            ],
+        }
+        raise HTTPError(
+            url, 422, "rejected", None, io.BytesIO(json.dumps(body).encode())
+        )
+
+    monkeypatch.setattr(client_module, "_post_ndjson", post)
+    stream = PlatformEventStream("http://unused.invalid", "test-only", "run-test")
+    for i in range(3):
+        stream.emit("item_completed", {"index": i})
+    stream.close()
+    assert len(calls) == 4
+    assert stream.rejected_events == stream.dropped_events == 3
+    assert stream.undelivered_events == 0
+    assert stream.flush(0) is True
+    err = capsys.readouterr().err
+    assert "3 platform events were rejected by the platform" in err
+    assert "latency_ms: Field required" in err
 
 
 # --- Real SDK stream against the platform ingest route ---------------------

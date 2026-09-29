@@ -136,22 +136,34 @@ def _rejected_events(response: Any, sent: int) -> "tuple[int, list[dict]]":
     return max(0, min(count, sent)), [row for row in details if isinstance(row, dict)]
 
 
-def _http_error_reason(exc: BaseException) -> str:
-    """Best-effort reason for a refused request, read from its JSON body."""
+def _http_rejection(exc: BaseException) -> "tuple[str, bool]":
+    """Reason for a refused request, and whether it refused the events themselves.
+
+    Platforms that validate each event answer a request whose events are all
+    invalid with a 4xx listing ``rejected_events``: the platform saw those
+    events and refused them. Any other 4xx (unknown run, a proxy's size limit)
+    says nothing about the events; they count as undelivered.
+    """
     reason = f"HTTP {getattr(exc, 'code', '?')}"
     try:
         body = json.loads(exc.read(65536).decode("utf-8"))  # type: ignore[attr-defined]
     except Exception:
-        return reason
+        return reason, False
     if not isinstance(body, dict):
-        return reason
+        return reason, False
     rows = body.get("rejected_events")
+    verdict = isinstance(rows, list) and bool(body.get("rejected"))
     if isinstance(rows, list) and rows and isinstance(rows[0], dict):
         if rows[0].get("error"):
-            return f"{reason}: {rows[0]['error']}"
+            return f"{reason}: {rows[0]['error']}", verdict
     if isinstance(body.get("detail"), str):
-        return f"{reason}: {body['detail']}"
-    return reason
+        return f"{reason}: {body['detail']}", verdict
+    return reason, verdict
+
+
+def _http_error_reason(exc: BaseException) -> str:
+    """Best-effort reason for a refused request, read from its JSON body."""
+    return _http_rejection(exc)[0]
 
 
 def _is_poison_error(exc: BaseException) -> bool:
@@ -243,9 +255,12 @@ class PlatformEventStream:
         self.sent_events = 0
         self.dropped_events = 0
         # Subset of dropped_events: events the platform refused as invalid
-        # (validation, reused sequence). Resending them can never succeed.
+        # (validation, reused sequence, a value its database refuses).
+        # Resending them can never succeed; the platform records them and
+        # flags the run, so they do not hold the run's completion.
         self.rejected_events = 0
         self._first_rejection: Optional[str] = None
+        self._first_refusal: Optional[str] = None
         self._consecutive_failures = 0
         self._seq = 0
         self._seq_lock = threading.Lock()
@@ -308,7 +323,7 @@ class PlatformEventStream:
                     return
                 if _is_poison_error(e):
                     # Deterministic rejection: another attempt cannot succeed.
-                    self._record_rejection(evt, _http_error_reason(e))
+                    self._record_rejection(evt, *_http_rejection(e))
                     return
                 _debug(
                     f"direct emit error (attempt {attempt + 1}/{self.SYNC_SEND_RETRIES}): {e}"
@@ -326,14 +341,31 @@ class PlatformEventStream:
             f"direct emit FAILED after {self.SYNC_SEND_RETRIES} attempt(s): {evt.get('type', '?')}"
         )
 
-    def _record_rejection(self, evt: Dict[str, Any], reason: str) -> None:
-        """Count one event the platform refused; warn once with the reason."""
-        self.rejected_events += 1
+    def _record_rejection(
+        self, evt: Dict[str, Any], reason: str, verdict: bool = True
+    ) -> None:
+        """Count one event the platform refused; warn once with the reason.
+
+        ``verdict`` is False when the refusal was about the request rather
+        than the event (no per-event verdict): the event is dropped and counts
+        as undelivered, which holds the run's completion.
+        """
+        if verdict:
+            self.rejected_events += 1
         self.dropped_events += 1
         _debug(
-            f"platform rejected event {evt.get('type', '?')} "
-            f"seq={evt.get('sequence', '?')}: {reason}"
+            f"platform {'rejected' if verdict else 'refused to take'} event "
+            f"{evt.get('type', '?')} seq={evt.get('sequence', '?')}: {reason}"
         )
+        if not verdict:
+            if self._first_refusal is None:
+                self._first_refusal = f"{evt.get('type', 'event')}: {reason}"
+                print(
+                    f"qym: WARNING: the platform refused to take a run event "
+                    f"({self._first_refusal}); it was not uploaded.",
+                    file=sys.stderr,
+                )
+            return
         if self._first_rejection is None:
             self._first_rejection = f"{evt.get('type', 'event')}: {reason}"
             print(
@@ -492,8 +524,21 @@ class PlatformEventStream:
             if registered:
                 release_registration()
 
+    @property
+    def undelivered_events(self) -> int:
+        """Dropped events the platform never answered for (outage, retries
+        exhausted, spool lost, uploads stopped). Events it refused are
+        ``rejected_events``: the platform saw them and flags the run instead.
+        """
+        return max(0, self.dropped_events - self.rejected_events)
+
     def flush(self, timeout: Optional[float] = None) -> bool:
-        """Wait for accepted events; report success only when none were lost."""
+        """Wait for accepted events; report success only when none went undelivered.
+
+        Events the platform refused (``rejected_events``) do not fail the
+        flush: resending them can never succeed, and the platform records
+        them and flags the run as incomplete when it completes.
+        """
         drained = self._q.wait_drained(
             self.FLUSH_TIMEOUT if timeout is None else timeout
         )
@@ -505,7 +550,7 @@ class PlatformEventStream:
             and admissions_finished
             and closing_finished
             and self._delivery_error is None
-            and self.dropped_events == 0
+            and self.undelivered_events == 0
         )
 
     async def aflush(self, timeout: Optional[float] = None) -> bool:
@@ -583,17 +628,27 @@ class PlatformEventStream:
                 _debug("flush thread joined successfully")
                 if self._remote_closed.is_set():
                     pass  # The terminal rejection was already reported once.
-                elif self.dropped_events:
+                elif self.undelivered_events:
                     rejected = (
-                        f" {self.rejected_events} were rejected by the platform "
+                        f" {self.rejected_events} more were rejected by the platform "
                         f"(first: {self._first_rejection})."
                         if self.rejected_events
                         else ""
                     )
                     print(
-                        f"qym: WARNING: {self.dropped_events} platform events failed to upload "
+                        f"qym: WARNING: {self.undelivered_events} platform events failed to upload "
                         "and were dropped — the run page may be missing items."
                         f"{rejected} Set QYM_PLATFORM_DEBUG=1 to log the failures.",
+                        file=sys.stderr,
+                    )
+                elif self.rejected_events:
+                    # Every event reached the platform; it refused some. The
+                    # run still completes, and the platform flags it.
+                    print(
+                        f"qym: WARNING: {self.rejected_events} platform events were "
+                        f"rejected by the platform (first: {self._first_rejection}). "
+                        "The run page does not include them and marks the run as "
+                        "incomplete. Set QYM_PLATFORM_DEBUG=1 to log each rejection.",
                         file=sys.stderr,
                     )
                 elif printed_progress:
@@ -634,7 +689,7 @@ class PlatformEventStream:
                         self._disable_uploads(run_wide)
                         return
                     if _is_poison_error(e2):
-                        self._record_rejection(evt, _http_error_reason(e2))
+                        self._record_rejection(evt, *_http_rejection(e2))
                         break
                     if attempt == 1:
                         self.dropped_events += 1

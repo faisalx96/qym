@@ -85,6 +85,10 @@ from qym_platform.services.run_review import (
     review_history,
     state_conflict,
 )
+from qym_platform.services.ingest_completeness import (
+    public_run_metadata,
+    runs_list_ingest_flag,
+)
 from qym_platform.services.metric_semantics import declared_direction, primary_metric
 from qym_platform.services.score_edits import (
     ScoreEditError,
@@ -2826,6 +2830,7 @@ def legacy_list_runs(
             "product_eval": r.run_metadata.get("product_eval")
             if isinstance(r.run_metadata, dict)
             else None,
+            "ingest_incomplete": runs_list_ingest_flag(r.run_metadata),
         }
 
         task = summary["task_name"]
@@ -3285,7 +3290,9 @@ def _build_run_data(
         else None
     )
     run_config = run.run_config if isinstance(run.run_config, dict) else {}
-    run_metadata = run.run_metadata if isinstance(run.run_metadata, dict) else {}
+    run_metadata = public_run_metadata(
+        run.run_metadata if isinstance(run.run_metadata, dict) else {}
+    )
 
     # Build per-item score/meta for UI
     scores = (

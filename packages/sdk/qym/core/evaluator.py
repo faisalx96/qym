@@ -1805,27 +1805,34 @@ class Evaluator:
             try:
                 # A timed-out drain must not publish completion ahead of queued
                 # item/span events. close() has already reported the backlog.
+                # Events the platform refused do not hold completion: they can
+                # never be accepted, and the platform flags the run instead.
                 if callable(getattr(type(platform_stream), "aflush", None)) and not await platform_stream.aflush(0):
                     raise RuntimeError("Platform upload still pending after close")
+                rejected_events = int(getattr(platform_stream, "rejected_events", 0) or 0)
+                summary = {
+                    "total_items": result.total_items,
+                    "success_count": len(result.results),
+                    "error_count": len(result.errors),
+                    "run_metadata": dict(result.run_metadata or {}),
+                }
+                if rejected_events:
+                    summary["rejected_events"] = rejected_events
                 # Send run_completed after the ordered queue has drained.
-                final_run_metadata = dict(result.run_metadata or {})
                 await _emit_platform_event(
                     platform_stream,
                     "run_completed",
                     {
                         "ended_at": _utc_now_str(),
                         "final_status": _final_status,
-                        "summary": {
-                            "total_items": result.total_items,
-                            "success_count": len(result.results),
-                            "error_count": len(result.errors),
-                            "run_metadata": final_run_metadata,
-                        },
+                        "summary": summary,
                     },
                     sync=True,
                 )
                 if callable(getattr(type(platform_stream), "aflush", None)) and not await platform_stream.aflush(0):
                     raise RuntimeError("Platform completion was not acknowledged")
+                if int(getattr(platform_stream, "rejected_events", 0) or 0) > rejected_events:
+                    raise RuntimeError("Platform refused the run completion")
                 self._run_completed = True
             except Exception:
                 pass

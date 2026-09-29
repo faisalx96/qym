@@ -32,6 +32,7 @@ from qym_platform.services.dashboard_outbox import (
     execution_event_query,
     execution_event_object,
 )
+from qym_platform.services.ingest_completeness import runs_list_ingest_flag
 from qym_platform.services.metric_semantics import primary_metric
 from qym_platform.services.run_means import (
     MetricTotals,
@@ -965,6 +966,7 @@ def _sync_dimension(db, run_id, version):
         "langfuse_url": metadata.get("langfuse_url"),
         "langfuse_dataset_id": metadata.get("langfuse_dataset_id"),
         "langfuse_run_id": metadata.get("langfuse_run_id"),
+        "ingest_incomplete": runs_list_ingest_flag(metadata),
         **dataset,
     }
     if created:

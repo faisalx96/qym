@@ -1,6 +1,7 @@
 """A drained queue is successful only if every admitted event was delivered."""
 
 import asyncio
+import io
 import json
 from urllib.error import HTTPError
 
@@ -122,3 +123,128 @@ async def test_evaluator_withholds_terminal_when_item_upload_is_lost(
     assert evaluator._run_completed is False
     assert "run_completed" not in attempted
     assert not any(row["type"] == "run_completed" for row in delivered)
+
+
+def _verdict(url, events, error="latency_ms: Field required"):
+    body = {
+        "ok": False,
+        "applied": 0,
+        "skipped": 0,
+        "rejected": len(events),
+        "rejected_events": [
+            {"event_id": row["event_id"], "type": row["type"], "error": error}
+            for row in events
+        ],
+    }
+    return HTTPError(url, 422, "rejected", None, io.BytesIO(json.dumps(body).encode()))
+
+
+def _one_item_evaluator(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        client_module.PlatformClient,
+        "create_run",
+        lambda self, **kwargs: PlatformRunHandle(
+            kwargs["external_run_id"], "http://unused.invalid/run"
+        ),
+    )
+
+    async def task(value):
+        return value
+
+    return Evaluator(
+        task,
+        InMemoryDataset([{"input": "answer", "expected_output": "answer"}]),
+        ["exact_match"],
+        config={
+            "run_name": "rejected-item",
+            "otel_enabled": False,
+            "checkpoint_enabled": False,
+            "platform_api_key": "test-only",
+            "platform_url": "http://unused.invalid",
+            "output_dir": str(tmp_path),
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_evaluator_completes_when_the_platform_only_rejected_events(
+    monkeypatch, tmp_path
+):
+    """A platform verdict on an event does not hold run_completed (C024)."""
+    _limits(monkeypatch, batch=100)
+    delivered = []
+
+    def post(url, payload, key, **kwargs):
+        events = [json.loads(line) for line in payload.splitlines()]
+        if any(row["type"] == "item_completed" for row in events):
+            bad = [row for row in events if row["type"] == "item_completed"]
+            if len(bad) == len(events):
+                raise _verdict(url, bad)
+            delivered.extend(row for row in events if row not in bad)
+            return {
+                "ok": True,
+                "applied": len(events) - len(bad),
+                "skipped": 0,
+                "rejected": len(bad),
+                "rejected_events": [
+                    {"event_id": row["event_id"], "error": "latency_ms: Field required"}
+                    for row in bad
+                ],
+            }
+        delivered.extend(events)
+        return {"ok": True, "applied": len(events), "skipped": 0}
+
+    monkeypatch.setattr(client_module, "_post_ndjson", post)
+    evaluator = _one_item_evaluator(monkeypatch, tmp_path)
+    await asyncio.wait_for(evaluator.arun(show_tui=False, auto_save=False), 5)
+
+    stream = evaluator._platform_stream
+    assert stream.rejected_events == 1 and stream.undelivered_events == 0
+    assert evaluator._run_completed is True
+    [completed] = [row for row in delivered if row["type"] == "run_completed"]
+    assert completed["payload"]["final_status"] == "COMPLETED"
+    assert completed["payload"]["summary"]["rejected_events"] == 1
+
+
+@pytest.mark.asyncio
+async def test_refused_run_completed_is_not_reported_as_completed(
+    monkeypatch, tmp_path
+):
+    _limits(monkeypatch, batch=100)
+    attempts = []
+
+    def post(url, payload, key, **kwargs):
+        events = [json.loads(line) for line in payload.splitlines()]
+        attempts.extend(row["type"] for row in events)
+        if any(row["type"] == "run_completed" for row in events):
+            raise _verdict(url, events, "final_status: invalid")
+        return {"ok": True, "applied": len(events), "skipped": 0}
+
+    monkeypatch.setattr(client_module, "_post_ndjson", post)
+    evaluator = _one_item_evaluator(monkeypatch, tmp_path)
+    await asyncio.wait_for(evaluator.arun(show_tui=False, auto_save=False), 5)
+
+    assert attempts.count("run_completed") == 1
+    assert evaluator._platform_stream.rejected_events == 1
+    assert evaluator._run_completed is False
+
+
+@pytest.mark.asyncio
+async def test_clean_run_completed_summary_has_no_rejected_count(
+    monkeypatch, tmp_path
+):
+    """Older platforms see the exact summary they always did."""
+    _limits(monkeypatch, batch=100)
+    delivered = []
+
+    def post(url, payload, key, **kwargs):
+        delivered.extend(json.loads(line) for line in payload.splitlines())
+        return {"ok": True, "applied": 1, "skipped": 0}
+
+    monkeypatch.setattr(client_module, "_post_ndjson", post)
+    evaluator = _one_item_evaluator(monkeypatch, tmp_path)
+    await asyncio.wait_for(evaluator.arun(show_tui=False, auto_save=False), 5)
+
+    assert evaluator._run_completed is True
+    [completed] = [row for row in delivered if row["type"] == "run_completed"]
+    assert "rejected_events" not in completed["payload"]["summary"]

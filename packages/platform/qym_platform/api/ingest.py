@@ -76,6 +76,14 @@ from qym_platform.item_identity import (
     looks_like_positional_item_id,
 )
 from qym_platform.services.run_means import reduce_pass_scores
+from qym_platform.services.ingest_completeness import (
+    INGEST_INCOMPLETE_KEY,
+    INGEST_REJECTED_KEY,
+    completed_by_client,
+    ingest_incomplete_flag,
+    record_rejected_events,
+    record_reported_rejections,
+)
 from qym_platform.services.run_lifecycle import (
     is_run_force_stopped,
     is_run_in_review,
@@ -681,12 +689,15 @@ def _rejection_reason(exc: BaseException) -> str:
     return reason[:_MAX_REJECTION_ERROR_CHARS]
 
 
-def _rejection_row(line_no: int, source: Any, reason: str) -> Dict[str, Any]:
+def _rejection_row(
+    line_no: int, source: Any, reason: str, raw: Any = None
+) -> Dict[str, Any]:
     """One ``rejected_events`` entry, from a parsed event or its raw JSON."""
     if isinstance(source, RunEventV1):
         event_id = str(source.event_id)
         sequence, kind = source.sequence, source.type
     else:
+        raw = source
         fields = source if isinstance(source, dict) else {}
         event_id, sequence, kind = (
             fields.get("event_id"),
@@ -696,11 +707,15 @@ def _rejection_row(line_no: int, source: Any, reason: str) -> Dict[str, Any]:
         event_id = event_id[:64] if isinstance(event_id, str) else None
         sequence = sequence if type(sequence) is int else None
         kind = kind[:64] if isinstance(kind, str) else None
+    payload = raw.get("payload") if isinstance(raw, dict) else None
+    item_id = payload.get("item_id") if isinstance(payload, dict) else None
     return {
         "line": line_no,
         "event_id": event_id,
         "sequence": sequence,
         "type": kind,
+        # Names the refused event on the run page (incomplete-ingest flag).
+        "item_id": item_id[:200] if isinstance(item_id, str) and item_id else None,
         "error": reason,
     }
 
@@ -762,6 +777,74 @@ def _int_or_none(value: Any) -> Optional[int]:
     except (TypeError, ValueError):
         return None
     return parsed
+
+
+def _refresh_ingest_flag(
+    db: Session, run: Run, expected: Optional[int] = None
+) -> None:
+    """Set or clear ``ingest_incomplete``: items that never arrived, refused events.
+
+    Callers flush first, outside any exception handler: a value the database
+    refuses must fail the batch so it can be isolated, not be swallowed here.
+    """
+    current = dict(run.run_metadata) if isinstance(run.run_metadata, dict) else {}
+    previous = current.get(INGEST_INCOMPLETE_KEY)
+    if expected is None and isinstance(previous, dict):
+        expected = _int_or_none(previous.get("expected_items"))
+    if expected is None:
+        expected = _int_or_none(current.get("total_items"))
+    received = int(
+        db.query(func.count(RunItem.item_id))
+        .filter(RunItem.run_id == run.id)
+        .scalar()
+        or 0
+    )
+    flag = ingest_incomplete_flag(current, expected=expected, received=received)
+    if flag == previous:
+        return
+    if flag is None:
+        current.pop(INGEST_INCOMPLETE_KEY, None)
+    else:
+        current[INGEST_INCOMPLETE_KEY] = flag
+        logger.warning(
+            "Run %s is flagged as incomplete: %d/%s items, %d refused event(s)",
+            run.id,
+            received,
+            expected if expected is not None else "?",
+            int(flag.get("rejected_events") or 0),
+        )
+    run.run_metadata = _sanitize_for_json(current)
+
+
+def _record_refused_events(
+    run_id: str, rows: list, bind, lines: Dict[int, str]
+) -> None:
+    """Tally events the database refused; the transaction that tried them rolled back."""
+    if not rows:
+        return
+    try:
+        with Session(bind=bind, autoflush=False) as db:
+            run = (
+                db.query(Run)
+                .filter(Run.id == run_id)
+                .with_for_update()
+                .populate_existing()
+                .first()
+            )
+            if (
+                run is None
+                or run.deleted_at is not None
+                or is_run_force_stopped(run)
+                or not record_rejected_events(run, rows, lines)
+            ):
+                return
+            if completed_by_client(run):
+                _refresh_ingest_flag(db, run)
+            db.commit()
+    except Exception:
+        logger.warning(
+            "Failed to record refused events for run %s", run_id, exc_info=True
+        )
 
 
 def _build_item_meta(ts_ms, retry_count=0):
@@ -1079,6 +1162,9 @@ def _split_line_range(
             except ValueError:
                 raw = None
             rows.append(_rejection_row(index + 1, raw, _store_error_reason(error)))
+        _record_refused_events(
+            run_id, rows, bind, {index + 1: lines[index] for index in filled}
+        )
         return {
             "applied": 0,
             "skipped": 0,
@@ -1147,10 +1233,14 @@ def _ingest_events_sync(
     # whole request instead would make the SDK resend the same poison batch.
     rejections: list[Dict[str, Any]] = []
 
-    def _reject(line_no: int, source: Any, reason: str) -> None:
-        rejections.append(_rejection_row(line_no, source, reason))
+    def _reject(line_no: int, source: Any, reason: str, raw: Any = None) -> None:
+        rejections.append(_rejection_row(line_no, source, reason, raw))
 
     parsed = []
+    # Tally inputs (see record_rejected_events): the text of lines refused
+    # before they had an event id, and lines that belong to another run.
+    unidentified_lines: Dict[int, str] = {}
+    foreign_lines = set()
     # NDJSON lines end at "\n" only. str.splitlines() would also split inside
     # a JSON string at U+2028, U+2029 or U+0085, which JSON leaves unescaped.
     for line_no, line in enumerate(text.split("\n"), start=1 + line_offset):
@@ -1162,9 +1252,13 @@ def _ingest_events_sync(
             evt = RunEventV1.model_validate(raw)
         except Exception as exc:
             _reject(line_no, raw, _rejection_reason(exc))
+            unidentified_lines[line_no] = line
             continue
         if str(evt.run_id) != run_id:
-            _reject(line_no, evt, "run_id does not match the run in the request path")
+            _reject(
+                line_no, evt, "run_id does not match the run in the request path", raw
+            )
+            foreign_lines.add(line_no)
             continue
         raw["__bytes"] = len(line)
         parsed.append((line_no, raw, evt))
@@ -1264,7 +1358,7 @@ def _ingest_events_sync(
             elif isinstance(payload, RunStartedPayload):
                 _validate_metric_specs(payload)
         except (ValidationError, _EventRejected, HTTPException) as exc:
-            _reject(line_no, evt, _rejection_reason(exc))
+            _reject(line_no, evt, _rejection_reason(exc), raw)
             continue
         if evt.type != "span_completed":
             owner = sequence_owners.setdefault(evt.sequence, event_id)
@@ -1273,6 +1367,7 @@ def _ingest_events_sync(
                     line_no,
                     evt,
                     f"sequence {evt.sequence} is already used by event {owner}",
+                    raw,
                 )
                 continue
         known_events.add(event_id)
@@ -1343,6 +1438,16 @@ def _ingest_events_sync(
                 "rejected_events": rejections,
             }
         )
+
+    # Tally refused events on the run before applying the batch, so a
+    # run_completed in it flags them, whichever SDK sent the run: old SDKs
+    # complete a run without reading these verdicts. Events naming another
+    # run are not this run's data.
+    rejections_recorded = record_rejected_events(
+        run,
+        [row for row in rejections if row["line"] not in foreign_lines],
+        unidentified_lines,
+    )
 
     storage = ingest_settings()
     event_rows = [
@@ -1632,6 +1737,14 @@ def _ingest_events_sync(
             md = _sanitize_for_json(dict(payload.run_metadata or {}))
             if payload.total_items is not None:
                 md["total_items"] = int(payload.total_items)
+            # Refusals already tallied (possibly from this very batch) stay.
+            tally = (
+                run.run_metadata.get(INGEST_REJECTED_KEY)
+                if isinstance(run.run_metadata, dict)
+                else None
+            )
+            if isinstance(tally, dict):
+                md[INGEST_REJECTED_KEY] = tally
             run.run_metadata = md
             run.run_config = _sanitize_for_json(payload.run_config)
             run.samples = _samples_from_config(payload.run_config)
@@ -2062,39 +2175,19 @@ def _ingest_events_sync(
             # If fewer item rows made it through the event stream, flag the
             # run so the UI can say "incomplete data" instead of quietly
             # presenting a partial run as the whole thing.
+            # Refused events flag the run the same way: new SDKs complete a run
+            # whose only losses are refusals and report how many there were.
             db.flush()
             try:
                 expected = None
                 if isinstance(payload.summary, dict):
                     expected = _int_or_none(payload.summary.get("total_items"))
+                    record_reported_rejections(
+                        run, payload.summary.get("rejected_events")
+                    )
                 if expected is None and isinstance(run.run_metadata, dict):
                     expected = _int_or_none(run.run_metadata.get("total_items"))
-                if expected is not None and expected > 0:
-                    received = (
-                        db.query(func.count(RunItem.item_id))
-                        .filter(RunItem.run_id == run_id)
-                        .scalar()
-                        or 0
-                    )
-                    current = (
-                        dict(run.run_metadata)
-                        if isinstance(run.run_metadata, dict)
-                        else {}
-                    )
-                    if received < expected:
-                        current["ingest_incomplete"] = {
-                            "expected_items": expected,
-                            "received_items": int(received),
-                        }
-                        logger.warning(
-                            "Run %s completed with incomplete ingest: %d/%d items",
-                            run_id,
-                            received,
-                            expected,
-                        )
-                    else:
-                        current.pop("ingest_incomplete", None)
-                    run.run_metadata = _sanitize_for_json(current)
+                _refresh_ingest_flag(db, run, expected)
             except Exception:
                 logger.warning(
                     "Failed to check ingest completeness for run %s",
@@ -2157,35 +2250,20 @@ def _ingest_events_sync(
     # Late-arriving item events (e.g. a retried batch landing after
     # run_completed was already applied) must keep the incomplete-ingest
     # flag honest — a re-sent run_completed would be deduped by event_id.
+    # So must events refused after completion.
     current_md = run.run_metadata if isinstance(run.run_metadata, dict) else {}
-    stale_flag = current_md.get("ingest_incomplete")
-    if isinstance(stale_flag, dict):
-        expected = _int_or_none(stale_flag.get("expected_items"))
-        if expected is not None and expected > 0:
-            db.flush()
-            try:
-                received = (
-                    db.query(func.count(RunItem.item_id))
-                    .filter(RunItem.run_id == run_id)
-                    .scalar()
-                    or 0
-                )
-                if received != _int_or_none(stale_flag.get("received_items")):
-                    updated = dict(current_md)
-                    if received >= expected:
-                        updated.pop("ingest_incomplete", None)
-                    else:
-                        updated["ingest_incomplete"] = {
-                            "expected_items": expected,
-                            "received_items": int(received),
-                        }
-                    run.run_metadata = _sanitize_for_json(updated)
-            except Exception:
-                logger.warning(
-                    "Failed to update ingest completeness for run %s",
-                    run_id,
-                    exc_info=True,
-                )
+    if isinstance(current_md.get(INGEST_INCOMPLETE_KEY), dict) or (
+        rejections_recorded and completed_by_client(run)
+    ):
+        db.flush()
+        try:
+            _refresh_ingest_flag(db, run)
+        except Exception:
+            logger.warning(
+                "Failed to update ingest completeness for run %s",
+                run_id,
+                exc_info=True,
+            )
 
     if trace_stats_dirty:
         # One refresh per batch. Wrapped in a savepoint so a stats failure
