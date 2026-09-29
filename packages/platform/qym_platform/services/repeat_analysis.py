@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any, Dict, Iterable, List, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -17,7 +17,9 @@ MIN_UNCERTAINTY_ITEMS = 20
 METHOD_VERSION = 1
 
 
-ScoreRow = Tuple[str, int, float]
+# A score of None is an errored pass of a lower-is-better metric: a failed
+# pass that is left out of averages (services/run_means.py).
+ScoreRow = Tuple[str, int, Optional[float]]
 
 
 def score_signature(rows: Iterable[ScoreRow]) -> str:
@@ -29,7 +31,7 @@ def score_signature(rows: Iterable[ScoreRow]) -> str:
         digest.update(b"\0")
         digest.update(str(int(pass_number)).encode("ascii"))
         digest.update(b"\0")
-        digest.update(float(score).hex().encode("ascii"))
+        digest.update(b"error" if score is None else float(score).hex().encode("ascii"))
         digest.update(b"\n")
     return digest.hexdigest()
 
@@ -47,7 +49,7 @@ def _interval(values: Sequence[float], *, seed: int) -> Dict[str, float] | None:
 
 
 def build_repeat_analysis(
-    items_scores: Dict[str, List[float]],
+    items_scores: Dict[str, List[Optional[float]]],
     *,
     threshold: float,
     samples: int,
@@ -56,10 +58,13 @@ def build_repeat_analysis(
     """Build Pass@k, Pass^k, and cumulative-average curves with item CIs.
 
     A lower-is-better metric (``direction="minimize"``) passes at or below
-    the threshold.
+    the threshold. A None score (an errored pass) never passes and is left
+    out of the cumulative average.
     """
 
-    def passes(score: float) -> bool:
+    def passes(score: Optional[float]) -> bool:
+        if score is None:
+            return False
         return score <= threshold if direction == "minimize" else score >= threshold
 
     max_k = max((len(scores) for scores in items_scores.values()), default=0)
@@ -73,7 +78,9 @@ def build_repeat_analysis(
             correct = sum(1 for score in scores if passes(score))
             pass_at_values.append(unbiased_pass_at_k(len(scores), correct, k))
             pass_hat_values.append(unbiased_pass_hat_k(len(scores), correct, k))
-            cumulative_values.append(sum(scores[:k]) / k)
+            scored = [score for score in scores[:k] if score is not None]
+            if scored:
+                cumulative_values.append(sum(scored) / len(scored))
 
         def average(values: Sequence[float]) -> float:
             return sum(values) / len(values) if values else 0.0

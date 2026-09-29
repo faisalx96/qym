@@ -200,6 +200,12 @@ def snapshot(obj, deleted=False):
                 metric_key=obj.metric_name,
                 error=int(_metric_execution_error(obj.meta)),
                 score=_number(obj.score_numeric),
+                # A reviewer's score: it stands even on a pass whose task
+                # failed (services/run_means.py, lower-is-better means).
+                success=int(
+                    isinstance(obj.meta, dict)
+                    and str(obj.meta.get("modified") or "").lower() == "true"
+                ),
             )
             if isinstance(obj, RunItemPassScore):
                 data["pass_number"] = int(obj.pass_number)

@@ -5,6 +5,7 @@ from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
 from qym_platform.datetime_utils import utc_now_naive
+from qym_platform.services.run_means import metric_directions, reduce_pass_scores
 from qym_platform.db.models import (
     AuditLog,
     ReviewCorrection,
@@ -137,12 +138,12 @@ def _renumber_pass_edit_meta(
 
 
 def _aggregate_meta(
-    pass_values: Dict[int, Optional[float]],
+    observed: int,
     stored_meta: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
     meta: Dict[str, Any] = {
         "sample_reducer": "mean",
-        "samples_observed": sum(value is not None for value in pass_values.values()),
+        "samples_observed": int(observed),
     }
     for key, value in (stored_meta or {}).items():
         if key in {"modified", "original_score"} or key.startswith("pass_"):
@@ -371,6 +372,7 @@ def _rereduce_scores(
     aggregates_by_key = {
         (score.item_id, score.metric_name): score for score in aggregate_scores
     }
+    directions = metric_directions(db, [run_id]).get(run_id, {})
     for key, siblings in pass_scores_by_key.items():
         aggregate = aggregates_by_key.get(key)
         if aggregate is None:
@@ -380,15 +382,13 @@ def _rereduce_scores(
                 metric_name=key[1],
             )
             db.add(aggregate)
-        pass_values = {
-            int(sibling.pass_number): sibling.score_numeric for sibling in siblings
-        }
-        numerics = [value for value in pass_values.values() if value is not None]
-        reduced = sum(numerics) / len(numerics) if numerics else None
+        # The ingest rule (services/run_means.py): a pass whose scorer or
+        # task failed counts as 0, or is left out when lower is better.
+        reduced, observed = reduce_pass_scores(siblings, directions.get(key[1]))
         aggregate.score_numeric = reduced
         aggregate.score_raw = reduced
         aggregate.meta = _aggregate_meta(
-            pass_values,
+            observed,
             _renumber_pass_edit_meta(aggregate.meta, deleted_pass),
         )
         aggregate.label = None

@@ -38,6 +38,7 @@ evaluator = Evaluator(
 
 <h3>Direction and the primary metric</h3>
 <p><code>direction</code> tells the platform which way is better. With <code>"maximize"</code> a higher score is better; with <code>"minimize"</code> (error rates, empty outputs, latency, cost) a lower one is, and a boolean passes when it is <code>False</code>. The platform uses it for score colors, Pass/Fail, the best value and winners in Compare, the Sweep verdict, and the Models ranking. A metric that declares no direction (the default, and every plain callable) is shown neutrally: its values and distributions, without good/bad colors, Pass/Fail, winners or an improved/regressed verdict. Built-in metrics declare theirs.</p>
+<p>Direction also decides how errors enter the run mean. A task error, or a metric error, counts as 0 in the mean of a higher-is-better metric and of a metric without a direction. For a lower-is-better metric 0 is the best score, so its errors are left out of its mean instead: the runs list, run page and Compare show how many were left out next to the mean, and every errored item or pass counts as a fail in Pass/Fail, Pass@k and the Sweep. In a repeat run each item is then the mean over its passes without an error.</p>
 <p><code>primary_metric</code> names the run's headline metric (<code>--primary-metric</code> on the CLI). Compare, Sweep, the Models page and the run page open on it; without it they open on the first metric in the order you listed them.</p>
 
 <pre data-lang="python">from qym import Metric, MetricSpec
@@ -61,7 +62,7 @@ quality = Metric(quality_score, name="quality", spec=quality_spec)</pre>
 <tr><td><code>bool</code></td><td><code>1.0</code> if <code>True</code>, else <code>0.0</code></td><td>Cleanest shape for pass/fail checks.</td></tr>
 <tr><td><code>int</code> / <code>float</code></td><td><code>float(value)</code></td><td>Used as the numeric score directly.</td></tr>
 <tr><td><code>dict</code> with a <code>score</code> key</td><td><code>float(score)</code></td><td>A non-numeric/missing <code>score</code> falls back to <code>0.0</code>. <code>label</code>, <code>explanation</code>, and <code>metadata</code> are carried through.</td></tr>
-<tr><td><code>dict</code> with an <code>error</code> key</td><td><code>0.0</code></td><td>Recorded as a <strong>metric error</strong>: <code>metadata.status = "error"</code> and the message under <code>metadata.error</code>. It counts as 0 in the run mean. A reason for a low score belongs in <code>metadata.reason</code> instead.</td></tr>
+<tr><td><code>dict</code> with an <code>error</code> key</td><td><code>0.0</code></td><td>Recorded as a <strong>metric error</strong>: <code>metadata.status = "error"</code> and the message under <code>metadata.error</code>. It counts as 0 in the run mean, or is left out of it for a lower-is-better metric (see Direction above). A reason for a low score belongs in <code>metadata.reason</code> instead.</td></tr>
 <tr><td><code>MetricResult</code></td><td>its <code>score</code></td><td>Pass-through; the richest shape.</td></tr>
 <tr><td>anything else</td><td><code>0.0</code></td><td>Raw value preserved in <code>metadata.raw</code>. This is the silent-failure case for a metric that returns a string.</td></tr>
 </tbody>

@@ -10,7 +10,7 @@
   <script src="./static/qym_safe.js?v=xss-rendering-20260928"></script>
   <script src="./static/auth.js?v=p0-integration-20260929"></script>
   <script src="./static/shell.js?v=p0-integration-20260929"></script>
-  <script src="./static/metrics.js?v=p0-integration-20260929"></script>
+  <script src="./static/metrics.js?v=p0-integration-20260929-minimize-errors"></script>
   <script src="./static/run_details.js?v=payload-perf-1"></script>
   <script src="./static/trace_viewer.js?v=trace-retries-20260917-1-xss-rendering"></script>
   <script src="./static/step_latency.js?v=empty-sections-20260911-2-xss-rendering"></script>
@@ -5782,10 +5782,13 @@
               if (!row) return null;
               const metricIdx = getMetricIndex(runData);
               if (metricIdx < 0) return null;
-              const { score } = window.QymMetrics.getRowScore(row, metricIdx, metricName);
-              if (score === null) return null;
-              values.push(window.QymMetrics.metricPasses(
-                score, threshold, options?.direction === undefined ? 'maximize' : options.direction, !!options?.isBoolean,
+              // metrics.js error rule: an errored item never passes when
+              // lower is better.
+              const direction = options?.direction === undefined ? 'maximize' : options.direction;
+              const outcome = window.QymMetrics.getRowScore(row, metricIdx, metricName, direction);
+              if (outcome.score === null && !outcome.isError) return null;
+              values.push(window.QymMetrics.rowMetricPasses(
+                outcome, threshold, direction, !!options?.isBoolean,
               ) === true);
             }
             return values;
@@ -6205,7 +6208,10 @@
               + sweepLutMoments(lutsRight[name], pmfRight).variance;
           });
 
-          // avgAtK: continuous scores, pooled within-item variance.
+          // avgAtK: continuous scores, pooled within-item variance. Scores
+          // leave out the errors of a lower-is-better metric; an item with
+          // none left on a side has no average there.
+          if (!leftScores.length || !rightScores.length) return;
           const meanLeft = leftScores.reduce((s, v) => s + Number(v || 0), 0) / (leftScores.length || 1);
           const meanRight = rightScores.reduce((s, v) => s + Number(v || 0), 0) / (rightScores.length || 1);
           sumsLeft.avgAtK = (sumsLeft.avgAtK || 0) + meanLeft;
@@ -8302,6 +8308,27 @@
         );
       }
 
+      // How errors enter a metric (metrics.js getRowScore, the server's
+      // rule): they count as 0, or are left out when lower is better.
+      function rowScoreFor(row, metricIndex, metricName) {
+        return window.QymMetrics.getRowScore(row, metricIndex, metricName, metricDirectionFor(metricName));
+      }
+
+      // Pass/fail of a row outcome: an errored item never passes when lower
+      // is better.
+      function rowPassesFor(metricName, outcome) {
+        return window.QymMetrics.rowMetricPasses(
+          outcome,
+          state.metricThresholds[metricName] ?? 0.8,
+          metricDirectionFor(metricName),
+          !!state.metricIsBoolean[metricName],
+        );
+      }
+
+      function errorsLeftOutFor(metricName) {
+        return window.QymMetrics.errorsLeftOut(metricDirectionFor(metricName));
+      }
+
       function metricColorClassFor(metricName, value, metricType = state.metricTypes?.[metricName] || 'score') {
         return window.QymMetrics.getMetricColorClass(value, metricType, metricDirectionFor(metricName));
       }
@@ -8421,7 +8448,7 @@
             if (!itemIdSet.has(itemId)) continue;
             // Score for the selected metric (use centralized error handling)
             if (metricIdx >= 0) {
-              const { score } = window.QymMetrics.getRowScore(row, metricIdx, metricName);
+              const { score } = rowScoreFor(row, metricIdx, metricName);
               if (score !== null) { scoreSum += score; scoreCount++; }
             }
             // Latency
@@ -8451,13 +8478,15 @@
             const snap = run.snapshot || {};
             const rows = snap.rows || [];
             const row = findRowByCompareId(rows, itemId);
-            if (!row) return { score: null, failed: false };
+            if (!row) return { score: null, failed: false, outcome: null };
             const metricIdx = getMetricIndex(run);
             // Error totals cover the execution, not just the selected metric.
             const failed = window.QymMetrics.isErrorRow(row);
-            if (metricIdx < 0) return { score: null, failed };
-            const { score } = window.QymMetrics.getRowScore(row, metricIdx, metricName);
-            return { score, failed };
+            if (metricIdx < 0) return { score: null, failed, outcome: null };
+            // An error a lower-is-better metric leaves out has no score (so
+            // it is never the best or the winner) and fails (metrics.js).
+            const outcome = rowScoreFor(row, metricIdx, metricName);
+            return { score: outcome.score, failed, outcome };
           });
 
           // Count each errored item/run execution once, even if several metrics errored.
@@ -8465,6 +8494,8 @@
 
           const scores = scoresWithStatus.map(s => s.score);
           const validScores = scores.filter(s => s !== null);
+          // Runs with a verdict on this item: a score, or an error.
+          const judged = scoresWithStatus.filter(s => s.outcome && (s.outcome.score !== null || s.outcome.isError));
           // Best, pass and winner follow the declared direction (C008); a
           // metric without one gets no winners, passes or Max@K.
           const direction = metricDirectionFor(metricName);
@@ -8476,7 +8507,7 @@
           }
 
           // Count distribution for ALL items (even those with missing data)
-          const numCorrect = scores.filter(s => s !== null && metricPassesFor(metricName, s) === true).length;
+          const numCorrect = judged.filter(s => rowPassesFor(metricName, s.outcome) === true).length;
           stats.correctDistribution[numCorrect]++;
 
           // For head-to-head comparison, need at least 2 valid scores
@@ -8485,7 +8516,7 @@
             // Still count pass@k for items with any data
             if (numCorrect > 0) stats.passAtK++;
             if (direction && scores.every(s => s === null || isWorst(s))) stats.allWrong++;
-            if (numCorrect === scores.filter(s => s !== null).length && numCorrect > 0) stats.allCorrect++;
+            if (numCorrect === judged.length && numCorrect > 0) stats.allCorrect++;
             stats.totalCompared++;
             continue;
           }
@@ -8518,7 +8549,8 @@
 
           // All correct / all wrong / pass@k (at least one run meets threshold)
           // Note: numCorrect was already calculated above using threshold
-          const allCorrectItem = numCorrect === validScores.length && validScores.length > 0;
+          // Errored runs count as failures (judged, without a score).
+          const allCorrectItem = numCorrect === judged.length && judged.length > 0;
           const allZeroItem = Boolean(direction) && validScores.every(isWorst); // Worst score everywhere
 
           if (allCorrectItem) stats.allCorrect++;
@@ -8531,17 +8563,17 @@
           // Consistency: binary agreement (do runs agree on pass/fail?)
           // Formula: 2 * max(passCount, failCount) / K - 1
           // Range: 0% (50/50 split) to 100% (all agree)
-          if (validScores.length > 1) {
-            const numFail = validScores.length - numCorrect;
+          if (judged.length > 1) {
+            const numFail = judged.length - numCorrect;
             const maxAgreement = Math.max(numCorrect, numFail);
-            const itemConsistency = (2 * maxAgreement / validScores.length) - 1;
+            const itemConsistency = (2 * maxAgreement / judged.length) - 1;
             stats.totalConsistencySum += itemConsistency;
             stats.itemsWithMultipleRuns++;
 
             // Reliability: when it CAN answer correctly, how often does it?
             // Only include items with at least one passing run
             if (numCorrect > 0) {
-              const itemReliability = numCorrect / validScores.length;
+              const itemReliability = numCorrect / judged.length;
               stats.totalReliabilitySum += itemReliability;
               stats.itemsWithAtLeastOnePass++;
             }
@@ -8571,7 +8603,7 @@
           for (const row of rows) {
             const itemId = getRowCompareId(row);
             if (!itemIdSet.has(itemId)) continue;
-            const { score } = window.QymMetrics.getRowScore(row, mIdx, metricName);
+            const { score } = rowScoreFor(row, mIdx, metricName);
             if (score !== null) {
               if (score < allScoresMin) allScoresMin = score;
               if (score > allScoresMax) allScoresMax = score;
@@ -8913,7 +8945,7 @@
               if (!itemsByGroup[effective][itemId]) itemsByGroup[effective][itemId] = { scores: [], latencies: [] };
 
               if (metricIndex >= 0) {
-                const { score } = window.QymMetrics.getRowScore(row, metricIndex, selectedMetric);
+                const { score } = rowScoreFor(row, metricIndex, selectedMetric);
                 if (score !== null) itemsByGroup[effective][itemId].scores.push(score);
               }
               if (row.latency_ms && row.status === 'completed') {
@@ -8992,7 +9024,7 @@
           for (const row of rows) {
             const itemId = getRowCompareId(row);
             if (!itemId || !filteredItemIds.has(itemId)) continue;
-            const { score } = window.QymMetrics.getRowScore(row, metricIndex, selectedMetric);
+            const { score } = rowScoreFor(row, metricIndex, selectedMetric);
             if (score !== null) overallScores.push(score);
           }
         }
@@ -9199,7 +9231,7 @@
             if (!row) return false;
             const run = state.runs[runIdx];
             const metricIndex = (run?.snapshot?.metric_names || run?.run?.metric_names || []).indexOf(metric);
-            return metricIndex >= 0 && window.QymMetrics.getRowScore(row, metricIndex, metric).score !== null;
+            return metricIndex >= 0 && rowScoreFor(row, metricIndex, metric).score !== null;
           })
         ));
         if (heading && hasScores) heading.style.display = '';
@@ -9587,8 +9619,11 @@
           </tr>
         `;
 
-        // Calculate metric averages and latency for each run
-        const runMetricAvgs = state.runs.map(run => {
+        // Calculate metric averages and latency for each run. A
+        // lower-is-better metric leaves errors out of its mean; count them
+        // so the cell can say so, like the runs list and run page.
+        const runMetricErrors = state.runs.map(() => ({}));
+        const runMetricAvgs = state.runs.map((run, runIndex) => {
           const snap = run.snapshot || {};
           const rows = snap.rows || [];
           const metricNames = snap.metric_names || run.run?.metric_names || [];
@@ -9601,16 +9636,22 @@
               continue;
             }
 
-            let sum = 0, count = 0;
+            const leftOut = errorsLeftOutFor(metric);
+            let sum = 0, count = 0, errors = 0;
             for (const row of rows) {
-              // Use centralized error handling - errors count as 0
-              const { score } = window.QymMetrics.getRowScore(row, idx, metric);
+              // Centralized error rule: 0, or left out when lower is better.
+              const { score, isError } = rowScoreFor(row, idx, metric);
               if (score !== null) {
                 sum += score;
                 count++;
               }
+              if (leftOut && isError) {
+                const counts = window.QymMetrics.rowMetricErrorCounts(row, metric);
+                errors += counts.task + counts.scorer;
+              }
             }
             avgs[metric] = count > 0 ? sum / count : null;
+            runMetricErrors[runIndex][metric] = errors;
           }
           return avgs;
         });
@@ -9649,13 +9690,18 @@
           const peerValues = runMetricAvgs
             .map(avgs => avgs[metric])
             .filter(val => val !== null && val !== undefined && !isNaN(val));
-          const cells = runMetricAvgs.map(avgs => {
+          const cells = runMetricAvgs.map((avgs, runIndex) => {
             const val = avgs[metric];
-            if (val === null) return '<td class="metric-value-cell"><span class="metric-val">—</span></td>';
+            const errors = runMetricErrors[runIndex][metric] || 0;
+            const errorLabel = `${errors} error${errors === 1 ? '' : 's'}${Number(state.runs[runIndex]?.run?.samples) > 1 ? ' across passes' : ''} not counted in the ${metric} mean (lower is better)`;
+            const errorHtml = errors
+              ? `<span class="status-errors status-metric-errors metric-error-indicator" title="${escapeAttr(errorLabel)}" aria-label="${escapeAttr(errorLabel)}">⚠ ${errors}</span>`
+              : '';
+            if (val === null) return `<td class="metric-value-cell"><span class="metric-val">—</span>${errorHtml}</td>`;
             const isBest = bestValues[metric] !== null && val === bestValues[metric] && state.runs.length > 1;
             const cls = metricColorClassFor(metric, val, mType);
             const display = window.QymMetrics.formatMetricValueSmart(val, mType, peerValues);
-            return `<td class="metric-value-cell"><span class="metric-val qym-score-value ${cls} ${isBest ? 'best' : ''}"${isBest ? ' title="Best across runs"' : ''}>${display}</span></td>`;
+            return `<td class="metric-value-cell"><span class="metric-val qym-score-value ${cls} ${isBest ? 'best' : ''}"${isBest ? ' title="Best across runs"' : ''}>${display}</span>${errorHtml}</td>`;
           }).join('');
 
           return `
@@ -10625,13 +10671,16 @@
         return compareFilterFieldDefs().find(field => field.id === id) || null;
       }
 
-      function compareFilterContext(itemId, rowData, scores, stats) {
-        const validScores = scores.filter(score => score !== null);
-        // Pass/fail follows the metric's declared direction; none = no verdict.
+      function compareFilterContext(itemId, rowData, scores, stats, verdicts = null) {
+        // Pass/fail follows the metric's declared direction; none = no
+        // verdict. ``verdicts`` has one entry per run with a score or an
+        // error (an errored run never passes when lower is better).
         const passes = score => metricPassesFor(state.selectedItemsMetric, score);
+        const runVerdicts = verdicts || scores.map(score => score !== null ? passes(score) : undefined);
+        const judged = runVerdicts.filter(verdict => verdict !== undefined);
         const hasDirection = Boolean(metricDirectionFor(state.selectedItemsMetric));
-        const correctRuns = scores
-          .map((score, index) => score !== null && passes(score) === true ? index : -1)
+        const correctRuns = runVerdicts
+          .map((verdict, index) => verdict === true ? index : -1)
           .filter(index => index >= 0);
         const outcomes = [];
         const outputs = rowData.map(row => row?.output_full || row?.output || '').filter(Boolean);
@@ -10640,9 +10689,9 @@
         const hasEditedMetric = rowData.some(rowHasEditedMetric);
         if (hasError) outcomes.push('errors');
         if (hasEditedMetric) outcomes.push('edited_metrics');
-        if (hasDirection && validScores.length >= 2 && validScores.every(score => passes(score) === true)) outcomes.push('all_correct');
-        if (hasDirection && validScores.length >= 2 && validScores.every(score => passes(score) === false)) outcomes.push('all_wrong');
-        if (validScores.length >= 2 && correctRuns.length > 0 && correctRuns.length < validScores.length) outcomes.push('partially_correct');
+        if (hasDirection && judged.length >= 2 && judged.every(verdict => verdict === true)) outcomes.push('all_correct');
+        if (hasDirection && judged.length >= 2 && judged.every(verdict => verdict === false)) outcomes.push('all_wrong');
+        if (judged.length >= 2 && correctRuns.length > 0 && correctRuns.length < judged.length) outcomes.push('partially_correct');
         const rareThreshold = Math.max(1, Math.floor(state.runs.length * 0.25));
         if (correctRuns.length > 0 && correctRuns.length <= rareThreshold) outcomes.push('rarely_solved');
         if (correctRuns.length === 1) outcomes.push('unique_solve');
@@ -10899,16 +10948,23 @@
           });
 
           // Get scores for this item based on selected metric (use centralized error handling)
-          const scores = rowData.map((row, runIdx) => {
+          const scoreOutcomes = rowData.map((row, runIdx) => {
             if (!row) return null;
             const run = state.runs[runIdx];
             const metricIdx = getMetricIndex(run);
             if (metricIdx < 0) return null;
-            // Use centralized error handling from metrics.js
-            const { score } = window.QymMetrics.getRowScore(row, metricIdx, selectedMetric);
-            return score;
+            // Use centralized error handling from metrics.js: an error a
+            // lower-is-better metric leaves out has no score.
+            return rowScoreFor(row, metricIdx, selectedMetric);
           });
-          const validScores = scores.filter(s => s !== null);
+          const scores = scoreOutcomes.map(outcome => outcome ? outcome.score : null);
+          // One verdict per run with a score or an error; an errored run
+          // never passes when lower is better. undefined = no data.
+          const verdicts = scoreOutcomes.map(outcome => outcome && (outcome.score !== null || outcome.isError)
+            ? rowPassesFor(selectedMetric, outcome)
+            : undefined);
+          const judged = verdicts.filter(verdict => verdict !== undefined);
+          const numCorrect = judged.filter(verdict => verdict === true).length;
 
           // #19: Apply search query filter across input/expected and all run outputs
           if (state.searchQuery) {
@@ -11018,36 +11074,26 @@
             if (!hasEditedMetric) continue;
           } else if (state.itemFilter === 'all_correct') {
             // All runs pass (direction-aware; no direction = no pass)
-            const passes = score => metricPassesFor(state.selectedItemsMetric, score) === true;
-            if (validScores.length < 2 || !validScores.every(passes)) continue;
+            if (judged.length < 2 || !judged.every(verdict => verdict === true)) continue;
           } else if (state.itemFilter === 'all_wrong') {
             // No run passes
-            const fails = score => metricPassesFor(state.selectedItemsMetric, score) === false;
-            if (validScores.length < 2 || !validScores.every(fails)) continue;
+            if (judged.length < 2 || !judged.every(verdict => verdict === false)) continue;
           } else if (state.itemFilter === 'rarely_solved') {
             // 25% or fewer runs pass
-            const passes = score => metricPassesFor(state.selectedItemsMetric, score) === true;
-            const numCorrect = scores.filter(s => s !== null && passes(s)).length;
             const rareThreshold = Math.max(1, Math.floor(state.runs.length * 0.25));
             if (numCorrect === 0 || numCorrect > rareThreshold) continue;
           } else if (state.itemFilter === 'unique_solve') {
             // Exactly 1 run passes
-            const passes = score => metricPassesFor(state.selectedItemsMetric, score) === true;
-            const numCorrect = scores.filter(s => s !== null && passes(s)).length;
             if (numCorrect !== 1) continue;
           } else if (state.itemFilter === 'partially_correct') {
             // #12: Some but not all runs passed
-            const passes = score => metricPassesFor(state.selectedItemsMetric, score) === true;
-            const numCorrect = scores.filter(s => s !== null && passes(s)).length;
-            if (numCorrect === 0 || numCorrect === validScores.length || validScores.length < 2) continue;
+            if (numCorrect === 0 || numCorrect === judged.length || judged.length < 2) continue;
           } else if (state.itemFilter.startsWith(GROUPED_OUTCOME_ITEM_FILTER_PREFIX)) {
             if (!groupedBucketItems || !groupedBucketItems.has(itemId)) continue;
           }
 
           // #20: Apply pass rate filter
           if (state.passRateOp) {
-            const passes = score => metricPassesFor(state.selectedItemsMetric, score) === true;
-            const numCorrect = scores.filter(s => s !== null && passes(s)).length;
             const target = state.passRateValue;
             if (state.passRateOp === 'lte' && numCorrect > target) continue;
             if (state.passRateOp === 'gte' && numCorrect < target) continue;
@@ -11068,12 +11114,12 @@
             } else if (state.winnerFilter.startsWith('only_')) {
               // Only show items where ONLY this run met threshold
               const runIdx = parseInt(state.winnerFilter.replace('only_', ''), 10);
-              const correctRuns = scores.map((s, idx) => s !== null && metricPassesFor(state.selectedItemsMetric, s) === true ? idx : -1).filter(x => x >= 0);
+              const correctRuns = verdicts.map((verdict, idx) => verdict === true ? idx : -1).filter(x => x >= 0);
               if (correctRuns.length !== 1 || correctRuns[0] !== runIdx) continue;
             }
           }
 
-          const filterContext = compareFilterContext(itemId, rowData, scores, stats);
+          const filterContext = compareFilterContext(itemId, rowData, scores, stats, verdicts);
           if (!evalFilterNode(state.filterRoot, filterContext)) continue;
 
           items.push({ itemId: itemId, rowData });
@@ -11089,7 +11135,7 @@
                 const mNames = run.snapshot?.metric_names || run.run?.metric_names || [];
                 const mIdx = selectedMetric ? mNames.indexOf(selectedMetric) : 0;
                 if (mIdx < 0) return null;
-                return window.QymMetrics.getRowScore(row, mIdx, selectedMetric).score;
+                return rowScoreFor(row, mIdx, selectedMetric).score;
               }).filter(s => s !== null);
               return vals.length > 0 ? Math.max(...vals) : -1;
             };
@@ -11303,7 +11349,10 @@
           metaKeys.forEach(k => { obj[window.QymMetrics.metricMetaDisplayKey(k, meta)] = _parseMetaDeep(meta[k]); });
           const v = window.QymMetrics.parseScoreValue((metricVals || [])[i]);
           let badge = '';
-          if (v !== null) {
+          if (errorsLeftOutFor(name) && window.QymMetrics.isMetricErrorMeta(meta)) {
+            // Left out of a lower-is-better mean: an error, not a score.
+            badge = '<span class="metric-score-value qym-score-value">Error</span>';
+          } else if (v !== null) {
             const mType = state.metricTypes?.[name] || 'score';
             const cls = metricColorClassFor(name, v, mType);
             badge = `<span class="metric-score-value qym-score-value ${cls}">${window.QymMetrics.formatMetricObservation(v, mType, state.metricSpecs?.[name])}</span>`;
@@ -11359,18 +11408,29 @@
         const visibleCount = rowData.filter((_, runIdx) => !hidden.has(runIdx)).length;
         const visibleClass = visibleCount > 3 ? 'visible-many' : `visible-${Math.max(1, visibleCount)}`;
         const scoreData = (row, runIdx, name) => {
-          if (!row) return { raw: null, parsed: null, cls: '', display: '\u2014', meta: {} };
+          if (!row) return { raw: null, parsed: null, outcome: null, cls: '', display: '\u2014', meta: {} };
           const runData = state.runs[runIdx];
           const names = runData?.snapshot?.metric_names || runData?.run?.metric_names || [];
           const metricIndex = names.indexOf(name);
           const raw = metricIndex >= 0 ? (row.metric_values || [])[metricIndex] : null;
-          const parsed = window.QymMetrics.parseScoreValue(raw);
+          let parsed = window.QymMetrics.parseScoreValue(raw);
+          const outcome = metricIndex >= 0 ? rowScoreFor(row, metricIndex, name) : null;
+          // A lower-is-better metric leaves errors out of its mean: show the
+          // value without them, or "Error", never an errored 0 as the best.
+          let errored = false;
+          if (outcome && outcome.isError && errorsLeftOutFor(name)) {
+            errored = outcome.score === null
+              && (parsed !== null || window.QymMetrics.hasMetricError(row, name));
+            parsed = outcome.score;
+          }
           const type = state.metricTypes?.[name] || 'score';
           return {
             raw,
             parsed,
+            outcome,
+            errored,
             cls: parsed === null ? '' : metricColorClassFor(name, parsed, type),
-            display: parsed === null ? '\u2014' : window.QymMetrics.formatMetricObservation(parsed, type, state.metricSpecs?.[name]),
+            display: errored ? 'Error' : (parsed === null ? '\u2014' : window.QymMetrics.formatMetricObservation(parsed, type, state.metricSpecs?.[name])),
             meta: (row.metric_meta || {})[name] || {},
           };
         };
@@ -11385,7 +11445,9 @@
             verdict = 'metric-error';
           } else if (metric && (state.metricTypes?.[metric] || 'score') !== 'numeric') {
             // Direction-aware; a metric without a direction gets no verdict.
-            const passed = metricPassesFor(metric, scoreData(row, runIdx, metric).parsed);
+            // An errored item never passes when lower is better.
+            const outcome = scoreData(row, runIdx, metric).outcome;
+            const passed = outcome ? rowPassesFor(metric, outcome) : null;
             if (passed !== null) verdict = passed ? 'pass' : 'fail';
           }
           return verdict;
@@ -11452,9 +11514,9 @@
             const rawText = score.raw == null ? '' : String(score.raw);
             // A stored score that is not a number keeps its chip and edit
             // control so it can be fixed (C009).
-            const invalidStored = score.parsed === null && rawText.trim() !== '';
+            const invalidStored = !score.errored && score.parsed === null && rawText.trim() !== '';
             const modified = String(score.meta.modified || '').toLowerCase() === 'true';
-            if (score.parsed === null && !hasMeta && !hasMetricExecutionError && !invalidStored && !modified) return '';
+            if (score.parsed === null && !score.errored && !hasMeta && !hasMetricExecutionError && !invalidStored && !modified) return '';
             const metricErrorClass = hasMetricExecutionError ? ' metric-execution-error' : '';
             const metricErrorIndicator = hasMetricExecutionError ? renderCompareMetricErrorIndicator(name) : '';
             // An exception is not a judged score (0 would render as False).
@@ -11679,9 +11741,8 @@
             } else if (selectedMetric && !pfIsNumeric) {
               const mIdx = metricNames.indexOf(selectedMetric);
               if (mIdx !== -1) {
-                const pfScore = metricVals[mIdx];
-                const pfVal = window.QymMetrics.parseScoreValue(pfScore);
-                const passed = metricPassesFor(selectedMetric, pfVal);
+                // An errored item never passes when lower is better.
+                const passed = rowPassesFor(selectedMetric, rowScoreFor(row, mIdx, selectedMetric));
                 if (passed !== null) pfClass = passed ? 'pass' : 'fail';
               }
             }
@@ -14643,7 +14704,9 @@
                   var metricThresholds = {};
                   var metricDirections = {};
                   metricNames.forEach(function (metricName, index) {
-                      metricScores[metricName] = window.QymMetrics.parseScoreValue((r.metric_values || [])[index]);
+                      // The item's value by the metric's error rule
+                      // (metrics.js): errors left out when lower is better.
+                      metricScores[metricName] = rowScoreFor(r, index, metricName).score;
                       metricThresholds[metricName] = state.metricThresholds[metricName] == null ? 0.8 : state.metricThresholds[metricName];
                       // Analysis targeting keeps the backend's maximize default
                       // for metrics without a declared direction.

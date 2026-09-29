@@ -93,10 +93,14 @@ from qym_platform.services.score_edits import (
 )
 from qym_platform.services.run_means import (
     METRIC_ERROR_STATUSES,
-    MetricTotals,
+    errored_pass_items,
+    errors_left_out,
     is_metric_error,
+    is_task_error_pass,
+    metric_directions,
     metric_error_candidates,
     metric_mean_fields,
+    pass_metric_totals,
     raw_metric_totals,
     reduce_pass_scores,
     run_metric_mean,
@@ -1712,6 +1716,7 @@ def _compute_run_summary(db: Session, run: Run) -> Dict[str, Any]:
         metrics,
         raw_metric_totals(db, [run.id]).get(run.id, {}) if total_items else {},
         error_count,
+        metric_directions(db, [run.id]).get(run.id, {}),
     )
 
     # Get owner user info
@@ -2487,31 +2492,14 @@ def legacy_list_runs(
     if sampled_run_ids:
         from qym_platform.db.models import RunItemAttempt, RunItemPassScore
 
-        dot_score_rows = (
-            db.query(
-                RunItemPassScore.run_id,
-                RunItemPassScore.metric_name,
-                RunItemPassScore.pass_number,
-                func.avg(RunItemPassScore.score_numeric).label("mean"),
-            )
-            .filter(
-                RunItemPassScore.run_id.in_(sampled_run_ids),
-                RunItemPassScore.score_numeric.isnot(None),
-            )
-            .group_by(
-                RunItemPassScore.run_id,
-                RunItemPassScore.metric_name,
-                RunItemPassScore.pass_number,
-            )
-            .all()
-        )
-        pass_means: Dict[str, Dict[str, Dict[int, float]]] = {}
-        for rid, metric_name, pass_number, mean in dot_score_rows:
-            if mean is None:
-                continue
-            pass_means.setdefault(rid, {}).setdefault(metric_name, {})[
-                int(pass_number)
-            ] = float(mean)
+        # Same rule as run means (services/run_means.py): a pass whose scorer
+        # or task failed counts as 0, or is left out when lower is better.
+        pass_means: Dict[str, Dict[str, Dict[int, Optional[float]]]] = {}
+        for rid, by_pass in pass_metric_totals(db, sampled_run_ids).items():
+            for (pass_number, metric_name), totals in by_pass.items():
+                pass_means.setdefault(rid, {}).setdefault(metric_name, {})[
+                    pass_number
+                ] = run_metric_mean(totals, 0)
 
         dot_attempt_rows = (
             db.query(
@@ -2707,7 +2695,13 @@ def legacy_list_runs(
 
         metrics = list(r.metrics or [])
         metric_means = metric_mean_fields(
-            metrics, score_totals.get(r.id, {}), error_count
+            metrics,
+            score_totals.get(r.id, {}),
+            error_count,
+            {
+                name: declared_direction(spec)
+                for name, spec in (metric_specs_by_run.get(r.id) or {}).items()
+            },
         )
 
         # Owner info
@@ -3040,6 +3034,58 @@ def _run_display_name(run: Run) -> str:
     return run_name or run.external_run_id or run.id
 
 
+def _models_errored_passes(
+    db: Session, samples_by_run: Dict[str, int]
+) -> Dict[tuple[str, str], Dict[str, Dict[str, list]]]:
+    """Pass scores of repeat items with a scorer- or task-error pass.
+
+    ``(run_id, item_id) -> {"scores": {metric: [score per pass]}, "meta":
+    {metric: [meta per pass]}}``, in the row shape of the run payload
+    (``pass_scores``/``pass_metric_meta``) with only the error markers
+    (``status``, or the "error" label of a failed task) in the meta.
+    """
+    from qym_platform.db.models import RunItemPassScore
+
+    if not samples_by_run:
+        return {}
+    affected = errored_pass_items(db, list(samples_by_run))
+    result: Dict[tuple[str, str], Dict[str, Dict[str, list]]] = {}
+    items = sorted({(run_id, item_id) for run_id, item_id, _ in affected})
+    for start in range(0, len(items), 400):
+        chunk = items[start : start + 400]
+        for run_id, item_id, metric_name, number, score, meta, label in (
+            db.query(
+                RunItemPassScore.run_id,
+                RunItemPassScore.item_id,
+                RunItemPassScore.metric_name,
+                RunItemPassScore.pass_number,
+                RunItemPassScore.score_numeric,
+                RunItemPassScore.meta,
+                RunItemPassScore.label,
+            )
+            .filter(
+                RunItemPassScore.run_id.in_({run_id for run_id, _ in chunk}),
+                RunItemPassScore.item_id.in_({item_id for _, item_id in chunk}),
+            )
+            .all()
+        ):
+            if (run_id, item_id, metric_name) not in affected:
+                continue
+            samples = samples_by_run[run_id]
+            index = int(number) - 1
+            if not 0 <= index < samples:
+                continue
+            entry = result.setdefault((run_id, item_id), {"scores": {}, "meta": {}})
+            scores = entry["scores"].setdefault(metric_name, [None] * samples)
+            metas = entry["meta"].setdefault(metric_name, [None] * samples)
+            scores[index] = score
+            if is_metric_error(meta):
+                metas[index] = {"status": meta.get("status")}
+            elif is_task_error_pass(label, meta):
+                metas[index] = {"label": "error"}
+    return result
+
+
 def _build_models_runs_data(db: Session, runs: list[Run]) -> list[dict[str, Any]]:
     if not runs:
         return []
@@ -3104,6 +3150,37 @@ def _build_models_runs_data(db: Session, runs: list[Run]) -> list[dict[str, Any]
             score.metric_name
         ] = value
 
+    # Errors follow the run-mean rule here too (metrics.js getRowScore): a
+    # scorer error carries its status, and a repeat item with an errored pass
+    # carries that metric's passes (the only pass data in this payload), so
+    # a lower-is-better metric is judged without them.
+    error_meta: dict[tuple[str, str], dict[str, Any]] = {}
+    for run_id, item_id, metric_name, status in (
+        db.query(
+            RunItemScore.run_id,
+            RunItemScore.item_id,
+            RunItemScore.metric_name,
+            RunItemScore.meta["status"].as_string(),
+        )
+        .filter(
+            RunItemScore.run_id.in_(run_ids),
+            metric_error_candidates(RunItemScore),
+        )
+        .all()
+    ):
+        if is_metric_error({"status": status}):
+            error_meta.setdefault((run_id, item_id), {})[metric_name] = {
+                "status": status
+            }
+    errored_passes = _models_errored_passes(
+        db,
+        {
+            run.id: int(getattr(run, "samples", 1) or 1)
+            for run in runs
+            if int(getattr(run, "samples", 1) or 1) > 1
+        },
+    )
+
     item_rows = (
         db.query(
             RunItem.run_id,
@@ -3131,17 +3208,26 @@ def _build_models_runs_data(db: Session, runs: list[Run]) -> list[dict[str, Any]
         else:
             stats["completed"] += 1
 
-        run_data["snapshot"]["rows"].append(
-            {
-                "index": item.index,
-                "item_id": item.item_id,
-                "status": status,
-                "latency_ms": item.latency_ms or 0,
-                "metric_values": [
-                    item_scores.get(metric_name, "") for metric_name in metrics
-                ],
-            }
-        )
+        row = {
+            "index": item.index,
+            "item_id": item.item_id,
+            "status": status,
+            "latency_ms": item.latency_ms or 0,
+            "metric_values": [
+                item_scores.get(metric_name, "") for metric_name in metrics
+            ],
+        }
+        if (item.run_id, item.item_id) in error_meta:
+            row["metric_meta"] = error_meta[(item.run_id, item.item_id)]
+        passes = errored_passes.get((item.run_id, item.item_id))
+        if passes:
+            row["pass_scores"] = passes["scores"]
+            row["pass_metric_meta"] = passes["meta"]
+        run_data["snapshot"]["rows"].append(row)
+    for run_id in {run_id for run_id, _ in errored_passes}:
+        if run_id in runs_data:
+            # Only errored items carry passes: not a per-pass snapshot.
+            runs_data[run_id]["snapshot"]["pass_scores_scope"] = "errored"
 
     for run_id, stats in stats_by_run.items():
         stats["success_rate"] = (
@@ -3994,47 +4080,11 @@ def run_passes(
         breakdowns=error_details,
     ).get(run.id, set())
 
-    # Per-pass mean per metric.
-    score_rows = (
-        db.query(
-            RunItemPassScore.pass_number,
-            RunItemPassScore.metric_name,
-            func.avg(RunItemPassScore.score_numeric),
-            func.count(RunItemPassScore.score_numeric),
-        )
-        .filter(
-            RunItemPassScore.run_id == run.id,
-            RunItemPassScore.score_numeric.isnot(None),
-        )
-        .group_by(RunItemPassScore.pass_number, RunItemPassScore.metric_name)
-        .all()
-    )
-    # Scorer errors without a score count as 0 (services/run_means.py).
-    unscored_errors: Dict[tuple[int, str], int] = defaultdict(int)
-    for pass_number, metric_name, status in (
-        db.query(
-            RunItemPassScore.pass_number,
-            RunItemPassScore.metric_name,
-            RunItemPassScore.meta["status"].as_string(),
-        )
-        .filter(
-            RunItemPassScore.run_id == run.id,
-            RunItemPassScore.score_numeric.is_(None),
-            metric_error_candidates(RunItemPassScore),
-        )
-        .all()
-    ):
-        if is_metric_error({"status": status}):
-            unscored_errors[(int(pass_number), metric_name)] += 1
-    pass_totals: Dict[tuple[int, str], MetricTotals] = {
-        (int(pass_number), metric_name): MetricTotals(
-            score_sum=float(avg_val or 0.0) * int(cnt or 0), score_count=int(cnt or 0)
-        )
-        for pass_number, metric_name, avg_val, cnt in score_rows
-    }
-    for key, unscored in unscored_errors.items():
-        pass_totals.setdefault(key, MetricTotals()).unscored_errors = unscored
-    metric_means: Dict[int, Dict[str, float]] = {}
+    # Per-pass mean per metric, by the run-mean rule (services/run_means.py):
+    # a pass whose scorer or task failed counts as 0, or is left out when
+    # lower is better.
+    pass_totals = pass_metric_totals(db, [run.id]).get(run.id, {})
+    metric_means: Dict[int, Dict[str, Optional[float]]] = {}
     counts: Dict[int, int] = {}
     for (pass_number, metric_name), totals in pass_totals.items():
         metric_means.setdefault(pass_number, {})[metric_name] = run_metric_mean(
@@ -4415,6 +4465,8 @@ def run_group_metrics(
             RunItemPassScore.item_id,
             RunItemPassScore.pass_number,
             RunItemPassScore.score_numeric,
+            RunItemPassScore.meta,
+            RunItemPassScore.label,
         )
         .filter(
             RunItemPassScore.run_id == run.id,
@@ -4423,9 +4475,22 @@ def run_group_metrics(
         .order_by(RunItemPassScore.item_id, RunItemPassScore.pass_number)
         .all()
     )
+    # A pass whose scorer or task failed scores 0. A lower-is-better metric
+    # would read that 0 as its best value, so there an errored pass is None:
+    # never a pass, and left out of averages and the best score
+    # (services/run_means.py).
+    left_out = errors_left_out(direction)
     score_rows = []
-    for item_id, pass_number, score_numeric in rows:
-        numeric = float(score_numeric) if score_numeric is not None else 0.0
+    for item_id, pass_number, score_numeric, meta, label in rows:
+        if left_out:
+            if is_metric_error(meta) or is_task_error_pass(label, meta):
+                numeric = None
+            elif score_numeric is None:
+                continue
+            else:
+                numeric = float(score_numeric)
+        else:
+            numeric = float(score_numeric) if score_numeric is not None else 0.0
         items_scores.setdefault(item_id, []).append(numeric)
         score_rows.append((str(item_id), int(pass_number), numeric))
 
@@ -4443,6 +4508,10 @@ def run_group_metrics(
         report_k=report_k,
         direction=direction or "maximize",
     )
+    if left_out and all(score is None for _, _, score in score_rows):
+        # Every pass errored: no average or best score, as the run mean (0
+        # would read as this lower-is-better metric's best value).
+        stats["avg_at_k"] = stats["max_at_k"] = None
     analysis = cached_repeat_analysis(
         db,
         run_id=run.id,
@@ -4801,7 +4870,8 @@ def update_metric(
         pass_record.score_numeric = numeric_val
 
         # Re-reduce with the ingest rule: the item value is the mean over its
-        # passes, a failed pass without a score counting as 0 (C015).
+        # passes, a failed pass without a score counting as 0 (C015), or left
+        # out when lower is better (services/run_means.py).
         siblings = {
             int(p.pass_number): p
             for p in db.query(RunItemPassScore).filter(
@@ -4812,7 +4882,9 @@ def update_metric(
         }
         # autoflush is off: a pass row created above is not in the query yet.
         siblings[pass_number] = pass_record
-        reduced, observed = reduce_pass_scores(siblings.values())
+        reduced, observed = reduce_pass_scores(
+            siblings.values(), declared_direction(spec)
+        )
         reduced = round(reduced, 6) if reduced is not None else None
         score_record.score_numeric = reduced
         score_record.score_raw = reduced

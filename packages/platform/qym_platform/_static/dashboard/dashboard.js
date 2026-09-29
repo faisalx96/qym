@@ -1445,13 +1445,31 @@
 
   // `scoredDisplay` is the metric's mean without its scorer errors, shown in
   // the tooltip so readers can see how far counting errors as 0 moved it.
-  function renderExecutionErrors(run, scope = '', onlyMetric = null, scoredDisplay = null) {
+  // `direction` overrides the metric direction read from `run` (pass rows
+  // carry no metric specs of their own).
+  function renderExecutionErrors(run, scope = '', onlyMetric = null, scoredDisplay = null, direction = undefined) {
     const known = run.task_error_count != null && run.metric_error_count != null;
     if (!known) {
       const count = Number(run.execution_error_count ?? run.error_count ?? 0);
       return !onlyMetric && count > 0
         ? `<span class="status-errors status-errors-pending" title="${count} execution errors${scope}; task/metric breakdown is updating">${count}⚠</span>`
         : '';
+    }
+    // A lower-is-better metric leaves task and scorer errors out of its mean
+    // (services/run_means.py): its cell says how many were left out.
+    const metricDirection = direction === undefined && onlyMetric ? runMetricDirection(run, onlyMetric) : direction;
+    if (onlyMetric && window.QymMetrics.errorsLeftOut(metricDirection)) {
+      const scorer = Number(run.metric_error_counts?.[onlyMetric] || 0);
+      const task = Number(run.task_error_count || 0);
+      const count = scorer + task;
+      if (!count) return '';
+      const kinds = [
+        scorer ? `${scorer} scorer error${scorer === 1 ? '' : 's'}` : '',
+        task ? `${task} task error${task === 1 ? '' : 's'}` : '',
+      ].filter(Boolean).join(' and ');
+      const label = `${kinds}${scope} ${count === 1 ? 'is' : 'are'} not counted in the ${onlyMetric} mean (lower is better)`;
+      const details = { kind: 'metric', count, scope, leftOut: true, metric: onlyMetric, task, metrics: { [onlyMetric]: scorer } };
+      return `<button type="button" class="status-errors status-error-detail status-metric-errors metric-error-indicator" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" data-execution-errors="${escapeHtml(JSON.stringify(details))}">⚠</button>`;
     }
     return (onlyMetric ? ['metric'] : ['task', 'metric']).map(kind => {
       const count = Number(onlyMetric
@@ -1478,7 +1496,10 @@
     modal.setAttribute('role', 'dialog');
     modal.setAttribute('aria-modal', 'true');
     modal.setAttribute('aria-labelledby', 'execution-error-title');
-    modal.innerHTML = `<div class="modal-content modal-small"><div class="modal-header"><h2 id="execution-error-title">${task ? 'Task' : 'Metric'} errors</h2><button class="modal-close qym-icon-action" aria-label="Close error details">×</button></div><div class="modal-body"><p>${details.count} ${task ? 'task execution' : 'metric check'}${details.count === 1 ? '' : 's'} failed${escapeHtml(details.scope)}.</p>${task ? '' : `<dl class="execution-error-breakdown">${Object.entries(details.metrics).map(([name, count]) => `<div><dt>${escapeHtml(name)}</dt><dd>${Number(count)}</dd></div>`).join('')}</dl>`}<p class="execution-error-note">${task ? 'Metrics skipped after a task failure are not metric errors.' : 'Task outputs are available. Each failed metric check is counted once per item and pass, and counts as 0% in the run mean.'}</p></div></div>`;
+    modal.innerHTML = details.leftOut
+      // A lower-is-better metric: its task and scorer errors are left out.
+      ? `<div class="modal-content modal-small"><div class="modal-header"><h2 id="execution-error-title">${escapeHtml(details.metric)} errors</h2><button class="modal-close qym-icon-action" aria-label="Close error details">×</button></div><div class="modal-body"><p>${Number(details.count)} error${details.count === 1 ? '' : 's'}${escapeHtml(details.scope)} ${details.count === 1 ? 'is' : 'are'} not counted in the ${escapeHtml(details.metric)} mean.</p><dl class="execution-error-breakdown"><div><dt>Scorer errors</dt><dd>${Number(details.metrics?.[details.metric] || 0)}</dd></div><div><dt>Task errors</dt><dd>${Number(details.task || 0)}</dd></div></dl><p class="execution-error-note">Lower is better for this metric, so an error counted as 0 would read as its best score. Errors are left out of its mean and count as fails in pass rates. Each is counted once per item and pass.</p></div></div>`
+      : `<div class="modal-content modal-small"><div class="modal-header"><h2 id="execution-error-title">${task ? 'Task' : 'Metric'} errors</h2><button class="modal-close qym-icon-action" aria-label="Close error details">×</button></div><div class="modal-body"><p>${details.count} ${task ? 'task execution' : 'metric check'}${details.count === 1 ? '' : 's'} failed${escapeHtml(details.scope)}.</p>${task ? '' : `<dl class="execution-error-breakdown">${Object.entries(details.metrics).map(([name, count]) => `<div><dt>${escapeHtml(name)}</dt><dd>${Number(count)}</dd></div>`).join('')}</dl>`}<p class="execution-error-note">${task ? 'Metrics skipped after a task failure are not metric errors.' : 'Task outputs are available. Each failed metric check is counted once per item and pass, and counts as 0% in the run mean.'}</p></div></div>`;
     document.body.appendChild(modal);
     const close = () => { modal.remove(); if (button.isConnected) button.focus(); };
     const closeButton = modal.querySelector('button');
@@ -3195,7 +3216,10 @@
     (runsData || []).forEach(rd => {
       const samples = parseInt(rd?.run?.samples, 10) || 1;
       const rows = rd?.snapshot?.rows || [];
-      const hasPassData = samples > 1 && rows.some(r => r && r.pass_scores);
+      // A snapshot whose errored items alone carry passes (the Models
+      // payload) stays one entry per item.
+      const hasPassData = samples > 1 && rd?.snapshot?.pass_scores_scope !== 'errored'
+        && rows.some(r => r && r.pass_scores);
       if (!hasPassData) { out.push(rd); return; }
       const metricNames = rd.snapshot.metric_names || rd.run.metric_names || [];
       for (let p = 0; p < samples; p++) {
@@ -3205,7 +3229,23 @@
             if (Array.isArray(ps)) return (ps[p] == null ? '' : ps[p]);
             return row.metric_values ? row.metric_values[i] : '';
           });
-          return Object.assign({}, row, { metric_values: mv });
+          if (!row.pass_metric_meta) return Object.assign({}, row, { metric_values: mv });
+          // The pass's own metric metadata and task outcome, so a scorer or
+          // task error of this pass follows the metric's error rule
+          // (metrics.js getRowScore) instead of the item's other passes.
+          const meta = {};
+          metricNames.forEach(m => {
+            const values = row.pass_metric_meta[m];
+            const value = Array.isArray(values) ? values[p] : null;
+            if (value && typeof value === 'object') meta[m] = value;
+          });
+          const passFailed = metricNames.some(m => window.QymMetrics.isTaskErrorPass(row, m, p));
+          return Object.assign({}, row, {
+            metric_values: mv,
+            metric_meta: meta,
+            pass_metric_meta: null,
+            status: passFailed ? 'error' : row.status,
+          });
         });
         out.push({ run: rd.run, snapshot: Object.assign({}, rd.snapshot, { rows: passRows }) });
       }
@@ -4195,14 +4235,14 @@
         const metricCells = metricsToShow.map(metric => {
           const value = (pass.metric_means || {})[metric];
           if (typeof value !== 'number') {
-            return `<td class="col-metric-value">${pass._queued ? '<span class="metric-na">—</span>' : pendingText('<span class="metric-na">—</span>')}${renderExecutionErrors(pass, ' in this pass', metric)}</td>`;
+            return `<td class="col-metric-value">${pass._queued ? '<span class="metric-na">—</span>' : pendingText('<span class="metric-na">—</span>')}${renderExecutionErrors(pass, ' in this pass', metric, null, runMetricDirection(parentRun, metric))}</td>`;
           }
           const metricType = state._metricTypes?.[metric] || window.QymMetrics.detectMetricTypeFromAvg(value);
           const peers = peerPasses.map(sibling => (sibling.metric_means || {})[metric]);
           const display = window.QymMetrics.formatMetricValueSmart(value, metricType, peers);
           const metricClass = window.QymMetrics.getMetricColorClass(value, metricType, runMetricDirection(parentRun, metric));
           const chip = chipAttrs(metricWinners[metric], firstPass);
-          return `<td class="col-metric-value"><span class="metric-score ${metricClass}${chip.cls}"${chip.title}>${display}</span>${renderExecutionErrors(pass, ' in this pass', metric)}</td>`;
+          return `<td class="col-metric-value"><span class="metric-score ${metricClass}${chip.cls}"${chip.title}>${display}</span>${renderExecutionErrors(pass, ' in this pass', metric, null, runMetricDirection(parentRun, metric))}</td>`;
         }).join('');
         const latencyCell = (cls, v, winners) => {
           const chip = chipAttrs(winners, firstPass);
@@ -5509,20 +5549,23 @@
       trackDistribution: true
     });
 
+    // A lower-is-better metric leaves errors out: a model with no score left
+    // has no average (its 0 would read as the best value and rank first).
+    const noScore = metrics.totalScoreCount === 0 && window.QymMetrics.errorsLeftOut(direction);
     return {
       passAtK: metrics.passAtK,
       passHatK: metrics.passHatK,
-      maxAtK: metrics.maxAtK,
+      maxAtK: noScore ? null : metrics.maxAtK,
       consistency: metrics.consistency,
       reliability: metrics.reliability,
-      avgScore: metrics.avgScore,
+      avgScore: noScore ? null : metrics.avgScore,
       avgLatency: metrics.avgLatency,
       medianLatency: metrics.medianLatency,
       totalItems: metrics.totalItems,
       failedCount: metrics.failedCount,
       totalScoreSum: metrics.totalScoreSum,
       totalScoreCount: metrics.totalScoreCount,
-      minScore: metrics.minScore,
+      minScore: noScore ? null : metrics.minScore,
       stddevScore: metrics.stddevScore,
       K: metrics.K,
       correctDistribution: metrics.correctDistribution || new Array(K + 1).fill(0),
@@ -5619,13 +5662,16 @@
     const direction = mvs.metricDirection || null;
     const isNeutral = !isNumeric && !direction;
     const passRule = direction === 'minimize' ? '≤' : '≥';
-    const scoreClassFor = value => window.QymMetrics.getMetricColorClass(value, mType, direction);
+    const scoreClassFor = value => (value === null || value === undefined
+      ? '' : window.QymMetrics.getMetricColorClass(value, mType, direction));
 
     const models = Object.keys(runsByModel).sort((a, b) => {
-      // Best average first when a direction is declared, else by name.
-      const scoreA = mvs.modelStats[a]?.avgScore || 0;
-      const scoreB = mvs.modelStats[b]?.avgScore || 0;
-      const better = window.QymMetrics.compareMetricValues(scoreA, scoreB, direction);
+      // Best average first when a direction is declared, else by name; a
+      // model without an average comes last.
+      const scoreA = mvs.modelStats[a]?.avgScore ?? null;
+      const scoreB = mvs.modelStats[b]?.avgScore ?? null;
+      if ((scoreA === null) !== (scoreB === null)) return scoreA === null ? 1 : -1;
+      const better = window.QymMetrics.compareMetricValues(scoreA || 0, scoreB || 0, direction);
       return better ? -better : String(a).localeCompare(String(b));
     });
 
@@ -5649,7 +5695,9 @@
           : `Average of the best score per item across all ${K} runs`,
         consistency: `How often runs agree on pass/fail across ${K} runs. 100% = all agree, 0% = 50/50 split.`,
         reliability: `When an item CAN be solved, how often is it? Only includes items with ≥1 passing run.`,
-        failedCount: `Number of runs that threw an error (across all items). Errors are scored as 0%.`,
+        failedCount: direction === 'minimize'
+          ? `Number of runs that threw an error (across all items). Lower is better for this metric, so errors are left out of its scores and count as fails.`
+          : `Number of runs that threw an error (across all items). Errors are scored as 0%.`,
         totalRetries: `Total retries across all items in the selected runs. This sums per-item retry counts, not distinct items that retried.`,
         avgScore: isNumeric
           ? `Mean value across all items and all ${K} runs`
@@ -5803,9 +5851,12 @@
     // no "better": list models by name, with no medals or colors.
     const direction = mvs.metricDirection || null;
     const ranked = models
-      .map(m => ({ model: m, score: mvs.modelStats[m]?.avgScore || 0 }))
+      .map(m => ({ model: m, score: mvs.modelStats[m]?.avgScore ?? null }))
       .sort((a, b) => {
-        const better = window.QymMetrics.compareMetricValues(a.score, b.score, direction);
+        // A model without an average (every item errored on a
+        // lower-is-better metric) is never ranked above one with a score.
+        if ((a.score === null) !== (b.score === null)) return a.score === null ? 1 : -1;
+        const better = window.QymMetrics.compareMetricValues(a.score || 0, b.score || 0, direction);
         return better ? -better : String(a.model).localeCompare(String(b.model));
       });
 
@@ -5823,8 +5874,8 @@
       <h3>${escapeHtml(title)}</h3>
       <div class="ranking-list">
         ${ranked.map((item, idx) => {
-          const rank = !direction ? '' : (idx < 3 ? rankEmojis[idx] : `#${idx + 1}`);
-          const scoreClass = window.QymMetrics.getMetricColorClass(item.score, rankMType, direction);
+          const rank = !direction || item.score === null ? '' : (idx < 3 ? rankEmojis[idx] : `#${idx + 1}`);
+          const scoreClass = item.score === null ? '' : window.QymMetrics.getMetricColorClass(item.score, rankMType, direction);
           const display = window.QymMetrics.formatMetricValue(item.score, rankMType);
           return `
             <div class="ranking-item">

@@ -26,7 +26,8 @@ def run_compare_js(body: str, *, render: bool = False) -> None:
         "stringify", "normalizeErrorLabel", "splitErrorLabel",
         "getErrorBucketKey", "addErrorBucket",
         "rowMatchesErrorFilter", "rowMatchesActiveErrorFilters", "getErrorFilterSlot",
-        "metricDirectionFor", "metricPassesFor", "metricColorClassFor",
+        "metricDirectionFor", "metricPassesFor", "rowScoreFor", "rowPassesFor",
+        "errorsLeftOutFor", "metricColorClassFor",
     )
     if render:
         names += (

@@ -6,7 +6,10 @@
  * - Models view
  * - Aggregate publish
  *
- * IMPORTANT: Error handling is centralized here. Errors are treated as 0% score.
+ * IMPORTANT: Error handling is centralized here (getRowScore). Task and
+ * scorer errors count as 0, except for lower-is-better metrics, which leave
+ * them out of the mean (0 is their best value) and never count them as a
+ * pass. Same rule as services/run_means.py.
  */
 
 /**
@@ -74,14 +77,7 @@ function isErrorRow(row) {
   return isTaskErrorRow(row) || hasMetricError(row);
 }
 
-/**
- * Get the score for a row, treating errors as 0
- * This is the SINGLE SOURCE OF TRUTH for error -> score conversion
- * @param {Object} row - Row data from snapshot
- * @param {number} metricIdx - Index of the metric in metric_values array
- * @param {string|null} metricName - Metric key used to find exception metadata
- * @returns {{score: number|null, isError: boolean}} Score (0 for errors) and error flag
- */
+/** Parse one stored metric value (number, boolean, "80%", "true", ...). */
 function parseScoreValue(metricValue) {
   if (metricValue === undefined || metricValue === null) return null;
   if (typeof metricValue === 'number') {
@@ -172,13 +168,94 @@ function parseMetricScoreInput(raw, spec, options = {}) {
   return { ok: true, value: number };
 }
 
-function getRowScore(row, metricIdx, metricName = null) {
+/**
+ * Whether a metric leaves errors out of its mean instead of counting 0.
+ * 0 is the best value of a lower-is-better metric, so counting an error as 0
+ * would reward it. Same rule as services/run_means.py (errors_left_out).
+ */
+function errorsLeftOut(direction) {
+  return direction === 'minimize';
+}
+
+/**
+ * A repeat-run pass whose task failed. Ingest stores 0 with the label
+ * "error" for its metrics, and the row's pass attempt is an error.
+ * Same rule as services/run_means.py (is_task_error_pass).
+ */
+function isTaskErrorPass(row, metricName, passIndex) {
+  const meta = row?.pass_metric_meta?.[metricName]?.[passIndex];
+  if (isMetricErrorMeta(meta)) return false;
+  if (meta && typeof meta === 'object') {
+    // A reviewer's score replaces what the failed task left behind.
+    if (String(meta.modified || '').toLowerCase() === 'true') return false;
+    // Ingest's zero-fill carries only the "error" label; a scorer's own
+    // "error" label comes with its metadata.
+    const others = Object.keys(meta).filter(key => key !== 'label' && key !== 'status'
+      && meta[key] !== null && meta[key] !== undefined && meta[key] !== '');
+    if (String(meta.label || '').trim().toLowerCase() === 'error') return others.length === 0;
+  }
+  const attempt = Array.isArray(row?.pass_attempts) ? row.pass_attempts[passIndex] : null;
+  return !!attempt && isTaskErrorRow(attempt);
+}
+
+/**
+ * A repeat row's passes for one metric: value, scorer error, task error.
+ * Null for rows without per-pass data. Rows scoped to one pass keep the
+ * run's pass_scores but carry no pass_metric_meta; every errored pass has
+ * metadata (a status or the "error" label), so those rows are not re-read.
+ */
+function repeatPassOutcomes(row, metricName) {
+  const scores = row?.pass_scores?.[metricName];
+  if (!Array.isArray(scores)) return null;
+  if (!row.pass_metric_meta || typeof row.pass_metric_meta !== 'object') return null;
+  const metas = row.pass_metric_meta[metricName];
+  return scores.map((raw, index) => {
+    const scorerError = isMetricErrorMeta(Array.isArray(metas) ? metas[index] : null);
+    return {
+      value: parseScoreValue(raw),
+      scorerError,
+      taskError: !scorerError && isTaskErrorPass(row, metricName, index),
+    };
+  });
+}
+
+/**
+ * Get the score for a row: the SINGLE SOURCE OF TRUTH for how errors enter a
+ * metric's mean. Same rule as services/run_means.py.
+ * - Higher is better, or no declared direction: a task error, or a scorer
+ *   error, counts as 0 (C015).
+ * - Lower is better (``direction`` "minimize"): errors are left out (score
+ *   null, isError true). A repeat row with errored passes is the mean over
+ *   its passes without an error (null when none is left).
+ * @param {Object} row - Row data from snapshot
+ * @param {number} metricIdx - Index of the metric in metric_values array
+ * @param {string|null} metricName - Metric key used to find exception metadata
+ * @param {'maximize'|'minimize'|null} [direction] - The metric's declared
+ *   direction (metricDirection)
+ * @returns {{score: number|null, isError: boolean}} Score and error flag
+ */
+function getRowScore(row, metricIdx, metricName = null, direction = null) {
   if (!row) return { score: null, isError: false };
+  const leftOut = errorsLeftOut(direction);
 
   // A task error invalidates every metric. A metric error invalidates only
   // that metric; sibling metrics on the same item retain their real scores.
   if (isTaskErrorRow(row)) {
-    return { score: 0, isError: true };
+    return { score: leftOut ? null : 0, isError: true };
+  }
+  if (leftOut && metricName !== null) {
+    const passes = repeatPassOutcomes(row, metricName);
+    if (passes && passes.some(pass => pass.scorerError || pass.taskError)) {
+      let sum = 0;
+      let count = 0;
+      passes.forEach(pass => {
+        if (pass.scorerError || pass.taskError || pass.value === null) return;
+        sum += pass.value;
+        count++;
+      });
+      return { score: count ? sum / count : null, isError: true };
+    }
+    if (hasMetricError(row, metricName)) return { score: null, isError: true };
   }
   const metricError = metricName !== null && hasMetricError(row, metricName);
 
@@ -195,6 +272,39 @@ function getRowScore(row, metricIdx, metricName = null) {
 }
 
 /**
+ * Task and scorer errors a row holds for one metric: once per item, or per
+ * errored pass for a repeat row (the unit of the runs list, "across all
+ * passes").
+ * @returns {{task: number, scorer: number}}
+ */
+function rowMetricErrorCounts(row, metricName) {
+  const passes = repeatPassOutcomes(row, metricName);
+  if (passes) {
+    const task = passes.filter(pass => pass.taskError).length;
+    const scorer = passes.filter(pass => pass.scorerError).length;
+    if (task || scorer) return { task, scorer };
+  }
+  if (isTaskErrorRow(row)) return { task: 1, scorer: 0 };
+  return { task: 0, scorer: hasMetricError(row, metricName) ? 1 : 0 };
+}
+
+/**
+ * Pass/fail verdict for a row outcome ({score, isError} from getRowScore):
+ * true, false, or null without a declared direction. An errored item never
+ * passes when lower is better; when higher is better it fails through its 0.
+ */
+function rowMetricPasses(outcome, threshold, direction, isBoolean = false) {
+  if (direction !== 'maximize' && direction !== 'minimize') return null;
+  if (outcome && outcome.isError && errorsLeftOut(direction)) return false;
+  return metricPasses(outcome ? outcome.score : null, threshold, direction, isBoolean);
+}
+
+/** How a metric's errors enter its mean, for notes and tooltips. */
+function metricErrorRuleLabel(direction) {
+  return errorsLeftOut(direction) ? 'not counted in the mean' : 'counted as 0%';
+}
+
+/**
  * A row's metric value with scorer errors left out, and how many scorer
  * errors it held. Same rule as services/run_means.py (the published "mean
  * without scorer errors"):
@@ -203,8 +313,14 @@ function getRowScore(row, metricIdx, metricName = null) {
  *   ``errors`` counts the errored passes; a row whose every pass errored is
  *   left out;
  * - a task error is not a scorer error: it keeps its 0 (errors 0).
+ * A lower-is-better metric leaves every error out of its mean already, so
+ * its value is getRowScore's.
  */
-function scoreWithoutMetricErrors(row, metricIdx, metricName) {
+function scoreWithoutMetricErrors(row, metricIdx, metricName, direction = null) {
+  if (errorsLeftOut(direction)) {
+    const { score } = getRowScore(row, metricIdx, metricName, direction);
+    return { score, errors: rowMetricErrorCounts(row, metricName).scorer };
+  }
   const { score, isError } = getRowScore(row, metricIdx, metricName);
   if (score === null) return { score: null, errors: 0 };
   if (!isError || isTaskErrorRow(row)) return { score, errors: 0 };
@@ -262,7 +378,7 @@ function calculateItemLevelMetrics(options) {
   const { runsData, metricName, threshold, getMetricIndex, getItemId, trackDistribution } = options;
   const direction = options.direction === undefined ? 'maximize' : options.direction;
   const isBoolean = options.isBoolean === undefined ? Number(threshold) >= 0.9999 : !!options.isBoolean;
-  const passes = s => metricPasses(s, threshold, direction, isBoolean) === true;
+  const passes = outcome => rowMetricPasses(outcome, threshold, direction, isBoolean) === true;
 
   const K = runsData?.length || 0;
 
@@ -303,6 +419,7 @@ function calculateItemLevelMetrics(options) {
   let totalConsistencySum = 0;  // Sum of per-item consistency scores
   let totalReliabilitySum = 0;  // Sum of per-item reliability (pass_count / K) for items with at least one pass
   let maxScoreSum = 0;
+  let itemsWithBest = 0;  // Items with a score to take the best of (Max@K)
   let totalScoreSum = 0;
   let totalScoreCount = 0;
   let totalLatencySum = 0;
@@ -329,7 +446,9 @@ function calculateItemLevelMetrics(options) {
 
   // Process each unique item
   for (const itemId of itemIds) {
-    const scores = [];
+    // One outcome per run: its score (null when an error is left out of the
+    // mean) and whether it errored.
+    const outcomes = [];
 
     // Get score for this item from each run
     for (const runData of runsData) {
@@ -340,15 +459,18 @@ function calculateItemLevelMetrics(options) {
       const metricIdx = getMetricIndex(runData);
       if (metricIdx < 0) continue;
 
-      // Use centralized score extraction (errors = 0)
-      const { score, isError } = getRowScore(row, metricIdx, metricName);
+      // Centralized error rule: 0, or left out when lower is better.
+      const outcome = getRowScore(row, metricIdx, metricName, direction);
+      const { score, isError } = outcome;
 
+      if (score !== null || isError) {
+        outcomes.push(outcome);
+        if (isError) failedCount++;
+      }
       if (score !== null) {
-        scores.push(score);
         totalScoreSum += score;
         totalScoreCount++;
         allScores.push(score);
-        if (isError) failedCount++;
       }
 
       // Collect latency
@@ -360,12 +482,13 @@ function calculateItemLevelMetrics(options) {
       }
     }
 
-    if (scores.length === 0) continue;
+    if (outcomes.length === 0) continue;
     itemsWithData++;
 
-    // Calculate item-level stats: the best score follows the direction.
-    const maxScore = direction === 'minimize' ? Math.min(...scores) : Math.max(...scores);
-    const numCorrect = scores.filter(passes).length;
+    // Calculate item-level stats: the best score follows the direction; an
+    // errored run is a failure and has no score to be the best.
+    const scores = outcomes.map(outcome => outcome.score).filter(score => score !== null);
+    const numCorrect = outcomes.filter(passes).length;
 
     // Track distribution if requested
     if (trackDistribution && result.correctDistribution) {
@@ -373,19 +496,22 @@ function calculateItemLevelMetrics(options) {
     }
 
     // Max@K: track the best score for this item
-    maxScoreSum += maxScore;
+    if (scores.length) {
+      maxScoreSum += direction === 'minimize' ? Math.min(...scores) : Math.max(...scores);
+      itemsWithBest++;
+    }
 
     // Pass@K: at least one run passed for this item
     if (numCorrect > 0) passAtKCount++;
 
     // Pass^K: ALL runs passed for this item
-    const allCorrectItem = numCorrect === scores.length && scores.length > 0;
+    const allCorrectItem = numCorrect === outcomes.length && outcomes.length > 0;
     if (allCorrectItem) passHatKCount++;
 
     // Consistency: binary agreement (do runs agree on pass/fail?)
     // Formula: 2 * max(passCount, failCount) / K - 1
     // Range: 0% (50/50 split) to 100% (all agree)
-    const numScores = scores.length;
+    const numScores = outcomes.length;
     if (numScores > 1) {
       const numFail = numScores - numCorrect;
       const maxAgreement = Math.max(numCorrect, numFail);
@@ -408,7 +534,7 @@ function calculateItemLevelMetrics(options) {
   result.failedCount = failedCount;
   result.passAtK = itemsWithData > 0 ? passAtKCount / itemsWithData : 0;
   result.passHatK = itemsWithData > 0 ? passHatKCount / itemsWithData : 0;
-  result.maxAtK = itemsWithData > 0 ? maxScoreSum / itemsWithData : 0;
+  result.maxAtK = itemsWithBest > 0 ? maxScoreSum / itemsWithBest : 0;
   // Consistency = average of per-item binary agreement scores (requires K > 1)
   result.consistency = itemsWithMultipleRuns > 0 ? totalConsistencySum / itemsWithMultipleRuns : null;
   // Reliability = average pass rate for items that CAN be solved (requires K > 1)
@@ -450,9 +576,10 @@ function calculateMedian(values) {
 /**
  * Calculate strict grouped item outcomes for two K-run model groups.
  *
- * Only items present with a non-null score in all selected runs are eligible.
- * Errors count as 0 via getRowScore(), and their verdict follows that 0: a
- * failure when higher is better, a pass when lower is better (C015 rule).
+ * Only items present with a score or an error in all selected runs are
+ * eligible. Errors follow getRowScore(): they count as 0 and fail when higher
+ * is better; when lower is better they are left out of averages and always
+ * fail.
  *
  * @param {Object} options
  * @param {Array} options.runsData
@@ -483,9 +610,10 @@ function calculateGroupedOutcomeBuckets(options) {
 /**
  * Calculate grouped cohort comparison stats for two K-run groups.
  *
- * Only items present with a non-null score in every selected run are eligible.
- * Errors count as 0 via getRowScore(), and their verdict follows that 0: a
- * failure when higher is better, a pass when lower is better (C015 rule).
+ * Only items present with a score or an error in every selected run are
+ * eligible. Errors follow getRowScore(): they count as 0 and fail when higher
+ * is better; when lower is better they are left out of averages and always
+ * fail (an errored pass of a repeat run too).
  *
  * @param {Object} options
  * @param {Array} options.runsData
@@ -514,6 +642,7 @@ function calculateGroupedCohortComparison(options) {
   const direction = options?.direction === undefined ? 'maximize' : options.direction;
   const isBoolean = options?.isBoolean === undefined ? Number(threshold) >= 0.9999 : !!options.isBoolean;
   const passesAt = value => metricPasses(value, threshold, direction, isBoolean) === true;
+  const leftOut = errorsLeftOut(direction);
 
   const bucketKeys = ['a_sweeps_b', 'b_sweeps_a', 'both_pass', 'both_fail'];
   const result = {
@@ -625,6 +754,9 @@ function calculateGroupedCohortComparison(options) {
     };
   }
 
+  // ``scores`` holds the values that enter averages; ``passes`` holds one
+  // verdict per entry (run, or pass of a repeat run), errored entries
+  // included. When lower is better an errored entry has no score and fails.
   function collectGroupValues(groupRuns, itemId) {
     const scores = [];
     const passes = [];
@@ -635,15 +767,34 @@ function calculateGroupedCohortComparison(options) {
       if (!row) return null;
       const metricIdx = getMetricIndex(runData);
       if (metricIdx < 0) return null;
+      const attempt = Math.max(1, Number(row?.retry_count || 0) + 1);
       // Repeat runs carry per-pass scores; each pass joins the cohort as its
       // own entry so pass@k / noise math sees all of them, not the reduced
       // mean. Falls back to the single reduced score when unavailable.
       const perPass = metricName && row?.pass_scores ? row.pass_scores[metricName] : null;
+      const passOutcomes = leftOut && Array.isArray(perPass)
+        ? (repeatPassOutcomes(row, metricName)
+          || perPass.map(raw => ({ value: parseScoreValue(raw), scorerError: false, taskError: false })))
+        : null;
+      if (passOutcomes && passOutcomes.some(pass => pass.value !== null || pass.scorerError || pass.taskError)) {
+        passOutcomes.forEach((pass) => {
+          if (pass.scorerError || pass.taskError) {
+            passes.push(false);
+          } else if (pass.value !== null) {
+            scores.push(pass.value);
+            passes.push(passesAt(pass.value));
+          } else {
+            return;
+          }
+          attempts.push(attempt);
+        });
+        rowList.push(row);
+        continue;
+      }
       const cleanPasses = Array.isArray(perPass)
         ? perPass.map(Number).filter(value => Number.isFinite(value))
         : [];
       if (cleanPasses.length) {
-        const attempt = Math.max(1, Number(row?.retry_count || 0) + 1);
         cleanPasses.forEach((value) => {
           scores.push(value);
           passes.push(passesAt(value));
@@ -652,11 +803,11 @@ function calculateGroupedCohortComparison(options) {
         rowList.push(row);
         continue;
       }
-      const { score } = getRowScore(row, metricIdx, metricName);
-      if (score === null) return null;
-      scores.push(score);
-      passes.push(passesAt(score));
-      attempts.push(Math.max(1, Number(row?.retry_count || 0) + 1));
+      const outcome = getRowScore(row, metricIdx, metricName, direction);
+      if (outcome.score === null && !outcome.isError) return null;
+      if (outcome.score !== null) scores.push(outcome.score);
+      passes.push(rowMetricPasses(outcome, threshold, direction, isBoolean) === true);
+      attempts.push(attempt);
       rowList.push(row);
     }
     return { scores, passes, attempts, rows: rowList };
@@ -664,10 +815,10 @@ function calculateGroupedCohortComparison(options) {
 
   function updateAggregateState(agg, groupValues) {
     const numCorrect = groupValues.passes.filter(Boolean).length;
-    const numScores = groupValues.scores.length;
+    const numScores = groupValues.passes.length;
 
     agg.totalScoreSum += groupValues.scores.reduce((sum, score) => sum + score, 0);
-    agg.totalScoreCount += numScores;
+    agg.totalScoreCount += groupValues.scores.length;
     agg.totalAttemptsSum += groupValues.attempts.reduce((sum, attempt) => sum + attempt, 0);
     agg.totalAttemptsCount += groupValues.attempts.length;
 
@@ -691,9 +842,9 @@ function calculateGroupedCohortComparison(options) {
 
   itemIds.forEach((itemId) => {
     const leftValues = collectGroupValues(leftRuns, itemId);
-    if (!leftValues || leftValues.scores.length < leftRuns.length) return;
+    if (!leftValues || leftValues.passes.length < leftRuns.length) return;
     const rightValues = collectGroupValues(rightRuns, itemId);
-    if (!rightValues || rightValues.scores.length < rightRuns.length) return;
+    if (!rightValues || rightValues.passes.length < rightRuns.length) return;
 
     result.eligibleItems += 1;
     updateAggregateState(leftAgg, leftValues);
@@ -1131,7 +1282,13 @@ if (typeof window !== 'undefined') {
     metricMetaDisplayKey,
     hasMetricError,
     isErrorRow,
+    errorsLeftOut,
+    isTaskErrorPass,
+    repeatPassOutcomes,
     getRowScore,
+    rowMetricErrorCounts,
+    rowMetricPasses,
+    metricErrorRuleLabel,
     scoreWithoutMetricErrors,
     parseScoreValue,
     parseMetricScoreInput,

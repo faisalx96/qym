@@ -265,7 +265,7 @@ evaluator = Evaluator(
 <li><strong>Sample first.</strong> Validate prompts and config on a handful of items before a full run — it surfaces the <code>RuntimeError</code> config check and any unfilled <code>{placeholders}</code> immediately.</li>
 <li><strong><code>max_metric_concurrency</code></strong> (default <code>1</code>) controls how many metrics run in parallel <em>per item</em>. Raise it to fan out multiple judge calls on the same item; keep it low when your provider's rate limits are strict.</li>
 <li><strong><code>metric_timeout</code></strong> (default <code>60.0</code>s) is the wall-clock budget per judge attempt. Raise it (or set it to <code>None</code>) for slow models.</li>
-<li><strong><code>metric_max_retries</code></strong> (default <code>2</code>) retries attempts that reach that wall-clock limit. Exhausted timeouts become ordinary metric errors and count as <code>0</code> in the run mean.</li>
+<li><strong><code>metric_max_retries</code></strong> (default <code>2</code>) retries attempts that reach that wall-clock limit. Exhausted timeouts become ordinary metric errors and count as <code>0</code> in the run mean (a lower-is-better metric leaves them out of its mean).</li>
 <li><strong>Tier your judges.</strong> Use a cheap model for smoke tests and a stronger one for release gates via per-judge <code>judge_model</code> overrides.</li>
 <li><strong>Record provenance.</strong> Store the judge model and prompt version in your run metadata so scores stay comparable across runs.</li>
 </ul>

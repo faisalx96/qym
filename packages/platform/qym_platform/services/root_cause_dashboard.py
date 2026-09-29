@@ -27,6 +27,12 @@ from qym_platform.db.models import (
     RunMetricSpec,
 )
 from qym_platform.services.approved_diagnoses import load_approved_diagnoses
+from qym_platform.services.run_means import (
+    errored_pass_items,
+    is_metric_error,
+    raw_metric_totals,
+    run_metric_mean,
+)
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from qym_platform.services.root_cause_categories import analysis_root_causes
@@ -62,6 +68,8 @@ class _Snapshot:
     metric_specs: dict[tuple[str, str], RunMetricSpec] = field(default_factory=dict)
     changes: list[dict[str, Any]] = field(default_factory=list)
     failed_pairs: set[tuple[str, str]] = field(default_factory=set)
+    # (run_id, item_id, metric) of repeat items with an errored pass.
+    errored_passes: set[tuple[str, str, str]] = field(default_factory=set)
 
 
 def normalize_label(value: Any) -> str:
@@ -146,10 +154,26 @@ def _pass_threshold(spec: RunMetricSpec | None) -> float:
     )
 
 
+def _errored_for_minimize(
+    score: RunItemScore | None, spec: RunMetricSpec | None, pass_errored: bool
+) -> bool:
+    """A scorer error, or an errored repeat pass, of a lower-is-better metric.
+
+    Those metrics leave errors out of their mean (services/run_means.py): an
+    errored item is an error, never a pass or a (best) 0 score.
+    """
+    return _direction(spec) == "minimize" and (
+        pass_errored or (score is not None and is_metric_error(score.meta))
+    )
+
+
 def _score_outcome(
-    item: RunItem, score: RunItemScore | None, spec: RunMetricSpec | None
+    item: RunItem,
+    score: RunItemScore | None,
+    spec: RunMetricSpec | None,
+    pass_errored: bool = False,
 ) -> str:
-    if item.error:
+    if item.error or _errored_for_minimize(score, spec, pass_errored):
         return "error"
     if score is None or score.score_numeric is None:
         return "unscored"
@@ -161,7 +185,14 @@ def _score_outcome(
     return "passed" if passed else "failed"
 
 
-def _score_value(item: RunItem, score: RunItemScore | None) -> float | None:
+def _score_value(
+    item: RunItem, score: RunItemScore | None, spec: RunMetricSpec | None = None
+) -> float | None:
+    if _errored_for_minimize(score, spec, False) or (
+        item.error and _direction(spec) == "minimize"
+    ):
+        # A lower-is-better metric leaves errors out of its mean.
+        return None
     if item.error:
         # Match the main dashboard's run-score semantics: errors contribute zero.
         return 0.0
@@ -370,6 +401,13 @@ def _load_snapshot(
     }
     spec_rows = db.query(RunMetricSpec).filter(RunMetricSpec.run_id.in_(run_ids)).all()
     snapshot.metric_specs = {(row.run_id, row.metric_name): row for row in spec_rows}
+    # Only lower-is-better metrics judge an item by its errored passes.
+    minimize_specs = [row for row in spec_rows if _direction(row) == "minimize"]
+    snapshot.errored_passes = errored_pass_items(
+        db,
+        sorted({row.run_id for row in minimize_specs}),
+        metrics={row.metric_name for row in minimize_specs},
+    )
     review_statuses = _latest_review_statuses(db, run_ids)
     approved_diagnoses = load_approved_diagnoses(db, run_ids, item_rows)
     runs_by_id = {run.id: run for run in runs}
@@ -383,7 +421,15 @@ def _load_snapshot(
             for metric in metrics:
                 score = scores.get((run.id, item.item_id, str(metric)))
                 spec = snapshot.metric_specs.get((run.id, str(metric)))
-                if _score_outcome(item, score, spec) in {"failed", "error"}:
+                pass_errored = (
+                    run.id,
+                    item.item_id,
+                    str(metric),
+                ) in snapshot.errored_passes
+                if _score_outcome(item, score, spec, pass_errored) in {
+                    "failed",
+                    "error",
+                }:
                     snapshot.failed_pairs.add((run.id, item.item_id))
                 stat = snapshot.score_stats.setdefault(
                     (run.id, str(metric)),
@@ -421,7 +467,12 @@ def _load_snapshot(
                     continue
                 score = scores.get((run.id, item.item_id, metric_name))
                 spec = snapshot.metric_specs.get((run.id, metric_name))
-                outcome = _score_outcome(item, score, spec)
+                outcome = _score_outcome(
+                    item,
+                    score,
+                    spec,
+                    (run.id, item.item_id, metric_name) in snapshot.errored_passes,
+                )
                 source = (
                     str(entry.get("source") or "unknown").strip().lower() or "unknown"
                 )
@@ -460,9 +511,17 @@ def _load_snapshot(
                         "source": source,
                         "review_status": review_status,
                         "outcome": outcome,
-                        "score": _score_value(item, score),
+                        "score": _score_value(item, score, spec),
                     }
                 )
+
+    # Run averages follow the one run-mean rule (services/run_means.py): task
+    # and scorer errors count as 0, or are left out when lower is better.
+    metric_totals = raw_metric_totals(db, run_ids, scored_averages=False)
+    for (run_id, metric), stat in snapshot.score_stats.items():
+        totals = (metric_totals.get(run_id) or {}).get(metric)
+        if totals is not None:
+            stat["average"] = run_metric_mean(totals, int(stat["error_count"]))
 
     # Changes are project-wide by default; narrow them to the run filters above.
     if include_changes:
@@ -516,7 +575,11 @@ def _run_score_payload(
     return {
         "run_id": run.id,
         "metric_name": metric_name,
-        "average": (float(stat.get("sum", 0.0)) / denominator) if denominator else None,
+        "average": (
+            stat["average"]
+            if "average" in stat
+            else (float(stat.get("sum", 0.0)) / denominator) if denominator else None
+        ),
         "scored_count": int(stat.get("scored_count", 0) or 0),
         "error_count": int(stat.get("error_count", 0) or 0),
         "item_count": int(stat.get("item_count", 0) or 0),

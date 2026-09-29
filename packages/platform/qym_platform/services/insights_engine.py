@@ -12,6 +12,7 @@ from typing import Any, Optional, Union
 from qym_platform.db.models import Run, RunItem, RunItemScore, RunMetricSpec, Span
 from qym_platform.services.approved_diagnoses import load_approved_diagnoses
 from qym_platform.services.insights_data import InsightData, RootCauseData
+from qym_platform.services.run_means import is_metric_error
 from sqlalchemy.orm import Session
 
 DEFAULT_MIN_ROOT_CAUSE_OCCURRENCES = 5
@@ -110,6 +111,15 @@ def _metric_result(
 ) -> Optional[str]:
     if item.error:
         return "fail"
+    direction = _clean_label(spec.direction).lower() if spec is not None else ""
+    if (
+        direction in {"minimize", "lower", "lower_is_better"}
+        and score is not None
+        and is_metric_error(score.meta)
+    ):
+        # A lower-is-better metric leaves scorer errors out of its mean; its
+        # stored 0 would otherwise read as a pass (services/run_means.py).
+        return "fail"
     if score is None or score.score_numeric is None:
         return None
 
@@ -118,7 +128,6 @@ def _metric_result(
         if spec is not None and spec.pass_threshold is not None
         else _DEFAULT_PASS_THRESHOLD
     )
-    direction = _clean_label(spec.direction).lower() if spec is not None else ""
     value = float(score.score_numeric)
     success = (
         value <= threshold

@@ -75,7 +75,8 @@ from qym_platform.item_identity import (
     build_identity_fingerprint,
     looks_like_positional_item_id,
 )
-from qym_platform.services.run_means import reduce_pass_scores
+from qym_platform.services.metric_semantics import declared_direction
+from qym_platform.services.run_means import errors_left_out, reduce_pass_scores
 from qym_platform.services.run_lifecycle import (
     is_run_force_stopped,
     is_run_in_review,
@@ -1550,9 +1551,22 @@ def _ingest_events_sync(
         pass_score_cache[(row.item_id, row.metric_name, row.pass_number)] = row
         passes_by_metric[(row.item_id, row.metric_name)][row.pass_number] = row
 
+    # Directions declared by a run_started event in this batch; its specs are
+    # stored after metric_spec_cache was read.
+    started_directions: Dict[str, Optional[str]] = {}
+
+    def _metric_direction(metric_name):
+        if metric_name in started_directions:
+            return started_directions[metric_name]
+        return declared_direction(metric_spec_cache.get(metric_name))
+
     def _reduce_pass_scores(item_id, metric_name):
-        # A pass whose scorer failed counts as 0 (services/run_means.py).
-        return reduce_pass_scores(passes_by_metric[(item_id, metric_name)].values())
+        # A pass whose scorer or task failed counts as 0, or is left out when
+        # lower is better (services/run_means.py).
+        return reduce_pass_scores(
+            passes_by_metric[(item_id, metric_name)].values(),
+            _metric_direction(metric_name),
+        )
 
     applied = 0
     trace_stats_dirty = False
@@ -1629,6 +1643,11 @@ def _ingest_events_sync(
             run.model = payload.model
             run.metrics = payload.metrics
             _store_metric_specs(db, run, payload.metric_specs)
+            for name, raw_spec in (payload.metric_specs or {}).items():
+                if name not in metric_spec_cache:
+                    started_directions[name] = declared_direction(
+                        _normalized_metric_spec(raw_spec)
+                    )
             md = _sanitize_for_json(dict(payload.run_metadata or {}))
             if payload.total_items is not None:
                 md["total_items"] = int(payload.total_items)
@@ -1805,7 +1824,10 @@ def _ingest_events_sync(
                 reduced_numeric, reduced_observations = _reduce_pass_scores(
                     payload.item_id, payload.metric_name
                 )
-                if reduced_numeric is None:
+                # A lower-is-better item whose every pass errored has no value.
+                if reduced_numeric is None and not errors_left_out(
+                    _metric_direction(payload.metric_name)
+                ):
                     reduced_numeric = payload.score_numeric
 
             score = _get_score(payload.item_id, payload.metric_name)

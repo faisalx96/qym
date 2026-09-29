@@ -28,7 +28,12 @@ from qym_platform.db.models import (
 from qym_platform.deps import get_db
 from qym_platform.permissions import has_project_access
 from qym_platform.settings import PlatformSettings
-from qym_platform.services.run_means import MetricTotals, raw_metric_totals, run_metric_mean
+from qym_platform.services.run_means import (
+    MetricTotals,
+    raw_metric_totals,
+    run_metric_count,
+    run_metric_mean,
+)
 
 
 router = APIRouter(tags=["insights"])
@@ -294,8 +299,8 @@ def project_insights(
         averages: dict[str, float | None] = {}
         for metric_name in run.metrics or []:
             totals = score_totals.get(run.id, {}).get(metric_name) or MetricTotals()
-            denominator_by_metric[metric_name] = (
-                totals.score_count + totals.unscored_errors + int(stats["errors"])
+            denominator_by_metric[metric_name] = run_metric_count(
+                totals, int(stats["errors"])
             )
             averages[metric_name] = run_metric_mean(totals, int(stats["errors"]))
 

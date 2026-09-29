@@ -258,9 +258,15 @@ def test_run_page_boolean_segments_match_their_filters_with_errors(browser):
             seg = card.locator(f".metric-bool-seg.{kind}")
             segments[kind] = int(seg.evaluate("el => el.style.flexGrow || el.style.flex.split(' ')[0]"))
         assert segments == {"pass-seg": 5, "fail-seg": 2, "error-seg": 3}
+        # Lower is better: errors are left out of the mean (2 True of the 7
+        # items without an error) and never read as a pass (C015 amended).
         legend = card.locator(".metric-bool-legend").inner_text()
-        assert "counted as False (pass)" in legend
-        assert "counted as fail" not in legend
+        assert "not counted in the mean" in legend
+        assert "counted as False (pass)" not in legend
+        assert card.locator(".metric-card-value").inner_text() == "28.6%"
+        note = card.locator(".metric-card-error-note")
+        assert note.inner_text().endswith("3 errors · not counted in the mean")
+        assert "2 scorer errors and 1 task error are not counted" in note.get_attribute("title")
         listed = {}
         for kind in ("pass-seg", "fail-seg", "error-seg"):
             fixture.goto()

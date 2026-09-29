@@ -10,7 +10,7 @@
   <script src="/static/qym_safe.js?v=xss-rendering-20260928"></script>
   <script src="/static/auth.js?v=p0-integration-20260929"></script>
   <script src="/static/shell.js?v=p0-integration-20260929"></script>
-  <script src="/static/metrics.js?v=p0-integration-20260929"></script>
+  <script src="/static/metrics.js?v=p0-integration-20260929-minimize-errors"></script>
   <script src="/static/qym_table.js"></script>
   <script src="/static/playground.js?v=p0-integration-20260929-frozen-columns"></script>
   <style>
@@ -3985,10 +3985,12 @@
           }
           metrics.forEach((metricName, index) => {
             const passValues = (row.pass_scores || {})[metricName];
-            const rawValue = passNumber && Array.isArray(passValues)
-              ? passValues[passNumber - 1]
-              : (row.metric_values || [])[index];
-            metricScores[metricName] = window.QymMetrics.parseScoreValue(rawValue);
+            // A whole item's value follows the metric's error rule
+            // (metrics.js): a lower-is-better item is judged without its
+            // errored passes.
+            metricScores[metricName] = passNumber && Array.isArray(passValues)
+              ? window.QymMetrics.parseScoreValue(passValues[passNumber - 1])
+              : window.QymMetrics.getRowScore(row, index, metricName, window.QymMetrics.metricDirection(specs[metricName])).score;
             metricThresholds[metricName] = specs[metricName] && specs[metricName].pass_threshold != null
               ? Number(specs[metricName].pass_threshold)
               : 0.8;

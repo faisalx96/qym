@@ -102,11 +102,18 @@ def test_run_item_scopes_task_and_metric_errors_to_the_right_surface() -> None:
     )
     assert "const selectedMetricHasError = metric" in verdict_block
     assert "window.QymMetrics.hasMetricError(row, metric)" in verdict_block
-    assert "if (hasAnyTaskError)" in verdict_block
+    # A lower-is-better metric leaves a scorer error out of its mean: the item
+    # shows as an error, never as a (best) score.
+    assert (
+        "const scorerErrorLeftOut = selectedMetricHasError && errorsLeftOutFor(metric);"
+        in verdict_block
+    )
+    assert "if (hasAnyTaskError || scorerErrorLeftOut)" in verdict_block
     assert "else if (!selectedMetricHasError" in verdict_block
     assert "pfClass = 'error';" in verdict_block
-    # Pass/Fail follows the declared direction; none = no tag (C008).
-    assert "const pfPassed = metricPassesFor(metric, window.QymMetrics.parseScoreValue(metricVals[mIdx]));" in verdict_block
+    # Pass/Fail follows the declared direction and the metric's error rule;
+    # none = no tag (C008).
+    assert "const pfPassed = rowPassesFor(metric, rowScoreFor(row, mIdx, metric));" in verdict_block
     assert "pfClass = pfPassed ? 'pass' : 'fail';" in verdict_block
     assert "const statusLabel = pfClass === 'pass' ? 'Pass' : 'Fail';" in verdict_block
     assert "? 'Task execution failed in ' + taskErrorAttempts.length" in verdict_block
@@ -181,7 +188,10 @@ def test_run_item_scopes_task_and_metric_errors_to_the_right_surface() -> None:
     assert "meta.status || meta.label" not in metrics_source
     assert "function hasMetricError(row, metricName = null)" in metrics_source
     assert "return isTaskErrorRow(row) || hasMetricError(row);" in metrics_source
-    assert "function getRowScore(row, metricIdx, metricName = null)" in metrics_source
+    assert (
+        "function getRowScore(row, metricIdx, metricName = null, direction = null)"
+        in metrics_source
+    )
     assert "const metricError = metricName !== null" in metrics_source
     assert "return { score, isError: metricError };" in metrics_source
     assert "Metric Errors" in source
@@ -735,8 +745,9 @@ def test_run_page_supports_single_pass_scope() -> None:
     assert '"running_count": (' in api
     assert 'running_by_pass.get(p, 0) if status == "running" else 0' in api
     assert 'pass_number = request.get("pass_number")' in api
-    # Re-reduced with the ingest rule (C015): services/run_means.py.
-    assert "reduce_pass_scores(siblings.values())" in api
+    # Re-reduced with the ingest rule (C015), which follows the metric's
+    # direction: services/run_means.py.
+    assert "reduce_pass_scores(\n            siblings.values(), declared_direction(spec)\n        )" in api
 
 
 def test_repeat_and_compare_share_grouped_output_interaction() -> None:

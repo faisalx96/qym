@@ -32,10 +32,11 @@ from qym_platform.services.dashboard_outbox import (
     execution_event_query,
     execution_event_object,
 )
-from qym_platform.services.metric_semantics import primary_metric
+from qym_platform.services.metric_semantics import declared_direction, primary_metric
 from qym_platform.services.run_means import (
     MetricTotals,
     apply_repeat_pass_errors,
+    errors_left_out,
     metric_mean_fields,
     run_metric_mean,
 )
@@ -1010,10 +1011,11 @@ def ensure_pending_summary(db, run_id, version):
 
 
 # Bump when published summary fields change; older summaries are refreshed
-# from numeric projection records (2: run means count scorer errors as 0;
-# 3: repeat runs publish the mean without scorer errors, and pass summaries
-# name the declared primary metric).
-SUMMARY_SHAPE = 3
+# from numeric projection records by reconcile_summary_shapes (2: run means
+# count scorer errors as 0; 3: repeat runs publish the mean without scorer
+# errors, and pass summaries name the declared primary metric; 4:
+# lower-is-better metrics leave task and scorer errors out of their means).
+SUMMARY_SHAPE = 4
 
 
 def _outdated_shape(data):
@@ -1022,25 +1024,49 @@ def _outdated_shape(data):
     return "task_error_count" not in data or shape < SUMMARY_SHAPE
 
 
-def _repeat_pass_errors(db, run_id):
+def _task_failed_passes(run_id):
+    """``(record_key, pass_number)`` of the passes whose task failed.
+
+    The same task evidence ``_execution_error_breakdown`` counts: final
+    attempts that failed, and item_failed events of older SDKs.
+    """
+    number = case((Record.pass_number < 1, 1), else_=Record.pass_number)
+    return (
+        select(
+            Record.record_key.label("record_key"), number.label("pass_number")
+        )
+        .where(
+            Record.run_key == run_id,
+            Record.present.is_(True),
+            Record.error > 0,
+            Record.record_kind == "attempt",
+            or_(
+                Record.is_last.is_(True), Record.metric_key.startswith("legacy_event:")
+            ),
+        )
+        .group_by(Record.record_key, number)
+        .subquery()
+    )
+
+
+def _repeat_pass_errors(db, run_id, left_out=()):
     """``apply_repeat_pass_errors`` input from numeric projection records.
 
-    Repeat runs keep scorer errors on pass records; only items with one
-    (and no task error) are read.
+    Repeat runs keep scorer errors on pass records; only items with one (and
+    no task error) are read, and for the metrics in ``left_out``
+    (lower-is-better) also items with a pass whose task failed.
     """
     item_alias = aliased(Record)
+    item_ok = and_(
+        item_alias.record_key == Record.record_key,
+        item_alias.record_kind == "item",
+        item_alias.present.is_(True),
+        item_alias.error == 0,
+    )
     affected = set(
         db.execute(
             select(Record.record_key, Record.metric_key)
-            .join(
-                item_alias,
-                and_(
-                    item_alias.record_key == Record.record_key,
-                    item_alias.record_kind == "item",
-                    item_alias.present.is_(True),
-                    item_alias.error == 0,
-                ),
-            )
+            .join(item_alias, item_ok)
             .where(
                 Record.run_key == run_id,
                 Record.record_kind == "pass_score",
@@ -1050,18 +1076,46 @@ def _repeat_pass_errors(db, run_id):
             .distinct()
         ).all()
     )
+    failed_passes = set()
+    if left_out:
+        failed = _task_failed_passes(run_id)
+        failed_passes = set(
+            db.execute(select(failed.c.record_key, failed.c.pass_number)).all()
+        )
+        affected.update(
+            db.execute(
+                select(Record.record_key, Record.metric_key)
+                .join(item_alias, item_ok)
+                .join(
+                    failed,
+                    and_(
+                        failed.c.record_key == Record.record_key,
+                        failed.c.pass_number == Record.pass_number,
+                    ),
+                )
+                .where(
+                    Record.run_key == run_id,
+                    Record.record_kind == "pass_score",
+                    Record.present.is_(True),
+                    Record.metric_key.in_(sorted(left_out)),
+                )
+                .distinct()
+            ).all()
+        )
     if not affected:
         return []
     keys = sorted({key for key, _ in affected})
     passes, values = {}, {}
     for start in range(0, len(keys), 400):
-        for key, metric, kind, score, error in db.execute(
+        for key, metric, kind, number, score, error, edited in db.execute(
             select(
                 Record.record_key,
                 Record.metric_key,
                 Record.record_kind,
+                Record.pass_number,
                 Record.score,
                 Record.error,
+                Record.success,
             ).where(
                 Record.run_key == run_id,
                 Record.present.is_(True),
@@ -1072,7 +1126,14 @@ def _repeat_pass_errors(db, run_id):
             if (key, metric) not in affected:
                 continue
             if kind == "pass_score":
-                passes.setdefault((key, metric), []).append((score, error > 0))
+                passes.setdefault((key, metric), []).append(
+                    (
+                        score,
+                        error > 0,
+                        # A reviewer's score (success) stands on a failed task.
+                        (key, number) in failed_passes and error == 0 and not edited,
+                    )
+                )
             else:
                 values[(key, metric)] = score
     return [
@@ -1131,6 +1192,10 @@ def refresh_run_summary(db, run_id, version):
         )
         .group_by(Record.metric_key)
     ).all()
+    metric_specs = (dimension.descriptor or {}).get("metric_specs") or {}
+    directions = {
+        metric: declared_direction(spec) for metric, spec in metric_specs.items()
+    }
     metric_totals = {
         metric: MetricTotals(
             score_sum=float(total or 0.0),
@@ -1138,13 +1203,21 @@ def refresh_run_summary(db, run_id, version):
             error_score_sum=float(error_total or 0.0),
             error_score_count=int(error_count or 0),
             unscored_errors=int(unscored or 0),
+            direction=directions.get(metric),
         )
         for metric, total, count, error_total, error_count, unscored in metric_rows
     }
     if int(run.samples or 1) > 1:
-        apply_repeat_pass_errors(metric_totals, _repeat_pass_errors(db, run_id))
+        left_out = sorted(
+            metric
+            for metric in run.metrics or []
+            if errors_left_out(directions.get(metric))
+        )
+        apply_repeat_pass_errors(
+            metric_totals, _repeat_pass_errors(db, run_id, left_out)
+        )
     metric_means = metric_mean_fields(
-        run.metrics or [], metric_totals, summary.error_count
+        run.metrics or [], metric_totals, summary.error_count, directions
     )
     execution_error_count, execution_errors_by_pass = _execution_error_counts(
         db, run_id, run.samples
@@ -1208,26 +1281,49 @@ def refresh_run_summary(db, run_id, version):
                 ).group_by(Record.pass_number)
             )
         }
-        primary = primary_metric(
-            run.metrics, (dimension.descriptor or {}).get("metric_specs") or {}
-        )
-        # Same rule as run means: a scorer error without a score counts as 0.
-        means = {
-            number: run_metric_mean(
-                MetricTotals(
-                    score_sum=float(total or 0.0),
-                    score_count=int(count or 0),
-                    unscored_errors=int(unscored or 0),
-                ),
-                0,
+        primary = primary_metric(run.metrics, metric_specs)
+        # Same rule as run means (services/run_means.py): a pass whose scorer
+        # or task failed counts as 0, or is left out when lower is better.
+        errored = Record.error > 0
+        pass_totals = {
+            number: MetricTotals(
+                score_sum=float(total or 0.0),
+                score_count=int(count or 0),
+                error_score_sum=float(error_total or 0.0),
+                error_score_count=int(error_count or 0),
+                unscored_errors=int(unscored or 0),
+                direction=directions.get(primary),
             )
-            for number, total, count, unscored in db.execute(
+            for number, total, count, error_total, error_count, unscored in db.execute(
                 select(
                     Record.pass_number,
                     func.sum(Record.score),
                     func.count(Record.score),
-                    func.count(
-                        case((and_(Record.error > 0, Record.score.is_(None)), 1))
+                    func.sum(case((errored, Record.score))),
+                    func.count(case((and_(errored, Record.score.isnot(None)), 1))),
+                    func.count(case((and_(errored, Record.score.is_(None)), 1))),
+                )
+                .where(
+                    Record.run_key == run_id,
+                    Record.record_kind == "pass_score",
+                    Record.metric_key == primary,
+                    Record.present.is_(True),
+                    or_(Record.score.isnot(None), errored),
+                )
+                .group_by(Record.pass_number)
+            ).all()
+        }
+        if errors_left_out(directions.get(primary)):
+            failed = _task_failed_passes(run_id)
+            for number, total, count in db.execute(
+                select(
+                    Record.pass_number, func.sum(Record.score), func.count(Record.score)
+                )
+                .join(
+                    failed,
+                    and_(
+                        failed.c.record_key == Record.record_key,
+                        failed.c.pass_number == Record.pass_number,
                     ),
                 )
                 .where(
@@ -1235,10 +1331,16 @@ def refresh_run_summary(db, run_id, version):
                     Record.record_kind == "pass_score",
                     Record.metric_key == primary,
                     Record.present.is_(True),
-                    or_(Record.score.isnot(None), Record.error > 0),
+                    Record.error == 0,
+                    Record.success == 0,
                 )
                 .group_by(Record.pass_number)
-            ).all()
+            ).all():
+                if number in pass_totals:
+                    pass_totals[number].task_error_score_sum = float(total or 0.0)
+                    pass_totals[number].task_error_score_count = int(count or 0)
+        means = {
+            number: run_metric_mean(totals, 0) for number, totals in pass_totals.items()
         }
         pass_causes = dict(
             db.execute(

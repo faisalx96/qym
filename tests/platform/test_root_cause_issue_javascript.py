@@ -243,7 +243,13 @@ def test_playground_can_rebuild_categories_from_fresh_approved_examples() -> Non
 def test_metric_analysis_is_shown_only_for_failed_or_errored_judges() -> None:
     function = "\n".join(
         _function("run", name)
-        for name in ("metricDirectionOf", "metricPassesFor", "shouldRenderMetricAnalysis")
+        for name in (
+            "metricDirectionOf",
+            "metricPassesFor",
+            "rowScoreFor",
+            "errorsLeftOutFor",
+            "shouldRenderMetricAnalysis",
+        )
     )
     metrics_js = (DASHBOARD / "metrics.js").read_text()
     _run_javascript(
@@ -281,6 +287,8 @@ def test_metric_analysis_is_shown_only_for_failed_or_errored_judges() -> None:
         };
         const window = {QymMetrics: {
           metricPasses: realMetrics.metricPasses,
+          errorsLeftOut: realMetrics.errorsLeftOut,
+          getRowScore: realMetrics.getRowScore,
           isTaskErrorRow: row => ['error', 'failed'].includes(String(row?.status || '').toLowerCase()),
           hasMetricError: (_row, metricName) => metricErrors.has(metricName),
           parseScoreValue: value => {
@@ -370,6 +378,9 @@ def test_compare_displays_and_saves_the_same_scope(scope_kind: str) -> None:
             "compareExecutionErrorInfo",
             "metricDirectionFor",
             "metricPassesFor",
+            "rowScoreFor",
+            "rowPassesFor",
+            "errorsLeftOutFor",
             "metricColorClassFor",
             "renderCompareOutputGroup",
             "wireRootCauseHandlers",
