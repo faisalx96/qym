@@ -130,6 +130,11 @@ class PlatformSettings(BaseSettings):
     analysis_max_concurrency: int = Field(default=20, ge=1, le=20)
     analysis_max_retries: int = Field(default=1, ge=0, le=5)
 
+    # Evaluation Service experiments: launches per user per window (0 disables).
+    # Dry-run previews are not counted.
+    eval_experiment_create_rate_limit: int = Field(default=30, ge=0)
+    eval_experiment_create_rate_window_seconds: int = Field(default=3600, ge=1)
+
     # Product eval API
     product_eval_max_workers: int = Field(default=3, ge=1)
     product_eval_max_concurrency: int = Field(default=10, ge=1, le=20)

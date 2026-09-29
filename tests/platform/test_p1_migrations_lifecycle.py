@@ -187,7 +187,7 @@ def test_postgres_full_chain_upgrade_p1_downgrade_reupgrade(postgres, populated)
     command.upgrade(config, "head")
     with engine.connect() as connection:
         assert (
-            connection.scalar(text("select version_num from alembic_version")) == "0062"
+            connection.scalar(text("select version_num from alembic_version")) == "0063"
         )
         inspector = inspect(connection)
         assert "ix_dashboard_event_retention" in {
