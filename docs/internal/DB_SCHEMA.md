@@ -10,8 +10,14 @@ The canonical models are in `packages/platform/qym_platform/db/models.py`; Alemb
 - `projects`: project access boundary and active/archive state.
 - `project_memberships`: one `MEMBER` / `MANAGER` role per user and project.
 - `api_keys`: project-bound key prefix, PBKDF2 hash, creator, recorded scopes, and revocation time. Scopes are stored but are not currently enforced.
-- `project_llm_connections`: encrypted OpenAI-compatible connection settings and the project default.
+- `project_llm_connections`: encrypted OpenAI-compatible connection settings, the project default, and `available_for_experiments` (whether the experiment model picker offers it).
 - `platform_settings`: retained settings storage; current operator configuration primarily comes from environment variables.
+
+## Evaluation Service environments
+
+- `eval_environments`: remote Evaluation Service deployments per project (unique name per project), with a normalized `base_url`, encrypted API key + `last4`, default/max priority (`LOW` / `NORMAL` / `HIGH`), `max_inflight_jobs`, the `allow_connection_keys` opt-in, best-run ranking defaults, health fields, and `is_active` soft-disable. A partial unique index keeps an active `base_url` in exactly one project across the platform.
+- `eval_environment_schemas`: immutable `env-overrides` JSON Schema history, unique per `(environment, schema_hash)`, with the cached form descriptor. `eval_environments.current_schema_id` points at the current row.
+- `eval_model_slots`: proposed / confirmed / stale LLM field groupings (`endpoint` or `flat`) per schema, unique per `(schema, slot_key)`, with JSON-pointer `field_map` and `transport_fields`.
 
 ## Runs and repeat executions
 
