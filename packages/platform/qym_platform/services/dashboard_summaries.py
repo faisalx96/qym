@@ -739,6 +739,43 @@ def _execution_error_breakdown(db, run_id, samples):
     return error_breakdown(task_counts, metric_counts)
 
 
+def _repeat_execution_counts(db, run_id):
+    """Execution success units of a repeat run: ``(item passes, failed)``.
+
+    Each item pass with attempt records (attempt rows, or legacy item events
+    with a failure or retries) counts once. It failed when it has a task
+    error: its last attempt failed, or the SDK reported item_failed for it (the
+    executions task_error_count counts), so a retried pass is judged by its
+    last attempt. ``execution_errors.repeat_execution_counts`` is the same rule
+    over source rows.
+    """
+    number = case((Record.pass_number < 1, 1), else_=Record.pass_number)
+    task_error = and_(
+        Record.error > 0,
+        or_(Record.is_last.is_(True), Record.metric_key.startswith("legacy_event:")),
+    )
+    passes = (
+        select(
+            Record.record_key,
+            number.label("pass_number"),
+            func.max(case((task_error, 1), else_=0)).label("failed"),
+        )
+        .where(
+            Record.run_key == run_id,
+            Record.record_kind == "attempt",
+            Record.present.is_(True),
+        )
+        .group_by(Record.record_key, number)
+        .subquery()
+    )
+    total, failed = db.execute(
+        select(func.count(), func.coalesce(func.sum(passes.c.failed), 0)).select_from(
+            passes
+        )
+    ).one()
+    return int(total or 0), int(failed or 0)
+
+
 def _repeat_retry_counts(db, run_id):
     """Deduplicate retries across retained attempts and legacy SDK events."""
     executions = (
@@ -1014,7 +1051,8 @@ def ensure_pending_summary(db, run_id, version):
 # from numeric projection records by reconcile_summary_shapes (2: run means
 # count scorer errors as 0; 3: repeat runs publish the mean without scorer
 # errors, and pass summaries name the declared primary metric; 4:
-# lower-is-better metrics leave task and scorer errors out of their means).
+# lower-is-better metrics leave task and scorer errors out of their means, and
+# execution success counts repeat-run item passes).
 SUMMARY_SHAPE = 4
 
 
@@ -1388,7 +1426,14 @@ def refresh_run_summary(db, run_id, version):
         ]
         if sum(pass_causes.values()):
             causes = sum(pass_causes.values())
-    success_rate = summary.success_count / summary.count if summary.count else 0.0
+    # Execution success: one unit per item, or per item pass in a repeat run
+    # (its RunItem reflects only the pass that arrived last).
+    executions, execution_successes = summary.count, summary.success_count
+    if int(run.samples or 1) > 1:
+        item_passes, failed_passes = _repeat_execution_counts(db, run_id)
+        if item_passes:
+            executions, execution_successes = item_passes, item_passes - failed_passes
+    success_rate = execution_successes / executions if executions else 0.0
     completed_success = (
         max(0, summary.terminal_count - summary.error_count) / summary.terminal_count
         if summary.terminal_count
@@ -1408,6 +1453,8 @@ def refresh_run_summary(db, run_id, version):
         "progress_pct": summary.terminal_count / expected if expected else None,
         "success_count": summary.success_count,
         "error_count": summary.error_count,
+        "execution_count": executions,
+        "execution_success_count": execution_successes,
         "execution_error_count": execution_error_count,
         **{k: v for k, v in error_details.items() if k != "pass_error_counts"},
         "total_retries": total_retries,

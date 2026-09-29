@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Iterator, List, Optional
 from uuid import uuid4
 
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -778,6 +778,110 @@ def _reclassify_metric_errors(ctx: JobContext) -> bool:
     else:
         ctx.progress["phase"], ctx.progress["cursor"] = phase, cursor
     ctx.progress["message"] = f"{phase} rows up to id {min(cursor, max_id):,}; {len(repaired):,} runs queued"
+    return False
+
+
+@register(
+    "project_item_failure_events",
+    description="Rebuild dashboard numbers for repeat runs with a pass that failed only through an item_failed event (C011).",
+)
+def _project_item_failure_events(ctx: JobContext) -> bool:
+    """Walk repeat runs in id windows; repair each affected run once.
+
+    Live ingest stored events without projecting them, so a repeat-run pass
+    whose failure has no failed final attempt (a crash before the attempt, or
+    a metric that raised after the task succeeded) is missing from published
+    task errors and execution success. Only runs with such a pass whose event
+    has no projection record are rebuilt, by the dashboard worker. Each window
+    reads just the item_failed events of its runs, through the run_id index.
+    """
+    from qym_platform.db.dashboard_models import DashboardRecordState as Record
+    from qym_platform.db.models import Run, RunEvent, RunItemAttempt
+    from qym_platform.services.dashboard_outbox import execution_event_numbers
+    from qym_platform.services.dashboard_summaries import request_dashboard_repair
+    from qym_platform.services.run_means import METRIC_ERROR_STATUSES
+
+    window = max(1, int(ctx.params.get("window", 200)))
+    cursor = str(ctx.progress.get("cursor") or "")
+    repaired = set(ctx.progress.get("runs") or [])
+    with ctx.session() as db:
+        run_ids = list(
+            db.scalars(
+                select(Run.id)
+                .where(Run.id > cursor, Run.samples > 1, Run.deleted_at.is_(None))
+                .order_by(Run.id)
+                .limit(window)
+            )
+        )
+        events = {}
+        if run_ids:
+            for run_id, event_id, item_id, pass_number in db.execute(
+                select(
+                    RunEvent.run_id,
+                    RunEvent.event_id,
+                    RunEvent.payload["item_id"].as_string(),
+                    RunEvent.payload["pass_number"].as_string(),
+                ).where(RunEvent.run_id.in_(run_ids), RunEvent.type == "item_failed")
+            ):
+                numbers = execution_event_numbers(
+                    "item_failed", {"item_id": item_id, "pass_number": pass_number}
+                )
+                if numbers["item_id"]:
+                    events[run_id, event_id] = (
+                        numbers["item_id"],
+                        numbers["pass_number"],
+                    )
+        failing = sorted({run_id for run_id, _ in events})
+        if failing:
+            # A failed final attempt already carries the failure.
+            failed = {
+                (run_id, str(item_id), max(1, int(pass_number or 1)))
+                for run_id, item_id, pass_number in db.execute(
+                    select(
+                        RunItemAttempt.run_id,
+                        RunItemAttempt.item_id,
+                        RunItemAttempt.pass_number,
+                    ).where(
+                        RunItemAttempt.run_id.in_(failing),
+                        RunItemAttempt.is_last_attempt.is_(True),
+                        func.lower(RunItemAttempt.status).in_(METRIC_ERROR_STATUSES),
+                    )
+                )
+            }
+            projected = set(
+                db.execute(
+                    select(Record.run_key, Record.metric_key).where(
+                        Record.run_key.in_(failing),
+                        Record.record_kind == "attempt",
+                        Record.metric_key.startswith("legacy_event:"),
+                        Record.present.is_(True),
+                        Record.error > 0,
+                    )
+                ).tuples()
+            )
+            affected = {
+                run_id
+                for (run_id, event_id), (item_id, pass_number) in events.items()
+                if (run_id, item_id, pass_number) not in failed
+                and (run_id, "legacy_event:" + event_id) not in projected
+            }
+            for run_id in sorted(affected - repaired):
+                if request_dashboard_repair(db, run_id, publish=False):
+                    repaired.add(run_id)
+        db.commit()
+    ctx.progress["runs"] = sorted(repaired)
+    ctx.progress["runs_repaired"] = len(repaired)
+    if len(run_ids) < window:
+        ctx.progress["phase"] = "done"
+        ctx.progress["message"] = (
+            f"done: {len(repaired):,} runs queued for a dashboard rebuild"
+        )
+        ctx.log(ctx.progress["message"])
+        return True
+    ctx.progress["cursor"] = run_ids[-1]
+    ctx.progress["message"] = (
+        f"repeat runs up to {run_ids[-1]}; {len(repaired):,} runs queued"
+    )
     return False
 
 

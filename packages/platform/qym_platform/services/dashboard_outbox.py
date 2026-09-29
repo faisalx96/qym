@@ -67,6 +67,40 @@ def execution_event_numbers(event_type, payload):
     }
 
 
+def projects_execution_event(event_type, payload):
+    """Whether an item event is attempt evidence: a failure or retries."""
+    if event_type not in EXECUTION_EVENT_TYPES:
+        return False
+    numbers = execution_event_numbers(event_type, payload)
+    return bool(numbers["item_id"] and (numbers["error"] or numbers["retry_count"]))
+
+
+def enqueue_inserted_events(connection, rows):
+    """Project run events written by a Core insert, which skips flush hooks.
+
+    Live ingest bulk-inserts events. Without this, an item pass that failed
+    only through item_failed (no failed final attempt) reached the summaries
+    only after a backfill, so task errors and execution success missed it.
+    """
+    from qym_platform.db.models import RunEvent
+
+    enqueue_snapshots(
+        connection,
+        [
+            snapshot(
+                RunEvent(
+                    run_id=row["run_id"],
+                    event_id=row["event_id"],
+                    type=row["type"],
+                    payload=row["payload"],
+                )
+            )
+            for row in rows
+            if projects_execution_event(row["type"], row["payload"])
+        ],
+    )
+
+
 def execution_event_query():
     """Read event identity and counters without fetching task outputs."""
     from qym_platform.db.models import RunEvent
@@ -389,12 +423,7 @@ def _before_flush(session, flush_context, instances):
 
     for obj in changed:
         if isinstance(obj, RunEvent) and obj in new:
-            numbers = execution_event_numbers(obj.type, obj.payload)
-            if (
-                obj.type not in EXECUTION_EVENT_TYPES
-                or not numbers["item_id"]
-                or not (numbers["error"] or numbers["retry_count"])
-            ):
+            if not projects_execution_event(obj.type, obj.payload):
                 continue
         if isinstance(obj, source) and (
             obj in new

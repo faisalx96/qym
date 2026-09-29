@@ -28,6 +28,10 @@ from qym_platform.db.models import (
 from qym_platform.deps import get_db
 from qym_platform.permissions import has_project_access
 from qym_platform.settings import PlatformSettings
+from qym_platform.services.execution_errors import (
+    execution_success_fields,
+    repeat_execution_counts,
+)
 from qym_platform.services.run_means import (
     MetricTotals,
     raw_metric_totals,
@@ -270,6 +274,12 @@ def project_insights(
         latencies[run_id].append(float(latency))
 
     score_totals = raw_metric_totals(db, run_ids)
+    # Reliability is execution success: repeat runs count item passes.
+    repeat_executions = repeat_execution_counts(
+        db,
+        [run.id for run in runs if int(run.samples or 1) > 1],
+        prefer_published=True,
+    )
 
     specs: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
     for spec in (
@@ -334,7 +344,13 @@ def project_insights(
                 "total_items": total_items,
                 "error_count": error_count,
                 "success_rate": (
-                    (total_items - error_count) / total_items if total_items else None
+                    execution_success_fields(
+                        total_items,
+                        total_items - error_count,
+                        repeat_executions.get(run.id),
+                    )["success_rate"]
+                    if total_items
+                    else None
                 ),
                 "total_retries": stats["retries"],
                 "avg_latency_ms": stats["avg_latency"],

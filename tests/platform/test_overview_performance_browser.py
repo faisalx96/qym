@@ -293,11 +293,17 @@ def test_overview_kpis_come_from_the_project_aggregation(browser):
             "All runs 25 runs 99.9% execution success 3 runs with errors"
             " 7 models 15,832 items"
         )
+        # Repeat runs weigh each item pass, judged by its last attempt (C011).
+        assert page.locator(
+            '[data-kpi="execution_success"] .qym-help-tooltip'
+        ).text_content() == (
+            "Share of item executions that ran without a task error across all"
+            " runs in this project. A repeat run counts each item once per pass,"
+            " judged by that pass’s last attempt. Metric errors do not lower"
+            " it; they count in runs with errors."
+        )
         assert (
-            "weighted by items"
-            in page.locator(
-                '[data-kpi="execution_success"] .qym-help-tooltip'
-            ).text_content()
+            page.locator('.topbar-stat[title^="Share of item executions"]').count() == 1
         )
         assert page.locator(".topbar-stat").first.get_attribute("title") == (
             "All runs in this project."

@@ -42,7 +42,7 @@ def test_alembic_has_one_upgrade_head() -> None:
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["0063"]
+    assert heads == ["0064"]
 
 
 def test_migrations_name_their_own_revision_in_job_logs() -> None:
@@ -94,6 +94,42 @@ def test_user_sessions_migration_creates_and_drops_the_session_table(
 
         migration.downgrade()
         assert "user_sessions" not in sa.inspect(connection).get_table_names()
+
+
+def test_item_failure_events_migration_queues_the_repair_job_for_repeat_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from qym_platform.db.maintenance_models import MaintenanceJob
+    from qym_platform.services import maintenance
+
+    migration = _load_migration("0064_project_item_failure_events.py")
+    engine = sa.create_engine("sqlite://")
+    metadata = sa.MetaData()
+    runs = sa.Table(
+        "runs",
+        metadata,
+        sa.Column("id", sa.String(length=36), primary_key=True),
+        sa.Column("samples", sa.Integer()),
+    )
+    metadata.create_all(engine)
+    MaintenanceJob.__table__.create(engine)
+    jobs = "SELECT kind, status FROM maintenance_jobs"
+
+    with engine.begin() as connection:
+        monkeypatch.setattr(
+            migration, "op", Operations(MigrationContext.configure(connection))
+        )
+        connection.execute(runs.insert(), [{"id": "classic", "samples": 1}])
+        migration.upgrade()
+        # Only repeat runs can have a pass that failed through item_failed alone.
+        assert connection.execute(sa.text(jobs)).all() == []
+
+        connection.execute(runs.insert(), [{"id": "repeat", "samples": 3}])
+        migration.upgrade()
+        assert connection.execute(sa.text(jobs)).all() == [
+            ("project_item_failure_events", "queued")
+        ]
+    assert "project_item_failure_events" in maintenance.registry()
 
 
 def test_subcategory_taxonomy_migration_preserves_rows_and_defaults_json(

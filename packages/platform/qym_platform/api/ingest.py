@@ -85,6 +85,7 @@ from qym_platform.services.run_lifecycle import (
     touch_run_event,
 )
 from qym_platform.settings import PlatformSettings
+from qym_platform.services.dashboard_outbox import enqueue_inserted_events
 from qym_platform.services.event_storage import (
     ingest_settings,
     oversized_span_attributes,
@@ -1364,6 +1365,9 @@ def _ingest_events_sync(
     ]
     for chunk in _chunks(event_rows):
         db.execute(insert(RunEvent), chunk)
+    # The bulk insert skips the dashboard flush hooks; project item failures
+    # and retries now, as the ORM path and backfill do.
+    enqueue_inserted_events(db.connection(), event_rows)
 
     item_ids = {
         payload.item_id for _, _, payload in accepted if hasattr(payload, "item_id")

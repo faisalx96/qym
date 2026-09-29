@@ -48,8 +48,9 @@
       {
         key: 'execution_success', name: 'Execution success', label: 'execution success',
         value: formatPercent(kpis.execution_success), color: 'var(--success)',
-        title: 'Share of items that ran without a task error, weighted by items,' + across
-          + '. Metric errors do not lower it; they count in runs with errors.',
+        title: 'Share of item executions that ran without a task error' + across
+          + '. A repeat run counts each item once per pass, judged by that pass’s last attempt.'
+          + ' Metric errors do not lower it; they count in runs with errors.',
       },
       {
         key: 'runs_with_errors', name: 'Runs with errors',
@@ -68,7 +69,7 @@
       {
         key: 'items', name: 'Items', label: noun(kpis.items, 'item', 'items'),
         value: formatCount(kpis.items), color: 'var(--accent-tertiary)', secondary: true,
-        title: 'Items evaluated' + across + '.',
+        title: 'Items evaluated' + across + '. A repeat run counts each item once.',
       },
     ];
   }

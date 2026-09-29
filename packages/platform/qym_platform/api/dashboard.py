@@ -230,12 +230,19 @@ def _ordered_query(conditions, *columns):
 def _sort_columns():
     success = func.coalesce(Summary.data["success_count"].as_float(), 0)
     errors = func.coalesce(Summary.data["error_count"].as_float(), 0)
+    # Execution success: item passes in repeat runs (older summaries: items).
+    executions = func.coalesce(
+        Summary.data["execution_count"].as_float(), success + errors
+    )
+    executed = func.coalesce(
+        Summary.data["execution_success_count"].as_float(), success
+    )
     return {
         "time": Dimension.timestamp,
         "created": Dimension.created_at,
         "activity": Dimension.descriptor["_activity_sort_at"].as_string(),
         "date": Dimension.timestamp,
-        "success": case((success + errors > 0, success / (success + errors)), else_=-1),
+        "success": case((executions > 0, executed / executions), else_=-1),
         "items": func.coalesce(Summary.data["total_items"].as_float(), 0),
         "task": Dimension.task,
         "model": Dimension.model,
@@ -377,9 +384,10 @@ def _kpis(db, conditions, *, filtered):
 
     One aggregate over the runs in scope (the whole project, or the active
     filter); a summary that is not published yet adds a run but no items.
-    Execution success is weighted by items; task and metric errors are counted
-    as runs with errors. Models are distinct model names, so reasoning and plain
-    variants of one model count once.
+    Execution success is weighted by executions: items, and item passes in
+    repeat runs. Task and metric errors are counted as runs with errors. Models
+    are distinct model names, so reasoning and plain variants of one model
+    count once.
     """
     data = Summary.data
     task, metric = (
@@ -396,22 +404,32 @@ def _kpis(db, conditions, *, filtered):
     name = func.replace(
         func.replace(Dimension.model, "|||reasoning", ""), "|||plain", ""
     )
-    runs, models, items, successes, errored = db.execute(
+    # Summaries published before shape 4 carry item counts only.
+    executions, successes = (
+        func.coalesce(
+            data["execution_count"].as_float(), data["total_items"].as_float()
+        ),
+        func.coalesce(
+            data["execution_success_count"].as_float(),
+            data["success_count"].as_float(),
+        ),
+    )
+    runs, models, items, executions, successes, errored = db.execute(
         _query(
             func.count(),
             func.count(func.distinct(case((name != "nomodel", name)))),
             func.coalesce(func.sum(data["total_items"].as_float()), 0),
-            func.coalesce(func.sum(data["success_count"].as_float()), 0),
+            func.coalesce(func.sum(executions), 0),
+            func.coalesce(func.sum(successes), 0),
             func.coalesce(func.sum(case((errors > 0, 1), else_=0)), 0),
         ).where(*conditions)
     ).one()
-    items = int(items)
     return {
         "scope": "filtered" if filtered else "project",
         "runs": int(runs),
         "models": int(models),
-        "items": items,
-        "execution_success": float(successes) / items if items else None,
+        "items": int(items),
+        "execution_success": float(successes) / executions if executions else None,
         "runs_with_errors": int(errored),
     }
 

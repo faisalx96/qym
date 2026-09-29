@@ -85,6 +85,10 @@ from qym_platform.services.run_review import (
     review_history,
     state_conflict,
 )
+from qym_platform.services.execution_errors import (
+    execution_success_fields,
+    repeat_execution_counts,
+)
 from qym_platform.services.metric_semantics import declared_direction, primary_metric
 from qym_platform.services.score_edits import (
     ScoreEditError,
@@ -641,6 +645,14 @@ def _repeat_attempt_summaries(
         summary["total_retries"] = sum(retry_counts_by_pass.values())
         summaries[run_id] = summary
     return summaries
+
+
+def _apply_execution_stats(
+    stats: Dict[str, Any], repeat: Optional[Dict[str, int]] = None
+) -> None:
+    """Snapshot stats: execution success counts and success_rate in percent."""
+    fields = execution_success_fields(stats["total"], stats["completed"], repeat)
+    stats.update(fields, success_rate=fields["success_rate"] * 100.0)
 
 
 def _stringify(val: Any) -> str:
@@ -1689,10 +1701,12 @@ def _compute_run_summary(db: Session, run: Run) -> Dict[str, Any]:
         ).get(run.id, set())
     )
     total_retries = sum(int(it.retry_count or 0) for it in items)
+    repeat_executions = None
     if int(getattr(run, "samples", 1) or 1) > 1:
         repeat_summary = _repeat_attempt_summaries(db, [run.id]).get(run.id, {})
         if "total_retries" in repeat_summary:
             total_retries = int(repeat_summary["total_retries"] or 0)
+        repeat_executions = repeat_execution_counts(db, [run.id]).get(run.id)
     success_count = total_items - error_count
     completed_count = len(
         [it for it in items if (it.output is not None) or (it.error is not None)]
@@ -1785,7 +1799,7 @@ def _compute_run_summary(db: Session, run: Run) -> Dict[str, Any]:
         "execution_error_count": execution_error_count,
         **{k: v for k, v in error_details[run.id].items() if k != "pass_error_counts"},
         "total_retries": total_retries,
-        "success_rate": (success_count / total_items) if total_items else 0.0,
+        **execution_success_fields(total_items, success_count, repeat_executions),
         "avg_latency_ms": avg_latency_ms,
         "median_latency_ms": median_latency_ms,
         "langfuse_url": run.run_metadata.get("langfuse_url")
@@ -2468,6 +2482,7 @@ def legacy_list_runs(
     # the scan-oriented list intentionally exposes only point estimates.
     sampled_run_ids = [r.id for r in runs if int(getattr(r, "samples", 1) or 1) > 1]
     repeat_attempt_summaries = _repeat_attempt_summaries(db, sampled_run_ids)
+    repeat_executions = repeat_execution_counts(db, sampled_run_ids)
     for run_id, attempt_summary in repeat_attempt_summaries.items():
         agg = item_agg.setdefault(
             run_id,
@@ -2775,7 +2790,9 @@ def legacy_list_runs(
                 k: v for k, v in error_details[r.id].items() if k != "pass_error_counts"
             },
             "total_retries": total_retries,
-            "success_rate": (success_count / total_items) if total_items else 0.0,
+            **execution_success_fields(
+                total_items, success_count, repeat_executions.get(r.id)
+            ),
             "avg_latency_ms": agg["avg_latency"],
             "median_latency_ms": agg.get("median_latency", 0.0),
             "duration_ms": duration_ms,
@@ -3229,10 +3246,13 @@ def _build_models_runs_data(db: Session, runs: list[Run]) -> list[dict[str, Any]
             # Only errored items carry passes: not a per-pass snapshot.
             runs_data[run_id]["snapshot"]["pass_scores_scope"] = "errored"
 
+    repeat_executions = repeat_execution_counts(
+        db,
+        [run.id for run in runs if int(getattr(run, "samples", 1) or 1) > 1],
+        prefer_published=True,
+    )
     for run_id, stats in stats_by_run.items():
-        stats["success_rate"] = (
-            (stats["completed"] / stats["total"] * 100.0) if stats["total"] else 0.0
-        )
+        _apply_execution_stats(stats, repeat_executions.get(run_id))
         runs_data[run_id]["snapshot"]["stats"] = stats
 
     return [runs_data[run.id] for run in runs if run.id in runs_data]
@@ -3754,8 +3774,16 @@ def _build_run_data(
         if compact:
             ui_rows[-1] = compact_row(ui_rows[-1], meta_keys)
 
-    stats["success_rate"] = (
-        (stats["completed"] / stats["total"] * 100.0) if stats["total"] else 0.0
+    # Whole-run builds count repeat-run item passes, from the current
+    # publication when there is one (a source scan adds a third to the build).
+    # Item batches (details, search) use only their rows.
+    _apply_execution_stats(
+        stats,
+        (
+            repeat_execution_counts(db, [run.id], prefer_published=True).get(run.id)
+            if run_samples > 1 and item_ids is None
+            else None
+        ),
     )
 
     # Extract Langfuse host/project_id from run metadata (langfuse_url fallback)
@@ -3820,6 +3848,8 @@ def _build_run_data(
                 "samples": run_samples,
                 "error_count": stats["failed"],
                 "execution_error_count": len(execution_error_pairs),
+                "execution_count": stats["execution_count"],
+                "execution_success_count": stats["execution_success_count"],
                 "last_completed_pass": (
                     run_metadata.get("last_completed_pass")
                     if isinstance(run_metadata, dict)
