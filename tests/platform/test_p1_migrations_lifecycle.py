@@ -12,7 +12,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy import column, create_engine, inspect, select, table, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -61,6 +61,20 @@ def postgres(request, monkeypatch):
     return engine, config
 
 
+def insert_legacy_run(db, **values):
+    """Insert a run with only the given columns, so it works at old revisions.
+
+    The ORM ``Run`` writes every mapped column, including ones added by later
+    migrations (e.g. ``origin`` in 0061); omitted columns use server defaults.
+    """
+    now = datetime.now()
+    values = {"created_at": now, "updated_at": now, **values}
+    runs = table(
+        "runs", *(column(name, Run.__table__.c[name].type) for name in values)
+    )
+    db.execute(runs.insert().values(**values))
+
+
 def seed(engine, *, before_dashboard=False):
     with Session(engine) as db:
         if before_dashboard:
@@ -73,25 +87,22 @@ def seed(engine, *, before_dashboard=False):
             )
         )
         db.flush()
-        db.add(
-            Run(
-                id="run",
-                project_id="project",
-                owner_user_id="owner",
-                created_by_user_id="owner",
-                task="test",
-                dataset="test",
-                model=None,
-                metrics=["quality"],
-                run_config={},
-                run_metadata={"total_items": 1},
-                status=RunWorkflowStatus.COMPLETED,
-                created_at=datetime.now(),
-                started_at=datetime.now(),
-                last_event_at=datetime.now(),
-            )
+        insert_legacy_run(
+            db,
+            id="run",
+            project_id="project",
+            owner_user_id="owner",
+            created_by_user_id="owner",
+            task="test",
+            dataset="test",
+            model=None,
+            metrics=["quality"],
+            run_config={},
+            run_metadata={"total_items": 1},
+            status=RunWorkflowStatus.COMPLETED,
+            started_at=datetime.now(),
+            last_event_at=datetime.now(),
         )
-        db.flush()
         db.add(
             ProjectAnalysisCategoryCatalogVersion(
                 id="catalog",
@@ -149,7 +160,7 @@ def source_snapshot(engine):
     with Session(engine) as db:
         source = db.scalar(select(RunItem))
         return {
-            "run": db.get(Run, "run").id,
+            "run": db.scalar(select(Run.id).where(Run.id == "run")),
             "input": source.input,
             "output": source.output,
             "score": db.scalar(select(RunItemScore.score_numeric)),
@@ -176,7 +187,7 @@ def test_postgres_full_chain_upgrade_p1_downgrade_reupgrade(postgres, populated)
     command.upgrade(config, "head")
     with engine.connect() as connection:
         assert (
-            connection.scalar(text("select version_num from alembic_version")) == "0060"
+            connection.scalar(text("select version_num from alembic_version")) == "0061"
         )
         inspector = inspect(connection)
         assert "ix_dashboard_event_retention" in {
