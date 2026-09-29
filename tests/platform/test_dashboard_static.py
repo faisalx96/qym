@@ -1741,8 +1741,9 @@ def test_changed_route_assets_are_cache_versioned() -> None:
     assert "/static/docs.js?v=ui-consistency-20260730-18-xss-rendering" in docs
     # The project-not-found page loads the same shared shell assets as the
     # dashboard pages, every one of them versioned.
-    for asset in ("dashboard.css", "shell.css", "auth.js", "shell.js"):
+    for asset in ("shell.css", "auth.js", "shell.js"):
         assert f'{{static_root}}/{asset}?v=p0-integration-20260929"' in runs_api
+    assert '{static_root}/dashboard.css?v=p0-integration-20260929-frozen-columns"' in runs_api
 
 
 def test_every_page_versions_the_shared_shell_assets() -> None:
@@ -2210,8 +2211,8 @@ def test_clear_filter_control_has_aligned_label_and_soft_count_pill() -> None:
     for page in DASHBOARD_DIR.glob("*.html"):
         source = page.read_text(encoding="utf-8")
         if page.name == "analyzer.html":
-            assert "dashboard.css?v=p0-integration-20260929" in source
-            assert "playground.js?v=p0-integration-20260929" in source
+            assert "dashboard.css?v=p0-integration-20260929-frozen-columns" in source
+            assert "playground.js?v=p0-integration-20260929-frozen-columns" in source
             assert "ui_components.css?v=auto-analysis-selectors-20260811-1-xss-rendering" in source
             assert "ui_components.js?v=auto-analysis-selectors-20260811-1" in source
             continue
@@ -3407,7 +3408,7 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert '"type": "retrying"' in analysis_api
     assert "state.phase === 'retrying'" in playground
     assert "Retrying timed-out analysis…" in playground
-    assert "playground.js?v=p0-integration-20260929" in (
+    assert "playground.js?v=p0-integration-20260929-frozen-columns" in (
         DASHBOARD_DIR / "analyzer.html"
     ).read_text(encoding="utf-8")
     assert "Timeout retries: <strong>" in playground
@@ -3986,7 +3987,7 @@ def test_runs_table_sticky_columns_size_to_visible_values() -> None:
     dashboard_js = (DASHBOARD_DIR / "dashboard.js").read_text(encoding="utf-8")
     styles = (DASHBOARD_DIR / "dashboard.css").read_text(encoding="utf-8")
 
-    assert "const RUNS_STICKY_COLUMN_LIMITS" in dashboard_js
+    assert "const RUNS_IDENTITY_COLUMNS" in dashboard_js
     assert "function scheduleRunsStickyColumnSizing()" in dashboard_js
     assert "runs-table--measuring-sticky-columns" in dashboard_js
     assert "scheduleRunsStickyColumnSizing();" in dashboard_js
@@ -3999,7 +4000,9 @@ def test_runs_table_sticky_columns_size_to_visible_values() -> None:
     assert "text-overflow: clip" in styles
 
 
-def test_runs_table_freezes_dataset_owner_and_date_with_identity_columns() -> None:
+def test_runs_table_freezes_the_chosen_identity_columns() -> None:
+    """C002: the reader picks the frozen identity columns (all seven by
+    default); offsets come from the frozen set, not a fixed calc() chain."""
     markup = (DASHBOARD_DIR / "index.html").read_text(encoding="utf-8")
     source = DASHBOARD_JS.read_text(encoding="utf-8")
     styles = (DASHBOARD_DIR / "dashboard.css").read_text(encoding="utf-8")
@@ -4008,10 +4011,6 @@ def test_runs_table_freezes_dataset_owner_and_date_with_identity_columns() -> No
     status_header = markup.index('class="col-status sortable" data-sort="status"')
     assert run_header < status_header
     assert markup.index("RUN NAME", run_header, status_header)
-    run_rule = _rule(styles, ".runs-table .col-run {")
-    status_rule = _rule(styles, ".runs-table .col-status {")
-    assert "left: 0;" in run_rule
-    assert "left: var(--runs-col-run-width);" in status_rule
 
     run_row = source.index('data-can-delete-pass=')
     assert source.index('<td class="col-run">', run_row) < source.index(
@@ -4030,12 +4029,40 @@ def test_runs_table_freezes_dataset_owner_and_date_with_identity_columns() -> No
         markup.index('class="col-analysis"'),
     ]
     assert identity_headers == sorted(identity_headers)
-    for column in ("dataset", "owner", "time"):
-        rule = _rule(styles, f".runs-table .col-{column} {{")
+
+    # Default: exactly today's seven frozen columns, Date casting the edge.
+    assert (
+        '<table class="runs-table" data-frozen-columns="run status task model '
+        'dataset owner time" data-frozen-edges="time">'
+    ) in markup
+    keys = ("run", "status", "task", "model", "dataset", "owner", "time")
+    for column in keys:
+        rule = _rule(
+            styles, f'.runs-table[data-frozen-columns~="{column}"] .col-{column} {{'
+        )
         assert "position: sticky;" in rule
-        assert "left: calc(" in rule
-        assert f"th.col-{column}" in styles
+        assert f"left: var(--runs-col-{column}-left, auto);" in rule
+        assert f'.runs-table[data-frozen-columns~="{column}"] thead th.col-{column}' in styles
+        assert f'.runs-table[data-frozen-edges~="{column}"] .col-{column}::before' in styles
         assert f"td.col-{column}" in styles
+    # No hard-coded chain of widths, and no identity column is sticky on its own.
+    assert "left: calc(var(--runs-col-" not in styles
+    for column in keys:
+        assert f".runs-table .col-{column} {{" not in styles
+    edge_rule = _rule(styles, '.runs-table[data-frozen-edges~="run"] .col-run::before')
+    assert "box-shadow: 4px 0 8px rgba(0, 0, 0, 0.25);" in edge_rule
+    assert "pointer-events: none;" in edge_rule
+
+    # JS writes the offsets from the measured widths of the frozen set only,
+    # remembers the choice per browser, and offers it in the Columns menu.
+    assert "applyRunsFrozenColumns(table, widths);" in source
+    assert "table.style.setProperty(`--runs-col-${column.key}-left`, `${left}px`);" in source
+    assert "const RUNS_FROZEN_COLUMNS_STORAGE_KEY = 'qym:runs-frozen-columns';" in source
+    assert "renderRunsFrozenColumnsSection(searchValue);" in source
+    assert '<div role="group" aria-labelledby="mv-frozen-label">' in source
+    assert "Reset to default" in source
+    # Focus padding follows the frozen block that is actually stuck.
+    assert "runsFrozenWidth(scroller)" in source
 
     timestamp_rule = _rule(styles, ".timestamp {")
     assert "display: inline-flex;" in timestamp_rule

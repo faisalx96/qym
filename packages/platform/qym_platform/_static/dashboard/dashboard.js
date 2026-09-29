@@ -204,6 +204,7 @@
     chartFirstColWidth: 320,
     allMetrics: [],   // All unique metric names across runs
     visibleMetrics: null, // null = all visible; Set of visible metric names
+    runsFrozenColumns: null, // Runs identity columns frozen on scroll; null = not loaded yet
     allModels: [],    // All unique model names
     currentUser: null,
     availableProjects: [],
@@ -1068,6 +1069,12 @@
     const visibleMetrics = new Set(getVisibleMetrics(metricOptions));
     const allVisible = visibleMetrics.size === metricOptions.length;
     const searchValue = dropdown.querySelector('.model-search-input')?.value || '';
+    // A refresh that rebuilds the list keeps keyboard focus on a Frozen
+    // columns control (they change the table without re-rendering).
+    const focusedFrozen = dropdown.contains(document.activeElement) ? document.activeElement : null;
+    const restoreFrozenFocus = focusedFrozen?.dataset?.frozenColumn
+      ? `input[data-frozen-column="${focusedFrozen.dataset.frozenColumn}"]`
+      : (focusedFrozen?.id === 'mv-frozen-reset' ? '#mv-frozen-reset' : '');
     dropdown.innerHTML =
       '<div class="model-search-box qym-dropdown__search"><input type="text" class="model-search-input qym-control qym-search" placeholder="Search columns..." value="' + escapeHtml(searchValue) + '" /></div>' +
       '<div class="ms-actions qym-dropdown__actions">' +
@@ -1099,7 +1106,8 @@
           const checked = allVisible || visibleMetrics.has(tm.key) ? 'checked' : '';
           const hidden = searchValue && !tm.label.toLowerCase().includes(searchValue.toLowerCase()) ? ' style="display:none"' : '';
           return `<label class="multi-select-option qym-dropdown__option"${hidden}><input type="checkbox" ${checked} data-mv-metric="${escapeHtml(tm.key)}" /><span>${escapeHtml(tm.label)}</span></label>`;
-        }).join('') : '');
+        }).join('') : '') +
+      renderRunsFrozenColumnsSection(searchValue);
 
     // Update button text
     updateMetricVisibilityBtn(metricOptions);
@@ -1111,16 +1119,22 @@
         const q = e.target.value.toLowerCase();
         dropdown.querySelectorAll('.multi-select-option').forEach(opt => {
           const metricCb = opt.querySelector('input[data-mv-metric]');
-          if (!metricCb) return;
-          const m = metricCb.dataset.mvMetric || '';
-          opt.style.display = getMetricDisplayName(m).toLowerCase().includes(q) ? '' : 'none';
+          const frozenCb = opt.querySelector('input[data-frozen-column]');
+          if (!metricCb && !frozenCb) return;
+          const label = metricCb
+            ? getMetricDisplayName(metricCb.dataset.mvMetric || '')
+            : opt.textContent.trim();
+          opt.style.display = label.toLowerCase().includes(q) ? '' : 'none';
         });
       });
       mvSearchInput.addEventListener('click', (e) => e.stopPropagation());
       mvSearchInput.addEventListener('keydown', (e) => e.stopPropagation());
     }
 
-    dropdown.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    wireRunsFrozenColumnControls(dropdown);
+    if (restoreFrozenFocus) dropdown.querySelector(restoreFrozenFocus)?.focus({ preventScroll: true });
+
+    dropdown.querySelectorAll('input[data-mv-metric]').forEach(cb => {
       cb.addEventListener('change', () => {
         const metric = cb.dataset.mvMetric;
         applyMetricVisibilityFromCheckboxes(metricOptions);
@@ -3199,45 +3213,170 @@
     return out;
   }
 
-  const RUNS_STICKY_COLUMN_LIMITS = [
+  // Runs identity columns in table order. Each one sizes to its visible values
+  // (clamped by the CSS min/max vars) and can be frozen on horizontal scroll.
+  const RUNS_IDENTITY_COLUMNS = [
     {
-      selector: '.col-status',
-      widthVar: '--runs-col-status-width',
-      minVar: '--runs-col-status-min-width',
-      maxVar: '--runs-col-status-max-width',
-    },
-    {
+      key: 'run',
+      label: 'Run name',
       selector: '.col-run',
       widthVar: '--runs-col-run-width',
       minVar: '--runs-col-run-min-width',
       maxVar: '--runs-col-run-max-width',
     },
     {
+      key: 'status',
+      label: 'Status',
+      selector: '.col-status',
+      widthVar: '--runs-col-status-width',
+      minVar: '--runs-col-status-min-width',
+      maxVar: '--runs-col-status-max-width',
+    },
+    {
+      key: 'task',
+      label: 'Task',
       selector: '.col-task',
       widthVar: '--runs-col-task-width',
       minVar: '--runs-col-task-min-width',
     },
     {
+      key: 'model',
+      label: 'Model',
       selector: '.col-model',
       widthVar: '--runs-col-model-width',
       minVar: '--runs-col-model-min-width',
     },
     {
+      key: 'dataset',
+      label: 'Dataset',
       selector: '.col-dataset',
       widthVar: '--runs-col-dataset-width',
       minVar: '--runs-col-dataset-min-width',
     },
     {
+      key: 'owner',
+      label: 'Owner',
       selector: '.col-owner',
       widthVar: '--runs-col-owner-width',
       minVar: '--runs-col-owner-min-width',
     },
     {
+      key: 'time',
+      label: 'Date',
       selector: '.col-time',
       widthVar: '--runs-col-time-width',
       minVar: '--runs-col-time-min-width',
     },
   ];
+
+  // Frozen columns (Display > Columns > Frozen columns). All identity columns
+  // are frozen by default; a reader's choice is remembered in this browser.
+  const RUNS_FROZEN_COLUMNS_STORAGE_KEY = 'qym:runs-frozen-columns';
+
+  function getRunsFrozenColumns() {
+    if (!state.runsFrozenColumns) {
+      let saved = null;
+      try {
+        saved = JSON.parse(window.localStorage.getItem(RUNS_FROZEN_COLUMNS_STORAGE_KEY) || 'null');
+      } catch {}
+      state.runsFrozenColumns = RUNS_IDENTITY_COLUMNS
+        .map(column => column.key)
+        .filter(key => !Array.isArray(saved) || saved.includes(key));
+    }
+    return state.runsFrozenColumns;
+  }
+
+  function isDefaultRunsFrozenColumns() {
+    return getRunsFrozenColumns().length === RUNS_IDENTITY_COLUMNS.length;
+  }
+
+  function setRunsFrozenColumns(keys) {
+    const chosen = new Set(keys);
+    state.runsFrozenColumns = RUNS_IDENTITY_COLUMNS
+      .map(column => column.key)
+      .filter(key => chosen.has(key));
+    try {
+      if (isDefaultRunsFrozenColumns()) {
+        window.localStorage.removeItem(RUNS_FROZEN_COLUMNS_STORAGE_KEY);
+      } else {
+        window.localStorage.setItem(RUNS_FROZEN_COLUMNS_STORAGE_KEY, JSON.stringify(state.runsFrozenColumns));
+      }
+    } catch {}
+    syncRunsFrozenColumnControls();
+    scheduleRunsStickyColumnSizing();
+  }
+
+  // The Frozen columns section of the Columns dropdown (Runs table only).
+  function renderRunsFrozenColumnsSection(searchValue) {
+    if (state.currentView !== 'table') return '';
+    const frozen = new Set(getRunsFrozenColumns());
+    const query = String(searchValue || '').toLowerCase();
+    return '<div class="mv-trace-separator"></div>' +
+      '<div class="mv-frozen-header">' +
+        '<div class="mv-trace-label" id="mv-frozen-label">Frozen columns</div>' +
+        '<button type="button" class="qym-dropdown__action mv-frozen-reset" id="mv-frozen-reset">Reset to default</button>' +
+      '</div>' +
+      '<div role="group" aria-labelledby="mv-frozen-label">' +
+      RUNS_IDENTITY_COLUMNS.map(column => {
+        const hidden = query && !column.label.toLowerCase().includes(query) ? ' style="display:none"' : '';
+        return `<label class="multi-select-option qym-dropdown__option"${hidden}><input type="checkbox" ${frozen.has(column.key) ? 'checked' : ''} data-frozen-column="${escapeHtml(column.key)}" /><span>${escapeHtml(column.label)}</span></label>`;
+      }).join('') +
+      '</div>';
+  }
+
+  function wireRunsFrozenColumnControls(dropdown) {
+    dropdown.querySelectorAll('input[data-frozen-column]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        setRunsFrozenColumns(Array.from(dropdown.querySelectorAll('input[data-frozen-column]'))
+          .filter(input => input.checked)
+          .map(input => input.dataset.frozenColumn));
+      });
+    });
+    dropdown.querySelector('#mv-frozen-reset')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!isDefaultRunsFrozenColumns()) setRunsFrozenColumns(RUNS_IDENTITY_COLUMNS.map(column => column.key));
+    });
+    syncRunsFrozenColumnControls();
+  }
+
+  function syncRunsFrozenColumnControls() {
+    const dropdown = el('metric-visibility-dropdown');
+    if (!dropdown) return;
+    const frozen = new Set(getRunsFrozenColumns());
+    dropdown.querySelectorAll('input[data-frozen-column]').forEach(cb => {
+      cb.checked = frozen.has(cb.dataset.frozenColumn);
+    });
+    // aria-disabled, not disabled: focus stays on the button after a reset.
+    const reset = dropdown.querySelector('#mv-frozen-reset');
+    if (reset) {
+      const isDefault = isDefaultRunsFrozenColumns();
+      reset.setAttribute('aria-disabled', isDefault ? 'true' : 'false');
+      reset.title = isDefault ? 'Default: all seven columns frozen' : 'Freeze all seven columns again';
+    }
+  }
+
+  // Marks the frozen columns on the table and writes each one's left offset:
+  // the measured width of the frozen columns before it. A frozen column with
+  // a scrolling column (or the table's data) to its right is an edge and
+  // casts the separator shadow.
+  function applyRunsFrozenColumns(table, widths) {
+    const frozen = new Set(getRunsFrozenColumns());
+    const edges = [];
+    let left = 0;
+    RUNS_IDENTITY_COLUMNS.forEach((column, index) => {
+      if (!frozen.has(column.key)) {
+        table.style.removeProperty(`--runs-col-${column.key}-left`);
+        return;
+      }
+      table.style.setProperty(`--runs-col-${column.key}-left`, `${left}px`);
+      left += widths[column.key] || 0;
+      const next = RUNS_IDENTITY_COLUMNS[index + 1];
+      if (!next || !frozen.has(next.key)) edges.push(column.key);
+    });
+    table.dataset.frozenColumns = getRunsFrozenColumns().join(' ');
+    table.dataset.frozenEdges = edges.join(' ');
+  }
 
   // Frozen (horizontally sticky) cells of the runs table.
   function isRunsFrozenCell(cell) {
@@ -3245,12 +3384,25 @@
     return !!style && style.position === 'sticky' && style.left !== 'auto';
   }
 
+  // Width of the frozen block once it is stuck: the right edge of the
+  // rightmost frozen column at its sticky offset. Frozen columns need not be
+  // adjacent (Run name and Date), so this is not where a frozen header sits
+  // right now, which can be further right until the table scrolls.
+  function runsFrozenWidth(scroller) {
+    return Array.from(scroller.querySelectorAll('.runs-table thead th'))
+      .filter(isRunsFrozenCell)
+      .reduce((width, th) => Math.max(
+        width,
+        (Number.parseFloat(getComputedStyle(th).left) || 0) + th.getBoundingClientRect().width,
+      ), 0);
+  }
+
   function isRunsTableAtEnd(scroller) {
     return scroller.scrollLeft > 0
       && scroller.scrollLeft >= scroller.scrollWidth - scroller.clientWidth - 1;
   }
 
-  // Keyboard focus must not land under the frozen identity block (WCAG 2.4.11).
+  // Keyboard focus must not land under the frozen columns (WCAG 2.4.11).
   // Chromium scrolls a newly focused control into view before `focusin`, so
   // this moves the table until the control clears the frozen edge, and keeps
   // that edge as scroll padding so the next focus scroll already stops there.
@@ -3274,18 +3426,20 @@
       scroller.style.scrollPaddingLeft = '';
       return;
     }
+    const frozenWidth = runsFrozenWidth(scroller);
     const view = scroller.getBoundingClientRect();
-    const frozenRight = Array.from(scroller.querySelectorAll('.runs-table thead th'))
-      .filter(isRunsFrozenCell)
-      .reduce((edge, th) => Math.max(edge, th.getBoundingClientRect().right), view.left);
+    const portLeft = view.left + scroller.clientLeft;
     const box = target.getBoundingClientRect();
-    // A window narrower than the control keeps its right part in view.
-    const padding = Math.max(0, Math.floor(Math.min(
-      frozenRight - view.left + RUNS_FOCUS_CLEARANCE_PX, scroller.clientWidth - box.width
-    )));
-    scroller.style.scrollPaddingLeft = `${padding}px`;
-    const visibleLeft = view.left + padding;
-    const visibleRight = view.left + scroller.clientWidth;
+    // A window narrower than the control keeps its right part in view. With
+    // nothing frozen this only completes a control cut by the table's edge.
+    const padding = frozenWidth > 0
+      ? Math.max(0, Math.floor(Math.min(
+        frozenWidth + RUNS_FOCUS_CLEARANCE_PX, scroller.clientWidth - box.width
+      )))
+      : 0;
+    scroller.style.scrollPaddingLeft = padding ? `${padding}px` : '';
+    const visibleLeft = portLeft + padding;
+    const visibleRight = portLeft + scroller.clientWidth;
     if (box.left < visibleLeft) scroller.scrollLeft -= visibleLeft - box.left;
     else if (box.right > visibleRight) scroller.scrollLeft += box.right - visibleRight;
   }
@@ -3312,7 +3466,7 @@
       const computed = getComputedStyle(table);
       const measured = [];
       try {
-        RUNS_STICKY_COLUMN_LIMITS.forEach(config => {
+        RUNS_IDENTITY_COLUMNS.forEach(config => {
           const header = table.querySelector(`thead ${config.selector}`);
           if (!header) return;
           const naturalWidth = Math.ceil(header.getBoundingClientRect().width);
@@ -3321,6 +3475,7 @@
             ? Number.parseFloat(computed.getPropertyValue(config.maxVar))
             : Infinity;
           measured.push({
+            key: config.key,
             widthVar: config.widthVar,
             width: Math.min(maxWidth, Math.max(minWidth, naturalWidth)),
           });
@@ -3328,9 +3483,12 @@
       } finally {
         table.classList.remove('runs-table--measuring-sticky-columns');
       }
-      measured.forEach(({ widthVar, width }) => {
+      const widths = {};
+      measured.forEach(({ key, widthVar, width }) => {
         table.style.setProperty(widthVar, `${width}px`);
+        widths[key] = width;
       });
+      applyRunsFrozenColumns(table, widths);
       if (scroller) {
         scroller.scrollLeft = keepEnd ? scroller.scrollWidth : scrollLeft;
         state._runsTableAtEnd = keepEnd || isRunsTableAtEnd(scroller);

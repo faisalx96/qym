@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Runs</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p0-integration-20260929">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p0-integration-20260929-frozen-columns">
   <link rel="stylesheet" href="/static/shell.css?v=p0-integration-20260929">
   <script src="/static/qym_safe.js?v=xss-rendering-20260928"></script>
   <script src="/static/auth.js?v=p0-integration-20260929"></script>
@@ -81,7 +81,7 @@
     <!-- Table View -->
     <div id="table-view" class="table-container" style="display:none;">
       <div class="table-scroll" id="runs-table-scroll">
-        <table class="runs-table">
+        <table class="runs-table" data-frozen-columns="run status task model dataset owner time" data-frozen-edges="time">
           <thead>
             <tr id="table-header-row">
               <th class="col-run sortable" data-sort="run">
@@ -218,6 +218,6 @@
   <script>window.__QYM_INITIAL_VIEW__ = 'table';</script>
   <script src="/static/metrics.js?v=p0-integration-20260929"></script>
   <script src="/static/qym_table.js"></script>
-  <script src="/static/dashboard.js?v=runs-performance-p0-integration-20260929"></script>
+  <script src="/static/dashboard.js?v=runs-performance-p0-integration-20260929-frozen-columns"></script>
 </body>
 </html>
