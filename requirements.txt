@@ -38,6 +38,7 @@ dataiku-api-client>=13.0.0
 openai>=1.40.0
 scipy>=1.9.0
 cryptography>=42.0.0
+jsonschema>=4.0.0
 sqlglot>=23.0.0
 
 # SDK development tools
