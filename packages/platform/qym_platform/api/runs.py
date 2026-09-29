@@ -1231,11 +1231,11 @@ def _project_not_found_page(request: Request, project_slug: str) -> HTMLResponse
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Project Not Found</title>
   <link rel="icon" type="image/png" href="{static_root}/qym_icon.png">
-  <link rel="stylesheet" href="{static_root}/dashboard.css?v=p0-integration-20260929-frozen-columns">
-  <link rel="stylesheet" href="{static_root}/shell.css?v=p0-integration-20260929">
-  <script src="{static_root}/qym_safe.js?v=xss-rendering-20260928"></script>
-  <script src="{static_root}/auth.js?v=p0-integration-20260929"></script>
-  <script src="{static_root}/shell.js?v=p0-integration-20260929-archive-readonly"></script>
+  <link rel="stylesheet" href="{static_root}/dashboard.css?v=p0-20260930">
+  <link rel="stylesheet" href="{static_root}/shell.css?v=p0-20260930">
+  <script src="{static_root}/qym_safe.js?v=p0-20260930"></script>
+  <script src="{static_root}/auth.js?v=p0-20260930"></script>
+  <script src="{static_root}/shell.js?v=p0-20260930"></script>
 </head>
 <body>
   <main style="min-height:50vh;display:flex;align-items:center;justify-content:center;padding:32px;color:var(--text-muted);">
