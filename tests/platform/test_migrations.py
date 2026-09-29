@@ -42,7 +42,7 @@ def test_alembic_has_one_upgrade_head() -> None:
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["0061"]
+    assert heads == ["0062"]
 
 
 def test_subcategory_taxonomy_migration_preserves_rows_and_defaults_json(
@@ -711,8 +711,13 @@ def test_eval_experiments_migration_sqlite_upgrade_and_downgrade(
     engine.dispose()
 
 
-def _eval_experiment_model_diffs(connection: sa.Connection) -> list[Any]:
-    """Diff the ORM models against the 0060/0061 tables and ``runs`` additions."""
+def _eval_experiment_model_diffs(
+    connection: sa.Connection, extra_tables: frozenset[str] = frozenset()
+) -> list[Any]:
+    """Diff the ORM models against the 0060/0061 tables and ``runs`` additions.
+
+    ``extra_tables`` adds tables from later revisions (e.g. 0062 presets).
+    """
     from alembic.autogenerate import compare_metadata
     from qym_platform.db.base import Base
 
@@ -722,7 +727,7 @@ def _eval_experiment_model_diffs(connection: sa.Connection) -> list[Any]:
         table = obj if kind == "table" else getattr(obj, "table", None)
         if table is None:
             return False
-        if table.name in EVAL_TABLES | EXPERIMENT_TABLES:
+        if table.name in EVAL_TABLES | EXPERIMENT_TABLES | extra_tables:
             return True
         if table.name != "runs":
             return False
@@ -805,3 +810,282 @@ def test_eval_experiments_migration_postgres_upgrade_and_downgrade(
 
         migration.upgrade()
         assert EXPERIMENT_TABLES <= set(sa.inspect(connection).get_table_names())
+
+
+PRESET_TABLES = frozenset({"eval_config_presets", "eval_config_preset_versions"})
+
+
+def _eval_preset_prerequisites(
+    engine: sa.engine.Engine, monkeypatch: pytest.MonkeyPatch
+) -> ModuleType:
+    """Build the pre-0062 schema (0060 + 0061) with an environment and schema."""
+    previous = _eval_experiment_prerequisites(engine, monkeypatch)
+    with engine.begin() as connection:
+        monkeypatch.setattr(
+            previous, "op", Operations(MigrationContext.configure(connection))
+        )
+        previous.upgrade()
+    return _load_migration("0062_eval_config_presets.py")
+
+
+def _insert_preset(connection: sa.Connection, preset_id: str, **values: Any) -> None:
+    _insert_row(
+        connection,
+        "eval_config_presets",
+        **{
+            "id": preset_id,
+            "environment_id": "e1",
+            "name": preset_id,
+            "kind": "saved",
+            "created_by_user_id": "u",
+            "created_at": TS,
+            "updated_at": TS,
+            **values,
+        },
+    )
+
+
+def _insert_preset_version(
+    connection: sa.Connection, version_id: str, **values: Any
+) -> None:
+    _insert_row(
+        connection,
+        "eval_config_preset_versions",
+        **{
+            "id": version_id,
+            "preset_id": "official",
+            "version": 1,
+            "schema_id": "s1",
+            "config": '{"evaluator": {}, "env_overrides": {}, "slot_bindings": {}}',
+            "published_by_user_id": "u",
+            "published_at": TS,
+            **values,
+        },
+    )
+
+
+def _assert_eval_preset_constraints(connection: sa.Connection) -> None:
+    """Exercise 0062 defaults, uniqueness, checks and FK actions."""
+
+    def scalar(sql: str) -> Any:
+        return connection.execute(sa.text(sql)).scalar_one()
+
+    def rejected(insert: Any, row_id: str, **values: Any) -> None:
+        with pytest.raises(sa.exc.IntegrityError):
+            with connection.begin_nested():
+                insert(connection, row_id, **values)
+
+    def statement_rejected(sql: str) -> None:
+        with pytest.raises(sa.exc.IntegrityError):
+            with connection.begin_nested():
+                connection.execute(sa.text(sql))
+
+    _insert_environment(connection, "e2", base_url="https://second.test")
+
+    # At most one official preset per environment; saved ones are unlimited.
+    _insert_preset(connection, "official", kind="official")
+    rejected(_insert_preset, "official-2", kind="official")
+    _insert_preset(connection, "official-e2", kind="official", environment_id="e2")
+    _insert_preset(connection, "saved-1")
+    _insert_preset(connection, "saved-2", name="saved-1")
+    rejected(_insert_preset, "bad-kind", kind="draft")
+    rejected(_insert_preset, "bad-env", environment_id="missing")
+    statement_rejected(
+        "UPDATE eval_config_presets SET kind = 'official' WHERE id = 'saved-2'"
+    )
+    preset = (
+        connection.execute(
+            sa.text("SELECT * FROM eval_config_presets WHERE id = 'official'")
+        )
+        .mappings()
+        .one()
+    )
+    assert preset["current_version_id"] is None
+
+    _insert_preset_version(connection, "v1")
+    version = (
+        connection.execute(sa.text("SELECT * FROM eval_config_preset_versions"))
+        .mappings()
+        .one()
+    )
+    assert version["notes"] == ""
+    # One row per (preset, version); versions start at 1.
+    rejected(_insert_preset_version, "v1-dup")
+    rejected(_insert_preset_version, "v0", version=0)
+    rejected(_insert_preset_version, "bad-schema", version=9, schema_id="missing")
+    _insert_preset_version(connection, "v2", version=2, notes="Raise temperature")
+    _insert_preset_version(connection, "saved-v1", preset_id="saved-1")
+    connection.execute(
+        sa.text(
+            "UPDATE eval_config_presets SET current_version_id = 'v2' "
+            "WHERE id = 'official'"
+        )
+    )
+    statement_rejected(
+        "UPDATE eval_config_presets SET current_version_id = 'missing' "
+        "WHERE id = 'official'"
+    )
+
+    # Deleting the current version clears the pointer.
+    connection.execute(
+        sa.text("DELETE FROM eval_config_preset_versions WHERE id = 'v2'")
+    )
+    assert (
+        scalar(
+            "SELECT current_version_id FROM eval_config_presets WHERE id = 'official'"
+        )
+        is None
+    )
+    # Deleting a publisher keeps the version.
+    connection.execute(sa.text("INSERT INTO users (id) VALUES ('publisher')"))
+    _insert_preset_version(
+        connection, "v3", version=3, published_by_user_id="publisher"
+    )
+    connection.execute(sa.text("DELETE FROM users WHERE id = 'publisher'"))
+    assert (
+        scalar(
+            "SELECT published_by_user_id FROM eval_config_preset_versions "
+            "WHERE id = 'v3'"
+        )
+        is None
+    )
+
+    # Deleting a preset cascades to its versions, including its current one.
+    connection.execute(
+        sa.text(
+            "UPDATE eval_config_presets SET current_version_id = 'saved-v1' "
+            "WHERE id = 'saved-1'"
+        )
+    )
+    connection.execute(sa.text("DELETE FROM eval_config_presets WHERE id = 'saved-1'"))
+    assert (
+        scalar(
+            "SELECT COUNT(*) FROM eval_config_preset_versions "
+            "WHERE preset_id = 'saved-1'"
+        )
+        == 0
+    )
+
+    # Regression: a project hard-delete reaches versions through presets and
+    # through schemas, and clears current_version_id pointers on the way. It
+    # must succeed with presets, versions, experiments and jobs present.
+    connection.execute(
+        sa.text(
+            "UPDATE eval_config_presets SET current_version_id = 'v3' "
+            "WHERE id = 'official'"
+        )
+    )
+    _insert_experiment(connection, "x1")
+    _insert_job(connection, "j1")
+    connection.execute(sa.text("DELETE FROM project_llm_connections"))
+    connection.execute(sa.text("DELETE FROM projects WHERE id = 'p1'"))
+    for table in (
+        "eval_environments",
+        "eval_environment_schemas",
+        "eval_experiment_jobs",
+        *sorted(PRESET_TABLES),
+    ):
+        assert scalar(f"SELECT COUNT(*) FROM {table}") == 0
+
+
+def _assert_eval_presets_dropped(connection: sa.Connection) -> None:
+    tables = set(sa.inspect(connection).get_table_names())
+    assert not tables & PRESET_TABLES
+    assert EVAL_TABLES | EXPERIMENT_TABLES <= tables
+
+
+def test_eval_presets_migration_sqlite_upgrade_and_downgrade(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = sa.create_engine("sqlite://")
+    migration = _eval_preset_prerequisites(engine, monkeypatch)
+
+    with engine.begin() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+        monkeypatch.setattr(
+            migration, "op", Operations(MigrationContext.configure(connection))
+        )
+        migration.upgrade()
+
+        inspector = sa.inspect(connection)
+        assert PRESET_TABLES <= set(inspector.get_table_names())
+        assert {
+            fk["referred_table"]
+            for fk in inspector.get_foreign_keys("eval_config_presets")
+        } == {"eval_environments", "users", "eval_config_preset_versions"}
+        _assert_eval_preset_constraints(connection)
+
+        migration.downgrade()
+        _assert_eval_presets_dropped(connection)
+
+        # Re-upgrading after a downgrade is clean.
+        migration.upgrade()
+        assert PRESET_TABLES <= set(sa.inspect(connection).get_table_names())
+
+    engine.dispose()
+
+
+def test_eval_presets_migration_matches_models(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The ORM models and migration 0062 describe the same schema."""
+    from qym_platform.db import models
+
+    engine = sa.create_engine("sqlite://")
+    migration = _eval_preset_prerequisites(engine, monkeypatch)
+
+    with engine.begin() as connection:
+        monkeypatch.setattr(
+            migration, "op", Operations(MigrationContext.configure(connection))
+        )
+        migration.upgrade()
+        assert _eval_experiment_model_diffs(connection, PRESET_TABLES) == []
+
+    table = models.EvalConfigPreset.__table__
+    current_fk = next(iter(table.c.current_version_id.foreign_keys))
+    assert current_fk.ondelete == "SET NULL" and current_fk.use_alter
+    assert next(iter(table.c.environment_id.foreign_keys)).ondelete == "CASCADE"
+    engine.dispose()
+
+
+def test_eval_presets_migration_postgres_upgrade_and_downgrade(
+    monkeypatch: pytest.MonkeyPatch, postgres_engine: sa.engine.Engine
+) -> None:
+    migration = _eval_preset_prerequisites(postgres_engine, monkeypatch)
+
+    with postgres_engine.begin() as connection:
+        monkeypatch.setattr(
+            migration, "op", Operations(MigrationContext.configure(connection))
+        )
+        migration.upgrade()
+
+        inspector = sa.inspect(connection)
+        assert PRESET_TABLES <= set(inspector.get_table_names())
+        current_fk = next(
+            fk
+            for fk in inspector.get_foreign_keys("eval_config_presets")
+            if fk["name"] == "fk_eval_config_presets_current_version"
+        )
+        assert current_fk["referred_table"] == "eval_config_preset_versions"
+        assert current_fk["options"].get("ondelete") == "SET NULL"
+        official_index = next(
+            index
+            for index in inspector.get_indexes("eval_config_presets")
+            if index["name"] == "ux_eval_config_presets_official_env"
+        )
+        assert official_index["unique"]
+        assert "official" in str(official_index["dialect_options"]["postgresql_where"])
+        config = next(
+            column
+            for column in inspector.get_columns("eval_config_preset_versions")
+            if column["name"] == "config"
+        )
+        assert config["type"].__class__.__name__ == "JSONB"
+        assert _eval_experiment_model_diffs(connection, PRESET_TABLES) == []
+        _assert_eval_preset_constraints(connection)
+
+        migration.downgrade()
+        _assert_eval_presets_dropped(connection)
+
+        migration.upgrade()
+        assert PRESET_TABLES <= set(sa.inspect(connection).get_table_names())

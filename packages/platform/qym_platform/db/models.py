@@ -124,6 +124,13 @@ class RunOrigin(str, enum.Enum):
     OFFICIAL = "official"
 
 
+class EvalConfigPresetKind(str, enum.Enum):
+    """``official``: the environment's manager-published defaults (at most one)."""
+
+    OFFICIAL = "official"
+    SAVED = "saved"
+
+
 def _string_enum(enum_cls: type[enum.Enum], length: int) -> Enum:
     """VARCHAR-backed enum storing member values; no native PostgreSQL type."""
     return Enum(
@@ -834,6 +841,94 @@ class EvalRemoteQueueSnapshot(Base):
     fetched_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     fetch_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     items: Mapped[list[dict[str, Any]]] = mapped_column(BIG_JSON, default=list, nullable=False)
+
+
+class EvalConfigPreset(Base):
+    """A named config starting point for one environment.
+
+    Each environment has at most one ``official`` preset (the published
+    defaults); members may keep any number of ``saved`` ones. Content lives in
+    immutable ``EvalConfigPresetVersion`` rows; ``current_version_id`` points
+    at the latest published one.
+    """
+
+    __tablename__ = "eval_config_presets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    # Cascades so a project hard-delete succeeds; the API soft-disables an
+    # environment that has presets instead of deleting it.
+    environment_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_environments.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    kind: Mapped[EvalConfigPresetKind] = mapped_column(
+        _string_enum(EvalConfigPresetKind, 10), nullable=False
+    )
+    current_version_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey(
+            "eval_config_preset_versions.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_eval_config_presets_current_version",
+        ),
+        nullable=True,
+    )
+    created_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    __table_args__ = (
+        # At most one official preset per environment.
+        Index(
+            "ux_eval_config_presets_official_env",
+            "environment_id",
+            unique=True,
+            postgresql_where=text("kind = 'official'"),
+            sqlite_where=text("kind = 'official'"),
+        ),
+        CheckConstraint(
+            "kind IN ('official', 'saved')", name="ck_eval_config_presets_kind"
+        ),
+    )
+
+
+class EvalConfigPresetVersion(Base):
+    """Immutable published content of a preset.
+
+    ``config`` is a config document without sweeps (``evaluator``,
+    secret-free ``env_overrides``, ``slot_bindings``) authored against
+    ``schema_id``. Publishing adds ``version = n + 1``; rows are never updated.
+    """
+
+    __tablename__ = "eval_config_preset_versions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    preset_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_config_presets.id", ondelete="CASCADE"), nullable=False
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    schema_id: Mapped[str] = mapped_column(
+        ForeignKey("eval_environment_schemas.id", ondelete="CASCADE"), index=True
+    )
+    config: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict, nullable=False)
+    notes: Mapped[str] = mapped_column(
+        Text, default="", server_default="", nullable=False
+    )
+    published_by_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    published_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("preset_id", "version", name="uq_eval_config_preset_version"),
+        CheckConstraint("version >= 1", name="ck_eval_config_preset_versions_version"),
+    )
 
 
 class Run(Base):
