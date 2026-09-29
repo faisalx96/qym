@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="./static/shell.css?v=p0-20260930">
   <script src="./static/qym_safe.js?v=p0-20260930"></script>
   <script src="./static/auth.js?v=p0-20260930"></script>
-  <script src="./static/shell.js?v=p0-20260930"></script>
+  <script src="./static/shell.js?v=p0-20260930-2"></script>
   <style>
     .trash-container {
       padding: var(--space-lg) var(--space-xl);
@@ -332,24 +332,14 @@
         };
       }
 
+      // The page has no toast container of its own; use the shell's.
       function showToast(type, title, message) {
-        const container = el('toast-container');
-        const toast = document.createElement('div');
-        toast.className = `toast toast-${type}`;
-        toast.innerHTML = `
-          <div class="toast-icon">${type === 'success' ? '✓' : '✗'}</div>
-          <div class="toast-content">
-            <div class="toast-title">${escapeHtml(title)}</div>
-            <div class="toast-message">${escapeHtml(message)}</div>
-          </div>
-          <button class="toast-close qym-icon-action" type="button" aria-label="Close notification">×</button>
-        `;
-        toast.querySelector('.toast-close')?.addEventListener('click', () => toast.remove());
-        container.appendChild(toast);
-        setTimeout(() => {
-          toast.classList.add('toast-exit');
-          setTimeout(() => toast.remove(), 300);
-        }, 4000);
+        const text = message ? `${title}: ${message}` : title;
+        if (window.QymShell && window.QymShell.toast) {
+          window.QymShell.toast(text, type === 'success' ? 'success' : 'error');
+        } else if (type !== 'success') {
+          window.alert(text);
+        }
       }
 
       function populateHeaderUser(user) {

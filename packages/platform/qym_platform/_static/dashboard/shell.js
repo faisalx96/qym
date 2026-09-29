@@ -108,12 +108,14 @@
       return { projectSlug: slug, page: page, subId: subId };
     }
 
-    // Legacy run detail: /run/{id} — keep project context from last known project
+    // Legacy run detail: /run/{id} — keep project context from last known project.
+    // That is a guess (the run can belong to another or an archived project), so
+    // the page corrects it with QymShell.setPageProject once the run has loaded.
     const lastSlug = localStorage.getItem('qym:last-project-slug') || null;
     const analyzerMatch = pathname.match(/\/run\/(.+)\/analyzer$/);
-    if (analyzerMatch) return { projectSlug: lastSlug, page: 'analysis', subId: analyzerMatch[1] };
+    if (analyzerMatch) return { projectSlug: lastSlug, page: 'analysis', subId: analyzerMatch[1], guessedProject: true };
     const runMatch = pathname.match(/\/run\/(.+)$/);
-    if (runMatch) return { projectSlug: lastSlug, page: 'run-detail', subId: runMatch[1] };
+    if (runMatch) return { projectSlug: lastSlug, page: 'run-detail', subId: runMatch[1], guessedProject: true };
 
     // Global pages — truly no project
     if (pathname.endsWith('/admin')) return { projectSlug: null, page: 'admin', subId: null };
@@ -243,6 +245,40 @@
 
     var triggerText = document.querySelector('.project-trigger-text');
     if (triggerText && _currentProject) triggerText.textContent = _currentProject.name;
+  }
+
+  // A remembered project that is gone (archived, or access removed) is no
+  // context at all for a guessed route; it is not a "project not found" page.
+  function dropMissingGuessedProject() {
+    if (_routeCtx && _routeCtx.guessedProject && _routeCtx.projectSlug && !projectExists(_routeCtx.projectSlug)) {
+      _routeCtx.projectSlug = null;
+      updateCurrentProjectForRoute();
+    }
+  }
+
+  // Pages reached without a project in the URL (/run/{id}) tell the shell
+  // which project they belong to once they know. An archived project, or one
+  // the user is not a member of, gives no project context: the sidebar shows
+  // no project links and the breadcrumb names the archived project.
+  var _pendingPageProject = null;
+  function setPageProject(project) {
+    if (!_routeCtx) return;
+    if (!_user) {
+      _pendingPageProject = project || null;
+      return;
+    }
+    _pendingPageProject = null;
+    var slug = project && project.slug ? String(project.slug) : null;
+    var usable = !!(slug && !project.archived && projectExists(slug));
+    _routeCtx.projectSlug = usable ? slug : null;
+    _routeCtx.guessedProject = false;
+    _routeCtx.archivedProjectName = !usable && project && project.archived ? String(project.name || slug || '') : null;
+    updateCurrentProjectForRoute();
+    if (usable) {
+      try { localStorage.setItem('qym:last-project-slug', slug); } catch (_err) { /* private mode */ }
+    }
+    renderBreadcrumbs(computeBreadcrumbs(_routeCtx));
+    renderProjectList();
   }
 
   function renderProjectNotFound(projectSlug) {
@@ -488,6 +524,7 @@
       crumbs.push({ label: ctx.subId || 'Run', href: getAppRootPath() + 'run/' + encodeURIComponent(ctx.subId || '') });
       crumbs.push({ label: 'Auto-analysis', current: true });
     } else if (ctx.page === 'run-detail') {
+      if (ctx.archivedProjectName) crumbs.push({ label: 'Archived project: ' + ctx.archivedProjectName, current: true });
       crumbs.push({ label: ctx.subId || 'Run Detail', current: true });
     } else {
       crumbs.push({ label: PAGE_LABELS[ctx.page] || 'Home', current: true });
@@ -918,6 +955,11 @@
       var res = await fetch(apiUrl('v1/admin/projects/' + encodeURIComponent(project.id) + '/archive-preview'), {
         credentials: 'same-origin',
       });
+      if (res.status === 403) {
+        // Not a failed check: only admins can archive, so there is nothing to confirm.
+        toast('Only an admin can archive a project.', 'error');
+        return { confirmed: false };
+      }
       if (res.ok) preview = await res.json();
     } catch (_err) {
       preview = null;
@@ -934,7 +976,8 @@
       warning = {
         lead: count === 1 ? '1 run is still in progress.' : count + ' runs are still in progress.',
         text: 'Archiving stops the project\'s API keys at once, so ' + (count === 1 ? 'its' : 'their')
-          + ' remaining results will be lost. Unarchiving does not bring them back.',
+          + ' remaining results will be lost, and product evals the platform runs for this project are stopped.'
+          + ' Unarchiving does not bring them back.',
         itemsLabel: 'Runs in progress',
         items: runs.map(function (run) {
           var started = formatDateTime(run.started_at);
@@ -1427,9 +1470,11 @@
       history.pushState({ qym: true }, '', url);
     }
 
+    _pendingPageProject = null;
     _routeCtx = parseRoute();
     setActiveNav(_routeCtx.page);
     updateCurrentProjectForRoute();
+    if (_user) dropMissingGuessedProject();
 
     if (_routeCtx.projectSlug && _user && !projectExists(_routeCtx.projectSlug)) {
       renderProjectNotFound(_routeCtx.projectSlug);
@@ -1656,6 +1701,8 @@
       // Fetch all projects for the switcher
       _projects = _user.projects || [];
       updateCurrentProjectForRoute();
+      dropMissingGuessedProject();
+      if (_pendingPageProject) setPageProject(_pendingPageProject);
       if (_routeCtx.projectSlug && !projectExists(_routeCtx.projectSlug)) {
         renderProjectNotFound(_routeCtx.projectSlug);
         return;
@@ -1775,6 +1822,7 @@
     upsertProject: upsertProject,
     removeProject: removeProject,
     projectExists: projectExists,
+    setPageProject: setPageProject,
     renderProjectNotFound: renderProjectNotFound,
     openFormDialog: openFormDialog,
     openDrawer: openDrawer,

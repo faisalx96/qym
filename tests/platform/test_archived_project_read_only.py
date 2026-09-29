@@ -697,6 +697,58 @@ def test_access_removal_and_job_cancel_stay_allowed(archived, session_factory):
         assert db.query(ProjectMembership).filter_by(project_id="pa", user_id="member").count() == 0
 
 
+def test_archiving_stops_the_projects_running_jobs(client, session_factory):
+    """Archived keys cannot call the product-eval stop routes, and nothing an
+    analysis job produces can be saved: archiving stops that work itself."""
+    from qym_platform.api.product_evals import job_manager
+    from qym_platform.services.analysis_jobs import (
+        AnalysisJob,
+        analysis_job_manager,
+        rule_inference_job_manager,
+    )
+    from qym_platform.services.product_evals import ProductEvalJob
+
+    with session_factory() as db:
+        db.add(_run("r-live", status=RunWorkflowStatus.RUNNING, started_at=datetime.utcnow()))
+        db.commit()
+    evals = {
+        "pa": ProductEvalJob(job_id="eval_pa", preset="p", project_id="pa", status="RUNNING"),
+        "other": ProductEvalJob(job_id="eval_other", preset="p", project_id="other", status="RUNNING"),
+    }
+    evals["pa"].runs.append({"attempt": 1, "qym_run_id": "r-live", "status": "RUNNING"})
+
+    def analysis(job_id, scope):
+        return AnalysisJob(
+            run_id=scope, user_id="mgr", auth_type="ui", request_payload={}, job_id=job_id, status="running"
+        )
+
+    analyses = {"run": analysis("an_pa", "r1"), "other": analysis("an_other", "elsewhere")}
+    rules = {"project": analysis("rule_pa", "project:pa"), "other": analysis("rule_other", "project:pb")}
+    for job in evals.values():
+        job_manager._jobs[job.job_id] = job
+    for manager, jobs in ((analysis_job_manager, analyses), (rule_inference_job_manager, rules)):
+        for job in jobs.values():
+            manager._jobs[job.job_id] = job
+    try:
+        response = client.post("/v1/admin/projects/pa/archive", headers=ADMIN)
+        assert response.status_code == 200, response.text
+        assert evals["pa"].stop_requested() and evals["pa"].to_dict()["status"] == "STOPPED"
+        assert not evals["other"].stop_requested()
+        assert analyses["run"].cancel_requested and analyses["run"].status == "cancelled"
+        assert rules["project"].cancel_requested
+        assert analyses["other"].status == "running" and rules["other"].status == "running"
+        with session_factory() as db:
+            live = db.get(Run, "r-live")
+            assert live.status == RunWorkflowStatus.STOPPED
+            assert live.status_reason == "product_eval_stopped"
+    finally:
+        for job in evals.values():
+            job_manager._jobs.pop(job.job_id, None)
+        for manager, jobs in ((analysis_job_manager, analyses), (rule_inference_job_manager, rules)):
+            for job in jobs.values():
+                manager._jobs.pop(job.job_id, None)
+
+
 def test_admin_lifecycle_stays_allowed_on_an_archived_project(archived, session_factory):
     assert archived.post("/v1/admin/projects/pa/archive", headers=ADMIN).status_code == 200
     assert archived.get("/v1/admin/projects/pa/deletion", headers=ADMIN).status_code == 200

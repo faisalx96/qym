@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/static/shell.css?v=p0-20260930">
   <script src="/static/qym_safe.js?v=p0-20260930"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p0-20260930"></script>
+  <script src="/static/shell.js?v=p0-20260930-2"></script>
   <style>
     .settings-page { }
     .settings-header { margin-bottom: var(--space-xl); }
@@ -202,7 +202,7 @@
       <button type="button" role="tab" id="settings-tab-apikeys" class="settings-tab qym-tabs__tab" data-tab="apikeys" aria-selected="false" aria-controls="panel-apikeys">API Keys</button>
       <button type="button" role="tab" id="settings-tab-llm" class="settings-tab qym-tabs__tab" data-tab="llm" aria-selected="false" aria-controls="panel-llm">LLM Connections</button>
       <button type="button" role="tab" id="settings-tab-prompts" class="settings-tab qym-tabs__tab" data-tab="prompts" aria-selected="false" aria-controls="panel-prompts" hidden disabled>AI Prompts</button>
-      <button type="button" role="tab" id="settings-tab-danger" class="settings-tab qym-tabs__tab" data-tab="danger" aria-selected="false" aria-controls="panel-danger">Danger Zone</button>
+      <button type="button" role="tab" id="settings-tab-danger" class="settings-tab qym-tabs__tab" data-tab="danger" aria-selected="false" aria-controls="panel-danger" hidden disabled>Danger Zone</button>
     </div>
 
     <!-- General -->
@@ -728,6 +728,12 @@
         ].map(([label, value]) => `<div class="form-group"><div class="form-label">${escapeHtml(label)}</div><div style="font-size:var(--font-sm);color:var(--text-primary);font-family:var(--font-mono)">${escapeHtml(value)}</div></div>`).join('');
 
         renderPrompts();
+
+        // Archive and Delete are admin-only on the server too.
+        const dangerTab = document.getElementById('settings-tab-danger');
+        const isAdmin = state.me?.role === 'ADMIN';
+        dangerTab.hidden = !isAdmin;
+        dangerTab.disabled = !isAdmin;
 
         // Members tab
         document.getElementById('member-count-label').textContent = `${state.members.length} members in this project`;

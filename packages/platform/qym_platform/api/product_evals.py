@@ -447,6 +447,30 @@ def _stop_product_eval_runs(
     return stopped
 
 
+def stop_project_product_evals(db: Session, project_id: str) -> int:
+    """Stop a project's in-process product evals and mark their runs stopped.
+
+    Archiving turns the project's API keys off, so the job's own key can no
+    longer call the stop routes, and its uploads are refused while the
+    product and judge calls would go on.
+    """
+    run_ids = set()
+    for job in job_manager.stop_project(project_id):
+        snapshot = job.to_dict()
+        run_ids.update(str(row["qym_run_id"]) for row in snapshot["runs"] if row.get("qym_run_id"))
+        if snapshot.get("run_id"):
+            run_ids.add(str(snapshot["run_id"]))
+    if not run_ids:
+        return 0
+    runs = (
+        Run.active(db)
+        .filter(Run.id.in_(sorted(run_ids)), Run.project_id == project_id)
+        .order_by(Run.id)
+        .all()
+    )
+    return _stop_runs(db, runs)
+
+
 def _stop_runs(db: Session, runs: List[Run]) -> int:
     now = utc_now_naive()
     stopped = 0

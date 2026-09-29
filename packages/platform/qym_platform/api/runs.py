@@ -1235,7 +1235,7 @@ def _project_not_found_page(request: Request, project_slug: str) -> HTMLResponse
   <link rel="stylesheet" href="{static_root}/shell.css?v=p0-20260930">
   <script src="{static_root}/qym_safe.js?v=p0-20260930"></script>
   <script src="{static_root}/auth.js?v=p0-20260930"></script>
-  <script src="{static_root}/shell.js?v=p0-20260930"></script>
+  <script src="{static_root}/shell.js?v=p0-20260930-2"></script>
 </head>
 <body>
   <main style="min-height:50vh;display:flex;align-items:center;justify-content:center;padding:32px;color:var(--text-muted);">

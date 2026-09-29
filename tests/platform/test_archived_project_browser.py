@@ -240,6 +240,33 @@ def test_settings_archive_dialog_without_running_runs_stays_as_it_was(app, facto
     assert app.errors == []
 
 
+def test_non_admins_get_no_archive_controls(browser, factory, monkeypatch):
+    """Archive and Delete are admin-only; a project manager never sees the
+    'runs could not be checked' warning for an action the server refuses."""
+    monkeypatch.setenv("QYM_AUTH_MODE", "proxy_headers")
+    with factory() as db:
+        db.add(User(id="mgr", email="mgr@x.com", display_name="Manager", role=UserRole.MEMBER))
+        db.flush()
+        db.add(ProjectMembership(project_id="pa", user_id="mgr", role=ProjectRole.MANAGER))
+        db.commit()
+    app = App(browser, factory)
+    try:
+        app.client.headers["X-User-Email"] = "mgr@x.com"
+        page = app.goto("/projects/pa/settings")
+        page.wait_for_function("() => document.getElementById('project-title').textContent === 'Support bot'")
+        assert page.locator("#settings-tab-danger").is_hidden()
+        assert page.locator("#settings-tab-members").is_visible()
+        # The shared dialog treats the preview's 403 as "admins only", not as a failed check.
+        result = page.evaluate("() => window.QymShell.confirmArchiveProject({ id: 'pa', name: 'Support bot' })")
+        assert result == {"confirmed": False}
+        assert page.locator("#shell-confirm-dialog").count() == 0
+        assert "Only an admin can archive" in page.locator("#shell-toast-container").inner_text()
+        assert _is_active(factory) is True
+        assert app.errors == []
+    finally:
+        app.close()
+
+
 def test_admin_archive_dialog_lists_runs_in_progress(app, factory):
     _add_running_runs(factory, 1)
     page = app.goto("/admin")
@@ -308,6 +335,43 @@ def test_project_run_link_of_an_archived_project_opens_the_read_only_run_page(ap
     assert app.errors == []
 
 
+def _crumbs(page) -> str:
+    return page.locator("#shell-breadcrumbs").inner_text()
+
+
+def test_run_page_takes_the_project_of_its_run_not_the_last_visited(app, factory):
+    """/run/{id} starts from the last visited project; once the run loads the
+    shell shows the run's own project, or no project when it is archived."""
+    with factory() as db:
+        db.add(Project(id="pb", name="Other project", slug="pb", created_by_user_id="owner", is_active=True))
+        db.flush()
+        db.add(ProjectMembership(project_id="pb", user_id="owner", role=ProjectRole.MANAGER))
+        db.commit()
+    page = app.goto("/projects/pb")
+    page.evaluate("() => localStorage.setItem('qym:last-project-slug', 'pb')")
+
+    page = app.goto("/run/candidate")
+    page.wait_for_function("() => document.getElementById('shell-breadcrumbs').innerText.includes('Support bot')")
+    assert "Other project" not in _crumbs(page)
+    assert page.locator('#qym-sidebar .nav-item[data-page="runs"]').get_attribute("href") == "/projects/pa"
+
+    assert app.client.post("/v1/admin/projects/pa/archive").status_code == 200
+    page = app.goto("/projects/pa/runs/candidate")
+    page.locator(".run-read-only-notice").wait_for()
+    page.wait_for_function("() => document.getElementById('shell-breadcrumbs').innerText.includes('Archived project: Support bot')")
+    assert "Other project" not in _crumbs(page)
+    assert "no-project" in page.locator("#qym-sidebar").get_attribute("class")
+    app.shot("run-archived-context")
+
+    # A remembered project that is now archived is no context either.
+    page.evaluate("() => localStorage.setItem('qym:last-project-slug', 'pa')")
+    page = app.goto("/run/candidate")
+    page.locator(".run-read-only-notice").wait_for()
+    assert "Project not found" not in page.locator("body").inner_text()
+    assert "candidate" in page.locator("#run-content").inner_text()
+    assert app.errors == []
+
+
 def test_compare_page_marks_archived_runs_read_only(app, factory):
     assert app.client.post("/v1/admin/projects/pa/archive").status_code == 200
     page = app.goto("/compare?runs=baseline&runs=candidate")
@@ -336,4 +400,30 @@ def test_trash_disables_restore_for_runs_of_archived_projects(app, factory):
     assert restore.is_disabled()
     assert "unarchive" in restore.get_attribute("title")
     app.shot("trash-archived")
+    assert app.errors == []
+
+
+def test_trash_restore_reports_success_and_failure(app, factory):
+    """Restore used a toast container the page does not have: it threw and
+    never said whether the run came back or why not."""
+    with factory() as db:
+        db.add(_run("deleted-a", deleted_at=datetime.utcnow()))
+        db.add(_run("deleted-b", deleted_at=datetime.utcnow()))
+        db.commit()
+    page = app.goto("/trash")
+    page.locator("#row-deleted-a .restore-btn").click()
+    success = page.locator("#shell-toast-container .shell-toast.success")
+    success.wait_for()
+    assert "Run Restored" in success.inner_text()
+    assert page.locator("#row-deleted-a").count() == 0
+
+    # The run is purged elsewhere before the click: the server's reason is shown.
+    with factory() as db:
+        db.delete(db.get(Run, "deleted-b"))
+        db.commit()
+    page.locator("#row-deleted-b .restore-btn").click()
+    failure = page.locator("#shell-toast-container .shell-toast.error")
+    failure.wait_for()
+    assert "Restore Failed: Deleted run not found" in failure.inner_text()
+    assert page.locator("#row-deleted-b .restore-btn").inner_text() == "Restore"
     assert app.errors == []

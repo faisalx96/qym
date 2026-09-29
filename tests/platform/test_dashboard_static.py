@@ -1755,7 +1755,7 @@ def test_changed_route_assets_are_cache_versioned() -> None:
     for asset in ("shell.css", "auth.js"):
         assert f'{{static_root}}/{asset}?v=p0-20260930"' in runs_api
     assert '{static_root}/dashboard.css?v=p0-20260930"' in runs_api
-    assert '{static_root}/shell.js?v=p0-20260930"' in runs_api
+    assert '{static_root}/shell.js?v=p0-20260930-2"' in runs_api
 
 
 def test_every_page_versions_the_shared_shell_assets() -> None:
@@ -2555,9 +2555,10 @@ def test_quick_actions_share_the_same_icon_only_green_treatment() -> None:
         run,
         compare,
         reviews,
-        (DASHBOARD_DIR / "trash.html").read_text(encoding="utf-8"),
     ):
         assert re.search(r'class="toast-close qym-icon-action"', source)
+    # Deleted Runs has no toast markup of its own; it uses the shell's toasts.
+    assert "window.QymShell.toast(" in (DASHBOARD_DIR / "trash.html").read_text(encoding="utf-8")
     title_copy_rule = datasets.split(
         ".dsx-item-title-line .tv-copy-btn {",
         1,

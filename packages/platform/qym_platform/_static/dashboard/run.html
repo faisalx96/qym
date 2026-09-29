@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/static/shell.css?v=p0-20260930">
   <script src="/static/qym_safe.js?v=p0-20260930"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p0-20260930"></script>
+  <script src="/static/shell.js?v=p0-20260930-2"></script>
   <script src="/static/metrics.js?v=p0-20260930"></script>
   <script src="/static/run_details.js?v=p0-20260930"></script>
   <script src="/static/trace_viewer.js?v=p0-20260930"></script>
@@ -6907,12 +6907,18 @@
       async function loadRunData() {
         function syncProjectLinks(project) {
           if (!project || !project.slug) return;
-          setHrefIfPresent('back-link-header', projectUrl(project.slug));
-          setHrefIfPresent('back-link-error', projectUrl(project.slug));
-          setHrefIfPresent('back-link-empty', projectUrl(project.slug));
-          setHrefIfPresent('logo-link', projectUrl(project.slug));
+          // /run/{id} starts from the last visited project; give the shell the real one.
+          if (!IS_EXPORT && window.QymShell && window.QymShell.setPageProject) window.QymShell.setPageProject(project);
+          // An archived project's pages answer "Project not found"; send links to the project list.
+          const home = project.archived
+            ? (window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '') + '/'
+            : projectUrl(project.slug);
+          setHrefIfPresent('back-link-header', home);
+          setHrefIfPresent('back-link-error', home);
+          setHrefIfPresent('back-link-empty', home);
+          setHrefIfPresent('logo-link', home);
           const reviewsLink = el('header-reviews-link');
-          if (reviewsLink) reviewsLink.href = projectUrl(project.slug, 'reviews');
+          if (reviewsLink && !project.archived) reviewsLink.href = projectUrl(project.slug, 'reviews');
         }
 
         if (window.__QYM_EXPORT_DATA__) {

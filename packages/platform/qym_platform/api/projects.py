@@ -1338,7 +1338,34 @@ def archive_project(
         _audit_project(db, principal, project, "project.archived", {"is_active": False})
         project.is_active = False
         db.commit()
+    _stop_project_jobs(db, project)
     return {"ok": True, "project_id": project.id, "archived": True}
+
+
+def _stop_project_jobs(db: Session, project: Project) -> None:
+    """Stop the work this process runs for an archived project.
+
+    Nothing those jobs produce can be saved once the project is read-only, and
+    the product-eval stop routes only take the project's (now refused) API key.
+    """
+    from qym_platform.api.analysis import _project_analysis_scope_key
+    from qym_platform.api.product_evals import stop_project_product_evals
+    from qym_platform.services.analysis_jobs import (
+        analysis_job_manager,
+        rule_inference_job_manager,
+    )
+
+    stop_project_product_evals(db, project.id)
+    project_scope = _project_analysis_scope_key(project.slug)
+    for manager in (analysis_job_manager, rule_inference_job_manager):
+        run_ids = sorted(scope for scope in manager.active_scope_ids() if scope != project_scope)
+        scopes = {project_scope}
+        if run_ids:
+            scopes.update(
+                row[0]
+                for row in db.query(Run.id).filter(Run.id.in_(run_ids), Run.project_id == project.id)
+            )
+        manager.cancel_scopes(scopes)
 
 
 @router.post("/v1/admin/projects/{project_id}/unarchive")
