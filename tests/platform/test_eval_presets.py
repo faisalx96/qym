@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import sys
@@ -40,6 +41,9 @@ from qym_platform.db.models import (
 )
 from qym_platform.deps import get_db
 from qym_platform.services import eval_presets
+from qym_platform.services.eval_config import validate_config_document
+from qym_platform.services.eval_model_slots import detect_model_slots
+from qym_platform.services.eval_schema_form import build_form_descriptor
 from qym_platform.services.eval_service_client import EvalServiceClient
 
 FIXTURE = Path(__file__).parent / "fixtures" / "eval_env_overrides_schema.json"
@@ -583,3 +587,269 @@ def test_env_with_presets_soft_disables_on_delete(client, env, session_factory):
     assert res.json()["disabled"] is True
     with session_factory() as s:
         assert s.query(EvalConfigPresetVersion).count() == 1
+
+
+# --------------------------------------------------------------------------- remap
+
+
+def _schema_v2() -> dict:
+    """The fixture after a service release: every kind of drift at once."""
+    schema = json.loads(FIXTURE.read_text())
+    props = schema["properties"]
+    defs = schema["$defs"]
+    del props["TABLE_SELECTION_MODE"]  # field removed
+    props["MILVUS_SEARCH_THRESHOLD"]["anyOf"][0] = {  # type changed
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 100,
+    }
+    props["NEW_FEATURE_ENABLED"] = {  # field added
+        "anyOf": [{"type": "boolean"}, {"type": "null"}],
+        "default": None,
+    }
+    props["CHART_LLM_MODEL"] = props.pop("VIZ_LLM_MODEL")  # flat slot renamed
+    roles = defs["LlmOverrides"]["properties"]
+    roles["planner"] = copy.deepcopy(roles.pop("brief"))  # role removed + added
+    effort = defs["RoleConfig"]["properties"]["reasoning_effort"]["anyOf"][0]
+    effort["enum"] = ["low", "high"]  # enum narrowed
+    return schema
+
+
+def _schemas():
+    v1 = EvalEnvironmentSchema(
+        schema_hash="hash-v1", schema_json=json.loads(FIXTURE.read_text())
+    )
+    v2 = EvalEnvironmentSchema(schema_hash="hash-v2", schema_json=_schema_v2())
+    return v1, v2
+
+
+def _drift_doc() -> dict:
+    doc = _doc(schema_hash="hash-v1")
+    doc["slot_bindings"] = {
+        "endpoint:primary": {"connection_id": "c-gpt4o"},
+        "endpoint:fast": {"connection_id": "c-mini"},
+        "flat:VIZ_LLM": {"connection_id": "c-qwen"},
+    }
+    doc["env_overrides"] = {
+        "TABLE_SELECTION_MODE": "rag",
+        "MILVUS_SEARCH_THRESHOLD": 0.7,
+        "SQL_RESULT_LIMIT": 500,
+        "LLM_OVERRIDES": {
+            "endpoints": {"primary": {"timeout": 60}, "fast": {"timeout": 30}},
+            "main": {"endpoint": "fast", "temperature": 0.2},
+            "brief": {"temperature": 0.5},
+            "router": {"reasoning_effort": "medium", "max_tokens": 256},
+        },
+    }
+    return doc
+
+
+def test_remap_across_schema_hashes():
+    v1, v2 = _schemas()
+    source = _drift_doc()
+    before = copy.deepcopy(source)
+    # The document is valid where it was authored.
+    v1_slots = [
+        p.to_dict() for p in detect_model_slots(build_form_descriptor(v1.schema_json))
+    ]
+    assert validate_config_document(
+        source, env_schema=v1.schema_json, slots=v1_slots, require_dataset=False
+    ).ok
+
+    result = eval_presets.remap(source, v1, v2)
+    assert source == before  # never mutated
+    assert result.errors == []
+    assert result.from_schema_hash == "hash-v1"
+    assert result.to_schema_hash == "hash-v2"
+
+    config = result.config
+    assert config["schema_hash"] == "hash-v2"
+    assert config["evaluator"] == before["evaluator"]
+    # Bindings carried by slot_key; the renamed flat slot is gone.
+    assert config["slot_bindings"] == {
+        "endpoint:primary": {"connection_id": "c-gpt4o"},
+        "endpoint:fast": {"connection_id": "c-mini"},
+    }
+    # Values whose pointer exists and validates are kept (templated endpoint and
+    # role pointers included); new fields and the new role stay unset.
+    assert config["env_overrides"] == {
+        "SQL_RESULT_LIMIT": 500,
+        "LLM_OVERRIDES": {
+            "endpoints": {"primary": {"timeout": 60}, "fast": {"timeout": 30}},
+            "main": {"endpoint": "fast", "temperature": 0.2},
+            "router": {"max_tokens": 256},
+        },
+    }
+
+    dropped = {d["pointer"]: d for d in result.dropped}
+    assert set(dropped) == {
+        "/env_overrides/TABLE_SELECTION_MODE",
+        "/env_overrides/LLM_OVERRIDES/brief",
+        "/slot_bindings/flat:VIZ_LLM",
+        "/env_overrides/MILVUS_SEARCH_THRESHOLD",
+        "/env_overrides/LLM_OVERRIDES/router/reasoning_effort",
+    }
+    assert dropped["/env_overrides/TABLE_SELECTION_MODE"]["reason"] == "removed"
+    brief = dropped["/env_overrides/LLM_OVERRIDES/brief"]
+    assert brief["reason"] == "removed"
+    assert brief["form_pointer"] == "/env_overrides/LLM_OVERRIDES/{role}"
+    assert brief["params"] == {"role": "brief"}
+    assert brief["section"] == "env_overrides"
+    viz = dropped["/slot_bindings/flat:VIZ_LLM"]
+    assert viz["reason"] == "slot_removed" and viz["slot_key"] == "flat:VIZ_LLM"
+    assert viz["section"] == "slot_bindings"
+    milvus = dropped["/env_overrides/MILVUS_SEARCH_THRESHOLD"]
+    assert milvus["reason"] == "invalid" and milvus["rule"] == "schema"
+    effort = dropped["/env_overrides/LLM_OVERRIDES/router/reasoning_effort"]
+    assert effort["reason"] == "invalid"
+    assert effort["form_pointer"] == (
+        "/env_overrides/LLM_OVERRIDES/{role}/reasoning_effort"
+    )
+    assert effort["params"] == {"role": "router"}
+
+    assert result.summary.startswith("5 settings no longer supported: ")
+    assert "TABLE_SELECTION_MODE" in result.summary
+    assert "LLM_OVERRIDES.brief" in result.summary
+    assert "model slot flat:VIZ_LLM" in result.summary
+
+    payload = result.to_dict()
+    assert json.loads(json.dumps(payload)) == payload
+    assert payload["ok"] is True and payload["summary"] == result.summary
+    # Values are never echoed in the dropped list.
+    assert "rag" not in json.dumps(payload["dropped"])
+
+    # The remapped document validates on the target schema.
+    check = validate_config_document(
+        config,
+        env_schema=v2.schema_json,
+        schema_hash="hash-v2",
+        require_dataset=False,
+    )
+    assert check.errors == [] and check.warnings == []
+
+
+def test_remap_onto_the_same_schema_is_a_no_op():
+    v1, _ = _schemas()
+    source = _drift_doc()
+    result = eval_presets.remap(source, v1, v1)
+    assert result.dropped == [] and result.errors == []
+    assert result.summary is None
+    assert result.config == source
+
+
+def test_remap_drops_stale_slot_bindings_and_cascades():
+    v1, v2 = _schemas()
+    slots = [
+        {
+            "slot_key": "endpoint:primary",
+            "status": "confirmed",
+            "field_map": {
+                "model": "/LLM_OVERRIDES/endpoints/primary/model",
+                "base_url": "/LLM_OVERRIDES/endpoints/primary/base_url",
+                "api_key": "/LLM_OVERRIDES/endpoints/primary/api_key",
+            },
+        },
+        {
+            "slot_key": "endpoint:fast",
+            "status": "stale",
+            "field_map": {"model": "/LLM_OVERRIDES/endpoints/fast/model"},
+        },
+    ]
+    result = eval_presets.remap(_drift_doc(), v1, v2, to_slots=slots)
+    assert result.errors == []
+    reasons = {d["pointer"]: d["reason"] for d in result.dropped}
+    assert reasons["/slot_bindings/endpoint:fast"] == "slot_stale"
+    # Without its model the fast endpoint no longer validates, and neither does the
+    # role that referenced it.
+    assert reasons["/env_overrides/LLM_OVERRIDES/endpoints/fast"] == "invalid"
+    assert reasons["/env_overrides/LLM_OVERRIDES/main/endpoint"] == "invalid"
+    llm = result.config["env_overrides"]["LLM_OVERRIDES"]
+    assert llm["endpoints"] == {"primary": {"timeout": 60}}
+    assert llm["main"] == {"temperature": 0.2}
+    assert list(result.config["slot_bindings"]) == ["endpoint:primary"]
+
+
+def test_remap_never_drops_a_whole_collection_for_a_missing_key():
+    v1, v2 = _schemas()
+    slots = [
+        {"slot_key": "endpoint:primary", "status": "stale", "field_map": {}},
+        {
+            "slot_key": "endpoint:fast",
+            "status": "confirmed",
+            "field_map": {"model": "/LLM_OVERRIDES/endpoints/fast/model"},
+        },
+    ]
+    result = eval_presets.remap(_drift_doc(), v1, v2, to_slots=slots)
+    reasons = {d["pointer"]: d["reason"] for d in result.dropped}
+    assert reasons["/slot_bindings/endpoint:primary"] == "slot_stale"
+    assert reasons["/env_overrides/LLM_OVERRIDES/endpoints/primary"] == "invalid"
+    # The fast endpoint and the role using it survive; the missing primary is
+    # reported for the user to rebind instead of wiping every endpoint.
+    llm = result.config["env_overrides"]["LLM_OVERRIDES"]
+    assert llm["endpoints"] == {"fast": {"timeout": 30}}
+    assert llm["main"] == {"endpoint": "fast", "temperature": 0.2}
+    assert [e["rule"] for e in result.errors] == ["required_keys"]
+
+
+def test_remap_reports_what_it_cannot_fix():
+    v1, v2 = _schemas()
+    v2.schema_json["properties"]["NEW_FEATURE_ENABLED"] = {"type": "boolean"}
+    v2.schema_json["required"] = ["NEW_FEATURE_ENABLED"]
+    result = eval_presets.remap(_drift_doc(), v1, v2)
+    assert [e["pointer"] for e in result.errors] == [
+        "/env_overrides/NEW_FEATURE_ENABLED"
+    ]
+    assert result.to_dict()["ok"] is False
+    # Unrelated values are still kept.
+    assert result.config["env_overrides"]["SQL_RESULT_LIMIT"] == 500
+
+
+def test_version_read_can_remap_onto_current_schema(client, env, session_factory):
+    doc = _doc()
+    doc["env_overrides"]["LLM_OVERRIDES"]["brief"] = {"temperature": 0.5}
+    doc["slot_bindings"]["flat:VIZ_LLM"] = {"connection_id": "c-gpt4o"}
+    preset = _official(client, env["id"], config=doc)
+    stored = preset["current_version"]["config"]
+    url = _presets_url(env["id"], f"/{preset['id']}/versions/1")
+
+    same = client.get(url + "?remap=current", headers=_headers(MEMBER)).json()
+    assert same["remap"]["dropped"] == [] and same["remap"]["summary"] is None
+
+    with session_factory() as s:
+        row = s.get(EvalEnvironment, env["id"])
+        schema = EvalEnvironmentSchema(
+            environment_id=row.id, schema_hash="hash-v2", schema_json=_schema_v2()
+        )
+        s.add(schema)
+        s.flush()
+        row.current_schema_id = schema.id
+        s.commit()
+
+    plain = client.get(url, headers=_headers(MEMBER)).json()
+    assert "remap" not in plain
+    assert client.get(url + "?remap=bogus", headers=_headers(MEMBER)).status_code == 422
+
+    res = client.get(url + "?remap=current", headers=_headers(MEMBER))
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["version"]["schema_current"] is False
+    assert body["version"]["config"] == stored
+    remapped = body["remap"]
+    assert remapped["to_schema_hash"] == "hash-v2"
+    assert remapped["from_schema_hash"] == env["schema_hash"]
+    assert remapped["config"]["schema_hash"] == "hash-v2"
+    assert {d["pointer"] for d in remapped["dropped"]} == {
+        "/env_overrides/TABLE_SELECTION_MODE",
+        "/env_overrides/LLM_OVERRIDES/brief",
+        "/slot_bindings/flat:VIZ_LLM",
+        "/env_overrides/MILVUS_SEARCH_THRESHOLD",
+    }
+    assert remapped["summary"].startswith("4 settings no longer supported")
+    assert remapped["config"]["slot_bindings"] == {
+        "endpoint:primary": {"connection_id": "c-gpt4o"}
+    }
+
+    # The stored version is untouched.
+    with session_factory() as s:
+        version = s.get(EvalConfigPresetVersion, preset["current_version_id"])
+        assert version.config == stored
