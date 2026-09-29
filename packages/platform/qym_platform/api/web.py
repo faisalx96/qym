@@ -172,6 +172,21 @@ def admin_update_user(
         user.email = next_email
     if req.display_name is not None:
         user.display_name = req.display_name.strip()
+    if req.is_active is False and user.id == principal.user.id:
+        raise HTTPException(status_code=400, detail="You cannot disable your own account")
+    will_be_admin = (req.role if req.role is not None else user.role) == UserRole.ADMIN and (
+        req.is_active if req.is_active is not None else user.is_active
+    )
+    if user.role == UserRole.ADMIN and user.is_active and not will_be_admin:
+        other_admins = (
+            db.query(User.id)
+            .filter(User.role == UserRole.ADMIN, User.is_active.is_(True), User.id != user.id)
+            .count()
+        )
+        if not other_admins:
+            # Nobody could sign in to undo this: the bootstrap token only
+            # works while there are no users at all.
+            raise HTTPException(status_code=409, detail="At least one active admin must remain")
     if req.role is not None:
         user.role = req.role
     if req.is_active is not None:

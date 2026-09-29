@@ -216,8 +216,18 @@ def get_session_user_and_provider(db: Session, request: Request) -> Optional[tup
         return None
     provider = row.provider or session.get(SESSION_PROVIDER_KEY)
     if now - row.last_seen_at >= _SESSION_TOUCH_INTERVAL:
-        row.last_seen_at = now
+        # A bulk UPDATE, not an ORM write: a sign-out or revoke that deletes
+        # the row after it was loaded matches 0 rows here, which means the
+        # session ended (an ORM flush would raise StaleDataError instead).
+        touched = (
+            db.query(UserSession)
+            .filter(UserSession.id == row.id)
+            .update({UserSession.last_seen_at: now}, synchronize_session=False)
+        )
         db.commit()
+        if not touched:
+            session.clear()
+            return None
     user = db.query(User).filter(User.id == str(user_id)).first()
     if not user or not user.is_active:
         session.clear()

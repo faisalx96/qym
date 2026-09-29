@@ -173,6 +173,24 @@ async function selfEditKeepsRoleLocked(browser) {
   await page.close();
 }
 
+async function disableAsksFirstAndSkipsOwnRow(browser) {
+  const { page, state, errors } = await harness(browser);
+  await page.locator('#edit-user-cancel').click();
+  assert.equal(await page.locator('[data-user-toggle="admin"]').count(), 0, 'Your own row has no Disable button');
+  await page.locator('[data-user-toggle="u1"]').click();
+  await page.locator('#shell-confirm-dialog').waitFor();
+  assert.match(await page.locator('#shell-confirm-dialog').innerText(), /signed out everywhere/);
+  await page.locator('#shell-confirm-cancel').click();
+  await page.waitForTimeout(100);
+  assert.equal(state.saves, 0, 'Cancelling the confirmation must not disable the user');
+  await page.locator('[data-user-toggle="u1"]').click();
+  await page.locator('#shell-confirm-submit').click();
+  await page.waitForFunction(() => document.getElementById('user-message').textContent.includes('User disabled'));
+  assert.equal(state.saves, 1);
+  assert.deepEqual(errors, []);
+  await page.close();
+}
+
 async function failuresKeepEditorUsable(browser) {
   const { page, state, errors } = await harness(browser);
   state.failReset = true;
@@ -204,6 +222,7 @@ async function failuresKeepEditorUsable(browser) {
     await saveWhilePending(browser);
     await saveStartedBehindConfirmation(browser);
     await selfEditKeepsRoleLocked(browser);
+    await disableAsksFirstAndSkipsOwnRow(browser);
     await failuresKeepEditorUsable(browser);
   }
   finally { await browser.close(); }

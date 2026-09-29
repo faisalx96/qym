@@ -243,6 +243,39 @@ def test_disabling_a_user_ends_sessions_even_after_re_enable(app, session_factor
     assert _me_status(app, cookie) == 401
 
 
+def test_admin_cannot_disable_themselves_or_the_last_admin(app, session_factory):
+    """A misclick must not leave the platform with no admin who can sign in."""
+    with session_factory() as db:
+        db.add(User(id="admin-1", email="admin@example.com", role=UserRole.ADMIN))
+        db.add(User(id="member-1", email="member@example.com", role=UserRole.MEMBER))
+        db.commit()
+    headers = {**ORIGIN, "X-User-Email": "admin@example.com"}
+    with TestClient(app) as admin:
+        own = admin.put("/v1/admin/users/admin-1", json={"is_active": False}, headers=headers)
+        assert own.status_code == 400
+        assert "own account" in own.json()["detail"]
+        demote = admin.put("/v1/admin/users/admin-1", json={"role": "MEMBER"}, headers=headers)
+        assert demote.status_code == 409
+        assert "active admin" in demote.json()["detail"]
+        # Other users stay manageable.
+        member = admin.put("/v1/admin/users/member-1", json={"is_active": False}, headers=headers)
+        assert member.status_code == 200
+
+        # With a second admin, either admin can be disabled by the other.
+        promote = admin.put(
+            "/v1/admin/users/member-1", json={"is_active": True, "role": "ADMIN"}, headers=headers
+        )
+        assert promote.status_code == 200
+        other = admin.put("/v1/admin/users/member-1", json={"is_active": False}, headers=headers)
+        assert other.status_code == 200
+        # member-1 is disabled now, so admin-1 is the last active admin again.
+        last = admin.put("/v1/admin/users/admin-1", json={"role": "MEMBER"}, headers=headers)
+        assert last.status_code == 409
+    with session_factory() as db:
+        admin_row = db.get(User, "admin-1")
+        assert admin_row.is_active and admin_row.role == UserRole.ADMIN
+
+
 def test_cookie_without_server_session_is_rejected(app, session_factory):
     """Cookies issued before server-side sessions (no session id) are not trusted."""
     with _browser(app) as client:
@@ -277,6 +310,41 @@ def test_active_session_refreshes_last_seen(app, session_factory):
         assert client.get("/v1/me").status_code == 200
         with session_factory() as db:
             assert db.query(UserSession).one().last_seen_at > stale + timedelta(days=12)
+
+
+def test_session_revoked_during_a_touch_answers_401_not_500(app, session_factory):
+    """A sign-out or revoke that lands between loading the session row and
+    refreshing its last-seen time ends the session; it is not a server error."""
+    from sqlalchemy import delete as sql_delete
+    from sqlalchemy.orm import Session as OrmSession
+
+    class RacingSession(OrmSession):
+        def get(self, entity, ident, **kwargs):
+            obj = super().get(entity, ident, **kwargs)
+            if entity is UserSession and obj is not None:
+                # Another request deletes the row after this one loaded it.
+                self.execute(sql_delete(UserSession).where(UserSession.id == ident))
+            return obj
+
+    racing = sessionmaker(bind=session_factory.kw["bind"], class_=RacingSession, autoflush=False)
+
+    def override_get_db():
+        db = racing()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    with _browser(app) as client:
+        cookie = _signup(client)
+    with session_factory() as db:
+        row = db.query(UserSession).one()
+        row.last_seen_at = datetime.utcnow() - timedelta(minutes=11)
+        db.commit()
+    app.dependency_overrides[get_db] = override_get_db
+    with TestClient(app, raise_server_exceptions=False) as other:
+        other.cookies.set("qym_session", cookie)
+        assert other.get("/v1/me").status_code == 401
 
 
 def test_session_cookie_keeps_the_14_day_lifetime(app):

@@ -471,8 +471,11 @@
         signupEnabled: false,
         providers: [],
         message: '',
-        messageType: ''
+        messageType: '',
+        // What the user typed; render() rebuilds the form, so it keeps these.
+        values: {}
       };
+      var FIELD_IDS = ['display-name', 'email', 'password', 'new-password', 'confirm-password'];
 
       var icons = {
         arrow: '<svg viewBox="0 0 20 20" fill="none"><path d="M7 5l5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -592,12 +595,22 @@
         return '<div class="provider-empty">No login methods are configured for this deployment.</div>';
       }
 
-      function render() {
+      function render(options) {
+        options = options || {};
+        FIELD_IDS.forEach(function (id) {
+          var input = document.getElementById(id);
+          if (input) state.values[id] = input.value;
+        });
+        (options.clear || []).forEach(function (id) { delete state.values[id]; });
         var hasLocal = state.localEnabled;
         var hasProviders = activeProviders().length > 0;
         root.innerHTML = (hasLocal || hasProviders)
           ? localSection() + providersSection()
           : emptyState();
+        FIELD_IDS.forEach(function (id) {
+          var input = document.getElementById(id);
+          if (input && state.values[id]) input.value = state.values[id];
+        });
 
         var toggle = document.querySelector('[data-toggle-mode]');
         if (toggle) {
@@ -605,7 +618,7 @@
             state.mode = state.mode === 'signup' ? 'signin' : 'signup';
             state.message = '';
             state.messageType = '';
-            render();
+            render({ clear: ['password'] });
           });
         }
 
@@ -616,21 +629,37 @@
             state.pending = null;
             state.message = '';
             state.messageType = '';
-            render();
+            render({ clear: ['password', 'new-password', 'confirm-password'] });
           });
         }
 
         var form = document.getElementById('local-auth-form');
         if (form) {
           form.addEventListener('submit', submitLocalAuth);
+          // An error stays only until the user starts fixing it.
+          form.addEventListener('input', function () {
+            if (state.messageType !== 'error') return;
+            state.message = '';
+            state.messageType = '';
+            var status = form.querySelector('.auth-status');
+            if (status) {
+              status.textContent = '';
+              status.className = 'auth-status';
+            }
+          });
+        }
+        if (options.focus) {
+          var target = document.getElementById(options.focus);
+          if (target) target.focus();
         }
       }
 
-      function showError(message) {
+      // options.clear: fields to empty; options.focus: the field to fix next.
+      function showError(message, options) {
         state.message = message;
         state.messageType = 'error';
         state.loading = false;
-        render();
+        render(options);
       }
 
       async function postJson(path, payload) {
@@ -648,7 +677,14 @@
         var formData = new FormData(form);
         var newPassword = String(formData.get('new_password') || '');
         if (newPassword !== String(formData.get('confirm_password') || '')) {
-          showError('The passwords do not match.');
+          showError('The passwords do not match.', { clear: ['confirm-password'], focus: 'confirm-password' });
+          return;
+        }
+        if (newPassword === state.pending.password) {
+          showError('The new password must be different from the temporary password.', {
+            clear: ['new-password', 'confirm-password'],
+            focus: 'new-password'
+          });
           return;
         }
 
@@ -667,11 +703,17 @@
             // The temporary password changed or expired; start over.
             state.mode = 'signin';
             state.pending = null;
-            showError('Your temporary password is no longer valid. Ask an admin for a new one.');
+            showError('Your temporary password is no longer valid. Ask an admin for a new one.', {
+              clear: ['password', 'new-password', 'confirm-password'],
+              focus: 'password'
+            });
             return;
           }
           if (!result.response.ok) {
-            showError(String(result.data.detail || 'Could not change the password. Please try again.'));
+            showError(String(result.data.detail || 'Could not change the password. Please try again.'), {
+              clear: ['new-password', 'confirm-password'],
+              focus: 'new-password'
+            });
             return;
           }
           state.pending = null;
@@ -680,7 +722,7 @@
           render();
           window.location.href = result.data.next || (QYM_PREFIX + '/');
         } catch (err) {
-          showError('Could not complete the request. Please try again.');
+          showError('Could not complete the request. Please try again.', { focus: 'new-password' });
         }
       }
 
@@ -716,13 +758,15 @@
             state.message = '';
             state.messageType = '';
             state.loading = false;
-            render();
-            var newPasswordInput = document.getElementById('new-password');
-            if (newPasswordInput) newPasswordInput.focus();
+            render({ clear: ['password', 'new-password', 'confirm-password'], focus: 'new-password' });
             return;
           }
           if (!result.response.ok) {
-            showError(String(data.detail || 'Authentication failed. Please try again.'));
+            var isSignin = state.mode !== 'signup';
+            showError(String(data.detail || 'Authentication failed. Please try again.'), {
+              clear: isSignin ? ['password'] : [],
+              focus: isSignin ? 'password' : 'email'
+            });
             return;
           }
           state.message = state.mode === 'signup' ? 'Account created. Redirecting...' : 'Signed in. Redirecting...';
@@ -730,7 +774,7 @@
           render();
           window.location.href = data.next || (QYM_PREFIX + '/');
         } catch (err) {
-          showError('Could not complete the request. Please try again.');
+          showError('Could not complete the request. Please try again.', { focus: 'password' });
         }
       }
 
