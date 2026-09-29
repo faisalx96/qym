@@ -20,6 +20,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -928,6 +929,14 @@ class EvalConfigPresetVersion(Base):
     __table_args__ = (
         UniqueConstraint("preset_id", "version", name="uq_eval_config_preset_version"),
         CheckConstraint("version >= 1", name="ck_eval_config_preset_versions_version"),
+    )
+
+
+@event.listens_for(EvalConfigPresetVersion, "before_update")
+def _refuse_preset_version_update(mapper, connection, target) -> None:
+    """Published preset versions are immutable; publish ``version + 1`` instead."""
+    raise ValueError(
+        "Preset versions are immutable; publish a new version instead"
     )
 
 
