@@ -47,6 +47,7 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
 
     from qym_platform.db.session import SessionLocal, build_engine
     from qym_platform.deps import get_db
+    from qym_platform.services.eval_dispatcher import EvalDispatcher
     from qym_platform.services.maintenance import MaintenanceWorker
     from sqlalchemy.orm import sessionmaker
 
@@ -57,6 +58,8 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     app.state.dashboard_summary_worker = dashboard_worker
     maintenance_worker = MaintenanceWorker(worker_sessions, worker_engine if worker_engine is not None else SessionLocal.kw["bind"])
     app.state.maintenance_worker = maintenance_worker
+    eval_dispatcher = EvalDispatcher(worker_sessions)
+    app.state.eval_dispatcher = eval_dispatcher
 
     @app.on_event("startup")
     def start_dashboard_summary_worker() -> None:
@@ -72,9 +75,12 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
             logging.getLogger("uvicorn.error").info("Dashboard summary worker started")
             maintenance_worker.start()
             logging.getLogger("uvicorn.error").info("Maintenance worker started")
+            eval_dispatcher.start()
+            logging.getLogger("uvicorn.error").info("Eval dispatcher started")
 
     @app.on_event("shutdown")
     def stop_dashboard_summary_worker() -> None:
+        eval_dispatcher.stop()
         maintenance_worker.stop()
         if dashboard_worker.stop():
             logging.getLogger("uvicorn.error").info("Dashboard summary worker stopped")
