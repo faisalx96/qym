@@ -24,6 +24,7 @@ from qym_platform.db.models import (
     RunWorkflowStatus,
 )
 from qym_platform.deps import get_db
+from qym_platform.services.ingest_completeness import public_run_metadata
 from qym_platform.services.product_evals import (
     ProductEvalError,
     ProductEvalJob,
@@ -516,7 +517,11 @@ def _latency_stats(items: List[RunItem]) -> Dict[str, Any]:
 
 
 def _public_metadata(run_metadata: Dict[str, Any]) -> Dict[str, Any]:
-    return {key: value for key, value in run_metadata.items() if key != "product_eval"}
+    return {
+        key: value
+        for key, value in public_run_metadata(run_metadata).items()
+        if key != "product_eval"
+    }
 
 
 def _completed_event_item_ids(db: Session, run_id: str) -> set[str]:

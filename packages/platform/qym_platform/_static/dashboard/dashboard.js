@@ -1485,6 +1485,15 @@
     }).join('');
   }
 
+  // A finished run whose items did not all arrive, or whose events the
+  // platform rejected, is flagged; the run page lists the details.
+  function renderIngestIncomplete(run) {
+    const flag = run.ingest_incomplete;
+    if (!flag || typeof flag !== 'object') return '';
+    const label = `Incomplete data. ${flag.reason || 'Not all of this run reached the platform.'}`;
+    return `<span class="status-incomplete qym-tag qym-tag--warning" style="display: flex; width: fit-content; margin-top: var(--space-xs);" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">Incomplete</span>`;
+  }
+
   function showExecutionErrorDetails(button) {
     const details = JSON.parse(button.dataset.executionErrors);
     const task = details.kind === 'task';
@@ -3734,7 +3743,7 @@
             </div>
           </td>
           <td class="col-status">
-            ${status ? `<span class="status-badge qym-badge status-${escapeHtml(status)}" title="${escapeHtml(statusTooltip)}">${escapeHtml(status)}${passText}${parentProgressText}</span>` : ''}${status !== 'RUNNING' && status !== 'PENDING' ? renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : ' across all items') : ''}${(run.total_retries > 0 && status !== 'RUNNING' && status !== 'PENDING') ? `<span class="status-retries" title="${run.total_retries} total retr${run.total_retries === 1 ? 'y' : 'ies'}${retryScope}">${run.total_retries}↻</span>` : ''}
+            ${status ? `<span class="status-badge qym-badge status-${escapeHtml(status)}" title="${escapeHtml(statusTooltip)}">${escapeHtml(status)}${passText}${parentProgressText}</span>` : ''}${status !== 'RUNNING' && status !== 'PENDING' ? renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : ' across all items') : ''}${(run.total_retries > 0 && status !== 'RUNNING' && status !== 'PENDING') ? `<span class="status-retries" title="${run.total_retries} total retr${run.total_retries === 1 ? 'y' : 'ies'}${retryScope}">${run.total_retries}↻</span>` : ''}${renderIngestIncomplete(run)}
           </td>
           <td class="col-task">
             <span class="tag qym-tag task" title="${escapeHtml(run.task_name || '')}">${run.task_name ? escapeHtml(run.task_name) : '—'}</span>

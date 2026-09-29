@@ -211,6 +211,20 @@
       color: var(--text-primary);
       font-weight: 600;
     }
+    .ingest-warning-body + .ingest-warning-body {
+      margin-top: var(--space-xs);
+    }
+    .ingest-rejected-list {
+      margin: var(--space-xs) 0 0;
+      padding-left: var(--space-lg);
+    }
+    .ingest-rejected-list li {
+      overflow-wrap: anywhere;
+    }
+    .ingest-warning-body .ingest-event {
+      font-family: var(--font-mono);
+      color: var(--text-primary);
+    }
 
     /* Config strip */
     .hero-config {
@@ -7412,23 +7426,57 @@
           '</button>';
         let ingestWarningHtml = '';
         const ingestIncomplete = metadata.ingest_incomplete;
-        if (ingestIncomplete && ingestIncomplete.expected_items != null) {
+        if (ingestIncomplete && typeof ingestIncomplete === 'object') {
           const expected = parseInt(ingestIncomplete.expected_items, 10) || 0;
           const received = parseInt(ingestIncomplete.received_items, 10) || 0;
-          const missing = Math.max(expected - received, 0);
-          ingestWarningHtml =
-            '<div class="ingest-warning-banner">' +
-              '<svg class="ingest-warning-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' +
-              '<div>' +
-                '<div class="ingest-warning-title">Incomplete data</div>' +
-                '<div class="ingest-warning-body">' +
-                  'The evaluation reported <span class="ingest-count">' + expected + '</span> items, but only ' +
-                  '<span class="ingest-count">' + received + '</span> reached the platform ' +
-                  '(<span class="ingest-count">' + missing + '</span> missing). ' +
-                  'The rows and metrics below cover the received items only — check the eval client’s upload warnings for the rest.' +
+          const missing = expected ? Math.max(expected - received, 0) : 0;
+          // Events the platform refused (schema errors, reused sequences,
+          // values the database refuses): the run completed without them.
+          const rejectedCount = parseInt(ingestIncomplete.rejected_events, 10) || 0;
+          const rejectedRows = (Array.isArray(ingestIncomplete.rejected) ? ingestIncomplete.rejected : [])
+            .filter(row => row && typeof row === 'object');
+          const causes = [];
+          if (missing > 0) {
+            causes.push(
+              '<div class="ingest-warning-body">' +
+                'The evaluation reported <span class="ingest-count">' + expected + '</span> items, but only ' +
+                '<span class="ingest-count">' + received + '</span> reached the platform ' +
+                '(<span class="ingest-count">' + missing + '</span> missing). ' +
+                'The rows and metrics below cover the received items only — check the eval client’s upload warnings for the rest.' +
+              '</div>'
+            );
+          }
+          if (rejectedCount > 0) {
+            const moreCount = rejectedCount - rejectedRows.length;
+            causes.push(
+              '<div class="ingest-warning-body" data-ingest-rejected="' + rejectedCount + '">' +
+                'The platform rejected <span class="ingest-count">' + rejectedCount + '</span> ' +
+                (rejectedCount === 1 ? 'event' : 'events') + ' from this run, so the data ' +
+                (rejectedCount === 1 ? 'it' : 'they') + ' carried is missing below' + (rejectedRows.length ? ':' : '.') +
+                (rejectedRows.length
+                  ? '<ul class="ingest-rejected-list">' + rejectedRows.map(row => {
+                      const target = row.item_id
+                        ? ' for item <span class="ingest-event">' + escapeHtml(row.item_id) + '</span>'
+                        : (row.sequence != null ? ' <span class="ingest-event">#' + escapeHtml(String(row.sequence)) + '</span>' : '');
+                      return '<li><span class="ingest-event">' + escapeHtml(row.type || 'event') + '</span>' + target +
+                        ': ' + escapeHtml(row.error || 'rejected') + '</li>';
+                    }).join('') +
+                    (moreCount > 0 ? '<li>and ' + moreCount + ' more</li>' : '') +
+                  '</ul>'
+                  : '') +
+              '</div>'
+            );
+          }
+          if (causes.length) {
+            ingestWarningHtml =
+              '<div class="ingest-warning-banner" role="status">' +
+                '<svg class="ingest-warning-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' +
+                '<div>' +
+                  '<div class="ingest-warning-title">Incomplete data</div>' +
+                  causes.join('') +
                 '</div>' +
-              '</div>' +
-            '</div>';
+              '</div>';
+          }
         }
 
         const samplesCount = parseInt(run.samples, 10) || 1;
@@ -8161,7 +8209,7 @@
           'snapshot', 'rows', 'metric_names', 'task_name', 'model',
           'model_name', 'dataset', 'dataset_name', 'total_items', 'samples',
           'last_completed_pass',
-          'git_branch', 'git_commit', 'ingest_incomplete'
+          'git_branch', 'git_commit', 'ingest_incomplete', 'ingest_rejected'
         ]);
         const colors = ['var(--accent-primary)', 'var(--accent-secondary)', 'var(--accent-tertiary)', 'var(--chart-4)', 'var(--chart-5)'];
         const entries = [];

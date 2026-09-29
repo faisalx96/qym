@@ -143,8 +143,12 @@ def test_409_or_403_without_a_state_header_is_still_isolated_per_event(monkeypat
     stream.close()
 
     assert len(calls) == 4
-    assert stream.rejected_events == 3
     assert not stream._remote_closed.is_set()
+    # No per-event verdict: the events were not delivered, so completion
+    # stays held (only events the platform itself rejected let a run finish).
+    assert stream.dropped_events == 3
+    assert stream.rejected_events == 0
+    assert stream.flush(0) is False
 
 
 def test_events_after_a_poison_batch_are_batched_again(monkeypatch):
