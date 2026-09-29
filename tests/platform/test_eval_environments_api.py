@@ -28,6 +28,9 @@ from qym_platform.api.eval_environments import get_eval_client_factory
 from qym_platform.app import create_app
 from qym_platform.db.base import Base
 from qym_platform.db.models import (
+    EvalConfigPreset,
+    EvalConfigPresetKind,
+    EvalConfigPresetVersion,
     EvalEnvironment,
     EvalEnvironmentSchema,
     EvalModelSlot,
@@ -476,6 +479,65 @@ def test_delete_in_use_soft_disables_and_reactivation_conflict(
     assert res.status_code == 409
     assert res.json()["detail"].startswith("Cannot reactivate")
     assert "Project Two" in res.json()["detail"]
+
+
+def _add_official_preset(session_factory, env_id: str) -> str:
+    """Publish v1 of an official preset on the environment's current schema."""
+    with session_factory() as s:
+        env = s.get(EvalEnvironment, env_id)
+        preset = EvalConfigPreset(
+            environment_id=env_id,
+            name="Official defaults",
+            kind=EvalConfigPresetKind.OFFICIAL,
+            created_by_user_id="manager-1",
+        )
+        s.add(preset)
+        s.flush()
+        version = EvalConfigPresetVersion(
+            preset_id=preset.id,
+            version=1,
+            schema_id=env.current_schema_id,
+            config={"evaluator": {}, "env_overrides": {}, "slot_bindings": {}},
+            notes="v1",
+            published_by_user_id="manager-1",
+        )
+        s.add(version)
+        s.flush()
+        preset.current_version_id = version.id
+        s.commit()
+        return preset.id
+
+
+def test_delete_env_with_preset_soft_disables(client, session_factory):
+    env_id = _created(client)["environment"]["id"]
+    preset_id = _add_official_preset(session_factory, env_id)
+    res = client.delete(_url(suffix=f"/{env_id}"), headers=_headers(MANAGER))
+    assert res.status_code == 200
+    assert res.json() == {"ok": True, "id": env_id, "deleted": False, "disabled": True}
+    with session_factory() as s:
+        assert s.get(EvalEnvironment, env_id).is_active is False
+        preset = s.get(EvalConfigPreset, preset_id)
+        assert preset is not None and preset.current_version_id is not None
+        assert s.query(EvalConfigPresetVersion).count() == 1
+
+
+def test_project_hard_delete_succeeds_with_presets(client, session_factory):
+    """Regression: archive_project must not trip over preset foreign keys."""
+    env_id = _created(client)["environment"]["id"]
+    _add_official_preset(session_factory, env_id)
+    engine = session_factory.kw["bind"]
+    # StaticPool shares one connection, so the pragma applies to the app too.
+    with engine.connect() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+    res = client.delete(f"/v1/admin/projects/{P1}", headers=_headers(ADMIN))
+    assert res.status_code == 200, res.text
+    assert res.json()["deleted"] is True
+    with session_factory() as s:
+        assert s.get(Project, P1) is None
+        assert s.query(EvalEnvironment).count() == 0
+        assert s.query(EvalEnvironmentSchema).count() == 0
+        assert s.query(EvalConfigPreset).count() == 0
+        assert s.query(EvalConfigPresetVersion).count() == 0
 
 
 # --------------------------------------------------------------------------- test / refresh
