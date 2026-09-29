@@ -11,7 +11,7 @@
   <script src="/static/shell.js?v=ui-consistency-20260730-15"></script>
   <script src="/static/metrics.js?v=metric-errors-20260914-1"></script>
   <script src="/static/run_details.js"></script>
-  <script src="/static/trace_viewer.js?v=merge-20260804-1"></script>
+  <script src="/static/trace_viewer.js?v=trace-retries-20260917-1"></script>
   <script src="/static/step_latency.js?v=empty-sections-20260911-2"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
@@ -3214,6 +3214,7 @@
     .metric-issue-dialog__solution .metric-analysis-help { margin-top: calc(-1 * var(--space-sm)); }
     .metric-issue-dialog__form .rdi-issues-editor__field { min-width: 0; }
     .metric-issue-dialog__form select { width: 100%; min-width: 0; }
+    .metric-issue-dialog__subcategory-hint { margin-top: var(--space-xs); }
     .metric-issue-dialog__status { color: var(--text-muted); font-size: var(--font-base); }
     .metric-issue-dialog__status.is-error { color: var(--error); }
     .metric-analysis-card {
@@ -5918,6 +5919,17 @@
         });
       }
 
+      function normalizeApprovedCategoryDetails(value) {
+        const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+        const details = {};
+        Object.entries(source).forEach(([category, values]) => {
+          const label = String(category || '').trim();
+          const approved = normalizeCategoryLabels(values);
+          if (label && approved.length) details[label] = approved;
+        });
+        return details;
+      }
+
       function normalizeCategoryTaxonomy(value) {
         const source = value && typeof value === 'object' ? value : {};
         const taxonomy = {};
@@ -5938,6 +5950,14 @@
 
       function categoryCatalogDetails(category) {
         const details = state.categoryCatalog?.category_details_map || {};
+        const key = Object.keys(details).find(candidate =>
+          String(candidate).trim().toLocaleLowerCase() === String(category).trim().toLocaleLowerCase()
+        );
+        return key && Array.isArray(details[key]) ? details[key] : [];
+      }
+
+      function categoryApprovedDetails(category) {
+        const details = state.categoryCatalog?.approved_category_details || {};
         const key = Object.keys(details).find(candidate =>
           String(candidate).trim().toLocaleLowerCase() === String(category).trim().toLocaleLowerCase()
         );
@@ -5968,6 +5988,9 @@
           category_details_map: source.category_details_map && typeof source.category_details_map === 'object'
             ? source.category_details_map
             : {},
+          approved_category_details: Object.prototype.hasOwnProperty.call(source, 'approved_category_details')
+            ? normalizeApprovedCategoryDetails(source.approved_category_details)
+            : (state.categoryCatalog?.approved_category_details || {}),
           category_taxonomy: taxonomy,
           subcategory_taxonomy: source.subcategory_taxonomy && typeof source.subcategory_taxonomy === 'object'
             ? source.subcategory_taxonomy
@@ -5990,11 +6013,13 @@
         const hasCatalogData = Array.isArray(config.root_cause_categories) ||
           (config.category_taxonomy && typeof config.category_taxonomy === 'object') ||
           (config.subcategory_taxonomy && typeof config.subcategory_taxonomy === 'object') ||
-          (config.category_details_map && typeof config.category_details_map === 'object');
+          (config.category_details_map && typeof config.category_details_map === 'object') ||
+          (config.approved_category_details && typeof config.approved_category_details === 'object');
         if (!hasCatalogData) return;
         setCategoryCatalog({
           categories: config.root_cause_categories || [],
           category_details_map: config.category_details_map || {},
+          approved_category_details: config.approved_category_details || {},
           category_taxonomy: config.category_taxonomy || config.category_taxonomies || {},
           subcategory_taxonomy: config.subcategory_taxonomy || {},
           max_root_cause_categories: config.max_root_cause_categories,
@@ -6153,6 +6178,7 @@
           categories: [],
           category_entries: [],
           category_details_map: {},
+          approved_category_details: {},
           category_taxonomy: {},
           subcategory_taxonomy: {},
           max_root_cause_categories: MAX_ROOT_CAUSE_CATEGORIES,
@@ -12258,13 +12284,17 @@
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok || !data.row) throw new Error(data.detail || data.error || 'Could not save. Your draft is still here; try again.');
-        if (scope !== metricAnalysisKey(itemId, metricName)) return true;
-        applyUpdatedRow(data.row);
-        if (request.issue?.category && !state.rootCauseValues.includes(request.issue.category)) {
-          state.rootCauseValues.push(request.issue.category);
-          state.rootCauseValues.sort();
-          buildCategoryDropdowns();
+        if (scope === metricAnalysisKey(itemId, metricName)) {
+          applyUpdatedRow(data.row);
+          if (request.issue?.category && !state.rootCauseValues.includes(request.issue.category)) {
+            state.rootCauseValues.push(request.issue.category);
+            state.rootCauseValues.sort();
+            buildCategoryDropdowns();
+          }
         }
+        // Approval, edit, and deletion can change the project-wide approved
+        // subcategory suggestions. Reload server truth before the next popup.
+        await loadProjectCategoryCatalog();
         return true;
       }
 
@@ -12331,18 +12361,28 @@
             (!draft.addingNewSolution && value === currentSolution ? ' selected' : '') + '>' +
             escapeHtml(value) + '</option>'
         ).join('');
+        const categoryOptions = categoryPickerOptions().map(value =>
+          '<option value="' + escapeAttr(String(value)) + '"></option>'
+        ).join('');
         const issues = draft.issues.map((issue, index) => {
           const guidanceId = 'metric-issue-guidance-' + index;
-          const detailsId = 'metric-issue-subcategories-' + index;
+          const categoryListId = 'metric-issue-categories-' + index;
+          const approvedSubcategories = categoryApprovedDetails(issue.category);
+          const currentSubcategory = String(issue.subcategory || '').trim();
+          const subcategoryListId = 'metric-issue-subcategories-' + index;
+          const approvedSubcategoryOptions = approvedSubcategories.map(value =>
+            '<option value="' + escapeAttr(String(value)) + '"></option>'
+          ).join('');
+          const subcategoryHintId = 'metric-issue-subcategory-hint-' + index;
           return '<fieldset class="metric-issue-dialog__issue" data-issue-row="' + index + '">' +
             '<legend class="metric-issue-dialog__issue-heading"><span>Issue ' + (draft.mode === 'edit' ? draft.issueIndex + 1 : 1) + '</span>' +
               (issue.confidence == null ? '' : '<span class="qym-tag qym-tag--count" title="Saved AI confidence">' + Math.round(issue.confidence * 100) + '% confidence</span>') + '</legend>' +
-            '<label class="rdi-issues-editor__field"><span>Category</span><input class="qym-control qym-input" data-issue-field="category" value="' + escapeAttr(issue.category || '') + '" placeholder="Choose from the category guide, or type one" aria-required="true" aria-describedby="' + guidanceId + '" autocomplete="off"></label>' +
+            '<label class="rdi-issues-editor__field"><span>Category</span><input class="qym-control qym-input" data-issue-field="category" value="' + escapeAttr(issue.category || '') + '" list="' + categoryListId + '" placeholder="Search project categories or type a new one" aria-required="true" aria-describedby="' + guidanceId + '" autocomplete="off"><datalist id="' + categoryListId + '" data-category-suggestions>' + categoryOptions + '</datalist></label>' +
             '<div id="' + guidanceId + '" class="metric-issue-dialog__guidance" data-category-guidance aria-live="polite">' + metricIssueGuidanceHtml(issue.category) + '</div>' +
-            '<label class="rdi-issues-editor__field"><span>Subcategory (optional)</span><input class="qym-control qym-input" data-issue-field="subcategory" value="' + escapeAttr(issue.subcategory || '') + '" list="' + detailsId + '" placeholder="A more specific failure mechanism"></label>' +
+            '<div class="rdi-issues-editor__field"><span>Subcategory (optional)</span><input class="qym-control qym-input" data-issue-field="subcategory" value="' + escapeAttr(currentSubcategory) + '" list="' + subcategoryListId + '" placeholder="Search approved subcategories or type a new one" aria-describedby="' + subcategoryHintId + '" autocomplete="off"><datalist id="' + subcategoryListId + '" data-subcategory-suggestions>' + approvedSubcategoryOptions + '</datalist><p id="' + subcategoryHintId + '" class="metric-analysis-help metric-issue-dialog__subcategory-hint">Suggestions include only reviewer-approved labels. If none match, type a new label to propose it for review.</p></div>' +
             '<label class="rdi-issues-editor__field"><span>Finding</span><textarea data-issue-field="finding" placeholder="Describe what went wrong in this sample and the evidence for it.">' + escapeHtml(issue.finding || '') + '</textarea></label>' +
             (issue.category_reason ? '<details class="metric-analysis-issue-reason"><summary>Why this category · saved AI explanation</summary><div>' + escapeHtml(issue.category_reason) + '</div></details>' : '') +
-            '<datalist id="' + detailsId + '">' + categoryCatalogDetails(issue.category).map(value => '<option value="' + escapeAttr(String(value)) + '"></option>').join('') + '</datalist></fieldset>';
+            '</fieldset>';
         }).join('');
         return '<div class="metric-issue-dialog__issues" data-issue-list>' + (issues || '<p class="metric-analysis-help">This issue will be removed when you save. Other issues will be kept.</p>') + '</div>' +
           (!draft.issues.length ? '<button type="button" class="qym-inline-action qym-inline-action--neutral" data-add-issue>Restore issue</button>' : '') +
@@ -12411,9 +12451,14 @@
           if (deleteButton) deleteButton.hidden = !draft.issues.length;
         };
         const updateIssueGuidance = issueRow => {
-          const category = draft.issues[Number(issueRow.dataset.issueRow)].category;
+          const issue = draft.issues[Number(issueRow.dataset.issueRow)];
+          const category = issue.category;
           issueRow.querySelector('[data-category-guidance]').innerHTML = metricIssueGuidanceHtml(category);
-          issueRow.querySelector('datalist').innerHTML = categoryCatalogDetails(category).map(value => '<option value="' + escapeAttr(String(value)) + '"></option>').join('');
+          const suggestions = issueRow.querySelector('[data-subcategory-suggestions]');
+          if (!suggestions) return;
+          suggestions.innerHTML = categoryApprovedDetails(category).map(value =>
+            '<option value="' + escapeAttr(String(value)) + '"></option>'
+          ).join('');
         };
         const clearError = () => {
           draft.error = false;

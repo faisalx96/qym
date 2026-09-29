@@ -143,11 +143,17 @@ QYM_API_KEY=AbCdEfGh...the-full-token...</pre>
   <tbody>
     <tr><td><code>none</code></td><td>Local/dev: no identity required. Every request runs as a stable <code>dev@local</code> admin user. The default.</td></tr>
     <tr><td><code>proxy_headers</code></td><td>A trusted reverse proxy injects the user's identity via <code>X-User-Email</code> (or <code>X-Email</code>). With <code>auto_provision_users</code> on (the default), an unknown but proxy-asserted email is created on first sight.</td></tr>
-    <tr><td><code>oidc</code></td><td>Native Google and/or GitHub sign-in when their client credentials are configured. Unauthenticated dashboard requests get <code>401 Not authenticated</code>. Generic OIDC, SAML, and other SSO providers are not implemented.</td></tr>
+    <tr><td><code>oidc</code></td><td>Native Google, GitHub, and/or self-hosted GitLab sign-in when their client credentials are configured. Unauthenticated dashboard requests get <code>401 Not authenticated</code>. Generic OIDC, SAML, and other SSO providers are not implemented.</td></tr>
   </tbody>
 </table>
 
 <p>Set <code>QYM_AUTH_LOCAL_ENABLED=true</code> to add email/password signup and login alongside <code>proxy_headers</code> or <code>oidc</code>. Any session-enabled configuration requires <code>QYM_AUTH_SESSION_SECRET</code>. Session cookies are HTTPS-only outside <code>dev</code>, <code>test</code>, and <code>local</code> environments, and browser state-changing requests must pass the platform's same-origin check.</p>
+
+<p>Self-hosted GitLab sign-in needs <code>QYM_AUTH_GITLAB_URL</code> (the GitLab issuer, for example <code>https://gitlab.example.com</code>), <code>QYM_AUTH_GITLAB_CLIENT_ID</code>, and <code>QYM_AUTH_GITLAB_CLIENT_SECRET</code>. Create a confidential GitLab OAuth application with the scopes <code>openid</code>, <code>email</code>, and <code>profile</code> and the redirect URI <code>&lt;QYM_BASE_URL&gt;/v1/auth/callback/gitlab</code>. A malformed <code>QYM_AUTH_GITLAB_URL</code> stops the platform at startup.</p>
+
+<div class="docs-callout warn"><svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><p><span class="docs-callout-title">Provider sign-in links accounts by verified email.</span> A first provider sign-in joins the existing account with the same verified email. For GitLab, this trusts the instance's email verification: enable it only when users cannot set an unconfirmed email (email confirmation on, or emails managed by LDAP or admins). Otherwise a GitLab user could claim another person's account, including an admin's.</p></div>
+
+<p><strong>Forgotten passwords.</strong> With email/password sign-in on, an admin opens <strong>Admin → Users → Edit</strong> and chooses <strong>Reset Password</strong> (<code>POST /v1/admin/users/{user_id}/reset-password</code>). The response shows a temporary password once. The user signs in with it and must choose a new password (<code>POST /v1/auth/password/change</code>) before a session is created. A temporary password works once; a later reset replaces it.</p>
 
 <p>First-admin bootstrap depends on the auth path:</p>
 <ul>

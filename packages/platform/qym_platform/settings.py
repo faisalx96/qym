@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from pydantic import Field
+from urllib.parse import urlsplit
+
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,6 +35,31 @@ class PlatformSettings(BaseSettings):
     auth_google_client_secret: str = Field(default="")
     auth_github_client_id: str = Field(default="")
     auth_github_client_secret: str = Field(default="")
+    # Self-hosted GitLab (OIDC). The URL is the instance issuer, e.g.
+    # https://gitlab.example.com; discovery reads /.well-known/openid-configuration.
+    auth_gitlab_url: str = Field(default="")
+    auth_gitlab_client_id: str = Field(default="")
+    auth_gitlab_client_secret: str = Field(default="")
+
+    @field_validator("auth_gitlab_url")
+    @classmethod
+    def _validate_gitlab_url(cls, value: str) -> str:
+        # Fail at startup instead of serving a GitLab button whose discovery 500s.
+        value = (value or "").strip()
+        if not value:
+            return ""
+        try:
+            parts = urlsplit(value)
+            parts.port  # raises ValueError for a malformed port
+        except ValueError as exc:
+            raise ValueError(f"QYM_AUTH_GITLAB_URL is not a valid URL: {exc}") from exc
+        if parts.scheme not in {"http", "https"} or not parts.hostname:
+            raise ValueError("QYM_AUTH_GITLAB_URL must be an http(s) URL with a host, e.g. https://gitlab.example.com")
+        if "?" in value or "#" in value or any(char.isspace() for char in value):
+            raise ValueError("QYM_AUTH_GITLAB_URL must not contain a query, fragment, or whitespace")
+        if "/.well-known/" in parts.path + "/":
+            raise ValueError("QYM_AUTH_GITLAB_URL is the GitLab base URL, not its /.well-known/ discovery URL")
+        return value
 
     # Database (required - no SQLite fallback)
     database_url: str = Field(description="PostgreSQL connection string (required)")
@@ -100,6 +127,8 @@ class PlatformSettings(BaseSettings):
     # Run lifecycle
     run_stale_timeout_seconds: int = Field(default=60, ge=5)
     analysis_job_max_workers: int = Field(default=2, ge=1)
+    analysis_max_concurrency: int = Field(default=20, ge=1, le=20)
+    analysis_max_retries: int = Field(default=1, ge=0, le=5)
 
     # Product eval API
     product_eval_max_workers: int = Field(default=3, ge=1)

@@ -29,10 +29,13 @@ exist, add a token first, then use it.
 The dim rule is the one most often violated, and it is absolute: if a human is
 expected to read it, it is `--text-muted` or brighter.
 
-Semantic colors (`--success/--warning/--error/--info`), the 5-step score scale
+Semantic colors (`--success/--warning/--error/--metric-error/--info`), the 5-step score scale
 (`--score-1..5`), chart colors (`--chart-1..5`), and accents
 (`--accent-primary/secondary/tertiary/tertiary-soft`) are for state and data
 encoding — they are not part of the hierarchy ramp and don't substitute for it.
+
+Runs error indicators use the original ⚠ glyph: `--error` for task failures and
+`--metric-error` for metric failures. Retry counts use ↻ with `--info`.
 
 ### Type scale — every element maps to exactly one role
 

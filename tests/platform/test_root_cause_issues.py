@@ -214,6 +214,9 @@ def test_prompt_renders_subcategory_definitions_and_issue_schema() -> None:
                     }
                 }
             },
+            "approved_category_details": {
+                "Agent": ["Retrieval failure"],
+            },
         },
     )[0]["content"]
 

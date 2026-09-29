@@ -70,6 +70,8 @@ from qym_platform.services.document_extractor import (
 )
 from qym_platform.services.llm_analyzer import (
     DEFAULT_SYSTEM_PROMPT,
+    LLM_REQUEST_TIMEOUT_SECONDS,
+    MAX_ANALYSIS_TIMEOUT_SECONDS,
     ROOT_CAUSE_CATEGORIES,
     SOLUTION_CATEGORIES,
     AnalysisRule,
@@ -93,7 +95,10 @@ from qym_platform.services.approved_categories import (
 )
 from qym_platform.services.issue_reviews import (
     change_metric_issue, correction_issue_id, correction_issues, issue_content,
-    sync_correction_issue_metadata, lock_issue_correction, lock_correction_pass,
+    filter_explicitly_approved_issue_corrections,
+    lock_correction_pass,
+    lock_issue_correction,
+    sync_correction_issue_metadata,
     sync_issue_candidates,
 )
 from qym_platform.services.repeat_passes import (
@@ -929,7 +934,10 @@ class AnalyzeRequest(BaseModel):
     root_cause: Optional[List[str]] = None
     item_ids: Optional[List[str]] = None
     limit: Optional[int] = Field(default=None, ge=1)
-    concurrency: int = Field(default=20, ge=1, le=20)
+    concurrency: Optional[int] = Field(default=None, ge=1, le=20)
+    timeout_seconds: float = Field(
+        default=LLM_REQUEST_TIMEOUT_SECONDS, ge=1, le=MAX_ANALYSIS_TIMEOUT_SECONDS
+    )
     config: Optional[PlaygroundConfig] = None
     category_catalog_version_id: Optional[str] = Field(default=None, max_length=80)
     pass_number: Optional[int] = Field(default=None, ge=1)
@@ -971,6 +979,9 @@ class TestRequest(BaseModel):
     pass_number: Optional[int] = Field(default=None, ge=1)
     expected_pass_version: Optional[int] = Field(default=None, ge=0, strict=True)
     connection_id: Optional[str] = None
+    timeout_seconds: float = Field(
+        default=LLM_REQUEST_TIMEOUT_SECONDS, ge=1, le=MAX_ANALYSIS_TIMEOUT_SECONDS
+    )
 
 
 class AnalysisContextUpdate(BaseModel):
@@ -1523,7 +1534,7 @@ def _approved_corrections(
     db: Session,
     run: Run | _ProjectAnalysisScope,
 ) -> list[ReviewCorrection]:
-    """Load the active approved corrections for a run or project scope."""
+    """Load active corrections whose matching saved issue is approved."""
     corrections_query = (
         db.query(ReviewCorrection)
         .join(Run, Run.id == ReviewCorrection.run_id)
@@ -1538,7 +1549,13 @@ def _approved_corrections(
         corrections_query = corrections_query.filter(
             ReviewCorrection.task == run.task
         )
-    return corrections_query.all()
+    # Newest first: taxonomy merging and category ordering depend on it.
+    corrections_query = corrections_query.order_by(
+        ReviewCorrection.created_at.desc(), ReviewCorrection.id.desc()
+    )
+    return filter_explicitly_approved_issue_corrections(
+        db, corrections_query.all()
+    )
 
 
 def _approved_category_example_counts(
@@ -1559,9 +1576,16 @@ def _approved_category_details(
     analyzer prompt can only ever surface details reviewers have approved.
     The editable catalog map is deliberately not consulted here.
     """
+    return _approved_category_details_from(_approved_corrections(db, run))
+
+
+def _approved_category_details_from(
+    corrections: List[ReviewCorrection],
+) -> dict[str, list[str]]:
+    """Build the category → approved details map from preloaded corrections."""
     details: dict[str, list[str]] = {}
     seen_by_category: dict[str, set[str]] = {}
-    for correction in _approved_corrections(db, run):
+    for correction in corrections:
         for issue in _correction_root_cause_issues(correction):
             category = issue["category"]
             detail = _catalog_label(issue["subcategory"])
@@ -1582,20 +1606,7 @@ def _collect_task_root_cause_catalog(
     items: List[RunItem],
 ) -> tuple[List[str], Dict[str, List[str]]]:
     """Collect root-cause categories and a category→details mapping from approved corrections."""
-    corrections_query = (
-        db.query(ReviewCorrection)
-        .join(Run, Run.id == ReviewCorrection.run_id)
-        .filter(
-            Run.project_id == run.project_id,
-            Run.deleted_at.is_(None),
-            ReviewCorrection.status == CorrectionStatus.APPROVED,
-            ReviewCorrection.is_active.is_(True),
-        )
-        .order_by(ReviewCorrection.created_at.desc())
-    )
-    if not isinstance(run, _ProjectAnalysisScope):
-        corrections_query = corrections_query.filter(ReviewCorrection.task == run.task)
-    task_corrections = corrections_query.all()
+    task_corrections = _approved_corrections(db, run)
 
     correction_categories: list[str] = []
     # Build category → details mapping from approved corrections
@@ -1626,20 +1637,7 @@ def _collect_task_root_cause_taxonomy(
     items: List[RunItem],
 ) -> Dict[str, Dict[str, str]]:
     """Collect built-in and learned category definitions for analyzer prompts."""
-    corrections_query = (
-        db.query(ReviewCorrection)
-        .join(Run, Run.id == ReviewCorrection.run_id)
-        .filter(
-            Run.project_id == run.project_id,
-            Run.deleted_at.is_(None),
-            ReviewCorrection.status == CorrectionStatus.APPROVED,
-            ReviewCorrection.is_active.is_(True),
-        )
-        .order_by(ReviewCorrection.created_at.desc(), ReviewCorrection.id.desc())
-    )
-    if not isinstance(run, _ProjectAnalysisScope):
-        corrections_query = corrections_query.filter(ReviewCorrection.task == run.task)
-    task_corrections = corrections_query.all()
+    task_corrections = _approved_corrections(db, run)
 
     # Older corrections do not have taxonomy columns, so use getattr for
     # compatibility with long-lived workers during a rolling migration.
@@ -2237,13 +2235,18 @@ def _analysis_config_with_category_catalog(
     )
     if "max_root_cause_categories" not in config:
         config["max_root_cause_categories"] = values["max_root_cause_categories"]
+    # Load the approved corrections once; the filter behind them queries
+    # RunItem and RunItemPassScore, so repeating it per field is wasteful.
+    approved_corrections = _approved_corrections(db, run)
     if "category_example_counts" not in config:
-        config["category_example_counts"] = _approved_category_example_counts(
-            db, run
+        config["category_example_counts"] = _category_example_counts(
+            approved_corrections
         )
     # Server-owned: never sourced from the editable catalog or the request body,
     # so an unapproved detail cannot reach the analyzer prompt.
-    config["approved_category_details"] = _approved_category_details(db, run)
+    config["approved_category_details"] = _approved_category_details_from(
+        approved_corrections
+    )
     config["category_catalog_version"] = values["version"]
     config["category_catalog_version_id"] = values["id"]
     return config or None
@@ -3721,6 +3724,17 @@ def _requested_metric_scope(request: AnalyzeRequest) -> set[str] | None:
     return None
 
 
+def _analysis_request_concurrency(requested: int | None) -> int:
+    """Apply the deployment concurrency cap, allowing only lower API overrides."""
+    configured = PlatformSettings().analysis_max_concurrency
+    return min(requested, configured) if requested is not None else configured
+
+
+def _analysis_max_retries() -> int:
+    """Return the deployment-wide timeout retry count."""
+    return PlatformSettings().analysis_max_retries
+
+
 def _validate_requested_metric(
     run: Run,
     scores_by_item: dict[str, dict[str, RunItemScore]],
@@ -4086,10 +4100,12 @@ async def _run_analysis_job(
             targets=analysis_targets,
             scores_by_item=scores_by_item,
             corrections=[],
-            concurrency=request.concurrency,
+            concurrency=_analysis_request_concurrency(request.concurrency),
             config=analyzer_config,
             temperature=request.config.temperature if request.config else None,
             max_tokens=request.config.max_tokens if request.config else None,
+            request_timeout_seconds=request.timeout_seconds,
+            max_timeout_retries=_analysis_max_retries(),
             progress_callback=on_progress,
             retry_callback=on_retry,
         )
@@ -4261,6 +4277,8 @@ async def _analyze_targets_batch(
     config: dict[str, Any] | None,
     temperature: float | None,
     max_tokens: int | None,
+    request_timeout_seconds: float,
+    max_timeout_retries: int,
     progress_callback: Any = None,
     retry_callback: Any = None,
 ) -> list[AnalysisResult]:
@@ -4280,6 +4298,10 @@ async def _analyze_targets_batch(
             max_tokens=max_tokens,
             progress_callback=progress_callback,
         )
+        if _supports_callable_arg(analyze_items_batch, "request_timeout_seconds"):
+            batch_kwargs["request_timeout_seconds"] = request_timeout_seconds
+        if _supports_callable_arg(analyze_items_batch, "max_timeout_retries"):
+            batch_kwargs["max_timeout_retries"] = max_timeout_retries
         if _supports_callable_arg(analyze_items_batch, "retry_callback"):
             batch_kwargs["retry_callback"] = retry_callback
         return await analyze_items_batch(**batch_kwargs)
@@ -4306,6 +4328,10 @@ async def _analyze_targets_batch(
             temperature=temperature,
             max_tokens=max_tokens,
         )
+        if _supports_callable_arg(analyze_items_batch, "request_timeout_seconds"):
+            batch_kwargs["request_timeout_seconds"] = request_timeout_seconds
+        if _supports_callable_arg(analyze_items_batch, "max_timeout_retries"):
+            batch_kwargs["max_timeout_retries"] = max_timeout_retries
         if _supports_callable_arg(analyze_items_batch, "retry_callback"):
             batch_kwargs["retry_callback"] = retry_callback
         batch_results = await analyze_items_batch(**batch_kwargs)
@@ -4646,10 +4672,12 @@ async def analyze_run_items(
         targets=analysis_targets,
         scores_by_item=scores_by_item,
         corrections=[],
-        concurrency=request.concurrency,
+        concurrency=_analysis_request_concurrency(request.concurrency),
         config=analyzer_config,
         temperature=request.config.temperature if request.config else None,
         max_tokens=request.config.max_tokens if request.config else None,
+        request_timeout_seconds=request.timeout_seconds,
+        max_timeout_retries=_analysis_max_retries(),
     )
     aggregation_error: str | None = None
     if request.pass_number is not None:
@@ -4794,7 +4822,7 @@ async def analyze_run_items_stream(
                 "completed": 0,
                 "errors": 0,
                 "retries": 0,
-                "concurrency": request.concurrency,
+                "concurrency": _analysis_request_concurrency(request.concurrency),
             }
         )
 
@@ -4944,10 +4972,12 @@ async def analyze_run_items_stream(
                     targets=analysis_targets,
                     scores_by_item=scores_by_item,
                     corrections=[],
-                    concurrency=request.concurrency,
+                    concurrency=_analysis_request_concurrency(request.concurrency),
                     config=analyzer_config,
                     temperature=request.config.temperature if request.config else None,
                     max_tokens=request.config.max_tokens if request.config else None,
+                    request_timeout_seconds=request.timeout_seconds,
+                    max_timeout_retries=_analysis_max_retries(),
                     progress_callback=on_progress,
                     retry_callback=on_retry,
                 )
@@ -7042,6 +7072,10 @@ async def analyze_test(
             temperature=request.config.temperature if request.config else None,
             max_tokens=request.config.max_tokens if request.config else None,
         )
+        if _supports_callable_arg(analyze_single_item, "request_timeout_seconds"):
+            single_kwargs["request_timeout_seconds"] = request.timeout_seconds
+        if _supports_callable_arg(analyze_single_item, "max_timeout_retries"):
+            single_kwargs["max_timeout_retries"] = _analysis_max_retries()
         if _supports_metric_name_arg(analyze_single_item):
             single_kwargs["metric_name"] = metric_name
         else:
@@ -7274,20 +7308,7 @@ def get_analysis_config(
         and i.item_metadata.get("root_cause_source") == "ai"
     )
 
-    corrections_query = (
-        db.query(ReviewCorrection)
-        .join(Run, Run.id == ReviewCorrection.run_id)
-        .filter(
-            Run.project_id == run.project_id,
-            Run.deleted_at.is_(None),
-            ReviewCorrection.status == CorrectionStatus.APPROVED,
-            ReviewCorrection.is_active.is_(True),
-        )
-        .order_by(ReviewCorrection.created_at.desc(), ReviewCorrection.id.desc())
-    )
-    if not isinstance(run, _ProjectAnalysisScope):
-        corrections_query = corrections_query.filter(ReviewCorrection.task == run.task)
-    approved_corrections = corrections_query.all()
+    approved_corrections = _approved_corrections(db, run)
     category_example_counts = _category_example_counts(approved_corrections)
     correction_count = len(approved_corrections)
     enabled_document_count = (
@@ -7399,6 +7420,11 @@ def get_analysis_config(
             "final_prompt_characters": None,
             "prompt_truncation_enabled": False,
         },
+        "analysis_defaults": {
+            "request_timeout_seconds": LLM_REQUEST_TIMEOUT_SECONDS,
+            "max_timeout_seconds": MAX_ANALYSIS_TIMEOUT_SECONDS,
+            "max_timeout_retries": _analysis_max_retries(),
+        },
         "default_system_prompt": DEFAULT_SYSTEM_PROMPT,
         "default_categories": all_categories,
         "max_root_cause_categories": category_catalog_values[
@@ -7473,6 +7499,16 @@ def get_project_category_catalog(
     )
     catalog = _category_catalog_reference(db, project_id, version)
     payload = _category_catalog_payload(catalog, can_manage=can_manage)
+    # The editable catalog contains proposed labels as well as labels that a
+    # reviewer has actually approved. Run-page issue editors need the latter
+    # without downloading the full approved-example payload.
+    payload["approved_category_details"] = _approved_category_details(
+        db,
+        _ProjectAnalysisScope(
+            id=_project_analysis_scope_key(project_slug),
+            project_id=project_id,
+        ),
+    )
     # Keep the snapshot top-level for simple clients and nested for the write
     # response shape used by the project workspace.
     return {**payload, "catalog": payload}

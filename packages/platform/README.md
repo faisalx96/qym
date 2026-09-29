@@ -40,6 +40,9 @@ QYM_AUTH_GOOGLE_CLIENT_ID=
 QYM_AUTH_GOOGLE_CLIENT_SECRET=
 QYM_AUTH_GITHUB_CLIENT_ID=
 QYM_AUTH_GITHUB_CLIENT_SECRET=
+QYM_AUTH_GITLAB_URL=
+QYM_AUTH_GITLAB_CLIENT_ID=
+QYM_AUTH_GITLAB_CLIENT_SECRET=
 QYM_LLM_CONFIG_ENCRYPTION_KEY=
 ```
 
@@ -124,13 +127,18 @@ For SDK streaming and platform-launched SDK work against a private HTTPS origin,
 | `QYM_AUTH_LOCAL_ENABLED` | `false` | Enable email/password sign-up and login when auth mode is not `none`. |
 | `QYM_AUTH_GOOGLE_CLIENT_ID` / `QYM_AUTH_GOOGLE_CLIENT_SECRET` | empty | Enable Google login in `oidc` mode. |
 | `QYM_AUTH_GITHUB_CLIENT_ID` / `QYM_AUTH_GITHUB_CLIENT_SECRET` | empty | Enable GitHub login in `oidc` mode. |
+| `QYM_AUTH_GITLAB_URL` / `QYM_AUTH_GITLAB_CLIENT_ID` / `QYM_AUTH_GITLAB_CLIENT_SECRET` | empty | Enable self-hosted GitLab login in `oidc` mode. The URL is the GitLab issuer, for example `https://gitlab.example.com`; a malformed value stops startup. |
 
 Auth modes:
 
 - `none` is for local development. It creates or reuses `dev@local` as an `ADMIN` and accepts no identity headers.
 - `proxy_headers` trusts `X-User-Email` or `X-Email` from an identity-aware reverse proxy. Block direct access to the application so clients cannot spoof these headers.
-- `oidc` provides native Google and/or GitHub login. Register `${QYM_BASE_URL}/v1/auth/callback/google` or `${QYM_BASE_URL}/v1/auth/callback/github` with the provider. Enterprise SSO/SAML is not implemented.
+- `oidc` provides native Google, GitHub, and/or self-hosted GitLab login. Register `${QYM_BASE_URL}/v1/auth/callback/<provider>` (`google`, `github`, or `gitlab`) with the provider. Enterprise SSO/SAML is not implemented.
 - `QYM_AUTH_LOCAL_ENABLED=true` adds local email/password sessions alongside `proxy_headers` or `oidc`.
+
+For GitLab, create an OAuth application (instance, group, or user level) with the redirect URI `${QYM_BASE_URL}/v1/auth/callback/gitlab`, the scopes `openid`, `email`, and `profile`, and **Confidential** enabled. The platform reads `${QYM_AUTH_GITLAB_URL}/.well-known/openid-configuration`, so the container must reach GitLab and trust its TLS certificate. A GitLab login links to an existing qym account with the same verified email, so qym trusts GitLab's email verification: only enable GitLab login when users cannot set an unconfirmed email on the instance (email confirmation on, or emails managed by LDAP/admins). Otherwise a GitLab user could claim another person's qym account, including an admin's. qym keys a GitLab account by the ID token issuer and subject, so a second GitLab instance cannot sign in as a user of the first. If the GitLab external URL changes, users relink by verified email at their next sign-in.
+
+Admins can reset a forgotten local password from **Admin → Users → Edit → Reset Password**. The platform shows a one-time password once; the user signs in with it and must choose a new password before a session starts. A temporary password works once, and a later reset replaces it.
 
 In session-based modes, `QYM_BASE_URL` must match the browser origin. Browser writes without Bearer authentication are restricted to that origin.
 
@@ -178,6 +186,11 @@ Reviews support filtering, human corrections, root-cause revisions, approval dec
 Background analysis jobs run on a bounded in-process executor. Configure the
 capacity with `QYM_ANALYSIS_JOB_MAX_WORKERS` (default `2`). The registry is
 intentionally in-memory while the platform runs as one Uvicorn worker.
+Each Auto-analysis job sends at most `QYM_ANALYSIS_MAX_CONCURRENCY` item-metric
+requests at once (default `20`, range `1`–`20`). The Auto-analysis page lets the
+user set the timeout for each request. Configure timeout retries with
+`QYM_ANALYSIS_MAX_RETRIES` (default `1`, range `0`–`5`); every retry doubles the
+previous attempt's timeout, and no single attempt waits longer than 3600 seconds.
 
 ## Datasets
 

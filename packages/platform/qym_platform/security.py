@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import os
+import secrets
 
 
 _PBKDF2_PREFIX = "pbkdf2_sha256"
@@ -80,3 +81,8 @@ def hash_password(password: str) -> bytes:
 
 def verify_password(password: str, stored_hash: bytes) -> bool:
     return _verify_pbkdf2(password or "", stored_hash, _PASSWORD_PBKDF2_PREFIX)
+
+
+def generate_temporary_password() -> str:
+    """Return a random one-time password for an admin-initiated reset."""
+    return secrets.token_urlsafe(12)

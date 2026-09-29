@@ -15,8 +15,12 @@ os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("QYM_AUTH_MODE", "proxy_headers")
 
 from qym_platform.api.analysis import (  # noqa: E402
+    AnalyzeRequest,
     CategoryCatalogUpdate,
     PlaygroundConfig,
+    TestRequest as AnalyzerTestRequest,
+    _analysis_max_retries,
+    _analysis_request_concurrency,
     _catalog_request_values,
     _analysis_config_with_category_catalog,
     _playground_config_to_analyzer,
@@ -25,9 +29,11 @@ from qym_platform.services.llm_analyzer import build_analysis_prompt
 from qym_platform.app import create_app
 from qym_platform.db.base import Base
 from qym_platform.db.models import (
+    CorrectionStatus,
     Project,
     ProjectMembership,
     ProjectRole,
+    ReviewCorrection,
     Run,
     RunItem,
     RunWorkflowStatus,
@@ -145,6 +151,28 @@ def _member_headers() -> dict[str, str]:
 
 def _outsider_headers() -> dict[str, str]:
     return {"X-User-Email": "analysis-outsider@example.com"}
+
+
+def test_auto_analysis_timeout_and_environment_concurrency(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("QYM_ANALYSIS_MAX_CONCURRENCY", "7")
+    monkeypatch.setenv("QYM_ANALYSIS_MAX_RETRIES", "3")
+
+    request = AnalyzeRequest()
+    assert request.concurrency is None
+    assert request.timeout_seconds == 120.0
+    assert _analysis_request_concurrency(request.concurrency) == 7
+    assert _analysis_request_concurrency(3) == 3
+    assert _analysis_request_concurrency(20) == 7
+    assert _analysis_max_retries() == 3
+    assert AnalyzeRequest(timeout_seconds=45).timeout_seconds == 45.0
+    assert AnalyzerTestRequest(item_ids=["item-1"], timeout_seconds=30).timeout_seconds == 30.0
+
+    with pytest.raises(ValueError):
+        AnalyzeRequest(timeout_seconds=0)
+    with pytest.raises(ValueError):
+        AnalyzeRequest(timeout_seconds=3601)
 
 
 def test_legacy_analyzer_url_redirects_to_project_run_route(
@@ -369,6 +397,141 @@ def test_category_catalog_version_aliases_and_conflict_contract(
     assert restored.json()["catalog"]["subcategory_taxonomy"] == catalog["subcategory_taxonomy"]
 
 
+def test_project_catalog_exposes_only_approved_subcategories_for_run_issue_picker(
+    analysis_route_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_generator = analysis_route_client.app.dependency_overrides[get_db]()
+    db = next(db_generator)
+    try:
+        for index, (item_id, subcategory, status, is_active, issue_status) in enumerate((
+            ("approved-item", "Invented entity", CorrectionStatus.APPROVED, True, "approved"),
+            ("pending-item", "Pending proposal", CorrectionStatus.PENDING, True, "pending"),
+            ("stale-approved-item", "Stale approval", CorrectionStatus.APPROVED, True, "pending"),
+            ("inactive-item", "Retired label", CorrectionStatus.APPROVED, False, "approved"),
+        )):
+            issue_id = f"issue-{item_id}"
+            db.add(
+                RunItem(
+                    run_id="analysis/run-1",
+                    item_id=item_id,
+                    index=index,
+                    input={"question": item_id},
+                    expected={"answer": "expected"},
+                    output={"answer": "actual"},
+                    item_metadata={
+                        "metric_analyses": {
+                            "judge": {
+                                "root_cause_issues": [
+                                    {
+                                        "issue_id": issue_id,
+                                        "category": "Hallucination",
+                                        "subcategory": subcategory,
+                                        "finding": "Reviewer finding",
+                                        "review_status": issue_status,
+                                    }
+                                ],
+                                "review_status": issue_status,
+                            }
+                        }
+                    },
+                )
+            )
+            db.add(
+                ReviewCorrection(
+                    run_id="analysis/run-1",
+                    item_id=item_id,
+                    metric_name="judge",
+                    task="task",
+                    ai_root_cause="Hallucination",
+                    human_root_cause="Hallucination",
+                    human_root_cause_issues=[
+                        {
+                            "issue_id": issue_id,
+                            "category": "Hallucination",
+                            "subcategory": subcategory,
+                            "finding": "Reviewer finding",
+                        }
+                    ],
+                    status=status,
+                    is_active=is_active,
+                )
+            )
+        db.commit()
+    finally:
+        db_generator.close()
+
+    response = analysis_route_client.get(
+        "/api/projects/analysis-project/analysis-category-catalog",
+        headers=_headers(),
+    )
+    assert response.status_code == 200
+    assert response.json()["approved_category_details"] == {
+        "Hallucination": ["Invented entity"]
+    }
+    assert response.json()["catalog"]["approved_category_details"] == {
+        "Hallucination": ["Invented entity"]
+    }
+
+    monkeypatch.setenv("QYM_ANALYSIS_MAX_RETRIES", "4")
+    config_response = analysis_route_client.get(
+        "/api/projects/analysis-project/analysis-config",
+        headers=_headers(),
+    )
+    assert config_response.status_code == 200
+    config = config_response.json()
+    assert config["approved_example_count"] == 1
+    assert config["analysis_defaults"] == {
+        "request_timeout_seconds": 120.0,
+        "max_timeout_seconds": 3600,
+        "max_timeout_retries": 4,
+    }
+    assert [
+        example["root_cause_issues"][0]["subcategory"]
+        for example in config["category_examples"]["Hallucination"]
+    ] == ["Invented entity"]
+
+    # Explicit catalog removal must survive unrelated guidance saves even
+    # though the approved evidence continues to expose the removed label.
+    base = "/api/projects/analysis-project/analysis-category-catalog"
+    payload = {
+        "categories": ["Hallucination"],
+        "category_details_map": {"Hallucination": ["Invented entity"]},
+        "category_taxonomy": {
+            "Hallucination": {
+                "description": "Unsupported information.",
+                "when_to_use": "Use when the answer invents information.",
+            }
+        },
+        "subcategory_taxonomy": {
+            "Hallucination": {
+                "Invented entity": {
+                    "description": "An entity is invented.",
+                    "when_to_use": "Use when an entity has no supporting evidence.",
+                }
+            }
+        },
+        "base_revision": response.json()["version"],
+    }
+    saved = analysis_route_client.put(base, headers=_headers(), json=payload)
+    assert saved.status_code == 200
+    payload["base_revision"] = saved.json()["catalog"]["version"]
+    payload["category_details_map"] = {}
+    payload["subcategory_taxonomy"] = {}
+    removed = analysis_route_client.put(base, headers=_headers(), json=payload)
+    assert removed.status_code == 200
+    payload["base_revision"] = removed.json()["catalog"]["version"]
+    payload["category_taxonomy"]["Hallucination"]["description"] = "Updated guidance."
+    updated = analysis_route_client.put(base, headers=_headers(), json=payload)
+    assert updated.status_code == 200
+    assert updated.json()["catalog"]["category_details_map"] == {}
+    reloaded = analysis_route_client.get(base, headers=_headers()).json()
+    assert reloaded["category_details_map"] == {}
+    assert reloaded["approved_category_details"] == {
+        "Hallucination": ["Invented entity"]
+    }
+
+
 def test_analysis_config_uses_catalog_categories_for_prompt_injection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -412,14 +575,20 @@ def test_analysis_config_uses_catalog_categories_for_prompt_injection(
         "qym_platform.api.analysis._category_catalog_reference",
         lambda *_args, **_kwargs: catalog,
     )
+    # The config builder loads approved corrections once and derives both the
+    # example counts and the approved details from that single list.
     monkeypatch.setattr(
-        "qym_platform.api.analysis._approved_category_example_counts",
+        "qym_platform.api.analysis._approved_corrections",
+        lambda *_args, **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        "qym_platform.api.analysis._category_example_counts",
         lambda *_args, **_kwargs: {},
     )
     # Only this approved-corrections source may reach the prompt; the catalog's
     # editable category_details_map above must not contribute any detail.
     monkeypatch.setattr(
-        "qym_platform.api.analysis._approved_category_details",
+        "qym_platform.api.analysis._approved_category_details_from",
         lambda *_args, **_kwargs: {"Approved Category": ["Approved mechanism"]},
     )
 
@@ -475,13 +644,13 @@ def test_analysis_config_uses_catalog_categories_for_prompt_injection(
     assert "- Approved Category" in prompt
     assert "- Bare Approved Category\n  Approved examples: 0" in prompt
     assert "Unapproved Category" not in prompt
-    # Approved correction details remain separate from the project taxonomy.
-    # A label with no subcategory definition still stays out of the prompt.
+    # Only approved issue labels enter the prompt. Taxonomy definitions may
+    # explain one of those labels, but cannot introduce an unapproved label.
     assert "Use the exact listed subcategory when it covers the mechanism:" in prompt
     assert "    - Approved mechanism" in prompt
-    assert "    - Approved detail" in prompt
-    assert "      Description: The approved detail definition." in prompt
-    assert "      Use when: Use for this approved detail." in prompt
+    assert "    - Approved detail" not in prompt
+    assert "The approved detail definition." not in prompt
+    assert "Use for this approved detail." not in prompt
     assert "Bare detail" not in prompt
     assert "Leaked detail" not in prompt
 
