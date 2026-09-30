@@ -72,6 +72,9 @@ from qym_platform.db.models import (
     EvalModelSlotStatus,
     EvalPriority,
     Run,
+    RunItem,
+    RunItemScore,
+    RunMetricSpec,
     User,
 )
 from qym_platform.deps import get_db
@@ -626,10 +629,97 @@ def _job_run_name(job: EvalExperimentJob) -> Optional[str]:
     return name if isinstance(name, str) else None
 
 
-def _run_summary(run: Optional[Run]) -> Optional[Dict[str, Any]]:
+def _job_qym_config(job: EvalExperimentJob) -> Optional[Dict[str, Any]]:
+    """The job's ``run_metadata.qym_config`` (§10.1), for "Save as preset".
+
+    Secret refs are stripped like everywhere else in responses, so a temporary model
+    shows label/model/base_url only (a preset never keeps its key either).
+    """
+    body = job.request_body if isinstance(job.request_body, Mapping) else {}
+    config = (body.get("evaluator") or {}).get("config") or {}
+    metadata = config.get("run_metadata") if isinstance(config, Mapping) else None
+    snapshot = metadata.get("qym_config") if isinstance(metadata, Mapping) else None
+    if not isinstance(snapshot, Mapping):
+        return None
+    return strip_secret_refs(redact_secret_refs(snapshot))
+
+
+def _run_metrics(db: Session, runs: Mapping[str, Run]) -> Dict[str, Dict[str, Any]]:
+    """Per run: ``{"means": {metric: mean}, "directions": {metric: direction}}``.
+
+    Means follow the runs list (``api/runs.py``): errored items count as 0 and
+    unscored items are left out of the denominator.
+    """
+    run_ids = list(runs)
+    if not run_ids:
+        return {}
+    errors = dict(
+        db.query(RunItem.run_id, func.count())
+        .filter(RunItem.run_id.in_(run_ids), RunItem.error.isnot(None))
+        .group_by(RunItem.run_id)
+        .all()
+    )
+    sums: Dict[str, Dict[str, Tuple[float, int]]] = {}
+    rows = (
+        db.query(
+            RunItemScore.run_id,
+            RunItemScore.metric_name,
+            func.sum(RunItemScore.score_numeric),
+            func.count(RunItemScore.score_numeric),
+        )
+        .join(
+            RunItem,
+            (RunItem.run_id == RunItemScore.run_id)
+            & (RunItem.item_id == RunItemScore.item_id),
+        )
+        .filter(RunItemScore.run_id.in_(run_ids), RunItem.error.is_(None))
+        .group_by(RunItemScore.run_id, RunItemScore.metric_name)
+        .all()
+    )
+    for run_id, metric, total, count in rows:
+        sums.setdefault(run_id, {})[metric] = (float(total or 0.0), int(count or 0))
+    directions: Dict[str, Dict[str, str]] = {}
+    for spec in db.query(RunMetricSpec).filter(RunMetricSpec.run_id.in_(run_ids)):
+        directions.setdefault(spec.run_id, {})[spec.metric_name] = spec.direction
+    out: Dict[str, Dict[str, Any]] = {}
+    for run_id, run in runs.items():
+        scored = sums.get(run_id, {})
+        error_count = int(errors.get(run_id, 0) or 0)
+        names = [m for m in (run.metrics or []) if isinstance(m, str)]
+        names += [m for m in scored if m not in names]
+        means: Dict[str, Optional[float]] = {}
+        for metric in names:
+            total, count = scored.get(metric, (0.0, 0))
+            means[metric] = total / (count + error_count) if count else None
+        out[run_id] = {"means": means, "directions": directions.get(run_id, {})}
+    return out
+
+
+def _headline_metric(
+    metrics: Optional[Mapping[str, Any]], ranking_metric: Optional[str]
+) -> Optional[Dict[str, Any]]:
+    """The environment's ranking metric when the run has it, else its first metric."""
+    means = (metrics or {}).get("means") or {}
+    if not means:
+        return None
+    name = ranking_metric if ranking_metric in means else next(iter(means))
+    return {
+        "name": name,
+        "mean": means[name],
+        "direction": ((metrics or {}).get("directions") or {}).get(name, "maximize"),
+    }
+
+
+def _run_summary(
+    run: Optional[Run],
+    metrics: Optional[Mapping[str, Any]] = None,
+    ranking_metric: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
     if run is None:
         return None
     return {
+        "metric_means": dict((metrics or {}).get("means") or {}),
+        "headline_metric": _headline_metric(metrics, ranking_metric),
         "id": run.id,
         "status": run.status.value if run.status else None,
         "status_reason": run.status_reason,
@@ -650,6 +740,9 @@ def _serialize_job(
     env_names: Mapping[str, str],
     runs: Mapping[str, Run],
     superseded: set,
+    run_metrics: Optional[Mapping[str, Mapping[str, Any]]] = None,
+    ranking_metrics: Optional[Mapping[str, Optional[str]]] = None,
+    combo_labels: Optional[Mapping[int, str]] = None,
 ) -> Dict[str, Any]:
     return {
         "id": job.id,
@@ -657,6 +750,7 @@ def _serialize_job(
         "environment_id": job.environment_id,
         "environment_name": env_names.get(job.environment_id),
         "combo_index": job.combo_index,
+        "combo_label": (combo_labels or {}).get(job.combo_index, ""),
         "attempt": job.attempt,
         "retry_of_job_id": job.retry_of_job_id,
         "superseded": job.id in superseded,
@@ -680,7 +774,16 @@ def _serialize_job(
         "created_at": to_api_timestamp(job.created_at),
         "updated_at": to_api_timestamp(job.updated_at),
         "run_id": job.run_id,
-        "run": _run_summary(runs.get(job.run_id)) if job.run_id else None,
+        "run": (
+            _run_summary(
+                runs.get(job.run_id),
+                (run_metrics or {}).get(job.run_id),
+                (ranking_metrics or {}).get(job.environment_id),
+            )
+            if job.run_id
+            else None
+        ),
+        "qym_config": _job_qym_config(job),
     }
 
 
@@ -731,6 +834,14 @@ def _status_counts(jobs: List[EvalExperimentJob]) -> Dict[str, int]:
 
 
 def _experiment_detail(db: Session, experiment: EvalExperiment) -> Dict[str, Any]:
+    """The experiment with every job, as the detail matrix (#35) renders it.
+
+    Besides the stored fields, each job carries ``combo_label`` (the sweep label),
+    ``qym_config`` (secret-free, for "Save as preset") and, when linked, the run's
+    ``metric_means`` and ``headline_metric`` (the environment's ``ranking_metric``
+    when the run has it, otherwise the run's first metric). ``sweep_keys`` maps each
+    swept pointer to its short label key.
+    """
     jobs = (
         db.query(EvalExperimentJob)
         .filter(EvalExperimentJob.experiment_id == experiment.id)
@@ -765,8 +876,39 @@ def _experiment_detail(db: Session, experiment: EvalExperiment) -> Dict[str, Any
         {"id": env.id, "name": env.name, "is_active": env.is_active}
         for env in sorted(envs, key=lambda e: env_ids.index(e.id))
     ]
+    ranking = {env.id: env.ranking_metric for env in envs}
+    payload["ranking_metrics"] = ranking
+    # Matrix rows (§12.2): one short label per combination, as in the run names.
+    sweeps: Dict[int, Mapping[str, Any]] = {}
+    for j in jobs:
+        sweep = (j.params or {}).get("sweep") if isinstance(j.params, Mapping) else None
+        if isinstance(sweep, Mapping) and j.combo_index not in sweeps:
+            sweeps[j.combo_index] = strip_secret_refs(sweep)
+    pointers: List[str] = []
+    for sweep in sweeps.values():
+        pointers += [p for p in sweep if p not in pointers]
+    keys = eval_sweeps.label_keys(pointers)
+    labels = (
+        eval_sweeps.connection_labels(db, experiment.project_id, experiment.spec or {})
+        if sweeps
+        else {}
+    )
+    combo_labels = {
+        index: eval_sweeps.combo_label(sweep, labels, {p: keys[p] for p in sweep})
+        for index, sweep in sweeps.items()
+    }
+    payload["sweep_keys"] = keys
+    run_metrics = _run_metrics(db, runs)
     payload["jobs"] = [
-        _serialize_job(j, env_names=env_names, runs=runs, superseded=superseded)
+        _serialize_job(
+            j,
+            env_names=env_names,
+            runs=runs,
+            superseded=superseded,
+            run_metrics=run_metrics,
+            ranking_metrics=ranking,
+            combo_labels=combo_labels,
+        )
         for j in jobs
     ]
     return payload
