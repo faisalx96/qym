@@ -898,6 +898,132 @@ def test_remote_legacy_versioning_and_failed_status(sessions, service, clock):
     )
 
 
+LEAKED = "sk-leaked-by-service-QQQQ7777"
+
+
+class LeakyService(FakeService):
+    """A service whose client forgot to redact: secrets in every answer and error."""
+
+    def __init__(self, clock: FakeClock) -> None:
+        super().__init__(clock)
+        self.submit_errors: Dict[str, Exception] = {}  # qym job id -> raised on POST
+        self.get_errors: List[Exception] = []  # raised by the next GETs, in order
+        self.list_error: Optional[Exception] = None
+
+    async def submit(self, body):
+        job_id = body["evaluator"]["config"]["run_metadata"]["qym_launch"]["job_id"]
+        if job_id in self.submit_errors:
+            raise self.submit_errors[job_id]
+        remote = await super().submit(body)
+        # The launch token and a key echoed back, as a raw service answer would.
+        remote["eval_input"]["config"]["run_metadata"]["qym_launch"]["token"] = LEAKED
+        remote["env_overrides"] = {"LLM_OVERRIDES": json.dumps({"api_key": LEAKED})}
+        return remote
+
+    async def get(self, job_id):
+        if self.get_errors:
+            raise self.get_errors.pop(0)
+        return await super().get(job_id)
+
+    async def list(self, **kwargs):
+        if self.list_error is not None:
+            raise self.list_error
+        return await super().list(**kwargs)
+
+
+def _secret_columns(sessions, secret):
+    """``table.column`` of every stored eval value that contains ``secret``."""
+    found = []
+    with sessions() as db:
+        for model in (EvalExperimentJob, EvalExperiment, EvalEnvironment):
+            for row in db.query(model):
+                for column in model.__table__.columns:
+                    value = getattr(row, column.key)
+                    text_value = (
+                        json.dumps(value, default=str)
+                        if isinstance(value, (dict, list))
+                        else str(value)
+                    )
+                    if secret in text_value:
+                        found.append(f"{model.__tablename__}.{column.key}")
+    return found
+
+
+def test_unredacted_service_answers_are_redacted_before_storing(
+    sessions, clock, caplog
+):
+    """Defence in depth: the dispatcher redacts whatever the service returns, even
+    when the client did not (remote_result, remote_versioning, error, wait_reason,
+    the environment's health_error, logs)."""
+    caplog.set_level(logging.DEBUG)
+    service = LeakyService(clock)
+    seed = _seed(sessions, jobs=4)
+    ok, failed, rejected, ambiguous = seed["job_ids"]
+    service.submit_errors = {
+        rejected: RequestRejected(
+            f"Evaluation service rejected the request: api_key={LEAKED}",
+            errors=[{"loc": ["body", "api_key"], "msg": LEAKED, "type": "x"}],
+        ),
+        ambiguous: RetryableError(f"timed out; Authorization: Bearer {LEAKED}"),
+    }
+    d = _dispatcher(sessions, service, clock)
+    d.tick()
+    assert _statuses(sessions, seed["job_ids"]) == [
+        EvalJobStatus.SUBMITTED,
+        EvalJobStatus.SUBMITTED,
+        EvalJobStatus.BLOCKED,
+        EvalJobStatus.SUBMITTING,
+    ]
+
+    # A poll that fails with a secret in its message is logged, not stored.
+    service.get_errors = [RetryableError(f"502 from upstream token={LEAKED}")]
+    job = _poll(d, sessions, clock, failed)
+    assert job.status == EvalJobStatus.SUBMITTED
+
+    result = {
+        "run_name": "r",
+        "pass_at_k": {"1": 0.5},
+        "api_key": LEAKED,
+        "judge": {"name": "gpt", "client_secret": LEAKED},
+        "config": {"LLM_OVERRIDES": json.dumps({"openai_api_key": LEAKED})},
+        "versioning_metadata": {"agent_version": "a1", "access_token": LEAKED},
+    }
+    service.set_status(_job(sessions, ok).remote_job_id, "SUCCEEDED", result=result)
+    job = _poll(d, sessions, clock, ok)
+    assert job.status == EvalJobStatus.SUCCEEDED
+    assert job.remote_result["pass_at_k"] == {"1": 0.5}
+    assert job.remote_result["api_key"] == "[REDACTED]"
+    assert job.remote_versioning == {
+        "agent_version": "a1",
+        "access_token": "[REDACTED]",
+    }
+
+    service.set_status(
+        _job(sessions, failed).remote_job_id,
+        "FAILED",
+        error={"message": f"boom password={LEAKED}", "secret": LEAKED},
+    )
+    job = _poll(d, sessions, clock, failed)
+    assert job.status == EvalJobStatus.FAILED
+    assert "boom" in job.error
+
+    # The ambiguous job is reconciled after a lease length; the environment is paused
+    # and its probe fails with a secret in the message (-> health_error).
+    with sessions() as db:
+        env = db.get(EvalEnvironment, seed["env_id"])
+        env.health_status = "error"
+        env.health_checked_at = None
+        db.commit()
+    service.list_error = RetryableError(f"probe failed: secret={LEAKED}")
+    job = _poll(d, sessions, clock, ambiguous)
+    assert job.status == EvalJobStatus.SUBMITTING
+    with sessions() as db:
+        assert "probe failed" in db.get(EvalEnvironment, seed["env_id"]).health_error
+
+    assert _secret_columns(sessions, LEAKED) == []
+    assert LEAKED not in caplog.text
+
+
 def _link_run(sessions, seed, job_id, **fields):
     with sessions() as db:
         run = Run(
