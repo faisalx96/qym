@@ -500,3 +500,495 @@ def test_cancel_request_lost_to_a_concurrent_write_is_recovered(
     assert _job(sessions, job_id).status == EvalJobStatus.CANCELLING
     assert d.tick() == 1
     assert _job(sessions, job_id).status == EvalJobStatus.CANCELLED
+
+
+# --------------------------------------------------------------------------- queue API
+# Issue #21 (plan §14.1): GET /eval-queue, GET /eval-queue/remote,
+# POST /eval-queue/cancel and POST /eval-queue/remote/cancel.
+
+
+@pytest.fixture()
+def api(sessions, service, monkeypatch):
+    from fastapi.testclient import TestClient
+    from qym_platform.api import eval_queue as eval_queue_api
+    from qym_platform.api.eval_environments import get_eval_client_factory
+    from qym_platform.app import create_app
+    from qym_platform.deps import get_db
+
+    monkeypatch.setenv("QYM_AUTH_MODE", "proxy_headers")
+    refreshes = []
+    monkeypatch.setattr(
+        eval_queue_api,
+        "refresh_snapshot_on_view",
+        lambda factory, env_id, **kwargs: refreshes.append(env_id),
+    )
+    app = create_app()
+
+    def override_get_db():
+        db = sessions()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_eval_client_factory] = lambda: service.factory
+    with TestClient(app) as client:
+        client.refreshes = refreshes
+        yield client
+    app.dependency_overrides.clear()
+
+
+def _as(sessions, user_id):
+    with sessions() as db:
+        email = db.get(User, user_id).email
+    return {"X-User-Email": email, "Origin": "http://localhost:8000"}
+
+
+def _queue_url(seed, suffix=""):
+    return f"/v1/projects/{seed['project_id']}/eval-queue{suffix}"
+
+
+def _join(sessions, seed, role=ProjectRole.MEMBER, user_id=None):
+    """Add ``user_id`` (default: a new user) to the seed project."""
+    if user_id is None:
+        return _add_user(sessions, seed["project_id"], role)
+    with sessions() as db:
+        db.add(
+            ProjectMembership(project_id=seed["project_id"], user_id=user_id, role=role)
+        )
+        db.commit()
+    return user_id
+
+
+def _queue_seed(sessions, clock):
+    """Five jobs: one done, two QUEUED (one backing off), one RUNNING, one BLOCKED."""
+    from qym_platform.db.models import RunItem
+
+    seed = _seed(sessions, jobs=5)
+    done, backoff, fresh, running, blocked = seed["job_ids"]
+    S = EvalJobStatus
+    _join(sessions, seed, user_id=seed["user_id"])
+    _update_job(sessions, done, status=S.SUCCEEDED)
+    _update_job(
+        sessions,
+        backoff,
+        next_attempt_at=clock() + timedelta(seconds=60),
+        wait_reason="HIGH job r-9 active",
+    )
+    _update_job(
+        sessions,
+        running,
+        status=S.RUNNING,
+        remote_job_id="r-ours",
+        next_attempt_at=clock() + timedelta(seconds=10),
+    )
+    _update_job(sessions, blocked, status=S.BLOCKED, wait_reason="model missing")
+    run_id = _link_run(
+        sessions,
+        seed,
+        running,
+        status=RunWorkflowStatus.RUNNING,
+        run_metadata={"total_items": 5},
+    )
+    with sessions() as db:
+        for index in range(2):
+            db.add(RunItem(run_id=run_id, item_id=f"i{index}", index=index, input={}))
+        db.commit()
+    return seed, run_id
+
+
+def test_queue_lists_jobs_in_dispatch_order_with_wait_reason(
+    api, sessions, service, clock
+):
+    seed, run_id = _queue_seed(sessions, clock)
+    done, backoff, fresh, running, blocked = seed["job_ids"]
+    creator = _as(sessions, seed["user_id"])
+
+    resp = api.get(_queue_url(seed), headers=creator)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    # COALESCE(next_attempt_at, created_at), created_at, combo_index; no terminal jobs.
+    assert [j["id"] for j in body["jobs"]] == [fresh, blocked, running, backoff]
+    assert body["total"] == 4
+    jobs = {j["id"]: j for j in body["jobs"]}
+    assert jobs[backoff]["wait_reason"] == "HIGH job r-9 active"
+    assert jobs[blocked]["wait_reason"] == "model missing"
+    assert jobs[fresh]["wait_reason"] is None
+    assert jobs[fresh]["queue_position"] == 1
+    assert jobs[backoff]["queue_position"] == 2
+    assert jobs[running]["queue_position"] is None
+    assert jobs[fresh]["priority"] == "NORMAL"
+    assert jobs[fresh]["experiment_name"] == "exp"
+    assert jobs[fresh]["environment_name"] == "staging"
+    assert jobs[fresh]["can_cancel"] is True
+    assert jobs[fresh]["run"] is None
+    run = jobs[running]["run"]
+    assert run["id"] == run_id and run["status"] == "RUNNING"
+    assert (run["items_done"], run["items_total"]) == (2, 5)
+    (env,) = body["environments"]
+    assert env["id"] == seed["env_id"]
+    assert (env["inflight"], env["queued"], env["blocked"]) == (1, 2, 1)
+    assert env["max_inflight_jobs"] == 5 and env["high_active"] is False
+
+    # The dispatcher claims the claimable ones in exactly this order.
+    clock.advance(120)
+    claimed = _dispatcher(sessions, service, clock).claim()
+    assert claimed == [fresh, running, backoff]
+
+
+def test_queue_filters(api, sessions, service, clock):
+    seed, _ = _queue_seed(sessions, clock)
+    done, backoff, fresh, running, blocked = seed["job_ids"]
+    creator = _as(sessions, seed["user_id"])
+    other = _join(sessions, seed)
+    others_job = _add_experiment(sessions, seed, other)
+
+    def ids(**params):
+        resp = api.get(_queue_url(seed), headers=creator, params=params)
+        assert resp.status_code == 200, resp.text
+        return [j["id"] for j in resp.json()["jobs"]]
+
+    assert others_job in ids()
+    # created now (real clock), long after the seed jobs
+    assert ids(status="QUEUED") == [fresh, backoff, others_job]
+    assert ids(status=["BLOCKED", "RUNNING"]) == [blocked, running]
+    assert ids(mine="true") == [fresh, blocked, running, backoff]
+    assert ids(experiment_id=seed["experiment_id"]) == [
+        fresh,
+        blocked,
+        running,
+        backoff,
+    ]
+    assert ids(environment_id=seed["env_id"], limit=2) == [fresh, blocked]
+    assert (
+        api.get(_queue_url(seed), headers=creator, params={"status": "SUCCEEDED"})
+    ).status_code == 422
+    assert (
+        api.get(_queue_url(seed), headers=creator, params={"experiment_id": "nope"})
+    ).status_code == 404
+    assert (
+        api.get(_queue_url(seed), headers=creator, params={"environment_id": "nope"})
+    ).status_code == 404
+
+
+def test_queue_permissions(api, sessions, service, clock):
+    seed, _ = _queue_seed(sessions, clock)
+    done, backoff, fresh, running, blocked = seed["job_ids"]
+    member = _join(sessions, seed)
+    manager = _join(sessions, seed, ProjectRole.MANAGER)
+    outsider = _add_user(sessions)
+    url = _queue_url(seed, "/cancel")
+
+    # Members see the whole project queue, but can't cancel others' jobs.
+    assert api.get(_queue_url(seed), headers=_as(sessions, outsider)).status_code == 403
+    body = api.get(_queue_url(seed), headers=_as(sessions, member)).json()
+    assert len(body["jobs"]) == 4 and not any(j["can_cancel"] for j in body["jobs"])
+    managed = api.get(_queue_url(seed), headers=_as(sessions, manager)).json()
+    assert all(j["can_cancel"] for j in managed["jobs"])
+    assert (
+        api.post(url, headers=_as(sessions, outsider), json={"job_ids": [fresh]})
+    ).status_code == 403
+
+    resp = api.post(
+        url, headers=_as(sessions, member), json={"job_ids": [fresh, running]}
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {
+        "outcomes": {fresh: "forbidden", running: "forbidden"},
+        "counts": {"forbidden": 2},
+    }
+    assert _job(sessions, fresh).status == EvalJobStatus.QUEUED
+
+    # The creator cancels: queued → cancelled locally, running → cancelling.
+    resp = api.post(
+        url,
+        headers=_as(sessions, seed["user_id"]),
+        json={"job_ids": [fresh, running, done, "missing"], "reason": "wrong data"},
+    )
+    assert resp.json()["outcomes"] == {
+        fresh: "cancelled",
+        running: "cancelling",
+        done: "already_terminal",
+        "missing": "not_found",
+    }
+    assert _job(sessions, fresh).cancel_reason == "wrong data"
+    assert set(_audits(sessions)) == {fresh, running}
+
+    # A manager cancels anyone's jobs; the experiment form takes QUEUED by default.
+    members_job = _add_experiment(sessions, seed, member)
+    resp = api.post(
+        url,
+        headers=_as(sessions, manager),
+        json={"experiment_id": seed["experiment_id"]},
+    )
+    assert resp.json() == {
+        "outcomes": {backoff: "cancelled"},
+        "counts": {"cancelled": 1},
+    }
+    assert _job(sessions, blocked).status == EvalJobStatus.BLOCKED
+    resp = api.post(
+        url,
+        headers=_as(sessions, manager),
+        json={"experiment_id": seed["experiment_id"], "statuses": ["BLOCKED"]},
+    )
+    assert resp.json()["outcomes"] == {blocked: "cancelled"}
+    assert (
+        api.post(url, headers=_as(sessions, manager), json={"job_ids": [members_job]})
+    ).json()["outcomes"] == {members_job: "cancelled"}
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {},
+        {"job_ids": []},
+        {"job_ids": ["a"] * 201},
+        {"job_ids": ["a"], "experiment_id": "x"},
+        {"job_ids": ["a"], "statuses": ["QUEUED"]},
+        {"experiment_id": "x", "statuses": ["SUCCEEDED"]},
+        {"job_ids": ["a"], "reason": "r" * 1001},
+    ],
+)
+def test_queue_cancel_validation(api, sessions, service, clock, body):
+    seed = _seed(sessions)
+    _join(sessions, seed, user_id=seed["user_id"])
+    resp = api.post(
+        _queue_url(seed, "/cancel"), headers=_as(sessions, seed["user_id"]), json=body
+    )
+    assert resp.status_code == 422
+
+
+def _foreign_project(sessions, seed):
+    """Another project with its own environment; returns (project_id, env_id)."""
+    from qym_platform.db.models import EvalEnvironment
+
+    with sessions() as db:
+        project = Project(
+            name="Q", slug="q-" + uuid4().hex[:6], created_by_user_id=seed["user_id"]
+        )
+        db.add(project)
+        db.flush()
+        env = EvalEnvironment(
+            project_id=project.id,
+            name="other",
+            base_url="https://other-" + uuid4().hex[:6] + ".example",
+        )
+        db.add(env)
+        db.commit()
+        return project.id, env.id
+
+
+def test_queue_cancel_experiment_of_another_project(api, sessions, service, clock):
+    seed = _seed(sessions)
+    _join(sessions, seed, user_id=seed["user_id"])
+    elsewhere, _ = _foreign_project(sessions, seed)
+    foreign_job = _add_experiment(sessions, seed, seed["user_id"], project_id=elsewhere)
+    with sessions() as db:
+        foreign_experiment = db.get(EvalExperimentJob, foreign_job).experiment_id
+    resp = api.post(
+        _queue_url(seed, "/cancel"),
+        headers=_as(sessions, seed["user_id"]),
+        json={"experiment_id": foreign_experiment},
+    )
+    assert resp.status_code == 404
+    assert _job(sessions, foreign_job).status == EvalJobStatus.QUEUED
+
+
+def _store_snapshot(sessions, env_id, items, *, age=timedelta(0)):
+    from qym_platform.datetime_utils import utc_now_naive
+    from qym_platform.db.models import EvalRemoteQueueSnapshot
+
+    with sessions() as db:
+        db.add(
+            EvalRemoteQueueSnapshot(
+                environment_id=env_id,
+                fetched_at=utc_now_naive() - age,
+                items=items,
+            )
+        )
+        db.commit()
+
+
+def _remote_item(rid, status="RUNNING", priority="NORMAL", user_id="u-1"):
+    return {
+        "remote_job_id": rid,
+        "status": status,
+        "priority": priority,
+        "user_id": user_id,
+        "created_at": "2020-01-01T11:00:00+00:00",
+        "run_name": "run " + rid,
+    }
+
+
+def test_remote_queue_matches_own_jobs_and_flags_orphans(api, sessions, service, clock):
+    seed, _ = _queue_seed(sessions, clock)
+    running = seed["job_ids"][3]
+    member = _join(sessions, seed)
+    manager = _join(sessions, seed, ProjectRole.MANAGER)
+    _store_snapshot(
+        sessions,
+        seed["env_id"],
+        [_remote_item("r-ours"), _remote_item("r-orphan", "PENDING", "HIGH")],
+    )
+
+    resp = api.get(_queue_url(seed, "/remote"), headers=_as(sessions, member))
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["can_cancel_orphans"] is False
+    (env,) = body["environments"]
+    assert env["environment_id"] == seed["env_id"]
+    assert env["fetch_error"] is None and env["stale"] is False
+    assert env["fetched_at"]
+    assert env["orphan_count"] == 1
+    ours, orphan = env["items"]
+    assert ours["orphan"] is False
+    assert ours["match"] == {
+        "job_id": running,
+        "experiment_id": seed["experiment_id"],
+        "experiment_name": "exp",
+        "status": "RUNNING",
+    }
+    assert orphan["orphan"] is True and orphan["match"] is None
+    assert orphan["priority"] == "HIGH" and orphan["run_name"] == "run r-orphan"
+    assert set(orphan) == {
+        "remote_job_id",
+        "status",
+        "priority",
+        "user_id",
+        "created_at",
+        "run_name",
+        "orphan",
+        "match",
+    }
+    # A fresh snapshot is not refreshed; a remote HIGH job shows in the header.
+    assert api.refreshes == []
+    queue = api.get(_queue_url(seed), headers=_as(sessions, member)).json()
+    assert queue["environments"][0]["high_active"] is True
+    managed = api.get(_queue_url(seed, "/remote"), headers=_as(sessions, manager))
+    assert managed.json()["can_cancel_orphans"] is True
+
+
+def test_remote_queue_schedules_a_refresh_when_stale(api, sessions, service, clock):
+    seed = _seed(sessions)
+    _join(sessions, seed, user_id=seed["user_id"])
+    headers = _as(sessions, seed["user_id"])
+    # Never fetched: served empty, refresh scheduled.
+    body = api.get(_queue_url(seed, "/remote"), headers=headers).json()
+    (env,) = body["environments"]
+    assert env["items"] == [] and env["fetched_at"] is None and env["stale"] is True
+    assert api.refreshes == [seed["env_id"]]
+    _store_snapshot(sessions, seed["env_id"], [], age=timedelta(minutes=5))
+    api.get(
+        _queue_url(seed, "/remote"),
+        headers=headers,
+        params={"environment_id": seed["env_id"]},
+    )
+    assert api.refreshes == [seed["env_id"]] * 2
+
+
+def test_remote_orphan_cancel_is_manager_only(api, sessions, service, clock):
+    seed, _ = _queue_seed(sessions, clock)
+    member = _join(sessions, seed)
+    manager = _join(sessions, seed, ProjectRole.MANAGER)
+    for rid, status in (("r-orphan", "RUNNING"), ("r-done", "SUCCEEDED")):
+        service.jobs[rid] = {"id": rid, "status": status, "user_id": "u-1"}
+    service.jobs["r-ours"] = {"id": "r-ours", "status": "RUNNING"}
+    _store_snapshot(
+        sessions,
+        seed["env_id"],
+        [
+            _remote_item("r-ours"),
+            _remote_item("r-orphan"),
+            _remote_item("r-done"),
+            _remote_item("r-gone"),
+        ],
+    )
+    url = _queue_url(seed, "/remote/cancel")
+    body = {
+        "environment_id": seed["env_id"],
+        "remote_job_ids": ["r-orphan", "r-ours", "r-done", "r-gone", "r-unseen"],
+        "reason": "stray",
+    }
+
+    for user in (member, seed["user_id"]):  # the job creator is not enough either
+        resp = api.post(url, headers=_as(sessions, user), json=body)
+        assert resp.status_code == 403
+    assert service.cancel_calls == []
+
+    resp = api.post(url, headers=_as(sessions, manager), json=body)
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {
+        "environment_id": seed["env_id"],
+        "outcomes": {
+            "r-orphan": "cancelled",
+            "r-ours": "refused_local_job",
+            "r-done": "already_terminal",
+            "r-gone": "not_found",
+            "r-unseen": "not_in_snapshot",
+        },
+        "errors": {},
+        "counts": {
+            "cancelled": 1,
+            "refused_local_job": 1,
+            "already_terminal": 1,
+            "not_found": 1,
+            "not_in_snapshot": 1,
+        },
+    }
+    # Only orphans reached the service; our job stays untouched.
+    assert [c[0] for c in service.cancel_calls] == ["r-orphan", "r-done", "r-gone"]
+    assert all(c[1] == manager for c in service.cancel_calls)
+    assert service.jobs["r-orphan"]["status"] == "CANCELLED"
+    assert service.jobs["r-ours"]["status"] == "RUNNING"
+    assert _job(sessions, seed["job_ids"][3]).status == EvalJobStatus.RUNNING
+    with sessions() as db:
+        audits = {
+            a.entity_id: a
+            for a in db.query(AuditLog).filter(
+                AuditLog.action == "eval_remote_job.cancel"
+            )
+        }
+    assert set(audits) == {"r-orphan", "r-done", "r-gone"}
+    assert audits["r-orphan"].actor_user_id == manager
+    assert audits["r-orphan"].after == {
+        "outcome": "cancelled",
+        "environment_id": seed["env_id"],
+        "project_id": seed["project_id"],
+        "reason": "stray",
+        "orphan": True,
+    }
+    # Settled orphans leave the snapshot at once; a refresh is scheduled.
+    remote = api.get(_queue_url(seed, "/remote"), headers=_as(sessions, manager))
+    items = remote.json()["environments"][0]["items"]
+    assert [i["remote_job_id"] for i in items] == ["r-ours"]
+    assert seed["env_id"] in api.refreshes
+
+
+def test_remote_orphan_cancel_errors_are_redacted(api, sessions, service, clock):
+    from qym_platform.services.eval_service_client import EnvAuthError
+
+    seed = _seed(sessions)
+    manager = _join(sessions, seed, ProjectRole.MANAGER)
+    _store_snapshot(
+        sessions, seed["env_id"], [_remote_item("r-1"), _remote_item("r-2")]
+    )
+    service.cancel_errors = [EnvAuthError("rejected", status_code=401)]
+    resp = api.post(
+        _queue_url(seed, "/remote/cancel"),
+        headers=_as(sessions, manager),
+        json={"environment_id": seed["env_id"], "remote_job_ids": ["r-1", "r-2"]},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["outcomes"] == {"r-1": "error", "r-2": "error"}
+    # After a 401 nothing more is sent; the env key never appears.
+    assert len(service.cancel_calls) == 1
+    assert "env-service-key" not in resp.text
+    _, foreign_env = _foreign_project(sessions, seed)
+    resp = api.post(
+        _queue_url(seed, "/remote/cancel"),
+        headers=_as(sessions, manager),
+        json={"environment_id": foreign_env, "remote_job_ids": ["r-1"]},
+    )
+    assert resp.status_code == 404

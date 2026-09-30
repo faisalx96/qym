@@ -15,6 +15,7 @@ from qym_platform.settings import PlatformSettings
 from qym_platform.api.web import router as web_router
 from qym_platform.api.projects import router as projects_router
 from qym_platform.api.eval_environments import router as eval_environments_router
+from qym_platform.api.eval_queue import router as eval_queue_router
 from qym_platform.api.eval_presets import router as eval_presets_router
 from qym_platform.api.experiments import router as experiments_router
 from qym_platform.api.runs import router as runs_router
@@ -159,6 +160,7 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     app.include_router(eval_environments_router)
     app.include_router(eval_presets_router)
     app.include_router(experiments_router)
+    app.include_router(eval_queue_router)
     app.include_router(analysis_router)  # before runs_router (its {run_id:path} is a catch-all)
     # Keep the dashboard route family registered so the feature can be restored
     # without rebuilding the application; its handlers are feature-gated.
