@@ -99,6 +99,32 @@ launch tokens. An app-wide handler now masks them (`validation_errors.py`).
 **Question for review.** Should the same handler apply to every non-eval endpoint too?
 It already applies app-wide, so confirm that this is intended.
 
+### A7. `qym_api_key` on job creation (In progress: `feat/eval-qym-api-key`)
+
+**Change requested.** `POST /evals` must carry a `qym_api_key` that points to the user
+submitting the job, so the uploaded run is authenticated as that user in the right
+project. The API guide is updated in §3.1, a new §4.0 and §7.
+
+**Decisions.**
+- **Owner.** The key belongs to the experiment creator, the same user sent as
+  `user_id`. Retries submitted by a manager still use the creator's key.
+- **Minting.** One dedicated platform API key is minted per experiment at launch (named
+  "Evaluation Service · …", minimal ingest scopes). It is stored encrypted (migration
+  0065) and added to the submitted body in memory only.
+- **Revocation.** The key is revoked automatically once every job has reached a
+  terminal status. It stays valid while a job is BLOCKED, because a blocked job can be
+  retried. A retry after revocation mints a new key.
+- **Unavailable key.** If the key or the creator's membership is gone, the job is
+  BLOCKED instead of submitted.
+
+**Questions for review.**
+- If a manager retries someone else's experiment, should the key (and run ownership)
+  move to the manager?
+- Should these keys be hidden from the user's API-key list rather than just clearly
+  named?
+- Will the Evaluation Service echo `qym_api_key` in `EvalJobRead`? qym redacts it
+  anyway.
+
 ### A5. Redaction limits (Kept)
 
 Redaction works by key name and on JSON inside strings. A secret sitting in free text
