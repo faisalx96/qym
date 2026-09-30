@@ -753,10 +753,7 @@ def _eval_experiment_model_diffs(
         column["name"]
         for column in sa.inspect(connection).get_columns("eval_experiment_jobs")
     }
-    from qym_platform.db.models import EvalExperimentJob
-
-    # TODO(#13): drop the hasattr guard once the 0063 model change is merged.
-    if "attempt" in job_columns or not hasattr(EvalExperimentJob, "attempt"):
+    if "attempt" in job_columns:
         return diffs()
     # The models describe the job table after 0063: compare with it applied.
     savepoint = connection.begin_nested()
@@ -1263,15 +1260,6 @@ def test_eval_job_attempts_migration_sqlite_upgrade_and_downgrade(
     engine.dispose()
 
 
-needs_job_attempt_models = pytest.mark.skipif(
-    not hasattr(
-        importlib.import_module("qym_platform.db.models").EvalExperimentJob, "attempt"
-    ),
-    reason="EvalExperimentJob.attempt/retry_of_job_id model change (0063) not applied",
-)
-
-
-@needs_job_attempt_models
 def test_eval_job_attempts_migration_matches_models(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1316,8 +1304,4 @@ def test_eval_job_attempts_migration_postgres_upgrade_and_downgrade(
         assert "ck_eval_experiment_jobs_attempt" in {
             c["name"] for c in inspector.get_check_constraints("eval_experiment_jobs")
         }
-        if hasattr(
-            importlib.import_module("qym_platform.db.models").EvalExperimentJob,
-            "attempt",
-        ):
-            assert _eval_experiment_model_diffs(connection, PRESET_TABLES) == []
+        assert _eval_experiment_model_diffs(connection, PRESET_TABLES) == []

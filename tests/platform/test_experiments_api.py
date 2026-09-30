@@ -69,13 +69,6 @@ OUTSIDER = "outsider@example.com"
 CONN_KEY = "sk-connection-secret-ZZZZ9999"
 PRIMARY = "endpoint:primary"
 
-# The job attempt columns come with migration 0063 and the matching model change.
-needs_attempts = pytest.mark.skipif(
-    not hasattr(EvalExperimentJob, "attempt"),
-    reason="EvalExperimentJob.attempt/retry_of_job_id model change (0063) not applied",
-)
-
-
 def _url(project_id: str = P1, suffix: str = "") -> str:
     return f"/v1/projects/{project_id}/experiments{suffix}"
 
@@ -389,7 +382,6 @@ def test_cancel_job_outcomes(
 # --------------------------------------------------------------------------- create
 
 
-@needs_attempts
 def test_create_persists_queued_job_with_hashed_token_and_named_bindings(
     client, session_factory, env, conn
 ):
@@ -448,7 +440,6 @@ def test_create_persists_queued_job_with_hashed_token_and_named_bindings(
         assert audits.count() == 1
 
 
-@needs_attempts
 def test_create_on_several_environments_makes_one_job_each(
     client, session_factory, env
 ):
@@ -461,7 +452,6 @@ def test_create_on_several_environments_makes_one_job_each(
     assert {j["environment_id"] for j in body["jobs"]} == {env.id, other.id}
 
 
-@needs_attempts
 def test_dry_run_previews_without_persisting_or_rate_limiting(
     client, session_factory, env, monkeypatch
 ):
@@ -483,7 +473,6 @@ def test_dry_run_previews_without_persisting_or_rate_limiting(
     assert bad.json()["jobs"][0]["errors"]
 
 
-@needs_attempts
 def test_invalid_documents_are_rejected_with_pointed_errors(
     client, session_factory, env, conn
 ):
@@ -508,7 +497,6 @@ def test_invalid_documents_are_rejected_with_pointed_errors(
         assert s.query(EvalExperiment).count() == 0
 
 
-@needs_attempts
 def test_temporary_models_are_rejected_until_issue_12(client, session_factory, env):
     spec = _spec()
     spec["slot_bindings"] = {
@@ -529,7 +517,6 @@ def test_temporary_models_are_rejected_until_issue_12(client, session_factory, e
         assert s.query(EvalExperiment).count() == 0
 
 
-@needs_attempts
 def test_create_permissions_and_environment_scoping(client, session_factory, env):
     assert _create(client, [env.id], email=OUTSIDER).status_code == 403
     foreign = _add_env(session_factory, "foreign", project_id=P2)
@@ -549,7 +536,6 @@ def test_create_permissions_and_environment_scoping(client, session_factory, env
     assert "no schema" in res.json()["detail"]["errors"][0]["message"]
 
 
-@needs_attempts
 def test_priority_caps_and_high_gating(client, session_factory, env):
     res = _create(client, [env.id], priority="HIGH", email=MANAGER)
     assert res.status_code == 422 and "exceeds" in res.json()["detail"]
@@ -576,7 +562,6 @@ def test_priority_caps_and_high_gating(client, session_factory, env):
     assert _created(client, [high_env.id, env.id])["priority"] == "LOW"
 
 
-@needs_attempts
 def test_creation_is_rate_limited_per_user(client, env, monkeypatch):
     monkeypatch.setenv("QYM_EVAL_EXPERIMENT_CREATE_RATE_LIMIT", "2")
     monkeypatch.setenv("QYM_EVAL_EXPERIMENT_CREATE_RATE_WINDOW_SECONDS", "600")
@@ -594,7 +579,6 @@ def test_creation_is_rate_limited_per_user(client, env, monkeypatch):
 # --------------------------------------------------------------------------- read
 
 
-@needs_attempts
 def test_list_filters_by_status_environment_and_creator(client, session_factory, env):
     other = _add_env(session_factory, "prod")
     first = _created(client, [env.id])
@@ -622,7 +606,6 @@ def test_list_filters_by_status_environment_and_creator(client, session_factory,
     assert client.get(_url(P2), headers=_headers(OUTSIDER)).json()["total"] == 0
 
 
-@needs_attempts
 def test_detail_has_job_matrix_and_linked_run_summary(client, session_factory, env):
     created = _created(client, [env.id])
     (job,) = _jobs(session_factory, created["id"])
@@ -665,7 +648,6 @@ def test_detail_has_job_matrix_and_linked_run_summary(client, session_factory, e
 # --------------------------------------------------------------------------- cancel
 
 
-@needs_attempts
 def test_cancel_permissions_creator_or_manager(client, session_factory, env):
     created = _created(client, [env.id])
     path = _url(suffix=f"/{created['id']}/cancel")
@@ -689,7 +671,6 @@ def test_cancel_permissions_creator_or_manager(client, session_factory, env):
     assert again.status_code == 200 and again.json()["outcome"] == "already_terminal"
 
 
-@needs_attempts
 def test_cancel_submitted_and_leased_jobs_defers_to_dispatcher(
     client, session_factory, env
 ):
@@ -733,7 +714,6 @@ def test_cancel_submitted_and_leased_jobs_defers_to_dispatcher(
 # --------------------------------------------------------------------------- retry
 
 
-@needs_attempts
 def test_retry_creates_a_new_attempt_row_with_a_new_token(client, session_factory, env):
     created = _created(client, [env.id])
     (job,) = _jobs(session_factory, created["id"])
@@ -784,7 +764,6 @@ def test_retry_creates_a_new_attempt_row_with_a_new_token(client, session_factor
     assert succeeded.status_code == 409
 
 
-@needs_attempts
 def test_retry_of_blocked_job_cancels_it_and_manager_may_retry(
     client, session_factory, env
 ):
@@ -808,7 +787,6 @@ def test_retry_of_blocked_job_cancels_it_and_manager_may_retry(
 # --------------------------------------------------------------------------- clone
 
 
-@needs_attempts
 def test_clone_prefills_form_without_secrets(client, session_factory, env, conn):
     created = _created(client, [env.id], spec=_spec(conn.id))
     # Simulate a temporary model (#12) stored with a key ref and an encrypted blob.
