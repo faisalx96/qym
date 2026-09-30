@@ -68,6 +68,8 @@ from qym_platform.services.run_lifecycle import (
     is_stale_running_run,
     reconcile_stale_running_run,
 )
+from qym_platform.services.eval_run_linking import strip_launch_token
+from qym_platform.services.run_experiment_panel import run_experiment_panel
 from qym_platform.services.run_payloads import compact_row, detail_item_ids, search_conditions
 from qym_platform.services.repeat_passes import (
     RepeatPassDeletionError,
@@ -3751,7 +3753,7 @@ def _build_run_data(
                 "metric_names": metrics,
                 "metric_specs": metric_specs,
                 "config": run_config,
-                "metadata": run_metadata,
+                "metadata": strip_launch_token(run_metadata),
                 "status": run.status,
                 "status_reason": run.status_reason,
                 "owner": owner_info,
@@ -3774,6 +3776,8 @@ def _build_run_data(
                     if isinstance(run_metadata, dict)
                     else None
                 ),
+                # Official runs only (plan §11, #26); None for local runs.
+                "experiment": run_experiment_panel(db, run),
             },
             "snapshot": {
                 "rows": ui_rows,
@@ -3872,6 +3876,11 @@ def export_run_html(
     # Export embeds full rows and needs no network hydration helper.
     run_html = re.sub(
         r'\s*<script\s+(?:defer\s+)?src="/static/run_details\.js(?:\?[^"]*)?"></script>\s*',
+        "\n", run_html,
+    )
+    # The Experiment panel (#26) links into the platform; exports leave it out.
+    run_html = re.sub(
+        r'\s*<script\s+(?:defer\s+)?src="/static/run_experiment_panel\.js(?:\?[^"]*)?"></script>\s*',
         "\n", run_html,
     )
 
