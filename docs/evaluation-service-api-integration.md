@@ -143,6 +143,11 @@ reliability caveat and the "small race window" note above apply equally to it.
   linked to this user (`EvalJob.user_id`) for the lifetime of the job. `priority`
   (`LOW`/`NORMAL`/`HIGH`) is optional, defaulting to `NORMAL` — see §2.1 for what `HIGH`
   does.
+- **`qym_api_key` is required for qym integrations:** a qym platform API key that
+  belongs to **the user submitting the job** (the same user as `user_id`), scoped to the
+  qym project the run should land in. The worker hands it to the qym SDK
+  (`QYM_API_KEY`) so the run it uploads is authenticated as that user, in that
+  project. See §4 for how to treat it (it is a secret).
 - **Response body:** `EvalJobRead` (see §5)
 - **Status code `409`** if `priority` is below `HIGH` and a `HIGH` priority job is
   currently active (§2.1) — `{"detail": "cannot accept <priority> priority job while HIGH
@@ -154,6 +159,7 @@ curl -sS -X POST "$BASE_URL/evals" \
   -H "Content-Type: application/json" \
   -d '{
         "user_id": "user-123",
+        "qym_api_key": "qym_...key of user-123...",
         "priority": "HIGH",
         "evaluator": {
           "dataset": "my-dataset-id",
@@ -311,10 +317,28 @@ curl -sS -X POST "$BASE_URL/evals/5b1e...uuid.../cancel" \
 ```
 EvalJobCreate
 ├── user_id:       str                      # required, min_length=1 — links the job to a caller
+├── qym_api_key:   str                      # qym API key of the submitting user (secret) — see below
 ├── priority:      LOW | NORMAL | HIGH = NORMAL   # optional — see §2.1 for HIGH's preemption behavior
 ├── env_overrides: EnvOverrides = {}        # optional, whitelisted env-var overrides
 └── evaluator:     EvaluatorInputs          # required
 ```
+
+### 4.0 `qym_api_key`
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `qym_api_key` | `str` | **yes, for qym integrations** | qym platform API key of the user who submits the job (the same user as `user_id`), scoped to the target qym project. The worker uses it as the qym SDK's `QYM_API_KEY` when it uploads the run, so the run is created as that user in that project. |
+
+Rules for callers and for the service:
+- **Per submitting user.** Never pass a shared or service-account key: the key decides
+  who owns the uploaded run and which project it lands in, so it must point to the user
+  in `user_id`.
+- **It is a secret.** Send it only over HTTPS. The service must not log it or echo it
+  back in `EvalJobRead` (the same concern as D1 for `LLM_OVERRIDES.endpoints.*.api_key`);
+  callers should still redact it from anything they store.
+- **Lifetime.** The key has to stay valid until the job reaches a terminal status and the
+  run upload has finished. A caller that mints a key per job should revoke it only after
+  that.
 
 ### 4.1 `evaluator` (`EvaluatorInputs`)
 
@@ -466,14 +490,44 @@ by `runner.py`'s `_analyze_report`, always including at least:
 {
   "run_name": "...",
   "dataset": "...",
-  "agent_version": "... or null",
-  "kb_version": "... or null",
+  "versioning_metadata": {
+    "agent_version": "... or null",
+    "kb_version": "... or null"
+  },
   "analysis_metric": "accuracy",
   // plus whatever analyze_group_runs returns, e.g.:
   "pass_at_k": "...", "pass_hat_k": "...", "consistency": "...",
   "reliability": "...", "items": "..."
 }
 ```
+
+### ⚠️ Versioning lives in `result.versioning_metadata` — read it from there
+
+`agent_version` and `kb_version` are **not** top-level keys of `result`. Both are nested
+inside a single `versioning_metadata` object, so clients must read
+`result.versioning_metadata.agent_version` and `result.versioning_metadata.kb_version`.
+Reading `result.agent_version` / `result.kb_version` returns `undefined`/`None` without
+any error, so a mistake here fails silently and every run looks unversioned.
+
+| Field | Source (in `runner.py`, at job completion) | Can be `null`? |
+|---|---|---|
+| `versioning_metadata.agent_version` | The worker's `AGENT_VERSION` env var | Yes, if `AGENT_VERSION` isn't set on the worker |
+| `versioning_metadata.kb_version` | `get_kb_version()`: the most recent `cms.snapshot` id, whether it was created or reverted to (successful reverts only) | No: a `cms.snapshot` row must exist, or the job fails while writing its result |
+
+Why it matters for integration:
+- These two values are what tie an eval result to the exact agent build and knowledge-base
+  snapshot it measured. Without them you can't compare runs, spot regressions, or attribute a
+  score change to an agent change versus a KB change.
+- Both values are captured **when the job finishes**, not when it's submitted. If the KB
+  snapshot changes or is reverted while a job is running, `kb_version` shows the snapshot
+  that was current at completion.
+- Treat the pair as a single versioning key. Store and display `versioning_metadata` as a
+  whole, and group or compare runs on both fields together.
+- Only `SUCCEEDED` jobs have `result` (and so `versioning_metadata`). It isn't available
+  while a job is `PENDING`/`RUNNING`, or for `FAILED`/`CANCELLED` jobs.
+- Jobs that finished before this change have the old flat shape (`result.agent_version`,
+  `result.kb_version`) in the database. If you read historical jobs, fall back to the flat
+  keys when `versioning_metadata` is missing.
 
 ### ⚠️ Fields present in the DB row but **not** in the API response
 
@@ -533,13 +587,14 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
-def submit_job(user_id: str, dataset: str, model: str, samples: int = 1,
-               priority: str = "NORMAL") -> dict:
+def submit_job(user_id: str, qym_api_key: str, dataset: str, model: str,
+               samples: int = 1, priority: str = "NORMAL") -> dict:
     resp = requests.post(
         f"{BASE_URL}/evals",
         headers=HEADERS,
         json={
             "user_id": user_id,
+            "qym_api_key": qym_api_key,   # qym API key of `user_id` (secret)
             "priority": priority,   # "LOW" | "NORMAL" | "HIGH" — see §2.1
             "evaluator": {
                 "dataset": dataset,
@@ -581,7 +636,8 @@ def poll_job(job_id: str, timeout_s: int = 7200, interval_s: int = 10) -> dict:
         time.sleep(interval_s)
     raise TimeoutError(f"job {job_id} did not finish within {timeout_s}s")
 
-job = submit_job(user_id="user-123", dataset="my-dataset-id", model="gpt-4o")
+job = submit_job(user_id="user-123", qym_api_key=QYM_API_KEY_OF_USER_123,
+                 dataset="my-dataset-id", model="gpt-4o")
 final = poll_job(job["id"])
 if final["status"] == "SUCCEEDED":
     print(final["result"])
@@ -596,7 +652,7 @@ else:
 
 | Method | Path | Purpose | Success code |
 |---|---|---|---|
-| `POST` | `/evals` | Create + enqueue an eval job (`user_id` required, `priority` optional) | `202` / `409` if blocked by an active `HIGH` job |
+| `POST` | `/evals` | Create + enqueue an eval job (`user_id` and `qym_api_key` of that user required, `priority` optional) | `202` / `409` if blocked by an active `HIGH` job |
 | `GET` | `/evals` | List jobs (paginated, `status`/`user_id`/`priority` filters) | `200` |
 | `GET` | `/evals/env-overrides/schema` | JSON Schema for `env_overrides` | `200` |
 | `GET` | `/evals/{job_id}` | Fetch one job (poll this) | `200` |
