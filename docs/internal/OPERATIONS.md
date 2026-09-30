@@ -252,7 +252,7 @@ API, because it decrypts keys and calls the services.
 | `QYM_EVAL_EXPERIMENT_CREATE_RATE_LIMIT` | `30` | Launches per user per window (`0` disables). Counted from `eval_experiments` rows, so it holds across API processes. Dry-run previews are not counted. Over the limit: 429 with `Retry-After`. |
 | `QYM_EVAL_EXPERIMENT_CREATE_RATE_WINDOW_SECONDS` | `3600` | Window of the launch rate limit. |
 | `QYM_ROLE` | `all` | See "Roles and processes". |
-| `QYM_ALLOW_PRIVATE_LLM_BASE_URLS` | `false` | Allows `http://` and private or loopback environment URLs (and private connection and temporary-model URLs). Keep it off in shared deployments. |
+| `QYM_ALLOW_PRIVATE_LLM_BASE_URLS` | `false` | Allows `http://` and private or loopback environment URLs, private connection and temporary-model URLs, and `http://` models in experiments. Keep it off in shared deployments. |
 
 **Rotating `QYM_LLM_CONFIG_ENCRYPTION_KEY`.** Decryption tries the current key and then
 every key in `QYM_LLM_CONFIG_ENCRYPTION_KEYS_PREVIOUS` (Fernet `MultiFernet`), while
@@ -505,6 +505,7 @@ job history.
 | `Rejected by the evaluation service` | The service answered 422 (or another 4xx). `error` holds its message, with `loc` paths | Usually schema drift: **Refresh schema** on the environment, fix the setting, retry. A 4xx other than 422 may be a service-side bug |
 | `Model "X" no longer exists` | The bound project connection was deleted | Relaunch with another model (a retry reuses the same binding) |
 | `Model "X" is no longer available for experiments` | **Available for experiments** was cleared on the connection | Re-enable it, then retry |
+| `Model "X" uses an http:// base URL. Experiments need an https:// base URL…` (also for temporary models) | The model's base URL is plain `http://`, and `QYM_ALLOW_PRIVATE_LLM_BASE_URLS` is off | Change the connection to `https://` (or relaunch with an `https://` model), then retry |
 | `Model "X" has no model name` | The connection has an empty model | Set the model on the connection, then retry |
 | `Model "X" needs its API key, but this environment does not accept model keys` (also for temporary models) | **Allow connection keys** is off on the environment | A manager enables it, or relaunch with a keyless model |
 | `The API key of model "X" could not be decrypted` | The connection's key was encrypted under a key that is neither `QYM_LLM_CONFIG_ENCRYPTION_KEY` nor listed in `QYM_LLM_CONFIG_ENCRYPTION_KEYS_PREVIOUS` | Add the old key to `QYM_LLM_CONFIG_ENCRYPTION_KEYS_PREVIOUS` and run `reencrypt_llm_keys`, or re-enter the connection key; then retry |
@@ -609,15 +610,19 @@ qym.
   stored or returned (D1); the remote snapshot keeps an allow-list of columns only.
 - Environment URLs are `https://` only (unless `QYM_ALLOW_PRIVATE_LLM_BASE_URLS`), and
   every service call uses the SSRF-safe transport (pinned DNS, no redirects).
+- Models used in experiments are `https://` only too (same exception): a temporary
+  model with an `http://` base URL is refused at launch (`https_required`), an `http://`
+  project connection is listed disabled in the model picker, refused per slot at launch,
+  and blocks a queued job at dispatch, and it can't be marked **Available for
+  experiments**. Root-cause-analyzer connections still accept public `http://`.
 - Model keys only go to environments with **Allow connection keys**, which only a
   manager can enable and which resets when the URL changes.
 - `HIGH` priority needs the environment's `max_priority`, a project manager, and an
   explicit acknowledgement, on launch and on retry (D9).
 - Audit log actions: `eval_job.cancel`, `eval_job.retry`, `eval_remote_job.cancel`.
 
-The full verification, with the enforcing code, tests, and two open items (plain
-`http://` connection and temporary-model URLs; the dispatcher trusting its client to
-redact), is in [`EVAL_SECURITY_CHECKLIST.md`](EVAL_SECURITY_CHECKLIST.md).
+The full verification, with the enforcing code and tests, is in
+[`EVAL_SECURITY_CHECKLIST.md`](EVAL_SECURITY_CHECKLIST.md).
 
 ### Multi-pod and load testing
 

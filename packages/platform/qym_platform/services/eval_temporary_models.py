@@ -5,8 +5,9 @@ names its key by an opaque ``ref``; the launch request carries the raw keys sepa
 as ``secrets: {ref: key}``. This module:
 
 - validates temporary bindings for a launch (``temporary_binding_errors``): the base
-  URL goes through ``validate_llm_base_url`` (as for project connections) and every
-  referenced key must be supplied;
+  URL goes through ``validate_llm_base_url`` (as for project connections), must be
+  ``https://`` (``https_required``; ``QYM_ALLOW_PRIVATE_LLM_BASE_URLS`` lifts it for
+  local development), and every referenced key must be supplied;
 - stores the keys Fernet-encrypted in ``EvalExperiment.secrets_encrypted`` as JSON
   ``{ref: key}`` (``encrypt_secrets``/``decrypt_secrets``/``secret_lookup``), using the
   ``QYM_LLM_CONFIG_ENCRYPTION_KEY`` helper of LLM connections, and refuses to store keys
@@ -41,7 +42,13 @@ from typing import Any, Dict, Iterator, List, Mapping, Optional, Tuple
 from sqlalchemy.orm import Session
 
 from ..db.models import EvalExperiment, ProjectLlmConnection
-from ..llm_endpoint_security import LlmEndpointValidationError, validate_llm_base_url
+from ..llm_endpoint_security import (
+    EXPERIMENT_HTTPS_REQUIRED_MESSAGE,
+    HTTPS_REQUIRED_CODE,
+    LlmEndpointValidationError,
+    experiment_base_url_needs_https,
+    validate_llm_base_url,
+)
 from ..secrets import (
     build_llm_config_storage,
     decrypt_llm_api_key,
@@ -156,7 +163,7 @@ def temporary_binding_errors(
 ) -> List[Dict[str, Any]]:
     """Launch checks for temporary models (environment independent).
 
-    Codes: ``temporary_base_url_invalid``, ``temporary_key_ref_invalid``,
+    Codes: ``temporary_base_url_invalid``, ``https_required``, ``temporary_key_ref_invalid``,
     ``temporary_key_required`` (a ref without a usable key in ``secrets``),
     ``temporary_field_too_long`` and ``encryption_unavailable``. The binding's shape is
     checked by ``eval_config``.
@@ -190,6 +197,18 @@ def temporary_binding_errors(
                 errors.append(
                     _error(item.slot_key, "temporary_base_url_invalid", str(exc))
                 )
+            else:
+                if experiment_base_url_needs_https(
+                    base_url, allow_private=settings.allow_private_llm_base_urls
+                ):
+                    errors.append(
+                        _error(
+                            item.slot_key,
+                            HTTPS_REQUIRED_CODE,
+                            f'Temporary model "{item.label}" uses an http:// base '
+                            "URL. " + EXPERIMENT_HTTPS_REQUIRED_MESSAGE,
+                        )
+                    )
         if temporary.get(KEY_ROLE) is None:
             continue
         ref = item.ref
@@ -373,6 +392,16 @@ def save_as_connection(
         )
     except LlmEndpointValidationError as exc:
         raise TemporaryModelError(422, str(exc), "temporary_base_url_invalid")
+    # The saved connection is offered to experiments, so it needs HTTPS too.
+    if experiment_base_url_needs_https(
+        base_url, allow_private=settings.allow_private_llm_base_urls
+    ):
+        raise TemporaryModelError(
+            422,
+            f'Model "{name}" uses an http:// base URL. '
+            + EXPERIMENT_HTTPS_REQUIRED_MESSAGE,
+            HTTPS_REQUIRED_CODE,
+        )
     if not encryption_available(settings):
         raise TemporaryModelError(
             400, "LLM config encryption is not configured", "encryption_unavailable"

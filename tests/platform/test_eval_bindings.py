@@ -623,3 +623,91 @@ def test_failing_secret_lookup_counts_as_missing_key(db, env, slots):
     )
     assert [p.code for p in resolution.problems] == ["temporary_key_missing"]
     assert TEMP_KEY not in json.dumps(resolution.to_errors())
+
+
+# --------------------------------------------------------------------------- https
+
+
+@pytest.mark.parametrize("decrypt", [False, True])  # launch check / dispatch
+def test_http_connection_is_refused_per_slot(db, env, project, slots, decrypt):
+    plain = _conn(db, project[1], name="plain", base_url="http://llm.example/v1")
+    secure = _conn(db, project[1], name="secure")
+    resolution = resolve_slot_bindings(
+        db,
+        env,
+        {PRIMARY: {"connection_id": plain.id}, VIZ: {"connection_id": secure.id}},
+        slots,
+        decrypt=decrypt,
+    )
+    assert [(p.slot_key, p.code) for p in resolution.problems] == [
+        (PRIMARY, "https_required")
+    ]
+    (error,) = resolution.to_errors()
+    assert error["slot_key"] == PRIMARY and error["code"] == "https_required"
+    assert 'Model "plain" uses an http:// base URL' in error["message"]
+    assert list(resolution.models) == [VIZ]
+    assert KEY_1 not in json.dumps(resolution.to_errors())
+
+
+def test_connection_without_base_url_is_not_an_https_problem(db, env, project, slots):
+    conn = _conn(db, project[1], base_url="")
+    resolution = resolve_slot_bindings(
+        db, env, {PRIMARY: {"connection_id": conn.id}}, slots
+    )
+    assert resolution.ok
+
+
+def test_http_connection_allowed_with_private_urls_opt_in(
+    db, env, project, slots, monkeypatch
+):
+    monkeypatch.setenv("QYM_ALLOW_PRIVATE_LLM_BASE_URLS", "true")
+    conn = _conn(db, project[1], base_url="http://localhost:11434/v1")
+    resolution = resolve_slot_bindings(
+        db, env, {PRIMARY: {"connection_id": conn.id}}, slots
+    )
+    assert resolution.ok
+    data = connection_options(db, env, slots)
+    assert data["connections"][0]["available"] is True
+
+
+def test_http_connection_listed_disabled_in_picker(db, env, project, slots):
+    _conn(db, project[1], name="plain", base_url="http://llm.example/v1")
+    _conn(db, project[1], name="secure")
+    by_name = {o["name"]: o for o in connection_options(db, env, slots)["connections"]}
+    plain = by_name["plain"]
+    assert plain["available"] is False
+    assert plain["reason_code"] == "https_required"
+    assert "https://" in plain["reason"]
+    assert plain["slots"][PRIMARY]["reason_code"] == "https_required"
+    # A model-only slot never sends the base URL, so it stays selectable.
+    assert plain["slots"][VIZ] == {"available": True, "reason_code": None, "reason": None}
+    assert by_name["secure"]["available"] is True
+
+
+def test_http_connection_on_model_only_slot_is_allowed(db, env, project, slots):
+    plain = _conn(db, project[1], base_url="http://llm.example/v1")
+    resolution = resolve_slot_bindings(
+        db, env, {VIZ: {"connection_id": plain.id}}, slots
+    )
+    assert resolution.ok
+
+
+def test_http_temporary_model_blocks_at_dispatch(db, env, slots, descriptor):
+    doc = _doc(_temporary())
+    doc["slot_bindings"][PRIMARY]["temporary"]["base_url"] = "http://t.example/v1"
+    prep = prepare_dispatch(
+        db,
+        env,
+        body=_stored_body(doc, slots, descriptor),
+        slot_bindings=doc["slot_bindings"],
+        slots=slots,
+        secret_lookup={"k1": TEMP_KEY}.get,
+    )
+    assert not prep.ok
+    assert [p.code for p in prep.problems] == ["https_required"]
+    assert TEMP_KEY not in (prep.wait_reason or "")
+    # Launch reports it once through temporary_binding_errors, not per environment.
+    launch = resolve_slot_bindings(
+        db, env, doc["slot_bindings"], slots, decrypt=False
+    )
+    assert "https_required" not in [p.code for p in launch.problems]
