@@ -111,7 +111,6 @@ from ..db.models import (
     EvalEnvironmentSchema,
     EvalExperiment,
     EvalExperimentJob,
-    EvalExperimentStatus,
     EvalJobStatus,
     Run,
     RunWorkflowStatus,
@@ -132,11 +131,9 @@ from .eval_experiments import (
     LaunchTokenUnavailable,
     aggregate_status,
     body_with_launch_token,
+    recompute_experiment_status,
+    stop_linked_run,
 )
-from .eval_experiments import (
-    recompute_experiment_status as _recompute_experiment_status,
-)
-from .eval_experiments import stop_linked_run
 from .eval_model_slots import descriptor_for_schema, list_model_slots
 from .eval_run_scores import sync_job_scores
 from .eval_service_client import (
@@ -214,35 +211,6 @@ SecretLookupFor = Callable[[EvalExperiment], Optional[SecretLookup]]
 
 
 # ------------------------------------------------------------------ pure helpers
-
-
-def recompute_experiment_status(
-    db: Session, experiment_id: str
-) -> Optional[EvalExperimentStatus]:
-    """Recompute and set ``EvalExperiment.status`` (flushes, commits nothing).
-
-    Delegates to ``eval_experiments.recompute_experiment_status``: one aggregate rule
-    (``aggregate_status``) for the API, the queue and the dispatcher.
-
-    On Postgres the experiment row is locked first (``FOR UPDATE``, reloaded), so
-    workers settling sibling jobs recompute one after another and each one reads the
-    jobs the previous one committed. Without the lock, two workers finishing the last
-    two jobs at once each saw the other's job still running under READ COMMITTED, and
-    the experiment stayed ``RUNNING`` forever (#40). SQLite serializes writers anyway.
-    """
-    db.flush()
-    if _is_postgres(db):
-        experiment = db.execute(
-            select(EvalExperiment)
-            .where(EvalExperiment.id == experiment_id)
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        ).scalar_one_or_none()
-    else:
-        experiment = db.get(EvalExperiment, experiment_id)
-    if experiment is None:
-        return None
-    return _recompute_experiment_status(db, experiment)
 
 
 def poll_interval(elapsed_seconds: float) -> float:

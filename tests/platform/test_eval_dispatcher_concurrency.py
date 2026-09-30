@@ -28,6 +28,7 @@ from pathlib import Path
 
 import pytest
 from cryptography.fernet import Fernet
+from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -352,6 +353,74 @@ def test_sibling_jobs_settling_at_once_complete_the_experiment(backend, clock):
     assert experiment_status_of(backend.sessions, setup["experiment_id"]) == (
         "COMPLETED"
     )
+
+
+@pytest.mark.parametrize("first", ["settle", "cancel"])
+def test_queue_cancel_racing_a_dispatcher_settle_settles_the_experiment(
+    backend, clock, first
+):
+    """Regression: a queue cancel of the last queued job overlaps a dispatcher
+    transaction settling the last running one. ``cancel_jobs`` recomputed without the
+    experiment row lock, so on Postgres each side read the other's job as still
+    active and the experiment stayed ``RUNNING`` with every job settled."""
+    setup = seed_sweep(backend.sessions, envs=1, jobs_per_env=2, cap=2)
+    running, queued = setup["job_ids"]
+    with backend.sessions() as db:
+        db.get(EvalExperimentJob, running).status = EvalJobStatus.RUNNING
+        dispatcher_module.recompute_experiment_status(db, setup["experiment_id"])
+        db.commit()
+    assert experiment_status_of(backend.sessions, setup["experiment_id"]) == "RUNNING"
+
+    other_engine = backend.make_engine()
+    other_sessions = sessionmaker(bind=other_engine, autoflush=False)
+    outcomes = []
+    errors = []
+
+    def settle(db):
+        # The dispatcher's order: job row (locked), then the experiment row.
+        job = db.execute(
+            select(EvalExperimentJob)
+            .where(EvalExperimentJob.id == running)
+            .with_for_update()
+        ).scalar_one()
+        job.status = EvalJobStatus.SUCCEEDED
+        db.flush()
+        dispatcher_module.recompute_experiment_status(db, setup["experiment_id"])
+
+    def cancel(db):
+        principal = Principal(user=db.get(User, setup["user_id"]), auth_type="x")
+        outcomes.append(cancel_jobs(db, [queued], principal, "queue"))
+
+    steps = {"settle": settle, "cancel": cancel}
+    second = "cancel" if first == "settle" else "settle"
+
+    def run_second():
+        try:
+            with other_sessions() as db:
+                steps[second](db)
+                db.commit()
+        except Exception as exc:  # noqa: BLE001 - surfaced by the assertion below
+            errors.append(repr(exc))
+
+    try:
+        with backend.sessions() as db:
+            steps[first](db)
+            # The other side runs while this transaction is still open.
+            thread = threading.Thread(target=run_second)
+            thread.start()
+            thread.join(timeout=0.5)
+            db.commit()
+        thread.join(timeout=60)
+    finally:
+        other_engine.dispose()
+    assert not thread.is_alive()
+    assert errors == []
+    assert outcomes == [{queued: "cancelled"}]
+    rows = job_rows(backend.sessions, setup["job_ids"])
+    assert rows[running].status == EvalJobStatus.SUCCEEDED
+    assert rows[queued].status == EvalJobStatus.CANCELLED
+    status = experiment_status_of(backend.sessions, setup["experiment_id"])
+    assert status == "PARTIAL"
 
 
 # --------------------------------------------------------------------------- load

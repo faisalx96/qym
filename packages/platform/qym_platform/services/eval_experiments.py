@@ -49,7 +49,16 @@ import copy
 import hashlib
 import hmac
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Iterable, Mapping, Optional, Sequence, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Iterable,
+    Mapping,
+    Optional,
+    Sequence,
+    Union,
+    cast,
+)
 
 from sqlalchemy import CursorResult, and_, or_, select, update
 from sqlalchemy.orm import Session, object_session
@@ -382,19 +391,54 @@ def current_jobs(jobs: Sequence[EvalExperimentJob]) -> list[EvalExperimentJob]:
 
 
 def recompute_experiment_status(
-    db: Session, experiment: EvalExperiment
-) -> EvalExperimentStatus:
-    """Refresh ``experiment.status`` from its jobs (caller commits)."""
+    db: Session, experiment: Union[EvalExperiment, str]
+) -> Optional[EvalExperimentStatus]:
+    """Refresh ``experiment.status`` from its jobs (flushes, caller commits).
+
+    ``experiment`` is the row or its id; returns None when the id is unknown. The one
+    aggregate rule (``aggregate_status``) for the API, the queue and the dispatcher.
+
+    On Postgres the experiment row is locked first (``FOR NO KEY UPDATE``, reloaded),
+    so transactions settling sibling jobs recompute one after another and each one
+    reads the jobs the previous one committed. Without the lock, two transactions
+    finishing the last two jobs at once (two dispatcher pods, or a queue cancel and a
+    dispatcher settle) each saw the other's job still running under READ COMMITTED,
+    and the experiment stayed ``RUNNING`` forever (#40). SQLite serializes writers.
+
+    Lock order: callers lock (or ``UPDATE``) their job rows, then the environment or
+    run rows they touch, and only then call this, which locks the experiment row
+    last. ``NO KEY UPDATE`` still lets other transactions insert jobs (a foreign-key
+    ``KEY SHARE`` lock) while the row is held.
+    """
+    experiment_id = experiment if isinstance(experiment, str) else experiment.id
+    db.flush()
+    if _is_postgres(db):
+        row = db.execute(
+            select(EvalExperiment)
+            .where(EvalExperiment.id == experiment_id)
+            .with_for_update(key_share=True)
+            .execution_options(populate_existing=True)
+        ).scalar_one_or_none()
+    elif isinstance(experiment, str):
+        row = db.get(EvalExperiment, experiment_id)
+    else:
+        row = experiment
+    if row is None:
+        return None
     jobs = (
         db.query(EvalExperimentJob)
-        .filter(EvalExperimentJob.experiment_id == experiment.id)
+        .filter(EvalExperimentJob.experiment_id == row.id)
         .all()
     )
     status = aggregate_status([j.status for j in current_jobs(jobs)])
-    if experiment.status != status:
-        experiment.status = status
-    clear_secrets_when_settled(experiment, jobs)
+    if row.status != status:
+        row.status = status
+    clear_secrets_when_settled(row, jobs)
     return status
+
+
+def _is_postgres(db: Session) -> bool:
+    return db.get_bind().dialect.name == "postgresql"
 
 
 # Nothing more is dispatched from these without a user action; a retry asks for the
@@ -654,7 +698,9 @@ def cancel_jobs(
     allowed: dict[str, bool] = {}
     touched: dict[str, EvalExperiment] = {}
     outcomes: dict[str, str] = {}
-    for job_id in ids:
+    # Rows are locked in id order (jobs, then experiments) so two concurrent bulk
+    # cancels over the same jobs cannot deadlock; outcomes keep the caller's order.
+    for job_id in sorted(ids):
         pair = found.get(job_id)
         if pair is None:
             outcomes[job_id] = NOT_FOUND
@@ -687,6 +733,8 @@ def cancel_jobs(
                 },
             )
         )
-    for experiment in touched.values():
-        recompute_experiment_status(db, experiment)
-    return outcomes
+    # Last, after every job and run row: the dispatcher's order (job, environment or
+    # run, experiment), so a cancel racing a dispatcher settle cannot deadlock.
+    for experiment_id in sorted(touched):
+        recompute_experiment_status(db, touched[experiment_id])
+    return {job_id: outcomes[job_id] for job_id in ids}
