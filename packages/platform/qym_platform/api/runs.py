@@ -101,7 +101,9 @@ from qym_platform.services.score_edits import (
     reduced_score_type,
 )
 from qym_platform.services.run_means import (
+    ITEM_EDIT_KEY,
     METRIC_ERROR_STATUSES,
+    TASK_ERROR_PASS_MARKER,
     errored_pass_items,
     errors_left_out,
     is_metric_error,
@@ -688,7 +690,7 @@ def _repeat_aggregate_metric_meta(
         "samples_observed": int(observed),
     }
     for key, value in (stored_meta or {}).items():
-        if key in {"modified", "original_score"} or key.startswith("pass_"):
+        if key in {"modified", "original_score", ITEM_EDIT_KEY} or key.startswith("pass_"):
             meta[key] = value
     return meta
 
@@ -3181,6 +3183,11 @@ def _build_models_runs_data(db: Session, runs: list[Run]) -> list[dict[str, Any]
             },
         }
 
+    # Errors follow the run-mean rule here too (metrics.js getRowScore): a
+    # scorer error carries its status (read with the scores, in one scan),
+    # and a repeat item with an errored pass carries that metric's passes
+    # (the only pass data in this payload), so a lower-is-better metric is
+    # judged without them.
     score_rows = (
         db.query(
             RunItemScore.run_id,
@@ -3188,38 +3195,17 @@ def _build_models_runs_data(db: Session, runs: list[Run]) -> list[dict[str, Any]
             RunItemScore.metric_name,
             RunItemScore.score_numeric,
             RunItemScore.score_raw,
+            RunItemScore.meta["status"].as_string(),
         )
         .filter(RunItemScore.run_id.in_(run_ids))
         .all()
     )
     score_by_run_item: dict[tuple[str, str], dict[str, Any]] = {}
-    for score in score_rows:
-        value = (
-            score.score_numeric if score.score_numeric is not None else score.score_raw
-        )
-        score_by_run_item.setdefault((score.run_id, score.item_id), {})[
-            score.metric_name
-        ] = value
-
-    # Errors follow the run-mean rule here too (metrics.js getRowScore): a
-    # scorer error carries its status, and a repeat item with an errored pass
-    # carries that metric's passes (the only pass data in this payload), so
-    # a lower-is-better metric is judged without them.
     error_meta: dict[tuple[str, str], dict[str, Any]] = {}
-    for run_id, item_id, metric_name, status in (
-        db.query(
-            RunItemScore.run_id,
-            RunItemScore.item_id,
-            RunItemScore.metric_name,
-            RunItemScore.meta["status"].as_string(),
-        )
-        .filter(
-            RunItemScore.run_id.in_(run_ids),
-            metric_error_candidates(RunItemScore),
-        )
-        .all()
-    ):
-        if is_metric_error({"status": status}):
+    for run_id, item_id, metric_name, score_numeric, score_raw, status in score_rows:
+        value = score_numeric if score_numeric is not None else score_raw
+        score_by_run_item.setdefault((run_id, item_id), {})[metric_name] = value
+        if status is not None and is_metric_error({"status": status}):
             error_meta.setdefault((run_id, item_id), {})[metric_name] = {
                 "status": status
             }
@@ -3480,6 +3466,9 @@ def _build_run_data(
             )[int(ps.pass_number)] = ps.score_numeric
             # Per-pass judge output, same shape as row-level metric_meta.
             ps_meta: dict[str, Any] = dict(ps.meta) if ps.meta else {}
+            # Internal: the page tells a failed task by the "error" label and
+            # the pass's failed attempt (metrics.js isTaskErrorPass).
+            ps_meta.pop(TASK_ERROR_PASS_MARKER, None)
             pass_analysis = ps_meta.pop(PASS_ANALYSIS_META_KEY, None)
             if isinstance(pass_analysis, dict):
                 pass_analysis_by_item.setdefault(ps.item_id, {}).setdefault(
@@ -3703,6 +3692,11 @@ def _build_run_data(
         input_text = _stringify(it.input)
         output_text = _stringify(it.output) if not is_error else f"ERROR: {it.error}"
         expected_text = _stringify(it.expected)
+        # item_completed always carries latency_ms: an item without output
+        # or latency never had its completion stored (still running, or the
+        # platform rejected the event; the page tells which by the run's
+        # ingest_incomplete flag), not an empty answer.
+        output_received = is_error or it.output is not None or it.latency_ms is not None
 
         ui_rows.append(
             {
@@ -3722,6 +3716,7 @@ def _build_run_data(
                 "input_full": input_text,
                 "output": output_text,
                 "output_full": output_text,
+                **({} if output_received else {"output_received": False}),
                 "expected": expected_text,
                 "expected_full": expected_text,
                 "time": (
@@ -4548,14 +4543,20 @@ def run_group_metrics(
         )
 
     items_scores: Dict[str, list] = {}
+    # A pass whose scorer or task failed scores 0. A lower-is-better metric
+    # would read that 0 as its best value, so there an errored pass is None:
+    # never a pass, and left out of averages and the best score
+    # (services/run_means.py). Only then are the pass metadata read.
+    left_out = errors_left_out(direction)
+    columns = [
+        RunItemPassScore.item_id,
+        RunItemPassScore.pass_number,
+        RunItemPassScore.score_numeric,
+    ]
+    if left_out:
+        columns += [RunItemPassScore.meta, RunItemPassScore.label]
     rows = (
-        db.query(
-            RunItemPassScore.item_id,
-            RunItemPassScore.pass_number,
-            RunItemPassScore.score_numeric,
-            RunItemPassScore.meta,
-            RunItemPassScore.label,
-        )
+        db.query(*columns)
         .filter(
             RunItemPassScore.run_id == run.id,
             RunItemPassScore.metric_name == metric_name,
@@ -4563,14 +4564,11 @@ def run_group_metrics(
         .order_by(RunItemPassScore.item_id, RunItemPassScore.pass_number)
         .all()
     )
-    # A pass whose scorer or task failed scores 0. A lower-is-better metric
-    # would read that 0 as its best value, so there an errored pass is None:
-    # never a pass, and left out of averages and the best score
-    # (services/run_means.py).
-    left_out = errors_left_out(direction)
     score_rows = []
-    for item_id, pass_number, score_numeric, meta, label in rows:
+    for row in rows:
+        item_id, pass_number, score_numeric = row[:3]
         if left_out:
+            meta, label = row[3:]
             if is_metric_error(meta) or is_task_error_pass(label, meta):
                 numeric = None
             elif score_numeric is None:
@@ -4951,6 +4949,9 @@ def update_metric(
             )
             db.add(pass_record)
         meta.setdefault(f"pass_{pass_number}_original", pass_record.score_numeric)
+        # The item is the mean over its passes again, replacing any value a
+        # reviewer gave the item as a whole.
+        meta.pop(ITEM_EDIT_KEY, None)
         pass_meta = dict(pass_record.meta or {})
         pass_meta.setdefault("original_score", pass_record.score_numeric)
         pass_meta["modified"] = "true"
@@ -4988,6 +4989,10 @@ def update_metric(
         # A reviewer's score replaces a failed scorer's: the row stops
         # counting as a scorer error; the failure is kept as original_*.
         meta = supersede_metric_error(meta)
+        if run_samples > 1:
+            # A repeat item scored as a whole keeps this value in every mean,
+            # errored passes or not, until one of its passes changes.
+            meta[ITEM_EDIT_KEY] = "true"
         if run_samples <= 1:
             # Imports can keep a pass-1 copy of a classic score, which the
             # error counts also read.
@@ -5048,6 +5053,7 @@ def update_metric(
                 int(ps.pass_number)
             ] = ps.score_numeric
             ps_meta = dict(ps.meta) if ps.meta else {}
+            ps_meta.pop(TASK_ERROR_PASS_MARKER, None)
             pass_analysis = ps_meta.pop(PASS_ANALYSIS_META_KEY, None)
             if isinstance(pass_analysis, dict):
                 by_metric_analysis.setdefault(ps.metric_name, {})[

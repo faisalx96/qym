@@ -810,6 +810,12 @@
       }
 
       var dropdownWrapper = event.target.closest('.multi-select-wrapper');
+      if (!dropdownWrapper && (event.target === document.body || event.target === document.documentElement)) {
+        // Choosing a value can re-render the list and drop focus to <body>:
+        // Escape still closes the open list.
+        var looseDropdown = document.querySelector('.multi-select-wrapper .multi-select-dropdown.open');
+        dropdownWrapper = looseDropdown ? looseDropdown.closest('.multi-select-wrapper') : null;
+      }
       var openDropdown = dropdownWrapper && dropdownWrapper.querySelector('.multi-select-dropdown.open, .qym-dropdown.open');
       if (openDropdown) {
         event.preventDefault();

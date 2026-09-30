@@ -273,7 +273,9 @@ def project_insights(
     ):
         latencies[run_id].append(float(latency))
 
-    score_totals = raw_metric_totals(db, run_ids)
+    # Only the run mean is shown: repeat runs then read pass rows only for
+    # their lower-is-better metrics, not for the unused mean without errors.
+    score_totals = raw_metric_totals(db, run_ids, scored_averages=False)
     # Reliability is execution success: repeat runs count item passes.
     repeat_executions = repeat_execution_counts(
         db,

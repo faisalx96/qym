@@ -718,9 +718,88 @@ def _counted_verdict_reason(meta: Any) -> bool:
     return bool(error.strip()) if isinstance(error, str) else bool(error)
 
 
+def _in_own_transaction(ctx: JobContext, work: Callable[[Session], Any], *, attempts: int = 3) -> Any:
+    """Run ``work(db)`` and commit, alone in its transaction.
+
+    A deadlock or lock timeout with the dashboard worker rolls back only this
+    unit and is retried, instead of failing the whole job.
+    """
+    from sqlalchemy.exc import OperationalError
+
+    for attempt in range(attempts):
+        try:
+            with ctx.session() as db:
+                result = work(db)
+                db.commit()
+                return result
+        except OperationalError as exc:
+            if attempt + 1 >= attempts:
+                raise
+            ctx.log(f"retrying after {type(getattr(exc, 'orig', exc)).__name__}")
+            time.sleep(0.2 * (attempt + 1))
+    return None
+
+
+def _mark_task_error_passes(ctx: JobContext, cursor: int, window: int) -> int:
+    """Mark pass scores that ingest zero-filled for a failed task while they
+    still carried the scorer's metadata (a cancel mid-scoring stored before
+    the marker existed). The dashboard already reads those passes as failed
+    tasks from their attempts; the marker makes the source rows agree."""
+    from qym_platform.db.models import RunItemAttempt, RunItemPassScore
+    from qym_platform.services.run_means import (
+        METRIC_ERROR_STATUSES,
+        TASK_ERROR_PASS_LABEL,
+        is_task_error_pass,
+        task_error_pass_meta,
+    )
+
+    def work(db: Session) -> int:
+        rows = [
+            row
+            for row in db.execute(
+                select(RunItemPassScore).where(
+                    RunItemPassScore.id > cursor,
+                    RunItemPassScore.id <= cursor + window,
+                    func.lower(func.trim(RunItemPassScore.label)) == TASK_ERROR_PASS_LABEL,
+                )
+            ).scalars()
+            # Rows the source rule already reads as failed tasks, scorer
+            # errors and reviewer scores stay as they are.
+            if not is_task_error_pass(row.label, row.meta)
+            and isinstance(row.meta, dict)
+            and str(row.meta.get("status") or "").strip().lower() not in METRIC_ERROR_STATUSES
+            and str(row.meta.get("modified") or "").strip().lower() != "true"
+        ]
+        if not rows:
+            return 0
+        failed = set(
+            db.execute(
+                select(
+                    RunItemAttempt.run_id, RunItemAttempt.item_id, RunItemAttempt.pass_number
+                ).where(
+                    RunItemAttempt.run_id.in_({row.run_id for row in rows}),
+                    RunItemAttempt.item_id.in_({row.item_id for row in rows}),
+                    RunItemAttempt.is_last_attempt.is_(True),
+                    func.lower(RunItemAttempt.status).in_(METRIC_ERROR_STATUSES),
+                )
+            ).tuples()
+        )
+        marked = 0
+        for row in rows:
+            if (row.run_id, row.item_id, int(row.pass_number)) in failed:
+                row.meta = task_error_pass_meta(row.meta)
+                marked += 1
+        return marked
+
+    return int(_in_own_transaction(ctx, work) or 0)
+
+
 @register(
     "reclassify_metric_errors",
-    description="Rebuild dashboard numbers for runs whose metric verdict reasons were counted as scorer errors (C010).",
+    description=(
+        "Rebuild dashboard numbers for runs whose metric verdict reasons were counted as "
+        "scorer errors (C010), and mark repeat passes whose task failed after a metric was scored."
+    ),
 )
 def _reclassify_metric_errors(ctx: JobContext) -> bool:
     """Scan score rows in id windows; repair each affected run once.
@@ -729,12 +808,20 @@ def _reclassify_metric_errors(ctx: JobContext) -> bool:
     error flag was computed when the score was stored. Rows that only carry a
     verdict reason in ``meta.error`` need their run rebuilt from source, which
     the dashboard worker does in the background after the repair request.
+    Each run's repair request commits on its own, in the worker's lock order
+    (a partition, then its buckets), and a deadlock with the worker is
+    retried. The last phase marks task-failed pass scores
+    (``_mark_task_error_passes``).
     """
     from qym_platform.db.models import RunItemPassScore, RunItemScore
     from qym_platform.services.dashboard_summaries import request_dashboard_repair
 
     window = max(1, int(ctx.params.get("window", 20000)))
-    phases = (("score", RunItemScore), ("pass_score", RunItemPassScore))
+    phases = (
+        ("score", RunItemScore),
+        ("pass_score", RunItemPassScore),
+        ("task_error_pass", RunItemPassScore),
+    )
     phase = ctx.progress.get("phase") or phases[0][0]
     names = [name for name, _ in phases]
     if phase not in names:
@@ -750,20 +837,27 @@ def _reclassify_metric_errors(ctx: JobContext) -> bool:
                 db.scalar(select(model.id).order_by(model.id.desc()).limit(1)) or 0
             )
         max_id = int(ctx.progress[max_key])
-        rows = db.execute(
-            select(model.run_id, model.meta).where(
-                model.id > cursor,
-                model.id <= cursor + window,
-                model.meta["error"].as_string().isnot(None),
-            )
-        ).all()
-        affected = {
-            run_id for run_id, meta in rows if _counted_verdict_reason(meta)
-        } - repaired
-        for run_id in sorted(affected):
-            if request_dashboard_repair(db, run_id, publish=False):
-                repaired.add(run_id)
-        db.commit()
+        affected = set()
+        if phase != "task_error_pass":
+            rows = db.execute(
+                select(model.run_id, model.meta).where(
+                    model.id > cursor,
+                    model.id <= cursor + window,
+                    model.meta["error"].as_string().isnot(None),
+                )
+            ).all()
+            affected = {
+                run_id for run_id, meta in rows if _counted_verdict_reason(meta)
+            } - repaired
+    if phase == "task_error_pass":
+        marked = _mark_task_error_passes(ctx, cursor, window)
+        ctx.progress["passes_marked"] = int(ctx.progress.get("passes_marked") or 0) + marked
+    for run_id in sorted(affected):
+        if _in_own_transaction(
+            ctx, lambda db, run_id=run_id: request_dashboard_repair(db, run_id, publish=False)
+        ):
+            repaired.add(run_id)
+            ctx.progress["runs"] = sorted(repaired)
     cursor += window
     ctx.progress["runs"] = sorted(repaired)
     ctx.progress["runs_repaired"] = len(repaired)
@@ -771,7 +865,10 @@ def _reclassify_metric_errors(ctx: JobContext) -> bool:
         position = names.index(phase) + 1
         if position >= len(names):
             ctx.progress["phase"] = "done"
-            ctx.progress["message"] = f"done: {len(repaired):,} runs queued for a dashboard rebuild"
+            ctx.progress["message"] = (
+                f"done: {len(repaired):,} runs queued for a dashboard rebuild; "
+                f"{int(ctx.progress.get('passes_marked') or 0):,} task-failed passes marked"
+            )
             ctx.log(ctx.progress["message"])
             return True
         ctx.progress["phase"], ctx.progress["cursor"] = names[position], 0

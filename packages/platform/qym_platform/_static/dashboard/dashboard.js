@@ -1230,7 +1230,8 @@
         case 'passHatK':
           return { key, label: `Pass^${K}` };
         case 'maxAtK':
-          return { key, label: `Max@${K}` };
+          // The best value per item follows the metric's direction.
+          return { key, label: `${mvs.metricDirection === 'minimize' ? 'Min' : 'Max'}@${K}` };
         case 'consistency':
           return { key, label: 'Consistency' };
         case 'reliability':
@@ -1463,11 +1464,15 @@
       const task = Number(run.task_error_count || 0);
       const count = scorer + task;
       if (!count) return '';
-      const kinds = [
-        scorer ? `${scorer} scorer error${scorer === 1 ? '' : 's'}` : '',
-        task ? `${task} task error${task === 1 ? '' : 's'}` : '',
-      ].filter(Boolean).join(' and ');
-      const label = `${kinds}${scope} ${count === 1 ? 'is' : 'are'} not counted in the ${onlyMetric} mean (lower is better)`;
+      const plural = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
+      // Task errors are the run's: a failed task that a reviewer then scored
+      // counts in the mean at that score, so they are not a count of what
+      // this mean left out.
+      const label = [
+        scorer ? `${plural(scorer, 'scorer error')}${scope} ${scorer === 1 ? 'is' : 'are'} not counted in the ${onlyMetric} mean (lower is better).` : '',
+        task && scorer ? `The run also has ${plural(task, 'task error')}${scope}, left out too unless a reviewer scored them.` : '',
+        task && !scorer ? `The run has ${plural(task, 'task error')}${scope}. Lower is better for ${onlyMetric}, so they are left out of its mean unless a reviewer scored them.` : '',
+      ].filter(Boolean).join(' ');
       const details = { kind: 'metric', count, scope, leftOut: true, metric: onlyMetric, task, metrics: { [onlyMetric]: scorer } };
       return `<button type="button" class="status-errors status-error-detail status-metric-errors metric-error-indicator" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" data-execution-errors="${escapeHtml(JSON.stringify(details))}">⚠</button>`;
     }
@@ -1507,7 +1512,7 @@
     modal.setAttribute('aria-labelledby', 'execution-error-title');
     modal.innerHTML = details.leftOut
       // A lower-is-better metric: its task and scorer errors are left out.
-      ? `<div class="modal-content modal-small"><div class="modal-header"><h2 id="execution-error-title">${escapeHtml(details.metric)} errors</h2><button class="modal-close qym-icon-action" aria-label="Close error details">×</button></div><div class="modal-body"><p>${Number(details.count)} error${details.count === 1 ? '' : 's'}${escapeHtml(details.scope)} ${details.count === 1 ? 'is' : 'are'} not counted in the ${escapeHtml(details.metric)} mean.</p><dl class="execution-error-breakdown"><div><dt>Scorer errors</dt><dd>${Number(details.metrics?.[details.metric] || 0)}</dd></div><div><dt>Task errors</dt><dd>${Number(details.task || 0)}</dd></div></dl><p class="execution-error-note">Lower is better for this metric, so an error counted as 0 would read as its best score. Errors are left out of its mean and count as fails in pass rates. Each is counted once per item and pass.</p></div></div>`
+      ? `<div class="modal-content modal-small"><div class="modal-header"><h2 id="execution-error-title">${escapeHtml(details.metric)} errors</h2><button class="modal-close qym-icon-action" aria-label="Close error details">×</button></div><div class="modal-body"><p>Errors${escapeHtml(details.scope)} are not counted in the ${escapeHtml(details.metric)} mean.</p><dl class="execution-error-breakdown"><div><dt>Scorer errors</dt><dd>${Number(details.metrics?.[details.metric] || 0)}</dd></div><div><dt>Task errors in the run</dt><dd>${Number(details.task || 0)}</dd></div></dl><p class="execution-error-note">Lower is better for this metric, so an error counted as 0 would read as its best score. Errors are left out of its mean and count as fails in pass rates. Each is counted once per item and pass; a failed task that a reviewer scored counts at that score.</p></div></div>`
       : `<div class="modal-content modal-small"><div class="modal-header"><h2 id="execution-error-title">${task ? 'Task' : 'Metric'} errors</h2><button class="modal-close qym-icon-action" aria-label="Close error details">×</button></div><div class="modal-body"><p>${details.count} ${task ? 'task execution' : 'metric check'}${details.count === 1 ? '' : 's'} failed${escapeHtml(details.scope)}.</p>${task ? '' : `<dl class="execution-error-breakdown">${Object.entries(details.metrics).map(([name, count]) => `<div><dt>${escapeHtml(name)}</dt><dd>${Number(count)}</dd></div>`).join('')}</dl>`}<p class="execution-error-note">${task ? 'Metrics skipped after a task failure are not metric errors.' : 'Task outputs are available. Each failed metric check is counted once per item and pass, and counts as 0% in the run mean.'}</p></div></div>`;
     document.body.appendChild(modal);
     const close = () => { modal.remove(); if (button.isConnected) button.focus(); };
@@ -2045,6 +2050,11 @@
   // ═══════════════════════════════════════════════════
 
   function renderChartsView() {
+    // A column's first sort direction: names A-Z, numbers highest first. The
+    // header click handlers below use it too, outside each card's render.
+    function getChartSortDirection(key) {
+      return key === 'model' ? 'asc' : 'desc';
+    }
     const chartData = state.chartData;
     const visibleSystemColumns = _visibleSystemColumns();
     
@@ -2236,10 +2246,6 @@
         state.chartSortState[cardId] = { key: metrics[0] || visibleTraceMetrics[0]?.key || 'latency', dir: 'desc' };
       }
       const sortState = state.chartSortState[cardId];
-
-      function getChartSortDirection(key) {
-        return key === 'model' ? 'asc' : 'desc';
-      }
 
       function isGroupStatSortKey(key) {
         return key === GROUP_PASS_AT_K_COLUMN_KEY
@@ -2955,13 +2961,9 @@
         if (!cardId || !sortKey) return;
 
         const currentSort = state.chartSortState[cardId] || { key: sortKey, dir: 'desc' };
-        if (currentSort.key === sortKey) {
-          currentSort.dir = currentSort.dir === 'desc' ? 'asc' : 'desc';
-        } else {
-          currentSort.key = sortKey;
-          currentSort.dir = getChartSortDirection(sortKey);
-        }
-        state.chartSortState[cardId] = currentSort;
+        state.chartSortState[cardId] = currentSort.key === sortKey
+          ? { key: sortKey, dir: currentSort.dir === 'desc' ? 'asc' : 'desc' }
+          : { key: sortKey, dir: getChartSortDirection(sortKey) };
         renderChartsView();
       });
     });
@@ -3935,7 +3937,7 @@
         e.preventDefault();
         e.stopPropagation();
         closeDropdown();
-        showWorkflowModal('approve', run.run_id, run.task_name);
+        showWorkflowModal('approve', run.run_id, getRunDisplayName(run));
       });
 
       const rejectBtn = tr.querySelector('.reject-run');
@@ -3943,7 +3945,7 @@
         e.preventDefault();
         e.stopPropagation();
         closeDropdown();
-        showWorkflowModal('reject', run.run_id, run.task_name);
+        showWorkflowModal('reject', run.run_id, getRunDisplayName(run));
       });
 
       const unapproveBtn = tr.querySelector('.unapprove-run');
@@ -3951,7 +3953,7 @@
         e.preventDefault();
         e.stopPropagation();
         closeDropdown();
-        showWorkflowModal('unapprove', run.run_id, run.task_name);
+        showWorkflowModal('unapprove', run.run_id, getRunDisplayName(run));
       });
 
       const unrejectBtn = tr.querySelector('.unreject-run');
@@ -3959,7 +3961,7 @@
         e.preventDefault();
         e.stopPropagation();
         closeDropdown();
-        showWorkflowModal('unreject', run.run_id, run.task_name);
+        showWorkflowModal('unreject', run.run_id, getRunDisplayName(run));
       });
 
       const deleteBtn = tr.querySelector('.delete-run');
@@ -5699,14 +5701,12 @@
         passHatK: isBoolean
           ? `% of items where ALL ${K} runs achieved ${direction === 'minimize' ? 'the best score (0%)' : '100%'}`
           : `% of items where ALL ${K} runs scored ${passRule}${threshold}%`,
-        maxAtK: isNumeric
-          ? `Average of the best value per item across all ${K} runs`
-          : `Average of the best score per item across all ${K} runs`,
+        maxAtK: `Average of the best ${isNumeric ? 'value' : 'score'} per item across all ${K} runs${direction === 'minimize' ? ' (the lowest, since lower is better)' : ''}`,
         consistency: `How often runs agree on pass/fail across ${K} runs. 100% = all agree, 0% = 50/50 split.`,
         reliability: `When an item CAN be solved, how often is it? Only includes items with ≥1 passing run.`,
         failedCount: direction === 'minimize'
-          ? `Number of runs that threw an error (across all items). Lower is better for this metric, so errors are left out of its scores and count as fails.`
-          : `Number of runs that threw an error (across all items). Errors are scored as 0%.`,
+          ? `Item evaluations that returned a task or scorer error, across all passes of the selected runs. Lower is better for this metric, so errors are left out of its scores and count as fails.`
+          : `Item evaluations that returned a task or scorer error, across all passes of the selected runs. Errors are scored as 0%.`,
         totalRetries: `Total retries across all items in the selected runs. This sums per-item retry counts, not distinct items that retried.`,
         avgScore: isNumeric
           ? `Mean value across all items and all ${K} runs`
@@ -5752,7 +5752,7 @@
       } else if (isNumeric) {
         addStatTile('avgScore', 'Avg', fmtN(stats.avgScore), '', tooltips.avgScore);
         addStatTile('minScore', 'Min', fmtN(stats.minScore), '', 'Minimum value across all items and runs.');
-        addStatTile('maxAtK', `Max@${K}`, fmtN(stats.maxAtK), '', tooltips.maxAtK);
+        addStatTile('maxAtK', `${direction === 'minimize' ? 'Min' : 'Max'}@${K}`, fmtN(stats.maxAtK), '', tooltips.maxAtK);
         addStatTile('stddevScore', 'StdDev', fmtN(stats.stddevScore), '', 'Standard deviation across all items and runs. Lower = more consistent.');
         addStatTile('totalScoreSum', 'Total', fmtN(stats.totalScoreSum), 'accent-value', 'Sum of all values across all items and runs.');
         addStatTile('failedCount', 'Errors', String(stats.failedCount), stats.failedCount > 0 ? 'failed-count' : '', tooltips.failedCount);
@@ -6595,7 +6595,7 @@
     });
   }
 
-  function showWorkflowModal(action, runId, taskName) {
+  function showWorkflowModal(action, runId, runName) {
     const modal = el('workflow-modal');
     const titleEl = el('workflow-modal-title');
     const descEl = el('workflow-modal-description');
@@ -6614,9 +6614,10 @@
       : (isUnreject
         ? 'Withdraw this rejection. The run returns to its execution result and the rejection stays in its review history.'
       : (isApprove
-        ? 'Approve this run to make it visible to leadership.'
+        ? 'Approve this run. The decision and your comment are kept in its review history.'
         : 'Reject this run and send it back for review.'));
-    runNameEl.textContent = `${taskName} (${runId.substring(0, 8)}...)`;
+    // The same name the runs table and the delete dialog use.
+    runNameEl.textContent = runName || runId;
     commentEl.value = '';
     modal.style.display = 'flex';
 

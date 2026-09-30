@@ -44,15 +44,18 @@ def test_runs_list_says_errors_are_not_counted_in_a_lower_is_better_mean(browser
         warning = page.locator('tr[data-file="run-000"] .metric-error-indicator')
         assert warning.inner_text() == "⚠"
         label = warning.get_attribute("aria-label")
+        # Scorer errors are per metric; task errors are the run's (a failed
+        # task a reviewer scored counts), so the note does not sum them.
         assert label == (
-            "2 scorer errors and 1 task error are not counted in the accuracy "
-            "mean (lower is better)"
+            "2 scorer errors are not counted in the accuracy mean (lower is better). "
+            "The run also has 1 task error, left out too unless a reviewer scored them."
         )
         assert "counted as 0%" not in label and "Mean without" not in label
         warning.click()
         dialog = page.get_by_role("dialog")
         text = dialog.inner_text()
-        assert "3 errors are not counted in the accuracy mean." in text
+        assert "Errors are not counted in the accuracy mean." in text
+        assert "Task errors in the run\n1" in text
         assert "count as fails in pass rates" in text
         assert "counts as 0%" not in text
     finally:

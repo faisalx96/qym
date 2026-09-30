@@ -76,7 +76,11 @@ from qym_platform.item_identity import (
     looks_like_positional_item_id,
 )
 from qym_platform.services.metric_semantics import declared_direction
-from qym_platform.services.run_means import errors_left_out, reduce_pass_scores
+from qym_platform.services.run_means import (
+    errors_left_out,
+    reduce_pass_scores,
+    task_error_pass_meta,
+)
 from qym_platform.services.ingest_completeness import (
     INGEST_INCOMPLETE_KEY,
     INGEST_REJECTED_KEY,
@@ -1730,7 +1734,11 @@ def _ingest_events_sync(
                 touched_trace_ids.add(row["trace_id"])
                 trace_stats_dirty = True
 
+    # True while the last event applied is a run_completed that just
+    # refreshed the ingest flag: the late-event check below would repeat it.
+    ingest_flag_fresh = False
     for raw, evt, payload in accepted:
+        ingest_flag_fresh = False
         if hasattr(payload, "item_id"):
             touched_item_ids.add(payload.item_id)
         logger.debug(
@@ -2115,12 +2123,17 @@ def _ingest_events_sync(
                             pass_number=payload.pass_number,
                             score_numeric=0.0,
                             label="error",
+                            meta=task_error_pass_meta(None),
                         )
                         _remember_pass_score(pass_score)
                         db.add(pass_score)
                     else:
                         pass_score.score_numeric = 0.0
                         pass_score.label = "error"
+                        # A metric scored before the task failed (a cancel
+                        # mid-scoring) leaves its metadata: keep it, but mark
+                        # the pass as a failed task (run_means.is_task_error_pass).
+                        pass_score.meta = task_error_pass_meta(pass_score.meta)
                     reduced, reduced_observations = _reduce_pass_scores(
                         payload.item_id, metric_name
                     )
@@ -2214,6 +2227,7 @@ def _ingest_events_sync(
                 if expected is None and isinstance(run.run_metadata, dict):
                     expected = _int_or_none(run.run_metadata.get("total_items"))
                 _refresh_ingest_flag(db, run, expected)
+                ingest_flag_fresh = True
             except Exception:
                 logger.warning(
                     "Failed to check ingest completeness for run %s",
@@ -2278,8 +2292,9 @@ def _ingest_events_sync(
     # flag honest — a re-sent run_completed would be deduped by event_id.
     # So must events refused after completion.
     current_md = run.run_metadata if isinstance(run.run_metadata, dict) else {}
-    if isinstance(current_md.get(INGEST_INCOMPLETE_KEY), dict) or (
-        rejections_recorded and completed_by_client(run)
+    if not ingest_flag_fresh and (
+        isinstance(current_md.get(INGEST_INCOMPLETE_KEY), dict)
+        or (rejections_recorded and completed_by_client(run))
     ):
         db.flush()
         try:

@@ -179,8 +179,8 @@ function errorsLeftOut(direction) {
 
 /**
  * A repeat-run pass whose task failed. Ingest stores 0 with the label
- * "error" for its metrics, and the row's pass attempt is an error.
- * Same rule as services/run_means.py (is_task_error_pass).
+ * "error" for its metrics and marks them "task_error"; the row's pass
+ * attempt is an error. Same rule as services/run_means.py (is_task_error_pass).
  */
 function isTaskErrorPass(row, metricName, passIndex) {
   const meta = row?.pass_metric_meta?.[metricName]?.[passIndex];
@@ -188,14 +188,38 @@ function isTaskErrorPass(row, metricName, passIndex) {
   if (meta && typeof meta === 'object') {
     // A reviewer's score replaces what the failed task left behind.
     if (String(meta.modified || '').toLowerCase() === 'true') return false;
-    // Ingest's zero-fill carries only the "error" label; a scorer's own
-    // "error" label comes with its metadata.
-    const others = Object.keys(meta).filter(key => key !== 'label' && key !== 'status'
-      && meta[key] !== null && meta[key] !== undefined && meta[key] !== '');
-    if (String(meta.label || '').trim().toLowerCase() === 'error') return others.length === 0;
+    if (String(meta.label || '').trim().toLowerCase() === 'error') {
+      if (meta.task_error === true) return true;
+      // Unmarked (older) rows: ingest's zero-fill carried only the "error"
+      // label. A scorer's own "error" label comes with its metadata; then
+      // the pass attempt decides.
+      const others = Object.keys(meta).filter(key => key !== 'label' && key !== 'status'
+        && meta[key] !== null && meta[key] !== undefined && meta[key] !== '');
+      if (others.length === 0) return true;
+    }
   }
   const attempt = Array.isArray(row?.pass_attempts) ? row.pass_attempts[passIndex] : null;
   return !!attempt && isTaskErrorRow(attempt);
+}
+
+/**
+ * A repeat item a reviewer scored as a whole (an edit without a pass): it
+ * keeps that value in every mean instead of being re-derived from its
+ * passes. Same rule as services/run_means.py (is_item_edit).
+ */
+function isItemEdit(meta) {
+  return !!meta && typeof meta === 'object' && String(meta.item_edit || '').toLowerCase() === 'true';
+}
+
+/**
+ * A row scoped to one pass (run page ?pass=N, Compare pass columns) whose
+ * task failed but whose metric a reviewer then scored: the reviewer's score
+ * stands, as on the server (/passes). Scoped rows set __pass_scope.
+ */
+function isReviewedPassSlice(row, metricName) {
+  if (!row || row.__pass_scope !== true || metricName === null || metricName === undefined) return false;
+  const meta = row.metric_meta && typeof row.metric_meta === 'object' ? row.metric_meta[metricName] : null;
+  return !!meta && typeof meta === 'object' && String(meta.modified || '').toLowerCase() === 'true';
 }
 
 /**
@@ -240,8 +264,13 @@ function getRowScore(row, metricIdx, metricName = null, direction = null) {
 
   // A task error invalidates every metric. A metric error invalidates only
   // that metric; sibling metrics on the same item retain their real scores.
-  if (isTaskErrorRow(row)) {
+  if (isTaskErrorRow(row) && !isReviewedPassSlice(row, metricName)) {
     return { score: leftOut ? null : 0, isError: true };
+  }
+  // A repeat item scored as a whole by a reviewer: that value, errored
+  // passes or not.
+  if (metricName !== null && isItemEdit(row?.metric_meta?.[metricName])) {
+    return { score: parseScoreValue((row.metric_values || [])[metricIdx]), isError: false };
   }
   if (leftOut && metricName !== null) {
     const passes = repeatPassOutcomes(row, metricName);
@@ -284,7 +313,7 @@ function rowMetricErrorCounts(row, metricName) {
     const scorer = passes.filter(pass => pass.scorerError).length;
     if (task || scorer) return { task, scorer };
   }
-  if (isTaskErrorRow(row)) return { task: 1, scorer: 0 };
+  if (isTaskErrorRow(row)) return isReviewedPassSlice(row, metricName) ? { task: 0, scorer: 0 } : { task: 1, scorer: 0 };
   return { task: 0, scorer: hasMetricError(row, metricName) ? 1 : 0 };
 }
 
@@ -463,10 +492,11 @@ function calculateItemLevelMetrics(options) {
       const outcome = getRowScore(row, metricIdx, metricName, direction);
       const { score, isError } = outcome;
 
-      if (score !== null || isError) {
-        outcomes.push(outcome);
-        if (isError) failedCount++;
-      }
+      if (score !== null || isError) outcomes.push(outcome);
+      // Errors in the unit of the runs list and run page: each errored pass
+      // of a repeat row, else once per item.
+      const errors = rowMetricErrorCounts(row, metricName);
+      failedCount += errors.task + errors.scorer;
       if (score !== null) {
         totalScoreSum += score;
         totalScoreCount++;
@@ -991,7 +1021,7 @@ function getMetricTooltips(K, isBoolean, threshold) {
     maxAtK: `Average of the best score across all ${K} runs for each item.`,
     consistency: `Measures how often runs agree on pass/fail across ${K} runs. 100% = all runs agree, 0% = 50/50 split.`,
     reliability: `When an item CAN be solved, how often is it? Only includes items with at least one passing run.`,
-    failedCount: `Number of runs that threw an error (across all items). Errors are scored as 0%.`,
+    failedCount: `Item evaluations that returned a task or scorer error, across all passes of the selected runs. Errors are scored as 0%.`,
     avgScore: `The mean score across all items and all runs.`,
     avgLatency: `The mean response time across all items and all runs.`,
     medianLatency: `The median response time across all items and all runs. Less sensitive to outliers than the mean.`
@@ -1284,6 +1314,8 @@ if (typeof window !== 'undefined') {
     isErrorRow,
     errorsLeftOut,
     isTaskErrorPass,
+    isItemEdit,
+    isReviewedPassSlice,
     repeatPassOutcomes,
     getRowScore,
     rowMetricErrorCounts,

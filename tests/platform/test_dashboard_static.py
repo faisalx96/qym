@@ -352,7 +352,7 @@ def test_runs_badges_separate_error_types_without_changing_item_math() -> None:
     assert "run.samples > 1 ? ' across all passes' : ''" in source
     assert "const retryScope = run.samples > 1 ? ' across all passes' : ' across all items';" in source
     assert "${retryScope}" in source
-    assert "dashboard.js?v=p0-20260930" in index
+    assert "dashboard.js?v=p0-20260930-2" in index
 
 
 def test_repeat_run_rows_show_each_pass_retry_count() -> None:
@@ -440,7 +440,7 @@ def test_repeat_parent_checkbox_selects_its_current_scope() -> None:
     assert "isPartiallySelected" not in source
     assert "state.selectedRuns.delete(filePath);" in source
     assert "if (!allSelected) refs.forEach(ref => state.selectedRuns.add(ref));" in source
-    assert "dashboard.js?v=p0-20260930" in index
+    assert "dashboard.js?v=p0-20260930-2" in index
 
 
 def test_repeat_comparison_selection_expands_to_exact_passes() -> None:
@@ -2226,12 +2226,12 @@ def test_clear_filter_control_has_aligned_label_and_soft_count_pill() -> None:
             assert "dashboard.css?v=p0-20260930" in source
             assert "playground.js?v=p0-20260930" in source
             assert "ui_components.css?v=p0-20260930" in source
-            assert "ui_components.js?v=auto-analysis-selectors-20260811-1" in source
+            assert "ui_components.js?v=p0-20260930-2" in source
             continue
         if "ui_components.css?v=" in source:
             assert "ui_components.css?v=p0-20260930" in source
         if "ui_components.js?v=" in source:
-            assert "ui_components.js?v=ui-consistency-20260803-28" in source
+            assert "ui_components.js?v=p0-20260930-2" in source
 
 
 def test_operational_statistics_use_connected_strip_contract() -> None:

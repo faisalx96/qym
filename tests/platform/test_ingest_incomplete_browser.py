@@ -103,3 +103,32 @@ def test_runs_list_tags_flagged_runs(browser):
         assert_inert(page)
     finally:
         fixture.close()
+
+
+def test_item_whose_completion_was_rejected_says_its_output_never_arrived(browser):
+    """Its scores arrived, so it reads like a model that answered nothing
+    unless the card says why the output and duration are missing."""
+    fixture = ViewFixture(browser, "run", compact=False, count=6)
+    run = fixture.data["run-1"]
+    run["run"]["metadata"] = {
+        "ingest_incomplete": {"expected_items": 6, "received_items": 6, "rejected_events": 1}
+    }
+    rejected = run["snapshot"]["rows"][2]
+    rejected.update(output="", output_full="", latency_ms=0, output_received=False)
+    page = fixture.page
+    try:
+        fixture.goto()
+        cards = page.locator("#items-grid .item-card")
+        cards.nth(2).locator(".item-header-expand").click()
+        note = cards.nth(2).locator(".output-missing-note")
+        note.wait_for()
+        assert note.inner_text().startswith(
+            "Output not received: the platform rejected this item's completion event"
+        )
+        # Items whose completion arrived carry no note.
+        cards.nth(1).locator(".item-header-expand").click()
+        cards.nth(1).locator(".output-text").wait_for()
+        assert cards.nth(1).locator(".output-missing-note").count() == 0
+        assert fixture.errors == []
+    finally:
+        fixture.close()

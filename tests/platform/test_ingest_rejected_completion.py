@@ -451,3 +451,32 @@ def test_maintenance_job_publishes_flags_of_runs_finished_before_the_upgrade(
     assert projected(database, "old")["ingest_incomplete"] == expected
     assert projected(database, "zz-old")["ingest_incomplete"] == expected
     assert projected(database, "clean").get("ingest_incomplete") is None
+
+
+def test_completing_batch_checks_the_flag_once_and_later_batches_again(api, monkeypatch):
+    """run_completed refreshes the flag; the late-event check after the batch
+    does not repeat it (each check counts the run's items), but a later batch
+    of the flagged run still does."""
+    from qym_platform.api import ingest as ingest_api
+
+    engine, run_id, post = api
+    real = ingest_api._refresh_ingest_flag
+    calls = []
+
+    def spy(*args, **kwargs):
+        calls.append(args)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(ingest_api, "_refresh_ingest_flag", spy)
+    post([_started(run_id, 1, 0), _poison(run_id, 2, 0)])
+    assert calls == []
+    assert post([_completed(run_id, 3, 2)]).status_code == 200
+    assert len(calls) == 1
+    assert _run(engine, run_id).run_metadata["ingest_incomplete"]["rejected_events"] == 1
+
+    # An item after run_completed in the same batch is checked again.
+    calls.clear()
+    post([_completed(run_id, 4, 2), _started(run_id, 5, 1)])
+    assert len(calls) >= 2
+    flag = _run(engine, run_id).run_metadata["ingest_incomplete"]
+    assert (flag["expected_items"], flag["received_items"]) == (2, 2)

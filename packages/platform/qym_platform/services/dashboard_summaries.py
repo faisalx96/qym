@@ -1098,6 +1098,9 @@ def _repeat_pass_errors(db, run_id, left_out=()):
     """
     item_alias = aliased(Record)
     item_ok = and_(
+        # run_key first: record_key alone has no index of its own, and without
+        # it the join scans every project's item records.
+        item_alias.run_key == run_id,
         item_alias.record_key == Record.record_key,
         item_alias.record_kind == "item",
         item_alias.present.is_(True),
@@ -1145,9 +1148,9 @@ def _repeat_pass_errors(db, run_id, left_out=()):
     if not affected:
         return []
     keys = sorted({key for key, _ in affected})
-    passes, values = {}, {}
+    passes, values, item_edits = {}, {}, set()
     for start in range(0, len(keys), 400):
-        for key, metric, kind, number, score, error, edited in db.execute(
+        for key, metric, kind, number, score, error, edited, item_edit in db.execute(
             select(
                 Record.record_key,
                 Record.metric_key,
@@ -1156,6 +1159,8 @@ def _repeat_pass_errors(db, run_id, left_out=()):
                 Record.score,
                 Record.error,
                 Record.success,
+                # On an item score: a reviewer's item-level value (dashboard_outbox).
+                Record.terminal,
             ).where(
                 Record.run_key == run_id,
                 Record.present.is_(True),
@@ -1176,8 +1181,15 @@ def _repeat_pass_errors(db, run_id, left_out=()):
                 )
             else:
                 values[(key, metric)] = score
+                if item_edit:
+                    item_edits.add((key, metric))
     return [
-        (metric, values.get((key, metric)), passes.get((key, metric), []))
+        (
+            metric,
+            values.get((key, metric)),
+            passes.get((key, metric), []),
+            (key, metric) in item_edits,
+        )
         for key, metric in sorted(affected)
     ]
 
@@ -1219,6 +1231,7 @@ def refresh_run_summary(db, run_id, version):
         .join(
             item_alias,
             and_(
+                item_alias.run_key == run_id,
                 item_alias.record_key == Record.record_key,
                 item_alias.record_kind == "item",
                 item_alias.present.is_(True),

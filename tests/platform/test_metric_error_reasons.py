@@ -128,3 +128,91 @@ def test_maintenance_job_rebuilds_runs_projected_with_the_old_rule(database):
     assert published["metric_error_count"] == 1
     assert published["metric_error_counts"] == {"score": 1}
     assert projected(database, "clean")["metric_error_count"] == 1
+
+
+def test_maintenance_job_retries_a_repair_that_deadlocks_with_the_worker(database):
+    """Each run's repair commits alone, and a deadlock is retried instead of
+    failing the job with no run repaired (it is queued once, by migration)."""
+    from sqlalchemy.exc import OperationalError
+
+    with patch.object(dashboard_outbox, "_metric_execution_error", _old_rule):
+        with Session(database) as db:
+            _seed(db, "r")
+            _seed(db, "s")
+        drain(database)
+    from qym_platform.services import dashboard_summaries
+
+    real_repair = dashboard_summaries.request_dashboard_repair
+    calls = []
+
+    def flaky_repair(db, run_id, **kwargs):
+        calls.append(run_id)
+        if run_id == "s" and calls.count("s") == 1:
+            raise OperationalError("SELECT ... FOR UPDATE", {}, Exception("deadlock detected"))
+        return real_repair(db, run_id, **kwargs)
+
+    factory = sessionmaker(bind=database, autoflush=False)
+    with factory() as db:
+        job = maintenance.enqueue(db, "reclassify_metric_errors", {"window": 50})
+        db.commit()
+        job_id = job.id
+    with patch.object(dashboard_summaries, "request_dashboard_repair", flaky_repair), patch.object(
+        maintenance.time, "sleep", lambda _seconds: None
+    ):
+        assert maintenance.MaintenanceWorker(factory, database).tick() == "succeeded"
+    with factory() as db:
+        row = db.get(MaintenanceJob, job_id)
+        assert row.status == "succeeded"
+        assert row.progress["runs"] == ["r", "s"]
+        assert "retrying after" in (row.log or "")
+    assert calls.count("s") == 2
+
+
+def test_maintenance_job_marks_task_failed_passes_that_kept_scorer_metadata(database):
+    """A metric scored before its task was cancelled left the scorer's
+    metadata on the zero-filled pass: the source rule read it as a real 0."""
+    from qym_platform.db.models import RunItemAttempt
+    from qym_platform.services.run_means import is_task_error_pass
+
+    with Session(database) as db:
+        run(db, run_id="rep", samples=2, status=RunWorkflowStatus.COMPLETED)
+        item(db, item_id="a", run_id="rep")
+        item(db, item_id="b", run_id="rep")
+        for item_id, status in (("a", "failed"), ("b", "completed")):
+            db.add(
+                RunItemPassScore(
+                    run_id="rep",
+                    item_id=item_id,
+                    metric_name="score",
+                    pass_number=1,
+                    score_numeric=0.0,
+                    label="error",
+                    meta={"reasoning": "judge says 0.9"},
+                )
+            )
+            db.add(
+                RunItemAttempt(
+                    run_id="rep",
+                    item_id=item_id,
+                    pass_number=1,
+                    attempt_number=1,
+                    status=status,
+                    is_last_attempt=True,
+                )
+            )
+        db.commit()
+    factory = sessionmaker(bind=database, autoflush=False)
+    with factory() as db:
+        maintenance.enqueue(db, "reclassify_metric_errors", {"window": 50})
+        db.commit()
+    assert maintenance.MaintenanceWorker(factory, database).tick() == "succeeded"
+    with factory() as db:
+        rows = {row.item_id: row for row in db.query(RunItemPassScore).filter_by(run_id="rep")}
+        # a's task failed: marked, the reasoning kept. b's own "error" label
+        # (its task completed) stays a judged score.
+        assert rows["a"].meta == {"reasoning": "judge says 0.9", "task_error": True}
+        assert is_task_error_pass(rows["a"].label, rows["a"].meta)
+        assert rows["b"].meta == {"reasoning": "judge says 0.9"}
+        assert not is_task_error_pass(rows["b"].label, rows["b"].meta)
+        job = db.query(MaintenanceJob).one()
+        assert job.progress["passes_marked"] == 1

@@ -11,7 +11,7 @@ from uuid import uuid4
 from sqlalchemy import case, event, insert, or_, select
 from sqlalchemy.orm import Session
 
-from qym_platform.services.run_means import is_metric_error
+from qym_platform.services.run_means import is_item_edit, is_metric_error
 
 _installed = False
 NUMERIC_FIELDS = (
@@ -240,6 +240,9 @@ def snapshot(obj, deleted=False):
                     isinstance(obj.meta, dict)
                     and str(obj.meta.get("modified") or "").lower() == "true"
                 ),
+                # A repeat item's reviewer value (update_metric without a
+                # pass): means keep it instead of re-reducing its passes.
+                terminal=int(isinstance(obj, RunItemScore) and is_item_edit(obj.meta)),
             )
             if isinstance(obj, RunItemPassScore):
                 data["pass_number"] = int(obj.pass_number)

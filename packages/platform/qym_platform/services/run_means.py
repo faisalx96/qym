@@ -31,6 +31,14 @@ METRIC_ERROR_STATUSES = ("error", "failed", "timeout")
 # Ingest stores 0 for every metric of a repeat-run pass whose task failed and
 # labels those scores "error" (api/ingest.py).
 TASK_ERROR_PASS_LABEL = "error"
+# ...and marks them with this metadata key, which also covers a pass whose
+# metric was scored before the task failed (a cancel mid-scoring): the
+# scorer's metadata stays on the row but no longer reads as a scored pass.
+TASK_ERROR_PASS_MARKER = "task_error"
+# A reviewer's item-level score on a repeat run (update_metric without a
+# pass): the item keeps that value in every mean instead of being re-derived
+# from its passes, until a pass changes and the item is reduced again.
+ITEM_EDIT_KEY = "item_edit"
 # Pass metadata keys that do not come from a scorer or a reviewer: the
 # status, the label, and a pass diagnosis (root_cause_changes
 # PASS_ANALYSIS_META_KEY).
@@ -65,26 +73,43 @@ def is_metric_error(meta: Any) -> bool:
     return status in METRIC_ERROR_STATUSES
 
 
+def is_item_edit(meta: Any) -> bool:
+    """Whether a repeat item's stored value is a reviewer's (``ITEM_EDIT_KEY``)."""
+    return isinstance(meta, dict) and str(meta.get(ITEM_EDIT_KEY) or "").lower() == "true"
+
+
+def task_error_pass_meta(meta: Any) -> Dict[str, Any]:
+    """Metadata ingest stores on a pass score it zero-fills for a failed task."""
+    marked = dict(meta) if isinstance(meta, dict) else {}
+    marked[TASK_ERROR_PASS_MARKER] = True
+    return marked
+
+
 def is_task_error_pass(label: Any, meta: Any) -> bool:
     """Return whether a repeat-run pass score stands for a failed task.
 
     Ingest stores 0 with the label "error" for every metric of a pass whose
-    task failed. A scorer error keeps its own status and is not a task error.
-    The run page applies the same rule in ``metrics.js`` (``isTaskErrorPass``).
+    task failed, marked with ``TASK_ERROR_PASS_MARKER``. A scorer error keeps
+    its own status and is not a task error; a reviewer's edit ("modified")
+    replaces it. The run page applies the same rule in ``metrics.js``
+    (``isTaskErrorPass``).
     """
-    # Ingest's zero-fill carries no metadata; a scorer's own "error" label
-    # comes with its metadata, and a reviewer's edit leaves "modified". A
+    if str(label or "").strip().lower() != TASK_ERROR_PASS_LABEL or is_metric_error(meta):
+        return False
+    if not isinstance(meta, dict):
+        return True
+    if str(meta.get("modified") or "").strip().lower() == "true":
+        return False
+    if meta.get(TASK_ERROR_PASS_MARKER) is True:
+        return True
+    # Unmarked rows (stored before the marker): ingest's zero-fill carried no
+    # metadata, while a scorer's own "error" label comes with its metadata. A
     # pass diagnosis is stored beside the score and says nothing about it
     # (the run payload moves it out of the pass metadata).
-    if isinstance(meta, dict) and any(
+    return not any(
         value not in (None, "")
         for key, value in meta.items()
         if key not in _NOT_SCORE_METADATA
-    ):
-        return False
-    return (
-        str(label or "").strip().lower() == TASK_ERROR_PASS_LABEL
-        and not is_metric_error(meta)
     )
 
 
@@ -241,17 +266,21 @@ def apply_repeat_pass_errors(
 ) -> None:
     """Add a repeat run's pass-level errors to its metric totals.
 
-    ``affected`` yields ``(metric, item_value, passes)`` for every item (without
-    a task error) that has at least one errored pass; ``item_value`` is the
-    item's stored mean over passes and ``passes`` its ``(score, scorer_error)``
-    or ``(score, scorer_error, task_error)`` tuples. The mean without scorer
-    errors re-reduces each such item over its passes whose scorer did not
-    fail (a failed task still counts as 0); the mean of a lower-is-better
-    metric re-reduces it over its passes without any error. An item with no
-    such pass drops out of that mean. The run mean of other metrics is
-    unchanged: errored passes already count as 0 in the item value.
+    ``affected`` yields ``(metric, item_value, passes)`` or ``(metric,
+    item_value, passes, item_edited)`` for every item (without a task error)
+    that has at least one errored pass; ``item_value`` is the item's stored
+    mean over passes and ``passes`` its ``(score, scorer_error)`` or ``(score,
+    scorer_error, task_error)`` tuples. The mean without scorer errors
+    re-reduces each such item over its passes whose scorer did not fail (a
+    failed task still counts as 0); the mean of a lower-is-better metric
+    re-reduces it over its passes without any error. An item with no such
+    pass drops out of that mean. The run mean of other metrics is unchanged:
+    errored passes already count as 0 in the item value. An item a reviewer
+    scored as a whole (``item_edited``) keeps that value in every mean.
     """
-    for metric, item_value, passes in affected:
+    for entry in affected:
+        metric, item_value, passes = entry[:3]
+        item_edited = len(entry) > 3 and bool(entry[3])
         passes = [
             (entry[0], bool(entry[1]), len(entry) > 2 and bool(entry[2]))
             for entry in passes
@@ -267,6 +296,8 @@ def apply_repeat_pass_errors(
             metric_totals.clean_sum = metric_totals.scored_sum
             metric_totals.clean_count = metric_totals.scored_count
         metric_totals.pass_errors += sum(1 for _, scorer, _ in passes if scorer)
+        if item_edited:
+            continue
         if item_value is not None:
             metric_totals.scored_sum -= float(item_value)
             metric_totals.scored_count -= 1
@@ -409,70 +440,87 @@ def raw_metric_totals(
         row[0]
         for row in db.query(Run.id).filter(Run.id.in_(run_ids), Run.samples > 1)
     ]
+    left_out_by_run = {}
     for run_id in repeat_ids:
-        left_out = sorted(
+        left_out = {
             metric
             for metric, direction in (directions.get(run_id) or {}).items()
             if errors_left_out(direction)
-        )
-        if not scored_averages and not left_out:
-            continue
-        apply_repeat_pass_errors(
-            totals.setdefault(run_id, {}),
-            _repeat_pass_errors(db, run_id, left_out, all_metrics=scored_averages),
-        )
+        }
+        if scored_averages or left_out:
+            left_out_by_run[run_id] = left_out
+    affected_by_run = _repeat_pass_errors(
+        db, left_out_by_run, all_metrics=scored_averages
+    )
+    for run_id, affected in affected_by_run.items():
+        apply_repeat_pass_errors(totals.setdefault(run_id, {}), affected)
     return totals
 
 
-def _repeat_pass_errors(db, run_id, left_out=(), *, all_metrics=True):
-    """``apply_repeat_pass_errors`` input for one repeat run, from source rows.
+def _repeat_pass_errors(db, left_out_by_run, *, all_metrics=True):
+    """``apply_repeat_pass_errors`` input per repeat run, from source rows.
 
-    Items with a scorer-error pass, and, for the metrics in ``left_out``
-    (lower-is-better), items with a pass whose task failed. With
-    ``all_metrics=False`` only the metrics in ``left_out`` are read.
+    ``left_out_by_run`` maps each repeat run to its lower-is-better metrics.
+    Items with a scorer-error pass, and, for those metrics, items with a pass
+    whose task failed. With ``all_metrics=False`` only the lower-is-better
+    metrics are read. One query finds the candidates of every run; only runs
+    with an affected item read their pass rows.
     """
     from qym_platform.db.models import RunItem, RunItemPassScore, RunItemScore
 
+    run_ids = sorted(left_out_by_run)
+    if not run_ids:
+        return {}
     task_ok = (
         (RunItem.run_id == RunItemPassScore.run_id)
         & (RunItem.item_id == RunItemPassScore.item_id)
         & RunItem.error.is_(None)
     )
-    left_out = set(left_out)
+    any_left_out = sorted(set().union(*left_out_by_run.values()))
     candidates = metric_error_candidates(RunItemPassScore)
     if not all_metrics:
-        candidates = and_(
-            RunItemPassScore.metric_name.in_(sorted(left_out)), candidates
-        )
-    if left_out:
+        candidates = and_(RunItemPassScore.metric_name.in_(any_left_out), candidates)
+    if any_left_out:
         candidates = or_(
             candidates,
             and_(
-                RunItemPassScore.metric_name.in_(sorted(left_out)),
+                RunItemPassScore.metric_name.in_(any_left_out),
                 task_error_pass_candidates(RunItemPassScore),
             ),
         )
-    affected = set()
-    for item_id, metric, status, label in (
-        db.query(
-            RunItemPassScore.item_id,
-            RunItemPassScore.metric_name,
-            RunItemPassScore.meta["status"].as_string(),
-            RunItemPassScore.label,
-        )
-        .join(RunItem, task_ok)
-        .filter(RunItemPassScore.run_id == run_id, candidates)
-    ):
-        meta = {"status": status}
-        if is_metric_error(meta) or (
-            metric in left_out and is_task_error_pass(label, meta)
+    affected_by_run: Dict[str, set] = {}
+    for start in range(0, len(run_ids), 400):
+        for run_id, item_id, metric, status, label in (
+            db.query(
+                RunItemPassScore.run_id,
+                RunItemPassScore.item_id,
+                RunItemPassScore.metric_name,
+                RunItemPassScore.meta["status"].as_string(),
+                RunItemPassScore.label,
+            )
+            .join(RunItem, task_ok)
+            .filter(RunItemPassScore.run_id.in_(run_ids[start : start + 400]), candidates)
         ):
-            affected.add((item_id, metric))
-    if not affected:
-        return []
+            meta = {"status": status}
+            left_out = left_out_by_run.get(run_id) or set()
+            if (is_metric_error(meta) and (all_metrics or metric in left_out)) or (
+                metric in left_out and is_task_error_pass(label, meta)
+            ):
+                affected_by_run.setdefault(run_id, set()).add((item_id, metric))
+    return {
+        run_id: _repeat_pass_outcomes(db, run_id, affected)
+        for run_id, affected in affected_by_run.items()
+    }
+
+
+def _repeat_pass_outcomes(db, run_id, affected):
+    """Passes and stored item values of one run's affected (item, metric)s."""
+    from qym_platform.db.models import RunItemPassScore, RunItemScore
+
     item_ids = sorted({item_id for item_id, _ in affected})
     passes: Dict[tuple, list] = {}
     values: Dict[tuple, Optional[float]] = {}
+    edited = set()
     for start in range(0, len(item_ids), 400):
         chunk = item_ids[start : start + 400]
         for item_id, metric, score, meta, label in db.query(
@@ -488,13 +536,23 @@ def _repeat_pass_errors(db, run_id, left_out=(), *, all_metrics=True):
                 passes.setdefault((item_id, metric), []).append(
                     (score, is_metric_error(meta), is_task_error_pass(label, meta))
                 )
-        for item_id, metric, score in db.query(
-            RunItemScore.item_id, RunItemScore.metric_name, RunItemScore.score_numeric
+        for item_id, metric, score, item_edit in db.query(
+            RunItemScore.item_id,
+            RunItemScore.metric_name,
+            RunItemScore.score_numeric,
+            RunItemScore.meta[ITEM_EDIT_KEY].as_string(),
         ).filter(RunItemScore.run_id == run_id, RunItemScore.item_id.in_(chunk)):
             if (item_id, metric) in affected:
                 values[(item_id, metric)] = score
+                if is_item_edit({ITEM_EDIT_KEY: item_edit}):
+                    edited.add((item_id, metric))
     return [
-        (metric, values.get((item_id, metric)), passes.get((item_id, metric), []))
+        (
+            metric,
+            values.get((item_id, metric)),
+            passes.get((item_id, metric), []),
+            (item_id, metric) in edited,
+        )
         for item_id, metric in sorted(affected)
     ]
 
@@ -530,6 +588,25 @@ def errored_pass_items(db, run_ids, metrics=None) -> set:
     for run_id, item_id, metric, meta, label in query:
         if is_metric_error(meta) or is_task_error_pass(label, meta):
             errored.add((run_id, item_id, metric))
+    if errored:
+        # An item a reviewer scored as a whole is judged by that score.
+        from qym_platform.db.models import RunItemScore
+
+        keys = sorted(errored)
+        for start in range(0, len(keys), 400):
+            chunk = keys[start : start + 400]
+            for run_id, item_id, metric, item_edit in db.query(
+                RunItemScore.run_id,
+                RunItemScore.item_id,
+                RunItemScore.metric_name,
+                RunItemScore.meta[ITEM_EDIT_KEY].as_string(),
+            ).filter(
+                RunItemScore.run_id.in_({key[0] for key in chunk}),
+                RunItemScore.item_id.in_({key[1] for key in chunk}),
+                RunItemScore.meta[ITEM_EDIT_KEY].as_string().isnot(None),
+            ):
+                if is_item_edit({ITEM_EDIT_KEY: item_edit}):
+                    errored.discard((run_id, item_id, metric))
     return errored
 
 

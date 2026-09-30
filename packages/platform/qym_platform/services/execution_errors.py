@@ -47,6 +47,8 @@ def repeat_execution_counts(
     reads them for runs whose publication is current (multi-run views) and
     scans source rows only for the rest.
     """
+    from sqlalchemy import and_, or_
+
     from qym_platform.db.models import RunEvent, RunItemAttempt
     from qym_platform.services.dashboard_outbox import (
         execution_event_numbers,
@@ -99,8 +101,20 @@ def repeat_execution_counts(
         passes[run_id].add(key)
         if is_last and str(status or "").strip().lower() in METRIC_ERROR_STATUSES:
             failed[run_id].add(key)
-    # Legacy SDKs can report an item pass only through its events.
-    events = execution_event_query().where(RunEvent.run_id.in_(run_ids))
+    # Legacy SDKs can report an item pass only through its events. Only a
+    # failure or a retry makes an event evidence; filter the bulk of
+    # item_completed/attempt events out in SQL (a superset: JSON numbers can
+    # come back as integers, and the numbers are checked again below).
+    retry = RunEvent.payload["retry_count"].as_string()
+    attempt = RunEvent.payload["attempt_number"].as_string()
+    events = execution_event_query().where(
+        RunEvent.run_id.in_(run_ids),
+        or_(
+            RunEvent.type == "item_failed",
+            and_(retry.isnot(None), retry.notin_(("", "0"))),
+            and_(attempt.isnot(None), attempt.notin_(("", "0", "1"))),
+        ),
+    )
     for row in db.execute(events.execution_options(yield_per=1000)):
         numbers = execution_event_numbers(
             row.type,

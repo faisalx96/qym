@@ -89,7 +89,9 @@ def build_repeat_analysis(
         band[k] = {
             "pass_at_k": average(pass_at_values),
             "pass_hat_k": average(pass_hat_values),
-            "cumulative_avg": average(cumulative_values),
+            # No scored pass among the first k (every one errored, for a
+            # lower-is-better metric): no average. 0 would read as its best.
+            "cumulative_avg": average(cumulative_values) if cumulative_values else None,
             "n_items": len(eligible),
             "uncertainty": {
                 "pass_at_k": _interval(pass_at_values, seed=seed),
@@ -132,7 +134,9 @@ def cached_repeat_analysis(
     if direction == "minimize":
         # A run's direction is fixed; folding it into the digest keeps
         # curves cached before directions existed valid for "maximize".
-        signature = hashlib.sha256((signature + ":minimize").encode("ascii")).hexdigest()
+        # ":2": curves cached before a k with no scored pass had no average
+        # (they stored 0.0 there) are recomputed.
+        signature = hashlib.sha256((signature + ":minimize:2").encode("ascii")).hexdigest()
     cached = (
         db.query(RunMetricAnalysis)
         .filter(
