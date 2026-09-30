@@ -8,8 +8,8 @@
  *
  * One page with a sticky preview: environments ("+ New environment" opens the
  * QymEvalEnvironments add dialog inline), dataset (project dataset + version or
- * alias, or a custom string), "Start from" (Blank only for now), one model card
- * per confirmed slot (project model, temporary model via QymTemporaryModel, or
+ * alias, or a custom string), "Start from" (official defaults, a saved preset,
+ * blank or a clone; see below), one model card per confirmed slot (project model, temporary model via QymTemporaryModel, or
  * Inherit), the generated grouped settings form (search, "changed only"),
  * priority (HIGH is gated) and name. The preview runs a debounced dry run of
  * POST /v1/projects/{pid}/experiments and lists every validation error; each
@@ -22,8 +22,23 @@
  *   GET  /v1/projects/{pid}/eval-environments/{eid}/model-options  project models
  *   GET  /v1/datasets?project_slug=  and  /v1/datasets/{name}/versions
  *   POST /v1/projects/{pid}/experiments  (dry_run for the preview)
+ *   GET  /v1/projects/{pid}/eval-environments/{eid}/presets         official + saved
+ *   GET  …/presets/{preset_id}/versions/{n}?remap=current            base config (§9.3)
+ *   POST /v1/projects/{pid}/experiments/{xid}/clone  and  GET …/experiments/{xid}
  *
- * Extension points: BASE_OPTIONS (#31 official/saved/best-run bases),
+ * Bases (#31, plan §8.2/§9.2): "Official defaults" is the default when the base
+ * environment has a published version (otherwise Blank, with a note). Official and
+ * saved presets load re-mapped onto the environment's current schema; dropped
+ * settings and model warnings are listed. The base fills st.baseline (settings,
+ * bindings, dataset) and st.evaluatorExtra (other evaluator inputs); a field that
+ * differs from the baseline shows the "changed" dot and resets to the base value,
+ * and the base section counts the diff vs base. Switching base (confirmed when
+ * there are edits) keeps the edits whose setting or slot exists on the new base.
+ * ?clone=<xid>[&job=<jid>] prefills from POST …/clone (or that job's qym_config)
+ * with base kind "clone"; temporary models come without their key and ask for it
+ * again. ?env=<eid> preselects an environment ("Run official defaults" fallback).
+ *
+ * Extension points: BASE_OPTIONS (#38 best-run base),
  * the [data-xl-advanced] host (#24 Advanced panel) and specValue() (#34 sweeps
  * write {"sweep": [...]} values into the same spec).
  *
@@ -40,20 +55,23 @@
   const STYLESHEETS = [
     'static/eval_environments.css?v=eval-environments-20260929-1',
     'static/eval_temporary_model.css?v=eval-temporary-model-20260930-1',
-    'static/experiment_launch.css?v=experiment-launch-20260930-1',
+    'static/experiment_launch.css?v=experiment-launch-20260930-2',
   ];
   const PREVIEW_DELAY_MS = 600;
   const PRIORITIES = ['LOW', 'NORMAL', 'HIGH'];
   const PRIORITY_ORDER = { LOW: 0, NORMAL: 1, HIGH: 2 };
   // services/eval_priority.PREEMPTION_ACK_REQUIRED
   const PREEMPTION_ACK_REQUIRED = 'preemption_acknowledgement_required';
-  // "Start from" (§8.2). Only Blank exists in P2; the others arrive with #31.
+  // "Start from" (§8.2). `available` means implemented; official/saved also need a
+  // published version on the base environment. Best run arrives with #38; "Clone"
+  // only appears for a ?clone= prefill.
   const BASE_OPTIONS = [
-    { kind: 'official', label: 'Official defaults', available: false },
+    { kind: 'official', label: 'Official defaults', available: true },
     { kind: 'best_run', label: 'Best run', available: false },
-    { kind: 'saved', label: 'Saved preset', available: false },
+    { kind: 'saved', label: 'Saved preset', available: true },
     { kind: 'blank', label: 'Blank', available: true },
   ];
+  const CLONE_OPTION = { kind: 'clone', label: 'Clone', available: true };
   const ROLE_LABELS = { model: 'model', base_url: 'base URL', api_key: 'API key' };
 
   // ── Utilities ──────────────────────────────────────────────────────────
@@ -177,6 +195,66 @@
     return out;
   }
 
+  // ── Base helpers (#31) ─────────────────────────────────────────────────
+  function deepCopy(value) {
+    return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+  }
+  function isPlainObject(value) {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
+  }
+  function sameValue(a, b) {
+    if (a === undefined || b === undefined) return a === b;
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+  /** A {"sweep": [...]} value (services/eval_config.is_sweep). */
+  function isSweepValue(value) {
+    return isPlainObject(value) && Object.keys(value).length === 1 && Array.isArray(value.sweep);
+  }
+  /** The descriptor template a concrete pointer belongs to (exact match first). */
+  function matchTemplate(fields, concrete) {
+    if (has(fields, concrete)) return concrete;
+    const segs = splitPointer(concrete);
+    let best = null;
+    let bestWild = Infinity;
+    Object.keys(fields).forEach((template) => {
+      const parts = splitPointer(template);
+      if (parts.length !== segs.length) return;
+      let wild = 0;
+      const fits = parts.every((part, i) => {
+        if (part === segs[i]) return true;
+        if (part.length > 2 && part.charAt(0) === '{' && part.charAt(part.length - 1) === '}') { wild += 1; return true; }
+        return false;
+      });
+      if (fits && wild < bestWild) { best = template; bestWild = wild; }
+    });
+    return best;
+  }
+  /** env_overrides → flat {pointer: value}; leaves are descriptor fields or scalars. */
+  function flattenOverrides(node, pointer, fields, out) {
+    if (node === null || node === undefined) return;
+    if (pointer) {
+      const template = matchTemplate(fields, pointer);
+      const entry = template ? fields[template] : null;
+      if (!isPlainObject(node) || isSweepValue(node) || (entry && entry.kind === 'field')) {
+        out[pointer] = deepCopy(node);
+        return;
+      }
+    }
+    if (!isPlainObject(node)) return;
+    Object.keys(node).forEach((key) => flattenOverrides(node[key], pointer + '/' + escSeg(key), fields, out));
+  }
+  /** A comparable key for a form binding (a temporary model's key is not part of it). */
+  function bindingKey(b) {
+    if (!b) return '';
+    if (b.kind === 'connection') return 'c:' + b.id;
+    if (b.kind === 'temporary') {
+      const t = Object.assign({}, (b.binding && b.binding.temporary) || {});
+      delete t.api_key;
+      return 't:' + JSON.stringify(t);
+    }
+    return 'r:' + JSON.stringify(b.value);
+  }
+
   // ── Mount ──────────────────────────────────────────────────────────────
   function mount(options) {
     const opts = options || {};
@@ -199,6 +277,16 @@
       versions: {},
       customDataset: '',
       base: 'blank',
+      baseTouched: false, // the user picked a base: selection changes keep its kind
+      baseEnv: null, // environment whose presets are the base
+      savedPresetId: '',
+      presets: {}, // env id → { loading, error, official, saved }
+      baseInfo: { kind: 'blank', loaded: false }, // what the current base loaded
+      baseGeneration: 0,
+      baseNote: '',
+      baseline: { values: {}, bindings: {}, dataset: null }, // the base's form values
+      evaluatorExtra: {}, // base evaluator inputs besides the dataset (sent as is)
+      clone: null, // { experimentId, jobId, spec, linkedGroups, sourceName, notes }
       bindings: {}, // slot_key → {kind:'connection', id} | {kind:'temporary', binding, secretRef, save}
       secrets: {}, // temporary-model keys {ref: key}: memory only
       tempFormFor: null,
@@ -247,8 +335,7 @@
         st.envsError = '';
         st.envs = (res.data.environments || []).filter((env) => env.is_active !== false);
         st.selected = st.selected.filter((id) => envById(id));
-        if (selectId && envById(selectId) && st.selected.indexOf(selectId) < 0) st.selected.push(selectId);
-        if (!st.selected.length && st.envs.length === 1) st.selected = [st.envs[0].id];
+        if (selectId && envById(selectId) && st.selected.indexOf(selectId) < 0) st.selected.push(selectId);        if (!st.selected.length && st.envs.length === 1) st.selected = [st.envs[0].id];
       }
       renderEnvironments();
       await loadSelectedEnvData();
@@ -285,6 +372,8 @@
       renderModels();
       renderSettings();
       renderRun();
+      await syncBase();
+      if (!st.active) return;
       schedulePreview();
     }
 
@@ -394,6 +483,9 @@
       Object.keys(st.bindings).forEach((key) => {
         if (keys.indexOf(key) < 0) clearBinding(key);
       });
+      Object.keys(st.baseline.bindings).forEach((key) => {
+        if (keys.indexOf(key) < 0) delete st.baseline.bindings[key];
+      });
     }
 
     // ── Bindings ────────────────────────────────────────────────────────
@@ -416,6 +508,7 @@
       }
       renderModels();
       renderSettings();
+      updateBaseMeta();
       schedulePreview();
     }
 
@@ -466,8 +559,491 @@
         }
         return b.id;
       }
+      if (b.kind === 'raw') {
+        const n = isSweepValue(b.value) ? b.value.sweep.length : 0;
+        return n ? 'Sweep of ' + n + ' models' : 'From the base';
+      }
       const t = b.binding.temporary || {};
       return 'Temporary: ' + (t.label || t.model);
+    }
+
+    // ── Base (#31, plan §8.2 / §9.2) ────────────────────────────────────
+    function hasOfficial(env) {
+      return !!(env && env.official_preset_id && env.official_preset_version != null);
+    }
+
+    /** The first selected environment with official defaults, else the first one. */
+    function pickBaseEnv() {
+      const envs = selectedEnvs();
+      const official = envs.find(hasOfficial);
+      return official ? official.id : (envs[0] ? envs[0].id : null);
+    }
+
+    function loadPresets(envId) {
+      if (!envId) return Promise.resolve(null);
+      const cached = st.presets[envId];
+      if (cached) return cached.promise;
+      const entry = { loading: true, error: '', official: null, saved: [] };
+      entry.promise = request(envPath(envId, '/presets')).then((res) => {
+        entry.loading = false;
+        if (!res.ok) entry.error = errorMessage(res.data, 'Failed to load presets');
+        else (res.data.presets || []).forEach((preset) => {
+          if (!preset.current_version) return;
+          if (preset.kind === 'official') entry.official = preset;
+          else entry.saved.push(preset);
+        });
+        return entry;
+      });
+      st.presets[envId] = entry;
+      return entry.promise;
+    }
+
+    function presetsFor(envId) {
+      const entry = envId ? st.presets[envId] : null;
+      return entry && !entry.loading ? entry : null;
+    }
+
+    function baseAvailability(kind) {
+      const env = envById(st.baseEnv);
+      if (kind === 'blank') return { ok: true };
+      if (kind === 'clone') return { ok: !!st.clone };
+      if (kind === 'best_run') return { ok: false, reason: 'Coming soon' };
+      if (!env) return { ok: false, reason: 'Pick an environment first' };
+      if (kind === 'official') {
+        return hasOfficial(env) ? { ok: true } : { ok: false, reason: 'No official defaults are published for ' + env.name };
+      }
+      if (kind === 'saved') {
+        const presets = presetsFor(env.id);
+        if (!presets) return { ok: false, reason: 'Loading saved presets…' };
+        return presets.saved.length ? { ok: true } : { ok: false, reason: 'No saved presets for ' + env.name + ' yet' };
+      }
+      return { ok: false };
+    }
+
+    function baseLabel() {
+      const info = st.baseInfo || {};
+      const version = info.version != null ? ' v' + info.version : '';
+      if (st.base === 'official') {
+        return 'Official defaults' + version + (st.selected.length > 1 && info.envId ? ' · ' + envName(info.envId) : '');
+      }
+      if (st.base === 'saved') return 'Saved preset' + (info.presetName ? ' “' + info.presetName + '”' : '') + version;
+      if (st.base === 'clone') {
+        const c = st.clone || {};
+        return 'Clone' + (c.sourceName ? ' of ' + c.sourceName : '') + (c.jobId ? ' (one job)' : '');
+      }
+      const opt = BASE_OPTIONS.find((b) => b.kind === st.base);
+      return opt ? opt.label : st.base;
+    }
+
+    /** base_source for the request; validated by the server (api/experiments.py). */
+    function baseSource() {
+      const info = st.baseInfo || {};
+      if ((st.base === 'official' || st.base === 'saved') && info.loaded && info.versionId) {
+        return { kind: st.base, preset_version_id: info.versionId };
+      }
+      if (st.base === 'clone' && st.clone) {
+        const source = { kind: 'clone', experiment_id: st.clone.experimentId };
+        if (st.clone.jobId) source.job_id = st.clone.jobId;
+        return source;
+      }
+      return { kind: 'blank' };
+    }
+
+    function currentDataset() {
+      return { mode: st.datasetMode, name: st.datasetName, ref: st.datasetRef, custom: st.customDataset };
+    }
+
+    function applyDataset(d) {
+      st.datasetMode = d.mode;
+      st.datasetName = d.name;
+      st.datasetRef = d.ref;
+      st.customDataset = d.custom;
+      if (d.mode === 'project' && d.name) loadVersions(d.name);
+    }
+
+    function datasetChanged() {
+      const b = st.baseline.dataset;
+      if (!b) return false;
+      const c = currentDataset();
+      if (b.mode !== c.mode) return true;
+      return b.mode === 'custom' ? b.custom.trim() !== c.custom.trim() : (b.name !== c.name || b.ref !== c.ref);
+    }
+
+    /** Raw values under a bound slot's fields would be a binding_conflict: drop them. */
+    function stripBoundFields(values, bindings) {
+      unionSlots().forEach((slot) => {
+        if (!bindings[slot.slot_key]) return;
+        Object.keys(slot.field_map).forEach((role) => { delete values[slot.field_map[role]]; });
+      });
+    }
+
+    /** Form state of a base config: {values, bindings, dataset, evaluatorExtra, notes}. */
+    function baselineFrom(config) {
+      const cfg = isPlainObject(config) ? config : {};
+      const values = {};
+      const model = union();
+      flattenOverrides(isPlainObject(cfg.env_overrides) ? cfg.env_overrides : {}, '', model.fields, values);
+      const slots = unionSlots();
+      const bindings = {};
+      const notes = [];
+      if (model.envs.length) {
+        // Settings no selected environment knows are dropped, and said so.
+        Object.keys(values).forEach((p) => {
+          if (matchTemplate(model.fields, p)) return;
+          delete values[p];
+          notes.push(splitPointer(p).join('.') + ' was dropped: not in any selected environment.');
+        });
+      }
+      const raw = isPlainObject(cfg.slot_bindings) ? cfg.slot_bindings : {};
+      Object.keys(raw).forEach((key) => {
+        const b = raw[key];
+        if (b == null || !isPlainObject(b) || b.inherit === true) return;
+        const slot = slots.find((s) => s.slot_key === key);
+        if (!slot) {
+          notes.push('Model slot ' + key + ' is not confirmed on the selected environments; it is left to Inherit.');
+          return;
+        }
+        if (isSweepValue(b)) {
+          bindings[key] = { kind: 'raw', value: deepCopy(b) };
+        } else if (typeof b.connection_id === 'string' && !has(b, 'temporary')) {
+          const conn = slotConnections(slot).find((c) => c.id === b.connection_id);
+          if (conn && conn.available) bindings[key] = { kind: 'connection', id: b.connection_id };
+          else {
+            notes.push('Model ' + (b.name || (conn && conn.name) || b.connection_id) + (conn ? ' cannot be used' : ' no longer exists')
+              + ' for ' + slot.label + '; pick another model.');
+          }
+        } else if (isPlainObject(b.temporary)) {
+          // Never a key: presets and clones drop it (§7.5); it is asked for again.
+          const t = {};
+          ['label', 'model', 'base_url'].forEach((f) => { if (typeof b.temporary[f] === 'string') t[f] = b.temporary[f]; });
+          bindings[key] = { kind: 'temporary', binding: { temporary: t }, secretRef: null, needsKey: true };
+        }
+      });
+      stripBoundFields(values, bindings);
+      const evaluator = isPlainObject(cfg.evaluator) ? deepCopy(cfg.evaluator) : {};
+      const evConfig = isPlainObject(evaluator.config) ? evaluator.config : {};
+      let dataset = null;
+      if (typeof evaluator.dataset === 'string' && evaluator.dataset) {
+        const known = (st.datasets || []).some((d) => d.name === evaluator.dataset);
+        if (known) {
+          const alias = typeof evConfig.dataset_alias === 'string' ? evConfig.dataset_alias : '';
+          dataset = {
+            mode: 'project', name: evaluator.dataset, custom: '',
+            ref: evaluator.dataset_version ? 'v:' + evaluator.dataset_version : alias ? 'a:' + alias : '',
+          };
+          delete evaluator.dataset_version;
+          delete evConfig.dataset_alias;
+        } else {
+          dataset = { mode: 'custom', name: '', ref: '', custom: evaluator.dataset };
+        }
+      }
+      delete evaluator.dataset;
+      if (isPlainObject(evaluator.config) && !Object.keys(evaluator.config).length) delete evaluator.config;
+      return { values, bindings, dataset, evaluatorExtra: evaluator, notes };
+    }
+
+    function applyBaseline(base) {
+      st.baseline = { values: deepCopy(base.values), bindings: deepCopy(base.bindings), dataset: base.dataset ? Object.assign({}, base.dataset) : null };
+      st.values = deepCopy(base.values);
+      st.invalid = {};
+      st.bindings = deepCopy(base.bindings);
+      st.evaluatorExtra = deepCopy(base.evaluatorExtra) || {};
+      if (base.dataset) applyDataset(base.dataset);
+    }
+
+    function isChanged(pointer) {
+      return has(st.invalid, pointer) || !sameValue(st.values[pointer], st.baseline.values[pointer]);
+    }
+
+    function changedPointers() {
+      const seen = {};
+      Object.keys(st.values).concat(Object.keys(st.baseline.values), Object.keys(st.invalid)).forEach((p) => {
+        if (!seen[p] && isChanged(p)) seen[p] = true;
+      });
+      return Object.keys(seen);
+    }
+
+    function bindingChanged(key) {
+      return bindingKey(st.bindings[key]) !== bindingKey(st.baseline.bindings[key]);
+    }
+
+    function changedSlots() {
+      const seen = {};
+      Object.keys(st.bindings).concat(Object.keys(st.baseline.bindings)).forEach((k) => {
+        if (!seen[k] && bindingChanged(k)) seen[k] = true;
+      });
+      return Object.keys(seen);
+    }
+
+    /** "Diff vs base" (§8.2): changed settings, model bindings and dataset. */
+    function diffVsBase() {
+      const settings = changedPointers().length;
+      const models = changedSlots().length;
+      const dataset = datasetChanged() ? 1 : 0;
+      return { settings, models, dataset, total: settings + models + dataset };
+    }
+
+    function diffText() {
+      const total = diffVsBase().total;
+      return total + ' change' + (total === 1 ? '' : 's') + ' vs base';
+    }
+
+    /** The user's edits relative to the current base (see replayEdits). */
+    function captureEdits() {
+      const values = {};
+      changedPointers().forEach((p) => {
+        values[p] = has(st.invalid, p) ? { invalid: st.invalid[p] } : { value: deepCopy(st.values[p]) };
+      });
+      const bindings = {};
+      changedSlots().forEach((k) => { bindings[k] = st.bindings[k] ? deepCopy(st.bindings[k]) : null; });
+      const dataset = datasetValue() && (datasetChanged() || !st.baseline.dataset) ? currentDataset() : null;
+      return { values, bindings, dataset };
+    }
+
+    /** Re-apply edits whose setting or slot exists on the new base (§8.2). */
+    function replayEdits(edits) {
+      const fields = union().fields;
+      const slotKeys = unionSlots().map((s) => s.slot_key);
+      let kept = 0;
+      let dropped = 0;
+      Object.keys(edits.values).forEach((p) => {
+        if (!matchTemplate(fields, p)) { dropped += 1; return; }
+        const edit = edits.values[p];
+        delete st.invalid[p];
+        delete st.values[p];
+        if (edit.invalid) st.invalid[p] = edit.invalid;
+        else if (edit.value !== undefined) st.values[p] = edit.value;
+        kept += 1;
+      });
+      Object.keys(edits.bindings).forEach((k) => {
+        if (slotKeys.indexOf(k) < 0) { dropped += 1; return; }
+        if (edits.bindings[k]) st.bindings[k] = edits.bindings[k];
+        else delete st.bindings[k];
+        kept += 1;
+      });
+      if (edits.dataset) applyDataset(edits.dataset);
+      stripBoundFields(st.values, st.bindings);
+      pruneSecrets();
+      return { kept, dropped };
+    }
+
+    /** Keys of temporary models no binding uses any more are forgotten. */
+    function pruneSecrets() {
+      const refs = {};
+      Object.keys(st.bindings).forEach((k) => {
+        const b = st.bindings[k];
+        if (b && b.kind === 'temporary' && b.secretRef) refs[b.secretRef] = true;
+      });
+      Object.keys(st.secrets).forEach((ref) => { if (!refs[ref]) delete st.secrets[ref]; });
+    }
+
+    /** Fetch st.base's config (re-mapped onto the current schema) → {base, info}. */
+    async function loadBase() {
+      const generation = ++st.baseGeneration;
+      const kind = st.base;
+      const envId = st.baseEnv;
+      st.baseInfo = { kind, loading: true, loaded: false, envId };
+      renderBase();
+      const info = { kind, loading: false, loaded: true, envId, warnings: [], dropped: [], errors: [], summary: null, notes: [] };
+      let config = {};
+      if (kind === 'official' || kind === 'saved') {
+        const presets = await loadPresets(envId);
+        if (!st.active || generation !== st.baseGeneration) return null;
+        let preset = null;
+        if (presets && !presets.error) {
+          preset = kind === 'official' ? presets.official
+            : (presets.saved.find((p) => p.id === st.savedPresetId) || presets.saved[0] || null);
+        }
+        if (kind === 'saved') st.savedPresetId = preset ? preset.id : '';
+        if (!preset) {
+          info.loaded = false;
+          info.error = (presets && presets.error) || (kind === 'official'
+            ? 'No official defaults are published for ' + envName(envId) + '.'
+            : 'There is no saved preset to start from.');
+        } else {
+          const res = await request(envPath(envId, '/presets/' + encodeURIComponent(preset.id) + '/versions/'
+            + encodeURIComponent(preset.current_version.version) + '?remap=current'));
+          if (!st.active || generation !== st.baseGeneration) return null;
+          if (!res.ok || !res.data.remap) {
+            info.loaded = false;
+            info.error = errorMessage(res.data, 'Failed to load the preset');
+          } else {
+            const remap = res.data.remap;
+            const version = res.data.version || {};
+            config = remap.config || {};
+            Object.assign(info, {
+              versionId: version.id,
+              version: version.version,
+              presetId: preset.id,
+              presetName: kind === 'saved' ? preset.name : null,
+              releaseNotes: version.notes || '',
+              summary: remap.summary || null,
+              dropped: remap.dropped || [],
+              errors: remap.errors || [],
+              // The schema_hash warning is what the remap just resolved.
+              warnings: (version.warnings || []).filter((w) => w.rule !== 'schema_hash'),
+            });
+          }
+        }
+      } else if (kind === 'clone' && st.clone) {
+        config = st.clone.spec || {};
+        info.notes = st.clone.notes.slice();
+      }
+      await st.datasetsReady; // a base dataset maps onto the project picker
+      if (!st.active || generation !== st.baseGeneration) return null;
+      const base = baselineFrom(config);
+      info.notes = info.notes.concat(base.notes);
+      return { base, info };
+    }
+
+    /** Lay st.base under the form, keeping the edits that still fit. */
+    async function setBase(kind) {
+      st.base = kind;
+      st.baseKey = kind + '|' + (kind === 'official' || kind === 'saved' ? st.baseEnv : '');
+      const loaded = await loadBase();
+      if (!loaded || !st.active) return null;
+      const edits = captureEdits();
+      applyBaseline(loaded.base);
+      st.baseInfo = loaded.info;
+      st.links = kind === 'clone' && st.clone ? deepCopy(st.clone.linkedGroups) : undefined;
+      const result = replayEdits(edits);
+      renderDataset();
+      renderBase();
+      renderModels();
+      renderSettings();
+      renderPreview();
+      schedulePreview();
+      return result;
+    }
+
+    /** "Start from" / "Switch base": confirm when there are edits (§8.2). */
+    async function chooseBase(kind, force) {
+      if (kind === st.base && !force) return true;
+      const diff = diffVsBase();
+      if (diff.total > 0) {
+        const ok = await confirmDialog({
+          title: 'Switch base?',
+          description: [
+            'You have ' + diff.total + ' change' + (diff.total === 1 ? '' : 's') + ' from ' + baseLabel() + '.',
+            'Changes to settings and models that also exist on the new base are kept; the others are dropped.',
+          ],
+          confirmLabel: 'Switch base',
+          cancelLabel: 'Keep current base',
+        });
+        if (!ok || !st.active) { renderBase(); return false; }
+      }
+      st.baseTouched = true;
+      st.baseNote = '';
+      const result = await setBase(kind);
+      if (result && result.dropped) {
+        toast(result.dropped + ' change' + (result.dropped === 1 ? '' : 's') + ' did not fit the new base and ' + (result.dropped === 1 ? 'was' : 'were') + ' dropped', 'info');
+      }
+      return true;
+    }
+
+    /** After an environment change: default to official defaults, else Blank (§9.2). */
+    async function syncBase() {
+      if (!st.selected.length) { renderBase(); return; }
+      if (!st.baseEnv || st.selected.indexOf(st.baseEnv) < 0) st.baseEnv = pickBaseEnv();
+      const env = envById(st.baseEnv);
+      await loadPresets(st.baseEnv);
+      if (!st.active) return;
+      let kind = st.base;
+      if (kind !== 'clone') {
+        if (!st.baseTouched) kind = 'official';
+        const available = baseAvailability(kind);
+        if ((kind === 'official' || kind === 'saved') && !available.ok) {
+          st.baseNote = (available.reason || 'That base is not available') + (st.baseTouched ? '' : ' yet') + ', so the form starts from Blank.';
+          kind = 'blank';
+        } else if (kind !== 'blank') {
+          st.baseNote = '';
+        }
+      }
+      const key = kind + '|' + (kind === 'official' || kind === 'saved' ? (env ? env.id : '') : '');
+      if (key !== st.baseKey) await setBase(kind);
+      else renderBase();
+    }
+
+    function resetAllToBase() {
+      st.values = deepCopy(st.baseline.values);
+      st.invalid = {};
+      const bindings = {};
+      Object.keys(st.baseline.bindings).forEach((k) => {
+        // Keep a re-entered key when the model itself is unchanged.
+        bindings[k] = bindingChanged(k) ? deepCopy(st.baseline.bindings[k]) : st.bindings[k];
+      });
+      st.bindings = bindings;
+      pruneSecrets();
+      if (st.baseline.dataset) applyDataset(st.baseline.dataset);
+      renderDataset();
+      renderBase();
+      renderModels();
+      renderSettings();
+      renderPreview();
+      schedulePreview();
+    }
+
+    // ── Clone prefill (#26 "Rerun with this config") ─────────────────────
+    function containsSweep(node) {
+      if (isSweepValue(node)) return true;
+      if (Array.isArray(node)) return node.some(containsSweep);
+      return isPlainObject(node) && Object.keys(node).some((k) => containsSweep(node[k]));
+    }
+
+    async function loadClone(experimentId, jobId) {
+      const suffix = '/experiments/' + encodeURIComponent(experimentId) + '/clone' + (jobId ? '?job_id=' + encodeURIComponent(jobId) : '');
+      const res = await request(projectPath(suffix), { method: 'POST' });
+      if (!st.active) return;
+      if (!res.ok) {
+        toast(errorMessage(res.data, 'Could not load the experiment to clone'), 'error');
+        return;
+      }
+      const data = res.data || {};
+      let spec = isPlainObject(data.spec) ? data.spec : {};
+      let envIds = Array.isArray(data.environment_ids) ? data.environment_ids.slice() : [];
+      const notes = [];
+      let job = jobId && data.base_source && data.base_source.job_id === jobId ? jobId : null;
+      if (jobId && !job) {
+        // Without ?job_id= support: take the job's qym_config from the detail.
+        const detail = await request(projectPath('/experiments/' + encodeURIComponent(experimentId)));
+        if (!st.active) return;
+        const row = detail.ok ? (detail.data.jobs || []).find((j) => j.id === jobId) : null;
+        if (row && isPlainObject(row.qym_config)) {
+          const q = row.qym_config;
+          spec = { evaluator: q.evaluator || {}, slot_bindings: q.slot_bindings || {}, env_overrides: q.env_overrides || {} };
+          envIds = envIds.indexOf(row.environment_id) >= 0 ? [row.environment_id] : [];
+          job = row.id;
+        } else {
+          notes.push('That job\'s configuration was not found, so the whole experiment is cloned.');
+        }
+      }
+      const unavailable = (data.unavailable_environment_ids || []).length;
+      if (unavailable) {
+        notes.push(unavailable + ' environment' + (unavailable === 1 ? ' of the original is' : 's of the original are') + ' disabled or gone and ' + (unavailable === 1 ? 'was' : 'were') + ' left out.');
+      }
+      const bindings = isPlainObject(spec.slot_bindings) ? spec.slot_bindings : {};
+      const temporary = Object.keys(bindings).filter((k) => {
+        const b = bindings[k];
+        return (isSweepValue(b) ? b.sweep : [b]).some((x) => isPlainObject(x) && isPlainObject(x.temporary));
+      });
+      if (temporary.length) {
+        notes.push('Temporary models are copied without their API keys: re-enter each key under Models (' + temporary.join(', ') + ').');
+      }
+      if (containsSweep(spec)) notes.push('Swept values are kept as they were, so the same combinations are launched.');
+      const sourceName = String(data.name || '').replace(/ \((copy|rerun)\)$/, '');
+      st.clone = {
+        experimentId,
+        jobId: job,
+        spec: deepCopy(spec),
+        linkedGroups: !job && Array.isArray(spec.links) ? deepCopy(spec.links) : undefined,
+        sourceName,
+        notes,
+      };
+      st.name = String(data.name || '').slice(0, 200);
+      if (data.priority) st.priority = data.priority;
+      st.selected = envIds;
+      st.base = 'clone';
+      st.baseTouched = true;
     }
 
     // ── Spec (the §8.1 document) ────────────────────────────────────────
@@ -481,19 +1057,22 @@
     }
 
     function buildSpec() {
-      const evaluator = { dataset: datasetValue() || null };
+      // Base evaluator inputs (samples, report_k, …) ride along unchanged (#31).
+      const evaluator = Object.assign(deepCopy(st.evaluatorExtra) || {}, { dataset: datasetValue() || null });
       if (st.datasetMode === 'project' && st.datasetRef) {
         if (st.datasetRef.indexOf('v:') === 0) evaluator.dataset_version = st.datasetRef.slice(2);
-        else if (st.datasetRef.indexOf('a:') === 0) evaluator.config = { dataset_alias: st.datasetRef.slice(2) };
+        else if (st.datasetRef.indexOf('a:') === 0) evaluator.config = Object.assign({}, evaluator.config, { dataset_alias: st.datasetRef.slice(2) });
       }
       const bindings = {};
       Object.keys(st.bindings).forEach((key) => {
         const b = st.bindings[key];
-        bindings[key] = specValue(b.kind === 'connection' ? { connection_id: b.id } : b.binding);
+        bindings[key] = specValue(b.kind === 'connection' ? { connection_id: b.id } : b.kind === 'raw' ? b.value : b.binding);
       });
       const values = {};
       Object.keys(st.values).forEach((p) => { values[p] = specValue(st.values[p]); });
-      return { evaluator, slot_bindings: bindings, env_overrides: buildOverrides(values) };
+      const spec = { evaluator, slot_bindings: bindings, env_overrides: buildOverrides(values) };
+      if (st.links) spec.links = deepCopy(st.links); // a cloned sweep's linked groups
+      return spec;
     }
 
     function buildRequest(dryRun) {
@@ -510,7 +1089,7 @@
         name: st.name.trim() || (dryRun ? 'Untitled experiment' : ''),
         environment_ids: st.selected.slice(),
         spec,
-        base_source: { kind: st.base },
+        base_source: baseSource(),
         dry_run: !!dryRun,
         secrets: refs,
         save_to_project_models: save,
@@ -527,6 +1106,9 @@
         const data = st.envData[id];
         if (data && data.formError) errors.push({ pointer: '#environments', message: data.formError + ' (' + envName(id) + ')' });
       });
+      if ((st.base === 'official' || st.base === 'saved') && !(st.baseInfo.loaded && st.baseInfo.versionId)) {
+        errors.push({ pointer: '#base', message: st.baseInfo.loading ? 'The base is still loading.' : (st.baseInfo.error || 'The base did not load; pick another base.') });
+      }
       if (!datasetValue()) errors.push({ pointer: '/evaluator/dataset', message: 'Choose a dataset or enter a custom dataset string.' });
       Object.keys(st.invalid).forEach((p) => errors.push({ pointer: '/env_overrides' + p, message: st.invalid[p].message }));
       if (!st.name.trim()) errors.push({ pointer: '#name', message: 'Name the experiment.' });
@@ -587,6 +1169,7 @@
     function findTarget(pointer) {
       if (pointer === '#environments' || pointer === '' || pointer == null) return hosts.environments;
       if (pointer === '#name') return root.querySelector('[data-xl-pointer="#name"]');
+      if (pointer === '#base') return hosts.base;
       const nodes = Array.from(root.querySelectorAll('[data-xl-pointer]'));
       let best = null;
       let bestLength = -1;
@@ -664,6 +1247,7 @@
           if (!env.schema_hash) tags.push(tag('No schema', 'danger'));
           if (env.model_slots && env.model_slots.needs_confirmation) tags.push(tag('Needs LLM grouping', 'warning'));
           tags.push(tag('max ' + env.max_priority, null, 'Highest priority allowed on this environment'));
+          if (hasOfficial(env)) tags.push(tag('official v' + env.official_preset_version, 'version', 'Published official defaults'));
           return el('label', { className: 'xl-env-option' + (selected ? ' xl-env-option--selected' : '') }, [
             el('input', { type: 'checkbox', checked: selected, 'data-xl-env': env.id, onChange: (e) => toggleEnv(env.id, e.target.checked) }),
             el('span', null, [
@@ -739,19 +1323,107 @@
       const host = hosts.base;
       if (!host) return;
       const body = host.querySelector('[data-xl-body]');
-      body.replaceChildren(
-        el('div', { className: 'qym-segmented', role: 'group', 'aria-label': 'Start from', 'data-xl-base': '1' }, BASE_OPTIONS.map((opt) => el('button', {
+      const options = BASE_OPTIONS.concat(st.clone ? [CLONE_OPTION] : []);
+      const children = [el('div', { className: 'qym-segmented', role: 'group', 'aria-label': 'Start from', 'data-xl-base': '1' }, options.map((opt) => {
+        const active = st.base === opt.kind;
+        const avail = opt.available ? baseAvailability(opt.kind) : { ok: false, reason: 'Coming soon' };
+        return el('button', {
           type: 'button',
-          className: 'qym-segmented__option' + (st.base === opt.kind ? ' active' : ''),
-          'aria-pressed': st.base === opt.kind ? 'true' : 'false',
+          className: 'qym-segmented__option' + (active ? ' active' : ''),
+          'aria-pressed': active ? 'true' : 'false',
           'data-base': opt.kind,
-          disabled: !opt.available,
-          title: opt.available ? null : 'Coming soon',
+          disabled: !active && !avail.ok,
+          title: avail.ok ? null : (avail.reason || null),
           text: opt.label,
-          onClick: () => { if (opt.available) { st.base = opt.kind; renderBase(); schedulePreview(); } },
-        }))),
-        el('div', { className: 'xl-hint', text: 'Blank starts from the environment\'s own settings: only what you change below is sent.' })
-      );
+          onClick: () => { if (!active && avail.ok) chooseBase(opt.kind); },
+        });
+      }))];
+      const presetBase = st.base === 'official' || st.base === 'saved';
+      if (presetBase && st.selected.length > 1) {
+        // Presets belong to one environment; the others validate the same config.
+        children.push(el('div', { className: 'xl-row' }, [
+          el('span', { className: 'xl-hint', text: 'Presets from' }),
+          el('select', {
+            className: 'qym-control qym-select', 'aria-label': 'Environment whose presets are the base', 'data-xl-base-env': '1',
+            onChange: (e) => {
+              const previous = st.baseEnv;
+              st.baseEnv = e.target.value;
+              chooseBase(st.base, true).then((ok) => { if (!ok) { st.baseEnv = previous; renderBase(); } });
+            },
+          }, selectedEnvs().map((env) => el('option', {
+            value: env.id, selected: env.id === st.baseEnv,
+            disabled: st.base === 'official' && !hasOfficial(env),
+            text: env.name + (hasOfficial(env) ? ' · official v' + env.official_preset_version : ''),
+          }))),
+        ]));
+      }
+      if (st.base === 'saved') {
+        const presets = presetsFor(st.baseEnv);
+        children.push(el('select', {
+          className: 'qym-control qym-select xl-wide', 'aria-label': 'Saved preset', 'data-xl-saved-preset': '1',
+          onChange: (e) => {
+            const previous = st.savedPresetId;
+            st.savedPresetId = e.target.value;
+            chooseBase('saved', true).then((ok) => { if (!ok) { st.savedPresetId = previous; renderBase(); } });
+          },
+        }, (presets ? presets.saved : []).map((p) => el('option', {
+          value: p.id, selected: p.id === st.savedPresetId, text: p.name + ' · v' + p.current_version.version,
+        }))));
+      }
+      children.push(baseStatus());
+      body.replaceChildren.apply(body, children);
+      updateBaseMeta();
+    }
+
+    const BASE_HINTS = {
+      official: 'The environment\'s published defaults. Your edits are layered on top: a changed setting shows a dot and resets to the base value.',
+      saved: 'A saved preset of this environment. Your edits are layered on top: a changed setting shows a dot and resets to the base value.',
+      clone: 'A copy of an earlier experiment\'s configuration. Your edits are layered on top: a changed setting shows a dot and resets to the base value.',
+      blank: 'Blank starts from the environment\'s own settings: only what you change below is sent.',
+    };
+
+    function listCallout(tone, title, items, attr) {
+      const attrs = { className: 'xl-callout' + (tone ? ' xl-callout--' + tone : ''), role: tone === 'error' ? 'alert' : 'note' };
+      if (attr) attrs[attr] = '1';
+      return el('div', attrs, [el('div', null, [
+        title ? el('strong', { text: title }) : null,
+        items.length ? el('ul', { className: 'xl-callout-list' }, items.map((text) => el('li', { text }))) : null,
+      ])]);
+    }
+
+    function baseStatus() {
+      const info = st.baseInfo || {};
+      const children = [];
+      if (info.loading) {
+        children.push(el('div', { className: 'xl-hint', text: 'Loading the base…' }));
+      } else {
+        children.push(el('div', { className: 'xl-row' }, [
+          el('span', { className: 'xl-base-label', 'data-xl-base-label': '1', text: baseLabel() }),
+          el('span', { className: 'xl-hint xl-mono', 'data-xl-diff-count': '1', text: diffText() }),
+          el('span', { className: 'xl-spacer' }),
+          st.base !== 'blank' ? el('button', { type: 'button', className: 'xl-link-btn', 'data-xl-reset-base': '1', text: 'Reset all to base', onClick: resetAllToBase }) : null,
+        ]));
+      }
+      children.push(el('div', { className: 'xl-hint', text: BASE_HINTS[st.base] || '' }));
+      if (info.releaseNotes) children.push(el('div', { className: 'xl-hint xl-base-notes', text: 'Release notes: ' + info.releaseNotes }));
+      if (st.baseNote) children.push(el('div', { className: 'xl-callout', role: 'note', 'data-xl-base-note': '1', text: st.baseNote }));
+      if (info.error) children.push(el('div', { className: 'xl-callout xl-callout--error', role: 'alert', text: info.error }));
+      if (info.dropped && info.dropped.length) {
+        children.push(listCallout('warning', info.summary || 'Some settings are no longer supported',
+          info.dropped.map((d) => (d.label || d.pointer) + ': ' + (d.message || d.reason || 'dropped')), 'data-xl-remap-dropped'));
+      }
+      if (info.errors && info.errors.length) {
+        children.push(listCallout('error', 'The base does not fit the environment\'s current schema', info.errors.map((e) => e.message || e.pointer || 'Invalid value')));
+      }
+      const warnings = (info.warnings || []).map((w) => w.message || '').filter(Boolean).concat(info.notes || []);
+      if (warnings.length) children.push(listCallout('warning', 'Check before launching', warnings, 'data-xl-base-warnings'));
+      return el('div', { className: 'xl-base-status', 'data-xl-base-status': '1' }, children);
+    }
+
+    function updateBaseMeta() {
+      const meta = root.querySelector('[data-xl-base-meta]');
+      if (meta) meta.textContent = 'Base: ' + baseLabel();
+      root.querySelectorAll('[data-xl-diff-count]').forEach((node) => { node.textContent = diffText(); });
     }
 
     // ── Section: models ─────────────────────────────────────────────────
@@ -796,15 +1468,54 @@
       body.replaceChildren.apply(body, children);
     }
 
+    /** A temporary model from a base (clone or preset) comes without its key (§7.5). */
+    function reenterKey(slot, binding) {
+      const keys = temporaryKeys();
+      if (!keys.allowed) return el('div', { className: 'xl-hint', text: 'Its API key was not copied. ' + keys.reason });
+      const input = el('input', {
+        className: 'qym-control qym-input xl-grow', type: 'password', autocomplete: 'off', spellcheck: 'false',
+        placeholder: 'API key', 'aria-label': 'API key for ' + slot.label, 'data-xl-reenter-key': slot.slot_key,
+      });
+      const use = el('button', {
+        type: 'button', className: 'qym-inline-action qym-inline-action--neutral', text: 'Use key',
+        onClick: () => {
+          const key = input.value.trim();
+          input.value = '';
+          if (!key) return;
+          const ref = 'tmp-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+          binding.binding = { temporary: Object.assign({}, binding.binding.temporary, { api_key: { $secret: ref } }) };
+          binding.secretRef = ref;
+          st.secrets[ref] = key; // memory only, like keys typed in the temporary-model form
+          renderModels();
+          schedulePreview();
+        },
+      });
+      return el('div', { className: 'xl-model-key' }, [
+        el('div', { className: 'xl-hint', text: 'Its API key was not copied. Enter it again, or launch without a key.' }),
+        el('div', { className: 'xl-row' }, [input, use]),
+      ]);
+    }
+
     function modelCard(slot) {
       const binding = st.bindings[slot.slot_key];
       const connections = slotConnections(slot);
       const missing = st.selected.filter((id) => slot.envs.indexOf(id) < 0 && st.envData[id] && st.envData[id].form);
+      const changed = bindingChanged(slot.slot_key);
       const head = el('div', { className: 'xl-model-head' }, [
+        changed ? el('span', { className: 'xl-dot', title: 'Changed from the base', 'data-xl-binding-changed': '1' }) : null,
         el('span', { className: 'xl-model-title', text: slot.label }),
         tag(slot.slot_key, 'data'),
         slot.required ? tag('required', 'role') : null,
-      ].concat(missing.map((id) => tag('not in ' + envName(id), 'warning'))));
+      ].concat(missing.map((id) => tag('not in ' + envName(id), 'warning'))).concat(changed ? [
+        el('span', { className: 'xl-spacer' }),
+        el('button', {
+          type: 'button', className: 'xl-link-btn', text: 'Reset', 'aria-label': 'Reset ' + slot.label + ' to the base model',
+          onClick: () => {
+            const base = st.baseline.bindings[slot.slot_key];
+            setBinding(slot.slot_key, base ? deepCopy(base) : null);
+          },
+        }),
+      ] : []));
       const fills = Object.keys(slot.field_map).map((role) => ROLE_LABELS[role] || role).join(', ');
 
       const select = el('select', {
@@ -814,7 +1525,7 @@
         onChange: (e) => {
           const value = e.target.value;
           if (value === '__inherit') setBinding(slot.slot_key, null);
-          else if (value === '__temporary') { /* unchanged */ }
+          else if (value === '__temporary' || value === '__raw') { /* unchanged */ }
           else setBinding(slot.slot_key, { kind: 'connection', id: value });
         },
       });
@@ -832,6 +1543,10 @@
       if (binding && binding.kind === 'temporary') {
         select.appendChild(el('option', { value: '__temporary', selected: true, text: bindingSummary(slot.slot_key) }));
       }
+      if (binding && binding.kind === 'raw') {
+        // A cloned model sweep: kept as is until a model is picked.
+        select.appendChild(el('option', { value: '__raw', selected: true, text: bindingSummary(slot.slot_key) }));
+      }
 
       const children = [head, el('div', { className: 'xl-hint', text: 'Fills ' + (fills || 'no fields') + '.' }), select];
       if (binding && binding.kind === 'temporary') {
@@ -844,6 +1559,7 @@
           binding.secretRef ? null : tag('no API key', null),
           el('button', { type: 'button', className: 'xl-link-btn', text: 'Remove', onClick: () => setBinding(slot.slot_key, null) }),
         ]));
+        if (binding.needsKey && !binding.secretRef) children.push(reenterKey(slot, binding));
       }
       if (st.tempFormFor === slot.slot_key && window.QymTemporaryModel) {
         const keys = temporaryKeys();
@@ -917,7 +1633,7 @@
 
     function markChanged(wrapper, pointer) {
       if (!wrapper) return;
-      const changed = has(st.values, pointer) || has(st.invalid, pointer);
+      const changed = isChanged(pointer);
       if (wrapper.tagName === 'TD') wrapper.classList.toggle('xl-cell--changed', changed);
       else {
         wrapper.classList.toggle('xl-field--changed', changed);
@@ -944,6 +1660,15 @@
         : entry.has_default ? 'Default: ' + formatValue(entry.default) : 'Inherited from environment';
       const common = { 'data-xl-pointer': docPointer, 'aria-label': label, disabled: !!bound, title: bound ? 'Filled by the ' + bound + ' model' : null };
       let control;
+      if (isSweepValue(current)) {
+        // A swept value from a cloned experiment: launched as is (sweep editing is #34).
+        control = el('input', Object.assign({}, common, {
+          className: 'qym-control qym-input xl-wide xl-mono', type: 'text', disabled: true,
+          title: 'Swept values from the cloned experiment; they are launched as they are',
+        }));
+        control.value = 'Sweep: ' + current.sweep.map(formatValue).join(', ');
+        return control;
+      }
       if (entry.secret || entry.widget === 'secret') {
         control = el('input', Object.assign({}, common, {
           className: 'qym-control qym-input xl-wide', type: 'text', disabled: true,
@@ -1013,12 +1738,12 @@
       const handler = () => onLeafInput(entry, pointer, control, wrapper);
       control.addEventListener(control.tagName === 'SELECT' ? 'change' : 'input', handler);
       const reset = el('button', {
-        type: 'button', className: 'xl-link-btn xl-reset', text: 'Reset',
+        type: 'button', className: 'xl-link-btn xl-reset', text: 'Reset', title: 'Reset to the base value',
         onClick: () => {
-          delete st.values[pointer];
           delete st.invalid[pointer];
-          control.value = '';
-          markChanged(wrapper, pointer);
+          if (has(st.baseline.values, pointer)) st.values[pointer] = deepCopy(st.baseline.values[pointer]);
+          else delete st.values[pointer];
+          renderSettings();
           updateChangedCount();
           renderPreviewSoon();
           schedulePreview();
@@ -1030,7 +1755,7 @@
         entry.label && entry.label !== entry.name ? el('span', { className: 'xl-field-name', text: entry.name }) : null,
         entry.required ? tag('required', 'role') : null,
         bound[pointer] ? tag('slot: ' + bound[pointer], 'accent') : null,
-      ].concat(missing.map((id) => tag('not in ' + envName(id), 'warning'))).concat([el('span', { className: 'xl-spacer' }), reset]));
+      ].concat(missing.map((id) => tag('not in ' + envName(id), 'warning'))).concat([el('span', { className: 'xl-spacer' }), bound[pointer] ? null : reset]));
       const id = 'xl-f-' + Math.random().toString(36).slice(2, 10);
       control.id = id;
       head.querySelector('label').setAttribute('for', id);
@@ -1158,13 +1883,15 @@
       ].concat(renderChildren(model, entry, pointer, bound, context)));
     }
 
+    /** Settings that differ from the base (every set value on a Blank base). */
     function countChanged() {
-      return Object.keys(st.values).length;
+      return changedPointers().length;
     }
 
     function updateChangedCount() {
       const node = root.querySelector('[data-xl-changed-count]');
       if (node) node.textContent = countChanged() + ' changed';
+      updateBaseMeta();
     }
 
     function applyFilters() {
@@ -1175,12 +1902,12 @@
       host.querySelectorAll('[data-xl-leaf]').forEach((node) => {
         const pointer = node.getAttribute('data-xl-leaf');
         const text = node.getAttribute('data-xl-search') || '';
-        const show = (!query || text.indexOf(query) >= 0) && (!st.changedOnly || has(st.values, pointer) || has(st.invalid, pointer));
+        const show = (!query || text.indexOf(query) >= 0) && (!st.changedOnly || isChanged(pointer));
         node.hidden = !show;
       });
       host.querySelectorAll('[data-xl-row]').forEach((row) => {
         const text = row.getAttribute('data-xl-search') || '';
-        const changed = (row._xlPointers || []).some((p) => has(st.values, p) || has(st.invalid, p));
+        const changed = (row._xlPointers || []).some(isChanged);
         row.hidden = !((!query || text.indexOf(query) >= 0) && (!st.changedOnly || changed));
       });
       const containers = Array.from(host.querySelectorAll('[data-xl-container]')).reverse();
@@ -1236,7 +1963,15 @@
         el('span', { className: 'xl-hint xl-mono', 'data-xl-changed-count': '1', text: countChanged() + ' changed' }),
         el('button', {
           type: 'button', className: 'xl-link-btn', text: 'Reset all',
-          onClick: () => { st.values = {}; st.invalid = {}; renderSettings(); schedulePreview(); },
+          title: 'Reset every setting to the base value',
+          onClick: () => {
+            st.values = deepCopy(st.baseline.values);
+            st.invalid = {};
+            stripBoundFields(st.values, st.bindings);
+            renderSettings();
+            updateBaseMeta();
+            schedulePreview();
+          },
         }),
       ]));
       const bound = boundPointers();
@@ -1342,7 +2077,7 @@
       const summary = el('dl', { className: 'xl-summary' }, [
         el('dt', { text: 'Environments' }), el('dd', { text: selectedEnvs().map((e) => e.name).join(', ') || '—' }),
         el('dt', { text: 'Dataset' }), el('dd', { className: st.datasetMode === 'custom' ? 'xl-mono' : null, text: datasetText }),
-        el('dt', { text: 'Start from' }), el('dd', { text: (BASE_OPTIONS.find((b) => b.kind === st.base) || {}).label || st.base }),
+        el('dt', { text: 'Start from' }), el('dd', { 'data-xl-preview-base': '1', text: baseLabel() + ' · ' + diffText() }),
         el('dt', { text: 'Models' }), el('dd', { text: models.join('; ') || '—' }),
         el('dt', { text: 'Settings' }), el('dd', { className: 'xl-mono', text: countChanged() + ' changed' }),
         el('dt', { text: 'Priority' }), el('dd', { text: st.priority || (st.preview && st.preview.priority ? st.preview.priority + ' (default)' : 'Environment default') }),
@@ -1503,7 +2238,7 @@
         }),
         el('h1', { className: 'xl-title', text: 'New experiment' }),
         el('p', { className: 'xl-description', text: 'Configure one Evaluation Service run per environment and launch it.' }),
-        el('div', { className: 'xl-meta' }, [el('span', { text: project.name || '' }), el('span', { className: 'xl-meta-sep', text: '·' }), el('span', { text: 'Base: Blank' })]),
+        el('div', { className: 'xl-meta' }, [el('span', { text: project.name || '' }), el('span', { className: 'xl-meta-sep', text: '·' }), el('span', { 'data-xl-base-meta': '1', text: 'Base: ' + baseLabel() })]),
         el('div', { className: 'xl-layout' }, [main, preview]),
       ]));
       renderEnvironments();
@@ -1525,8 +2260,19 @@
     }
 
     render();
-    loadEnvironments();
-    loadDatasets();
+    st.datasetsReady = loadDatasets();
+    (async () => {
+      // ?clone=<xid>[&job=<jid>] ("Rerun with this config", #26) or ?env=<eid>.
+      const params = new URLSearchParams(window.location.search);
+      const cloneId = opts.clone || params.get('clone');
+      const envParam = opts.environmentId || params.get('env');
+      if (cloneId) await loadClone(cloneId, opts.cloneJob || params.get('job') || null);
+      else if (envParam) st.selected = [envParam];
+      if (!st.active) return;
+      renderRun();
+      renderBase();
+      loadEnvironments();
+    })();
     return { teardown };
   }
 

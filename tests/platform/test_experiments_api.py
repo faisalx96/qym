@@ -28,6 +28,9 @@ from qym_platform.datetime_utils import utc_now_naive
 from qym_platform.db.base import Base
 from qym_platform.db.models import (
     AuditLog,
+    EvalConfigPreset,
+    EvalConfigPresetKind,
+    EvalConfigPresetVersion,
     EvalEnvironment,
     EvalEnvironmentSchema,
     EvalExperiment,
@@ -162,6 +165,46 @@ def _add_env(
         s.refresh(env)
         s.expunge(env)
         return env
+
+
+def _add_preset_version(
+    session_factory,
+    env: EvalEnvironment,
+    config: dict | None = None,
+    *,
+    kind: EvalConfigPresetKind = EvalConfigPresetKind.OFFICIAL,
+    version: int = 1,
+    name: str = "Official defaults",
+) -> EvalConfigPresetVersion:
+    """A published preset version of ``env`` on its current schema (plan §9)."""
+    with session_factory() as s:
+        preset = (
+            s.query(EvalConfigPreset)
+            .filter(
+                EvalConfigPreset.environment_id == env.id,
+                EvalConfigPreset.kind == kind,
+                EvalConfigPreset.name == name,
+            )
+            .first()
+        )
+        if preset is None:
+            preset = EvalConfigPreset(environment_id=env.id, name=name, kind=kind)
+            s.add(preset)
+            s.flush()
+        row = EvalConfigPresetVersion(
+            preset_id=preset.id,
+            version=version,
+            schema_id=env.current_schema_id,
+            config=config or {},
+            notes="release",
+        )
+        s.add(row)
+        s.flush()
+        preset.current_version_id = row.id
+        s.commit()
+        s.refresh(row)
+        s.expunge(row)
+        return row
 
 
 @pytest.fixture()
@@ -429,9 +472,23 @@ def test_build_qym_config_is_the_secret_free_combo_document():
 def test_run_metadata_snapshot_describes_the_run_without_the_job_row(
     client, session_factory, env, conn
 ):
-    base_source = {"kind": "official", "preset_version_id": "pv-7"}
     spec = _spec(conn.id)
-    created = _created(client, [env.id], spec=spec, base_source=base_source)
+    version = _add_preset_version(session_factory, env, spec, version=7)
+    created = _created(
+        client,
+        [env.id],
+        spec=spec,
+        base_source={"kind": "official", "preset_version_id": version.id},
+    )
+    # Stored canonically, with the preset and environment it came from (#31).
+    base_source = {
+        "kind": "official",
+        "preset_id": version.preset_id,
+        "preset_version_id": version.id,
+        "version": 7,
+        "environment_id": env.id,
+    }
+    assert created["base_source"] == base_source
     (job,) = _jobs(session_factory, created["id"])
     metadata = job.request_body["evaluator"]["config"]["run_metadata"]
     config = metadata["qym_config"]

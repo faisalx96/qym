@@ -188,7 +188,7 @@
   <link rel="stylesheet" href="/static/eval_environments.css?v=eval-environments-20260929-1">
   <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60">
   <script defer src="/static/ui_components.js?v=ui-consistency-20260803-28"></script>
-  <script src="/static/eval_environments.js?v=eval-environments-20260929-1"></script>
+  <script src="/static/eval_environments.js?v=eval-environments-20260930-2"></script>
 </head>
 <body>
   <main class="settings-page">
@@ -518,6 +518,7 @@
         }
         window.QymEvalEnvironments.mountEnvironmentsPanel({
           projectId: state.project.id,
+          projectSlug: state.project.slug,
           canManage: canManageMembers(),
           tbody,
           addButton: document.getElementById('add-environment-btn'),
