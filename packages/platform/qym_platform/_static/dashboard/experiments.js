@@ -3,6 +3,7 @@
  *
  *   list    → /projects/{slug}/experiments
  *   detail  → /projects/{slug}/experiments?experiment=<id>
+ *   new     → /projects/{slug}/experiments?new=1  (launch form, experiment_launch.js)
  *
  * Consumes the experiments API (api/experiments.py):
  *   GET  /v1/projects/{pid}/experiments[?status=&mine=&limit=&offset=]
@@ -14,7 +15,9 @@
  *
  * The detail view mounts the combination × environment matrix and the
  * param-vs-metric chart from experiment_matrix.js (#35) above the job history;
- * cancel/retry (single, all, and "Retry failed") stay in this file.
+ * cancel/retry (single, all, and "Retry failed") stay in this file. The launch
+ * form (#23) lives in experiment_launch.js (window.QymExperimentLaunch); this file
+ * only routes to it (?new=1).
  *
  * Security: every node is built with el()/textContent, so no server string
  * (names, emails, errors, params) is ever parsed as HTML; there is no innerHTML.
@@ -58,6 +61,8 @@
     project: null,
     me: null,
     experimentId: null,
+    creating: false,
+    launch: null,
     environments: {},
     // list
     list: null,
@@ -308,6 +313,7 @@
     state.slug = (ctx && ctx.projectSlug) || (match ? decodeURIComponent(match[1]) : '');
     const params = new URLSearchParams(window.location.search);
     state.experimentId = params.get('experiment') || null;
+    state.creating = !state.experimentId && params.get('new') === '1';
     state.status = params.get('status') || '';
     state.mine = params.get('mine') === '1';
 
@@ -370,14 +376,36 @@
 
   // ── List view ──────────────────────────────────────────────────────────
   function newExperimentButton() {
-    // The launch form arrives with #23; keep the entry point visible but inert.
     return el('button', {
       className: 'qym-inline-action qym-inline-action--accent',
       type: 'button',
-      disabled: true,
       'data-exp-new': '1',
-      title: 'Launching experiments from this page is coming soon',
       text: '+ New experiment',
+      onClick: () => navigate(projectPage('/experiments?new=1')),
+    });
+  }
+
+  function mountLaunchForm() {
+    if (!window.QymExperimentLaunch) {
+      renderMessage('exp-error', 'The launch form failed to load.');
+      return;
+    }
+    if (window.QymShell && window.QymShell.setBreadcrumbs) {
+      const project = window.QymShell.getProject ? window.QymShell.getProject() : null;
+      const crumbs = [];
+      if (project) crumbs.push({ label: project.name, projectSwitcher: true });
+      crumbs.push({ label: 'Experiments', href: experimentUrl(null) });
+      crumbs.push({ label: 'New experiment', current: true });
+      try { window.QymShell.setBreadcrumbs(crumbs); } catch (_) { /* shell owns the fallback */ }
+    }
+    state.launch = window.QymExperimentLaunch.mount({
+      root,
+      project: state.project,
+      me: state.me,
+      slug: state.slug,
+      listUrl: experimentUrl(null),
+      onCancel: () => navigate(experimentUrl(null)),
+      onLaunched: (experiment) => navigate(experimentUrl(experiment.id)),
     });
   }
 
@@ -899,6 +927,8 @@
   // ── Lifecycle ──────────────────────────────────────────────────────────
   function teardown() {
     state.active = false;
+    if (state.launch) state.launch.teardown();
+    state.launch = null;
     clearPoll();
     document.removeEventListener('visibilitychange', onVisibility);
   }
@@ -910,6 +940,7 @@
     if (!state.active) return;
     await loadContext();
     if (!state.active) return;
+    if (state.creating) { mountLaunchForm(); return; }
     await refresh();
   }
 

@@ -91,6 +91,9 @@
     .exp-error { padding: var(--space-md) var(--space-lg); color: var(--error); font-size: var(--font-base); }
     .exp-poll-note { font-size: var(--font-sm); color: var(--text-muted); }
   </style>
+  <link rel="stylesheet" href="/static/eval_environments.css?v=eval-environments-20260929-1">
+  <link rel="stylesheet" href="/static/eval_temporary_model.css?v=eval-temporary-model-20260930-1">
+  <link rel="stylesheet" href="/static/experiment_launch.css?v=experiment-launch-20260930-1">
   <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60">
   <script defer src="/static/ui_components.js?v=ui-consistency-20260803-28"></script>
 </head>
@@ -99,6 +102,10 @@
     <div class="exp-loading">Loading experiments…</div>
   </main>
   <script src="/static/experiment_matrix.js?v=experiments-20260930-3"></script>
-  <script src="/static/experiments.js?v=experiments-20260930-3"></script>
+  <!-- New-experiment form (#23): ?new=1 mounts window.QymExperimentLaunch. -->
+  <script src="/static/eval_environments.js?v=eval-environments-20260929-1"></script>
+  <script src="/static/eval_temporary_model.js?v=eval-temporary-model-20260930-1"></script>
+  <script src="/static/experiment_launch.js?v=experiment-launch-20260930-1"></script>
+  <script src="/static/experiments.js?v=experiments-20260930-4"></script>
 </body>
 </html>
