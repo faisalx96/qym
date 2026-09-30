@@ -371,7 +371,7 @@ def test_launch_form_offers_official_and_saved_bases():
     base = re.search(r"const BASE_OPTIONS = \[(.*?)\];", MODULE, re.S).group(1)
     assert re.search(r"kind: 'official'[^}]*available: true", base)
     assert re.search(r"kind: 'saved'[^}]*available: true", base)
-    assert re.search(r"kind: 'best_run'[^}]*available: false", base)  # #38
+    assert re.search(r"kind: 'best_run'[^}]*available: true", base)  # #38
     assert "const CLONE_OPTION = { kind: 'clone'" in MODULE
     # Official defaults is the default when published; otherwise Blank, with a note.
     assert "if (!st.baseTouched) kind = 'official';" in MODULE

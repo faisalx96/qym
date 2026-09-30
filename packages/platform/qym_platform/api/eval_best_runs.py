@@ -3,6 +3,12 @@
 ``GET /v1/projects/{project_id}/eval-environments/{env_id}/best-runs`` ranks the
 environment's official runs on one dataset version. Project members may read it. The
 ranking rules and the response shape are documented in ``services/eval_best_run.py``.
+
+``GET …/eval-environments/{env_id}/best-runs/{run_id}/base`` (#38, plan §10.3) turns
+one official run of the environment into a launch-form base: its stored config
+re-mapped onto the current schema, temporary models and unusable connections unbound
+(with prompts/warnings), and the agent/KB versioning drift against the environment's
+latest job. See ``services/eval_best_run_base.py``. Nothing is persisted.
 """
 
 from __future__ import annotations
@@ -22,6 +28,7 @@ from qym_platform.services.eval_best_run import (
     BestRunError,
     rank_best_runs,
 )
+from qym_platform.services.eval_best_run_base import run_base
 
 router = APIRouter()
 
@@ -55,5 +62,25 @@ def list_best_runs(
             limit=limit,
             exclude_errored=exclude_errored,
         )
+    except BestRunError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+@router.get(
+    "/v1/projects/{project_id}/eval-environments/{env_id}/best-runs/{run_id}/base"
+)
+def get_best_run_base(
+    project_id: str,
+    env_id: str,
+    run_id: str,
+    metric: Optional[str] = Query(default=None, max_length=200),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """A launch-ready base config from one official run of the environment."""
+    _require_project_access(db, principal, project_id)
+    env = _get_environment(db, project_id, env_id)
+    try:
+        return run_base(db, env, run_id, metric=metric)
     except BestRunError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)

@@ -129,8 +129,8 @@ def test_start_from_options_with_extension_points():
     base = re.search(r"const BASE_OPTIONS = \[(.*?)\];", MODULE, re.S).group(1)
     available = re.findall(r"kind: '(\w+)'[^}]*available: true", base)
     # Official/saved arrived with #31 (tests/platform/test_experiment_launch_base.py);
-    # best run waits for #38.
-    assert available == ["official", "saved", "blank"]
+    # best run arrived with #38 (tests/platform/test_experiment_launch_best_run.py).
+    assert available == ["official", "best_run", "saved", "blank"]
     for kind in ("official", "best_run", "saved"):
         assert f"kind: '{kind}'" in base
     assert "'data-xl-advanced': '1'" in MODULE  # #24 Advanced panel host
