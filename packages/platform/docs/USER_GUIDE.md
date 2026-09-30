@@ -438,7 +438,7 @@ The header warns **Agent or KB versions changed since this run** when the servic
 - One card per environment shows **In flight** against its cap, **Queued**, **Blocked**, the health, and a banner while a `HIGH` job is active. A full environment says "At capacity: queued jobs start as running ones finish."
 - **Our jobs** shows each job's experiment, environment, priority, status, `wait_reason` (why it is not moving), creator, elapsed time, and linked-run progress.
 - Cancel one job, the selected jobs (**Cancel selected**), or **Cancel all queued in experiment**. The confirmation splits the selection: **Queued here (not yet sent)** jobs are removed immediately; **Submitted or running on the service** jobs are hard-stopped, and their partial results stay on the linked run; jobs you may not cancel are skipped. You can give an optional reason.
-- **Remote queue** shows what each environment's service holds, from a snapshot refreshed about every 30 seconds. A remote job that matches no job of this project is an **Orphan**. Only project managers can cancel orphans; that call goes straight to the service and is audit-logged.
+- **Remote queue** shows what each environment's service holds, from a snapshot refreshed about every 30 seconds. A remote job that matches no job of this project is an **Orphan**. A remote job whose qym job already finished (for example timed out) but that the service still runs is **Stale**; it still counts toward the environment's in-flight cap. Only project managers can cancel orphans and stale jobs; that call goes straight to the service and is audit-logged.
 
 ### Official and local runs
 

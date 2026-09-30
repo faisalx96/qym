@@ -383,7 +383,13 @@ qym does not order by priority, because the service enforces priority. The lease
 `SUBMITTED`, `RUNNING` or `CANCELLING`. `QUEUED → SUBMITTING` is one conditional
 `UPDATE` that re-counts the slots (under a lock on the environment row on PostgreSQL),
 so several pods never exceed `max_inflight_jobs`. A job over the cap waits with
-`Inflight cap n/cap` and is rechecked every 10s. The cap only counts qym's own jobs.
+`Inflight cap n/cap` and is rechecked every 10s. The cap counts qym's own jobs plus
+**stale remote jobs**: ids in the environment's latest remote snapshot that are still
+`PENDING`/`RUNNING` on the service although their qym job is already terminal (see
+"Stale remote jobs" below). The count comes from the stored snapshot, not from a
+service call, so it can lag by up to 30s; while it is non-zero the wait reason reads
+`Inflight cap n/cap (k stale on the service)`. Orphans (remote jobs that match no qym
+job) are not counted (D8).
 
 **Submit.** `SUBMITTING` is committed before `POST /evals`, as the crash-safety marker.
 Keys are decrypted in memory only. Outcomes:
@@ -431,7 +437,13 @@ the linked qym run's status is merged in:
   (the service's 7200s hard limit plus margin) becomes `TIMED_OUT`. The clock only
   runs while the job is `RUNNING` and qym can observe it: a job still `PENDING` on
   the service (`SUBMITTED`) never times out, and neither does one whose service is
-  unreachable or paused.
+  unreachable or paused. Before the transition the dispatcher makes one best-effort
+  `POST /evals/{id}/cancel` (as the experiment's creator). Its outcome is appended
+  to the job's `error` (`… Remote job cancelled on the evaluation service`,
+  `… already finished …`, `… unknown to the evaluation service`, or
+  `… not cancelled: …` with the reason). A failed cancel is logged
+  (`remote cancel after timeout failed`, redacted) and never blocks the timeout; a
+  401 also pauses the environment.
 
 When a job is terminal and its run completed, the completion hook writes the run's
 `eval_run_scores` rows. After every status change, the experiment's aggregate status is
@@ -454,8 +466,10 @@ a project manager; audit action `eval_job.cancel`):
 transport error or 5xx → retried with backoff from 15s to 5 minutes
 (`Cancelling; evaluation service unreachable, retrying`). After **2h15m** of failed
 attempts the dispatcher gives up and marks the job `CANCELLED`
-(`… gave up after 2h15m`), because the service's hard limit has ended the remote job
-either way and the job should stop holding an inflight slot. After a remote cancel, the
+(`… gave up after 2h15m`), because the service's hard limit has usually ended the
+remote job by then. If the service still lists it, it becomes a stale remote job:
+it keeps counting toward the cap and a manager can cancel it from the remote queue.
+After a remote cancel, the
 linked run is marked `STOPPED` with `status_reason = cancelled_from_queue`, unless it
 already ended; a killed worker never sends a terminal event.
 
@@ -494,24 +508,28 @@ usually a worker that died.
 1. Open the job's linked run. If it has events near the end, the worker died late;
    if there is no run, the worker probably never started the task. The service's logs
    for `remote_job_id` say which.
-2. Check the Queue page's **Remote queue**. If the remote job is still listed there
-   as `RUNNING`, it still holds a service worker, but qym no longer counts it against
-   the inflight cap. qym cannot stop it: the job is terminal, so the queue cancel
-   answers `already_terminal`, and the orphan cancel refuses it (`refused_local_job`)
-   because it matches a local job. Cancel it on the service directly:
-   `curl -X POST "$BASE_URL/evals/<remote_job_id>/cancel" -H "Authorization: Bearer $EVAL_API_KEY" -H "Content-Type: application/json" -d '{"user_id": "<your qym user id>"}'`
-   (API guide §3.5).
-3. **Retry** once the service is healthy.
+2. Read the end of `error`: the dispatcher already tried to cancel the remote job.
+   `Remote job cancelled on the evaluation service` means the service worker was
+   freed; nothing more to do.
+3. Otherwise (`… not cancelled: …`), check the Queue page's **Remote queue**. If the
+   remote job is still listed there, it carries a **Stale** badge: it still holds a
+   service worker and counts toward the environment's inflight cap. The queue cancel
+   no longer applies (the job is terminal, so it answers `already_terminal`); a
+   project manager selects the stale job and uses **Cancel selected remote jobs**
+   (or `POST /v1/projects/{pid}/eval-queue/remote/cancel` with its
+   `remote_job_id`). The cancel is audit-logged. Fix the environment first if the
+   note says the key was rejected or the service could not be reached.
+4. **Retry** once the service is healthy.
 
 The same applies to a job that the dispatcher cancelled after giving up on the remote
-cancel (`… gave up after 2h15m`).
+cancel (`… gave up after 2h15m`): if the service still lists it, it is stale.
 
 **Jobs that do not move** (not blocked):
 
 | `wait_reason` | Meaning | Action |
 |---|---|---|
 | empty on a `QUEUED` job | No dispatcher has claimed it | Check that a process with `QYM_ROLE=all` or `worker` runs, and its logs for `eval dispatcher tick failed` |
-| `Inflight cap n/cap` | The environment has `max_inflight_jobs` jobs in flight | Wait, cancel something, or raise the cap |
+| `Inflight cap n/cap` / `Inflight cap n/cap (k stale on the service)` | The environment has `max_inflight_jobs` jobs in flight, counting stale remote jobs | Wait, cancel something (stale jobs from the remote queue, as a manager), or raise the cap |
 | `HIGH job <id> active` | The service refused a submit while a HIGH job runs | Wait; retried with backoff up to every 5 minutes |
 | `Environment unhealthy: API key rejected` / `Environment unhealthy` / `Environment has no API key` / `Environment API key cannot be decrypted` / `Environment unavailable: …` | The environment is paused or unusable | See "Environment health"; fix the key or URL |
 | `Launch tokens need QYM_LLM_CONFIG_ENCRYPTION_KEY` | The dispatcher's process has no encryption key | Set it on that process |
@@ -531,11 +549,17 @@ Useful log lines (logger `qym_platform.services.eval_dispatcher`):
 retrying later` (lock contention; the lease expires and the job is retried),
 `eval job …: dispatcher step failed` (the job backs off 5 minutes; investigate).
 
-### Orphans
+### Orphans and stale remote jobs
 
 The **Remote queue** on the Queue page lists each active environment's `PENDING` and
 `RUNNING` remote jobs from the latest snapshot. A remote job whose id matches no local
-job of any status is an **orphan**. Common causes:
+job of any status is an **orphan**. A remote job whose id matches a local job that is
+already terminal (`TIMED_OUT`, `CANCELLED`, `FAILED` or `SUCCEEDED`) is **stale**
+(`stale: true` with the local job in `match`, a **Stale** badge on the page): qym has
+stopped tracking it, usually after a timeout whose remote cancel failed or a
+`CANCELLING` give-up. A job that finished locally in the last 30s can show as stale
+until the next snapshot. Stale jobs count toward the inflight cap. Common causes of
+orphans:
 
 - a job whose `POST /evals` answer was lost is `SUBMITTING` without a `remote_job_id`
   until reconcile adopts it. Its remote job shows as an orphan meanwhile. This clears
@@ -544,13 +568,16 @@ job of any status is an **orphan**. Common causes:
   by a qym database that was since restored from a backup;
 - jobs created before the integration.
 
-Only project managers can cancel orphans (**Cancel selected orphans**, or
+Only project managers can cancel orphans and stale jobs (**Cancel selected orphans**,
+or **Cancel selected remote jobs** when stale jobs are listed, or
 `POST /v1/projects/{pid}/eval-queue/remote/cancel` with up to 200 ids). The call goes
-straight to the service with the manager's user id. Ids that match a local job are
-refused (`refused_local_job`: cancel those through the normal queue cancel, which keeps
-the job, run and experiment consistent), and ids that are not in the latest snapshot
-are refused (`not_in_snapshot`). Every id sent is audit-logged as
-`eval_remote_job.cancel`. Cancelling the orphan of a job still being reconciled is safe:
+straight to the service with the manager's user id. Ids that match a non-terminal
+local job are refused (`refused_local_job`: cancel those through the normal queue
+cancel, which keeps the job, run and experiment consistent), and ids that are not in
+the latest snapshot are refused (`not_in_snapshot`). Every id sent is audit-logged as
+`eval_remote_job.cancel`; for a stale job the entry has `stale: true`, the local
+`job_id` and its `job_status`, and a successful cancel sets the job's `remote_status`
+to `CANCELLED` (its status stays terminal). Cancelling the orphan of a job still being reconciled is safe:
 reconcile adopts the remote job and the next poll records it as `CANCELLED`.
 
 A snapshot shows "fetched … ago". `fetch_error` means the last refresh failed and the
@@ -564,8 +591,8 @@ cancel every job. qym relies on being the **only** caller of each environment:
 
 - the remote snapshot filters by status only, not by `user_id`, so every remote job is
   shown and any job qym doesn't know is an orphan that a manager may cancel;
-- the inflight cap counts qym's jobs only, so other callers' jobs make the service
-  slower without qym backing off;
+- the inflight cap counts qym's jobs (including stale ones) only, so other callers'
+  jobs make the service slower without qym backing off;
 - another caller's `HIGH` job preempts qym's running jobs.
 
 Do not share an environment's `EVAL_API_KEY` with other clients. A deployment that has

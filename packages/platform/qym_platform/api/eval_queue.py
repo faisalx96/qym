@@ -34,6 +34,7 @@ checked **per job**. Cancelling an orphan remote job needs a project manager.
           "environments": [{           # queue headers (the filtered env, or all active)
             "id", "name", "is_active", "health_status", "health_error",
             "max_inflight_jobs", "inflight", "queued", "blocked",
+            "stale_remote",            # stale remote jobs; they count toward the cap
             "counts": {status: n}, "high_active"
           }]
         }
@@ -54,15 +55,18 @@ checked **per job**. Cancelling an orphan remote job needs a project manager.
             "fetched_at",              # last refresh attempt, null if never fetched
             "fetch_error",             # set when that attempt failed (items are older)
             "stale",                   # older than 30s (a refresh is scheduled)
-            "orphan_count",
+            "orphan_count", "stale_count",
             "items": [{
               "remote_job_id", "status", "priority", "user_id", "created_at",
               "run_name",
               "orphan",                # no local job has this remote_job_id
+              "stale",                 # matches a terminal local job but is still
+                                       # PENDING/RUNNING on the service
               "match": null | {"job_id", "experiment_id", "experiment_name", "status"}
             }]
           }],
-          "can_cancel_orphans"         # the caller is a project manager
+          "can_cancel_orphans"         # the caller is a project manager (orphans
+                                       # and stale jobs)
         }
 
 ``POST /v1/projects/{pid}/eval-queue/cancel``
@@ -80,13 +84,15 @@ checked **per job**. Cancelling an orphan remote job needs a project manager.
 
 ``POST /v1/projects/{pid}/eval-queue/remote/cancel`` (project manager)
     Body: ``{"environment_id", "remote_job_ids": [...≤200], "reason"?}``. Only orphans
-    of the latest snapshot are cancelled, directly on the service. Response::
+    and stale jobs of the latest snapshot are cancelled, directly on the service.
+    Response::
 
         {"environment_id", "outcomes": {remote_job_id: outcome},
          "errors": {remote_job_id: message}, "counts": {outcome: n}}
 
     with outcome ``cancelled``, ``already_terminal``, ``not_found``,
-    ``refused_local_job`` (it matches a local job: use ``/eval-queue/cancel``),
+    ``refused_local_job`` (it matches a non-terminal local job: use
+    ``/eval-queue/cancel``),
     ``not_in_snapshot`` or ``error``. Every id sent to the service is audit-logged.
 """
 

@@ -19,14 +19,19 @@ Read side (``api/eval_queue.py`` serializes it):
   job, or a ``HIGH`` item in the remote snapshot).
 - ``remote_view``: the stored snapshot (``eval_remote_queue.read_snapshot``) with each
   remote job matched to a local job by ``remote_job_id`` (any status) or flagged as an
-  **orphan**.
+  **orphan**. A matched remote job whose local job is already terminal (``TIMED_OUT``,
+  ``CANCELLED``, ``FAILED``, ``SUCCEEDED``) while the snapshot still shows it
+  ``PENDING``/``RUNNING`` is flagged **stale**: qym stopped tracking it (a timeout
+  whose remote cancel failed, or a ``CANCELLING`` give-up) but it may still hold a
+  service worker.
 
 Write side: ``cancel_remote_orphans`` calls ``POST /evals/{id}/cancel`` for remote
-jobs that are in the environment's latest snapshot and match **no** local job. Ids
-that match a local job are refused (they go through ``cancel_jobs``, which keeps the
-job row, linked run and experiment status consistent). Every id sent to the service
-is audit-logged (``eval_remote_job.cancel``); the caller checks the manager role and
-commits.
+jobs that are in the environment's latest snapshot and are orphans (match **no**
+local job) or stale. Ids that match a non-terminal local job are refused (they go
+through ``cancel_jobs``, which keeps the job row, linked run and experiment status
+consistent). Every id sent to the service is audit-logged
+(``eval_remote_job.cancel``, with ``stale`` and the local ``job_id`` for stale
+jobs); the caller checks the manager role and commits.
 
 Caveat: a job whose ``POST /evals`` answer was lost is ``SUBMITTING`` with no
 ``remote_job_id`` until the dispatcher reconciles it, so its remote job shows as an
@@ -61,6 +66,7 @@ from ..db.models import (
     Run,
     RunItem,
 )
+from .eval_dispatcher import is_stale_remote, stale_remote_job_ids
 from .eval_experiments import ACTIVE_JOB_STATUSES, TERMINAL_JOB_STATUSES
 from .eval_remote_queue import read_snapshot
 from .eval_service_client import (
@@ -266,6 +272,8 @@ def environment_summaries(
                 "health_error": env.health_error,
                 "max_inflight_jobs": env.max_inflight_jobs,
                 "inflight": inflight,
+                # Stale remote jobs also take slots of the cap (dispatcher §13).
+                "stale_remote": len(stale_remote_job_ids(db, env.id)),
                 "queued": by_status.get(EvalJobStatus.QUEUED.value, 0),
                 "blocked": by_status.get(EvalJobStatus.BLOCKED.value, 0),
                 "counts": by_status,
@@ -311,6 +319,7 @@ def remote_view(db: Session, env: EvalEnvironment) -> Dict[str, Any]:
     for item in items:
         pair = matched.get(item.get("remote_job_id"))
         match = None
+        stale = False
         if pair is not None:
             job, experiment = pair
             match = {
@@ -319,7 +328,10 @@ def remote_view(db: Session, env: EvalEnvironment) -> Dict[str, Any]:
                 "experiment_name": experiment.name,
                 "status": job.status.value,
             }
-        out_items.append({**item, "orphan": match is None, "match": match})
+            stale = is_stale_remote(item.get("status"), job.status)
+        out_items.append(
+            {**item, "orphan": match is None, "stale": stale, "match": match}
+        )
     return {
         "environment_id": env.id,
         "environment_name": env.name,
@@ -330,6 +342,7 @@ def remote_view(db: Session, env: EvalEnvironment) -> Dict[str, Any]:
         "stale": snapshot["stale"] if snapshot else True,
         "items": out_items,
         "orphan_count": sum(1 for item in out_items if item["orphan"]),
+        "stale_count": sum(1 for item in out_items if item["stale"]),
     }
 
 
@@ -357,30 +370,39 @@ async def cancel_remote_orphans(
     *,
     reason: Optional[str] = None,
 ) -> Tuple[Dict[str, str], Dict[str, str]]:
-    """Cancel orphan remote jobs directly on the service (manager only, plan §12.2a).
+    """Cancel orphan and stale remote jobs directly on the service (manager only).
 
     Returns ``(outcomes, errors)``: per id ``cancelled``, ``already_terminal``,
-    ``not_found``, ``refused_local_job``, ``not_in_snapshot`` or ``error`` (with a
+    ``not_found``, ``refused_local_job`` (matches a non-terminal local job, or a
+    local job but not the snapshot), ``not_in_snapshot`` or ``error`` (with a
     redacted message in ``errors``). After a 401 the remaining ids are not sent.
+    A cancelled stale job gets ``remote_status = CANCELLED`` on its local row.
     One ``AuditLog`` entry per id sent to the service. The caller checks the manager
     role, closes the client and commits.
     """
     ids = list(dict.fromkeys(rid for rid in remote_job_ids if rid))
     snapshot = read_snapshot(db, env.id)
-    in_snapshot = {
-        item.get("remote_job_id") for item in (snapshot or {}).get("items") or []
+    snapshot_status = {
+        item.get("remote_job_id"): item.get("status")
+        for item in (snapshot or {}).get("items") or []
     }
     local = local_jobs_by_remote_id(db, env.id, ids)
     outcomes: Dict[str, str] = {}
     errors: Dict[str, str] = {}
     auth_failed = False
     for rid in ids:
+        if rid not in snapshot_status:
+            outcomes[rid] = (
+                ORPHAN_REFUSED_LOCAL if rid in local else ORPHAN_NOT_IN_SNAPSHOT
+            )
+            continue
+        stale_job: Optional[EvalExperimentJob] = None
         if rid in local:
-            outcomes[rid] = ORPHAN_REFUSED_LOCAL
-            continue
-        if rid not in in_snapshot:
-            outcomes[rid] = ORPHAN_NOT_IN_SNAPSHOT
-            continue
+            job = local[rid][0]
+            if not is_stale_remote(snapshot_status[rid], job.status):
+                outcomes[rid] = ORPHAN_REFUSED_LOCAL
+                continue
+            stale_job = job
         if auth_failed:
             outcomes[rid] = ORPHAN_ERROR
             errors[rid] = "Evaluation service rejected the environment API key"
@@ -403,6 +425,21 @@ async def cancel_remote_orphans(
             errors[rid] = f"Remote cancel failed: {type(exc).__name__}"
         else:
             outcomes[rid] = ORPHAN_CANCELLED
+            if stale_job is not None:
+                stale_job.remote_status = "CANCELLED"
+        after: Dict[str, Any] = {
+            "outcome": outcomes[rid],
+            "environment_id": env.id,
+            "project_id": env.project_id,
+            "reason": reason,
+            "orphan": stale_job is None,
+        }
+        if stale_job is not None:
+            after.update(
+                stale=True,
+                job_id=stale_job.id,
+                job_status=stale_job.status.value,
+            )
         db.add(
             AuditLog(
                 actor_user_id=principal.user.id,
@@ -410,13 +447,7 @@ async def cancel_remote_orphans(
                 entity_type="eval_remote_job",
                 entity_id=rid,
                 before={},
-                after={
-                    "outcome": outcomes[rid],
-                    "environment_id": env.id,
-                    "project_id": env.project_id,
-                    "reason": reason,
-                    "orphan": True,
-                },
+                after=after,
             )
         )
     _drop_from_snapshot(
