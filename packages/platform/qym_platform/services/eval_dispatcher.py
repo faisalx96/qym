@@ -223,11 +223,25 @@ def recompute_experiment_status(
 
     Delegates to ``eval_experiments.recompute_experiment_status``: one aggregate rule
     (``aggregate_status``) for the API, the queue and the dispatcher.
+
+    On Postgres the experiment row is locked first (``FOR UPDATE``, reloaded), so
+    workers settling sibling jobs recompute one after another and each one reads the
+    jobs the previous one committed. Without the lock, two workers finishing the last
+    two jobs at once each saw the other's job still running under READ COMMITTED, and
+    the experiment stayed ``RUNNING`` forever (#40). SQLite serializes writers anyway.
     """
-    experiment = db.get(EvalExperiment, experiment_id)
+    db.flush()
+    if _is_postgres(db):
+        experiment = db.execute(
+            select(EvalExperiment)
+            .where(EvalExperiment.id == experiment_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).scalar_one_or_none()
+    else:
+        experiment = db.get(EvalExperiment, experiment_id)
     if experiment is None:
         return None
-    db.flush()
     return _recompute_experiment_status(db, experiment)
 
 
