@@ -165,6 +165,18 @@ def test_controls_respect_permissions():
     assert MODULE.count("disabled: !allowed") >= 2
 
 
+def test_high_retry_asks_for_preemption_acknowledgement():
+    # #14: a HIGH retry is refused with PREEMPTION_ACK_REQUIRED until the user
+    # confirms the server's warning; the page then resends with the flag.
+    from qym_platform.services.eval_priority import PREEMPTION_ACK_REQUIRED
+
+    assert f"const PREEMPTION_ACK_REQUIRED = '{PREEMPTION_ACK_REQUIRED}';" in MODULE
+    retry = MODULE[MODULE.index("async function retryJob") :]
+    retry = retry[: retry.index("\n  }\n")]
+    assert "detail.code === PREEMPTION_ACK_REQUIRED" in retry
+    assert retry.index("confirmDialog(") < retry.index("acknowledge_preemption: true")
+
+
 def test_detail_polls_while_jobs_are_live_and_pauses_when_hidden():
     assert "!isTerminal(job.status)" in MODULE
     assert "document.hidden" in MODULE

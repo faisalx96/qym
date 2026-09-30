@@ -30,6 +30,8 @@
   const PAGE_SIZE = 50;
   const POLL_MIN_MS = 5000;
   const POLL_MAX_MS = 60000;
+  // services/eval_priority.PREEMPTION_ACK_REQUIRED: a HIGH retry needs acknowledge_preemption.
+  const PREEMPTION_ACK_REQUIRED = 'preemption_acknowledgement_required';
 
   const EXPERIMENT_TONES = {
     QUEUED: 'neutral', RUNNING: 'info', COMPLETED: 'success',
@@ -146,6 +148,7 @@
   function errorMessage(data, fallback) {
     const detail = data && data.detail;
     if (typeof detail === 'string' && detail) return detail;
+    if (detail && typeof detail.message === 'string' && detail.message) return detail.message;
     if (Array.isArray(detail)) return detail.map((e) => (e && e.msg) || String(e)).join('; ');
     return fallback || 'Request failed';
   }
@@ -775,9 +778,28 @@
   async function retryJob(job) {
     const x = state.detail;
     if (!x || state.busy[job.id]) return;
+    const path = experimentsPath('/' + encodeURIComponent(x.id) + '/jobs/' + encodeURIComponent(job.id) + '/retry');
     state.busy[job.id] = true;
     renderDetail();
-    const res = await postJson(experimentsPath('/' + encodeURIComponent(x.id) + '/jobs/' + encodeURIComponent(job.id) + '/retry'), {});
+    let res = await postJson(path, {});
+    const detail = res.data && res.data.detail;
+    if (!res.ok && res.status === 422 && detail && detail.code === PREEMPTION_ACK_REQUIRED) {
+      // HIGH preempts other users' jobs (plan §5.3): the server's warning names the
+      // environment; retry only after an explicit acknowledgement.
+      const ok = state.active && await confirmDialog({
+        title: 'Retry job #' + job.combo_index + ' at HIGH priority?',
+        description: [errorMessage(res.data, '')],
+        confirmLabel: 'Retry at HIGH',
+        cancelLabel: 'Don’t retry',
+        confirmClass: 'shell-btn-danger',
+      });
+      if (!ok) {
+        delete state.busy[job.id];
+        if (state.active) renderDetail();
+        return;
+      }
+      res = await postJson(path, { acknowledge_preemption: true });
+    }
     delete state.busy[job.id];
     if (!state.active) return;
     if (!res.ok) { handleDenied(res, 'Failed to retry the job'); return; }
