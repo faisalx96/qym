@@ -83,6 +83,9 @@ def _preset_payload(
         can_publish_versions=eval_presets.can_publish(
             preset, user_id=user_id, is_manager=is_manager
         ),
+        created_by=eval_presets.user_briefs(db, [preset.created_by_user_id]).get(
+            preset.created_by_user_id or ""
+        ),
     )
 
 

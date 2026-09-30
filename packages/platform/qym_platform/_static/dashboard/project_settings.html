@@ -14,6 +14,8 @@
     .settings-header { margin-bottom: var(--space-xl); }
     .settings-header h1 { font-size: var(--font-title); font-weight: 600; margin: 0; letter-spacing: -0.3px; }
     .settings-header p { font-size: var(--font-sm); color: var(--text-muted); margin-top: 6px; }
+    /* The official-defaults editor (#30) replaces the page while it is open. */
+    .settings-header[hidden], .settings-tabs[hidden], .settings-panel[hidden], .ps-editor-host[hidden] { display: none; }
 
     .settings-tabs { margin-bottom: var(--space-lg); overflow-x: auto; }
 
@@ -186,9 +188,15 @@
     }
   </style>
   <link rel="stylesheet" href="/static/eval_environments.css?v=eval-environments-20260929-1">
+  <link rel="stylesheet" href="/static/eval_official_defaults.css?v=eval-official-defaults-20260930-1">
   <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60">
   <script defer src="/static/ui_components.js?v=ui-consistency-20260803-28"></script>
-  <script src="/static/eval_environments.js?v=eval-environments-20260930-2"></script>
+  <script src="/static/eval_environments.js?v=eval-environments-20260930-3"></script>
+  <!-- Official defaults editor (#30): the launch form in editor mode; its stylesheets are added on mount. -->
+  <script src="/static/eval_temporary_model.js?v=eval-temporary-model-20260930-1"></script>
+  <script src="/static/experiment_launch_advanced.js?v=experiment-launch-advanced-20260930-3"></script>
+  <script src="/static/experiment_launch.js?v=experiment-launch-20260930-5"></script>
+  <script src="/static/eval_official_defaults.js?v=eval-official-defaults-20260930-1"></script>
 </head>
 <body>
   <main class="settings-page">
@@ -419,6 +427,8 @@
         </div>
       </div>
     </div>
+    <!-- Official defaults editor (#30); mounted by eval_official_defaults.js. -->
+    <div class="ps-editor-host" id="env-editor-host" hidden></div>
   </main>
 
   <script>
@@ -510,13 +520,14 @@
       }
 
       // ── Evaluation Service environments (members read, managers write) ──
+      let envPanel = null;
       function mountEnvironments() {
         const tbody = document.getElementById('environments-tbody');
         if (!window.QymEvalEnvironments) {
           tbody.innerHTML = '<tr><td colspan="9"><div class="note" style="margin:0">Environments UI failed to load.</div></td></tr>';
           return;
         }
-        window.QymEvalEnvironments.mountEnvironmentsPanel({
+        envPanel = window.QymEvalEnvironments.mountEnvironmentsPanel({
           projectId: state.project.id,
           projectSlug: state.project.slug,
           canManage: canManageMembers(),
@@ -524,6 +535,25 @@
           addButton: document.getElementById('add-environment-btn'),
           note: document.getElementById('env-panel-note'),
           onGotoApiKeys: () => document.getElementById('settings-tab-apikeys').click(),
+          onEditOfficial: openOfficialDefaultsEditor,
+        });
+      }
+
+      // Environments → env → Official defaults (#30): the launch form without sweeps.
+      function openOfficialDefaultsEditor({ env, fromVersion }) {
+        if (!window.QymOfficialDefaults) return;
+        window.QymOfficialDefaults.openEditor({
+          host: document.getElementById('env-editor-host'),
+          hide: [
+            document.querySelector('.settings-header'),
+            document.querySelector('.settings-tabs'),
+            document.getElementById('panel-environments'),
+          ],
+          project: state.project,
+          me: state.me,
+          env,
+          fromVersion,
+          onPublished: () => { if (envPanel) envPanel.reload(); },
         });
       }
 

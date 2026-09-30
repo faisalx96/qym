@@ -45,6 +45,7 @@ from qym_platform.db.models import (
     EvalModelSlot,
     EvalModelSlotStatus,
     ProjectLlmConnection,
+    User,
 )
 from qym_platform.services.eval_config import binding_kind, validate_config_document
 from qym_platform.services.eval_model_slots import (
@@ -943,6 +944,23 @@ def remap_version(
 # --------------------------------------------------------------------------- payloads
 
 
+def user_briefs(db: Session, ids: Iterable[Optional[str]]) -> Dict[str, Dict[str, str]]:
+    """``{user_id: {"id", "name"}}`` for authors shown in the UI (no emails)."""
+    wanted = {i for i in ids if i}
+    if not wanted:
+        return {}
+    rows = db.query(User.id, User.display_name, User.email).filter(User.id.in_(wanted))
+    return {
+        row.id: {
+            "id": row.id,
+            "name": (row.display_name or "").strip()
+            or (row.email or "").split("@")[0]
+            or row.id,
+        }
+        for row in rows.all()
+    }
+
+
 def version_payloads(
     db: Session,
     env: EvalEnvironment,
@@ -963,6 +981,7 @@ def version_payloads(
     connections = _load_connections(
         db, env.project_id, _connection_ids(v.config for v in versions)
     )
+    authors = user_briefs(db, (v.published_by_user_id for v in versions))
     payloads = []
     for version in versions:
         warnings = connection_warnings(version.config, connections)
@@ -988,6 +1007,7 @@ def version_payloads(
                 "config": copy.deepcopy(version.config),
                 "notes": version.notes,
                 "published_by_user_id": version.published_by_user_id,
+                "published_by": authors.get(version.published_by_user_id or ""),
                 "published_at": to_api_timestamp(version.published_at),
                 "warnings": warnings,
             }
@@ -1000,6 +1020,7 @@ def preset_payload(
     current: Optional[Dict[str, Any]],
     *,
     can_publish_versions: bool,
+    created_by: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     return {
         "id": preset.id,
@@ -1010,6 +1031,7 @@ def preset_payload(
         "current_version": current,
         "can_publish": can_publish_versions,
         "created_by_user_id": preset.created_by_user_id,
+        "created_by": created_by,
         "created_at": to_api_timestamp(preset.created_at),
         "updated_at": to_api_timestamp(preset.updated_at),
     }

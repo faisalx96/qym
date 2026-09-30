@@ -1,0 +1,58 @@
+/*
+ * Official defaults history and saved presets in the environment drawer
+ * (plan §9.1, §12.1; issue #30): eval_official_defaults.js. Page-local recipes
+ * use the odx- prefix; sections, callouts and key/value lists reuse the env-
+ * recipes of eval_environments.css, and the editor itself is the launch form
+ * (experiment_launch.css). Tokens only (docs/DESIGN_LANGUAGE.md).
+ */
+
+.odx-muted { color: var(--text-muted); font-size: var(--font-sm); }
+.odx-notes { color: var(--text-secondary); font-size: var(--font-base); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.odx-subtitle { display: flex; align-items: center; gap: var(--space-xs); color: var(--text-primary); font-size: var(--font-md); font-weight: 600; }
+
+/* Version history */
+.odx-history { display: grid; gap: var(--space-xs); }
+.odx-version { border: 1px solid var(--border-subtle); border-radius: var(--control-radius); background: var(--bg-elevated); }
+.odx-version > summary {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-sm);
+  padding: var(--space-sm) var(--space-md); cursor: pointer; list-style: none;
+}
+.odx-version > summary::-webkit-details-marker { display: none; }
+.odx-version > summary:focus-visible { outline: 1px solid var(--accent-primary); outline-offset: -1px; }
+.odx-version-author { color: var(--text-secondary); font-size: var(--font-base); }
+.odx-version-date { color: var(--text-muted); font-size: var(--font-sm); }
+.odx-version-notes {
+  flex: 1 1 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text-muted); font-size: var(--font-sm);
+}
+.odx-version[open] .odx-version-notes { display: none; }
+.odx-version-body { display: grid; gap: var(--space-sm); padding: 0 var(--space-md) var(--space-md); }
+.odx-version-actions { display: flex; justify-content: flex-end; }
+
+/* Read-only view of a version */
+.odx-view { display: grid; gap: var(--space-sm); }
+.odx-kv-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+.odx-kv-list li { overflow-wrap: anywhere; font-family: var(--font-mono); font-size: var(--font-base); color: var(--text-muted); }
+.odx-kv-name { color: var(--text-secondary); }
+.odx-kv-value { color: var(--text-primary); }
+.odx-json > summary { cursor: pointer; color: var(--text-muted); font-size: var(--font-sm); font-weight: 600; }
+.odx-pre {
+  margin: var(--space-xs) 0 0; padding: var(--space-sm) var(--space-md); max-height: calc(var(--space-xl) * 10); overflow: auto;
+  border: 1px solid var(--border-subtle); border-radius: var(--control-radius); background: var(--bg-surface);
+  color: var(--text-secondary); font-family: var(--font-mono); font-size: var(--font-base); line-height: 1.5; white-space: pre;
+}
+
+/* Saved presets */
+.odx-table-wrap { overflow-x: auto; }
+.odx-table { width: 100%; border-collapse: collapse; }
+.odx-table th {
+  padding: var(--space-xs) var(--space-sm); border-bottom: 1px solid var(--border-subtle); text-align: left;
+  background: var(--bg-elevated); color: var(--text-muted); font-size: var(--font-sm); font-weight: 650;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.odx-table td {
+  padding: var(--space-sm); border-bottom: 1px solid var(--border-subtle); vertical-align: middle;
+  color: var(--text-secondary); font-size: var(--font-base);
+}
+.odx-table .odx-actions-cell { text-align: right; white-space: nowrap; }
+.odx-preset-name { color: var(--text-primary); font-weight: 600; overflow-wrap: anywhere; }

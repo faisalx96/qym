@@ -6,7 +6,10 @@
  *
  *   mountEnvironmentsPanel({ projectId, canManage, tbody, addButton, note, onGotoApiKeys })
  *   openAddDialog({ projectId, onChange, onGotoApiKeys })        3-step add dialog
- *   openEnvironmentDrawer({ projectId, env, canManage, onChange }) detail drawer
+ *   openEnvironmentDrawer({ projectId, projectSlug, env, canManage, onChange, onEditOfficial })
+ *                                    detail drawer; its presets section (official
+ *                                    defaults + saved presets, #30) is
+ *                                    QymOfficialDefaults.renderDrawerSection
  *   createSlotEditor({...})                                       "Group LLM settings"
  *   renderFormPreview(descriptor)                                 read-only generated form
  *   HIGH_PRIORITY_WARNING / highPriorityWarning(envName)          §5.3 preemption text
@@ -1218,7 +1221,6 @@
             <input class="shell-form-input env-mono-input" id="env-drawer-key" type="password" maxlength="4096" autocomplete="new-password" spellcheck="false" placeholder="${esc(env.api_key_set ? `Leave blank to keep ${env.api_key_hint || 'the stored key'}` : 'Paste the service API key')}">
           </div>
         </section>` : ''}
-        <!-- Presets (#28/#30): official defaults and saved presets render here. -->
         <div class="env-error" data-drawer-error role="alert"></div>`;
     }
 
@@ -1245,7 +1247,27 @@
       });
     }
 
-    const SECTIONS = { status: statusSection, schema: schemaSection, slots: slotsSection, settings: settingsSection };
+    /** Official defaults and saved presets (#30): eval_official_defaults.js fills it. */
+    function presetsSection() {
+      return '<div data-drawer-presets></div>';
+    }
+
+    function renderPresets() {
+      const target = drawer.body.querySelector('[data-drawer-presets]');
+      if (!target || !window.QymOfficialDefaults) return;
+      window.QymOfficialDefaults.renderDrawerSection(target, {
+        projectId: opts.projectId,
+        projectSlug: opts.projectSlug || projectSlugFromPath(),
+        env: st.env,
+        // Only the settings page hosts the editor; elsewhere the history is read-only.
+        onEdit: opts.onEditOfficial ? (payload) => {
+          drawer.close();
+          opts.onEditOfficial(Object.assign({ env: st.env }, payload));
+        } : null,
+      });
+    }
+
+    const SECTIONS = { status: statusSection, schema: schemaSection, slots: slotsSection, presets: presetsSection, settings: settingsSection };
 
     /** Re-render one section only, so unsaved inputs elsewhere survive. */
     function renderSection(name) {
@@ -1254,6 +1276,7 @@
       if (name === 'settings') st.keysTouched = false;
       el.innerHTML = SECTIONS[name]();
       if (name === 'slots') renderSlots();
+      if (name === 'presets') renderPresets();
     }
 
     function render() {
@@ -1262,6 +1285,7 @@
       st.keysTouched = false;
       drawer.setBody(Object.keys(SECTIONS).map((name) => `<div class="env-section-slot" data-sec="${name}">${SECTIONS[name]()}</div>`).join(''));
       renderSlots();
+      renderPresets();
       drawer.setFooter(canManage ? `
         <button class="shell-btn shell-btn-danger env-footer-start" type="button" data-drawer-delete>Delete environment</button>
         <button class="shell-btn shell-btn-secondary" type="button" data-drawer-close>Close</button>
@@ -1272,7 +1296,7 @@
     function renderEnvSections() {
       drawer.setTitle(st.env.name);
       drawer.setSubtitle(st.env.base_url);
-      ['status', 'schema', 'settings'].forEach(renderSection);
+      ['status', 'schema', 'presets', 'settings'].forEach(renderSection);
       if (!st.editing) renderSection('slots');
     }
 
@@ -1358,7 +1382,7 @@
       st.diff = res.data;
       await loadDetails();
       st.editing = canManage && !!res.data.needs_confirmation;
-      ['status', 'schema', 'slots'].forEach(renderSection);
+      ['status', 'schema', 'slots', 'presets'].forEach(renderSection);
       notifyChange();
     }
 
@@ -1583,7 +1607,10 @@
             done();
           }
         } else if (button.dataset.envOpen) {
-          openEnvironmentDrawer({ projectId: ctl.opts.projectId, env, canManage: ctl.opts.canManage, onChange: () => ctl.reload() });
+          openEnvironmentDrawer({
+            projectId: ctl.opts.projectId, projectSlug: ctl.opts.projectSlug, env, canManage: ctl.opts.canManage,
+            onChange: () => ctl.reload(), onEditOfficial: ctl.opts.onEditOfficial,
+          });
         } else if (button.dataset.envTest && ctl.opts.canManage) {
           const done = spinnerLabel(button, '');
           const res = await request(envPath(ctl.opts.projectId, `/${encodeURIComponent(env.id)}/test`), sendJson('POST'));
