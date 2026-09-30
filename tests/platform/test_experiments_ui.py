@@ -118,9 +118,10 @@ def test_module_consumes_experiments_api():
         "v1/projects/by-slug/",
     ):
         assert path in MODULE, path
-    # Detail is ?experiment=<id>; the launch form (#23) is only a disabled entry.
+    # Detail is ?experiment=<id>; the launch form (#23) is ?new=1.
     assert "'?experiment='" in MODULE and "params.get('experiment')" in MODULE
-    assert "'data-exp-new': '1'" in MODULE and "disabled: true" in MODULE
+    assert "'data-exp-new': '1'" in MODULE
+    assert "navigate(projectPage('/experiments?new=1'))" in MODULE
 
 
 def test_list_has_required_columns_and_empty_best_score():

@@ -41,6 +41,7 @@ from qym_platform.secrets import (
     encrypt_llm_api_key,
     encryption_available,
 )
+from qym_platform.services.eval_bindings import connection_options
 from qym_platform.services.eval_model_slots import (
     SlotValidationError,
     confirm_model_slots,
@@ -861,6 +862,35 @@ def get_model_slots(
         )
         payload["proposal"] = proposal.to_dict() if proposal else None
     return payload
+
+
+@router.get(_PREFIX + "/{env_id}/model-options")
+def get_model_options(
+    project_id: str,
+    env_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Launch-form model picker (#23): project models per confirmed slot. Secret-free.
+
+    Wraps ``eval_bindings.connection_options``: each connection's availability for
+    the environment and for each confirmed slot, plus whether temporary-model keys
+    are accepted (``temporary_keys_allowed``/``temporary_keys_reason``).
+    """
+    _require_project_access(db, principal, project_id)
+    env = _get_environment(db, project_id, env_id)
+    schema = _current_schema(db, env)
+    slots = [
+        slot
+        for slot in list_model_slots(db, schema.id)
+        if slot.status == EvalModelSlotStatus.CONFIRMED
+    ]
+    return {
+        "schema_id": schema.id,
+        **connection_options(
+            db, env, slots, descriptor=descriptor_for_schema(schema)
+        ),
+    }
 
 
 @router.put(_PREFIX + "/{env_id}/model-slots")

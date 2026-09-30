@@ -1,0 +1,108 @@
+/*
+ * New-experiment launch form (plan §12.2, issue #23): experiment_launch.js.
+ * Page-local recipes use the xl- prefix. Controls, inline actions, badges,
+ * tags, segmented controls and icon actions come from ui_components.css and
+ * are never restyled here. Tokens only (docs/DESIGN_LANGUAGE.md).
+ */
+
+.xl-page { }
+.xl-back { display: inline-block; margin-bottom: var(--space-sm); color: var(--text-muted); font-size: var(--font-sm); text-decoration: none; }
+.xl-back:hover { color: var(--accent-primary); }
+.xl-title { margin: 0; font-size: var(--font-title); font-weight: 650; color: var(--text-primary); letter-spacing: -0.3px; }
+.xl-description { margin: 6px 0 0; font-size: var(--font-base); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xl-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-sm); margin: var(--space-sm) 0 var(--space-lg); font-size: var(--font-base); color: var(--text-muted); }
+.xl-meta-sep { color: var(--text-dim); }
+
+.xl-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--space-lg); align-items: start; }
+.xl-main { min-width: 0; }
+@media (max-width: 1100px) {
+  .xl-layout { grid-template-columns: minmax(0, 1fr); }
+  .xl-preview { position: static; max-height: none; }
+}
+
+/* Sections */
+.xl-card { background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: 8px; margin-bottom: var(--space-lg); }
+.xl-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-md); padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--border-subtle); }
+.xl-card-body { padding: var(--space-md) var(--space-lg); display: grid; gap: var(--space-md); }
+.xl-section-title { margin: 0; font-size: var(--font-lg); font-weight: 600; color: var(--text-primary); }
+.xl-section-description { margin: 2px 0 0; font-size: var(--font-sm); color: var(--text-muted); }
+.xl-step { font-family: var(--font-mono); color: var(--text-muted); margin-right: var(--space-xs); }
+.xl-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); }
+.xl-spacer { flex: 1; }
+.xl-label { display: block; margin-bottom: var(--space-xs); font-size: var(--font-sm); font-weight: 600; color: var(--text-muted); }
+.xl-hint { font-size: var(--font-sm); color: var(--text-muted); line-height: 1.5; }
+.xl-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.xl-muted { color: var(--text-muted); }
+.xl-error-text { color: var(--error); font-size: var(--font-sm); }
+.xl-wide { width: 100%; box-sizing: border-box; }
+.xl-grow { flex: 1; min-width: 180px; }
+.xl-link-btn { padding: 0; border: 0; background: none; color: var(--accent-primary); font: inherit; font-size: var(--font-sm); cursor: pointer; }
+.xl-link-btn:hover { text-decoration: underline; }
+
+.xl-callout { display: flex; align-items: flex-start; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); border: 1px solid var(--border-default); border-radius: var(--control-radius); background: var(--bg-elevated); font-size: var(--font-sm); color: var(--text-secondary); line-height: 1.5; }
+.xl-callout--warning { border-color: var(--warning); color: var(--text-primary); }
+.xl-callout--error { border-color: var(--error); color: var(--text-primary); }
+
+/* Environment picker */
+.xl-env-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--space-sm); }
+.xl-env-option { display: flex; align-items: flex-start; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); border: 1px solid var(--border-default); border-radius: var(--control-radius); background: var(--bg-elevated); cursor: pointer; }
+.xl-env-option:hover { border-color: var(--border-strong); }
+.xl-env-option--selected { border-color: var(--accent-primary); }
+.xl-env-option input { margin-top: 2px; accent-color: var(--accent-primary); }
+.xl-env-name { font-size: var(--font-md); font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
+.xl-env-sub { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-top: var(--space-xs); }
+
+/* Model cards */
+.xl-models { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-sm); }
+.xl-model-card { display: grid; gap: var(--space-sm); padding: var(--space-md); border: 1px solid var(--border-default); border-radius: 8px; background: var(--bg-elevated); }
+.xl-model-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
+.xl-model-title { font-size: var(--font-md); font-weight: 600; color: var(--text-primary); margin-right: var(--space-xs); }
+.xl-model-bound { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
+
+/* Settings form */
+.xl-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); }
+.xl-check { display: inline-flex; align-items: center; gap: var(--space-xs); font-size: var(--font-sm); color: var(--text-muted); cursor: pointer; }
+.xl-check input { accent-color: var(--accent-primary); }
+.xl-group { border: 1px solid var(--border-subtle); border-radius: var(--control-radius); background: var(--bg-surface); }
+.xl-group > summary { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); cursor: pointer; list-style: none; font-size: var(--font-md); font-weight: 600; color: var(--text-primary); }
+.xl-group > summary::-webkit-details-marker { display: none; }
+.xl-group > summary::before { content: "▶"; color: var(--text-dim); font-size: var(--font-sm); transition: transform 0.15s ease; }
+.xl-group[open] > summary::before { transform: rotate(90deg); }
+.xl-group-count { font-family: var(--font-mono); font-size: var(--font-sm); font-weight: 400; color: var(--text-muted); }
+.xl-group-body { display: grid; gap: var(--space-sm); padding: 0 var(--space-md) var(--space-md); }
+.xl-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-sm) var(--space-md); }
+.xl-field { display: grid; gap: var(--space-xs); align-content: start; min-width: 0; }
+.xl-field-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); min-height: 20px; }
+.xl-field-label { font-size: var(--font-sm); font-weight: 600; color: var(--text-muted); overflow-wrap: anywhere; }
+.xl-field-name { font-family: var(--font-mono); font-size: var(--font-sm); color: var(--text-muted); overflow-wrap: anywhere; }
+.xl-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-primary); flex: none; }
+.xl-field:not(.xl-field--changed) .xl-dot,
+.xl-field:not(.xl-field--changed) .xl-reset { display: none; }
+.xl-field--error .xl-field-label { color: var(--error); }
+.xl-textarea { width: 100%; box-sizing: border-box; min-height: 56px; padding: var(--space-xs) var(--space-sm); border: 1px solid var(--border-default); border-radius: var(--control-radius); background: var(--bg-elevated); color: var(--text-primary); font-family: var(--font-mono); font-size: var(--font-sm); resize: vertical; }
+.xl-textarea:focus { outline: none; border-color: var(--accent-primary); }
+.xl-flash { outline: 2px solid var(--warning); outline-offset: 2px; }
+.xl-object { display: grid; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); border-left: 2px solid var(--border-subtle); }
+.xl-object-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); font-size: var(--font-md); font-weight: 600; color: var(--text-primary); }
+.xl-table-wrap { overflow-x: auto; max-height: 420px; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: var(--control-radius); }
+.xl-role-table { border-collapse: collapse; width: max-content; min-width: 100%; }
+.xl-role-table th { position: sticky; top: 0; z-index: 1; padding: var(--space-xs) var(--space-sm); background: var(--bg-elevated); font-size: var(--font-sm); font-weight: 650; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; text-align: left; white-space: nowrap; }
+.xl-role-table td { padding: var(--space-xs) var(--space-sm); border-top: 1px solid var(--border-subtle); font-size: var(--font-base); color: var(--text-secondary); vertical-align: middle; }
+.xl-role-name { font-family: var(--font-mono); color: var(--text-primary); white-space: nowrap; }
+.xl-cell--changed { box-shadow: inset 2px 0 0 var(--accent-primary); }
+.xl-empty { padding: var(--space-md); text-align: center; font-size: var(--font-base); color: var(--text-muted); }
+
+/* Preview */
+.xl-preview { position: sticky; top: var(--space-md); max-height: calc(100vh - 96px); overflow-y: auto; background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: 8px; }
+.xl-preview-body { display: grid; gap: var(--space-md); padding: var(--space-md) var(--space-lg); }
+.xl-summary { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-xs) var(--space-md); margin: 0; font-size: var(--font-base); }
+.xl-summary dt { font-size: var(--font-sm); color: var(--text-muted); }
+.xl-summary dd { margin: 0; color: var(--text-secondary); overflow-wrap: anywhere; }
+.xl-preview-heading { margin: 0 0 var(--space-xs); font-size: var(--font-sm); font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.xl-run-names { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; font-family: var(--font-mono); font-size: var(--font-sm); color: var(--text-secondary); overflow-wrap: anywhere; }
+.xl-errors { display: grid; gap: var(--space-xs); margin: 0; padding: 0; list-style: none; }
+.xl-error-item { display: grid; gap: 2px; width: 100%; padding: var(--space-xs) var(--space-sm); border: 1px solid var(--border-subtle); border-left: 2px solid var(--error); border-radius: var(--control-radius); background: var(--bg-elevated); color: var(--text-primary); font: inherit; font-size: var(--font-sm); text-align: left; cursor: pointer; }
+.xl-error-item:hover { border-color: var(--border-strong); border-left-color: var(--error); }
+.xl-error-where { font-family: var(--font-mono); color: var(--text-muted); overflow-wrap: anywhere; }
+.xl-status { display: flex; align-items: center; gap: var(--space-xs); font-size: var(--font-sm); color: var(--text-muted); }
+.xl-actions { display: flex; justify-content: flex-end; gap: var(--space-xs); }
