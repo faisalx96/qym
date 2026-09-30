@@ -9,6 +9,7 @@
  *   openEnvironmentDrawer({ projectId, env, canManage, onChange }) detail drawer
  *   createSlotEditor({...})                                       "Group LLM settings"
  *   renderFormPreview(descriptor)                                 read-only generated form
+ *   HIGH_PRIORITY_WARNING / highPriorityWarning(envName)          §5.3 preemption text
  *
  * Security: every server or user string goes through esc() before it reaches
  * innerHTML. The environment API key only exists in its password input until
@@ -30,6 +31,12 @@
   const TRANSPORT = ['timeout', 'max_attempts', 'max_connections', 'max_keepalive', 'connect_timeout'];
   const SCALAR_TYPES = ['boolean', 'integer', 'number', 'string', 'enum'];
   const PRIORITIES = ['LOW', 'NORMAL', 'HIGH'];
+  // Mirrors HIGH_PRIORITY_WARNING in services/eval_priority.py (plan §5.3). The launch
+  // form reuses it through window.QymEvalEnvironments.highPriorityWarning.
+  const HIGH_PRIORITY_WARNING = 'Launching at HIGH cancels every running LOW/NORMAL job on {env} for all users.';
+  function highPriorityWarning(envName) {
+    return HIGH_PRIORITY_WARNING.replace('{env}', envName);
+  }
   const DIFF_LIMIT = 50;
   const KEYS_HELP = 'Send project LLM connection API keys to this service when a slot is bound to a connection.';
   const KEYS_HELP_MOVED = 'Turned off because the URL changed. Tick it again to send connection keys to the new host.';
@@ -1134,6 +1141,12 @@
         </section>`;
     }
 
+    /** Shown while HIGH is the max priority: HIGH launches preempt everyone (§5.3). */
+    function highWarningHtml(maxPriority) {
+      if (maxPriority !== 'HIGH') return '';
+      return `<div class="env-callout env-callout--warning" role="note"><div>${esc(highPriorityWarning(st.env.name))}</div></div>`;
+    }
+
     function settingsSection() {
       const env = st.env;
       const disabled = canManage ? '' : ' disabled';
@@ -1174,6 +1187,7 @@
               <input class="shell-form-input env-mono-input" id="env-drawer-inflight" type="number" min="1" max="1000" step="1" value="${esc(env.max_inflight_jobs)}"${disabled}>
             </div>
           </div>
+          <div data-drawer-high-warning>${highWarningHtml(env.max_priority)}</div>
           <label class="shell-form-checkbox" for="env-drawer-connection-keys">
             <input type="checkbox" id="env-drawer-connection-keys"${env.allow_connection_keys ? ' checked' : ''}${disabled}>
             <span class="shell-form-checkbox-copy">
@@ -1386,6 +1400,10 @@
     });
     drawer.el.addEventListener('change', (event) => {
       if (event.target.id === 'env-drawer-connection-keys') st.keysTouched = true;
+      if (event.target.id === 'env-drawer-max-priority') {
+        const slot = drawer.body.querySelector('[data-drawer-high-warning]');
+        if (slot) slot.innerHTML = highWarningHtml(event.target.value);
+      }
     });
 
     drawer.el.addEventListener('click', async (event) => {
@@ -1474,6 +1492,8 @@
     renderFormPreview,
     renderEnvironmentRows,
     officialPresetVersionHtml,
+    HIGH_PRIORITY_WARNING,
+    highPriorityWarning,
     // Exposed for tests and the Experiments page.
     _internal: { esc, expandPointer, endpointCandidates, flatCandidates, countFields, errorMessage },
   };

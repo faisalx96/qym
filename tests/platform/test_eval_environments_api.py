@@ -34,6 +34,7 @@ from qym_platform.db.models import (
     EvalEnvironment,
     EvalEnvironmentSchema,
     EvalModelSlot,
+    EvalPriority,
     Project,
     ProjectMembership,
     ProjectRole,
@@ -410,6 +411,49 @@ def test_connection_key_opt_in_is_manager_only(client, session_factory):
 def test_default_priority_cannot_exceed_max(client):
     res = _create(client, default_priority="HIGH", max_priority="NORMAL")
     assert res.status_code == 400
+    env_id = _created(client)["environment"]["id"]
+    res = client.put(
+        _url(suffix=f"/{env_id}"),
+        headers=_headers(MANAGER),
+        json={"default_priority": "HIGH"},
+    )
+    assert res.status_code == 400
+    res = client.put(
+        _url(suffix=f"/{env_id}"),
+        headers=_headers(MANAGER),
+        json={"max_priority": "LOW"},  # below the NORMAL default
+    )
+    assert res.status_code == 400
+
+
+def test_raising_priorities_to_high_is_manager_only(client, session_factory):
+    res = _create(
+        client,
+        email=MEMBER,
+        name="m",
+        base_url="https://m.io",
+        max_priority="HIGH",
+    )
+    assert res.status_code == 403
+    env_id = _created(client)["environment"]["id"]
+    for body in (
+        {"max_priority": "HIGH"},
+        {"max_priority": "HIGH", "default_priority": "HIGH"},
+    ):
+        res = client.put(_url(suffix=f"/{env_id}"), headers=_headers(MEMBER), json=body)
+        assert res.status_code == 403
+    with session_factory() as s:
+        env = s.get(EvalEnvironment, env_id)
+        assert env.max_priority == EvalPriority.NORMAL
+        assert env.default_priority == EvalPriority.NORMAL
+
+    res = client.put(
+        _url(suffix=f"/{env_id}"),
+        headers=_headers(MANAGER),
+        json={"max_priority": "HIGH", "default_priority": "HIGH"},
+    )
+    assert res.status_code == 200
+    assert res.json()["max_priority"] == res.json()["default_priority"] == "HIGH"
 
 
 # --------------------------------------------------------------------------- update

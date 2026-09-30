@@ -549,6 +549,9 @@ def test_priority_caps_and_high_gating(client, session_factory, env):
         default_priority=EvalPriority.LOW,
     )
     assert _create(client, [high_env.id], priority="HIGH").status_code == 403
+    # A non-manager is refused even with the acknowledgement.
+    res = _create(client, [high_env.id], priority="HIGH", acknowledge_preemption=True)
+    assert res.status_code == 403
     body = _created(
         client,
         [high_env.id],
@@ -562,6 +565,128 @@ def test_priority_caps_and_high_gating(client, session_factory, env):
 
     # Without a requested priority, the lowest environment default is used.
     assert _created(client, [high_env.id, env.id])["priority"] == "LOW"
+
+
+def test_high_priority_requires_preemption_acknowledgement(
+    client, session_factory, env
+):
+    high_env = _add_env(session_factory, "high", max_priority=EvalPriority.HIGH)
+    warning = (
+        "Launching at HIGH cancels every running LOW/NORMAL job on high for all users."
+    )
+
+    res = _create(client, [high_env.id], priority="HIGH", email=MANAGER)
+    assert res.status_code == 422
+    detail = res.json()["detail"]
+    assert detail["code"] == "preemption_acknowledgement_required"
+    assert warning in detail["message"]
+    res = _create(
+        client,
+        [high_env.id],
+        priority="HIGH",
+        email=MANAGER,
+        acknowledge_preemption=False,
+    )
+    assert res.status_code == 422
+    with session_factory() as s:
+        assert s.query(EvalExperiment).count() == 0
+
+    # A HIGH environment default counts as a HIGH request.
+    default_high = _add_env(
+        session_factory,
+        "default-high",
+        max_priority=EvalPriority.HIGH,
+        default_priority=EvalPriority.HIGH,
+    )
+    res = _create(client, [default_high.id], email=MANAGER)
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "preemption_acknowledgement_required"
+
+    # A dry run previews the warning instead of requiring the acknowledgement.
+    preview = _create(
+        client, [high_env.id], priority="HIGH", email=MANAGER, dry_run=True
+    ).json()
+    assert preview["ok"] is True and preview["preemption_warning"] == warning
+    normal = _create(client, [env.id], dry_run=True).json()
+    assert normal["preemption_warning"] is None
+
+    # The acknowledgement flag is irrelevant below HIGH.
+    body = _created(client, [env.id], acknowledge_preemption=True)
+    assert body["priority"] == "NORMAL" and body["preemption_acknowledged_at"] is None
+
+
+def test_high_retry_rechecks_manager_cap_and_acknowledgement(client, session_factory):
+    high_env = _add_env(session_factory, "high", max_priority=EvalPriority.HIGH)
+    created = _created(
+        client,
+        [high_env.id],
+        priority="HIGH",
+        email=MANAGER,
+        acknowledge_preemption=True,
+    )
+    (job,) = _jobs(session_factory, created["id"])
+    _set_job(session_factory, job.id, status=EvalJobStatus.FAILED)
+    retry_path = _url(suffix=f"/{created['id']}/jobs/{job.id}/retry")
+    ack = {"acknowledge_preemption": True}
+
+    # Missing acknowledgement (no body, or false) is refused before anything changes.
+    res = client.post(retry_path, headers=_headers(MANAGER))
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "preemption_acknowledgement_required"
+    res = client.post(
+        retry_path, headers=_headers(MANAGER), json={"acknowledge_preemption": False}
+    )
+    assert res.status_code == 422
+    assert len(_jobs(session_factory, created["id"])) == 1
+
+    # The environment cap is re-checked.
+    with session_factory() as s:
+        s.get(EvalEnvironment, high_env.id).max_priority = EvalPriority.NORMAL
+        s.commit()
+    res = client.post(retry_path, headers=_headers(MANAGER), json=ack)
+    assert res.status_code == 422 and "exceeds" in res.json()["detail"]
+    with session_factory() as s:
+        s.get(EvalEnvironment, high_env.id).max_priority = EvalPriority.HIGH
+        s.commit()
+
+    res = client.post(retry_path, headers=_headers(MANAGER), json=ack)
+    assert res.status_code == 200, res.text
+    new = next(j for j in _jobs(session_factory, created["id"]) if j.id != job.id)
+    assert new.request_body["priority"] == "HIGH"
+    with session_factory() as s:
+        experiment = s.get(EvalExperiment, created["id"])
+        assert experiment.preemption_acknowledged_at is not None
+        audit = s.query(AuditLog).filter(AuditLog.action == "eval_job.retry").one()
+        assert audit.after["priority"] == "HIGH"
+
+
+def test_high_retry_by_non_manager_creator_is_refused(client, session_factory):
+    high_env = _add_env(session_factory, "high", max_priority=EvalPriority.HIGH)
+    created = _created(
+        client,
+        [high_env.id],
+        priority="HIGH",
+        email=MANAGER,
+        acknowledge_preemption=True,
+    )
+    (job,) = _jobs(session_factory, created["id"])
+    _set_job(session_factory, job.id, status=EvalJobStatus.FAILED)
+    # The creator is demoted to member: a HIGH retry now needs a manager.
+    with session_factory() as s:
+        membership = (
+            s.query(ProjectMembership)
+            .filter_by(project_id=P1, user_id=created["created_by_user_id"])
+            .one()
+        )
+        membership.role = ProjectRole.MEMBER
+        s.commit()
+    res = client.post(
+        _url(suffix=f"/{created['id']}/jobs/{job.id}/retry"),
+        headers=_headers(MANAGER),
+        json={"acknowledge_preemption": True},
+    )
+    assert res.status_code == 403
+    assert len(_jobs(session_factory, created["id"])) == 1
 
 
 def test_creation_is_rate_limited_per_user(client, env, monkeypatch):
