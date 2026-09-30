@@ -3,9 +3,10 @@
 Routes live under ``/v1/projects/{project_id}/experiments`` (plan §14).
 
 - Members may create (``dry_run`` previews without persisting), list, read and clone.
-  ``HIGH`` priority needs a project manager; every environment's ``max_priority`` caps
-  the requested priority. The preemption acknowledgement is recorded when sent, and
-  enforcing it is left to the HIGH policy (#14).
+  ``HIGH`` priority needs a project manager and ``acknowledge_preemption: true``
+  (stored as ``preemption_acknowledged_at``); every environment's ``max_priority`` caps
+  the requested priority (plan §5.3). A dry run reports the warning instead of
+  requiring the acknowledgement. Retrying a ``HIGH`` job re-checks all three.
 - Cancel and retry are for the experiment's creator or a project manager.
 - Creation is rate-limited per user: ``QYM_EVAL_EXPERIMENT_CREATE_RATE_LIMIT``
   launches (default 30, ``0`` disables) per
@@ -82,6 +83,10 @@ from qym_platform.services.eval_model_slots import (
     descriptor_for_schema,
     list_model_slots,
 )
+from qym_platform.services.eval_priority import (
+    PREEMPTION_ACK_REQUIRED,
+    high_priority_warning,
+)
 from qym_platform.services.eval_schema_form import escape_pointer_segment
 from qym_platform.settings import PlatformSettings
 from sqlalchemy import func
@@ -124,6 +129,11 @@ class ExperimentCreateRequest(BaseModel):
 
 class CancelRequest(BaseModel):
     reason: Optional[str] = Field(default=None, max_length=1000)
+
+
+class RetryRequest(BaseModel):
+    # Required (true) when the retried job runs at HIGH (plan §5.3).
+    acknowledge_preemption: bool = False
 
 
 # --------------------------------------------------------------------------- #
@@ -303,6 +313,21 @@ def _resolve_priority(
             status_code=403, detail="HIGH priority requires a project manager"
         )
     return priority
+
+
+def _require_preemption_ack(
+    priority: EvalPriority, envs: List[EvalEnvironment], acknowledged: bool
+) -> None:
+    """HIGH preempts every LOW/NORMAL job on the env for all users: make it explicit."""
+    if priority == EvalPriority.HIGH and not acknowledged:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": PREEMPTION_ACK_REQUIRED,
+                "message": high_priority_warning(env.name for env in envs)
+                + " Send acknowledge_preemption: true to launch.",
+            },
+        )
 
 
 def _binding_error(slot_key: str, code: str, message: str) -> Dict[str, Any]:
@@ -710,9 +735,15 @@ def create_experiment(
             "ok": not errors,
             "job_count": len(envs),
             "priority": priority.value,
+            "preemption_warning": (
+                high_priority_warning(env.name for env in envs)
+                if priority == EvalPriority.HIGH
+                else None
+            ),
             "errors": errors,
             "jobs": preview,
         }
+    _require_preemption_ack(priority, envs, req.acknowledge_preemption)
     if errors:
         raise HTTPException(
             status_code=422,
@@ -747,11 +778,7 @@ def create_experiment(
         spec=strip_secret_refs(stored_spec),
         secrets_encrypted=None,
         priority=priority,
-        preemption_acknowledged_at=(
-            now
-            if priority == EvalPriority.HIGH and req.acknowledge_preemption
-            else None
-        ),
+        preemption_acknowledged_at=now if priority == EvalPriority.HIGH else None,
         status=EvalExperimentStatus.QUEUED,
         job_count=len(envs),
         created_at=now,
@@ -958,10 +985,14 @@ def retry_experiment_job(
     project_id: str,
     experiment_id: str,
     job_id: str,
+    req: Optional[RetryRequest] = None,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
-    """Clone a failed/cancelled/timed-out/blocked job into a new attempt (plan §13)."""
+    """Clone a failed/cancelled/timed-out/blocked job into a new attempt (plan §13).
+
+    A HIGH retry preempts again, so it passes the launch policy again (§5.3).
+    """
     _require_project_access(db, principal, project_id)
     experiment = _get_experiment(db, project_id, experiment_id)
     job = _get_job(db, experiment, job_id)
@@ -991,6 +1022,9 @@ def retry_experiment_job(
         raise HTTPException(
             status_code=409, detail="The job's environment is disabled or missing"
         )
+    _resolve_priority(db, principal, project_id, [env], experiment.priority)
+    acknowledged = bool(req and req.acknowledge_preemption)
+    _require_preemption_ack(experiment.priority, [env], acknowledged)
     if job.status == EvalJobStatus.BLOCKED:
         # The blocked attempt is replaced: cancel it locally first.
         if (
@@ -1039,6 +1073,8 @@ def retry_experiment_job(
         updated_at=now,
     )
     db.add(retry)
+    if experiment.priority == EvalPriority.HIGH:
+        experiment.preemption_acknowledged_at = now
     try:
         db.flush()
     except IntegrityError:
@@ -1052,7 +1088,11 @@ def retry_experiment_job(
         "eval_job.retry",
         "eval_experiment_job",
         new_id,
-        {"retry_of_job_id": job.id, "attempt": attempt},
+        {
+            "retry_of_job_id": job.id,
+            "attempt": attempt,
+            "priority": experiment.priority.value,
+        },
     )
     db.commit()
     db.refresh(experiment)

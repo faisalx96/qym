@@ -150,6 +150,19 @@ def test_drawer_has_refresh_diff_ranking_k_and_policies():
     assert "official_preset_version" in MODULE
 
 
+def test_drawer_warns_when_max_priority_is_high():
+    from qym_platform.services.eval_priority import HIGH_PRIORITY_WARNING
+
+    # The exact §5.3 text, shared with the backend and exposed for the launch form.
+    assert f"const HIGH_PRIORITY_WARNING = '{HIGH_PRIORITY_WARNING}';" in MODULE
+    assert "HIGH_PRIORITY_WARNING,\n    highPriorityWarning," in MODULE
+    assert "data-drawer-high-warning" in MODULE
+    assert "maxPriority !== 'HIGH'" in MODULE
+    # Re-rendered live when the max priority select changes.
+    assert "event.target.id === 'env-drawer-max-priority'" in MODULE
+    assert "esc(highPriorityWarning(st.env.name))" in MODULE
+
+
 def test_drawer_and_row_write_controls_are_manager_only():
     # Every write control is emitted behind a canManage / canEdit check.
     for hook in (
