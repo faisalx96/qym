@@ -138,6 +138,7 @@ from .eval_experiments import (
 )
 from .eval_experiments import stop_linked_run
 from .eval_model_slots import descriptor_for_schema, list_model_slots
+from .eval_run_scores import sync_job_scores
 from .eval_service_client import (
     EnvAuthError,
     EvalServiceClient,
@@ -598,6 +599,7 @@ class EvalDispatcher:
         with self.session_factory() as db:
             job = self._locked_job(db, job_id)
             result = fn(db, job)
+            sync_job_scores(db, job)  # completion hook (§13): no-op until terminal
             recompute_experiment_status(db, job.experiment_id)
             db.commit()
             return result

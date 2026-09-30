@@ -46,6 +46,35 @@ def _interval(values: Sequence[float], *, seed: int) -> Dict[str, float] | None:
     return {"low": result["ci_low"], "high": result["ci_high"]}
 
 
+def _pass_at_values(
+    eligible: Sequence[Sequence[float]], *, threshold: float, k: int
+) -> List[float]:
+    """Per-item unbiased pass@k for the items with at least ``k`` passes."""
+    return [
+        unbiased_pass_at_k(
+            len(scores), sum(1 for score in scores if score >= threshold), k
+        )
+        for scores in eligible
+    ]
+
+
+def pass_at_k_curve(
+    items_scores: Dict[str, List[float]], *, threshold: float
+) -> Dict[int, float]:
+    """``{k: pass@k}`` for k = 1..max passes, without the bootstrap intervals.
+
+    The same values as ``build_repeat_analysis(...)["band"][k]["pass_at_k"]``; used
+    where only the point estimates are stored (``eval_run_scores``).
+    """
+    max_k = max((len(scores) for scores in items_scores.values()), default=0)
+    curve: Dict[int, float] = {}
+    for k in range(1, max_k + 1):
+        eligible = [scores for scores in items_scores.values() if len(scores) >= k]
+        values = _pass_at_values(eligible, threshold=threshold, k=k)
+        curve[k] = sum(values) / len(values) if values else 0.0
+    return curve
+
+
 def build_repeat_analysis(
     items_scores: Dict[str, List[float]],
     *,
@@ -58,12 +87,11 @@ def build_repeat_analysis(
     band: Dict[int, Dict[str, Any]] = {}
     for k in range(1, max_k + 1):
         eligible = [scores for scores in items_scores.values() if len(scores) >= k]
-        pass_at_values: List[float] = []
+        pass_at_values = _pass_at_values(eligible, threshold=threshold, k=k)
         pass_hat_values: List[float] = []
         cumulative_values: List[float] = []
         for scores in eligible:
             correct = sum(1 for score in scores if score >= threshold)
-            pass_at_values.append(unbiased_pass_at_k(len(scores), correct, k))
             pass_hat_values.append(unbiased_pass_hat_k(len(scores), correct, k))
             cumulative_values.append(sum(scores[:k]) / k)
 

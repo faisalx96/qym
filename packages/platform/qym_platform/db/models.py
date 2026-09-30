@@ -798,6 +798,9 @@ class EvalExperimentJob(Base):
     run_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey("runs.id", ondelete="SET NULL"), nullable=True
     )
+    # When ingest linked a run (0064). Never cleared, so a job whose linked run was
+    # hard-deleted (``run_id`` SET NULL) can't be claimed again by a replayed token.
+    run_linked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     submit_attempts: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
@@ -841,6 +844,88 @@ class EvalExperimentJob(Base):
             "status IN ('QUEUED', 'SUBMITTING', 'SUBMITTED', 'RUNNING', 'SUCCEEDED', "
             "'FAILED', 'BLOCKED', 'CANCELLING', 'CANCELLED', 'TIMED_OUT')",
             name="ck_eval_experiment_jobs_status",
+        ),
+    )
+
+
+class EvalRunScore(Base):
+    """Best-run index (plan §4.7): one metric of one scored official run.
+
+    Written by ``services/eval_run_scores.py`` once the run's job is terminal and the
+    run completed, refreshed on re-score, and filled for older runs by the backfill.
+    """
+
+    __tablename__ = "eval_run_scores"
+
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("runs.id", ondelete="CASCADE", name="fk_eval_run_scores_run_id"),
+        primary_key=True,
+    )
+    metric_name: Mapped[str] = mapped_column(String(200), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey(
+            "projects.id", ondelete="CASCADE", name="fk_eval_run_scores_project_id"
+        ),
+        nullable=False,
+    )
+    environment_id: Mapped[str] = mapped_column(
+        ForeignKey(
+            "eval_environments.id",
+            ondelete="CASCADE",
+            name="fk_eval_run_scores_environment_id",
+        ),
+        nullable=False,
+    )
+    dataset_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey(
+            "datasets.id", ondelete="SET NULL", name="fk_eval_run_scores_dataset_id"
+        ),
+        nullable=True,
+    )
+    dataset_version_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey(
+            "dataset_versions.id",
+            ondelete="SET NULL",
+            name="fk_eval_run_scores_dataset_version_id",
+        ),
+        nullable=True,
+    )
+    # The runs-list mean: errored items count as 0, unscored items are left out.
+    mean_score: Mapped[float] = mapped_column(Float, nullable=False)
+    # ``RunMetricSpec.direction`` ("maximize" when the run has no spec).
+    direction: Mapped[str] = mapped_column(
+        String(10), default="maximize", server_default="maximize", nullable=False
+    )
+    # {"k": pass@k}: k = 1..samples from the stored pass scores of a repeat run, else
+    # the service result's single value for its analysis_metric; None otherwise.
+    pass_at_k: Mapped[Optional[dict[str, Any]]] = mapped_column(BIG_JSON, nullable=True)
+    item_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    error_item_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_eval_run_scores_ranking",
+            "environment_id",
+            "dataset_version_id",
+            "metric_name",
+            "mean_score",
+        ),
+        CheckConstraint(
+            "direction IN ('maximize', 'minimize')",
+            name="ck_eval_run_scores_direction",
+        ),
+        CheckConstraint(
+            "item_count >= 0 AND error_item_count >= 0 "
+            "AND error_item_count <= item_count",
+            name="ck_eval_run_scores_counts",
         ),
     )
 

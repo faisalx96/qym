@@ -5,8 +5,10 @@ put in ``run_metadata.qym_launch.token``:
 
 1. ``qym_launch.job_id`` names an existing ``EvalExperimentJob``;
 2. ``sha256(token) == job.launch_token_hash`` (constant time);
-3. ``job.run_id IS NULL`` (one-time use), claimed with a guarded
-   ``UPDATE … WHERE run_id IS NULL`` so two concurrent ingests can't both link;
+3. ``job.run_id IS NULL AND job.run_linked_at IS NULL`` (one-time use), claimed with
+   a guarded ``UPDATE … WHERE run_id IS NULL AND run_linked_at IS NULL`` so two
+   concurrent ingests can't both link. ``run_linked_at`` is never cleared: ``run_id``
+   is ``ON DELETE SET NULL``, and a hard-deleted run must not reopen the job;
 4. the run's project is the experiment's project. A mismatch with a *valid* token
    means the environment ingests with another project's key, so the environment gets
    ``health_error = "runs arriving in project X"``.
@@ -30,6 +32,7 @@ from typing import Any, Mapping, Optional
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from qym_platform.datetime_utils import utc_now_naive
 from qym_platform.db.models import (
     EvalEnvironment,
     EvalExperiment,
@@ -136,13 +139,13 @@ def link_official_run(
             job.id,
         )
         return False
-    if job.run_id is not None:
+    if job.run_id is not None or job.run_linked_at is not None:
         logger.warning(
-            "run %s: job %s is already linked to run %s (replayed token); "
+            "run %s: job %s was already linked (to run %s; replayed token); "
             "stored as local",
             run.id,
             job.id,
-            job.run_id,
+            job.run_id or "since deleted",
         )
         return False
     experiment = db.get(EvalExperiment, job.experiment_id)
@@ -169,18 +172,19 @@ def link_official_run(
         .where(
             EvalExperimentJob.id == job.id,
             EvalExperimentJob.run_id.is_(None),
+            EvalExperimentJob.run_linked_at.is_(None),
             EvalExperimentJob.launch_token_hash == job.launch_token_hash,
         )
-        .values(run_id=run.id)
+        .values(run_id=run.id, run_linked_at=utc_now_naive())
         .execution_options(synchronize_session=False)
     )
     if int(getattr(claimed, "rowcount", 0) or 0) != 1:
         logger.warning(
             "run %s: job %s was linked concurrently; stored as local", run.id, job.id
         )
-        db.expire(job, ["run_id"])
+        db.expire(job, ["run_id", "run_linked_at"])
         return False
-    db.expire(job, ["run_id"])
+    db.expire(job, ["run_id", "run_linked_at"])
     run.origin = RunOrigin.OFFICIAL
     run.experiment_job_id = job.id
     if experiment.created_by_user_id:

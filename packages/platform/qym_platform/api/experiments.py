@@ -78,9 +78,6 @@ from qym_platform.db.models import (
     EvalModelSlotStatus,
     EvalPriority,
     Run,
-    RunItem,
-    RunItemScore,
-    RunMetricSpec,
     User,
 )
 from qym_platform.deps import get_db
@@ -116,6 +113,9 @@ from qym_platform.services.eval_model_slots import (
 from qym_platform.services.eval_priority import (
     PREEMPTION_ACK_REQUIRED,
     high_priority_warning,
+)
+from qym_platform.services.eval_run_scores import (
+    run_metric_summaries as _run_metrics,
 )
 from qym_platform.services.eval_temporary_models import (
     TemporaryModelError,
@@ -647,57 +647,6 @@ def _job_qym_config(job: EvalExperimentJob) -> Optional[Dict[str, Any]]:
     if not isinstance(snapshot, Mapping):
         return None
     return strip_secret_refs(redact_secret_refs(snapshot))
-
-
-def _run_metrics(db: Session, runs: Mapping[str, Run]) -> Dict[str, Dict[str, Any]]:
-    """Per run: ``{"means": {metric: mean}, "directions": {metric: direction}}``.
-
-    Means follow the runs list (``api/runs.py``): errored items count as 0 and
-    unscored items are left out of the denominator.
-    """
-    run_ids = list(runs)
-    if not run_ids:
-        return {}
-    errors = dict(
-        db.query(RunItem.run_id, func.count())
-        .filter(RunItem.run_id.in_(run_ids), RunItem.error.isnot(None))
-        .group_by(RunItem.run_id)
-        .all()
-    )
-    sums: Dict[str, Dict[str, Tuple[float, int]]] = {}
-    rows = (
-        db.query(
-            RunItemScore.run_id,
-            RunItemScore.metric_name,
-            func.sum(RunItemScore.score_numeric),
-            func.count(RunItemScore.score_numeric),
-        )
-        .join(
-            RunItem,
-            (RunItem.run_id == RunItemScore.run_id)
-            & (RunItem.item_id == RunItemScore.item_id),
-        )
-        .filter(RunItemScore.run_id.in_(run_ids), RunItem.error.is_(None))
-        .group_by(RunItemScore.run_id, RunItemScore.metric_name)
-        .all()
-    )
-    for run_id, metric, total, count in rows:
-        sums.setdefault(run_id, {})[metric] = (float(total or 0.0), int(count or 0))
-    directions: Dict[str, Dict[str, str]] = {}
-    for spec in db.query(RunMetricSpec).filter(RunMetricSpec.run_id.in_(run_ids)):
-        directions.setdefault(spec.run_id, {})[spec.metric_name] = spec.direction
-    out: Dict[str, Dict[str, Any]] = {}
-    for run_id, run in runs.items():
-        scored = sums.get(run_id, {})
-        error_count = int(errors.get(run_id, 0) or 0)
-        names = [m for m in (run.metrics or []) if isinstance(m, str)]
-        names += [m for m in scored if m not in names]
-        means: Dict[str, Optional[float]] = {}
-        for metric in names:
-            total, count = scored.get(metric, (0.0, 0))
-            means[metric] = total / (count + error_count) if count else None
-        out[run_id] = {"means": means, "directions": directions.get(run_id, {})}
-    return out
 
 
 def _headline_metric(
