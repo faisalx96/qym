@@ -393,8 +393,7 @@ def test_per_environment_validation_maps_errors_to_combo_and_pointer(
 def test_secrets_never_reach_params_qym_config_or_responses(
     client, session_factory, env, conn
 ):
-    # Temporary models stay rejected until #12, even inside a sweep, and the key
-    # ref is never echoed back.
+    # A swept temporary model needs its key; the ref is never echoed back.
     spec = _spec(conn.id)
     spec["slot_bindings"][PRIMARY] = {
         "sweep": [
@@ -417,7 +416,25 @@ def test_secrets_never_reach_params_qym_config_or_responses(
             e.get("code")
             for e in (res.json().get("errors") or res.json()["detail"]["errors"])
         }
-        assert "temporary_unsupported" in codes
+        assert "temporary_key_required" in codes
+
+    # With the key (#12): the temporary combo's job keeps the ref (never the key)
+    # for the dispatcher; responses and qym_config carry neither.
+    temp_key = "sk-swept-temporary-KEY-9876"
+    body = _created(client, [env.id], spec=spec, secrets={SECRET_REF: temp_key})
+    detail = client.get(_url(suffix=f"/{body['id']}"), headers=_headers(MEMBER)).text
+    jobs = _jobs(session_factory, body["id"])
+    assert len(jobs) == 2
+    stored = json.dumps([(j.params, j.request_body) for j in jobs])
+    for text in (json.dumps(body), detail, stored):
+        assert temp_key not in text and CONN_KEY not in text
+    for text in (json.dumps(body), detail):
+        assert SECRET_REF not in text
+    refs = [j for j in jobs if SECRET_REF in json.dumps(j.params)]
+    assert len(refs) == 1
+    assert SECRET_REF not in json.dumps(
+        refs[0].request_body["evaluator"]["config"]["run_metadata"]["qym_config"]
+    )
 
     # A connection sweep: nothing secret in stored params, qym_config or responses.
     spec["slot_bindings"][PRIMARY]["sweep"].pop()

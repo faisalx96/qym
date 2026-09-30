@@ -1,0 +1,33 @@
+/*
+ * "+ Temporary model" inline form and chip (plan §7.5, issue #12).
+ * Page-local recipes prefixed tmpm-. Controls, inline actions, tags and the
+ * shell form classes come from ui_components.css / shell.css. Tokens only
+ * (docs/DESIGN_LANGUAGE.md).
+ */
+
+.tmpm-form {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--control-radius);
+  background: var(--bg-elevated);
+}
+.tmpm-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+.tmpm-field { display: grid; gap: var(--space-xs); }
+.tmpm-field .shell-form-label { margin-bottom: 0; }
+.tmpm-note { color: var(--text-muted); font-size: var(--font-sm); line-height: 1.5; }
+.tmpm-error { color: var(--error); font-size: var(--font-sm); }
+.tmpm-actions { display: flex; justify-content: flex-end; gap: var(--space-xs); }
+
+.tmpm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  border: 1px dashed var(--border-strong);
+}
+.tmpm-chip-model { font-family: var(--font-mono); color: var(--text-muted); }

@@ -41,7 +41,8 @@ from datetime import datetime
 from typing import Any, Iterable, Mapping, Optional, Sequence, cast
 
 from sqlalchemy import CursorResult, or_, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
+from sqlalchemy.orm.attributes import set_committed_value
 
 from ..datetime_utils import utc_now_naive
 from ..db.models import (
@@ -209,7 +210,66 @@ def recompute_experiment_status(
     )
     status = aggregate_status([j.status for j in current_jobs(jobs)])
     experiment.status = status
+    clear_secrets_when_settled(experiment, jobs)
     return status
+
+
+# Nothing more is dispatched from these without a user action; a retry asks for the
+# temporary-model keys again (#12).
+SETTLED_JOB_STATUSES = TERMINAL_JOB_STATUSES | {EvalJobStatus.BLOCKED}
+
+
+def clear_secrets_when_settled(
+    experiment: EvalExperiment, jobs: Sequence[EvalExperimentJob]
+) -> bool:
+    """Drop temporary-model keys once every current job has settled (plan §7.5).
+
+    ``jobs`` are all of the experiment's rows; superseded attempts are ignored.
+    Settled means terminal, or ``BLOCKED`` (only a retry, which asks for the key
+    again, moves it on). Returns True when the keys were cleared. Caller commits.
+
+    The ``UPDATE`` only clears the blob that was seen: a retry always writes a fresh
+    blob, so a retry committed concurrently (e.g. while the dispatcher settles the
+    last job) keeps its keys instead of losing them to this write.
+    """
+    seen = experiment.secrets_encrypted
+    if not seen:
+        return False
+    current = current_jobs(list(jobs))
+    if not current or any(j.status not in SETTLED_JOB_STATUSES for j in current):
+        return False
+    session = object_session(experiment)
+    if session is None:
+        experiment.secrets_encrypted = None
+        return True
+    session.flush()
+    cleared = _guarded_experiment_update(
+        session,
+        experiment.id,
+        [EvalExperiment.secrets_encrypted == seen],
+        {"secrets_encrypted": None},
+    )
+    if cleared:
+        set_committed_value(experiment, "secrets_encrypted", None)
+    return cleared
+
+
+def _guarded_experiment_update(
+    db: Session,
+    experiment_id: str,
+    conditions: Sequence[Any],
+    values: Mapping[str, Any],
+) -> bool:
+    result = cast(
+        CursorResult,
+        db.execute(
+            update(EvalExperiment)
+            .where(EvalExperiment.id == experiment_id, *conditions)
+            .values(**values)
+            .execution_options(synchronize_session=False)
+        ),
+    )
+    return bool(result.rowcount)
 
 
 # --------------------------------------------------------------------------- cancel

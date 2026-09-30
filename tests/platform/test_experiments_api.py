@@ -499,7 +499,8 @@ def test_invalid_documents_are_rejected_with_pointed_errors(
         assert s.query(EvalExperiment).count() == 0
 
 
-def test_temporary_models_are_rejected_until_issue_12(client, session_factory, env):
+def test_temporary_model_without_its_key_is_rejected(client, session_factory, env):
+    # Temporary models (#12) are covered in test_eval_temporary_models.py.
     spec = _spec()
     spec["slot_bindings"] = {
         PRIMARY: {
@@ -514,7 +515,7 @@ def test_temporary_models_are_rejected_until_issue_12(client, session_factory, e
     res = _create(client, [env.id], spec=spec)
     assert res.status_code == 422
     codes = {e.get("code") for e in res.json()["detail"]["errors"]}
-    assert "temporary_unsupported" in codes
+    assert "temporary_key_required" in codes
     with session_factory() as s:
         assert s.query(EvalExperiment).count() == 0
 
