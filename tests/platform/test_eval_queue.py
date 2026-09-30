@@ -969,8 +969,11 @@ def test_remote_queue_matches_own_jobs_and_flags_orphans(api, sessions, service,
         "created_at",
         "run_name",
         "orphan",
+        "stale",
         "match",
     }
+    assert ours["stale"] is False and orphan["stale"] is False
+    assert env["stale_count"] == 0
     # A fresh snapshot is not refreshed; a remote HIGH job shows in the header.
     assert api.refreshes == []
     queue = api.get(_queue_url(seed), headers=_as(sessions, member)).json()
@@ -1102,3 +1105,280 @@ def test_remote_orphan_cancel_errors_are_redacted(api, sessions, service, clock)
         json={"environment_id": foreign_env, "remote_job_ids": ["r-1"]},
     )
     assert resp.status_code == 404
+
+
+# --------------------------------------------------------------------------- stale
+# Remote jobs qym can no longer stop: the local job is terminal (TIMED_OUT, or
+# CANCELLED by the CANCELLING give-up) but the service still runs it.
+
+
+def _poll_until_settled(d, sessions, clock, job_id):
+    while True:
+        job = _job(sessions, job_id)
+        clock.advance(max(0.0, (job.next_attempt_at - clock()).total_seconds()))
+        assert d.tick() >= 1
+        job = _job(sessions, job_id)
+        if job.status != EvalJobStatus.RUNNING:
+            return job
+
+
+def test_timeout_cancels_the_remote_job_first(sessions, service, clock):
+    seed, d, remote = _submitted(sessions, service, clock)
+    (job_id,) = seed["job_ids"]
+    rid = remote[job_id]
+    service.set_status(rid, "RUNNING")
+    started = clock()
+
+    job = _poll_until_settled(d, sessions, clock, job_id)
+
+    assert job.status == EvalJobStatus.TIMED_OUT
+    assert clock() - started >= timedelta(hours=2, minutes=15)
+    assert service.cancel_calls == [(rid, seed["user_id"])]
+    assert service.jobs[rid]["status"] == "CANCELLED"
+    assert job.remote_status == "CANCELLED"
+    assert "2h15m" in job.error
+    assert "Remote job cancelled on the evaluation service" in job.error
+    assert job.lease_owner is None and job.next_attempt_at is None
+    assert (
+        _experiment_status(sessions, seed["experiment_id"])
+        == EvalExperimentStatus.FAILED
+    )
+
+
+@pytest.mark.parametrize(
+    "error, expected",
+    [
+        (
+            RetryableError("Evaluation service returned 503: Bearer tok-SECRET-123"),
+            "could not be reached",
+        ),
+        (NotCancellable("already done", status="SUCCEEDED"), "already finished"),
+        (RemoteNotFound("gone", status_code=404), "unknown to the evaluation service"),
+    ],
+)
+def test_timeout_still_times_out_when_the_remote_cancel_fails(
+    sessions, service, clock, caplog, error, expected
+):
+    seed, d, remote = _submitted(sessions, service, clock)
+    (job_id,) = seed["job_ids"]
+    rid = remote[job_id]
+    service.set_status(rid, "RUNNING")
+    service.cancel_errors = [error]
+
+    with caplog.at_level("INFO", logger="qym_platform.services.eval_dispatcher"):
+        job = _poll_until_settled(d, sessions, clock, job_id)
+
+    assert job.status == EvalJobStatus.TIMED_OUT
+    assert len(service.cancel_calls) == 1
+    assert "2h15m" in job.error and expected in job.error
+    assert job.remote_status == "RUNNING"
+    assert "tok-SECRET-123" not in job.error
+    assert "tok-SECRET-123" not in caplog.text
+    if isinstance(error, RetryableError):
+        assert "remote cancel after timeout failed" in caplog.text
+    # Terminal: never claimed or cancelled again.
+    clock.advance(3600)
+    assert d.tick() == 0
+    assert len(service.cancel_calls) == 1
+
+
+def test_timeout_with_a_rejected_key_pauses_the_environment(sessions, service, clock):
+    from qym_platform.db.models import EvalEnvironment
+    from qym_platform.services.eval_service_client import EnvAuthError
+
+    seed, d, remote = _submitted(sessions, service, clock)
+    (job_id,) = seed["job_ids"]
+    service.set_status(remote[job_id], "RUNNING")
+    service.cancel_errors = [EnvAuthError("rejected", status_code=401)]
+    job = _poll_until_settled(d, sessions, clock, job_id)
+    assert job.status == EvalJobStatus.TIMED_OUT
+    assert "API key was rejected" in job.error
+    with sessions() as db:
+        assert db.get(EvalEnvironment, seed["env_id"]).health_status == "error"
+
+
+def test_stale_remote_jobs_count_toward_the_inflight_cap(sessions, service, clock):
+    from qym_platform.db.models import EvalRemoteQueueSnapshot
+    from qym_platform.services.eval_dispatcher import stale_remote_job_ids
+
+    seed = _seed(sessions, jobs=3, cap=2)
+    stale, first, second = seed["job_ids"]
+    _update_job(
+        sessions, stale, status=EvalJobStatus.TIMED_OUT, remote_job_id="r-stale"
+    )
+    _store_snapshot(
+        sessions,
+        seed["env_id"],
+        [
+            _remote_item("r-stale"),  # ours, finished locally: counts
+            _remote_item("r-orphan"),  # not ours: does not count (D8)
+        ],
+    )
+    with sessions() as db:
+        assert stale_remote_job_ids(db, seed["env_id"]) == {"r-stale"}
+    d = _dispatcher(sessions, service, clock)
+    assert d.tick() == 2
+    assert _job(sessions, first).status == EvalJobStatus.SUBMITTED
+    waiting = _job(sessions, second)
+    assert waiting.status == EvalJobStatus.QUEUED
+    assert waiting.wait_reason == "Inflight cap 2/2 (1 stale on the service)"
+    assert service.calls["submit"] == 1
+
+    # The stale job ends on the service: the next snapshot frees the slot.
+    with sessions() as db:
+        db.get(EvalRemoteQueueSnapshot, seed["env_id"]).items = [
+            _remote_item("r-orphan")
+        ]
+        db.commit()
+    clock.advance(10)
+    d.tick()
+    assert _job(sessions, second).status == EvalJobStatus.SUBMITTED
+    assert service.calls["submit"] == 2
+
+
+def test_only_active_remote_jobs_of_terminal_local_jobs_are_stale(
+    sessions, service, clock
+):
+    from qym_platform.services.eval_dispatcher import stale_remote_job_ids
+
+    seed = _seed(sessions, jobs=3)
+    cancelled, succeeded, running = seed["job_ids"]
+    S = EvalJobStatus
+    _update_job(sessions, cancelled, status=S.CANCELLED, remote_job_id="r-1")
+    _update_job(sessions, succeeded, status=S.SUCCEEDED, remote_job_id="r-2")
+    _update_job(sessions, running, status=S.RUNNING, remote_job_id="r-3")
+    _store_snapshot(
+        sessions,
+        seed["env_id"],
+        [
+            _remote_item("r-1", "PENDING"),
+            _remote_item("r-2", "SUCCEEDED"),  # not active remotely
+            _remote_item("r-3"),  # tracked locally: our own in-flight job
+        ],
+    )
+    with sessions() as db:
+        assert stale_remote_job_ids(db, seed["env_id"]) == {"r-1"}
+
+
+def _stale_seed(sessions, clock):
+    """The queue seed plus a TIMED_OUT job still RUNNING on the service."""
+    seed, _ = _queue_seed(sessions, clock)
+    done = seed["job_ids"][0]
+    _update_job(
+        sessions,
+        done,
+        status=EvalJobStatus.TIMED_OUT,
+        remote_job_id="r-stale",
+        remote_status="RUNNING",
+    )
+    _store_snapshot(
+        sessions,
+        seed["env_id"],
+        [_remote_item("r-ours"), _remote_item("r-stale"), _remote_item("r-orphan")],
+    )
+    return seed, done
+
+
+def test_remote_queue_flags_stale_jobs(api, sessions, service, clock):
+    seed, done = _stale_seed(sessions, clock)
+    member = _join(sessions, seed)
+    body = api.get(_queue_url(seed, "/remote"), headers=_as(sessions, member)).json()
+    (env,) = body["environments"]
+    items = {i["remote_job_id"]: i for i in env["items"]}
+    assert items["r-stale"]["stale"] is True
+    assert items["r-stale"]["orphan"] is False
+    assert items["r-stale"]["match"] == {
+        "job_id": done,
+        "experiment_id": seed["experiment_id"],
+        "experiment_name": "exp",
+        "status": "TIMED_OUT",
+    }
+    assert items["r-ours"]["stale"] is False and items["r-ours"]["orphan"] is False
+    assert items["r-orphan"]["stale"] is False and items["r-orphan"]["orphan"] is True
+    assert env["stale_count"] == 1 and env["orphan_count"] == 1
+    # The queue header counts it against the cap next to our own RUNNING job.
+    queue = api.get(_queue_url(seed), headers=_as(sessions, member)).json()
+    assert queue["environments"][0]["stale_remote"] == 1
+    assert queue["environments"][0]["inflight"] == 1
+
+
+def test_manager_cancels_a_stale_remote_job_with_audit(api, sessions, service, clock):
+    seed, done = _stale_seed(sessions, clock)
+    member = _join(sessions, seed)
+    manager = _join(sessions, seed, ProjectRole.MANAGER)
+    for rid in ("r-ours", "r-stale"):
+        service.jobs[rid] = {"id": rid, "status": "RUNNING", "user_id": "u-1"}
+    url = _queue_url(seed, "/remote/cancel")
+    body = {
+        "environment_id": seed["env_id"],
+        "remote_job_ids": ["r-stale", "r-ours"],
+        "reason": "timed out",
+    }
+
+    # Members, including the experiment's creator, are refused.
+    for user in (member, seed["user_id"]):
+        assert api.post(url, headers=_as(sessions, user), json=body).status_code == 403
+    assert service.cancel_calls == []
+
+    resp = api.post(url, headers=_as(sessions, manager), json=body)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["outcomes"] == {
+        "r-stale": "cancelled",
+        # A non-terminal local job still goes through the queue cancel.
+        "r-ours": "refused_local_job",
+    }
+    assert service.cancel_calls == [("r-stale", manager)]
+    assert service.jobs["r-stale"]["status"] == "CANCELLED"
+    assert service.jobs["r-ours"]["status"] == "RUNNING"
+    job = _job(sessions, done)
+    assert job.status == EvalJobStatus.TIMED_OUT
+    assert job.remote_status == "CANCELLED"
+    assert _job(sessions, seed["job_ids"][3]).status == EvalJobStatus.RUNNING
+    with sessions() as db:
+        audits = {
+            a.entity_id: a
+            for a in db.query(AuditLog).filter(
+                AuditLog.action == "eval_remote_job.cancel"
+            )
+        }
+    assert set(audits) == {"r-stale"}
+    assert audits["r-stale"].actor_user_id == manager
+    assert audits["r-stale"].after == {
+        "outcome": "cancelled",
+        "environment_id": seed["env_id"],
+        "project_id": seed["project_id"],
+        "reason": "timed out",
+        "orphan": False,
+        "stale": True,
+        "job_id": done,
+        "job_status": "TIMED_OUT",
+    }
+    # It leaves the snapshot at once, so it no longer counts toward the cap.
+    remote = api.get(_queue_url(seed, "/remote"), headers=_as(sessions, manager))
+    ids = [i["remote_job_id"] for i in remote.json()["environments"][0]["items"]]
+    assert "r-stale" not in ids
+
+
+def test_non_terminal_local_match_is_still_refused(api, sessions, service, clock):
+    seed, _ = _queue_seed(sessions, clock)
+    manager = _join(sessions, seed, ProjectRole.MANAGER)
+    _, backoff, fresh, _, blocked = seed["job_ids"]
+    S = EvalJobStatus
+    for job_id, status, rid in (
+        (backoff, S.CANCELLING, "r-cancelling"),
+        (fresh, S.SUBMITTED, "r-submitted"),
+        (blocked, S.BLOCKED, "r-blocked"),
+    ):
+        _update_job(sessions, job_id, status=status, remote_job_id=rid)
+    rids = ["r-ours", "r-cancelling", "r-submitted", "r-blocked"]
+    _store_snapshot(sessions, seed["env_id"], [_remote_item(r) for r in rids])
+    resp = api.post(
+        _queue_url(seed, "/remote/cancel"),
+        headers=_as(sessions, manager),
+        json={"environment_id": seed["env_id"], "remote_job_ids": rids},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["outcomes"] == {rid: "refused_local_job" for rid in rids}
+    assert service.cancel_calls == []
+    body = api.get(_queue_url(seed, "/remote"), headers=_as(sessions, manager)).json()
+    assert body["environments"][0]["stale_count"] == 0

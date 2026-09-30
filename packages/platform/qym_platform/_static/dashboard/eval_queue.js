@@ -212,6 +212,12 @@
     return (job.experiment_name || 'Experiment') + ' #' + job.combo_index + ' on ' + (job.environment_name || 'an environment');
   }
 
+  // Remote jobs a manager may cancel directly on the service: orphans (no local job)
+  // and stale jobs (the local job is finished but the service still runs it).
+  function isRemoteCancellable(item) {
+    return !!(item && (item.orphan || item.stale));
+  }
+
   function isCancellable(job) {
     return !!job.can_cancel && job.status !== 'CANCELLING';
   }
@@ -403,19 +409,39 @@
 
   async function cancelOrphans(envView, remoteIds) {
     if (state.busy || !remoteIds.length || !(state.remote && state.remote.can_cancel_orphans)) return;
-    const labels = remoteIds.slice();
-    const result = await confirmCancel({
-      title: 'Cancel ' + plural(remoteIds.length, 'orphan job') + ' on ' + (envView.environment_name || 'this environment') + '?',
-      description: ['These jobs match no job of this project, so they are cancelled directly on the Evaluation Service. The call is audit-logged.'],
-      sections: [{
+    const byId = {};
+    (envView.items || []).forEach((item) => { byId[item.remote_job_id] = item; });
+    const staleIds = remoteIds.filter((rid) => byId[rid] && byId[rid].stale);
+    const orphanIds = remoteIds.filter((rid) => staleIds.indexOf(rid) < 0);
+    const sections = [];
+    if (orphanIds.length) {
+      sections.push({
         key: 'orphans',
         title: 'Orphans on the service',
-        count: remoteIds.length,
-        body: 'Will be hard-stopped on the service.',
-        items: labels,
-      }],
+        count: orphanIds.length,
+        body: 'Match no job of this project. Will be hard-stopped on the service.',
+        items: orphanIds,
+      });
+    }
+    if (staleIds.length) {
+      sections.push({
+        key: 'stale',
+        title: 'Stale jobs on the service',
+        count: staleIds.length,
+        body: 'Their qym job already finished, but the service still runs them. Will be hard-stopped on the service.',
+        items: staleIds.map((rid) => {
+          const match = byId[rid].match || {};
+          return rid + ' (' + (match.experiment_name || 'experiment') + ', ' + titleCase(match.status) + ')';
+        }),
+      });
+    }
+    const noun = staleIds.length ? 'remote job' : 'orphan job';
+    const result = await confirmCancel({
+      title: 'Cancel ' + plural(remoteIds.length, noun) + ' on ' + (envView.environment_name || 'this environment') + '?',
+      description: ['These jobs are cancelled directly on the Evaluation Service. The call is audit-logged.'],
+      sections: sections,
       actionable: remoteIds.length,
-      confirmLabel: 'Cancel ' + plural(remoteIds.length, 'orphan'),
+      confirmLabel: 'Cancel ' + plural(remoteIds.length, staleIds.length ? 'remote job' : 'orphan'),
     });
     if (!result.confirmed || !state.active) return;
     const body = { environment_id: envView.environment_id, remote_job_ids: remoteIds };
@@ -426,7 +452,7 @@
     state.busy = false;
     if (!state.active) return;
     if (!res.ok) {
-      toast(errorMessage(res.data, 'Failed to cancel the orphan jobs'), 'error');
+      toast(errorMessage(res.data, 'Failed to cancel the remote jobs'), 'error');
     } else {
       const counts = res.data.counts || {};
       const parts = Object.keys(counts).map((k) => counts[k] + ' ' + titleCase(k).toLowerCase());
@@ -558,8 +584,8 @@
     const views = (state.remote && state.remote.environments) || [];
     Object.keys(state.remoteSelected).forEach((envId) => {
       const view = views.find((v) => v.environment_id === envId);
-      const orphans = new Set(((view && view.items) || []).filter((i) => i.orphan).map((i) => i.remote_job_id));
-      Array.from(state.remoteSelected[envId]).forEach((rid) => { if (!orphans.has(rid)) state.remoteSelected[envId].delete(rid); });
+      const cancellable = new Set(((view && view.items) || []).filter(isRemoteCancellable).map((i) => i.remote_job_id));
+      Array.from(state.remoteSelected[envId]).forEach((rid) => { if (!cancellable.has(rid)) state.remoteSelected[envId].delete(rid); });
     });
   }
 
@@ -685,7 +711,9 @@
     }
     host.replaceChildren.apply(host, envs.map((env) => {
       const cap = env.max_inflight_jobs;
-      const full = cap && env.inflight >= cap;
+      const staleRemote = env.stale_remote || 0;
+      const used = (env.inflight || 0) + staleRemote;
+      const full = cap && used >= cap;
       const health = env.health_status === 'ok'
         ? el('span', { className: 'qym-badge qym-badge--success', text: 'Healthy' })
         : env.health_status === 'error'
@@ -701,12 +729,15 @@
           el('span', { className: 'exq-env-badges' }, [env.is_active ? null : tag('Disabled', 'warning'), health]),
         ]),
         el('div', { className: 'exq-env-stats' }, [
-          stat('In flight', env.inflight + '/' + (cap == null ? '∞' : cap), full ? ' exq-env-value--full' : ''),
+          stat('In flight', used + '/' + (cap == null ? '∞' : cap), full ? ' exq-env-value--full' : ''),
           stat('Queued', String(env.queued || 0)),
           stat('Blocked', String(env.blocked || 0)),
         ]),
         env.health_status === 'error'
           ? el('p', { className: 'exq-env-note exq-env-note--error', text: 'Dispatch is paused until the health check passes' + (env.health_error ? ': ' + env.health_error : '.') })
+          : null,
+        staleRemote
+          ? el('p', { className: 'exq-env-note', 'data-exq-stale-remote': String(staleRemote), text: 'Includes ' + plural(staleRemote, 'stale job') + ' that the service still runs although qym finished them. A manager can cancel them in the remote queue.' })
           : null,
         full ? el('p', { className: 'exq-env-note', text: 'At capacity: queued jobs start as running ones finish.' }) : null,
         env.high_active
@@ -933,7 +964,12 @@
     const selected = state.remoteSelected[view.environment_id] || new Set();
     state.remoteSelected[view.environment_id] = selected;
     const fetched = view.fetched_at ? 'fetched ' + relTime(view.fetched_at) : 'not fetched yet';
-    const metaText = [fetched, view.stale ? 'refreshing' : null, plural(view.orphan_count || 0, 'orphan')].filter(Boolean).join(' · ');
+    const metaText = [
+      fetched,
+      view.stale ? 'refreshing' : null,
+      plural(view.orphan_count || 0, 'orphan'),
+      view.stale_count ? plural(view.stale_count, 'stale job') : null,
+    ].filter(Boolean).join(' · ');
     const head = el('div', { className: 'exq-remote-env-head' }, [
       el('div', null, [
         el('h3', { className: 'exq-remote-env-name', text: view.environment_name || view.environment_id }),
@@ -941,15 +977,15 @@
         view.fetch_error ? el('div', { className: 'exq-remote-env-meta exq-error-text', text: 'Last refresh failed: ' + view.fetch_error }) : null,
       ]),
     ]);
-    if (canCancel && view.orphan_count) {
-      const orphanIds = items.filter((i) => i.orphan).map((i) => i.remote_job_id);
-      const chosen = orphanIds.filter((rid) => selected.has(rid));
+    if (canCancel && (view.orphan_count || view.stale_count)) {
+      const cancellableIds = items.filter(isRemoteCancellable).map((i) => i.remote_job_id);
+      const chosen = cancellableIds.filter((rid) => selected.has(rid));
       const btn = el('button', {
         className: 'qym-inline-action qym-inline-action--danger',
         type: 'button',
         'data-exq-orphan-cancel': view.environment_id,
         disabled: !chosen.length || state.busy,
-        text: 'Cancel selected orphans (' + chosen.length + ')',
+        text: (view.stale_count ? 'Cancel selected remote jobs (' : 'Cancel selected orphans (') + chosen.length + ')',
       });
       btn.addEventListener('click', () => cancelOrphans(view, chosen));
       head.appendChild(btn);
@@ -961,10 +997,10 @@
     }
     const renderRow = (item) => {
       let selectCell = el('td', { className: 'exq-select-cell' });
-      if (canCancel && item.orphan) {
+      if (canCancel && isRemoteCancellable(item)) {
         const box = el('input', {
           type: 'checkbox',
-          'aria-label': 'Select orphan ' + item.remote_job_id,
+          'aria-label': 'Select ' + (item.orphan ? 'orphan ' : 'stale job ') + item.remote_job_id,
           'data-exq-orphan-select': item.remote_job_id,
           checked: selected.has(item.remote_job_id),
           disabled: state.busy,
@@ -979,7 +1015,17 @@
       const owner = match
         ? el('td', { title: match.experiment_name || '' }, [
           el('a', { className: 'exq-link', href: experimentUrl(match.experiment_id), text: match.experiment_name || match.experiment_id }),
-          el('div', { className: 'exq-sub', text: 'Local status ' + titleCase(match.status) }),
+          el('div', { className: 'exq-sub' }, [
+            item.stale
+              ? el('span', {
+                className: 'qym-badge qym-badge--warning',
+                'data-exq-stale': item.remote_job_id,
+                title: 'The qym job is finished, but the service still runs it. It counts toward the inflight cap until it ends.',
+                text: 'Stale',
+              })
+              : null,
+            (item.stale ? ' ' : '') + 'Local status ' + titleCase(match.status),
+          ]),
         ])
         : el('td', null, [tag('Orphan', 'danger', 'No job of this project has this remote id')]);
       return el('tr', { 'data-remote-job-id': item.remote_job_id }, [
@@ -1015,6 +1061,9 @@
     const orphanTotal = remote && remote.environments
       ? remote.environments.reduce((n, v) => n + (v.orphan_count || 0), 0)
       : 0;
+    const staleTotal = remote && remote.environments
+      ? remote.environments.reduce((n, v) => n + (v.stale_count || 0), 0)
+      : 0;
     const toggle = el('button', {
       className: 'exq-remote-toggle',
       type: 'button',
@@ -1025,13 +1074,14 @@
       el('span', { className: 'exq-chevron', 'aria-hidden': 'true', text: '▶' }),
       el('span', null, [
         el('h2', { className: 'exq-section-title', text: 'Remote queue' }),
-        el('p', { className: 'exq-section-description', text: 'What each environment’s Evaluation Service holds, from its latest snapshot. Jobs that match none of ours are orphans.' }),
+        el('p', { className: 'exq-section-description', text: 'What each environment’s Evaluation Service holds, from its latest snapshot. Jobs that match none of ours are orphans; jobs whose qym job already finished are stale.' }),
       ]),
     ]);
     toggle.addEventListener('click', toggleRemote);
     const header = el('div', { className: 'exq-card-header' }, [
       toggle,
       orphanTotal ? tag(plural(orphanTotal, 'orphan'), 'danger') : null,
+      staleTotal ? tag(plural(staleTotal, 'stale job'), 'warning') : null,
     ]);
     if (!state.remoteOpen) {
       host.replaceChildren(header);
@@ -1047,8 +1097,8 @@
     } else {
       const canCancel = remote.can_cancel_orphans === true;
       remote.environments.forEach((view) => body.appendChild(renderRemoteEnv(view, canCancel)));
-      if (!canCancel && orphanTotal) {
-        body.appendChild(el('div', { className: 'exq-footer-note', text: 'Only a project manager can cancel orphan jobs.' }));
+      if (!canCancel && (orphanTotal || staleTotal)) {
+        body.appendChild(el('div', { className: 'exq-footer-note', text: 'Only a project manager can cancel orphan and stale jobs.' }));
       }
     }
     host.replaceChildren(header, body);

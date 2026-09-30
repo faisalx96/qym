@@ -166,9 +166,12 @@ def test_module_consumes_the_queue_api():
         "query.set('mine', 'true')",
     ):
         assert needle in MODULE, needle
-    # Header per environment: in-flight n/cap, queued, health, HIGH banner.
+    # Header per environment: in-flight n/cap (stale remote jobs included, as in
+    # the dispatcher's cap check), queued, health, HIGH banner.
     for needle in (
-        "env.inflight + '/'",
+        "const used = (env.inflight || 0) + staleRemote;",
+        "used + '/'",
+        "data-exq-stale-remote",
         "env.queued",
         "env.health_status",
         "env.high_active",
@@ -233,8 +236,13 @@ def test_every_cancel_asks_first_and_splits_the_selection():
 
 def test_orphan_cancel_is_offered_to_managers_only():
     assert "const canCancel = remote.can_cancel_orphans === true;" in MODULE
-    assert "if (canCancel && item.orphan)" in MODULE
-    assert "if (canCancel && view.orphan_count)" in MODULE
+    assert "if (canCancel && isRemoteCancellable(item))" in MODULE
+    assert "if (canCancel && (view.orphan_count || view.stale_count))" in MODULE
+    # Stale remote jobs (local job finished, service still runs them) are
+    # cancellable like orphans and carry a "Stale" badge.
+    assert "return !!(item && (item.orphan || item.stale));" in MODULE
+    assert "'data-exq-stale': item.remote_job_id" in MODULE
+    assert "className: 'qym-badge qym-badge--warning'" in MODULE
     guard = _function(MODULE, "cancelOrphans")
     assert "!(state.remote && state.remote.can_cancel_orphans)" in guard
     # Collapsible remote section, fetched only while open.

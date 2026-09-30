@@ -22,7 +22,16 @@ process when ``QYM_ROLE=all``, that mirrors ``MaintenanceWorker``. Each tick:
    is merged in (D2): a terminal run wins over a remote ``PENDING``/``RUNNING``. A
    ``RUNNING`` job with no remote change and no run activity for 2h15m becomes
    ``TIMED_OUT``. The clock doesn't run while the job is still ``PENDING`` remotely or
-   while the service can't be observed.
+   while the service can't be observed. Before the transition the dispatcher makes a
+   best-effort ``POST /evals/{id}/cancel`` (``_time_out``); its outcome is appended
+   to ``error`` and a failure never blocks the transition.
+
+Stale remote jobs: a job that is terminal locally (``TIMED_OUT`` after a failed
+cancel, or ``CANCELLED`` by the ``CANCELLING`` give-up) may still be ``PENDING`` or
+``RUNNING`` on the service. Those ids, read from the environment's stored remote
+snapshot (``stale_remote_job_ids``, no service call), count toward
+``max_inflight_jobs`` in the submit cap check, and managers can cancel them from the
+queue (``eval_queue.cancel_remote_orphans``).
 
 Submit outcomes: ``202`` → ``SUBMITTED``. A ``409`` while a HIGH job is active →
 back to ``QUEUED`` with a 30s → 5m backoff. ``422`` → ``BLOCKED``. ``401`` →
@@ -98,6 +107,7 @@ from typing import (
     Mapping,
     Optional,
     Sequence,
+    Set,
     Tuple,
     TypeVar,
 )
@@ -115,6 +125,7 @@ from ..db.models import (
     EvalExperiment,
     EvalExperimentJob,
     EvalJobStatus,
+    EvalRemoteQueueSnapshot,
     Run,
     RunWorkflowStatus,
 )
@@ -192,6 +203,7 @@ RECONCILE_MAX_PAGES = 20
 RECONCILE_CLOCK_SKEW = timedelta(minutes=10)
 
 ENV_AUTH_ERROR = "Evaluation service rejected the environment API key"
+TIMEOUT_ERROR = "No progress from the evaluation service or the linked run for 2h15m"
 
 # Occupies an in-flight slot on its environment.
 INFLIGHT_JOB_STATUSES = ACTIVE_JOB_STATUSES
@@ -205,6 +217,9 @@ CLAIMABLE_JOB_STATUSES = (
 )
 
 REMOTE_TERMINAL = {"SUCCEEDED", "FAILED", "CANCELLED"}
+# Remote statuses that still hold a service worker or queue slot.
+REMOTE_ACTIVE = ("PENDING", "RUNNING")
+_STALE_QUERY_CHUNK = 500
 
 ClientFactory = Callable[[str, str], EvalServiceClient]
 LaunchTokenAdder = Callable[[Dict[str, Any], str], Dict[str, Any]]
@@ -312,6 +327,54 @@ def _is_run_terminal(run: Run) -> bool:
         run.status == RunWorkflowStatus.STOPPED
         and run.status_reason != RUN_STATUS_REASON_LEASE_TIMEOUT
     )
+
+
+def is_stale_remote(remote_status: Any, local_status: Any) -> bool:
+    """A remote job still active on the service whose local job is already terminal.
+
+    This happens after ``TIMED_OUT`` (when the best-effort remote cancel failed) and
+    after a ``CANCELLING`` give-up: qym stopped tracking the job, but it may still
+    hold a service worker.
+    """
+    return str(remote_status or "").upper() in REMOTE_ACTIVE and (
+        local_status in TERMINAL_JOB_STATUSES
+    )
+
+
+def stale_remote_job_ids(db: Session, environment_id: str) -> Set[str]:
+    """Remote ids in the environment's latest snapshot that are stale (see above).
+
+    Reads the stored snapshot only (no service call), so it is cheap enough for the
+    dispatcher's cap check. The snapshot is at most ~30s old while the environment
+    has local jobs in progress; a job that just finished locally may count for that
+    long, which errs on the side of not overloading the service.
+    """
+    snapshot = db.get(EvalRemoteQueueSnapshot, environment_id)
+    if snapshot is None or not snapshot.items:
+        return set()
+    active = sorted(
+        {
+            str(item.get("remote_job_id"))
+            for item in snapshot.items
+            if isinstance(item, Mapping)
+            and item.get("remote_job_id")
+            and str(item.get("status") or "").upper() in REMOTE_ACTIVE
+        }
+    )
+    latest: Dict[str, Any] = {}
+    table = EvalExperimentJob
+    for start in range(0, len(active), _STALE_QUERY_CHUNK):
+        rows = db.execute(
+            select(table.remote_job_id, table.status)
+            .where(
+                table.environment_id == environment_id,
+                table.remote_job_id.in_(active[start : start + _STALE_QUERY_CHUNK]),
+            )
+            .order_by(table.created_at)
+        )
+        for remote_job_id, status in rows:
+            latest[str(remote_job_id)] = status  # the newest row wins
+    return {rid for rid, status in latest.items() if status in TERMINAL_JOB_STATUSES}
 
 
 # ------------------------------------------------------------------ default seams
@@ -782,9 +845,19 @@ class EvalDispatcher:
         return self.add_launch_token(body, job.id)
 
     def _begin_submit(
-        self, db: Session, job: EvalExperimentJob, env: EvalEnvironment, *, first: bool
+        self,
+        db: Session,
+        job: EvalExperimentJob,
+        env: EvalEnvironment,
+        *,
+        first: bool,
+        stale_remote: int = 0,
     ) -> bool:
-        """Take the SUBMITTING marker. For a first submit, only below the inflight cap."""
+        """Take the SUBMITTING marker. For a first submit, only below the inflight cap.
+
+        ``stale_remote`` remote jobs (see :func:`stale_remote_job_ids`) occupy slots
+        of the cap next to our own in-flight jobs.
+        """
         now = self.clock()
         table = EvalExperimentJob
         conditions = [table.id == job.id, table.lease_owner == self.owner]
@@ -810,7 +883,7 @@ class EvalDispatcher:
                 table.status == EvalJobStatus.QUEUED,
                 # A cancel that landed after this worker read the job wins.
                 table.cancel_requested_at.is_(None),
-                inflight < env.max_inflight_jobs,
+                inflight < env.max_inflight_jobs - stale_remote,
             ]
         else:
             conditions.append(table.status == EvalJobStatus.SUBMITTING)
@@ -844,6 +917,13 @@ class EvalDispatcher:
             or 0
         )
 
+    def _cap_reason(self, db: Session, env: EvalEnvironment, stale_remote: int) -> str:
+        used = self._inflight_count(db, env.id) + stale_remote
+        reason = f"Inflight cap {used}/{env.max_inflight_jobs}"
+        if stale_remote:
+            reason += f" ({stale_remote} stale on the service)"
+        return reason
+
     def _step_queued(self, job_id: str) -> None:
         self._try_submit(job_id, first=True)
 
@@ -875,12 +955,17 @@ class EvalDispatcher:
                     recompute_experiment_status(db, experiment.id)
                     db.commit()
                     return
+                stale_remote = 0
                 if first:
-                    cap = env.max_inflight_jobs
-                    inflight = self._inflight_count(db, env.id)
-                    if inflight >= cap:
+                    # Remote jobs qym no longer tracks but the service still runs
+                    # count toward the cap too (from the stored snapshot only).
+                    stale_remote = len(stale_remote_job_ids(db, env.id))
+                    inflight = self._inflight_count(db, env.id) + stale_remote
+                    if inflight >= env.max_inflight_jobs:
                         self._defer(
-                            job, CAP_RECHECK_SECONDS, f"Inflight cap {inflight}/{cap}"
+                            job,
+                            CAP_RECHECK_SECONDS,
+                            self._cap_reason(db, env, stale_remote),
                         )
                         db.commit()
                         return
@@ -910,7 +995,9 @@ class EvalDispatcher:
                     return
                 del prep
                 db.flush()
-                if not self._begin_submit(db, job, env, first=first):
+                if not self._begin_submit(
+                    db, job, env, first=first, stale_remote=stale_remote
+                ):
                     db.rollback()
                     job = self._locked_job(db, job_id)
                     # Still QUEUED: nothing was sent, so a pending cancel is local.
@@ -927,11 +1014,10 @@ class EvalDispatcher:
                         self._save(job, changed=False)  # e.g. cancelled meanwhile
                         db.commit()
                         return
-                    cap = env.max_inflight_jobs
                     self._defer(
                         job,
                         CAP_RECHECK_SECONDS,
-                        f"Inflight cap {self._inflight_count(db, env.id)}/{cap}",
+                        self._cap_reason(db, env, stale_remote),
                     )
                     db.commit()
                     return
@@ -1192,9 +1278,11 @@ class EvalDispatcher:
                     remote_error = "retry"
         finally:
             self._close(client)
-        self._with_job(
+        timed_out = self._with_job(
             job_id, lambda db, job: self._apply_poll(db, job, remote, remote_error)
         )
+        if timed_out:
+            self._time_out(job_id)
 
     def _apply_poll(
         self,
@@ -1202,11 +1290,14 @@ class EvalDispatcher:
         job: EvalExperimentJob,
         remote: Optional[Mapping[str, Any]],
         remote_error: Optional[str],
-    ) -> None:
+    ) -> bool:
+        """Apply one poll. ``True`` means the job timed out: the caller cancels it
+        remotely and then marks it ``TIMED_OUT`` (:meth:`_time_out`), still holding
+        the lease."""
         now = self.clock()
         if job.status not in (EvalJobStatus.SUBMITTED, EvalJobStatus.RUNNING):
             self._save(job, changed=False)
-            return
+            return False
         job.last_polled_at = now
         changed = False
         if remote_error == "auth":
@@ -1225,7 +1316,7 @@ class EvalDispatcher:
                 job.remote_versioning = redact_payload(extract_versioning(result))
                 self._set_status(job, EvalJobStatus.SUCCEEDED)
                 self._save(job, changed=True)
-                return
+                return False
             if remote_status in ("FAILED", "CANCELLED"):
                 error = remote.get("error")
                 self._set_status(
@@ -1236,7 +1327,7 @@ class EvalDispatcher:
                 if remote_status == "CANCELLED" and job.cancel_requested_at:
                     stop_linked_run(db, job, now=now)
                 self._save(job, changed=True)
-                return
+                return False
 
         run = _linked_run(db, job)
         target = self._merge_run(job, run, now)
@@ -1244,7 +1335,7 @@ class EvalDispatcher:
             status, error = target
             self._set_status(job, status, error=error)
             self._save(job, changed=True)
-            return
+            return False
         if job.cancel_requested_at is not None:
             # Still live remotely although a cancel was requested (e.g. a concurrent
             # write undid the move to CANCELLING): cancel it on the next tick.
@@ -1253,7 +1344,7 @@ class EvalDispatcher:
             )
             job.next_attempt_at = now
             self._save(job, changed=True)
-            return
+            return False
         if remote_error == "not_found":
             self._set_status(
                 job,
@@ -1261,7 +1352,7 @@ class EvalDispatcher:
                 error="The evaluation service no longer knows this job",
             )
             self._save(job, changed=True)
-            return
+            return False
 
         running = job.remote_status == "RUNNING" or (
             run is not None and run.status != RunWorkflowStatus.PENDING
@@ -1302,18 +1393,16 @@ class EvalDispatcher:
         observed = remote is not None or run is not None
         stuck = observed and job.status == EvalJobStatus.RUNNING
         if stuck and now - last_change >= JOB_TIMEOUT:
-            self._set_status(
-                job,
-                EvalJobStatus.TIMED_OUT,
-                error="No progress from the evaluation service or the linked run "
-                "for 2h15m",
-            )
-            self._save(job, changed=True)
-            return
+            # Keep the lease and the status: the remote cancel runs outside this
+            # transaction, then ``_apply_timeout`` settles the job. A crash in
+            # between leaves it RUNNING, so the next poll times it out again.
+            flag_modified(job, "updated_at")  # keep the value; suppress onupdate
+            return True
 
         elapsed = (now - (job.submitted_at or now)).total_seconds()
         job.next_attempt_at = now + timedelta(seconds=poll_interval(elapsed))
         self._save(job, changed=changed)
+        return False
 
     # -- remote cancel ---------------------------------------------------------
 
@@ -1348,29 +1437,130 @@ class EvalDispatcher:
             if client is None:
                 kind = "paused"
             else:
-                try:
-                    self._await(client.cancel(remote_job_id, user_id))
-                    kind = "cancelled"
-                except RemoteNotFound:
-                    kind = "not_found"
-                except RemoteConflict:  # NotCancellable: already terminal remotely
-                    kind = "terminal"
-                except EnvAuthError:
-                    kind = "auth"
-                except EvalServiceError as exc:
-                    kind, message = "retry", str(exc)
-                except Exception as exc:  # noqa: BLE001 - retry; never crash the loop
-                    logger.warning(
-                        "eval job %s: cancel failed unexpectedly: %s",
-                        job_id,
-                        type(exc).__name__,
-                    )
-                    kind, message = "retry", type(exc).__name__
+                kind, error = self._remote_cancel(
+                    client, job_id, remote_job_id, user_id
+                )
+                message = error or message
         finally:
             self._close(client)
         self._with_job(
             job_id, lambda db, job: self._apply_cancel(db, job, kind, message)
         )
+
+    def _remote_cancel(
+        self,
+        client: EvalServiceClient,
+        job_id: str,
+        remote_job_id: str,
+        user_id: str,
+    ) -> Tuple[str, Optional[str]]:
+        """``POST /evals/{id}/cancel``; never raises.
+
+        Returns ``(kind, message)`` with kind ``cancelled``, ``not_found``,
+        ``terminal`` (409, already finished), ``auth`` or ``retry`` (transport error,
+        5xx, anything unexpected; ``message`` says what and is not yet redacted).
+        """
+        try:
+            self._await(client.cancel(remote_job_id, user_id))
+        except RemoteNotFound:
+            return "not_found", None
+        except RemoteConflict:  # NotCancellable: already terminal remotely
+            return "terminal", None
+        except EnvAuthError:
+            return "auth", None
+        except EvalServiceError as exc:
+            return "retry", str(exc)
+        except Exception as exc:  # noqa: BLE001 - retry; never crash the loop
+            logger.warning(
+                "eval job %s: cancel failed unexpectedly: %s",
+                job_id,
+                type(exc).__name__,
+            )
+            return "retry", type(exc).__name__
+        return "cancelled", None
+
+    # -- timeout ---------------------------------------------------------------
+
+    def _time_out(self, job_id: str) -> None:
+        """Best-effort remote cancel of a timed-out job, then ``TIMED_OUT``.
+
+        The service may still run the job (D2: it doesn't always report ``FAILED``),
+        and once the job is terminal locally the queue cancel no longer reaches it.
+        Whatever the cancel answers, the job becomes ``TIMED_OUT`` and the outcome is
+        appended to its ``error``. If the cancel failed, the remote job shows as
+        *stale* in the Queue page's remote queue, where a manager can cancel it, and
+        it keeps counting toward the environment's inflight cap meanwhile.
+        """
+        client: Optional[EvalServiceClient] = None
+        kind = "none"  # none | paused | cancelled | not_found | terminal | auth | retry
+        message: Optional[str] = None
+        user_id = ""
+        try:
+            with self.session_factory() as db:
+                job = self._locked_job(db, job_id)
+                experiment = db.get(EvalExperiment, job.experiment_id)
+                env = db.get(EvalEnvironment, job.environment_id)
+                remote_job_id = job.remote_job_id
+                if remote_job_id and env is not None:
+                    user_id = (
+                        _service_user_id(experiment)
+                        if experiment is not None
+                        else f"qym-experiment-{job.experiment_id}"
+                    )
+                    access = self._env_access(db, env)
+                    client = access.client
+                    if client is None:
+                        kind, message = "paused", access.paused_reason
+                db.commit()
+            if client is not None and remote_job_id:
+                kind, message = self._remote_cancel(
+                    client, job_id, remote_job_id, user_id
+                )
+        finally:
+            self._close(client)
+        if kind not in ("none", "cancelled", "not_found", "terminal"):
+            logger.warning(
+                "eval job %s: remote cancel after timeout failed (%s): %s",
+                job_id,
+                kind,
+                _redacted_text(message) if message else "-",
+            )
+        self._with_job(
+            job_id, lambda db, job: self._apply_timeout(db, job, kind, message)
+        )
+
+    def _apply_timeout(
+        self,
+        db: Session,
+        job: EvalExperimentJob,
+        kind: str,
+        message: Optional[str],
+    ) -> None:
+        if job.status not in (EvalJobStatus.SUBMITTED, EvalJobStatus.RUNNING):
+            self._save(job, changed=False)  # e.g. cancelled from the queue meanwhile
+            return
+        if kind == "cancelled":
+            note = "cancelled on the evaluation service"
+            job.remote_status = "CANCELLED"
+        elif kind == "not_found":
+            note = "unknown to the evaluation service"
+        elif kind == "terminal":
+            note = "already finished on the evaluation service"
+        elif kind == "none":
+            note = "not cancelled: no remote job or environment"
+        elif kind == "auth":
+            self._mark_env_unauthorized(db, job.environment_id)
+            note = "not cancelled: the environment API key was rejected"
+        elif kind == "paused":
+            note = f"not cancelled: {message or 'environment unhealthy'}"
+        else:
+            note = "not cancelled: the evaluation service could not be reached"
+            if message:
+                note += f" ({message})"
+        self._set_status(
+            job, EvalJobStatus.TIMED_OUT, error=f"{TIMEOUT_ERROR}. Remote job {note}"
+        )
+        self._save(job, changed=True)
 
     def _apply_cancel(
         self,
@@ -1494,7 +1684,9 @@ __all__: Sequence[str] = (
     "aggregate_status",
     "extract_versioning",
     "high_backoff",
+    "is_stale_remote",
     "launch_job_id",
     "poll_interval",
     "recompute_experiment_status",
+    "stale_remote_job_ids",
 )
