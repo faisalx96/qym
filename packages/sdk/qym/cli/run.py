@@ -14,7 +14,13 @@ import typer
 
 from ._exit_codes import ExitCode
 from ._output import is_json_mode, output, output_error, err_console, status
-from ._platform_api import PlatformAPIClient, PlatformAPIError
+from ._platform_api import (
+    RUN_ORIGIN_CHOICES,
+    PlatformAPIClient,
+    PlatformAPIError,
+    normalize_run_origin,
+    run_origin_of,
+)
 from ._legacy import load_function_from_file, load_multi_run_specs
 from ..utils.env import get_platform_url_env
 
@@ -335,12 +341,28 @@ def run_list(
     model_filter: Optional[str] = typer.Option(None, "--model", help="Filter by model name"),
     status_filter: Optional[str] = typer.Option(None, "--status", help="Filter by status"),
     user_filter: Optional[str] = typer.Option(None, "--user", help="Filter by run owner user"),
+    origin: Optional[str] = typer.Option(
+        None,
+        "--origin",
+        metavar="[official|local|all]",
+        help="Filter by run origin: official (dispatched by the platform), local, or all",
+    ),
 ) -> None:
     """List recent evaluation runs from the platform."""
+    try:
+        origin_value = normalize_run_origin(origin)
+    except ValueError as exc:
+        output_error(
+            "usage_error",
+            str(exc),
+            suggestion="Use --origin " + "|".join(RUN_ORIGIN_CHOICES) + ".",
+        )
+        raise typer.Exit(code=ExitCode.USAGE_ERROR)
+
     client = PlatformAPIClient()
 
     try:
-        data = client.list_runs()
+        data = client.list_runs(origin=origin_value)
     except PlatformAPIError as exc:
         output_error(
             error_type="connection_failed" if exc.status_code == 0 else "failure",
@@ -370,7 +392,10 @@ def run_list(
                     ]
                     if not any(user_filter.lower() in field.lower() for field in owner_fields):
                         continue
-                flat_runs.append(run_summary)
+                row = dict(run_summary)
+                row["origin"] = run_origin_of(row)
+                row.setdefault("experiment", None)
+                flat_runs.append(row)
 
     # Sort by timestamp descending, apply limit
     flat_runs.sort(key=lambda r: r.get("timestamp", ""), reverse=True)
@@ -383,6 +408,7 @@ def run_list(
             err_console.print("[dim]No runs found.[/dim]")
             return
 
+        from rich.markup import escape as rich_escape
         from rich.table import Table
 
         table = Table(title=f"Recent Runs ({len(flat_runs)})")
@@ -392,11 +418,20 @@ def run_list(
         table.add_column("Status")
         table.add_column("Success Rate", justify="right")
         table.add_column("Items", justify="right")
+        table.add_column("Origin")
         table.add_column("Timestamp")
 
         for r in flat_runs:
             sr = r.get("success_rate")
             sr_str = f"{sr:.1%}" if sr is not None else "—"
+            if r["origin"] == "official":
+                experiment = r.get("experiment")
+                experiment_name = str(experiment.get("name") or "") if isinstance(experiment, dict) else ""
+                origin_str = "Official run"
+                if experiment_name:
+                    origin_str += f" · {rich_escape(experiment_name)}"
+            else:
+                origin_str = "Local"
             table.add_row(
                 str(r.get("run_id", ""))[:12],
                 r.get("task_name", ""),
@@ -404,6 +439,7 @@ def run_list(
                 r.get("status", ""),
                 sr_str,
                 str(r.get("total_items", "")),
+                origin_str,
                 r.get("timestamp", ""),
             )
         err_console.print(table)

@@ -714,6 +714,20 @@ class PlatformClient:
             raise RuntimeError(f"Platform did not return run_id/live_url: {data}")
         return PlatformRunHandle(run_id=run_id, live_url=live_url)
 
+    def list_runs(self, *, origin: Optional[str] = None) -> Dict[str, Any]:
+        """List runs (``GET /api/runs``), grouped as ``{"tasks": {task: {model: [run]}}}``.
+
+        ``origin`` is ``"official"``, ``"local"`` or ``"all"`` (default: no
+        filter); anything else raises ``ValueError`` before any request. Each run
+        dict carries ``origin`` and ``experiment`` (``{id, name, job_id}`` for
+        official runs, ``None`` for local ones).
+        """
+        from ..cli._platform_api import PlatformAPIClient
+
+        return PlatformAPIClient(
+            platform_url=self.platform_url, api_key=self.api_key
+        ).list_runs(origin=origin)
+
     def get_dataset_items(
         self,
         *,
