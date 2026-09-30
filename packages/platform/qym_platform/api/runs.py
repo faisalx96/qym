@@ -1127,6 +1127,10 @@ def _platform_static_models() -> Path:
     return _platform_static_dir() / "dashboard" / "models.html"
 
 
+def _platform_static_experiments() -> Path:
+    return _platform_static_dir() / "dashboard" / "experiments.html"
+
+
 def _platform_static_datasets() -> Path:
     return _platform_static_dir() / "dashboard" / "datasets.html"
 
@@ -2058,6 +2062,19 @@ def project_models(
     idx = _platform_static_models()
     if not idx.exists():
         raise HTTPException(status_code=404, detail="Models UI not found")
+    return _dashboard_html_response(idx, request)
+
+
+@router.get("/projects/{project_slug}/experiments", response_model=None)
+def project_experiments(
+    project_slug: str, request: Request, db: Session = Depends(get_db)
+) -> Any:
+    guarded = _guard_project_page(request, db, project_slug)
+    if guarded:
+        return guarded
+    idx = _platform_static_experiments()
+    if not idx.exists():
+        raise HTTPException(status_code=404, detail="Experiments UI not found")
     return _dashboard_html_response(idx, request)
 
 
