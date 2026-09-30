@@ -26,10 +26,19 @@ from qym_platform.services.eval_service_client import (
 
 # Request fields whose *values* are maps of secrets (not named like a key themselves).
 _SECRET_CONTAINERS = frozenset({"secrets", "temporary_keys"})
+# Credentials named explicitly (``_is_sensitive_key`` covers them too): the
+# Evaluation Service ``qym_api_key`` must never come back in a 422, whatever the
+# request that carried it.
+_SECRET_FIELDS = frozenset({"qym_api_key"})
 
 
 def _is_secret_field(name: Any) -> bool:
-    return str(name).lower() in _SECRET_CONTAINERS or _is_sensitive_key(name)
+    lowered = str(name).lower()
+    return (
+        lowered in _SECRET_CONTAINERS
+        or lowered in _SECRET_FIELDS
+        or _is_sensitive_key(name)
+    )
 
 
 def _redact_input(value: Any) -> Any:

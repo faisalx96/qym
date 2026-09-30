@@ -664,9 +664,19 @@ def _join(sessions, seed, role=ProjectRole.MEMBER, user_id=None):
     if user_id is None:
         return _add_user(sessions, seed["project_id"], role)
     with sessions() as db:
-        db.add(
-            ProjectMembership(project_id=seed["project_id"], user_id=user_id, role=role)
+        existing = (
+            db.query(ProjectMembership)
+            .filter_by(project_id=seed["project_id"], user_id=user_id)
+            .one_or_none()
         )
+        if existing is not None:  # the seed's creator is already a member
+            existing.role = role
+        else:
+            db.add(
+                ProjectMembership(
+                    project_id=seed["project_id"], user_id=user_id, role=role
+                )
+            )
         db.commit()
     return user_id
 

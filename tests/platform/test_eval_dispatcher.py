@@ -41,11 +41,16 @@ from qym_platform.db.models import (
     EvalModelSlotStatus,
     Project,
     ProjectLlmConnection,
+    ProjectMembership,
     Run,
     RunWorkflowStatus,
     User,
 )
 from qym_platform.secrets import encrypt_llm_api_key
+from qym_platform.services.eval_submitter_keys import (
+    issue_experiment_api_key,
+    resolve_submitter_key,
+)
 from qym_platform.services import eval_dispatcher as dispatcher_module
 from qym_platform.services.eval_config import is_placeholder, materialize_job_body
 from qym_platform.services.eval_dispatcher import (
@@ -305,6 +310,7 @@ def _seed(sessions, *, jobs=1, cap=5, schema_json=None, allow_keys=False):
         )
         db.add(project)
         db.flush()
+        db.add(ProjectMembership(project_id=project.id, user_id=user.id))
         env = EvalEnvironment(
             project_id=project.id,
             name="staging",
@@ -330,6 +336,7 @@ def _seed(sessions, *, jobs=1, cap=5, schema_json=None, allow_keys=False):
         )
         db.add(experiment)
         db.flush()
+        issue_experiment_api_key(db, experiment)  # as a real launch does
         job_ids = []
         for index in range(jobs):
             job_id = str(uuid4())
@@ -1487,13 +1494,20 @@ def test_submitted_body_is_stored_body_plus_launch_token(
     ).tick()
     assert _job(sessions, job_id).status == EvalJobStatus.SUBMITTED
     (sent,) = service.bodies
+    with sessions() as db:
+        experiment = db.get(EvalExperiment, seed["experiment_id"])
+        qym_api_key = resolve_submitter_key(db, experiment)
 
-    # Only slot placeholders were resolved, and only the token was added.
+    # Only slot placeholders were resolved; only the token and the creator's
+    # qym_api_key were added.
     diffs = _diffs(stored, sent)
-    assert _TOKEN_POINTER in [pointer for pointer, _, _ in diffs]
+    pointers = [pointer for pointer, _, _ in diffs]
+    assert _TOKEN_POINTER in pointers and "/qym_api_key" in pointers
     for pointer, before, after in diffs:
         if pointer == _TOKEN_POINTER:
             assert (before, after) == (_MISSING, token)
+        elif pointer == "/qym_api_key":
+            assert (before, after) == (_MISSING, qym_api_key)
         else:
             assert is_placeholder(before), pointer
             assert not pointer.startswith("/evaluator/config/run_metadata"), pointer
@@ -1527,6 +1541,7 @@ def test_submitted_body_is_stored_body_plus_launch_token(
     persisted = json.dumps([{k: str(v) for k, v in r.items()} for r in rows])
     assert token not in persisted and MODEL_KEY not in persisted
     assert token not in caplog.text and MODEL_KEY not in caplog.text
+    assert qym_api_key not in persisted and qym_api_key not in caplog.text
 
 
 def test_missing_launch_token_key_waits_instead_of_submitting(

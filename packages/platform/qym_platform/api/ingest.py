@@ -900,8 +900,10 @@ def _ingest_events_sync(
     )
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
-    # An official run is owned by the experiment creator but still streamed by the
-    # environment's ingest principal, which stays ``created_by_user_id``.
+    # An official run is owned by the experiment creator. It is normally streamed
+    # with the creator's own per-experiment ``qym_api_key`` (owner == creator); a
+    # worker that uploads with the environment's own ingest key is its
+    # ``created_by_user_id`` and may stream it too.
     if run.owner_user_id != principal.user.id and not (
         run.origin == RunOrigin.OFFICIAL
         and run.created_by_user_id == principal.user.id

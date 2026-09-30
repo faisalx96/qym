@@ -48,9 +48,9 @@ change, the experiment's aggregate status is recomputed (``recompute_experiment_
 ``updated_at`` on a job means "last meaningful change". Lease and poll bookkeeping
 preserve it, and the timeout is measured against it (plus the linked run's activity).
 
-Secrets: the resolved body (decrypted model keys, launch token) exists only in memory
-between ``prepare_dispatch`` and the client call. It is never stored, logged or put in
-an exception. Service responses are redacted by ``EvalServiceClient``, and again here
+Secrets: the resolved body (decrypted model keys, launch token, ``qym_api_key``)
+exists only in memory between ``prepare_dispatch`` and the client call. It is never
+stored, logged or put in an exception. Service responses are redacted by ``EvalServiceClient``, and again here
 (``redact_payload`` / ``_redacted_text``) before anything from the service is stored
 (``remote_result``, ``remote_versioning``, ``error``, ``wait_reason``, the
 environment's ``health_error``): a client that forgets to redact leaks nothing.
@@ -65,6 +65,13 @@ Seams for later issues (all constructor arguments):
 - ``add_launch_token(body, job_id)`` inserts the one-time launch token (#13/#16). The
   default is ``services.eval_experiments.body_with_launch_token``. Without
   ``QYM_LLM_CONFIG_ENCRYPTION_KEY`` the job waits (``QUEUED``) instead of submitting.
+- ``submitter_key_for(db, experiment)``: the raw top-level ``qym_api_key`` (the
+  creator's per-experiment platform key, ``services.eval_submitter_keys``). It is set
+  next to the launch token, overriding anything in the stored body. When it raises
+  ``SubmitterKeyUnavailable`` (key missing, revoked or unreadable; creator gone,
+  disabled or no longer in the project) the job is ``BLOCKED`` with that reason
+  instead of being submitted. The raw key is also scrubbed, as a literal, from
+  whatever the service answers before anything of it is kept.
 - ``slot_bindings_for_job(job, experiment)``: the combination's bindings. The default is
   ``job.params["slot_bindings"]``, then the ``qym_config`` copy in the stored body.
 - ``secret_lookup_for(experiment)``: resolves temporary-model key refs (#12). The default
@@ -151,6 +158,7 @@ from .eval_experiments import (
 from .eval_model_slots import descriptor_for_schema, list_model_slots
 from .eval_run_scores import sync_job_scores
 from .eval_service_client import (
+    REDACTED,
     EnvAuthError,
     EvalServiceClient,
     EvalServiceError,
@@ -162,6 +170,7 @@ from .eval_service_client import (
     redact_payload,
     redact_text,
 )
+from .eval_submitter_keys import SubmitterKeyUnavailable, resolve_submitter_key
 from .eval_temporary_models import secret_lookup as temporary_secret_lookup
 from .run_lifecycle import (
     RUN_STATUS_REASON_ADMIN_FORCE_STOP,
@@ -227,6 +236,7 @@ SlotBindingsFor = Callable[
     [EvalExperimentJob, EvalExperiment], Optional[Mapping[str, Any]]
 ]
 SecretLookupFor = Callable[[EvalExperiment], Optional[SecretLookup]]
+SubmitterKeyFor = Callable[[Session, EvalExperiment], str]
 
 
 # ------------------------------------------------------------------ pure helpers
@@ -292,6 +302,38 @@ def _parse_remote_time(value: Any) -> Optional[datetime]:
 def _short(text: Any, limit: int = WAIT_REASON_MAX) -> str:
     value = str(text)
     return value if len(value) <= limit else value[: limit - 1] + "…"
+
+
+def _scrub_literal(value: Any, secret: Optional[str]) -> Any:
+    """A copy of ``value`` with every occurrence of ``secret`` masked (keys and text)."""
+    if not secret:
+        return value
+    if isinstance(value, str):
+        return value.replace(secret, REDACTED)
+    if isinstance(value, Mapping):
+        return {
+            _scrub_literal(k, secret): _scrub_literal(v, secret)
+            for k, v in value.items()
+        }
+    if isinstance(value, list):
+        return [_scrub_literal(item, secret) for item in value]
+    return value
+
+
+def _scrub_outcome(outcome: "_Outcome", secret: Optional[str]) -> "_Outcome":
+    """Mask the submitted ``qym_api_key`` wherever the service may have echoed it.
+
+    Key-named fields are already redacted by the client; this also catches the bare
+    value in free text (a 422 message, an unexpected field).
+    """
+    if not secret:
+        return outcome
+    return _Outcome(
+        outcome.kind,
+        remote=_scrub_literal(outcome.remote, secret),
+        message=_scrub_literal(outcome.message, secret),
+        high_job_id=_scrub_literal(outcome.high_job_id, secret),
+    )
 
 
 def _redacted_text(value: Any) -> str:
@@ -474,6 +516,7 @@ class EvalDispatcher:
         add_launch_token: Optional[LaunchTokenAdder] = None,
         slot_bindings_for_job: Optional[SlotBindingsFor] = None,
         secret_lookup_for: Optional[SecretLookupFor] = None,
+        submitter_key_for: Optional[SubmitterKeyFor] = None,
     ) -> None:
         self.session_factory = session_factory
         self._client_factory = client_factory
@@ -486,6 +529,7 @@ class EvalDispatcher:
             slot_bindings_for_job or default_slot_bindings_for_job
         )
         self.secret_lookup_for = secret_lookup_for or default_secret_lookup_for
+        self.submitter_key_for = submitter_key_for or resolve_submitter_key
         self._stop = threading.Event()
         self._wait = wait or self._stop.wait
         self._thread: Optional[threading.Thread] = None
@@ -828,8 +872,9 @@ class EvalDispatcher:
         resolved: Dict[str, Any],
         job: EvalExperimentJob,
         experiment: EvalExperiment,
+        qym_api_key: str,
     ) -> Dict[str, Any]:
-        """Final in-memory body: user, priority, ``qym_launch.job_id`` and token.
+        """Final in-memory body: user, priority, ``qym_launch`` token, ``qym_api_key``.
 
         ``run_metadata`` is the stored one, not the placeholder-filled copy: it is
         persisted by the run, so it must never carry a resolved key.
@@ -851,10 +896,14 @@ class EvalDispatcher:
         # Reconcile-after-crash matches on this id; #13 stores the rest of qym_launch.
         launch["job_id"] = job.id
         if self.add_launch_token is default_add_launch_token:
-            return default_add_launch_token(
+            body = default_add_launch_token(
                 body, job.id, expected_hash=job.launch_token_hash
             )
-        return self.add_launch_token(body, job.id)
+        else:
+            body = self.add_launch_token(body, job.id)
+        # Always the platform's value: nothing stored can choose whose key is sent.
+        body["qym_api_key"] = qym_api_key
+        return body
 
     def _begin_submit(
         self,
@@ -942,6 +991,7 @@ class EvalDispatcher:
     def _try_submit(self, job_id: str, *, first: bool) -> None:
         client: Optional[EvalServiceClient] = None
         body: Optional[Dict[str, Any]] = None
+        qym_api_key: Optional[str] = None
         try:
             with self.session_factory() as db:
                 job = self._locked_job(db, job_id)
@@ -995,7 +1045,24 @@ class EvalDispatcher:
                     db.commit()
                     return
                 try:
-                    body = self._submit_body(prep.body or {}, job, experiment)
+                    qym_api_key = self.submitter_key_for(db, experiment)
+                except SubmitterKeyUnavailable as exc:
+                    del prep
+                    self._set_status(
+                        job,
+                        EvalJobStatus.BLOCKED,
+                        wait_reason=str(exc),
+                        error=str(exc),
+                    )
+                    job.next_attempt_at = None
+                    self._save(job, changed=True)
+                    recompute_experiment_status(db, experiment.id)
+                    db.commit()
+                    return
+                try:
+                    body = self._submit_body(
+                        prep.body or {}, job, experiment, qym_api_key
+                    )
                 except LaunchTokenUnavailable:
                     del prep
                     self._defer(
@@ -1035,9 +1102,10 @@ class EvalDispatcher:
                     return
                 recompute_experiment_status(db, experiment.id)
                 db.commit()  # the SUBMITTING marker is durable before the POST
-            outcome = self._post(client, body)
+            outcome = _scrub_outcome(self._post(client, body), qym_api_key)
         finally:
             body = None
+            qym_api_key = None
             self._close(client)
         self._apply_submit_outcome(job_id, outcome)
 

@@ -42,7 +42,7 @@ def test_alembic_has_one_upgrade_head() -> None:
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["0064"]
+    assert heads == ["0065"]
 
 
 def test_subcategory_taxonomy_migration_preserves_rows_and_defaults_json(
@@ -471,10 +471,11 @@ EXPERIMENT_TABLES = {
 RUN_EXPERIMENT_COLUMNS = {"origin", "experiment_job_id"}
 RUN_EXPERIMENT_INDEXES = {"ix_runs_origin", "ix_runs_experiment_job_id"}
 SCORE_TABLES = frozenset({"eval_run_scores"})  # 0064
-# Revisions after 0061 that change eval_experiment_jobs: (column they add, file).
-LATER_JOB_REVISIONS = (
-    ("attempt", "0063_eval_job_attempts.py"),
-    ("run_linked_at", "0064_eval_run_scores.py"),
+# Revisions after 0061 that change its tables: (table, column they add, file).
+LATER_REVISIONS = (
+    ("eval_experiment_jobs", "attempt", "0063_eval_job_attempts.py"),
+    ("eval_experiment_jobs", "run_linked_at", "0064_eval_run_scores.py"),
+    ("eval_experiments", "qym_api_key_id", "0065_eval_experiment_qym_api_key.py"),
 )
 
 
@@ -491,6 +492,8 @@ def _eval_experiment_prerequisites(
         sa.Column("project_id", sa.String(36), nullable=False),
         sa.Column("task", sa.String(200), nullable=False),
     )
+    # Referenced by eval_experiments.qym_api_key_id (0065).
+    sa.Table("api_keys", metadata, sa.Column("id", sa.String(36), primary_key=True))
     # Referenced by eval_run_scores (0064).
     sa.Table("datasets", metadata, sa.Column("id", sa.String(36), primary_key=True))
     sa.Table(
@@ -757,21 +760,31 @@ def _eval_experiment_model_diffs(
             return not sqlite and columns == {"experiment_job_id"}
         return kind == "table"
 
+    def include_eval_object(obj, name, kind, reflected, compare_to):  # type: ignore[no-untyped-def]
+        # Same for eval_experiments.qym_api_key_id (0065): PRAGMA-checked on SQLite.
+        if sqlite and kind == "foreign_key_constraint":
+            columns = {column.name for column in obj.columns}
+            if columns == {"qym_api_key_id"}:
+                return False
+        return include_object(obj, name, kind, reflected, compare_to)
+
     def diffs() -> list[Any]:
         context = MigrationContext.configure(
-            connection, opts={"compare_type": True, "include_object": include_object}
+            connection,
+            opts={"compare_type": True, "include_object": include_eval_object},
         )
         return compare_metadata(context, Base.metadata)
 
-    job_columns = {
-        column["name"]
-        for column in sa.inspect(connection).get_columns("eval_experiment_jobs")
+    inspector = sa.inspect(connection)
+    columns = {
+        table: {column["name"] for column in inspector.get_columns(table)}
+        for table in {table for table, _, _ in LATER_REVISIONS}
     }
     # The models describe the schema at head: apply the later revisions missing here.
     pending = [
         filename
-        for marker, filename in LATER_JOB_REVISIONS
-        if marker not in job_columns
+        for table, marker, filename in LATER_REVISIONS
+        if marker not in columns[table]
     ]
     if not pending:
         return diffs()
@@ -1502,3 +1515,95 @@ def test_eval_run_scores_migration_postgres_upgrade_and_downgrade(
             "ck_eval_run_scores_direction",
             "ck_eval_run_scores_counts",
         } <= {c["name"] for c in inspector.get_check_constraints("eval_run_scores")}
+
+
+def _eval_qym_api_key_prerequisites(
+    engine: sa.engine.Engine, monkeypatch: pytest.MonkeyPatch
+) -> ModuleType:
+    """Build the pre-0065 schema (0060-0064) with experiment ``x1`` and key ``k1``."""
+    previous = _eval_run_scores_prerequisites(engine, monkeypatch)
+    with engine.begin() as connection:
+        monkeypatch.setattr(
+            previous, "op", Operations(MigrationContext.configure(connection))
+        )
+        previous.upgrade()
+        _insert_row(connection, "api_keys", id="k1")
+    return _load_migration("0065_eval_experiment_qym_api_key.py")
+
+
+def _run_eval_qym_api_key_round_trip(
+    connection: sa.Connection, migration: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def columns() -> set[str]:
+        return {
+            column["name"]
+            for column in sa.inspect(connection).get_columns("eval_experiments")
+        }
+
+    def scalar(sql: str) -> Any:
+        return connection.execute(sa.text(sql)).scalar_one()
+
+    monkeypatch.setattr(
+        migration, "op", Operations(MigrationContext.configure(connection))
+    )
+    migration.upgrade()
+    assert {"qym_api_key_id", "qym_api_key_encrypted"} <= columns()
+    # Existing experiments have no key: their jobs block until retried.
+    assert scalar("SELECT qym_api_key_id FROM eval_experiments WHERE id = 'x1'") is None
+    assert "ix_eval_experiments_qym_api_key_id" in {
+        index["name"] for index in sa.inspect(connection).get_indexes("eval_experiments")
+    }
+    assert _eval_experiment_model_diffs(connection, PRESET_TABLES) == []
+
+    # Deleting the key only clears the pointer.
+    connection.execute(
+        sa.text(
+            "UPDATE eval_experiments SET qym_api_key_id = 'k1', "
+            "qym_api_key_encrypted = 'blob' WHERE id = 'x1'"
+        )
+    )
+    connection.execute(sa.text("DELETE FROM api_keys WHERE id = 'k1'"))
+    assert scalar("SELECT qym_api_key_id FROM eval_experiments WHERE id = 'x1'") is None
+    assert scalar("SELECT COUNT(*) FROM eval_experiments") == 1
+
+    migration.downgrade()
+    assert not {"qym_api_key_id", "qym_api_key_encrypted"} & columns()
+    assert scalar("SELECT COUNT(*) FROM eval_experiments") == 1
+
+    migration.upgrade()
+    assert {"qym_api_key_id", "qym_api_key_encrypted"} <= columns()
+
+
+def test_eval_qym_api_key_migration_sqlite_upgrade_and_downgrade(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = sa.create_engine("sqlite://")
+    migration = _eval_qym_api_key_prerequisites(engine, monkeypatch)
+
+    with engine.begin() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+        _run_eval_qym_api_key_round_trip(connection, migration, monkeypatch)
+        # SQLAlchemy doesn't reflect options of an inline (ADD COLUMN) FK.
+        fks = connection.exec_driver_sql(
+            "PRAGMA foreign_key_list(eval_experiments)"
+        ).all()
+        assert ("api_keys", "qym_api_key_id", "SET NULL") in {
+            (fk[2], fk[3], fk[6]) for fk in fks
+        }
+    engine.dispose()
+
+
+def test_eval_qym_api_key_migration_postgres_upgrade_and_downgrade(
+    monkeypatch: pytest.MonkeyPatch, postgres_engine: sa.engine.Engine
+) -> None:
+    migration = _eval_qym_api_key_prerequisites(postgres_engine, monkeypatch)
+
+    with postgres_engine.begin() as connection:
+        _run_eval_qym_api_key_round_trip(connection, migration, monkeypatch)
+        fk = next(
+            fk
+            for fk in sa.inspect(connection).get_foreign_keys("eval_experiments")
+            if fk["name"] == "fk_eval_experiments_qym_api_key_id"
+        )
+        assert fk["referred_table"] == "api_keys"
+        assert fk["options"].get("ondelete") == "SET NULL"

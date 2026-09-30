@@ -671,7 +671,8 @@ class EvalExperiment(Base):
 
     ``spec`` is the config document with sweeps; secrets appear in it only as
     refs, and ``secrets_encrypted`` holds the Fernet blob ``{ref_id: value}``
-    for temporary-model keys until every job is terminal.
+    for temporary-model keys until every job is terminal. ``qym_api_key_*`` is the
+    creator's per-experiment platform API key, revoked once every job is terminal.
     """
 
     __tablename__ = "eval_experiments"
@@ -696,6 +697,19 @@ class EvalExperiment(Base):
     )
     spec: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict, nullable=False)
     secrets_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # The creator's dedicated qym API key, sent as ``qym_api_key`` on every submit
+    # (migration 0065, ``services/eval_submitter_keys``). The id outlives revocation;
+    # the Fernet blob is cleared when the key is revoked.
+    qym_api_key_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey(
+            "api_keys.id",
+            ondelete="SET NULL",
+            name="fk_eval_experiments_qym_api_key_id",
+        ),
+        nullable=True,
+        index=True,
+    )
+    qym_api_key_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     priority: Mapped[EvalPriority] = mapped_column(
         _string_enum(EvalPriority, 10),
         default=EvalPriority.NORMAL,

@@ -48,6 +48,14 @@ current job has settled; a retry after that needs ``temporary_keys: {slot_key: k
 (project managers) turns those temporary models into project connections instead.
 Clone never copies keys.
 
+The creator's qym API key (``services/eval_submitter_keys``): a real launch mints one
+``ApiKey`` for the creator in this project ("Evaluation Service · <name>"), stored
+Fernet-encrypted in ``qym_api_key_encrypted``; the dispatcher sends it as the
+top-level ``qym_api_key`` so the worker uploads the run as the creator. It is never
+returned, is revoked once every current job is terminal, and a retry keeps it alive
+or mints a new one. A retry is refused (409) when the creator is no longer an active
+member of the project; clone the experiment instead. Dry runs mint nothing.
+
 Stored per job:
 
 - ``params``: ``{"slot_bindings": {slot_key: binding | null}}`` for the combination,
@@ -133,6 +141,11 @@ from qym_platform.services.eval_priority import (
 )
 from qym_platform.services.eval_run_scores import (
     run_metric_summaries as _run_metrics,
+)
+from qym_platform.services.eval_submitter_keys import (
+    creator_can_submit,
+    ensure_key_for_retry,
+    issue_experiment_api_key,
 )
 from qym_platform.services.eval_temporary_models import (
     TemporaryModelError,
@@ -1181,6 +1194,8 @@ def create_experiment(
     )
     db.add(experiment)
     db.flush()
+    # The creator's dedicated key, sent as ``qym_api_key`` on every submit.
+    issue_experiment_api_key(db, experiment, _settings())
     for combo, env, schema, plan, params, run_name in planned:
         assert schema is not None and plan["body"] is not None
         job_id = str(uuid4())
@@ -1432,6 +1447,10 @@ def retry_experiment_job(
         raise HTTPException(
             status_code=409, detail="The job's environment is disabled or missing"
         )
+    # Jobs are always submitted as the creator (their qym API key uploads the run).
+    creator_problem = creator_can_submit(db, experiment)
+    if creator_problem:
+        raise HTTPException(status_code=409, detail=creator_problem)
     _resolve_priority(db, principal, project_id, [env], experiment.priority)
     acknowledged = bool(req and req.acknowledge_preemption)
     _require_preemption_ack(experiment.priority, [env], acknowledged)
@@ -1506,6 +1525,9 @@ def retry_experiment_job(
         # A concurrent retry took this attempt number (unique per combination).
         db.rollback()
         raise HTTPException(status_code=409, detail="This job was already retried")
+    # Keep the creator's key alive for this attempt, or mint a new one if it was
+    # revoked when the experiment settled (eval_submitter_keys).
+    ensure_key_for_retry(db, experiment, _settings())
     recompute_experiment_status(db, experiment)
     _audit(
         db,

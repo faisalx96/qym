@@ -9,6 +9,8 @@ Every response is redacted before it is returned. The service currently
 echoes ``LLM_OVERRIDES.endpoints.*.api_key`` back in ``EvalJobRead.env_overrides``
 (integration plan D1), sometimes as a flattened JSON string, so provider keys
 are masked here and never reach callers, storage, logs, or exception messages.
+``submit`` also masks the literal value of every credential it sent (e.g. the
+top-level ``qym_api_key``) in the error text it logs or raises.
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ import json
 import logging
 import re
 import time
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 from urllib.parse import quote
 
 import httpx
@@ -49,6 +51,10 @@ _SENSITIVE_KEYS = {
     # ``run_metadata.qym_launch.token``: the one-time launch token (#16) is echoed back
     # in ``eval_input`` and must never be stored, returned or logged.
     "token",
+    # ``EvalJobCreate.qym_api_key``: the submitting user's qym API key (guide §4.0).
+    # The service may echo it like the D1 keys; it has no recognizable prefix, so
+    # ``submit`` also scrubs its literal value from error text.
+    "qym_api_key",
 }
 _SENSITIVE_SUFFIXES = ("_api_key", "_apikey", "_password", "_secret", "_token")
 
@@ -222,6 +228,52 @@ def _mask_schema_values(subschema: Any) -> Any:
     return out
 
 
+# Shorter values are too generic to mask as literals (e.g. "gpt-4o", "false").
+_MIN_LITERAL_SECRET = 8
+
+
+def _sent_secrets(value: Any) -> List[str]:
+    """Literal credential values in a request body (under sensitive keys)."""
+    found: List[str] = []
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if (
+                _is_sensitive_key(key)
+                and isinstance(item, str)
+                and len(item) >= _MIN_LITERAL_SECRET
+            ):
+                found.append(item)
+            else:
+                found.extend(_sent_secrets(item))
+    elif isinstance(value, list):
+        for item in value:
+            found.extend(_sent_secrets(item))
+    return found
+
+
+def _scrub_text(text: str, secrets: Sequence[str]) -> str:
+    for secret in secrets:
+        if secret:
+            text = text.replace(secret, REDACTED)
+    return text
+
+
+def _scrub_values(value: Any, secrets: Sequence[str]) -> Any:
+    """A copy of ``value`` with every literal in ``secrets`` masked."""
+    if not secrets:
+        return value
+    if isinstance(value, str):
+        return _scrub_text(value, secrets)
+    if isinstance(value, Mapping):
+        return {
+            _scrub_values(key, secrets): _scrub_values(item, secrets)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_scrub_values(item, secrets) for item in value]
+    return value
+
+
 def redact_headers(headers: Mapping[str, str]) -> Dict[str, str]:
     """Header copy that is safe to log."""
     return {
@@ -280,8 +332,14 @@ class EvalServiceClient:
 
     async def submit(self, body: Mapping[str, Any]) -> Dict[str, Any]:
         """``POST /evals``; returns the redacted ``EvalJobRead`` (202)."""
-        return redact_payload(
-            await self._request("POST", "/evals", json_body=dict(body))
+        sent = _sent_secrets(body)
+        return _scrub_values(
+            redact_payload(
+                await self._request(
+                    "POST", "/evals", json_body=dict(body), secrets=sent
+                )
+            ),
+            sent,
         )
 
     async def get(self, job_id: str) -> Dict[str, Any]:
@@ -331,7 +389,9 @@ class EvalServiceClient:
         *,
         json_body: Any = None,
         params: Optional[Mapping[str, Any]] = None,
+        secrets: Sequence[str] = (),
     ) -> Any:
+        """One call. ``secrets`` are values sent in the body, masked in any error."""
         url = self.base_url + path
         headers = {
             "Authorization": f"Bearer {self._api_key}",
@@ -353,7 +413,7 @@ class EvalServiceClient:
                 f"Evaluation service request timed out: {type(exc).__name__}"
             ) from None
         except httpx.TransportError as exc:
-            message = redact_text(exc)
+            message = _scrub_text(redact_text(exc), secrets)
             logger.warning(
                 "Evaluation service %s %s failed: %s: %s",
                 method,
@@ -374,7 +434,7 @@ class EvalServiceClient:
             elapsed_ms,
             redact_headers(headers),
         )
-        return _handle_response(method, url, response)
+        return _handle_response(method, url, response, secrets)
 
 
 def _job_path(job_id: str) -> str:
@@ -388,7 +448,9 @@ def _detail(response: httpx.Response) -> Any:
         return None
 
 
-def _handle_response(method: str, url: str, response: httpx.Response) -> Any:
+def _handle_response(
+    method: str, url: str, response: httpx.Response, secrets: Sequence[str] = ()
+) -> Any:
     status = response.status_code
     if 200 <= status < 300:
         try:
@@ -398,7 +460,7 @@ def _handle_response(method: str, url: str, response: httpx.Response) -> Any:
                 "Evaluation service returned a non-JSON response", status_code=status
             ) from None
 
-    detail = _detail(response)
+    detail = _scrub_values(_detail(response), secrets)
     safe_detail = redact_text(detail) if isinstance(detail, str) else None
     logger.info(
         "Evaluation service %s %s returned %s%s",
