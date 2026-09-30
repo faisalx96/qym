@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>قيِّم • Experiments</title>
+  <link rel="icon" type="image/png" href="/static/qym_icon.png">
+  <link rel="stylesheet" href="/static/dashboard.css?v=runs-analysis-c1-20260804-16">
+  <link rel="stylesheet" href="/static/shell.css">
+  <script src="/static/auth.js"></script>
+  <script src="/static/shell.js?v=ui-consistency-20260730-15"></script>
+  <script src="/static/qym_table.js"></script>
+  <!--
+    Experiments page (plan §12.2, issue #22). Page-local recipes use the exp-
+    prefix; shared primitives (qym badges, tags, controls, inline actions,
+    stat strip, pagination) come from the shared component layer. Tokens only
+    (docs/DESIGN_LANGUAGE.md). Kept inline so client-side navigation carries it.
+  -->
+  <style>
+    .exp-page { }
+    .exp-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-lg); margin-bottom: var(--space-lg); }
+    .exp-header-text { min-width: 0; }
+    .exp-title { margin: 0; font-size: var(--font-title); font-weight: 650; color: var(--text-primary); letter-spacing: -0.3px; overflow-wrap: anywhere; }
+    .exp-description { margin: 6px 0 0; font-size: var(--font-base); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .exp-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-sm); margin-top: var(--space-sm); font-size: var(--font-base); color: var(--text-muted); }
+    .exp-meta-sep { color: var(--text-dim); }
+    .exp-header-actions { display: flex; align-items: center; gap: var(--space-sm); flex: none; }
+    .exp-back { display: inline-block; margin-bottom: var(--space-sm); color: var(--text-muted); font-size: var(--font-sm); text-decoration: none; }
+    .exp-back:hover { color: var(--accent-primary); }
+
+    .exp-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-md); }
+    .exp-toolbar-label { font-size: var(--font-sm); color: var(--text-muted); }
+    .exp-toolbar-spacer { flex: 1; }
+    .exp-check { display: inline-flex; align-items: center; gap: var(--space-xs); font-size: var(--font-sm); color: var(--text-muted); cursor: pointer; }
+
+    .exp-card { background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: 8px; overflow: hidden; margin-bottom: var(--space-lg); }
+    .exp-card-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--border-subtle); }
+    .exp-section-title { margin: 0; font-size: var(--font-lg); font-weight: 600; color: var(--text-primary); }
+    .exp-section-description { margin: 2px 0 0; font-size: var(--font-sm); color: var(--text-muted); }
+    .exp-table-wrap { overflow-x: auto; }
+    .exp-table-wrap .qdt-table tbody td { vertical-align: middle; }
+    .exp-footer { display: flex; align-items: center; justify-content: flex-end; padding: var(--space-sm) var(--space-lg); border-top: 1px solid var(--border-subtle); }
+    .exp-footer:empty { display: none; }
+
+    .exp-name { color: var(--text-primary); font-weight: 600; text-decoration: none; }
+    .exp-name:hover { color: var(--accent-primary); }
+    .exp-sub { margin-top: 2px; font-size: var(--font-sm); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; }
+    .exp-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .exp-num { text-align: right; }
+    td.exp-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .exp-muted { color: var(--text-muted); }
+    .exp-error-text { color: var(--error); }
+    .exp-counts { display: inline-flex; flex-wrap: wrap; gap: var(--space-xs); }
+    .exp-run-link { color: var(--accent-primary); text-decoration: none; font-family: var(--font-mono); }
+    .exp-run-link:hover { text-decoration: underline; }
+    .exp-row-actions { display: flex; justify-content: flex-end; gap: var(--space-xs); }
+    .exp-row--superseded td { color: var(--text-muted); }
+    .exp-actions-cell { text-align: right; }
+
+    .exp-stats { margin-bottom: var(--space-lg); }
+    .exp-empty { padding: var(--space-xl); text-align: center; }
+    .exp-empty-title { margin: 0 0 var(--space-sm); font-size: var(--font-xl); font-weight: 650; color: var(--text-primary); }
+    .exp-empty-body { margin: 0; font-size: var(--font-md); color: var(--text-muted); line-height: 1.5; }
+    .exp-loading { padding: var(--space-xl); text-align: center; font-size: var(--font-base); color: var(--text-muted); }
+    .exp-error { padding: var(--space-md) var(--space-lg); color: var(--error); font-size: var(--font-base); }
+    .exp-poll-note { font-size: var(--font-sm); color: var(--text-muted); }
+  </style>
+  <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60">
+  <script defer src="/static/ui_components.js?v=ui-consistency-20260803-28"></script>
+</head>
+<body>
+  <main class="page exp-page" id="exp-root" aria-live="polite">
+    <div class="exp-loading">Loading experiments…</div>
+  </main>
+  <script src="/static/experiments.js?v=experiments-20260930-1"></script>
+</body>
+</html>
