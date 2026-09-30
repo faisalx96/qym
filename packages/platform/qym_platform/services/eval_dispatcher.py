@@ -41,7 +41,10 @@ preserve it, and the timeout is measured against it (plus the linked run's activ
 
 Secrets: the resolved body (decrypted model keys, launch token) exists only in memory
 between ``prepare_dispatch`` and the client call. It is never stored, logged or put in
-an exception. Service responses are redacted by ``EvalServiceClient``.
+an exception. Service responses are redacted by ``EvalServiceClient``, and again here
+(``redact_payload`` / ``_redacted_text``) before anything from the service is stored
+(``remote_result``, ``remote_versioning``, ``error``, ``wait_reason``, the
+environment's ``health_error``): a client that forgets to redact leaks nothing.
 
 Run metadata (#16): the submitted ``run_metadata`` is the stored one (``qym_config``,
 ``qym_launch``, user keys) plus ``qym_launch.token``, nothing else. It is copied from
@@ -145,6 +148,7 @@ from .eval_service_client import (
     RemoteNotFound,
     RequestRejected,
     RetryableError,
+    redact_payload,
     redact_text,
 )
 from .eval_temporary_models import secret_lookup as temporary_secret_lookup
@@ -273,6 +277,20 @@ def _parse_remote_time(value: Any) -> Optional[datetime]:
 def _short(text: Any, limit: int = WAIT_REASON_MAX) -> str:
     value = str(text)
     return value if len(value) <= limit else value[: limit - 1] + "…"
+
+
+def _redacted_text(value: Any) -> str:
+    """Text to store (error, wait reason) with every credential masked.
+
+    Defence in depth over ``EvalServiceClient``'s own redaction: structured values
+    are redacted by key, then serialized; strings (JSON or free text) are redacted
+    by key and by pattern. Redact before truncating, so a cut can't hide a secret.
+    """
+    if isinstance(value, (Mapping, list)):
+        text = json.dumps(redact_payload(value), default=str)
+    else:
+        text = str(redact_payload(str(value)))
+    return redact_text(text)
 
 
 # A finished run may move on into the review flow (submitted/approved/rejected).
@@ -608,9 +626,9 @@ class EvalDispatcher:
         error: Optional[str] = None,
     ) -> None:
         job.status = status
-        job.wait_reason = _short(wait_reason) if wait_reason else None
+        job.wait_reason = _short(_redacted_text(wait_reason)) if wait_reason else None
         if error is not None:
-            job.error = error
+            job.error = _redacted_text(error)
         if status in TERMINAL_JOB_STATUSES:
             job.finished_at = self.clock()
             job.next_attempt_at = None
@@ -621,8 +639,9 @@ class EvalDispatcher:
         seconds: float,
         wait_reason: Optional[str],
     ) -> None:
-        changed = job.wait_reason != (_short(wait_reason) if wait_reason else None)
-        job.wait_reason = _short(wait_reason) if wait_reason else None
+        reason = _short(_redacted_text(wait_reason)) if wait_reason else None
+        changed = job.wait_reason != reason
+        job.wait_reason = reason
         job.next_attempt_at = self.clock() + timedelta(seconds=seconds)
         self._save(job, changed=changed)
 
@@ -679,7 +698,7 @@ class EvalDispatcher:
         except EnvAuthError:
             env.health_error = ENV_AUTH_ERROR
         except EvalServiceError as exc:
-            env.health_error = _short(str(exc), 500)
+            env.health_error = _short(_redacted_text(exc), 500)
         else:
             env.health_status = "ok"
             env.health_error = None
@@ -1004,7 +1023,7 @@ class EvalDispatcher:
                 job.wait_reason = _short(
                     "Evaluation service unreachable; checking before resubmitting"
                 )
-                job.error = outcome.message
+                job.error = _redacted_text(outcome.message) if outcome.message else None
                 # Wait at least a lease length: the service may still be handling
                 # the request the client gave up on.
                 job.next_attempt_at = self.clock() + timedelta(
@@ -1017,6 +1036,7 @@ class EvalDispatcher:
     def _adopt_remote(self, job: EvalExperimentJob, remote: Mapping[str, Any]) -> None:
         """Record an accepted (or reconciled) remote job: ``SUBMITTED``/``RUNNING``."""
         now = self.clock()
+        remote = redact_payload(remote)
         job.remote_job_id = str(remote.get("id"))
         remote_status = str(remote.get("status") or "PENDING").upper()
         job.remote_status = remote_status
@@ -1166,7 +1186,9 @@ class EvalDispatcher:
                 except RemoteNotFound:
                     remote_error = "not_found"
                 except EvalServiceError as exc:
-                    logger.info("eval job %s: poll failed: %s", job_id, exc)
+                    logger.info(
+                        "eval job %s: poll failed: %s", job_id, _redacted_text(exc)
+                    )
                     remote_error = "retry"
         finally:
             self._close(client)
@@ -1190,6 +1212,7 @@ class EvalDispatcher:
         if remote_error == "auth":
             self._mark_env_unauthorized(db, job.environment_id)
         if remote is not None:
+            remote = redact_payload(remote)
             remote_status = str(remote.get("status") or "").upper() or None
             if remote_status and remote_status != job.remote_status:
                 job.remote_status = remote_status
@@ -1199,7 +1222,7 @@ class EvalDispatcher:
                 job.remote_result = (
                     dict(result) if isinstance(result, Mapping) else None
                 )
-                job.remote_versioning = extract_versioning(result)
+                job.remote_versioning = redact_payload(extract_versioning(result))
                 self._set_status(job, EvalJobStatus.SUCCEEDED)
                 self._save(job, changed=True)
                 return
@@ -1208,7 +1231,7 @@ class EvalDispatcher:
                 self._set_status(
                     job,
                     EvalJobStatus(remote_status),
-                    error=redact_text(error) if error else None,
+                    error=_redacted_text(error) if error else None,
                 )
                 if remote_status == "CANCELLED" and job.cancel_requested_at:
                     stop_linked_run(db, job, now=now)
@@ -1408,7 +1431,7 @@ class EvalDispatcher:
         else:
             requested = job.cancel_requested_at or now
             elapsed = (now - requested).total_seconds()
-            job.error = message
+            job.error = _redacted_text(message) if message else None
             self._defer(
                 job,
                 min(RETRY_BACKOFF_MAX, max(RETRY_BACKOFF_MIN, elapsed)),
