@@ -228,7 +228,7 @@ def faithfulness(output: Any, expected: Any, input_data: Dict[str, Any]) -> Dict
     if output is None or str(output).strip() == "":
         return {
             "score": 0.0,
-            "metadata": {"error": "Empty output"}
+            "metadata": {"reason": "Empty output"}
         }
 
     # Extract context from input_data
@@ -239,10 +239,8 @@ def faithfulness(output: Any, expected: Any, input_data: Dict[str, Any]) -> Dict
             context = input_data["input"].get("context")
 
     if context is None or str(context).strip() == "":
-        return {
-            "score": 0.0,
-            "metadata": {"error": "No context found in input_data"}
-        }
+        # Without context the metric cannot judge: a scorer error, not a 0.
+        return {"score": 0.0, "error": "No context found in input_data"}
 
     context = str(context).lower()
     output = str(output).lower()
@@ -254,7 +252,7 @@ def faithfulness(output: Any, expected: Any, input_data: Dict[str, Any]) -> Dict
     if len(output_tokens) == 0:
         return {
             "score": 0.0,
-            "metadata": {"error": "No tokens in output"}
+            "metadata": {"reason": "No tokens in output"}
         }
 
     # Filter out common stopwords for more meaningful comparison

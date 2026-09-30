@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Datasets</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=runs-analysis-c1-20260804-16">
-  <link rel="stylesheet" href="/static/shell.css">
-  <script src="/static/auth.js"></script>
-  <script src="/static/shell.js?v=ui-consistency-20260730-15"></script>
+  <link rel="stylesheet" href="/static/dashboard.css?v=p0-20260930">
+  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
+  <script src="/static/qym_safe.js?v=p0-20260930"></script>
+  <script src="/static/auth.js?v=p0-20260930"></script>
+  <script src="/static/shell.js?v=p0-20260930-3"></script>
   <script src="/static/qym_table.js"></script>
-  <script src="/static/metrics.js?v=metric-errors-20260914-1"></script>
-  <script src="/static/trace_viewer.js?v=trace-retries-20260917-1"></script>
+  <script src="/static/metrics.js?v=p0-20260930-3"></script>
+  <script src="/static/trace_viewer.js?v=p0-20260930"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
     /* ============================================================
@@ -253,7 +254,6 @@
     .dsx-table tbody td { padding: 5px 10px; font-size: var(--font-base); font-family: var(--font-sans); line-height: 1.35; color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle); vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .dsx-table tbody tr { cursor: pointer; transition: background .1s ease; }
     .dsx-table tbody tr:hover td { background: var(--bg-hover); }
-    .dsx-table tbody tr.editing td { background: rgba(99,102,241,0.05); }
     .dsx-table th.sortable { cursor: pointer; }
     .dsx-table .sort-btn { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; background: transparent; border: 0; padding: 0; color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit; cursor: inherit; pointer-events: none; }
     .dsx-table .sort-btn > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -311,15 +311,6 @@
       font-family: var(--font-mono); font-size: var(--font-base); line-height: 1.5; white-space: pre-wrap; word-break: break-word;
     }
 
-    /* INLINE EDIT CELL */
-    .dsx-cell-edit {
-      background: var(--bg-elevated); border: 1px solid var(--accent-primary); border-radius: 6px;
-      font-family: var(--font-mono); font-size: var(--font-base); color: var(--text-primary); line-height: 1.5;
-      padding: 6px 8px; resize: vertical; min-height: 60px; width: 100%; max-width: 420px;
-      box-shadow: 0 0 0 3px rgba(0,212,170,0.12);
-    }
-    .dsx-cell-edit:focus { outline: 0; }
-    .dsx-cell-edit.invalid { border-color: var(--error); box-shadow: 0 0 0 3px rgba(239,68,68,0.12); }
     .dsx-json-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--success, #22c55e); margin-left: 6px; vertical-align: middle; }
     .dsx-json-dot.invalid { background: var(--error); }
 
@@ -463,6 +454,10 @@
     .dsx-item-panel-body { padding: var(--space-md); }
     .dsx-item-panel-title { padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-size: var(--font-sm); font-weight: 650; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .dsx-item-panel-title .tv-inline-actions { margin-left: 0; }
+    .dsx-item-panel-label { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+    .dsx-item-panel-label .dsx-item-type { text-transform: none; letter-spacing: 0; }
+    .dsx-item-field-status { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; }
+    .dsx-item-field-state { margin-left: auto; font-size: var(--font-sm); color: var(--text-muted); }
     .dsx-item-runs-wrap { overflow-x: auto; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-surface); }
     .dsx-item-runs-table .run-name { color: var(--text-primary); font-weight: 600; background: transparent; border: 0; padding: 0; cursor: pointer; text-align: left; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; }
     .dsx-item-runs-table .run-name:hover,
@@ -548,6 +543,7 @@
     .dsx-diff-row.expanded .dsx-diff-body { display: flex; }
     .dsx-diff-field { display: grid; grid-template-columns: 110px 1fr 1fr; gap: 10px; font-family: var(--font-mono); font-size: var(--font-base); }
     .dsx-diff-field .name { color: var(--text-muted); font-family: var(--font-sans); text-transform: uppercase; font-size: var(--font-sm); letter-spacing: 0.05em; padding-top: 6px; }
+    .dsx-diff-typenote { display: block; margin-top: 4px; color: var(--warning); font-family: var(--font-sans); font-size: var(--font-sm); text-transform: none; letter-spacing: 0; }
     .dsx-diff-pane { background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; word-break: break-word; line-height: 1.5; max-height: 240px; overflow: auto; }
     .dsx-diff-pane.before { border-left: 3px solid var(--error); }
     .dsx-diff-pane.after { border-left: 3px solid var(--success, #22c55e); }
@@ -569,6 +565,22 @@
     .dsx-file-drop:hover, .dsx-file-drop.dragover { border-color: var(--accent-primary); background: rgba(0,212,170,0.05); }
     .dsx-file-drop input[type="file"] { position: absolute; opacity: 0; pointer-events: none; }
     .dsx-file-drop .filename { color: var(--text-primary); font-family: var(--font-mono); font-size: var(--font-base); margin-top: 6px; }
+    /* Wizard help/caption text (shell.css has no .shell-form-help rule). */
+    #dsx-wiz-body .shell-form-help { font-size: var(--font-sm); color: var(--text-muted); line-height: 1.45; }
+    #dsx-wiz-body .shell-form-help strong { color: var(--text-secondary); }
+    #dsx-wiz-slug { margin-top: 4px; }
+    .dsx-wiz-filestatus { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+    .dsx-wiz-fileinfo { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .dsx-wiz-encoding { margin-left: var(--space-sm); }
+    .dsx-wiz-alert { padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border-default); font-size: var(--font-sm); line-height: 1.45; color: var(--text-secondary); }
+    .dsx-wiz-alert.error { border-color: var(--error); background: rgba(239,68,68,0.08); color: var(--text-primary); }
+    .dsx-wiz-alert.warning { border-color: var(--warning); background: rgba(245,158,11,0.08); color: var(--text-primary); }
+    .dsx-wiz-errlist { margin: 6px 0 0; padding-left: 18px; color: var(--text-secondary); }
+    .dsx-field-error { color: var(--error); font-size: var(--font-sm); line-height: 1.45; margin-top: 4px; }
+    .dsx-field-error:empty { display: none; }
+    .dsx-wiz-link { display: inline; margin-left: 6px; padding: 0; background: transparent; border: 0; color: var(--accent-primary); font: inherit; text-decoration: underline; cursor: pointer; }
+    .dsx-wiz-slug { font-family: var(--font-mono); color: var(--text-primary); }
+    .shell-form-input[aria-invalid="true"] { border-color: var(--error); }
 
     .dsx-mapping { display: grid; grid-template-columns: 260px 1fr; gap: 14px; }
     .dsx-mapping-bank { display: flex; flex-direction: column; gap: 8px; align-content: start; }
@@ -585,6 +597,7 @@
       padding: 10px; display: flex; flex-direction: column; gap: 6px;
     }
     .dsx-mapping-field.over { border-color: var(--accent-primary); background: rgba(0,212,170,0.06); }
+    .dsx-mapping-field.invalid { border-color: var(--error); }
     .dsx-mapping-bank { padding: 10px; border: 1px dashed transparent; border-radius: 8px; transition: border-color .12s ease, background .12s ease; }
     .dsx-mapping-bank.over { border-color: var(--accent-primary); background: rgba(0,212,170,0.06); }
     .dsx-mapping-chip.dsx-chip-item { cursor: grab; padding: 4px 8px; }
@@ -616,8 +629,8 @@
       .dsx-diff-field { grid-template-columns: 1fr; }
     }
   </style>
-  <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60">
-  <script defer src="/static/ui_components.js?v=ui-consistency-20260803-28"></script>
+  <link rel="stylesheet" href="/static/ui_components.css?v=p0-20260930">
+  <script defer src="/static/ui_components.js?v=p0-20260930-2"></script>
 </head>
 <body>
   <main class="dsx-page" id="dsx-root">
@@ -718,7 +731,7 @@
       }
       return e;
     }
-    function escapeHtml(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+    function escapeHtml(s){ return QymSafe.escapeHtml(s == null ? '' : String(s)); }
     function dsxSearchControl(input){
       const wrap = el('div', { className: 'dsx-search-wrap qym-search-wrap' });
       wrap.appendChild(input);
@@ -788,6 +801,42 @@
         return { ok: true, value: JSON.parse(t), ambiguous: true };
       }
       return { ok: true, value: raw };
+    }
+    const ITEM_FIELD_LABELS = { input: 'Input', expected_output: 'Expected output', metadata: 'Metadata' };
+    function jsonTypeName(v){
+      if (v === null || v === undefined) return 'null';
+      if (Array.isArray(v)) return 'array';
+      return typeof v; // string | number | boolean | object
+    }
+    // Item page editing keeps each value's JSON type: strings (and empty values) are edited
+    // as text and saved as strings; other values are edited and saved as raw JSON. The user
+    // changes the type only by switching the field between Text and JSON.
+    function itemFieldInitialMode(key, value){
+      if (key === 'metadata') return 'json';
+      return (value == null || typeof value === 'string') ? 'text' : 'json';
+    }
+    function parseItemField(text, key, mode){
+      if (key === 'metadata') return coerceCellValue(text, 'metadata');
+      const raw = (text == null ? '' : String(text));
+      const t = raw.trim();
+      if (t === '') return { ok: true, value: null };
+      if (mode === 'text') return { ok: true, value: raw };
+      try { return { ok: true, value: JSON.parse(t) }; }
+      catch (_) { return { ok: false, error: 'Not valid JSON. Switch to Text to save it as a string' }; }
+    }
+    // Text for the two sides of a value diff. When the JSON type differs (e.g. "51" → 51)
+    // both sides render as JSON (strings quoted) and a note names the change, so a
+    // type-only change is never shown as two identical values.
+    function diffValueTexts(before, after){
+      const tb = jsonTypeName(before), ta = jsonTypeName(after);
+      const typeChanged = (before != null && after != null && tb !== ta)
+        || (before == null && after === '') || (after == null && before === '');
+      const show = v => {
+        if (v == null) return typeChanged ? 'null' : '';
+        if (typeof v === 'string' && !typeChanged) return v;
+        return prettyJSON(typeof v === 'string' ? JSON.stringify(v) : v);
+      };
+      return { before: show(before), after: show(after), note: typeChanged ? 'type changed: ' + tb + ' → ' + ta : '' };
     }
     function tokenize(v){
       // Render a one-line preview of input/expected with light tinting
@@ -1040,7 +1089,9 @@
       const m = path.match(/^\/projects\/([^\/]+)\/datasets(?:\/([^\/]+)(?:\/(compare))?)?$/);
       if (!m) return { mode: 'unknown' };
       const slug = m[1];
-      const ref = m[2] || null;
+      // Dataset slugs may be non-Latin (e.g. Arabic); the path segment arrives percent-encoded.
+      let ref = m[2] || null;
+      if (ref) { try { ref = decodeURIComponent(ref); } catch (_) { /* keep the raw segment */ } }
       const compare = m[3] === 'compare';
       return {
         mode: !ref ? 'catalog' : (compare ? 'compare' : 'detail'),
@@ -1161,6 +1212,15 @@
         project = window.__QYM_USER__.projects.find(p => p.slug === state.slug) || null;
       }
       return project;
+    }
+    // An archived project opens read-only: its datasets, versions and items stay
+    // readable, every change answers 409, so no edit control is offered.
+    function projectReadOnly(){
+      const project = state.project || resolveProjectFromShell();
+      return !!(project && project.is_active === false);
+    }
+    function canEditVersion(v){
+      return !!(v && v.status === 'draft' && !projectReadOnly());
     }
     function projectCrumb(){
       const project = state.project || resolveProjectFromShell() || { slug: state.slug, name: state.slug };
@@ -1362,11 +1422,11 @@
       const newBtn = el('button', { className: 'shell-btn shell-btn-primary qym-inline-action', 'aria-haspopup': 'menu', style: { flex: 'none' } }, '+ New dataset');
       newBtn.addEventListener('click', e => { e.stopPropagation(); openContextMenu(newBtn, [
         { label: 'Start blank', onClick: openNewDatasetWizard },
-        { label: 'Import CSV / TSV / JSONL', onClick: () => openUploadWizard({ mode: 'new' }) },
+        { label: 'Import CSV / TSV / JSON / JSONL', onClick: () => openUploadWizard({ mode: 'new' }) },
       ]); });
       controls.appendChild(dsxSearchControl(search));
       controls.appendChild(sortSel);
-      controls.appendChild(newBtn);
+      if (!projectReadOnly()) controls.appendChild(newBtn);
       bar.appendChild(controls);
       container.appendChild(bar);
 
@@ -1425,12 +1485,12 @@
           empty.appendChild(el('p', null, state.datasets.length === 0
             ? 'Curate examples once, version them, and run them against any model.'
             : 'Try a different search term.'));
-          if (state.datasets.length === 0) {
+          if (state.datasets.length === 0 && !projectReadOnly()) {
             const acts = el('div', { className: 'dsx-empty-actions' });
             const firstBtn = el('button', { className: 'shell-btn shell-btn-primary', 'aria-haspopup': 'menu' }, '+ Create your first dataset');
             firstBtn.addEventListener('click', e => { e.stopPropagation(); openContextMenu(firstBtn, [
               { label: 'Start blank', onClick: openNewDatasetWizard },
-              { label: 'Import CSV / TSV / JSONL', onClick: () => openUploadWizard({ mode: 'new' }) },
+              { label: 'Import CSV / TSV / JSON / JSONL', onClick: () => openUploadWizard({ mode: 'new' }) },
             ]); });
             acts.appendChild(firstBtn);
             empty.appendChild(acts);
@@ -1534,38 +1594,194 @@
     // ============================================================
     // UPLOAD WIZARD (3 steps)
     // ============================================================
+    // Text encodings offered for CSV/TSV files. Values are TextDecoder labels, which the
+    // upload API accepts as `encoding`. Excel on Arabic Windows saves "CSV" as Windows-1256.
+    const CSV_ENCODINGS = [
+      ['utf-8', 'UTF-8'],
+      ['utf-16le', 'UTF-16 LE'],
+      ['utf-16be', 'UTF-16 BE'],
+      ['windows-1256', 'Windows-1256 (Arabic)'],
+      ['iso-8859-6', 'ISO-8859-6 (Arabic)'],
+      ['windows-1252', 'Windows-1252 (Western European)'],
+    ];
+    // Tried in this order when a file is not UTF-8; ties keep the historic Windows-1252.
+    const LEGACY_CSV_ENCODINGS = ['windows-1252', 'windows-1256', 'iso-8859-6'];
+    const ENCODING_SAMPLE_CHARS = 262144;
+    const NEUTRAL_TEXT_CHARS = new Set(Array.from('\u00a0\u00ab\u00bb\u201c\u201d\u2018\u2019\u201e\u2013\u2014\u2026\u2022\u20ac\u00a3\u00a5\u00b0\u00a9\u00ae\u2122\u00a7\u00b7\u00bf\u00a1\u060c\u061b\u061f\u066a\u066b\u066c'));
+    // Keys the importer reads from a JSON/JSONL record (same aliases as the server).
+    const JSON_ITEM_KEYS = ['item_id', 'id', 'input', 'expected_output', 'expected', 'metadata', 'labels'];
+    function encodingLabel(encoding){
+      const hit = CSV_ENCODINGS.find(entry => entry[0] === encoding);
+      return hit ? hit[1] : encoding;
+    }
+    function isArabicCodePoint(cp){
+      return (cp >= 0x0600 && cp <= 0x06FF) || (cp >= 0x0750 && cp <= 0x077F) || (cp >= 0x08A0 && cp <= 0x08FF)
+        || (cp >= 0xFB50 && cp <= 0xFDFF) || (cp >= 0xFE70 && cp <= 0xFEFF);
+    }
+    // Mirrors _legacy_text_score in api/datasets.py. Arabic read with the wrong code page
+    // becomes words made of accented Latin letters; Latin read as Arabic mixes scripts
+    // inside a word. Real text keeps one script per word, so it scores higher.
+    function legacyTextScore(text){
+      let total = 0;
+      let word = [];
+      const flush = () => {
+        const nonAscii = word.filter(ch => ch.codePointAt(0) > 0x7f);
+        if (nonAscii.length) {
+          const arabic = word.some(ch => isArabicCodePoint(ch.codePointAt(0)));
+          const latin = word.some(ch => ch.codePointAt(0) < 0x250);
+          const other = word.some(ch => { const cp = ch.codePointAt(0); return cp >= 0x250 && !isArabicCodePoint(cp); });
+          if (other || (arabic && latin)) total -= 2 * nonAscii.length;
+          else if (arabic) total += word.length;
+          else if (2 * nonAscii.length <= word.length) total += nonAscii.length;
+          else total -= nonAscii.length;
+        }
+        word = [];
+      };
+      for (const ch of text) {
+        if (/[\p{L}\p{M}]/u.test(ch)) { word.push(ch); continue; }
+        flush();
+        if (ch.codePointAt(0) > 0x7f && !/[\p{N}\p{Z}]/u.test(ch) && !NEUTRAL_TEXT_CHARS.has(ch)) total -= 1;
+      }
+      flush();
+      return total;
+    }
+    function decodeBytes(bytes, encoding){
+      return new TextDecoder(encoding, { fatal: true }).decode(bytes);
+    }
+    function detectCSVEncoding(bytes){
+      if (bytes[0] === 0xff && bytes[1] === 0xfe) return 'utf-16le';
+      if (bytes[0] === 0xfe && bytes[1] === 0xff) return 'utf-16be';
+      try { decodeBytes(bytes, 'utf-8'); return 'utf-8'; } catch (_) { /* not UTF-8: score the legacy code pages */ }
+      let best = null;
+      LEGACY_CSV_ENCODINGS.forEach(encoding => {
+        let text;
+        try { text = decodeBytes(bytes, encoding); } catch (_) { return; }
+        const score = legacyTextScore(text.slice(0, ENCODING_SAMPLE_CHARS));
+        if (!best || score > best.score) best = { encoding, score };
+      });
+      return best ? best.encoding : 'windows-1252';
+    }
+    // Mirrors _slugify in api/datasets.py ('' means the server generates one).
+    function slugifyDatasetName(value){
+      const text = String(value || '').normalize('NFKC').trim().toLowerCase();
+      const chars = [];
+      for (const ch of text) {
+        const last = chars[chars.length - 1];
+        if (/[\p{L}\p{N}]/u.test(ch)) chars.push(ch);
+        else if (/\p{M}/u.test(ch) && chars.length && last !== '-') chars.push(ch);
+        else if (chars.length && last !== '-') chars.push('-');
+      }
+      return chars.slice(0, 120).join('').replace(/^-+|-+$/g, '');
+    }
+    function nextVersionAfter(version){
+      const m = /^v(\d+)$/.exec(String(version || ''));
+      return m ? 'v' + (parseInt(m[1], 10) + 1) : null;
+    }
+    // Mirrors _labels in api/datasets.py: a comma-separated string or a list of values.
+    function importLabels(value){
+      if (typeof value === 'string') return value.split(',').map(part => part.trim()).filter(Boolean);
+      if (Array.isArray(value)) return value.map(part => String(part).trim()).filter(Boolean);
+      return [];
+    }
+    function jsonRecordProblem(obj){
+      if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) return 'must be a JSON object';
+      if (obj.metadata != null && (typeof obj.metadata !== 'object' || Array.isArray(obj.metadata))) return 'metadata must be a JSON object';
+      return '';
+    }
+    // Parse a .json/.jsonl upload with the server's rules: a .json file holding an array is
+    // JSON, anything else is JSONL, and every record must be an object. Nothing is dropped:
+    // records that cannot be imported are returned as errors with their line/item number.
+    function parseJSONRecords(text, fileName){
+      const body = String(text || '').replace(/^\uFEFF/, '');
+      const rows = [];
+      const errors = [];
+      if (String(fileName || '').toLowerCase().endsWith('.json') && body.trim().startsWith('[')) {
+        let doc;
+        try { doc = JSON.parse(body); }
+        catch (e) { return { format: 'json', rows, errors: [{ where: 'File', message: 'is not valid JSON (' + e.message + ')' }], total: 0 }; }
+        doc.forEach((obj, index) => {
+          const problem = jsonRecordProblem(obj);
+          if (problem) errors.push({ where: 'Item ' + (index + 1), message: problem });
+          else rows.push(obj);
+        });
+        return { format: 'json', rows, errors, total: doc.length };
+      }
+      let total = 0;
+      body.split('\n').forEach((line, index) => {
+        const t = line.trim();
+        if (!t) return;
+        total += 1;
+        let obj;
+        try { obj = JSON.parse(t); }
+        catch (_) { errors.push({ where: 'Line ' + (index + 1), message: 'is not valid JSON' }); return; }
+        const problem = jsonRecordProblem(obj);
+        if (problem) errors.push({ where: 'Line ' + (index + 1), message: problem });
+        else rows.push(obj);
+      });
+      return { format: 'jsonl', rows, errors, total };
+    }
+
     function openUploadWizard(opts){
       opts = opts || {};
-      const mode = opts.mode || 'new'; // 'new' | 'add-to-draft'
+      // 'new' creates a dataset (never appends to one), 'new-version' adds the file as a new
+      // version of opts.target, 'add-to-draft' upserts the rows into an existing draft.
+      let mode = opts.mode || 'new';
       const targetVersionLabel = opts.versionLabel || null;
 
       const wstate = {
         step: 1,
         file: null,
-        format: null,           // 'csv' | 'jsonl'
+        format: null,           // 'csv' | 'jsonl' | 'json'
+        reading: false,
+        readSeq: 0,
+        readError: '',
+        csvBytes: null,         // raw bytes, kept so another encoding can re-decode the preview
+        encoding: null,         // encoding used for the CSV (detected or chosen)
+        detectedEncoding: null,
+        encodingError: '',
+        encodingSuspicious: false,
         csvDelimiter: ',',
         csvHeaders: [],
         csvRows: [],            // all rows for import; only the preview is truncated
-        jsonlRows: [],
+        jsonlRows: [],          // every valid JSON/JSONL record
+        jsonErrors: [],         // records that cannot be imported: [{ where, message }]
+        jsonTotal: 0,
         name: '',
-        slug: '',
         description: '',
         versionName: '',
-        publish: true,
-        setAlias: true,
+        // A brand-new dataset can safely become production; a new version of an existing
+        // dataset stays a draft unless the user explicitly opts in.
+        publish: mode === 'new',
+        setAlias: mode === 'new',
         mapping: { input: [], expected: [], id: '', metadata: [] },
+        target: opts.target || null, // 'new-version': { id, name, slug, nextVersion }
+        errors: {},                  // inline errors shown next to fields: name, file, mapping, submit
         // for add-to-draft
         draftRef: opts.ref || state.datasetRef,
         draftVersion: targetVersionLabel,
       };
+      let nameInputEl = null;
+      let nameErrorEl = null;
+      let slugHelpEl = null;
+      let fileStatusEl = null;
+      let fileInputEl = null;
+
+      function wizardTitle(){ return mode === 'new' ? 'Upload dataset' : (mode === 'new-version' ? 'Upload new version' : 'Add items to draft'); }
+      function wizardSubtitle(){
+        if (mode === 'new-version' && wstate.target) return 'Upload a CSV, TSV, JSON, or JSONL file as a new version of "' + wstate.target.name + '".';
+        return 'Upload a CSV, TSV, JSON, or JSONL file.';
+      }
+      function submitLabel(){ return mode === 'new' ? 'Create dataset' : (mode === 'new-version' ? 'Create version' : 'Add items'); }
 
       // Modal scaffold via shell modal markup (rolled inline)
       const backdrop = el('div', { className: 'shell-modal-backdrop' });
       const modal = el('div', { className: 'shell-modal', style: { maxWidth: '780px', width: '100%' } });
       const header = el('div', { className: 'shell-modal-header' });
       const titleWrap = el('div');
-      titleWrap.appendChild(el('div', { className: 'shell-modal-title', id: 'dsx-wiz-title' }, mode === 'new' ? 'Upload dataset' : 'Add items to draft'));
-      titleWrap.appendChild(el('div', { className: 'shell-modal-subtitle', id: 'dsx-wiz-subtitle' }, 'Upload a CSV, TSV, or JSONL file.'));
+      const titleEl = el('div', { className: 'shell-modal-title', id: 'dsx-wiz-title' }, wizardTitle());
+      const subtitleEl = el('div', { className: 'shell-modal-subtitle', id: 'dsx-wiz-subtitle' }, wizardSubtitle());
+      titleWrap.appendChild(titleEl);
+      titleWrap.appendChild(subtitleEl);
       header.appendChild(titleWrap);
       const closeBtn = el('button', { className: 'shell-modal-close', onclick: close }, '×');
       header.appendChild(closeBtn);
@@ -1598,17 +1814,31 @@
       requestAnimationFrame(() => backdrop.classList.add('shell-modal-open'));
 
       function close(){ backdrop.classList.remove('shell-modal-open'); setTimeout(() => backdrop.remove(), 200); }
-      function updateSteps(){ stepEls.forEach((s, i) => { s.classList.toggle('active', wstate.step === i + 1); s.classList.toggle('done', wstate.step > i + 1); }); backBtn.style.visibility = wstate.step === 1 ? 'hidden' : 'visible'; nextBtn.textContent = wstate.step === 3 ? (mode === 'new' ? 'Create dataset' : 'Add items') : 'Continue →'; }
-      function stepBack(){ if (wstate.step > 1) { wstate.step--; render(); } }
+      function updateSteps(){ stepEls.forEach((s, i) => { s.classList.toggle('active', wstate.step === i + 1); s.classList.toggle('done', wstate.step > i + 1); }); backBtn.style.visibility = wstate.step === 1 ? 'hidden' : 'visible'; nextBtn.textContent = wstate.step === 3 ? submitLabel() : 'Continue →'; }
+      function stepBack(){ if (wstate.step > 1) { wstate.errors = {}; wstate.step = wstate.step === 3 && wstate.format !== 'csv' ? 1 : wstate.step - 1; render(); } }
       function stepNext(){
         if (wstate.step === 1) {
-          if (mode === 'new' && !wstate.name.trim()) { Shell.toast('Name is required', 'error'); return; }
-          if (!wstate.file) { Shell.toast('Please choose a file', 'error'); return; }
-          if (wstate.format === 'jsonl') { wstate.step = 3; render(); return; }
-          wstate.step = 2; render(); return;
+          const errors = {};
+          const nameProblem = mode === 'new' ? nameError() : '';
+          if (nameProblem) errors.name = nameProblem;
+          const fileProblem = fileError();
+          if (fileProblem) errors.file = fileProblem;
+          wstate.errors = errors;
+          if (Object.keys(errors).length) {
+            refreshNameError();
+            refreshFileStatus();
+            (errors.name && nameInputEl ? nameInputEl : fileInputEl)?.focus?.();
+            return;
+          }
+          wstate.step = wstate.format === 'csv' ? 2 : 3; render(); return;
         }
         if (wstate.step === 2) {
-          if (!wstate.mapping.input || !wstate.mapping.input.length) { Shell.toast('Assign at least one Input column', 'error'); return; }
+          if (!wstate.mapping.input || !wstate.mapping.input.length) {
+            wstate.errors = { mapping: 'Assign at least one column to Input before you continue.' };
+            rerenderStep2();
+            return;
+          }
+          wstate.errors = {};
           wstate.step = 3; render(); return;
         }
         if (wstate.step === 3) { submit(); return; }
@@ -1622,14 +1852,88 @@
         else body.appendChild(renderStep3());
       }
 
+      // ---- Step 1: name + file -------------------------------------------------------
+      function nameClash(){
+        const clean = wstate.name.trim();
+        if (!clean) return null;
+        const slug = slugifyDatasetName(clean);
+        const lower = clean.toLowerCase();
+        return (state.datasets || []).find(d => String(d.name || '').trim().toLowerCase() === lower
+          || d.slug === clean || (slug && d.slug === slug)) || null;
+      }
+      function nameError(){
+        if (!wstate.name.trim()) return 'Enter a name for the dataset.';
+        const clash = nameClash();
+        if (clash) return 'A dataset named "' + clash.name + '" already exists (slug ' + clash.slug + '). Choose another name, or upload this file as a new version of it.';
+        return '';
+      }
+      function refreshNameError(){
+        if (!nameInputEl || !nameErrorEl) return;
+        const clash = nameClash();
+        // A clash shows as you type; "required" only after Continue.
+        const message = clash ? nameError() : (wstate.errors.name ? nameError() : '');
+        nameInputEl.setAttribute('aria-invalid', message ? 'true' : 'false');
+        nameErrorEl.replaceChildren();
+        if (message) {
+          nameErrorEl.appendChild(el('span', null, message));
+          if (clash) {
+            nameErrorEl.appendChild(el('button', { type: 'button', className: 'dsx-wiz-link', onclick: () => switchToNewVersion(clash) }, 'Upload as a new version of "' + clash.name + '"'));
+          }
+        }
+        if (slugHelpEl) {
+          const slug = slugifyDatasetName(wstate.name);
+          slugHelpEl.textContent = wstate.name.trim() ? ('Slug: ' + (slug || 'generated automatically')) : '';
+        }
+      }
+      function switchToNewVersion(dataset){
+        mode = 'new-version';
+        wstate.target = {
+          id: dataset.id,
+          name: dataset.name,
+          slug: dataset.slug,
+          nextVersion: nextVersionAfter(dataset.latest_version && dataset.latest_version.version),
+        };
+        wstate.publish = false;
+        wstate.setAlias = false;
+        wstate.errors = {};
+        titleEl.textContent = wizardTitle();
+        subtitleEl.textContent = wizardSubtitle();
+        render();
+      }
+      function jsonErrorsSummary(){
+        const errs = wstate.jsonErrors;
+        if (errs.length === 1 && errs[0].where === 'File') return 'The file ' + errs[0].message + '. Fix it and choose the file again.';
+        const unit = wstate.format === 'json' ? 'items' : 'lines';
+        return errs.length + ' of ' + wstate.jsonTotal + ' ' + unit + ' cannot be imported, so nothing will be uploaded. Fix these ' + unit + ' and choose the file again.';
+      }
+      function fileError(){
+        if (!wstate.file) return 'Choose a file to upload.';
+        if (wstate.reading) return 'Still reading the file. Try again in a moment.';
+        if (wstate.readError) return wstate.readError;
+        if (wstate.format === 'csv') {
+          if (wstate.encodingError) return wstate.encodingError;
+          if (!wstate.csvHeaders.length) return 'The file has no header row.';
+          if (!wstate.csvRows.length) return 'The file has a header row but no data rows.';
+          return '';
+        }
+        if (wstate.jsonErrors.length) return jsonErrorsSummary();
+        if (!wstate.jsonlRows.length) return 'The file has no items.';
+        return '';
+      }
+
       function renderStep1(){
         const wrap = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '14px' } });
+        nameInputEl = null; nameErrorEl = null; slugHelpEl = null;
         if (mode === 'new') {
           const nameField = el('div', { className: 'shell-form-field' });
-          nameField.appendChild(el('label', { className: 'shell-form-label' }, 'Name *'));
-          const nameInput = el('input', { className: 'shell-form-input', placeholder: 'e.g. Customer Support QA', value: wstate.name });
-          nameInput.addEventListener('input', e => { wstate.name = e.target.value; });
-          nameField.appendChild(nameInput);
+          nameField.appendChild(el('label', { className: 'shell-form-label', for: 'dsx-wiz-name' }, 'Name *'));
+          nameInputEl = el('input', { className: 'shell-form-input', id: 'dsx-wiz-name', placeholder: 'e.g. Customer Support QA', value: wstate.name, 'aria-describedby': 'dsx-wiz-name-error dsx-wiz-slug' });
+          nameInputEl.addEventListener('input', e => { wstate.name = e.target.value; refreshNameError(); });
+          nameField.appendChild(nameInputEl);
+          slugHelpEl = el('div', { className: 'shell-form-help', id: 'dsx-wiz-slug' });
+          nameField.appendChild(slugHelpEl);
+          nameErrorEl = el('div', { className: 'dsx-field-error', id: 'dsx-wiz-name-error', role: 'alert' });
+          nameField.appendChild(nameErrorEl);
           wrap.appendChild(nameField);
 
           const descField = el('div', { className: 'shell-form-field' });
@@ -1639,85 +1943,156 @@
           descInput.addEventListener('input', e => { wstate.description = e.target.value; });
           descField.appendChild(descInput);
           wrap.appendChild(descField);
+        } else if (mode === 'new-version') {
+          wrap.appendChild(el('div', { className: 'shell-form-help' }, 'The file becomes a new version of "' + (wstate.target && wstate.target.name) + '". Existing versions and the production alias are not changed unless you choose to on the Review step.'));
         } else {
           wrap.appendChild(el('div', { className: 'shell-form-help' }, 'Items will be added to version "' + (wstate.draftVersion || state.versionLabel || 'current draft') + '" of "' + (state.dataset && state.dataset.name) + '".'));
         }
 
         const fileField = el('div', { className: 'shell-form-field' });
-        fileField.appendChild(el('label', { className: 'shell-form-label' }, 'File (CSV, TSV, or JSONL) *'));
+        fileField.appendChild(el('label', { className: 'shell-form-label' }, 'File (CSV, TSV, JSON, or JSONL) *'));
         const drop = el('div', { className: 'dsx-file-drop' });
-        const fileInput = el('input', { type: 'file', accept: '.csv,.tsv,.txt,.jsonl,.json,text/csv,text/tab-separated-values,text/plain,application/json' });
+        fileInputEl = el('input', { type: 'file', accept: '.csv,.tsv,.txt,.jsonl,.ndjson,.json,text/csv,text/tab-separated-values,text/plain,application/json', 'aria-label': 'Dataset file', 'aria-describedby': 'dsx-wiz-file-status' });
         const dropMsg = el('div', { html: '<strong>Drag & drop</strong> or <span style="color:var(--accent-primary)">click to browse</span>' });
-        drop.appendChild(fileInput);
+        drop.appendChild(fileInputEl);
         drop.appendChild(dropMsg);
         const fileNameEl = el('div', { className: 'filename' }, wstate.file ? wstate.file.name : '');
         drop.appendChild(fileNameEl);
-        drop.addEventListener('click', () => fileInput.click());
+        drop.addEventListener('click', () => fileInputEl.click());
         ['dragover','dragenter'].forEach(evt => drop.addEventListener(evt, e => { e.preventDefault(); drop.classList.add('dragover'); }));
         ['dragleave','dragend','drop'].forEach(evt => drop.addEventListener(evt, e => { e.preventDefault(); drop.classList.remove('dragover'); }));
         drop.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
-        fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+        fileInputEl.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
         fileField.appendChild(drop);
 
-        const fmtNote = el('div', { className: 'shell-form-help', id: 'dsx-wiz-fmt', style: { marginTop: '8px', padding: '2px 0' } });
-        fmtNote.innerHTML = 'Detected format: <strong>' + (wstate.format ? wstate.format.toUpperCase() : '—') + '</strong>';
-        fileField.appendChild(fmtNote);
+        fileStatusEl = el('div', { className: 'dsx-wiz-filestatus', id: 'dsx-wiz-file-status' });
+        fileField.appendChild(fileStatusEl);
         wrap.appendChild(fileField);
+        refreshNameError();
+        refreshFileStatus();
         return wrap;
 
         function handleFile(file){
           wstate.file = file;
+          wstate.errors = Object.assign({}, wstate.errors, { file: '' });
           fileNameEl.textContent = file.name;
-          const lower = file.name.toLowerCase();
-          if (lower.endsWith('.jsonl') || lower.endsWith('.json')) { wstate.format = 'jsonl'; parseJSONL(file); }
-          else { wstate.format = 'csv'; parseCSV(file); }
-          fmtNote.innerHTML = 'Detected format: <strong>' + wstate.format.toUpperCase() + '</strong>';
+          wstate.format = /\.(jsonl|ndjson|json)$/i.test(file.name) ? 'jsonl' : 'csv';
           if (mode === 'new' && !wstate.name) {
-            wstate.name = file.name.replace(/\.(csv|tsv|txt|jsonl|json)$/i, '');
-            const nameInp = wrap.querySelector('input.shell-form-input');
-            if (nameInp) nameInp.value = wstate.name;
+            wstate.name = file.name.replace(/\.(csv|tsv|txt|jsonl|ndjson|json)$/i, '');
+            if (nameInputEl) nameInputEl.value = wstate.name;
+            refreshNameError();
           }
+          readFile(file);
         }
       }
 
-      function parseCSV(file){
+      function readFile(file){
+        const seq = ++wstate.readSeq;
+        const isCSV = wstate.format === 'csv';
+        wstate.reading = true;
+        wstate.readError = '';
+        wstate.csvBytes = null; wstate.csvHeaders = []; wstate.csvRows = [];
+        wstate.jsonlRows = []; wstate.jsonErrors = []; wstate.jsonTotal = 0;
+        wstate.encoding = null; wstate.detectedEncoding = null; wstate.encodingError = ''; wstate.encodingSuspicious = false;
+        refreshFileStatus();
         const reader = new FileReader();
         reader.onload = () => {
-          const text = decodeCSVBuffer(reader.result);
-          wstate.csvDelimiter = detectCSVDelimiter(text);
-          const rows = csvParseLite(text, wstate.csvDelimiter);
-          wstate.csvHeaders = rows.length
-            ? rows[0].map((header, index) => index === 0 ? header.replace(/^\uFEFF/, '').trim() : header.trim())
-            : [];
-          wstate.csvRows = rows.slice(1);
-          // auto-map
-          autoMap();
+          if (seq !== wstate.readSeq) return;
+          wstate.reading = false;
+          const bytes = new Uint8Array(reader.result || new ArrayBuffer(0));
+          if (isCSV) {
+            wstate.csvBytes = bytes;
+            wstate.detectedEncoding = detectCSVEncoding(bytes);
+            applyCSVEncoding(wstate.detectedEncoding);
+          } else {
+            let text = '';
+            try { text = decodeBytes(bytes, 'utf-8'); }
+            catch (_) { wstate.readError = 'JSON and JSONL files must be UTF-8 encoded. Save the file as UTF-8 and choose it again.'; }
+            if (!wstate.readError) {
+              const parsed = parseJSONRecords(text, file.name);
+              wstate.format = parsed.format;
+              wstate.jsonlRows = parsed.rows;
+              wstate.jsonErrors = parsed.errors;
+              wstate.jsonTotal = parsed.total;
+            }
+          }
+          if (wstate.step === 1) refreshFileStatus();
+        };
+        reader.onerror = () => {
+          if (seq !== wstate.readSeq) return;
+          wstate.reading = false;
+          wstate.readError = 'The file could not be read. Choose it again.';
+          if (wstate.step === 1) refreshFileStatus();
         };
         reader.readAsArrayBuffer(file);
       }
-      function parseJSONL(file){
-        const reader = new FileReader();
-        reader.onload = () => {
-          const text = String(reader.result || '');
-          const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
-          wstate.jsonlRows = lines.map(l => { try { return JSON.parse(l); } catch(_) { return null; } }).filter(Boolean);
-        };
-        reader.readAsText(file);
+
+      function applyCSVEncoding(encoding){
+        wstate.encoding = encoding;
+        wstate.encodingError = '';
+        wstate.encodingSuspicious = false;
+        let text;
+        try { text = decodeBytes(wstate.csvBytes, encoding); }
+        catch (_) {
+          wstate.encodingError = 'This file is not valid ' + encodingLabel(encoding) + '. Choose the encoding the file was saved with, or save it as "CSV UTF-8" and choose it again.';
+          wstate.csvHeaders = []; wstate.csvRows = [];
+          wstate.mapping = { input: [], expected: [], id: '', metadata: [] };
+          return;
+        }
+        text = text.replace(/^\uFEFF/, '');
+        if (LEGACY_CSV_ENCODINGS.includes(encoding)) wstate.encodingSuspicious = legacyTextScore(text.slice(0, ENCODING_SAMPLE_CHARS)) < 0;
+        wstate.csvDelimiter = detectCSVDelimiter(text);
+        const rows = csvParseLite(text, wstate.csvDelimiter);
+        wstate.csvHeaders = rows.length ? rows[0].map(header => header.trim()) : [];
+        wstate.csvRows = rows.slice(1);
+        autoMap();
       }
-      function decodeCSVBuffer(buffer){
-        const bytes = new Uint8Array(buffer || new ArrayBuffer(0));
-        if (bytes[0] === 0xff && bytes[1] === 0xfe) {
-          return new TextDecoder('utf-16le').decode(bytes);
+
+      function refreshFileStatus(){
+        if (!fileStatusEl) return;
+        fileStatusEl.replaceChildren();
+        const formatLabel = wstate.format ? wstate.format.toUpperCase() : '—';
+        const info = el('div', { className: 'dsx-wiz-fileinfo' });
+        info.appendChild(el('span', { className: 'shell-form-help', id: 'dsx-wiz-fmt' }, ['Detected format: ', el('strong', null, wstate.reading ? 'reading…' : formatLabel)]));
+        if (wstate.format === 'csv' && wstate.csvBytes) {
+          const select = el('select', { className: 'qym-control qym-select', id: 'dsx-wiz-encoding', 'aria-label': 'File encoding' });
+          CSV_ENCODINGS.forEach(([value, label]) => {
+            const option = el('option', { value }, label + (value === wstate.detectedEncoding ? ' · detected' : ''));
+            if (value === wstate.encoding) option.selected = true;
+            select.appendChild(option);
+          });
+          select.addEventListener('change', () => {
+            applyCSVEncoding(select.value);
+            wstate.errors = Object.assign({}, wstate.errors, { file: '' });
+            refreshFileStatus();
+            document.getElementById('dsx-wiz-encoding')?.focus();
+          });
+          info.appendChild(el('label', { className: 'dsx-wiz-encoding shell-form-help', for: 'dsx-wiz-encoding' }, 'Encoding'));
+          info.appendChild(select);
         }
-        if (bytes[0] === 0xfe && bytes[1] === 0xff) {
-          return new TextDecoder('utf-16be').decode(bytes);
+        fileStatusEl.appendChild(info);
+        if (wstate.format === 'csv' && wstate.encoding && !wstate.encodingError) {
+          if (wstate.encodingSuspicious) {
+            fileStatusEl.appendChild(el('div', { className: 'dsx-wiz-alert warning', role: 'status' }, 'Some text looks garbled (words made of accented Latin letters). If the file has Arabic text, choose Windows-1256 above, or save it from Excel as "CSV UTF-8" and choose it again.'));
+          } else if (LEGACY_CSV_ENCODINGS.includes(wstate.encoding)) {
+            fileStatusEl.appendChild(el('div', { className: 'shell-form-help' }, 'This file is not UTF-8, so it was read as ' + encodingLabel(wstate.encoding) + '. Check the preview; saving files as "CSV UTF-8" avoids this.'));
+          }
         }
-        try {
-          return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-        } catch (_) {
-          return new TextDecoder('windows-1252').decode(bytes);
+        // Problems found while reading the file show right away; "choose a file" only after Continue.
+        const message = wstate.file && !wstate.reading ? fileError() : (wstate.errors.file || '');
+        if (fileInputEl) fileInputEl.setAttribute('aria-invalid', message ? 'true' : 'false');
+        if (!message) return;
+        const alert = el('div', { className: 'dsx-wiz-alert error', role: 'alert', id: 'dsx-wiz-file-error' });
+        alert.appendChild(el('div', null, message));
+        if (wstate.format !== 'csv' && wstate.jsonErrors.length && wstate.jsonErrors[0].where !== 'File') {
+          const list = el('ul', { className: 'dsx-wiz-errlist' });
+          wstate.jsonErrors.slice(0, 8).forEach(err => list.appendChild(el('li', null, err.where + ' ' + err.message)));
+          if (wstate.jsonErrors.length > 8) list.appendChild(el('li', null, 'and ' + (wstate.jsonErrors.length - 8) + ' more'));
+          alert.appendChild(list);
         }
+        fileStatusEl.appendChild(alert);
       }
+
       function detectCSVDelimiter(text){
         const candidates = [',', ';', '\t', '|'];
         let best = { delimiter: ',', score: -1 };
@@ -1810,6 +2185,8 @@
         wrap.appendChild(fields);
         const outer = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } });
         outer.appendChild(el('div', { className: 'shell-form-help' }, 'Drag columns into a field, between fields, or back to the left to unassign. Unassigned columns are not imported.'));
+        if (wstate.errors.mapping && (wstate.mapping.input || []).length) wstate.errors = {};
+        if (wstate.errors.mapping) outer.appendChild(el('div', { className: 'dsx-wiz-alert error', role: 'alert', id: 'dsx-wiz-mapping-error' }, wstate.errors.mapping));
         outer.appendChild(wrap);
         outer.appendChild(remap);
         return outer;
@@ -1825,7 +2202,8 @@
         }
 
         function mappingTarget(key, label, kind){
-          const t = el('div', { className: 'dsx-mapping-field' });
+          const invalid = key === 'input' && !!wstate.errors.mapping;
+          const t = el('div', { className: 'dsx-mapping-field' + (invalid ? ' invalid' : ''), 'aria-invalid': invalid ? 'true' : null });
           const lbl = el('div', { className: 'dsx-mapping-field-label' });
           lbl.appendChild(el('span', null, label));
           const value = el('div', { className: 'dsx-mapping-field-value' });
@@ -1865,30 +2243,70 @@
 
       function renderStep3(){
         const wrap = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '14px' } });
-        if (mode === 'new') {
+        if (mode === 'new' || mode === 'new-version') {
           const verField = el('div', { className: 'shell-form-field' });
           verField.appendChild(el('label', { className: 'shell-form-label' }, 'Version name'));
           const verIn = el('input', { className: 'shell-form-input', value: wstate.versionName, placeholder: 'Optional — e.g. initial import' });
           verIn.addEventListener('input', e => { wstate.versionName = e.target.value; });
           verField.appendChild(verIn);
-          verField.appendChild(el('div', { className: 'shell-form-help' }, 'Uploaded as version v1 — version numbers are assigned automatically.'));
+          if (mode === 'new') {
+            const slug = slugifyDatasetName(wstate.name);
+            verField.appendChild(el('div', { className: 'shell-form-help' }, [
+              'Creates a new dataset "' + wstate.name.trim() + '" (slug ',
+              el('code', { className: 'dsx-wiz-slug' }, slug || 'generated automatically'),
+              ') with this file as version v1.',
+            ]));
+          } else {
+            const target = wstate.target || {};
+            verField.appendChild(el('div', { className: 'shell-form-help' }, 'Adds this file to "' + target.name + '" as version ' + (target.nextVersion || 'vN') + '. Version numbers are assigned automatically; earlier versions are not changed.'));
+          }
           wrap.appendChild(verField);
 
           const opts = el('div', { style: { display: 'flex', gap: '14px', flexWrap: 'wrap' } });
-          opts.appendChild(checkbox('Publish immediately', wstate.publish, v => { wstate.publish = v; }));
-          opts.appendChild(checkbox('Set as production alias', wstate.setAlias, v => { wstate.setAlias = v; }));
+          opts.appendChild(checkbox('Publish immediately', wstate.publish, v => {
+            wstate.publish = v;
+            if (!v) wstate.setAlias = false;
+            body.replaceChildren(renderStep3());
+          }));
+          opts.appendChild(checkbox('Set as production alias', wstate.publish && wstate.setAlias, v => { wstate.setAlias = v; }, !wstate.publish));
           wrap.appendChild(opts);
+          if (mode === 'new-version' && wstate.publish && wstate.setAlias) {
+            wrap.appendChild(el('div', { className: 'dsx-wiz-alert warning', role: 'status' }, 'Runs that use the "production" alias of "' + (wstate.target && wstate.target.name) + '" will evaluate this file from now on.'));
+          }
         }
 
-        const summary = el('div', { className: 'shell-form-help' });
+        if (wstate.errors.submit) {
+          wrap.appendChild(el('div', { className: 'dsx-wiz-alert error', role: 'alert', id: 'dsx-wiz-submit-error' }, wstate.errors.submit));
+        }
+
         const rows = wstate.format === 'csv' ? wstate.csvRows : wstate.jsonlRows;
         const rowCount = rows.length;
         const previewRows = rows.slice(0, 10);
-        summary.innerHTML = '<strong>' + (wstate.file ? wstate.file.name : '—') + '</strong> · '
-          + (wstate.format ? wstate.format.toUpperCase() : '—') + ' · '
-          + rowCount + ' row' + (rowCount === 1 ? '' : 's') + ' · '
-          + 'preview shows first ' + previewRows.length + ' row' + (previewRows.length === 1 ? '' : 's');
-        wrap.appendChild(summary);
+        const summaryParts = [
+          wstate.format ? wstate.format.toUpperCase() : '—',
+        ];
+        if (wstate.format === 'csv' && wstate.encoding) summaryParts.push(encodingLabel(wstate.encoding));
+        summaryParts.push(rowCount + ' row' + (rowCount === 1 ? '' : 's'));
+        summaryParts.push('preview shows first ' + previewRows.length + ' row' + (previewRows.length === 1 ? '' : 's'));
+        wrap.appendChild(el('div', { className: 'shell-form-help' }, [
+          el('strong', null, wstate.file ? wstate.file.name : '—'),
+          ' · ' + summaryParts.join(' · '),
+        ]));
+
+        // Say exactly what will not be imported, instead of dropping it silently.
+        if (wstate.format === 'csv') {
+          const used = new Set([wstate.mapping.id, ...(wstate.mapping.input || []), ...(wstate.mapping.expected || []), ...(wstate.mapping.metadata || [])].filter(Boolean));
+          const ignored = wstate.csvHeaders.filter(col => col && !used.has(col));
+          if (ignored.length) {
+            wrap.appendChild(el('div', { className: 'dsx-wiz-alert warning', role: 'status', id: 'dsx-wiz-ignored' }, 'Not imported: ' + pluralize(ignored.length, 'column') + ' (' + ignored.join(', ') + '). Go back to Map columns and drag them to Metadata to keep them.'));
+          }
+        } else {
+          const extra = new Set();
+          wstate.jsonlRows.forEach(r => Object.keys(r || {}).forEach(k => { if (!JSON_ITEM_KEYS.includes(k)) extra.add(k); }));
+          if (extra.size) {
+            wrap.appendChild(el('div', { className: 'dsx-wiz-alert warning', role: 'status', id: 'dsx-wiz-ignored' }, 'Not imported: ' + pluralize(extra.size, 'key') + ' (' + Array.from(extra).join(', ') + '). Only item_id (or id), input, expected_output (or expected), metadata, and labels are read; move other fields into metadata to keep them.'));
+          }
+        }
 
         // Preview
         const previewWrap = el('div', { className: 'dsx-preview-table' });
@@ -1919,39 +2337,57 @@
         return wrap;
       }
 
-      function checkbox(label, checked, onChange){
-        const wrap = el('label', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: 'var(--font-md)', color: 'var(--text-secondary)' } });
+      function checkbox(label, checked, onChange, disabled){
+        const wrap = el('label', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: disabled ? 'default' : 'pointer', fontSize: 'var(--font-md)', color: disabled ? 'var(--text-muted)' : 'var(--text-secondary)' }, title: disabled ? 'Publish the version to set an alias' : null });
         const cb = el('input', { type: 'checkbox' });
         cb.checked = !!checked;
+        cb.disabled = !!disabled;
         cb.addEventListener('change', () => onChange(cb.checked));
         wrap.appendChild(cb);
         wrap.appendChild(document.createTextNode(label));
         return wrap;
       }
 
+      function appendCSVMapping(fd){
+        if (wstate.encoding) fd.append('encoding', wstate.encoding);
+        if (wstate.mapping.input && wstate.mapping.input.length) fd.append('input_cols', wstate.mapping.input.join(','));
+        if (wstate.mapping.expected && wstate.mapping.expected.length) fd.append('expected_cols', wstate.mapping.expected.join(','));
+        if (wstate.mapping.id) fd.append('id_col', wstate.mapping.id);
+        if (wstate.mapping.metadata && wstate.mapping.metadata.length) fd.append('metadata_cols', wstate.mapping.metadata.join(','));
+      }
+
       async function submit(){
+        wstate.errors = {};
         nextBtn.disabled = true; nextBtn.innerHTML = '<span class="dsx-spinner"></span> Working...';
         try {
-          if (mode === 'new') {
+          if (mode === 'new' || mode === 'new-version') {
             const fd = new FormData();
             fd.append('project_slug', state.slug);
-            fd.append('name', wstate.name);
-            if (wstate.description) fd.append('description', wstate.description);
+            if (mode === 'new') {
+              fd.append('name', wstate.name.trim());
+              // Never append to an existing dataset from "Create dataset": the API answers 409.
+              fd.append('create_only', 'true');
+              if (wstate.description) fd.append('description', wstate.description);
+            } else {
+              fd.append('name', wstate.target.name);
+              fd.append('dataset_ref', wstate.target.id);
+            }
             if (wstate.versionName) fd.append('version_name', wstate.versionName);
             if (wstate.publish) fd.append('publish', 'true');
             if (wstate.publish && wstate.setAlias) fd.append('set_alias', 'production');
-            if (wstate.format === 'csv') {
-              if (wstate.mapping.input && wstate.mapping.input.length) fd.append('input_cols', wstate.mapping.input.join(','));
-              if (wstate.mapping.expected && wstate.mapping.expected.length) fd.append('expected_cols', wstate.mapping.expected.join(','));
-              if (wstate.mapping.id) fd.append('id_col', wstate.mapping.id);
-              if (wstate.mapping.metadata && wstate.mapping.metadata.length) fd.append('metadata_cols', wstate.mapping.metadata.join(','));
-            }
+            fd.append('format', wstate.format);
+            if (wstate.format === 'csv') appendCSVMapping(fd);
             fd.append('file', wstate.file);
             const created = await apiFetch('/v1/datasets:upload', { method: 'POST', body: fd });
             const totalItems = (created.version && created.version.item_count) || '?';
-            Shell.toast('Dataset "' + (created.dataset.name) + '" created · ' + pluralize(totalItems, 'item'), 'success');
             close();
-            navigate({ mode: 'detail', ref: created.dataset.slug, tab: 'items', v: null, item: null });
+            if (mode === 'new') {
+              Shell.toast('Dataset "' + (created.dataset.name) + '" created · ' + pluralize(totalItems, 'item'), 'success');
+              navigate({ mode: 'detail', ref: created.dataset.slug, tab: 'items', v: null, item: null });
+            } else {
+              Shell.toast('Version ' + created.version.version + ' of "' + created.dataset.name + '" created · ' + pluralize(totalItems, 'item'), 'success');
+              navigate({ mode: 'detail', ref: created.dataset.slug, tab: 'items', v: created.version.version, item: null }, { forceReload: true });
+            }
           } else {
             // Add items to existing draft: build bulk upserts
             const upserts = [];
@@ -1975,13 +2411,17 @@
                 upserts.push(entry);
               });
             } else {
+              // Same keys and aliases as the server's JSON/JSONL parser.
               wstate.jsonlRows.forEach(r => {
                 const entry = {};
-                if (r.item_id) entry.item_id = r.item_id;
+                const id = String(r.item_id || r.id || '').trim();
+                if (id) entry.item_id = id;
                 entry.input = r.input;
                 if (r.expected_output !== undefined) entry.expected_output = r.expected_output;
+                else if (r.expected !== undefined) entry.expected_output = r.expected;
                 if (r.metadata) entry.metadata = r.metadata;
-                if (r.labels) entry.labels = r.labels;
+                const labels = importLabels(r.labels);
+                if (labels.length) entry.labels = labels;
                 upserts.push(entry);
               });
             }
@@ -1993,8 +2433,13 @@
             refreshDetailView({ force: true });
           }
         } catch(e) {
-          Shell.toast(e.message || 'Upload failed', 'error');
-          nextBtn.disabled = false; nextBtn.textContent = wstate.step === 3 ? (mode === 'new' ? 'Create dataset' : 'Add items') : 'Continue →';
+          wstate.errors = { submit: e.message || 'Upload failed' };
+          Shell.toast(wstate.errors.submit, 'error');
+          nextBtn.disabled = false; nextBtn.textContent = wstate.step === 3 ? submitLabel() : 'Continue →';
+          if (wstate.step === 3) {
+            body.replaceChildren(renderStep3());
+            document.getElementById('dsx-wiz-submit-error')?.scrollIntoView?.({ block: 'nearest' });
+          }
         }
       }
 
@@ -2092,6 +2537,10 @@
       right.innerHTML = '';
       right.appendChild(versionSelectorPill());
       const v = state.activeVersion;
+      if (projectReadOnly()) {
+        if (v) right.appendChild(overflowMenuButton());
+        return;
+      }
       if (!v) {
         // No versions yet: the only meaningful action is creating the first draft.
         right.appendChild(el('button', { className: 'shell-btn shell-btn-primary', onclick: () => createDraftFromVersionFlow() }, '+ Create first draft'));
@@ -2119,14 +2568,26 @@
         e.stopPropagation();
         const v = state.activeVersion;
         const menu = [];
+        const readOnly = projectReadOnly();
         if (v) {
-          menu.push({ label: 'Name version…', onClick: nameVersionFlow });
+          if (!readOnly) menu.push({ label: 'Name version…', onClick: nameVersionFlow });
           menu.push({ label: 'Compare…', onClick: openCompareFlow });
           menu.push({ label: '↓ Download JSONL', onClick: () => window.open(apiUrl('/v1/datasets/' + encodeURIComponent(state.datasetRef) + '/versions/' + encodeURIComponent(v.version) + ':download?project_slug=' + encodeURIComponent(state.slug)), '_blank', 'noopener') });
         }
+        if (!readOnly) menu.push({ label: '↑ Upload file as new version…', onClick: openNewVersionUpload });
         openContextMenu(btn, menu);
       });
       return btn;
+    }
+
+    // Explicit "new version from a file" for this dataset (the catalog's "Create dataset"
+    // never appends to an existing dataset).
+    function openNewVersionUpload(){
+      if (!state.dataset) return;
+      openUploadWizard({
+        mode: 'new-version',
+        target: { id: state.dataset.id, name: state.dataset.name, slug: state.dataset.slug, nextVersion: suggestNextVersion() },
+      });
     }
 
     function refreshDetailChrome(opts){
@@ -2169,16 +2630,20 @@
       titleRow.appendChild(Shell.identicon(state.dataset.slug || state.datasetRef, { cell: 4, gap: 2 }));
       const nameEl = el('h1', { className: 'dsx-hero-name' });
       nameEl.appendChild(document.createTextNode(state.dataset.name));
-      nameEl.appendChild(el('span', { className: 'dsx-name-edit', title: 'Rename', onclick: renameDatasetFlow }, '✎'));
+      if (!projectReadOnly()) nameEl.appendChild(el('span', { className: 'dsx-name-edit', title: 'Rename', onclick: renameDatasetFlow }, '✎'));
       titleRow.appendChild(nameEl);
       idCol.appendChild(titleRow);
 
-      if (state.dataset.description) {
+      if (state.dataset.description && projectReadOnly()) {
+        const descEl = el('p', { className: 'dsx-hero-desc' });
+        descEl.textContent = state.dataset.description;
+        idCol.appendChild(descEl);
+      } else if (state.dataset.description) {
         const descEl = el('p', { className: 'dsx-hero-desc', title: 'Click to edit description', style: { cursor: 'pointer' } });
         descEl.textContent = state.dataset.description;
         descEl.addEventListener('click', editDescriptionFlow);
         idCol.appendChild(descEl);
-      } else {
+      } else if (!projectReadOnly()) {
         // No description: a compact, obviously-clickable affordance instead of a big italic placeholder.
         const addDesc = el('button', { className: 'dsx-hero-add-desc', type: 'button', title: 'Add a description', onclick: editDescriptionFlow }, '+ Add a description');
         idCol.appendChild(addDesc);
@@ -2330,15 +2795,18 @@
       if (!v) {
         const e = el('div', { className: 'dsx-empty' });
         e.appendChild(el('h3', null, 'No versions yet'));
-        e.appendChild(el('p', null, 'Create a first draft to start adding items.'));
-        const acts = el('div', { className: 'dsx-empty-actions' });
-        acts.appendChild(el('button', { className: 'shell-btn shell-btn-primary', onclick: () => createDraftFromVersionFlow() }, '+ Create first draft'));
-        e.appendChild(acts);
+        if (!projectReadOnly()) {
+          e.appendChild(el('p', null, 'Create a first draft to start adding items.'));
+          const acts = el('div', { className: 'dsx-empty-actions' });
+          acts.appendChild(el('button', { className: 'shell-btn shell-btn-primary', onclick: () => createDraftFromVersionFlow() }, '+ Create first draft'));
+          e.appendChild(acts);
+        }
         host.appendChild(e);
         return;
       }
 
       const isDraft = v.status === 'draft';
+      const editable = canEditVersion(v);
 
       const toolbar = el('div', { className: 'dsx-items-toolbar' });
       const left = el('div', { className: 'left' });
@@ -2388,7 +2856,7 @@
         const oldTr = state.itemRowMap.get(updated.id);
         if (!oldTr || !oldTr.isConnected) return false;
         const showIdColumn = list.some(item => hasUserProvidedItemId(item.item_id));
-        const newTr = renderItemRow(list[idx], isDraft, showIdColumn, (state.itemsList && state.itemsList.metricNames) || []);
+        const newTr = renderItemRow(list[idx], editable, showIdColumn, (state.itemsList && state.itemsList.metricNames) || []);
         state.itemRowMap.set(updated.id, newTr);
         oldTr.replaceWith(newTr);
         return true;
@@ -2448,7 +2916,7 @@
           e.appendChild(el('h3', null, filtered ? 'No items match these filters' : (isDraft ? 'This draft is empty' : 'This version has no items')));
           if (filtered) {
             e.appendChild(el('p', null, 'Try another search or clear the filters.'));
-          } else if (isDraft) {
+          } else if (editable) {
             e.appendChild(el('p', null, 'Add items one at a time, or import a file.'));
             const acts = el('div', { className: 'dsx-empty-actions' });
             acts.appendChild(el('button', { className: 'shell-btn shell-btn-primary', onclick: () => openNewItemFlow() }, '+ Add item'));
@@ -2508,13 +2976,13 @@
             loadItems({ keepTable: true });
           },
           renderRow: item => {
-            const tr = renderItemRow(item, isDraft, showIdColumn, metricNames);
+            const tr = renderItemRow(item, editable, showIdColumn, metricNames);
             state.itemRowMap.set(item.id, tr);
             return tr;
           },
         });
 
-        if (isDraft) {
+        if (editable) {
           const addBtn = el('button', { className: 'dsx-addrow', onclick: () => openNewItemFlow() }, '+ Add new item');
           const ftr = el('div', { style: { padding: '10px var(--space-xl)' } });
           ftr.appendChild(addBtn);
@@ -2536,9 +3004,9 @@
           tr.appendChild(idTd);
         }
 
-        tr.appendChild(makePreviewCell(item, 'input', isDraft));
-        tr.appendChild(makePreviewCell(item, 'expected_output', isDraft));
-        tr.appendChild(makePreviewCell(item, 'metadata', isDraft));
+        tr.appendChild(makePreviewCell(item, 'input'));
+        tr.appendChild(makePreviewCell(item, 'expected_output'));
+        tr.appendChild(makePreviewCell(item, 'metadata'));
         const summary = item.result_summary || {};
         tr.appendChild(el('td', { className: 'col-runs' }, String(summary.run_count || item.run_count || 0)));
         const metrics = summary.metrics || {};
@@ -2557,13 +3025,14 @@
         tr.appendChild(actTd);
 
         tr.addEventListener('click', e => {
-          if (e.target.closest('input,button,textarea,.dsx-cell-edit')) return;
+          if (e.target.closest('input,button,textarea')) return;
           navigate({ item: item.item_id, tab: 'details' });
         });
         return tr;
       }
 
-      function makePreviewCell(item, field, isDraft){
+      // Cells are read-only previews; items are edited on the item page only.
+      function makePreviewCell(item, field){
         const td = el('td', { className: field === 'input' ? 'col-input' : (field === 'metadata' ? 'col-metadata' : 'col-expected') });
         const val = item[field];
         const preview = el('div', { className: 'dsx-preview' + ((val == null || val === '') ? ' muted' : '') });
@@ -2579,87 +3048,7 @@
           preview.addEventListener('blur', hidePreviewPopover);
         }
         td.appendChild(preview);
-        if (isDraft) {
-          // Row is clickable (opens the item page), so keep the pointer cursor it inherits from <tr>.
-          // Double-click still enters inline edit — it just isn't advertised with a text caret.
-          td.title = 'Click to open · double-click to edit';
-          td.addEventListener('dblclick', e => { e.stopPropagation(); enterEditMode(td, item, field); });
-        }
         return td;
-      }
-
-      function enterEditMode(td, item, field){
-        const initial = fullPreview(item[field]);
-        td.innerHTML = '';
-        const ed = el('textarea', { className: 'dsx-cell-edit' });
-        ed.value = initial;
-        td.appendChild(ed);
-        const status = el('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px', marginLeft: '6px' } });
-        const dot = el('span', { className: 'dsx-json-dot' });
-        const dotLabel = el('span', { style: { fontSize: 'var(--font-sm)', color: 'var(--text-muted)' } });
-        const toggle = el('button', { className: 'dsx-json-dot-toggle', type: 'button', style: { display: 'none', fontSize: 'var(--font-sm)', background: 'transparent', border: '1px solid var(--border-default)', borderRadius: '4px', color: 'var(--text-muted)', cursor: 'pointer', padding: '1px 5px' } });
-        status.appendChild(dot); status.appendChild(dotLabel); status.appendChild(toggle);
-        td.appendChild(status);
-        const tr = td.closest('tr');
-        tr.classList.add('editing');
-        ed.focus();
-        ed.setSelectionRange(initial.length, initial.length);
-        let valid = true;
-        let forceString = false;
-        function refresh(){
-          const res = coerceCellValue(ed.value, field, forceString);
-          if (!res.ok) {
-            valid = false; ed.classList.add('invalid'); dot.classList.add('invalid');
-            dotLabel.textContent = res.error || 'invalid';
-            toggle.style.display = 'none';
-            return;
-          }
-          valid = true; ed.classList.remove('invalid'); dot.classList.remove('invalid');
-          dotLabel.textContent = typeof res.value === 'string' ? 'string' : (res.value === null ? 'empty' : 'JSON');
-          // Ambiguous bare scalar (number/bool/null) — let the user force a literal string.
-          if (res.ambiguous || (forceString && BARE_NUMBER_RE.test(ed.value.trim()))) {
-            toggle.style.display = '';
-            toggle.textContent = forceString ? 'treat as JSON' : 'treat as string';
-          } else {
-            toggle.style.display = 'none';
-          }
-        }
-        toggle.addEventListener('mousedown', e => { e.preventDefault(); }); // keep textarea focus
-        toggle.addEventListener('click', e => { e.preventDefault(); forceString = !forceString; refresh(); ed.focus(); });
-        ed.addEventListener('input', refresh);
-        refresh();
-        ed.addEventListener('keydown', async e => {
-          if (e.key === 'Escape') { e.preventDefault(); restore(); }
-          else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commit(); }
-        });
-        ed.addEventListener('blur', commit);
-        let committed = false;
-        async function commit(){
-          if (committed) return;
-          const res = coerceCellValue(ed.value, field, forceString);
-          if (!res.ok) { Shell.toast(res.error || 'Invalid value', 'error'); return; }
-          committed = true;
-          const parsed = res.value;
-          const previous = item[field];
-          item[field] = parsed;
-          try {
-            const body = {}; body[field] = parsed;
-            const upd = await apiFetch('/v1/datasets/' + encodeURIComponent(state.datasetRef) + '/versions/' + encodeURIComponent(v.version) + '/items/' + encodeURIComponent(item.item_id) + '?project_slug=' + encodeURIComponent(state.slug), { method: 'PATCH', body });
-            Object.assign(item, upd.item);
-            Shell.toast('Saved', 'success');
-            replaceCell();
-          } catch(e) {
-            item[field] = previous;
-            Shell.toast(e.message || 'Save failed', 'error');
-            replaceCell();
-          }
-        }
-        function restore(){ committed = true; replaceCell(); }
-        function replaceCell(){
-          tr.classList.remove('editing');
-          const newCell = makePreviewCell(item, field, true);
-          td.parentNode.replaceChild(newCell, td);
-        }
       }
 
       function rowMenuItems(item, isDraft){
@@ -2716,13 +3105,13 @@
       const wrap = el('div', { className: 'dsx-hist-diff' });
       let changed = 0;
       HISTORY_DIFF_FIELDS.forEach(([key, label]) => {
-        const b = before[key], a = after[key];
-        const beforeStr = b == null ? '' : (typeof b === 'string' ? b : prettyJSON(b));
-        const afterStr = a == null ? '' : (typeof a === 'string' ? a : prettyJSON(a));
+        const texts = diffValueTexts(before[key], after[key]);
+        const beforeStr = texts.before;
+        const afterStr = texts.after;
         if (beforeStr === afterStr) return;
         changed++;
         const field = el('div', { className: 'dsx-hist-diff-field' });
-        field.appendChild(el('div', { className: 'name' }, label));
+        field.appendChild(el('div', { className: 'name' }, [label, texts.note ? el('span', { className: 'dsx-diff-typenote' }, texts.note) : null]));
         if (beforeStr !== '') field.appendChild(el('div', { className: 'dsx-hist-diff-pane before', html: '<span class="label">before</span>' + highlightDiff(beforeStr, afterStr, 'before') }));
         if (afterStr !== '') field.appendChild(el('div', { className: 'dsx-hist-diff-pane after', html: '<span class="label">after</span>' + highlightDiff(beforeStr, afterStr, 'after') }));
         wrap.appendChild(field);
@@ -2802,16 +3191,16 @@
       main.appendChild(titleWrap);
 
       const actions = el('div', { className: 'dsx-item-actions' });
-      if (v.status !== 'draft') {
+      if (v.status !== 'draft' && !projectReadOnly()) {
         actions.appendChild(el('button', { className: 'shell-btn shell-btn-primary qym-inline-action', type: 'button', onclick: () => createDraftFromVersionFlow(v.version, { itemId: item.item_id }) }, 'Create draft to edit'));
       }
-      if (v.status === 'draft' && itemTab === 'details') {
+      if (canEditVersion(v) && itemTab === 'details') {
         actions.appendChild(el('button', { className: 'shell-btn shell-btn-danger qym-inline-action', type: 'button', onclick: () => deleteItemPageItem(item, v) }, 'Delete'));
         actions.appendChild(el('span', { className: 'dsx-item-actions-sep', 'aria-hidden': 'true' }));
       }
       actions.appendChild(el('button', { className: 'shell-btn shell-btn-secondary qym-inline-action', type: 'button', title: 'Previous item', onclick: () => navigateItemPage(item, -1) }, 'Previous'));
       actions.appendChild(el('button', { className: 'shell-btn shell-btn-secondary qym-inline-action', type: 'button', title: 'Next item', onclick: () => navigateItemPage(item, 1) }, 'Next'));
-      if (v.status === 'draft' && itemTab === 'details') {
+      if (canEditVersion(v) && itemTab === 'details') {
         actions.appendChild(el('button', { className: 'shell-btn shell-btn-primary qym-inline-action', type: 'button', onclick: () => saveItemPageItem(item, v) }, 'Save changes'));
       }
       main.appendChild(actions);
@@ -2873,7 +3262,7 @@
     }
 
     function renderItemPageDetails(host, item, v){
-      const isDraft = v.status === 'draft';
+      const isDraft = canEditVersion(v);
       const grid = el('div', { className: 'dsx-item-details-grid' });
       const main = el('div', { className: 'dsx-item-field-stack' });
       const side = el('div', { className: 'dsx-item-side' });
@@ -2888,7 +3277,9 @@
     function itemPageJSONPanel(label, key, item, isDraft){
       const panel = el('div', { className: 'dsx-item-panel' });
       const title = el('div', { className: 'dsx-item-panel-title' });
-      title.appendChild(el('span', null, label));
+      // The value's JSON type is always visible, so a type change is never silent.
+      const typeTag = el('span', { className: 'qym-tag qym-tag--data dsx-item-type', title: 'Stored JSON type' }, jsonTypeName(item[key]));
+      title.appendChild(el('span', { className: 'dsx-item-panel-label' }, [el('span', null, label), typeTag]));
       const actions = el('span', { className: 'tv-inline-actions' });
       title.appendChild(actions);
       panel.appendChild(title);
@@ -2914,16 +3305,49 @@
       } else {
         const code = el('div', { className: 'dsx-code' });
         const hl = el('pre', { className: 'dsx-code-hl' });
-        const ed = el('textarea', { className: 'dsx-code-input', spellcheck: 'false', dataset: { field: key } });
+        const ed = el('textarea', { className: 'dsx-code-input', spellcheck: 'false', dataset: { field: key }, 'aria-label': label });
         ed.value = raw;
         code.appendChild(hl);
         code.appendChild(ed);
-        const dot = el('div', { style: { textAlign: 'right', fontSize: 'var(--font-sm)', color: 'var(--text-muted)', marginTop: '4px' } });
+        // Edit state: the original text and how it is parsed. Text mode saves the text as a
+        // string; JSON mode parses it. Strings start in Text mode, everything else in JSON mode.
+        // originalText is read back from the textarea, which turns \r\n into \n, so an
+        // untouched multi-line string is not mistaken for an edit (and rewritten) on Save.
+        const field = { originalText: ed.value, originalMode: itemFieldInitialMode(key, item[key]), originalType: jsonTypeName(item[key]) };
+        field.mode = field.originalMode;
+        ed._dsxField = field;
+        const status = el('div', { className: 'dsx-item-field-status' });
+        const statusText = el('span', { className: 'dsx-item-field-state', 'aria-live': 'polite' });
+        if (key !== 'metadata') {
+          const modes = el('div', { className: 'qym-segmented', role: 'group', 'aria-label': label + ' value type' });
+          [['text', 'Text'], ['json', 'JSON']].forEach(([mode, text]) => {
+            const btn = el('button', { className: 'qym-segmented__option', type: 'button', dataset: { mode }, 'aria-pressed': field.mode === mode ? 'true' : 'false', title: mode === 'text' ? 'Save the value as a string' : 'Parse the value as JSON (number, boolean, object, array, null)' }, text);
+            btn.addEventListener('click', () => {
+              field.mode = mode;
+              modes.querySelectorAll('.qym-segmented__option').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === mode ? 'true' : 'false'));
+              validate();
+            });
+            modes.appendChild(btn);
+          });
+          status.appendChild(modes);
+        }
+        status.appendChild(statusText);
         function sync(){ hl.innerHTML = highlightJSONHtml(ed.value) + '\n'; hl.scrollTop = ed.scrollTop; hl.scrollLeft = ed.scrollLeft; }
         function validate(){
-          const res = coerceCellValue(ed.value, key === 'metadata' ? 'metadata' : key, false);
+          const res = parseItemField(ed.value, key, field.mode);
           code.classList.toggle('invalid', !res.ok);
-          dot.innerHTML = '<span class="dsx-json-dot' + (res.ok ? '' : ' invalid') + '"></span> ' + (res.ok ? (typeof res.value === 'string' ? 'string' : (res.value === null ? 'empty' : 'valid JSON')) : (res.error || 'invalid'));
+          ed.setAttribute('aria-invalid', res.ok ? 'false' : 'true');
+          statusText.replaceChildren();
+          statusText.appendChild(el('span', { className: 'dsx-json-dot' + (res.ok ? '' : ' invalid') }));
+          if (!res.ok) {
+            statusText.appendChild(document.createTextNode(' ' + (res.error || 'invalid')));
+            return;
+          }
+          const unchanged = ed.value === field.originalText && field.mode === field.originalMode;
+          const nextType = unchanged ? field.originalType : jsonTypeName(res.value);
+          typeTag.textContent = nextType === field.originalType ? nextType : (field.originalType + ' → ' + nextType);
+          typeTag.classList.toggle('qym-tag--warning', nextType !== field.originalType);
+          statusText.appendChild(document.createTextNode(' ' + (unchanged ? 'unchanged' : (nextType === 'null' ? 'will be saved empty' : 'will be saved as ' + nextType))));
         }
         function autoGrow(){
           ed.style.height = 'auto';
@@ -2941,18 +3365,22 @@
         ed.addEventListener('scroll', () => { hl.scrollTop = ed.scrollTop; hl.scrollLeft = ed.scrollLeft; });
         sync(); validate(); requestAnimationFrame(autoGrow);
         body.appendChild(code);
-        body.appendChild(dot);
+        body.appendChild(status);
       }
       panel.appendChild(body);
       return panel;
     }
 
+    // Only fields the user touched are sent (PATCH is a partial update), so untouched values
+    // keep their exact JSON type and labels are never dropped.
     function collectItemPageValues(){
       const body = {};
       document.querySelectorAll('.dsx-item-page textarea[data-field]').forEach(ed => {
         const key = ed.dataset.field;
-        const res = coerceCellValue(ed.value, key === 'metadata' ? 'metadata' : key, false);
-        if (!res.ok) throw new Error(res.error || ('Invalid value for ' + key));
+        const field = ed._dsxField;
+        if (!field || (ed.value === field.originalText && field.mode === field.originalMode)) return;
+        const res = parseItemField(ed.value, key, field.mode);
+        if (!res.ok) throw new Error(ITEM_FIELD_LABELS[key] + ': ' + (res.error || 'invalid value'));
         body[key] = res.value;
       });
       return body;
@@ -2961,6 +3389,7 @@
     async function saveItemPageItem(item, v){
       try {
         const body = collectItemPageValues();
+        if (!Object.keys(body).length) { Shell.toast('No changes to save', 'info'); return; }
         const upd = await apiFetch('/v1/datasets/' + encodeURIComponent(state.datasetRef) + '/versions/' + encodeURIComponent(v.version) + '/items/' + encodeURIComponent(item.item_id) + '?project_slug=' + encodeURIComponent(state.slug), { method: 'PATCH', body });
         Shell.toast('Saved', 'success');
         state.itemId = upd.item.item_id;
@@ -3210,6 +3639,7 @@
     async function openItemDrawerImpl(itemId){
       const v = state.activeVersion; if (!v) return;
       const isDraft = v.status === 'draft';
+      const editable = canEditVersion(v);
       // Update URL
       if (state.itemId !== itemId) { history.replaceState({}, '', buildUrl({ item: itemId })); state.itemId = itemId; }
 
@@ -3274,7 +3704,7 @@
       }
 
       function renderDetails(body){
-        if (!isDraft) {
+        if (!isDraft && !projectReadOnly()) {
           const hint = el('div', { className: 'shell-form-help' });
           hint.innerHTML = 'This version is published. <button class="shell-btn shell-btn-primary" style="padding:4px 10px;margin-left:6px;font-size:var(--font-sm);">Create draft to edit</button>';
           hint.querySelector('button').addEventListener('click', () => { drawer.close(); createDraftFromVersionFlow(v.version); });
@@ -3284,7 +3714,7 @@
         body.appendChild(buildJSONField('Expected output', 'expected_output'));
         body.appendChild(buildJSONField('Metadata', 'metadata'));
 
-        if (isDraft) {
+        if (editable) {
           const footer = el('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '8px', marginTop: '12px' } });
           const delBtn = el('button', { className: 'shell-btn shell-btn-danger', onclick: deleteItem }, 'Delete');
           const saveBtn = el('button', { className: 'shell-btn shell-btn-primary', onclick: saveItem }, 'Save changes');
@@ -3295,7 +3725,7 @@
 
       function fieldStatusDot(text, ok){
         const dot = el('div', { style: { textAlign: 'right', fontSize: 'var(--font-sm)', color: 'var(--text-muted)', marginTop: '4px' } });
-        dot.innerHTML = '<span class="dsx-json-dot' + (ok ? '' : ' invalid') + '"></span> ' + text;
+        dot.innerHTML = '<span class="dsx-json-dot' + (ok ? '' : ' invalid') + '"></span> ' + escapeHtml(text);
         return dot;
       }
       function buildJSONField(label, key){
@@ -3310,7 +3740,7 @@
         let expanded = false;
         const expandBtn = el('button', { title: 'Expand / collapse' }, '⤢ Expand');
 
-        if (!isDraft) {
+        if (!editable) {
           // Read-only: colorized, full-height view (no cramped textarea).
           const view = el('pre', { className: 'dsx-json-view' + (raw === '' ? ' empty' : '') });
           if (raw === '') view.textContent = '(empty)';
@@ -3331,6 +3761,7 @@
         const hl = el('pre', { className: 'dsx-code-hl' });
         const ed = el('textarea', { className: 'dsx-code-input', spellcheck: 'false' });
         ed.value = raw;
+        ed._originalText = ed.value; // textarea-normalized (\r\n -> \n), compared on save
         code.appendChild(hl); code.appendChild(ed);
         const dot = el('div', { style: { textAlign: 'right', fontSize: 'var(--font-sm)', color: 'var(--text-muted)', marginTop: '4px' } });
 
@@ -3342,7 +3773,7 @@
         function sync(){ hl.innerHTML = highlightJSONHtml(ed.value) + '\n'; hl.scrollTop = ed.scrollTop; hl.scrollLeft = ed.scrollLeft; }
         function validate(){
           const res = coerceCellValue(ed.value, key === 'metadata' ? 'metadata' : key, false);
-          if (!res.ok) { code.classList.add('invalid'); dot.innerHTML = '<span class="dsx-json-dot invalid"></span> ' + (res.error || 'invalid'); return; }
+          if (!res.ok) { code.classList.add('invalid'); dot.innerHTML = '<span class="dsx-json-dot invalid"></span> ' + escapeHtml(res.error || 'invalid'); return; }
           code.classList.remove('invalid');
           const kind = typeof res.value === 'string' ? 'string' : (res.value === null ? 'empty' : 'valid JSON');
           dot.innerHTML = '<span class="dsx-json-dot"></span> ' + kind;
@@ -3370,9 +3801,10 @@
         const fields = host.querySelectorAll('.dsx-drawer-section > div');
         fields.forEach(f => {
           if (f._editor) {
+            // Same contract as the item page: send only edited fields, keeping each value's type.
             const key = f._editor.dataset.field;
-            const kind = key === 'metadata' ? 'metadata' : key;
-            const res = coerceCellValue(f._editor.value, kind, !!f._editor._forceString);
+            if (f._editor.value === f._editor._originalText) return;
+            const res = parseItemField(f._editor.value, key, itemFieldInitialMode(key, item[key]));
             if (!res.ok) throw new Error(res.error || ('Invalid value for ' + key));
             body[key] = res.value;
           }
@@ -3467,13 +3899,13 @@
         const wrap = el('div', { className: 'dsx-hist-diff' });
         let changed = 0;
         HISTORY_DIFF_FIELDS.forEach(([key, label]) => {
-          const b = before[key], a = after[key];
-          const beforeStr = b == null ? '' : (typeof b === 'string' ? b : prettyJSON(b));
-          const afterStr = a == null ? '' : (typeof a === 'string' ? a : prettyJSON(a));
+          const texts = diffValueTexts(before[key], after[key]);
+          const beforeStr = texts.before;
+          const afterStr = texts.after;
           if (beforeStr === afterStr) return;
           changed++;
           const field = el('div', { className: 'dsx-hist-diff-field' });
-          field.appendChild(el('div', { className: 'name' }, label));
+          field.appendChild(el('div', { className: 'name' }, [label, texts.note ? el('span', { className: 'dsx-diff-typenote' }, texts.note) : null]));
           if (beforeStr !== '') field.appendChild(el('div', { className: 'dsx-hist-diff-pane before', html: '<span class="label">before</span>' + highlightDiff(beforeStr, afterStr, 'before') }));
           if (afterStr !== '') field.appendChild(el('div', { className: 'dsx-hist-diff-pane after', html: '<span class="label">after</span>' + highlightDiff(beforeStr, afterStr, 'after') }));
           wrap.appendChild(field);
@@ -3537,7 +3969,7 @@
               head.appendChild(el('span', { className: 'when' }, relTime(r.created_at)));
               entry.appendChild(head);
               entry.appendChild(historyDiffBody(r.before, r.after));
-              if (isDraft) {
+              if (editable) {
                 const actions = el('div', { className: 'dsx-history-actions' });
                 actions.appendChild(el('button', { className: 'shell-btn shell-btn-secondary', style: { padding: '4px 10px', fontSize: 'var(--font-sm)' }, onclick: () => revertToRevision(r, body) }, '↩ Revert to this'));
                 entry.appendChild(actions);
@@ -3851,17 +4283,20 @@
     // SETTINGS TAB
     // -------------------------------------------------------------
     function renderSettingsTab(host){
+      const readOnly = projectReadOnly();
       const wrap = el('div', { className: 'dsx-settings', style: { padding: 'var(--space-lg) var(--space-xl)' } });
       const card = el('div', { className: 'dsx-settings-card' });
       card.appendChild(el('h3', null, 'General'));
       const nameField = el('div', { className: 'shell-form-field' });
       nameField.appendChild(el('label', { className: 'shell-form-label' }, 'Name'));
       const nameIn = el('input', { className: 'shell-form-input', value: state.dataset.name || '' });
+      nameIn.readOnly = readOnly;
       nameField.appendChild(nameIn); card.appendChild(nameField);
       const descField = el('div', { className: 'shell-form-field' });
       descField.appendChild(el('label', { className: 'shell-form-label' }, 'Description'));
       const descIn = el('textarea', { className: 'shell-form-input', rows: 3, style: { resize: 'vertical' } });
       descIn.value = state.dataset.description || '';
+      descIn.readOnly = readOnly;
       descField.appendChild(descIn); card.appendChild(descField);
       const tagsField = el('div', { className: 'shell-form-field' });
       tagsField.appendChild(el('label', { className: 'shell-form-label' }, 'Tags'));
@@ -3869,7 +4304,8 @@
       const tags = (state.dataset.tags || []).slice();
       function renderTags(){
         tagsChips.innerHTML = '';
-        tags.forEach((t, i) => { const c = el('span', { className: 'dsx-chip-item' }); c.appendChild(document.createTextNode(t)); c.appendChild(el('button', { onclick: () => { tags.splice(i, 1); renderTags(); } }, '×')); tagsChips.appendChild(c); });
+        tags.forEach((t, i) => { const c = el('span', { className: 'dsx-chip-item' }); c.appendChild(document.createTextNode(t)); if (!readOnly) c.appendChild(el('button', { onclick: () => { tags.splice(i, 1); renderTags(); } }, '×')); tagsChips.appendChild(c); });
+        if (readOnly) return;
         const inp = el('input', { placeholder: 'add tag…' });
         inp.addEventListener('keydown', e => { if (e.key === 'Enter' && inp.value.trim()) { tags.push(inp.value.trim()); inp.value=''; renderTags(); } });
         tagsChips.appendChild(inp);
@@ -3882,6 +4318,11 @@
           state.dataset = upd.dataset || upd; Shell.toast('Settings saved', 'success'); refreshDetailView({ force: true });
         } catch(e) { Shell.toast(e.message || 'Save failed', 'error'); }
       } }, 'Save changes');
+      if (readOnly) {
+        wrap.appendChild(card);
+        host.appendChild(wrap);
+        return;
+      }
       card.appendChild(saveBtn);
       wrap.appendChild(card);
 
@@ -4220,8 +4661,8 @@
         row.appendChild(head);
         row.addEventListener('click', () => row.classList.toggle('expanded'));
         const body = el('div', { className: 'dsx-diff-body' });
-        if (it.input != null) body.appendChild(diffField('input', kind === 'add' ? null : it.input, kind === 'add' ? it.input : null));
-        if (it.expected_output != null) body.appendChild(diffField('expected_output', kind === 'add' ? null : it.expected_output, kind === 'add' ? it.expected_output : null));
+        if (it.input != null) body.appendChild(diffField('input', kind === 'add' ? null : it.input, kind === 'add' ? it.input : null, { plain: true }));
+        if (it.expected_output != null) body.appendChild(diffField('expected_output', kind === 'add' ? null : it.expected_output, kind === 'add' ? it.expected_output : null, { plain: true }));
         row.appendChild(body);
         return row;
       }
@@ -4242,7 +4683,8 @@
         const editor = userLabelPill('Edited By', d.edited_by || fallbackEditor);
         if (editor) left.appendChild(el('div', { className: 'dsx-diff-meta' }, editor));
         head.appendChild(left);
-        head.appendChild(el('span', { className: 'fields' }, 'fields changed: ' + (d.fields || []).join(', ')));
+        const fieldLabels = (d.fields || []).map(f => f + (diffValueTexts((d.before || {})[f], (d.after || {})[f]).note ? ' (type)' : ''));
+        head.appendChild(el('span', { className: 'fields' }, 'fields changed: ' + fieldLabels.join(', ')));
         row.appendChild(head);
         const body = el('div', { className: 'dsx-diff-body' });
         (d.fields || []).forEach(f => body.appendChild(diffField(f, (d.before || {})[f], (d.after || {})[f])));
@@ -4250,11 +4692,14 @@
         return row;
       }
 
-      function diffField(name, before, after){
+      function diffField(name, before, after, opts){
         const f = el('div', { className: 'dsx-diff-field' });
-        f.appendChild(el('div', { className: 'name' }, name));
-        const beforeStr = before == null ? '' : (typeof before === 'string' ? before : prettyJSON(before));
-        const afterStr = after == null ? '' : (typeof after === 'string' ? after : prettyJSON(after));
+        const texts = (opts && opts.plain)
+          ? { before: before == null ? '' : prettyJSON(before), after: after == null ? '' : prettyJSON(after), note: '' }
+          : diffValueTexts(before, after);
+        f.appendChild(el('div', { className: 'name' }, [name, texts.note ? el('span', { className: 'dsx-diff-typenote' }, texts.note) : null]));
+        const beforeStr = texts.before;
+        const afterStr = texts.after;
         f.appendChild(el('div', { className: 'dsx-diff-pane before', html: highlightDiff(beforeStr, afterStr, 'before') }));
         f.appendChild(el('div', { className: 'dsx-diff-pane after', html: highlightDiff(beforeStr, afterStr, 'after') }));
         return f;

@@ -732,14 +732,11 @@ window.QymPlayground = (function () {
   }
 
   function _esc(text) {
-    if (_opts.escapeHtml) return _opts.escapeHtml(text);
-    var d = document.createElement('div');
-    d.textContent = text || '';
-    return d.innerHTML;
+    return QymSafe.escapeHtml(text || '');
   }
 
   function _escAttr(text) {
-    return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return QymSafe.escapeHtml(String(text || ''));
   }
 
   function _formatCategoryExampleValue(value) {
@@ -1857,10 +1854,13 @@ window.QymPlayground = (function () {
   }
 
   function _isMetricExecutionError(meta) {
+    // One rule for every page: metrics.js isMetricErrorMeta (meta.status).
+    if (window.QymMetrics && window.QymMetrics.isMetricErrorMeta) {
+      return window.QymMetrics.isMetricErrorMeta(meta);
+    }
     if (!meta || typeof meta !== 'object') return false;
     var status = String(meta.status || '').trim().toLowerCase();
-    if (status === 'error' || status === 'failed' || status === 'timeout') return true;
-    return Boolean(meta.error) && String(meta.error).trim() !== '';
+    return status === 'error' || status === 'failed' || status === 'timeout';
   }
 
   function _getMatchedItems() {

@@ -22,11 +22,35 @@ for (const label of ['failed', 'error', 'timeout', 'FAILED']) {
   assert.equal(metrics.hasMetricError(row, 'quality'), false, label);
 }
 
+// A verdict reason is a judged score, not a scorer crash (C010). Only
+// meta.status marks an execution error; meta.error alone reads as a reason.
+for (const meta of [
+  { error: 'Empty output' },
+  { is_valid: false, error: 'ERROR near "FROM": syntax error' },
+  { reason: 'Empty output' },
+  { status: 'success', error: 'ignored' },
+]) {
+  const row = {
+    status: 'completed', metric_values: [0, 1],
+    metric_meta: { valid_sql: meta },
+  };
+  assert.equal(metrics.isMetricErrorMeta(meta), false, JSON.stringify(meta));
+  assert.equal(metrics.hasMetricError(row, 'valid_sql'), false);
+  assert.equal(metrics.isErrorRow(row), false);
+  assert.deepEqual(plain(metrics.getRowScore(row, 0, 'valid_sql')), { score: 0, isError: false });
+  row.pass_metric_meta = { valid_sql: [meta, {}] };
+  assert.equal(metrics.hasMetricError(row, 'valid_sql'), false);
+}
+assert.equal(metrics.metricMetaDisplayKey('error', { error: 'Empty output' }), 'reason');
+assert.equal(metrics.metricMetaDisplayKey('error', { status: 'error', error: 'boom' }), 'error');
+assert.equal(metrics.metricMetaDisplayKey('error', { reason: 'r', error: 'e' }), 'error');
+assert.equal(metrics.metricMetaDisplayKey('is_valid', { error: 'x' }), 'is_valid');
+
 for (const meta of [
   { status: 'error', error: '' },
   { status: 'failed' },
   { status: 'timeout' },
-  { error: 'BusinessRuleError' },
+  { status: ' Error ', error: 'BusinessRuleError' },
 ]) {
   const row = {
     status: 'completed', metric_values: [0, 1],

@@ -61,6 +61,8 @@ def page(browser):
     source = source.replace(
         "window.__dsx = { state,", "window.__dsx = { openUploadWizard, state,"
     )
+    # The page loads the shared escaping layer before any other script.
+    page.add_script_tag(path=str(STATIC / "qym_safe.js"))
     page.add_script_tag(content=source)
     page.evaluate("""() => {
       Object.assign(__dsx.state, {slug: 'project', datasetRef: 'demo',

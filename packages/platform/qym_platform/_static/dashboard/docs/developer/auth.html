@@ -93,6 +93,14 @@
 </ul>
 <p>Anyone else gets <code>403 Access denied</code>. Revoking an already-revoked key returns <code>400 API key already revoked</code>.</p>
 
+<h3>When a key stops working</h3>
+<p>A key acts for its creator inside its project, so every request also checks that the creator can still use the project:</p>
+<ul>
+  <li>Removing the creator from the project revokes their keys for it. A key whose creator is no longer a member (and not an admin) returns <code>403 API key owner is no longer a member of this project</code>.</li>
+  <li>While the project is archived, its keys return <code>409</code>. They work again once an admin unarchives the project.</li>
+  <li>Disabling the creator's account returns <code>403 User disabled</code>.</li>
+</ul>
+
 <h2>Token format and storage</h2>
 <table>
   <thead><tr><th>Property</th><th>Value</th></tr></thead>
@@ -149,11 +157,13 @@ QYM_API_KEY=AbCdEfGh...the-full-token...</pre>
 
 <p>Set <code>QYM_AUTH_LOCAL_ENABLED=true</code> to add email/password signup and login alongside <code>proxy_headers</code> or <code>oidc</code>. Any session-enabled configuration requires <code>QYM_AUTH_SESSION_SECRET</code>. Session cookies are HTTPS-only outside <code>dev</code>, <code>test</code>, and <code>local</code> environments, and browser state-changing requests must pass the platform's same-origin check.</p>
 
+<p>Sessions are also recorded on the server, and a cookie authenticates only while its session exists. Signing out ends the session on the server, so a copy of the cookie stops working too; changing or resetting a password, or disabling a user, ends all of that user's sessions; every sign-in starts a new session. A session ends after 14 days without activity. Dashboard pages and API responses are sent with <code>Cache-Control: no-store</code>, so the browser does not show them again from its cache after sign-out.</p>
+
 <p>Self-hosted GitLab sign-in needs <code>QYM_AUTH_GITLAB_URL</code> (the GitLab issuer, for example <code>https://gitlab.example.com</code>), <code>QYM_AUTH_GITLAB_CLIENT_ID</code>, and <code>QYM_AUTH_GITLAB_CLIENT_SECRET</code>. Create a confidential GitLab OAuth application with the scopes <code>openid</code>, <code>email</code>, and <code>profile</code> and the redirect URI <code>&lt;QYM_BASE_URL&gt;/v1/auth/callback/gitlab</code>. A malformed <code>QYM_AUTH_GITLAB_URL</code> stops the platform at startup.</p>
 
 <div class="docs-callout warn"><svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><p><span class="docs-callout-title">Provider sign-in links accounts by verified email.</span> A first provider sign-in joins the existing account with the same verified email. For GitLab, this trusts the instance's email verification: enable it only when users cannot set an unconfirmed email (email confirmation on, or emails managed by LDAP or admins). Otherwise a GitLab user could claim another person's account, including an admin's.</p></div>
 
-<p><strong>Forgotten passwords.</strong> With email/password sign-in on, an admin opens <strong>Admin → Users → Edit</strong> and chooses <strong>Reset Password</strong> (<code>POST /v1/admin/users/{user_id}/reset-password</code>). The response shows a temporary password once. The user signs in with it and must choose a new password (<code>POST /v1/auth/password/change</code>) before a session is created. A temporary password works once; a later reset replaces it.</p>
+<p><strong>Forgotten passwords.</strong> With email/password sign-in on, an admin opens <strong>Admin → Users → Edit</strong> and chooses <strong>Reset Password</strong> (<code>POST /v1/admin/users/{user_id}/reset-password</code>). The response shows a temporary password once. The user signs in with it and must choose a new password (<code>POST /v1/auth/password/change</code>) before a session is created. A temporary password works once; a later reset replaces it. A reset also signs the user out of every browser, whatever they signed in with.</p>
 
 <p>First-admin bootstrap depends on the auth path:</p>
 <ul>

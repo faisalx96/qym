@@ -342,10 +342,12 @@ def test_project_manager_or_admin_can_clear_review_decision_to_completed(client,
         run = session.get(Run, "run-submitted")
         approval = session.query(Approval).filter(Approval.run_id == "run-submitted").one()
         assert run.status == RunWorkflowStatus.COMPLETED
-        assert approval.decision is None
-        assert approval.decision_by_user_id is None
-        assert approval.decision_at is None
-        assert approval.comment == ""
+        # Withdrawing keeps the decision on record (history lives in
+        # run_workflow_events); it is no longer in effect.
+        assert approval.decision == ApprovalDecision.APPROVED
+        assert approval.decision_by_user_id == "admin-1"
+        assert approval.decision_at is not None
+        assert approval.comment == "approved"
 
     member_unreject = client.post(
         "/v1/runs/run-rejected/unreject",
@@ -366,10 +368,9 @@ def test_project_manager_or_admin_can_clear_review_decision_to_completed(client,
         run = session.get(Run, "run-rejected")
         approval = session.query(Approval).filter(Approval.run_id == "run-rejected").one()
         assert run.status == RunWorkflowStatus.COMPLETED
-        assert approval.decision is None
-        assert approval.decision_by_user_id is None
-        assert approval.decision_at is None
-        assert approval.comment == ""
+        assert approval.decision == ApprovalDecision.REJECTED
+        assert approval.decision_by_user_id == "manager-1"
+        assert approval.comment == "needs changes"
 
 
 def test_project_runs_can_be_filtered_to_approved_status(client, session_factory):
@@ -400,7 +401,7 @@ def test_project_runs_can_be_filtered_to_approved_status(client, session_factory
     assert runs[0]["status"] == "APPROVED"
 
 
-def test_rejected_run_can_be_resubmitted_and_clears_previous_decision(client, session_factory):
+def test_rejected_run_can_be_resubmitted_and_keeps_previous_decision(client, session_factory):
     with session_factory() as session:
         _seed_project_world(session)
 
@@ -415,10 +416,11 @@ def test_rejected_run_can_be_resubmitted_and_clears_previous_decision(client, se
         run = session.get(Run, "run-rejected")
         approval = session.query(Approval).filter(Approval.run_id == "run-rejected").one()
         assert run.status == RunWorkflowStatus.SUBMITTED
-        assert approval.decision is None
-        assert approval.decision_by_user_id is None
-        assert approval.decision_at is None
-        assert approval.comment == ""
+        assert approval.submitted_by_user_id == "member-1"
+        # The rejection that sent it back stays on record for the next reviewer.
+        assert approval.decision == ApprovalDecision.REJECTED
+        assert approval.decision_by_user_id == "manager-1"
+        assert approval.comment == "needs changes"
 
 
 def test_project_scoped_api_key_creates_project_bound_run(client, session_factory):
@@ -549,7 +551,8 @@ def test_runless_project_deletion_removes_catalog_lineage_safely(
         session.commit()
 
     deleted = client.delete(
-        f"/v1/admin/projects/{project_id}", headers=_headers("admin@example.com")
+        f"/v1/admin/projects/{project_id}?confirm=catalog-delete",
+        headers=_headers("admin@example.com"),
     )
     assert deleted.status_code == 200
     with session_factory() as session:

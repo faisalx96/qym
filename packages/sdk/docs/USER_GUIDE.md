@@ -682,6 +682,12 @@ def detailed_metric(output, expected):
 
 The metadata appears in your CSV results and Langfuse traces for debugging.
 
+Declare which way is better with `Metric(fn, score_type=..., direction="maximize" | "minimize")`, and name the headline metric with `Evaluator(..., primary_metric="accuracy")` (CLI: `--primary-metric`). The platform colors scores, shows Pass/Fail, picks winners and ranks models by the declared direction; a metric without one is shown neutrally. Views open on the primary metric, else on the first metric you listed.
+
+Put the reason for a low score in `metadata["reason"]`. When the metric itself cannot score (a judge call fails, required input is missing), raise an exception or return a top-level `error` key such as `{"score": 0, "error": "No context"}`. qym then sets `metadata["status"] = "error"`, and the platform reports a metric error, not a judged 0. A metric may also return its own `metadata["status"]` of `"error"`, `"failed"` or `"timeout"`; qym records every metric error with score 0, whatever score came with it. Only `metadata["status"]` marks a metric error; a reason stored in `metadata["error"]` is shown as a reason.
+
+How errors enter a metric's mean follows its direction, with one rule for the platform and for the local summary (`result.get_metric_stats()`, `result.summary()`, `result.to_dict()` and the summary panel). A metric error, or a task error on the item, counts as 0 for a higher-is-better metric and for one that declares no direction. A lower-is-better metric (`direction="minimize"`) leaves them out of its mean instead, since 0 is its best value; if every item errored it has no mean (`None`). Either way `get_metric_stats()` reports `error_count` (`task_error_count` + `metric_error_count`) and `errors_left_out` beside the mean.
+
 #### Using Task Metadata in Custom Metrics
 
 When a task needs to expose supporting data to metrics without showing that data as the platform output, return the qym task-output envelope:
@@ -1222,12 +1228,17 @@ Notes:
 - **`result.pass_at(k)` works for any k ≤ samples** — all passes are stored,
   so you can compute the whole accuracy-vs-k curve from a single run without
   re-running.
-- **Pass/fail threshold** defaults to `score >= 0.8` (same as group
-  analysis); override per call: `result.pass_at(3, threshold=0.5)`.
+- **Pass/fail follows the metric's direction**, as on the platform: a pass
+  is `score >= threshold`, or `score <= threshold` for a lower-is-better
+  metric (whose `Max@k` is then each item's lowest score). The threshold
+  defaults to the metric's `pass_threshold`, else 0.8 (0.2 when lower is
+  better); override per call: `result.pass_at(3, threshold=0.5)`.
 - **Temperature must be > 0** — with a deterministic task every pass returns
   the same output and qym warns that repeat metrics measure nothing.
-- **Failed passes score 0** — a pass that errors after retries counts as a
-  failing pass (this is what makes `Pass^k` an honest reliability number).
+- **Failed passes never pass** — a pass whose task errors after retries, or
+  whose metric errors, counts as a failing pass (this is what makes `Pass^k`
+  an honest reliability number). In the mean it scores 0, or is left out for
+  a lower-is-better metric; each item is the mean over its counted passes.
 - Resume works per pass: an interrupted `samples=8` run picks up exactly
   where it stopped.
 
@@ -1573,10 +1584,11 @@ print(f"Total: {results.total_items}")
 print(f"Success rate: {results.success_rate:.1%}")
 print(f"Duration: {results.duration:.1f}s")
 
-# Per-metric stats
+# Per-metric stats (errors count as 0, or are left out of a lower-is-better
+# metric's mean; stats["mean"] is None if every item of such a metric errored)
 for metric in results.metrics:
     stats = results.get_metric_stats(metric)
-    print(f"{metric}: mean={stats['mean']:.3f}, std={stats['std']:.3f}")
+    print(f"{metric}: mean={stats['mean']}, errors={stats['error_count']}")
 
 # Timing stats
 timing = results.get_timing_stats()

@@ -10,10 +10,11 @@ from dataclasses import dataclass
 from typing import Optional
 
 from fastapi import Depends, Header, HTTPException, Request
+from sqlalchemy import and_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from qym_platform.db.models import ApiKey, User, UserIdentity, UserRole
+from qym_platform.db.models import ApiKey, Project, ProjectMembership, User, UserIdentity, UserRole
 from qym_platform.auth_oidc import get_session_user_and_provider, session_auth_enabled
 from qym_platform.deps import get_db
 from qym_platform.security import api_key_prefix, verify_api_key
@@ -117,14 +118,50 @@ def clear_api_key_cache() -> None:
         _api_key_cache.clear()
 
 
-def require_api_key_principal(
-    db: Session = Depends(get_db),
-    authorization: Optional[str] = Header(default=None),
-) -> Principal:
-    token = _bearer_token(authorization)
-    if not token:
-        raise HTTPException(status_code=401, detail="Missing Bearer API key")
+def _require_api_key_project_access(db: Session, row: ApiKey, user: User) -> None:
+    """A key acts for its owner inside its project, so it works only while the
+    owner can still use that project: the project is active and the owner is a
+    member (or an admin). Checked on every request, so removing a member or
+    archiving a project cuts key access immediately."""
+    if not row.project_id:
+        return
+    found = (
+        db.query(Project.is_active, ProjectMembership.id)
+        .outerjoin(
+            ProjectMembership,
+            and_(
+                ProjectMembership.project_id == Project.id,
+                ProjectMembership.user_id == user.id,
+            ),
+        )
+        .filter(Project.id == row.project_id)
+        .first()
+    )
+    # X-Qym-Key-State tells SDKs the key itself is refused, so a run stops
+    # uploading instead of resending every event on its own.
+    if found is None:
+        raise HTTPException(
+            status_code=403,
+            detail="API key project not found",
+            headers={"X-Qym-Key-State": "project_missing"},
+        )
+    project_active, membership_id = found
+    if not project_active:
+        raise HTTPException(
+            status_code=409,
+            detail="Project is archived; its API keys stop working until an admin unarchives it",
+            headers={"X-Qym-Key-State": "project_archived"},
+        )
+    if membership_id is None and user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=403,
+            detail="API key owner is no longer a member of this project",
+            headers={"X-Qym-Key-State": "owner_removed"},
+        )
 
+
+def resolve_api_key_principal(db: Session, token: str) -> Principal:
+    """Authenticate a bearer API key and return the principal it acts as."""
     prefix = api_key_prefix(token)
     row = (
         db.query(ApiKey)
@@ -133,21 +170,45 @@ def require_api_key_principal(
         .first()
     )
     if not row:
-        raise HTTPException(status_code=401, detail="Invalid API key")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid API key",
+            headers={"X-Qym-Key-State": "invalid"},
+        )
     if not _verify_api_key_cached(token, row.id, row.key_hash):
-        raise HTTPException(status_code=401, detail="Invalid API key")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid API key",
+            headers={"X-Qym-Key-State": "invalid"},
+        )
 
     user = db.query(User).filter(User.id == row.user_id).first()
     if not user or not user.is_active:
-        raise HTTPException(status_code=403, detail="User disabled")
+        raise HTTPException(
+            status_code=403,
+            detail="User disabled",
+            headers={"X-Qym-Key-State": "owner_disabled"},
+        )
+    _require_api_key_project_access(db, row, user)
     scopes = tuple(str(scope).strip() for scope in (row.scopes or []) if str(scope).strip())
     return Principal(user=user, auth_type="api_key", scopes=scopes, project_id=row.project_id)
 
 
+def require_api_key_principal(
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+) -> Principal:
+    token = _bearer_token(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing Bearer API key")
+    return resolve_api_key_principal(db, token)
+
+
 def require_api_key_scope(principal: Principal, required_scope: str) -> None:
     # Scope enforcement is intentionally disabled: any valid API key is granted full
-    # access to its project. Authentication (a valid, non-revoked key) and project
-    # membership still gate access; per-key scopes are no longer checked. The
+    # access to its project. Authentication (a valid, non-revoked key), the key
+    # owner's current project membership and an active project still gate access
+    # (see resolve_api_key_principal); per-key scopes are no longer checked. The
     # `required_scope` argument is kept so call sites don't need to change, and so
     # enforcement can be reinstated here later without touching every endpoint.
     return

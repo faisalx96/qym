@@ -20,7 +20,10 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    delete,
+    event,
 )
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column, object_session, relationship
 
@@ -112,6 +115,33 @@ class LocalAuthCredential(Base):
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
+class UserSession(Base):
+    """Server-side record of one signed-in browser session.
+
+    The signed cookie carries a random session token; ``id`` is its SHA-256
+    digest. A cookie authenticates only while its row exists, so signing out,
+    changing the password, or disabling the user ends the session everywhere,
+    including in copies of the cookie.
+    """
+
+    __tablename__ = "user_sessions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    provider: Mapped[str] = mapped_column(String(50), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+@event.listens_for(LocalAuthCredential, "after_update")
+def _end_sessions_after_password_change(mapper, connection, target) -> None:
+    # An ORM update that stores a new password hash signs the user out of every
+    # browser in the same transaction. Bulk UPDATEs and new credentials bypass
+    # this hook and call end_user_sessions themselves.
+    if sa_inspect(target).attrs.password_hash.history.has_changes():
+        connection.execute(delete(UserSession.__table__).where(UserSession.user_id == target.user_id))
+
+
 class Project(Base):
     __tablename__ = "projects"
 
@@ -119,6 +149,10 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     slug: Mapped[str] = mapped_column(String(200), nullable=False, unique=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    # When the project was archived (NULL while it is active). Trash purging of
+    # its deleted runs is paused meanwhile; unarchiving moves their purge
+    # clocks forward by the time since (Run.purge_clock_started_at).
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -441,6 +475,11 @@ class Run(Base):
 
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None, index=True)
     deleted_by_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    # When the Trash grace period of a deleted run started counting; NULL
+    # counts it from deleted_at (services/retention.py). Purging pauses while
+    # the run's project is archived, so unarchiving moves this forward by the
+    # time the project spent archived.
+    purge_clock_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     items: Mapped[list["RunItem"]] = relationship("RunItem", lazy="noload", foreign_keys="RunItem.run_id")
     scores: Mapped[list["RunItemScore"]] = relationship("RunItemScore", lazy="noload", foreign_keys="RunItemScore.run_id")
@@ -529,6 +568,17 @@ class RunItem(Base):
         session = object_session(self)
         if session is None or not self.trace_id:
             return []
+        if not session.in_transaction():
+            # Analysis ends its read transaction before awaiting a model call
+            # and builds each prompt, which reads these spans, inside that
+            # call. A read on the owning session would begin a transaction
+            # left idle for the whole call (PostgreSQL ends it after 60 s), so
+            # read on a short-lived session instead.
+            with Session(bind=session.get_bind(Span)) as reader:
+                return self._trace_content_from(reader)
+        return self._trace_content_from(session)
+
+    def _trace_content_from(self, session: Session) -> list[dict[str, Any]]:
         spans = (
             session.query(Span)
             .filter(Span.run_id == self.run_id, Span.trace_id == self.trace_id)
@@ -740,12 +790,16 @@ class RunMetricSpec(Base):
     position: Mapped[int] = mapped_column(Integer, default=0)
     schema_version: Mapped[int] = mapped_column(Integer, default=1)
     score_type: Mapped[str] = mapped_column(String(30))
-    direction: Mapped[str] = mapped_column(String(20), default="maximize")
+    # "maximize" / "minimize"; NULL when the metric declares no direction
+    # (views then show it neutrally).
+    direction: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     pass_threshold: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     sample_reducer: Mapped[str] = mapped_column(String(20), default="mean")
     run_reducer: Mapped[str] = mapped_column(String(20), default="mean")
     unit: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
     precision: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # The run's declared headline metric (at most one per run).
+    is_primary: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("run_id", "metric_name", name="uq_run_metric_spec"),
@@ -825,6 +879,30 @@ class Approval(Base):
     decision_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     decision: Mapped[Optional[ApprovalDecision]] = mapped_column(Enum(ApprovalDecision), nullable=True)
     comment: Mapped[str] = mapped_column(Text, default="")
+    # runs.status shows the review state while a run is in review. This keeps
+    # the execution outcome (COMPLETED/FAILED) it had when it was submitted so
+    # withdrawing a decision restores it. NULL for reviews started before 0062.
+    execution_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+
+
+class RunWorkflowEvent(Base):
+    """Append-only history of a run's review transitions (submit/approve/...)."""
+
+    __tablename__ = "run_workflow_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"))
+    action: Mapped[str] = mapped_column(String(20))
+    from_status: Mapped[str] = mapped_column(String(20))
+    to_status: Mapped[str] = mapped_column(String(20))
+    actor_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    comment: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Copied from the approval row of a review that started before history
+    # was kept, just before its first recorded transition overwrote the row.
+    reconstructed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    __table_args__ = (Index("ix_run_workflow_events_run", "run_id", "id"),)
 
 
 class AuditLog(Base):

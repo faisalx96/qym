@@ -32,6 +32,17 @@ from qym_platform.services.dashboard_outbox import (
     execution_event_query,
     execution_event_object,
 )
+from qym_platform.services.ingest_completeness import runs_list_ingest_flag
+from qym_platform.services.metric_semantics import declared_direction, primary_metric
+from qym_platform.services.run_means import (
+    COMPLETED_RUN_STATUSES,
+    MetricTotals,
+    apply_repeat_pass_errors,
+    errors_left_out,
+    mean_task_errors,
+    metric_mean_fields,
+    run_metric_mean,
+)
 from sqlalchemy import and_, case, delete, func, insert, or_, select, tuple_, update
 from sqlalchemy.orm import Session, aliased
 
@@ -731,6 +742,43 @@ def _execution_error_breakdown(db, run_id, samples):
     return error_breakdown(task_counts, metric_counts)
 
 
+def _repeat_execution_counts(db, run_id):
+    """Execution success units of a repeat run: ``(item passes, failed)``.
+
+    Each item pass with attempt records (attempt rows, or legacy item events
+    with a failure or retries) counts once. It failed when it has a task
+    error: its last attempt failed, or the SDK reported item_failed for it (the
+    executions task_error_count counts), so a retried pass is judged by its
+    last attempt. ``execution_errors.repeat_execution_counts`` is the same rule
+    over source rows.
+    """
+    number = case((Record.pass_number < 1, 1), else_=Record.pass_number)
+    task_error = and_(
+        Record.error > 0,
+        or_(Record.is_last.is_(True), Record.metric_key.startswith("legacy_event:")),
+    )
+    passes = (
+        select(
+            Record.record_key,
+            number.label("pass_number"),
+            func.max(case((task_error, 1), else_=0)).label("failed"),
+        )
+        .where(
+            Record.run_key == run_id,
+            Record.record_kind == "attempt",
+            Record.present.is_(True),
+        )
+        .group_by(Record.record_key, number)
+        .subquery()
+    )
+    total, failed = db.execute(
+        select(func.count(), func.coalesce(func.sum(passes.c.failed), 0)).select_from(
+            passes
+        )
+    ).one()
+    return int(total or 0), int(failed or 0)
+
+
 def _repeat_retry_counts(db, run_id):
     """Deduplicate retries across retained attempts and legacy SDK events."""
     executions = (
@@ -958,6 +1006,7 @@ def _sync_dimension(db, run_id, version):
         "langfuse_url": metadata.get("langfuse_url"),
         "langfuse_dataset_id": metadata.get("langfuse_dataset_id"),
         "langfuse_run_id": metadata.get("langfuse_run_id"),
+        "ingest_incomplete": runs_list_ingest_flag(metadata),
         **dataset,
     }
     if created:
@@ -1002,6 +1051,168 @@ def ensure_pending_summary(db, run_id, version):
         db.flush()
 
 
+# Bump when published summary fields change; older summaries are refreshed
+# from numeric projection records by reconcile_summary_shapes (2: run means
+# count scorer errors as 0; 3: repeat runs publish the mean without scorer
+# errors, and pass summaries name the declared primary metric; 4:
+# lower-is-better metrics leave task and scorer errors out of their means, and
+# execution success counts repeat-run item passes; 5: repeat-run means judge
+# task errors per pass, not by the pass that arrived last, and a completed
+# run's items never received are counted apart and left out of Execution
+# success and the means).
+SUMMARY_SHAPE = 5
+
+
+def _outdated_shape(data):
+    data = data or {}
+    shape = int(data.get("summary_shape") or 0)
+    return "task_error_count" not in data or shape < SUMMARY_SHAPE
+
+
+def _task_failed_passes(run_id):
+    """``(record_key, pass_number)`` of the passes whose task failed.
+
+    The same task evidence ``_execution_error_breakdown`` counts: final
+    attempts that failed, and item_failed events of older SDKs.
+    """
+    number = case((Record.pass_number < 1, 1), else_=Record.pass_number)
+    return (
+        select(
+            Record.record_key.label("record_key"), number.label("pass_number")
+        )
+        .where(
+            Record.run_key == run_id,
+            Record.present.is_(True),
+            Record.error > 0,
+            Record.record_kind == "attempt",
+            or_(
+                Record.is_last.is_(True), Record.metric_key.startswith("legacy_event:")
+            ),
+        )
+        .group_by(Record.record_key, number)
+        .subquery()
+    )
+
+
+def _item_not_received(record, run):
+    """``run_means.item_not_received`` over item records: a classic item of a
+    completed run with no error, no output and no latency. None when the run
+    has no such items to find (repeat, or not completed)."""
+    status = str(getattr(run.status, "value", run.status) or "").upper()
+    if int(run.samples or 1) > 1 or status not in COMPLETED_RUN_STATUSES:
+        return None
+    return and_(
+        record.record_kind == "item",
+        record.error == 0,
+        record.terminal == 0,
+        record.latency_ms.is_(None),
+    )
+
+
+def _repeat_pass_errors(db, run_id, left_out=()):
+    """``apply_repeat_pass_errors`` input from numeric projection records.
+
+    Repeat runs keep scorer errors on pass records; items with one are read,
+    and for the metrics in ``left_out`` (lower-is-better) also items with a
+    pass whose task failed, whichever pass arrived last.
+    """
+    item_alias = aliased(Record)
+    item_ok = and_(
+        # run_key first: record_key alone has no index of its own, and without
+        # it the join scans every project's item records.
+        item_alias.run_key == run_id,
+        item_alias.record_key == Record.record_key,
+        item_alias.record_kind == "item",
+        item_alias.present.is_(True),
+    )
+    affected = set(
+        db.execute(
+            select(Record.record_key, Record.metric_key)
+            .join(item_alias, item_ok)
+            .where(
+                Record.run_key == run_id,
+                Record.record_kind == "pass_score",
+                Record.present.is_(True),
+                Record.error > 0,
+            )
+            .distinct()
+        ).all()
+    )
+    failed_passes = set()
+    if left_out:
+        failed = _task_failed_passes(run_id)
+        failed_passes = set(
+            db.execute(select(failed.c.record_key, failed.c.pass_number)).all()
+        )
+        affected.update(
+            db.execute(
+                select(Record.record_key, Record.metric_key)
+                .join(item_alias, item_ok)
+                .join(
+                    failed,
+                    and_(
+                        failed.c.record_key == Record.record_key,
+                        failed.c.pass_number == Record.pass_number,
+                    ),
+                )
+                .where(
+                    Record.run_key == run_id,
+                    Record.record_kind == "pass_score",
+                    Record.present.is_(True),
+                    Record.metric_key.in_(sorted(left_out)),
+                )
+                .distinct()
+            ).all()
+        )
+    if not affected:
+        return []
+    keys = sorted({key for key, _ in affected})
+    passes, values, item_edits = {}, {}, set()
+    for start in range(0, len(keys), 400):
+        for key, metric, kind, number, score, error, edited, item_edit in db.execute(
+            select(
+                Record.record_key,
+                Record.metric_key,
+                Record.record_kind,
+                Record.pass_number,
+                Record.score,
+                Record.error,
+                Record.success,
+                # On an item score: a reviewer's item-level value (dashboard_outbox).
+                Record.terminal,
+            ).where(
+                Record.run_key == run_id,
+                Record.present.is_(True),
+                Record.record_kind.in_(("score", "pass_score")),
+                Record.record_key.in_(keys[start : start + 400]),
+            )
+        ):
+            if (key, metric) not in affected:
+                continue
+            if kind == "pass_score":
+                passes.setdefault((key, metric), []).append(
+                    (
+                        score,
+                        error > 0,
+                        # A reviewer's score (success) stands on a failed task.
+                        (key, number) in failed_passes and error == 0 and not edited,
+                    )
+                )
+            else:
+                values[(key, metric)] = score
+                if item_edit:
+                    item_edits.add((key, metric))
+    return [
+        (
+            metric,
+            values.get((key, metric)),
+            passes.get((key, metric), []),
+            (key, metric) in item_edits,
+        )
+        for key, metric in sorted(affected)
+    ]
+
+
 def refresh_run_summary(db, run_id, version):
     """Build display numbers from numeric state and current small dimensions."""
     dimension, run = _sync_dimension(db, run_id, version)
@@ -1026,17 +1237,48 @@ def refresh_run_summary(db, run_id, version):
     )
     median_latency = _median(db, latency, Record.latency_ms)
     item_alias = aliased(Record)
-    metric_rows = db.execute(
-        select(Record.metric_key, func.sum(Record.score), func.count(Record.score))
-        .join(
-            item_alias,
-            and_(
-                item_alias.record_key == Record.record_key,
-                item_alias.record_kind == "item",
-                item_alias.present.is_(True),
-                item_alias.error == 0,
-            ),
+    errored = Record.error > 0
+    repeat = int(run.samples or 1) > 1
+    # Items never received are counted apart: neither successes nor executions,
+    # and left out of the means (services/run_means.py).
+    not_received_rule = _item_not_received(Record, run)
+    not_received = (
+        int(
+            db.scalar(
+                select(func.count()).where(
+                    Record.run_key == run_id,
+                    Record.present.is_(True),
+                    not_received_rule,
+                )
+            )
+            or 0
         )
+        if not_received_rule is not None
+        else 0
+    )
+    counted_items = [
+        item_alias.run_key == run_id,
+        item_alias.record_key == Record.record_key,
+        item_alias.record_kind == "item",
+        item_alias.present.is_(True),
+    ]
+    if not repeat:
+        # A classic item's task error counts through task_errors; a repeat
+        # item's value already holds its failed passes (its item record only
+        # carries the pass that arrived last).
+        counted_items.append(item_alias.error == 0)
+    if not_received:
+        counted_items.append(~_item_not_received(item_alias, run))
+    metric_rows = db.execute(
+        select(
+            Record.metric_key,
+            func.sum(Record.score),
+            func.count(Record.score),
+            func.sum(case((errored, Record.score))),
+            func.count(case((and_(errored, Record.score.isnot(None)), 1))),
+            func.count(case((and_(errored, Record.score.is_(None)), 1))),
+        )
+        .join(item_alias, and_(*counted_items))
         .where(
             Record.run_key == run_id,
             Record.record_kind == "score",
@@ -1044,18 +1286,36 @@ def refresh_run_summary(db, run_id, version):
         )
         .group_by(Record.metric_key)
     ).all()
-    metric_agg = {
-        metric: (total or 0, count or 0) for metric, total, count in metric_rows
+    metric_specs = (dimension.descriptor or {}).get("metric_specs") or {}
+    directions = {
+        metric: declared_direction(spec) for metric, spec in metric_specs.items()
     }
-    metric_means = {
-        metric: (
-            metric_agg.get(metric, (0, 0))[0]
-            / (metric_agg.get(metric, (0, 0))[1] + summary.error_count)
-            if metric_agg.get(metric, (0, 0))[1] + summary.error_count
-            else 0.0
+    metric_totals = {
+        metric: MetricTotals(
+            score_sum=float(total or 0.0),
+            score_count=int(count or 0),
+            error_score_sum=float(error_total or 0.0),
+            error_score_count=int(error_count or 0),
+            unscored_errors=int(unscored or 0),
+            direction=directions.get(metric),
         )
-        for metric in run.metrics or []
+        for metric, total, count, error_total, error_count, unscored in metric_rows
     }
+    if repeat:
+        left_out = sorted(
+            metric
+            for metric in run.metrics or []
+            if errors_left_out(directions.get(metric))
+        )
+        apply_repeat_pass_errors(
+            metric_totals, _repeat_pass_errors(db, run_id, left_out)
+        )
+    metric_means = metric_mean_fields(
+        run.metrics or [],
+        metric_totals,
+        mean_task_errors(run.samples, summary.error_count),
+        directions,
+    )
     execution_error_count, execution_errors_by_pass = _execution_error_counts(
         db, run_id, run.samples
     )
@@ -1118,20 +1378,67 @@ def refresh_run_summary(db, run_id, version):
                 ).group_by(Record.pass_number)
             )
         }
-        primary = (run.metrics or [None])[0]
-        means = dict(
-            db.execute(
-                select(Record.pass_number, func.avg(Record.score))
+        primary = primary_metric(run.metrics, metric_specs)
+        # Same rule as run means (services/run_means.py): a pass whose scorer
+        # or task failed counts as 0, or is left out when lower is better.
+        errored = Record.error > 0
+        pass_totals = {
+            number: MetricTotals(
+                score_sum=float(total or 0.0),
+                score_count=int(count or 0),
+                error_score_sum=float(error_total or 0.0),
+                error_score_count=int(error_count or 0),
+                unscored_errors=int(unscored or 0),
+                direction=directions.get(primary),
+            )
+            for number, total, count, error_total, error_count, unscored in db.execute(
+                select(
+                    Record.pass_number,
+                    func.sum(Record.score),
+                    func.count(Record.score),
+                    func.sum(case((errored, Record.score))),
+                    func.count(case((and_(errored, Record.score.isnot(None)), 1))),
+                    func.count(case((and_(errored, Record.score.is_(None)), 1))),
+                )
                 .where(
                     Record.run_key == run_id,
                     Record.record_kind == "pass_score",
                     Record.metric_key == primary,
                     Record.present.is_(True),
-                    Record.score.isnot(None),
+                    or_(Record.score.isnot(None), errored),
                 )
                 .group_by(Record.pass_number)
             ).all()
-        )
+        }
+        if errors_left_out(directions.get(primary)):
+            failed = _task_failed_passes(run_id)
+            for number, total, count in db.execute(
+                select(
+                    Record.pass_number, func.sum(Record.score), func.count(Record.score)
+                )
+                .join(
+                    failed,
+                    and_(
+                        failed.c.record_key == Record.record_key,
+                        failed.c.pass_number == Record.pass_number,
+                    ),
+                )
+                .where(
+                    Record.run_key == run_id,
+                    Record.record_kind == "pass_score",
+                    Record.metric_key == primary,
+                    Record.present.is_(True),
+                    Record.error == 0,
+                    Record.success == 0,
+                )
+                .group_by(Record.pass_number)
+            ).all():
+                if number in pass_totals:
+                    pass_totals[number].task_error_score_sum = float(total or 0.0)
+                    pass_totals[number].task_error_score_count = int(count or 0)
+        means = {
+            number: run_metric_mean(totals, 0) for number, totals in pass_totals.items()
+        }
         pass_causes = dict(
             db.execute(
                 select(
@@ -1160,6 +1467,7 @@ def refresh_run_summary(db, run_id, version):
                     has_data=p in means or p in attempt_counts,
                     run_status=dimension.status,
                 ),
+                "primary_metric": primary,
                 "primary_score": means.get(p),
                 "error_count": execution_errors_by_pass.get(p, 0),
                 **error_details["pass_error_counts"].get(
@@ -1177,7 +1485,15 @@ def refresh_run_summary(db, run_id, version):
         ]
         if sum(pass_causes.values()):
             causes = sum(pass_causes.values())
-    success_rate = summary.success_count / summary.count if summary.count else 0.0
+    # Execution success: one unit per item, or per item pass in a repeat run
+    # (its RunItem reflects only the pass that arrived last).
+    success_count = summary.success_count - not_received
+    executions, execution_successes = summary.count - not_received, success_count
+    if repeat:
+        item_passes, failed_passes = _repeat_execution_counts(db, run_id)
+        if item_passes:
+            executions, execution_successes = item_passes, item_passes - failed_passes
+    success_rate = execution_successes / executions if executions else 0.0
     completed_success = (
         max(0, summary.terminal_count - summary.error_count) / summary.terminal_count
         if summary.terminal_count
@@ -1189,13 +1505,17 @@ def refresh_run_summary(db, run_id, version):
         completed_success,
     )
     summary.data = {
-        "metric_averages": metric_means,
+        "summary_shape": SUMMARY_SHAPE,
+        **metric_means,
         "total_items": summary.count,
         "progress_completed": summary.terminal_count,
         "progress_total": expected,
         "progress_pct": summary.terminal_count / expected if expected else None,
-        "success_count": summary.success_count,
+        "success_count": success_count,
         "error_count": summary.error_count,
+        "not_received_count": not_received,
+        "execution_count": executions,
+        "execution_success_count": execution_successes,
         "execution_error_count": execution_error_count,
         **{k: v for k, v in error_details.items() if k != "pass_error_counts"},
         "total_retries": total_retries,
@@ -1293,11 +1613,11 @@ def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
             if partition.backfill_complete:
                 if run is None or (
                     summary is not None
-                    and "task_error_count" not in (summary.data or {})
+                    and _outdated_shape(summary.data)
                     and partition.queue_state != "repair_required"
                 ):
                     # Upgrade the published shape from numeric projection rows.
-                    # Migration 0058 queues existing summaries without replaying history.
+                    # Migrations 0058/0060 queue existing summaries without replaying history.
                     dimension = db.get(Dimension, run_id)
                     hours = {_hour(dimension.timestamp)} if dimension else set()
                     if run:
@@ -1416,7 +1736,11 @@ def reconcile_summary_shapes(db, *, limit=100):
         .where(
             Run.deleted_at.is_(None),
             Summary.projection_revision > 0,
-            Summary.data["task_error_count"].as_integer().is_(None),
+            or_(
+                Summary.data["task_error_count"].as_integer().is_(None),
+                Summary.data["summary_shape"].as_integer().is_(None),
+                Summary.data["summary_shape"].as_integer() < SUMMARY_SHAPE,
+            ),
         )
     )
     eligible = (

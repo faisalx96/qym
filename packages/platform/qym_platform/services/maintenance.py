@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Iterator, List, Optional
 from uuid import uuid4
 
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -705,6 +705,341 @@ def _drop_legacy_spans(ctx: JobContext) -> bool:
     ctx.progress["message"] = f"dropped spans_legacy, freed {size:,} bytes"
     ctx.log(ctx.progress["message"])
     return True
+
+
+def _counted_verdict_reason(meta: Any) -> bool:
+    """A score the pre-C010 rule counted as a scorer error but the current rule
+    reads as a verdict reason: ``meta.error`` set without an error status."""
+    from qym_platform.services.run_means import is_metric_error
+
+    if not isinstance(meta, dict) or is_metric_error(meta):
+        return False
+    error = meta.get("error")
+    return bool(error.strip()) if isinstance(error, str) else bool(error)
+
+
+def _in_own_transaction(ctx: JobContext, work: Callable[[Session], Any], *, attempts: int = 3) -> Any:
+    """Run ``work(db)`` and commit, alone in its transaction.
+
+    A deadlock or lock timeout with the dashboard worker rolls back only this
+    unit and is retried, instead of failing the whole job.
+    """
+    from sqlalchemy.exc import OperationalError
+
+    for attempt in range(attempts):
+        try:
+            with ctx.session() as db:
+                result = work(db)
+                db.commit()
+                return result
+        except OperationalError as exc:
+            if attempt + 1 >= attempts:
+                raise
+            ctx.log(f"retrying after {type(getattr(exc, 'orig', exc)).__name__}")
+            time.sleep(0.2 * (attempt + 1))
+    return None
+
+
+def _mark_task_error_passes(ctx: JobContext, cursor: int, window: int) -> int:
+    """Mark pass scores that ingest zero-filled for a failed task while they
+    still carried the scorer's metadata (a cancel mid-scoring stored before
+    the marker existed). The dashboard already reads those passes as failed
+    tasks from their attempts; the marker makes the source rows agree."""
+    from qym_platform.db.models import RunItemAttempt, RunItemPassScore
+    from qym_platform.services.run_means import (
+        METRIC_ERROR_STATUSES,
+        TASK_ERROR_PASS_LABEL,
+        is_task_error_pass,
+        task_error_pass_meta,
+    )
+
+    def work(db: Session) -> int:
+        rows = [
+            row
+            for row in db.execute(
+                select(RunItemPassScore).where(
+                    RunItemPassScore.id > cursor,
+                    RunItemPassScore.id <= cursor + window,
+                    func.lower(func.trim(RunItemPassScore.label)) == TASK_ERROR_PASS_LABEL,
+                )
+            ).scalars()
+            # Rows the source rule already reads as failed tasks, scorer
+            # errors and reviewer scores stay as they are.
+            if not is_task_error_pass(row.label, row.meta)
+            and isinstance(row.meta, dict)
+            and str(row.meta.get("status") or "").strip().lower() not in METRIC_ERROR_STATUSES
+            and str(row.meta.get("modified") or "").strip().lower() != "true"
+        ]
+        if not rows:
+            return 0
+        failed = set(
+            db.execute(
+                select(
+                    RunItemAttempt.run_id, RunItemAttempt.item_id, RunItemAttempt.pass_number
+                ).where(
+                    RunItemAttempt.run_id.in_({row.run_id for row in rows}),
+                    RunItemAttempt.item_id.in_({row.item_id for row in rows}),
+                    RunItemAttempt.is_last_attempt.is_(True),
+                    func.lower(RunItemAttempt.status).in_(METRIC_ERROR_STATUSES),
+                )
+            ).tuples()
+        )
+        marked = 0
+        for row in rows:
+            if (row.run_id, row.item_id, int(row.pass_number)) in failed:
+                row.meta = task_error_pass_meta(row.meta)
+                marked += 1
+        return marked
+
+    return int(_in_own_transaction(ctx, work) or 0)
+
+
+@register(
+    "reclassify_metric_errors",
+    description=(
+        "Rebuild dashboard numbers for runs whose metric verdict reasons were counted as "
+        "scorer errors (C010), and mark repeat passes whose task failed after a metric was scored."
+    ),
+)
+def _reclassify_metric_errors(ctx: JobContext) -> bool:
+    """Scan score rows in id windows; repair each affected run once.
+
+    Summaries and error counts come from numeric projection records whose
+    error flag was computed when the score was stored. Rows that only carry a
+    verdict reason in ``meta.error`` need their run rebuilt from source, which
+    the dashboard worker does in the background after the repair request.
+    Each run's repair request commits on its own, in the worker's lock order
+    (a partition, then its buckets), and a deadlock with the worker is
+    retried. The last phase marks task-failed pass scores
+    (``_mark_task_error_passes``).
+    """
+    from qym_platform.db.models import RunItemPassScore, RunItemScore
+    from qym_platform.services.dashboard_summaries import request_dashboard_repair
+
+    window = max(1, int(ctx.params.get("window", 20000)))
+    phases = (
+        ("score", RunItemScore),
+        ("pass_score", RunItemPassScore),
+        ("task_error_pass", RunItemPassScore),
+    )
+    phase = ctx.progress.get("phase") or phases[0][0]
+    names = [name for name, _ in phases]
+    if phase not in names:
+        return True
+    model = dict(phases)[phase]
+    cursor = int(ctx.progress.get("cursor") or 0)
+    repaired = set(ctx.progress.get("runs") or [])
+    with ctx.session() as db:
+        max_key = phase + "_max_id"
+        if max_key not in ctx.progress:
+            # Rows stored after the upgrade already use the current rule.
+            ctx.progress[max_key] = int(
+                db.scalar(select(model.id).order_by(model.id.desc()).limit(1)) or 0
+            )
+        max_id = int(ctx.progress[max_key])
+        affected = set()
+        if phase != "task_error_pass":
+            rows = db.execute(
+                select(model.run_id, model.meta).where(
+                    model.id > cursor,
+                    model.id <= cursor + window,
+                    model.meta["error"].as_string().isnot(None),
+                )
+            ).all()
+            affected = {
+                run_id for run_id, meta in rows if _counted_verdict_reason(meta)
+            } - repaired
+    if phase == "task_error_pass":
+        marked = _mark_task_error_passes(ctx, cursor, window)
+        ctx.progress["passes_marked"] = int(ctx.progress.get("passes_marked") or 0) + marked
+    for run_id in sorted(affected):
+        if _in_own_transaction(
+            ctx, lambda db, run_id=run_id: request_dashboard_repair(db, run_id, publish=False)
+        ):
+            repaired.add(run_id)
+            ctx.progress["runs"] = sorted(repaired)
+    cursor += window
+    ctx.progress["runs"] = sorted(repaired)
+    ctx.progress["runs_repaired"] = len(repaired)
+    if cursor >= max_id:
+        position = names.index(phase) + 1
+        if position >= len(names):
+            ctx.progress["phase"] = "done"
+            ctx.progress["message"] = (
+                f"done: {len(repaired):,} runs queued for a dashboard rebuild; "
+                f"{int(ctx.progress.get('passes_marked') or 0):,} task-failed passes marked"
+            )
+            ctx.log(ctx.progress["message"])
+            return True
+        ctx.progress["phase"], ctx.progress["cursor"] = names[position], 0
+    else:
+        ctx.progress["phase"], ctx.progress["cursor"] = phase, cursor
+    ctx.progress["message"] = f"{phase} rows up to id {min(cursor, max_id):,}; {len(repaired):,} runs queued"
+    return False
+
+
+@register(
+    "project_item_failure_events",
+    description="Rebuild dashboard numbers for repeat runs with a pass that failed only through an item_failed event (C011).",
+)
+def _project_item_failure_events(ctx: JobContext) -> bool:
+    """Walk repeat runs in id windows; repair each affected run once.
+
+    Live ingest stored events without projecting them, so a repeat-run pass
+    whose failure has no failed final attempt (a crash before the attempt, or
+    a metric that raised after the task succeeded) is missing from published
+    task errors and execution success. Only runs with such a pass whose event
+    has no projection record are rebuilt, by the dashboard worker. Each window
+    reads just the item_failed events of its runs, through the run_id index.
+    """
+    from qym_platform.db.dashboard_models import DashboardRecordState as Record
+    from qym_platform.db.models import Run, RunEvent, RunItemAttempt
+    from qym_platform.services.dashboard_outbox import execution_event_numbers
+    from qym_platform.services.dashboard_summaries import request_dashboard_repair
+    from qym_platform.services.run_means import METRIC_ERROR_STATUSES
+
+    window = max(1, int(ctx.params.get("window", 200)))
+    cursor = str(ctx.progress.get("cursor") or "")
+    repaired = set(ctx.progress.get("runs") or [])
+    with ctx.session() as db:
+        run_ids = list(
+            db.scalars(
+                select(Run.id)
+                .where(Run.id > cursor, Run.samples > 1, Run.deleted_at.is_(None))
+                .order_by(Run.id)
+                .limit(window)
+            )
+        )
+        events = {}
+        if run_ids:
+            for run_id, event_id, item_id, pass_number in db.execute(
+                select(
+                    RunEvent.run_id,
+                    RunEvent.event_id,
+                    RunEvent.payload["item_id"].as_string(),
+                    RunEvent.payload["pass_number"].as_string(),
+                ).where(RunEvent.run_id.in_(run_ids), RunEvent.type == "item_failed")
+            ):
+                numbers = execution_event_numbers(
+                    "item_failed", {"item_id": item_id, "pass_number": pass_number}
+                )
+                if numbers["item_id"]:
+                    events[run_id, event_id] = (
+                        numbers["item_id"],
+                        numbers["pass_number"],
+                    )
+        failing = sorted({run_id for run_id, _ in events})
+        if failing:
+            # A failed final attempt already carries the failure.
+            failed = {
+                (run_id, str(item_id), max(1, int(pass_number or 1)))
+                for run_id, item_id, pass_number in db.execute(
+                    select(
+                        RunItemAttempt.run_id,
+                        RunItemAttempt.item_id,
+                        RunItemAttempt.pass_number,
+                    ).where(
+                        RunItemAttempt.run_id.in_(failing),
+                        RunItemAttempt.is_last_attempt.is_(True),
+                        func.lower(RunItemAttempt.status).in_(METRIC_ERROR_STATUSES),
+                    )
+                )
+            }
+            projected = set(
+                db.execute(
+                    select(Record.run_key, Record.metric_key).where(
+                        Record.run_key.in_(failing),
+                        Record.record_kind == "attempt",
+                        Record.metric_key.startswith("legacy_event:"),
+                        Record.present.is_(True),
+                        Record.error > 0,
+                    )
+                ).tuples()
+            )
+            affected = {
+                run_id
+                for (run_id, event_id), (item_id, pass_number) in events.items()
+                if (run_id, item_id, pass_number) not in failed
+                and (run_id, "legacy_event:" + event_id) not in projected
+            }
+            for run_id in sorted(affected - repaired):
+                if request_dashboard_repair(db, run_id, publish=False):
+                    repaired.add(run_id)
+        db.commit()
+    ctx.progress["runs"] = sorted(repaired)
+    ctx.progress["runs_repaired"] = len(repaired)
+    if len(run_ids) < window:
+        ctx.progress["phase"] = "done"
+        ctx.progress["message"] = (
+            f"done: {len(repaired):,} runs queued for a dashboard rebuild"
+        )
+        ctx.log(ctx.progress["message"])
+        return True
+    ctx.progress["cursor"] = run_ids[-1]
+    ctx.progress["message"] = (
+        f"repeat runs up to {run_ids[-1]}; {len(repaired):,} runs queued"
+    )
+    return False
+
+
+@register(
+    "publish_ingest_flags",
+    description="Show the incomplete-data flag of runs finished before C024 in the runs list.",
+)
+def _publish_ingest_flags(ctx: JobContext) -> bool:
+    """Queue a runs-list refresh for runs whose metadata carries ``ingest_incomplete``.
+
+    The runs list reads the flag from each run's dashboard descriptor, which
+    the worker rebuilds only when the run changes. Runs flagged before the
+    descriptor carried the flag get a run-level change event: the worker
+    rebuilds the descriptor from the run row and republishes the summary from
+    its numeric records, without rescanning items. Runs are read in bounded
+    id windows.
+    """
+    from qym_platform.db.models import Run
+    from qym_platform.services.dashboard_outbox import enqueue_snapshots
+
+    window = max(1, int(ctx.params.get("window", 2000)))
+    cursor = str(ctx.progress.get("cursor") or "")
+    queued = int(ctx.progress.get("runs_queued") or 0)
+    with ctx.session() as db:
+        rows = db.execute(
+            select(
+                Run.id,
+                Run.project_id,
+                Run.run_metadata["ingest_incomplete"].as_string(),
+            )
+            .where(Run.id > cursor, Run.deleted_at.is_(None))
+            .order_by(Run.id)
+            .limit(window)
+        ).all()
+        flagged = [
+            (
+                dict(
+                    partition_key=run_id,
+                    project_key=project_id,
+                    record_key=run_id + ":run",
+                    record_kind="run",
+                    operation="UPSERT",
+                ),
+                [],
+            )
+            for run_id, project_id, flag in rows
+            if flag not in (None, "", "null")
+        ]
+        if flagged:
+            enqueue_snapshots(db.connection(), flagged)
+        db.commit()
+    queued += len(flagged)
+    ctx.progress["runs_queued"] = queued
+    if len(rows) < window:
+        ctx.progress["phase"] = "done"
+        ctx.progress["message"] = f"done: {queued:,} flagged runs queued for the runs list"
+        ctx.log(ctx.progress["message"])
+        return True
+    ctx.progress["cursor"] = rows[-1][0]
+    ctx.progress["message"] = f"runs up to {rows[-1][0]}; {queued:,} flagged runs queued"
+    return False
 
 
 def ingest_settings_for_maintenance():

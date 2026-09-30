@@ -59,7 +59,7 @@
   function copyBtn(textOrFn, label) {
     const id = `tv-cb-${++_copyId}`;
     _copyData[id] = textOrFn;
-    return `<button type="button" class="tv-copy-btn qym-icon-action" data-copy-id="${id}" title="${label || "Copy"}" aria-label="${label || "Copy"}">${COPY_ICON}</button>`;
+    return `<button type="button" class="tv-copy-btn qym-icon-action" data-copy-id="${id}" title="${esc(label || "Copy")}" aria-label="${esc(label || "Copy")}">${COPY_ICON}</button>`;
   }
   let _copyId = 0;
   const _copyData = {};
@@ -67,7 +67,7 @@
   function expandBtn(payload, label) {
     const id = `tv-xb-${++_expandId}`;
     _expandData[id] = payload;
-    return `<button type="button" class="tv-expand-btn qym-icon-action" data-expand-id="${id}" title="${label || "Expand"}" aria-label="${label || "Expand"}">${EXPAND_ICON}</button>`;
+    return `<button type="button" class="tv-expand-btn qym-icon-action" data-expand-id="${id}" title="${esc(label || "Expand")}" aria-label="${esc(label || "Expand")}">${EXPAND_ICON}</button>`;
   }
   let _expandId = 0;
   const _expandData = {};
@@ -83,7 +83,7 @@
   }
 
   function esc(v) {
-    return String(v == null ? "" : v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    return QymSafe.escapeHtml(v == null ? "" : String(v));
   }
 
   function fmtDur(ms) {
@@ -1031,7 +1031,7 @@
     const role = String(message.role).toLowerCase();
     const msgText = message.content ? String(message.content) : "";
     const resolvedName = message._resolvedToolName || "";
-    let bubble = `<div class="tv-msg tv-msg-${role}">`;
+    let bubble = `<div class="tv-msg tv-msg-${esc(role)}">`;
     if (role === "tool" && resolvedName) {
         bubble += renderToolHeader(resolvedName, "result", message.toolCallId, headerActions);
     } else {

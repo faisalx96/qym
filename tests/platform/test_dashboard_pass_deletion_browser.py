@@ -174,3 +174,127 @@ def test_poll_clears_old_selection_and_rejects_delayed_pass_details(browser):
             assert client.get("/api/runs/run-1").json()["run"]["samples"] == 2
         finally:
             fixture.close()
+
+
+class DeleteDashboard(DashboardFixture):
+    """Runs list whose run deletes answer like the platform (soft delete)."""
+
+    def __init__(self, browser):
+        super().__init__(browser)
+        self.deleted = []
+
+    def route(self, route):
+        url = urlparse(route.request.url)
+        if url.path == "/api/runs/delete" and route.request.method == "POST":
+            self.deleted.append(route.request.post_data_json["file_path"])
+            route.fulfill(json={"ok": True, "purge_after_days": 30})
+            return
+        super().route(route)
+
+
+@pytest.mark.parametrize("mode", ["single", "bulk"])
+def test_run_delete_dialog_offers_restore_and_no_cannot_be_undone(browser, mode):
+    """C020: deleted runs can be restored, so the dialog must not also say
+    "This action cannot be undone", and the bulk toast states the window."""
+    fixture = DeleteDashboard(browser)
+    try:
+        fixture.open()
+        page = fixture.page
+        if mode == "single":
+            page.evaluate(
+                "document.querySelector('#runs-tbody tr[data-idx] .delete-run').click()"
+            )
+        else:
+            page.evaluate(
+                "() => { const t=window.__dashboardTest; t.state.selectMode=true;"
+                " t.toggleSelect(t.state.filteredRuns[0].file_path); t.render(); }"
+            )
+            page.locator("#delete-selected").click()
+        assert page.locator("#delete-modal").is_visible()
+        assert "can restore" in page.locator("#delete-modal-description").inner_text()
+        assert "cannot be undone" not in page.locator("#delete-modal").inner_text()
+        page.locator("#confirm-delete-btn").click()
+        toast = page.locator(".toast").filter(has_text="30 days")
+        toast.wait_for()
+        assert len(fixture.deleted) == 1
+    finally:
+        fixture.close()
+
+
+def test_pass_delete_dialog_warns_that_passes_are_permanent(browser):
+    with source_run_api(count=2) as client:
+        fixture = PassDashboard(browser, client)
+        try:
+            fixture.open_passes()
+            page = fixture.page
+            page.locator('.pass-checkbox[data-pass-ref="run-1::pass2"]').check()
+            page.locator("#delete-selected").click()
+            warning = page.locator("#delete-modal-warning")
+            assert warning.is_visible()
+            assert warning.inner_text() == "Deleted passes cannot be restored."
+        finally:
+            fixture.close()
+
+
+class PublishingDashboard(DashboardFixture):
+    """The page answer says the projection is still publishing; the overview
+    (cached for 60 s by the client) does not."""
+
+    def __init__(self, browser):
+        super().__init__(browser)
+        self.page_updating = False
+        self.runs_requests = 0
+
+    def route(self, route):
+        url = urlparse(route.request.url)
+        if url.path.endswith("/api/dashboard/runs"):
+            self.runs_requests += 1
+            if self.page_updating:
+                self.page_updating = False
+                original = route.fulfill
+
+                def fulfill(**kwargs):
+                    body = kwargs.get("json")
+                    if isinstance(body, dict):
+                        body["freshness"] = {"updating": True}
+                    return original(**kwargs)
+
+                route.fulfill = fulfill
+        super().route(route)
+
+
+def test_runs_list_polls_again_while_its_page_is_still_publishing(browser):
+    """C012/C014: after a review action the row kept its old status for the
+    60 s idle poll although the page said the projection was updating."""
+    fixture = PublishingDashboard(browser)
+    try:
+        fixture.open()
+        page = fixture.page
+        fixture.page_updating = True
+        page.evaluate("window.__dashboardTest.fetchRuns()")
+        page.wait_for_function(
+            "window.__dashboardTest.state.dashboardPage?.freshness?.updating === true"
+        )
+        before = fixture.runs_requests
+        page.wait_for_timeout(3500)
+        assert fixture.runs_requests > before, "no follow-up poll within 3.5 s"
+    finally:
+        fixture.close()
+
+
+def test_status_bar_names_filtered_models_like_the_dropdown(browser):
+    """The footer printed internal keys such as "gpt-4.1-mini|||plain"."""
+    fixture = DashboardFixture(browser)
+    try:
+        fixture.open()
+        page = fixture.page
+        page.evaluate(
+            "() => { const t = window.__dashboardTest;"
+            " t.state.filterModels = new Set(['openai/gpt-4.1-mini|||plain',"
+            " 'anthropic/claude-sonnet-5|||reasoning']); t.render(); }"
+        )
+        text = page.locator("#status-filter").inner_text()
+        assert "|||" not in text
+        assert "model: gpt-4.1-mini, claude-sonnet-5 (reasoning)" in text
+    finally:
+        fixture.close()

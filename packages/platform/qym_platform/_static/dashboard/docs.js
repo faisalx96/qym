@@ -91,7 +91,7 @@
     return null; // text / csv / pipeline diagrams stay plain
   }
 
-  function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+  function esc(s) { return QymSafe.escapeHtml(s == null ? '' : String(s)); }
 
   function slugify(text) {
     return String(text).toLowerCase().trim()

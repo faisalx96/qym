@@ -27,8 +27,9 @@ logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import func, insert, inspect
+from sqlalchemy.exc import DataError, DBAPIError, IntegrityError, StatementError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -74,13 +75,30 @@ from qym_platform.item_identity import (
     build_identity_fingerprint,
     looks_like_positional_item_id,
 )
+from qym_platform.services.metric_semantics import declared_direction
+from qym_platform.services.run_means import (
+    errors_left_out,
+    is_task_error_pass,
+    reduce_pass_scores,
+    task_error_pass_meta,
+)
+from qym_platform.services.ingest_completeness import (
+    INGEST_INCOMPLETE_KEY,
+    INGEST_REJECTED_KEY,
+    completed_by_client,
+    ingest_incomplete_flag,
+    record_rejected_events,
+    record_reported_rejections,
+)
 from qym_platform.services.run_lifecycle import (
     is_run_force_stopped,
+    is_run_in_review,
     mark_run_running,
     mark_run_terminal,
     touch_run_event,
 )
 from qym_platform.settings import PlatformSettings
+from qym_platform.services.dashboard_outbox import enqueue_inserted_events
 from qym_platform.services.event_storage import (
     ingest_settings,
     oversized_span_attributes,
@@ -636,6 +654,129 @@ _PAYLOAD_TYPE = {
     "span_completed": SpanCompletedPayload,
 }
 
+# Per-event rejections are reported in full by count; the response lists only
+# the first few so a batch of garbage cannot produce a huge reply.
+MAX_REJECTION_DETAILS = 100
+_MAX_REJECTION_ERROR_CHARS = 300
+# Isolating a value the database refuses re-applies the batch in halves, up
+# to 2N-1 transactions for N events, each taking the run lock. SDKs send at
+# most 200 events per batch; bigger batches (only very old SDKs drained their
+# whole queue into one) are refused instead of split, which bounds the cost.
+MAX_ISOLATED_BATCH_EVENTS = 400
+# run_events.sequence and the item/attempt counters are 32-bit INTEGER columns
+# on Postgres. Larger values would fail the whole batch at INSERT time.
+_MAX_DB_INT = 2_147_483_647
+_INT_PAYLOAD_FIELDS = (
+    "index",
+    "pass_number",
+    "attempt_number",
+    "retry_count",
+    "samples",
+)
+
+
+class _EventRejected(ValueError):
+    """One event is invalid; the rest of its batch still applies."""
+
+
+def _rejection_reason(exc: BaseException) -> str:
+    """Describe a per-event failure without echoing the submitted values."""
+    if isinstance(exc, ValidationError):
+        parts = []
+        for error in exc.errors()[:5]:
+            loc = ".".join(str(part) for part in error.get("loc") or ())
+            parts.append(f"{loc}: {error.get('msg')}" if loc else str(error.get("msg")))
+        reason = "; ".join(parts) or "invalid event"
+    elif isinstance(exc, json.JSONDecodeError):
+        reason = f"invalid JSON: {exc.msg}"
+    elif isinstance(exc, HTTPException):
+        reason = str(exc.detail)
+    else:
+        reason = str(exc) or type(exc).__name__
+    return reason[:_MAX_REJECTION_ERROR_CHARS]
+
+
+def _rejection_row(
+    line_no: int, source: Any, reason: str, raw: Any = None
+) -> Dict[str, Any]:
+    """One ``rejected_events`` entry, from a parsed event or its raw JSON."""
+    if isinstance(source, RunEventV1):
+        event_id = str(source.event_id)
+        sequence, kind = source.sequence, source.type
+    else:
+        raw = source
+        fields = source if isinstance(source, dict) else {}
+        event_id, sequence, kind = (
+            fields.get("event_id"),
+            fields.get("sequence"),
+            fields.get("type"),
+        )
+        event_id = event_id[:64] if isinstance(event_id, str) else None
+        sequence = sequence if type(sequence) is int else None
+        kind = kind[:64] if isinstance(kind, str) else None
+    payload = raw.get("payload") if isinstance(raw, dict) else None
+    item_id = payload.get("item_id") if isinstance(payload, dict) else None
+    return {
+        "line": line_no,
+        "event_id": event_id,
+        "sequence": sequence,
+        "type": kind,
+        # Names the refused event on the run page (incomplete-ingest flag).
+        "item_id": item_id[:200] if isinstance(item_id, str) and item_id else None,
+        "error": reason,
+    }
+
+
+def _is_event_store_error(exc: BaseException) -> bool:
+    """True when the database refused a value carried by the batch itself.
+
+    Text longer than its column, a NUL character or an out-of-range number
+    fails the same way on every retry. Lost connections, deadlocks and
+    timeouts (OperationalError) can succeed on retry and stay a 5xx.
+    """
+    if isinstance(exc, (DataError, IntegrityError)):
+        return True
+    # psycopg2 refuses some values (NUL in a string) before sending them.
+    return (
+        isinstance(exc, StatementError)
+        and not isinstance(exc, DBAPIError)
+        and isinstance(exc.orig, (ValueError, TypeError))
+    )
+
+
+def _store_error_reason(exc: BaseException) -> str:
+    detail = str(getattr(exc, "orig", None) or exc).strip().splitlines()
+    reason = detail[0] if detail else type(exc).__name__
+    return f"the database refused a value in this event: {reason}"[
+        :_MAX_REJECTION_ERROR_CHARS
+    ]
+
+
+def _ingest_response(result: Dict[str, Any]) -> JSONResponse:
+    body: Dict[str, Any] = {
+        "ok": True,
+        "applied": result["applied"],
+        "skipped": result["skipped"],
+        "rejected": result["rejected"],
+        "rejected_events": result["rejected_events"][:MAX_REJECTION_DETAILS],
+    }
+    if body["rejected"] and not body["applied"] and not body["skipped"]:
+        # Nothing in the request was usable: a client error, never a 5xx
+        # (clients retry 5xx). Old SDKs isolate a 4xx batch per event.
+        body["ok"] = False
+        body["detail"] = f"All {body['rejected']} events were rejected"
+        return JSONResponse(body, status_code=422)
+    return JSONResponse(body)
+
+
+def _check_int_ranges(evt: RunEventV1, payload: Any) -> None:
+    if evt.sequence > _MAX_DB_INT:
+        raise _EventRejected(f"sequence {evt.sequence} is out of range")
+    for name in _INT_PAYLOAD_FIELDS:
+        value = getattr(payload, name, None)
+        if isinstance(value, int) and abs(value) > _MAX_DB_INT:
+            raise _EventRejected(f"payload.{name} {value} is out of range")
+
 
 def _int_or_none(value: Any) -> Optional[int]:
     try:
@@ -643,6 +784,74 @@ def _int_or_none(value: Any) -> Optional[int]:
     except (TypeError, ValueError):
         return None
     return parsed
+
+
+def _refresh_ingest_flag(
+    db: Session, run: Run, expected: Optional[int] = None
+) -> None:
+    """Set or clear ``ingest_incomplete``: items that never arrived, refused events.
+
+    Callers flush first, outside any exception handler: a value the database
+    refuses must fail the batch so it can be isolated, not be swallowed here.
+    """
+    current = dict(run.run_metadata) if isinstance(run.run_metadata, dict) else {}
+    previous = current.get(INGEST_INCOMPLETE_KEY)
+    if expected is None and isinstance(previous, dict):
+        expected = _int_or_none(previous.get("expected_items"))
+    if expected is None:
+        expected = _int_or_none(current.get("total_items"))
+    received = int(
+        db.query(func.count(RunItem.item_id))
+        .filter(RunItem.run_id == run.id)
+        .scalar()
+        or 0
+    )
+    flag = ingest_incomplete_flag(current, expected=expected, received=received)
+    if flag == previous:
+        return
+    if flag is None:
+        current.pop(INGEST_INCOMPLETE_KEY, None)
+    else:
+        current[INGEST_INCOMPLETE_KEY] = flag
+        logger.warning(
+            "Run %s is flagged as incomplete: %d/%s items, %d refused event(s)",
+            run.id,
+            received,
+            expected if expected is not None else "?",
+            int(flag.get("rejected_events") or 0),
+        )
+    run.run_metadata = _sanitize_for_json(current)
+
+
+def _record_refused_events(
+    run_id: str, rows: list, bind, lines: Dict[int, str]
+) -> None:
+    """Tally events the database refused; the transaction that tried them rolled back."""
+    if not rows:
+        return
+    try:
+        with Session(bind=bind, autoflush=False) as db:
+            run = (
+                db.query(Run)
+                .filter(Run.id == run_id)
+                .with_for_update()
+                .populate_existing()
+                .first()
+            )
+            if (
+                run is None
+                or run.deleted_at is not None
+                or is_run_force_stopped(run)
+                or not record_rejected_events(run, rows, lines)
+            ):
+                return
+            if completed_by_client(run):
+                _refresh_ingest_flag(db, run)
+            db.commit()
+    except Exception:
+        logger.warning(
+            "Failed to record refused events for run %s", run_id, exc_info=True
+        )
 
 
 def _build_item_meta(ts_ms, retry_count=0):
@@ -664,14 +873,16 @@ def _samples_from_config(run_config: Optional[Dict[str, Any]]) -> int:
 
 def _normalized_metric_spec(raw: Dict[str, Any]) -> Dict[str, Any]:
     score_type = str(raw.get("score_type") or "legacy")
-    direction = str(raw.get("direction") or "maximize")
+    # A missing direction is stored as NULL: the metric declared none and is
+    # shown neutrally. SDKs before 2026-09 always sent a default "maximize".
+    direction = str(raw["direction"]) if raw.get("direction") is not None else None
     sample_reducer = str(raw.get("sample_reducer") or "mean")
     run_reducer = str(raw.get("run_reducer") or "mean")
     if score_type not in {"boolean", "percentage", "count", "number", "legacy"}:
         raise HTTPException(
             status_code=422, detail=f"Invalid metric score_type: {score_type}"
         )
-    if direction not in {"maximize", "minimize"}:
+    if direction not in {None, "maximize", "minimize"}:
         raise HTTPException(
             status_code=422, detail=f"Invalid metric direction: {direction}"
         )
@@ -698,7 +909,29 @@ def _normalized_metric_spec(raw: Dict[str, Any]) -> Dict[str, Any]:
         "run_reducer": run_reducer,
         "unit": str(raw["unit"])[:80] if raw.get("unit") is not None else None,
         "precision": int(precision) if precision is not None else None,
+        "is_primary": raw.get("primary") is True,
     }
+
+
+def _metric_spec_unchanged(stored: RunMetricSpec, normalized: Dict[str, Any]) -> bool:
+    """Whether a re-sent spec matches the stored one.
+
+    Rows stored before direction and primary became optional hold the old
+    defaults (schema 1, "maximize", no primary flag); a newer SDK resuming
+    such a run sends schema 2 and ``None`` / ``False`` for them, which is the
+    same declaration.
+    """
+    for key, value in normalized.items():
+        current = getattr(stored, key)
+        if key == "schema_version" and current == 1 and value == 2:
+            continue
+        if key == "direction" and value is None and current == "maximize":
+            continue
+        if key == "is_primary" and current is None:
+            continue
+        if current != value:
+            return False
+    return True
 
 
 def _store_metric_specs(
@@ -721,8 +954,7 @@ def _store_metric_specs(
         normalized = _normalized_metric_spec(raw)
         current = existing.get(name)
         if current:
-            stored = {key: getattr(current, key) for key in normalized}
-            if stored != normalized:
+            if not _metric_spec_unchanged(current, normalized):
                 raise HTTPException(
                     status_code=409, detail=f"Metric spec changed during run: {name}"
                 )
@@ -857,11 +1089,116 @@ def _ingest_events_worker(
     if request_db is not None:
         request_db.close()
     with Session(bind=bind, autoflush=False) as db:
-        return _ingest_events_sync(run_id, body, db, principal)
+        try:
+            return _ingest_events_sync(run_id, body, db, principal)
+        except Exception as exc:
+            if not _is_event_store_error(exc):
+                raise
+            db.rollback()
+            error = exc
+    logger.warning(
+        "Database refused part of an ingest batch for run %s; isolating the "
+        "refused events: %s",
+        run_id,
+        _store_error_reason(error),
+    )
+    # A refused value fails its batch the same way on every retry, and
+    # clients retry a 5xx forever. Apply the batch again in halves, each in
+    # its own transaction, until only the refused events are left out.
+    lines = body.decode("utf-8").split("\n")
+    filled = sum(1 for line in lines if line.strip())
+    if filled > MAX_ISOLATED_BATCH_EVENTS:
+        # A 4xx, not a 5xx: SDKs then resend the events one by one, which
+        # applies the valid ones and rejects only the refused value.
+        return JSONResponse(
+            {
+                "ok": False,
+                "applied": 0,
+                "skipped": 0,
+                "detail": (
+                    f"The database refused a value in this batch of {filled} "
+                    f"events. Batches of more than {MAX_ISOLATED_BATCH_EVENTS} "
+                    "events are not split to find it; resend it in smaller "
+                    "batches."
+                ),
+            },
+            status_code=413,
+        )
+    return _ingest_response(
+        _split_line_range(run_id, lines, 0, len(lines), bind, principal, error)
+    )
+
+
+def _ingest_line_range(
+    run_id: str, lines: list[str], start: int, stop: int, bind, principal
+) -> Dict[str, Any]:
+    """Apply ``lines[start:stop]`` in one transaction; isolate refused values."""
+    with Session(bind=bind, autoflush=False) as db:
+        try:
+            response = _ingest_events_sync(
+                run_id,
+                "\n".join(lines[start:stop]).encode("utf-8"),
+                db,
+                principal,
+                line_offset=start,
+            )
+            return json.loads(response.body)
+        except Exception as exc:
+            if not _is_event_store_error(exc):
+                raise
+            db.rollback()
+            error = exc
+    return _split_line_range(run_id, lines, start, stop, bind, principal, error)
+
+
+def _split_line_range(
+    run_id: str,
+    lines: list[str],
+    start: int,
+    stop: int,
+    bind,
+    principal,
+    error: BaseException,
+) -> Dict[str, Any]:
+    filled = [index for index in range(start, stop) if lines[index].strip()]
+    if len(filled) <= 1:
+        rows = []
+        for index in filled:
+            try:
+                raw = json.loads(lines[index])
+            except ValueError:
+                raw = None
+            rows.append(_rejection_row(index + 1, raw, _store_error_reason(error)))
+        _record_refused_events(
+            run_id, rows, bind, {index + 1: lines[index] for index in filled}
+        )
+        return {
+            "applied": 0,
+            "skipped": 0,
+            "rejected": len(rows),
+            "rejected_events": rows,
+        }
+    middle = filled[len(filled) // 2]
+    parts = [
+        _ingest_line_range(run_id, lines, start, middle, bind, principal),
+        _ingest_line_range(run_id, lines, middle, stop, bind, principal),
+    ]
+    return {
+        "applied": sum(part["applied"] for part in parts),
+        "skipped": sum(part["skipped"] for part in parts),
+        "rejected": sum(part["rejected"] for part in parts),
+        "rejected_events": [
+            row for part in parts for row in part["rejected_events"]
+        ][:MAX_REJECTION_DETAILS],
+    }
 
 
 def _ingest_events_sync(
-    run_id: str, body: bytes, db: Session, principal: Principal
+    run_id: str,
+    body: bytes,
+    db: Session,
+    principal: Principal,
+    line_offset: int = 0,
 ) -> JSONResponse:
     """Apply one ordered batch using an exclusively owned synchronous session."""
     require_api_key_scope(principal, "runs:write")
@@ -898,21 +1235,40 @@ def _ingest_events_sync(
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="Invalid encoding")
 
+    # Every line gets its own verdict: an invalid event is rejected and
+    # reported, and the valid rest of the batch still applies. Failing the
+    # whole request instead would make the SDK resend the same poison batch.
+    rejections: list[Dict[str, Any]] = []
+
+    def _reject(line_no: int, source: Any, reason: str, raw: Any = None) -> None:
+        rejections.append(_rejection_row(line_no, source, reason, raw))
+
     parsed = []
-    for line in text.splitlines():
+    # Tally inputs (see record_rejected_events): the text of lines refused
+    # before they had an event id, and lines that belong to another run.
+    unidentified_lines: Dict[int, str] = {}
+    foreign_lines = set()
+    # NDJSON lines end at "\n" only. str.splitlines() would also split inside
+    # a JSON string at U+2028, U+2029 or U+0085, which JSON leaves unescaped.
+    for line_no, line in enumerate(text.split("\n"), start=1 + line_offset):
         if not line.strip():
             continue
+        raw = None
         try:
             raw = json.loads(line)
             evt = RunEventV1.model_validate(raw)
         except Exception as exc:
-            logger.warning("Skipping malformed event for run %s: %s", run_id, exc)
+            _reject(line_no, raw, _rejection_reason(exc))
+            unidentified_lines[line_no] = line
             continue
         if str(evt.run_id) != run_id:
-            logger.warning("Skipping event with run_id mismatch for run %s", run_id)
+            _reject(
+                line_no, evt, "run_id does not match the run in the request path", raw
+            )
+            foreign_lines.add(line_no)
             continue
         raw["__bytes"] = len(line)
-        parsed.append((raw, evt))
+        parsed.append((line_no, raw, evt))
 
     # Fetch identities once per bounded chunk, including IDs absent from the DB.
     # Missing entries remain cached too, avoiding a SELECT for every new row.
@@ -921,28 +1277,116 @@ def _ingest_events_sync(
         return (values[pos : pos + size] for pos in range(0, len(values), size))
 
     known_events = set()
-    for chunk in _chunks({str(evt.event_id) for _, evt in parsed}):
+    for chunk in _chunks({str(evt.event_id) for _, _, evt in parsed}):
         known_events.update(
             row[0]
             for row in db.query(RunEvent.event_id).filter(
                 RunEvent.run_id == run_id, RunEvent.event_id.in_(chunk)
             )
         )
+    # (run_id, sequence) is unique. A new event reusing a stored or in-batch
+    # sequence is rejected here rather than failing the bulk INSERT below.
+    sequence_owners: Dict[int, str] = {}
+    fresh_sequences = {
+        evt.sequence
+        for _, _, evt in parsed
+        if evt.type != "span_completed"
+        and str(evt.event_id) not in known_events
+        and evt.sequence <= _MAX_DB_INT
+    }
+    for chunk in _chunks(fresh_sequences):
+        sequence_owners.update(
+            (row[0], row[1])
+            for row in db.query(RunEvent.sequence, RunEvent.event_id).filter(
+                RunEvent.run_id == run_id, RunEvent.sequence.in_(chunk)
+            )
+        )
+    metric_spec_cache = {
+        spec.metric_name: spec
+        for spec in db.query(RunMetricSpec).filter(RunMetricSpec.run_id == run_id).all()
+    }
+
+    def _validate_metric_score(payload: MetricScoredPayload) -> None:
+        spec = metric_spec_cache.get(payload.metric_name)
+        if not spec or spec.score_type == "legacy":
+            return
+        value = payload.score_value
+        numeric = payload.score_numeric
+        if numeric is None or not math.isfinite(float(numeric)):
+            raise _EventRejected("Metric score must be finite")
+        if spec.score_type == "boolean":
+            if value is not None and not (
+                isinstance(value, bool)
+                or (isinstance(value, (int, float)) and float(value) in {0.0, 1.0})
+            ):
+                raise _EventRejected(
+                    f"Boolean metric {payload.metric_name} must emit bool, 0, or 1"
+                )
+            if float(numeric) not in {0.0, 1.0}:
+                raise _EventRejected("Boolean score must be 0 or 1")
+        elif spec.score_type == "percentage" and not 0.0 <= float(numeric) <= 1.0:
+            raise _EventRejected("Percentage score must be between 0 and 1")
+        elif spec.score_type == "count":
+            if float(numeric) < 0 or not float(numeric).is_integer():
+                raise _EventRejected("Count score must be a non-negative integer")
+
+    def _validate_metric_specs(payload: RunStartedPayload) -> None:
+        # Mirrors _store_metric_specs, which applies the specs later.
+        for name, raw_spec in (payload.metric_specs or {}).items():
+            if name not in (payload.metrics or []):
+                raise _EventRejected(f"Metric spec provided for unknown metric: {name}")
+            try:
+                normalized = _normalized_metric_spec(raw_spec)
+            except (TypeError, ValueError) as exc:
+                raise _EventRejected(f"Invalid metric spec for {name}: {exc}")
+            current = metric_spec_cache.get(name)
+            if current and {
+                key: getattr(current, key) for key in normalized
+            } != normalized:
+                raise _EventRejected(f"Metric spec changed during run: {name}")
+
     accepted = []
     skipped = 0
-    for raw, evt in parsed:
+    for line_no, raw, evt in parsed:
         event_id = str(evt.event_id)
         if event_id in known_events:
             skipped += 1
             continue
-        known_events.add(event_id)
         payload_cls = _PAYLOAD_TYPE.get(evt.type)
-        payload = (
-            payload_cls.model_validate(raw.get("payload") or {})
-            if payload_cls
-            else evt.payload
-        )
+        try:
+            payload = (
+                payload_cls.model_validate(raw.get("payload") or {})
+                if payload_cls
+                else evt.payload
+            )
+            _check_int_ranges(evt, payload)
+            if isinstance(payload, MetricScoredPayload):
+                _validate_metric_score(payload)
+            elif isinstance(payload, RunStartedPayload):
+                _validate_metric_specs(payload)
+        except (ValidationError, _EventRejected, HTTPException) as exc:
+            _reject(line_no, evt, _rejection_reason(exc), raw)
+            continue
+        if evt.type != "span_completed":
+            owner = sequence_owners.setdefault(evt.sequence, event_id)
+            if owner != event_id:
+                _reject(
+                    line_no,
+                    evt,
+                    f"sequence {evt.sequence} is already used by event {owner}",
+                    raw,
+                )
+                continue
+        known_events.add(event_id)
         accepted.append((raw, evt, payload))
+    if rejections:
+        logger.warning(
+            "Rejected %d event(s) for run %s; first: line %s: %s",
+            len(rejections),
+            run_id,
+            rejections[0]["line"],
+            rejections[0]["error"],
+        )
 
     # Spans are stored once, in ``spans``; ``run_events`` keeps the run's
     # structural history only. A redelivered span therefore dedupes on
@@ -976,6 +1420,42 @@ def _ingest_events_sync(
             deduped.append(entry)
         accepted = deduped
 
+    if is_run_in_review(run):
+        # A reviewed run is frozen. Heartbeats are harmless no-ops (a late one
+        # must not move it back to RUNNING); redelivered events were already
+        # skipped above. Any new data would change what the reviewer saw.
+        writes = [evt.type for _, evt, _ in accepted if evt.type != "run_heartbeat"]
+        if writes:
+            status = run.status.value
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Run is under review ({status}); its results stay frozen "
+                    "until a project manager withdraws the review decision"
+                ),
+                headers={"X-Qym-Run-State": "in_review", "X-Qym-Run-Status": status},
+            )
+        # Same response contract as any other batch: invalid lines keep their
+        # per-event verdicts, and an all-invalid batch is a 422.
+        return _ingest_response(
+            {
+                "applied": 0,
+                "skipped": skipped + len(accepted),
+                "rejected": len(rejections),
+                "rejected_events": rejections,
+            }
+        )
+
+    # Tally refused events on the run before applying the batch, so a
+    # run_completed in it flags them, whichever SDK sent the run: old SDKs
+    # complete a run without reading these verdicts. Events naming another
+    # run are not this run's data.
+    rejections_recorded = record_rejected_events(
+        run,
+        [row for row in rejections if row["line"] not in foreign_lines],
+        unidentified_lines,
+    )
+
     storage = ingest_settings()
     event_rows = [
         dict(
@@ -995,6 +1475,9 @@ def _ingest_events_sync(
     ]
     for chunk in _chunks(event_rows):
         db.execute(insert(RunEvent), chunk)
+    # The bulk insert skips the dashboard flush hooks; project item failures
+    # and retries now, as the ORM path and backfill do.
+    enqueue_inserted_events(db.connection(), event_rows)
 
     item_ids = {
         payload.item_id for _, _, payload in accepted if hasattr(payload, "item_id")
@@ -1036,6 +1519,34 @@ def _ingest_events_sync(
             ):
                 dataset_item_cache[(row.dataset_version_id, row.item_id)] = row
 
+    # Dataset references are foreign keys. One that names a deleted row (a
+    # draft item removed mid-run) would fail the whole batch at flush, so an
+    # unknown reference is ignored and the rest of its event still applies.
+    def _existing(column, values):
+        found = set()
+        for chunk in _chunks({value for value in values if value is not None}):
+            found.update(row[0] for row in db.query(column).filter(column.in_(chunk)))
+        return found
+
+    known_dataset_item_pks = _existing(
+        DatasetItem.id,
+        (
+            payload.dataset_item_pk
+            for _, _, payload in accepted
+            if isinstance(payload, ItemStartedPayload)
+        ),
+    )
+    run_started_payloads = [
+        payload for _, _, payload in accepted if isinstance(payload, RunStartedPayload)
+    ]
+    known_dataset_ids = _existing(
+        Dataset.id, (payload.dataset_id for payload in run_started_payloads)
+    )
+    known_dataset_version_ids = _existing(
+        DatasetVersion.id,
+        (payload.dataset_version_id for payload in run_started_payloads),
+    )
+
     pending_spans = []
     # Some legacy payloads omit retry_count on the item outcome. Preserve the
     # current batch's output when a later event identifies another final retry.
@@ -1043,42 +1554,6 @@ def _ingest_events_sync(
     attempts_by_pass = defaultdict(dict)
     for (item_id, pass_number, attempt_number), attempt in attempt_cache.items():
         attempts_by_pass[(item_id, pass_number)][attempt_number] = attempt
-    metric_spec_cache = {
-        spec.metric_name: spec
-        for spec in db.query(RunMetricSpec).filter(RunMetricSpec.run_id == run_id).all()
-    }
-
-    def _validate_metric_score(payload: MetricScoredPayload) -> None:
-        spec = metric_spec_cache.get(payload.metric_name)
-        if not spec or spec.score_type == "legacy":
-            return
-        value = payload.score_value
-        numeric = payload.score_numeric
-        if numeric is None or not math.isfinite(float(numeric)):
-            raise HTTPException(status_code=422, detail="Metric score must be finite")
-        if spec.score_type == "boolean":
-            if value is not None and not (
-                isinstance(value, bool)
-                or (isinstance(value, (int, float)) and float(value) in {0.0, 1.0})
-            ):
-                raise HTTPException(
-                    status_code=422,
-                    detail=f"Boolean metric {payload.metric_name} must emit bool, 0, or 1",
-                )
-            if float(numeric) not in {0.0, 1.0}:
-                raise HTTPException(
-                    status_code=422, detail="Boolean score must be 0 or 1"
-                )
-        elif spec.score_type == "percentage" and not 0.0 <= float(numeric) <= 1.0:
-            raise HTTPException(
-                status_code=422, detail="Percentage score must be between 0 and 1"
-            )
-        elif spec.score_type == "count":
-            if float(numeric) < 0 or not float(numeric).is_integer():
-                raise HTTPException(
-                    status_code=422, detail="Count score must be a non-negative integer"
-                )
-
     def _aggregate_score_meta(
         observations: int, existing: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
@@ -1190,22 +1665,143 @@ def _ingest_events_sync(
         pass_score_cache[(row.item_id, row.metric_name, row.pass_number)] = row
         passes_by_metric[(row.item_id, row.metric_name)][row.pass_number] = row
 
+    # Directions declared by a run_started event in this batch; its specs are
+    # stored after metric_spec_cache was read.
+    started_directions: Dict[str, Optional[str]] = {}
+
+    def _metric_direction(metric_name):
+        if metric_name in started_directions:
+            return started_directions[metric_name]
+        return declared_direction(metric_spec_cache.get(metric_name))
+
     def _reduce_pass_scores(item_id, metric_name):
-        values = [
-            row.score_numeric
-            for row in passes_by_metric[(item_id, metric_name)].values()
-            if row.score_numeric is not None
-        ]
-        return (sum(values) / len(values), len(values)) if values else (None, 0)
+        # A pass whose scorer or task failed counts as 0, or is left out when
+        # lower is better (services/run_means.py).
+        return reduce_pass_scores(
+            passes_by_metric[(item_id, metric_name)].values(),
+            _metric_direction(metric_name),
+        )
+
+    def _record_failed_pass(item_id: str, pass_number: int) -> None:
+        # A failed pass scores 0 for every metric (mirrors the SDK's
+        # reduction rule) so Pass^k and the reduced mean stay honest.
+        for metric_name in list(run.metrics or []):
+            pass_score = _get_pass_score(item_id, metric_name, pass_number)
+            if not pass_score:
+                pass_score = RunItemPassScore(
+                    run_id=run_id,
+                    item_id=item_id,
+                    metric_name=metric_name,
+                    pass_number=pass_number,
+                    score_numeric=0.0,
+                    label="error",
+                    meta=task_error_pass_meta(None),
+                )
+                _remember_pass_score(pass_score)
+                db.add(pass_score)
+            else:
+                pass_score.score_numeric = 0.0
+                pass_score.label = "error"
+                # A metric scored before the task failed (a cancel
+                # mid-scoring) leaves its metadata: keep it, but mark the
+                # pass as a failed task (run_means.is_task_error_pass).
+                pass_score.meta = task_error_pass_meta(pass_score.meta)
+            reduced, reduced_observations = _reduce_pass_scores(item_id, metric_name)
+            score = _get_score(item_id, metric_name)
+            if score:
+                score.score_numeric = reduced
+                score.score_raw = reduced
+                score.meta = _aggregate_score_meta(
+                    int(reduced_observations or 0),
+                    score.meta if isinstance(score.meta, dict) else None,
+                )
+                score.label = None
+                score.explanation = None
+            elif reduced is not None:
+                db.add(
+                    _remember_score(
+                        RunItemScore(
+                            run_id=run_id,
+                            item_id=item_id,
+                            metric_name=metric_name,
+                            score_numeric=reduced,
+                            score_raw=reduced,
+                            meta=_aggregate_score_meta(int(reduced_observations or 0)),
+                            label=None,
+                            explanation=None,
+                        )
+                    )
+                )
+
+    def _record_final_attempt_outcome(payload: ItemAttemptFinishedPayload) -> None:
+        # A final attempt is evidence of the item's (or the pass's) outcome.
+        # When the item event that reports it (item_failed, item_completed)
+        # did not arrive, because the platform rejected it or it comes later,
+        # the attempt stands in for it, so a failed task never counts as a
+        # clean result. The item event, when it comes, is authoritative.
+        failed = payload.status == "failed"
+        if run.samples > 1:
+            passes = [
+                _get_pass_score(payload.item_id, metric_name, payload.pass_number)
+                for metric_name in list(run.metrics or [])
+            ]
+            # item_failed may have stored the pass as a failed task already.
+            if failed and not all(
+                row is not None and is_task_error_pass(row.label, row.meta)
+                for row in passes
+            ):
+                _record_failed_pass(payload.item_id, payload.pass_number)
+            return
+        if not failed and payload.output is None:
+            # No output to show: without its item_completed the item stays
+            # not received (run_means.item_not_received).
+            return
+        item = _get_item(payload.item_id)
+        if item is None:
+            item = _remember_item(
+                RunItem(
+                    run_id=run_id,
+                    item_id=payload.item_id,
+                    index=payload.index if payload.index is not None else 0,
+                    input={},
+                    expected=None,
+                    item_metadata=_build_item_meta(
+                        payload.task_started_at_ms, payload.attempt_number - 1
+                    ),
+                )
+            )
+            db.add(item)
+        elif (
+            item.error is not None
+            or item.output is not None
+            or item.latency_ms is not None
+        ):
+            return
+        if failed:
+            item.error = payload.error or "Task failed on its final attempt"
+        else:
+            item.output = _sanitize_for_json(payload.output)
+        item.latency_ms = payload.latency_ms
+        item.retry_count = payload.attempt_number - 1
+        if payload.trace_id is not None:
+            item.trace_id = payload.trace_id
+        if payload.trace_url is not None:
+            item.trace_url = payload.trace_url
 
     applied = 0
     trace_stats_dirty = False
     touched_trace_ids: set[str] = set()
     touched_item_ids: set[str] = set()
 
+    # begin_nested() first flushes pending rows outside its savepoint, so the
+    # savepoint blocks below cannot absorb a flush failure: it would resurface
+    # as PendingRollbackError at commit. Each block flushes before its try so
+    # a value the database refuses raises its own error, which the worker
+    # isolates to the event that carried it.
     def _invalidate_trace_summary():
         from qym_platform.db.models import RunTraceSummary
 
+        db.flush()
         try:
             with db.begin_nested():
                 db.query(RunTraceSummary).filter_by(run_id=run_id).delete(
@@ -1224,6 +1820,7 @@ def _ingest_events_sync(
             return
         rows = list(pending_spans)
         pending_spans.clear()
+        db.flush()
         try:
             with db.begin_nested():
                 db.execute(insert(Span), rows)
@@ -1244,7 +1841,11 @@ def _ingest_events_sync(
                 touched_trace_ids.add(row["trace_id"])
                 trace_stats_dirty = True
 
+    # True while the last event applied is a run_completed that just
+    # refreshed the ingest flag: the late-event check below would repeat it.
+    ingest_flag_fresh = False
     for raw, evt, payload in accepted:
+        ingest_flag_fresh = False
         if hasattr(payload, "item_id"):
             touched_item_ids.add(payload.item_id)
         logger.debug(
@@ -1259,16 +1860,29 @@ def _ingest_events_sync(
             run.external_run_id = payload.external_run_id
             run.task = payload.task
             run.dataset = payload.dataset
-            if payload.dataset_id:
+            if payload.dataset_id in known_dataset_ids:
                 run.dataset_id = payload.dataset_id
-            if payload.dataset_version_id:
+            if payload.dataset_version_id in known_dataset_version_ids:
                 run.dataset_version_id = payload.dataset_version_id
             run.model = payload.model
             run.metrics = payload.metrics
             _store_metric_specs(db, run, payload.metric_specs)
+            for name, raw_spec in (payload.metric_specs or {}).items():
+                if name not in metric_spec_cache:
+                    started_directions[name] = declared_direction(
+                        _normalized_metric_spec(raw_spec)
+                    )
             md = _sanitize_for_json(dict(payload.run_metadata or {}))
             if payload.total_items is not None:
                 md["total_items"] = int(payload.total_items)
+            # Refusals already tallied (possibly from this very batch) stay.
+            tally = (
+                run.run_metadata.get(INGEST_REJECTED_KEY)
+                if isinstance(run.run_metadata, dict)
+                else None
+            )
+            if isinstance(tally, dict):
+                md[INGEST_REJECTED_KEY] = tally
             run.run_metadata = md
             run.run_config = _sanitize_for_json(payload.run_config)
             run.samples = _samples_from_config(payload.run_config)
@@ -1283,7 +1897,11 @@ def _ingest_events_sync(
         elif isinstance(payload, ItemStartedPayload):
             mark_run_running(run)
             item = _get_item(payload.item_id)
-            dataset_item_pk = payload.dataset_item_pk
+            dataset_item_pk = (
+                payload.dataset_item_pk
+                if payload.dataset_item_pk in known_dataset_item_pks
+                else None
+            )
             if dataset_item_pk is None and run.dataset_version_id:
                 dataset_item = dataset_item_cache.get(
                     (run.dataset_version_id, payload.item_id)
@@ -1405,9 +2023,9 @@ def _ingest_events_sync(
                         and attempt_no != payload.attempt_number
                     ):
                         other.is_last_attempt = False
+                _record_final_attempt_outcome(payload)
 
         elif isinstance(payload, MetricScoredPayload):
-            _validate_metric_score(payload)
             mark_run_running(run)
             reduced_numeric = payload.score_numeric
             reduced_observations = 1 if payload.score_numeric is not None else 0
@@ -1439,7 +2057,10 @@ def _ingest_events_sync(
                 reduced_numeric, reduced_observations = _reduce_pass_scores(
                     payload.item_id, payload.metric_name
                 )
-                if reduced_numeric is None:
+                # A lower-is-better item whose every pass errored has no value.
+                if reduced_numeric is None and not errors_left_out(
+                    _metric_direction(payload.metric_name)
+                ):
                     reduced_numeric = payload.score_numeric
 
             score = _get_score(payload.item_id, payload.metric_name)
@@ -1596,56 +2217,7 @@ def _ingest_events_sync(
                     item.item_metadata = _sanitize_for_json(md)
             if run.samples > 1:
                 _finish_unfinished_pass(payload)
-                # A failed pass scores 0 for every metric (mirrors the SDK's
-                # reduction rule) so Pass^k and the reduced mean stay honest.
-                for metric_name in list(run.metrics or []):
-                    pass_score = _get_pass_score(
-                        payload.item_id, metric_name, payload.pass_number
-                    )
-                    if not pass_score:
-                        pass_score = RunItemPassScore(
-                            run_id=run_id,
-                            item_id=payload.item_id,
-                            metric_name=metric_name,
-                            pass_number=payload.pass_number,
-                            score_numeric=0.0,
-                            label="error",
-                        )
-                        _remember_pass_score(pass_score)
-                        db.add(pass_score)
-                    else:
-                        pass_score.score_numeric = 0.0
-                        pass_score.label = "error"
-                    reduced, reduced_observations = _reduce_pass_scores(
-                        payload.item_id, metric_name
-                    )
-                    score = _get_score(payload.item_id, metric_name)
-                    if score:
-                        score.score_numeric = reduced
-                        score.score_raw = reduced
-                        score.meta = _aggregate_score_meta(
-                            int(reduced_observations or 0),
-                            score.meta if isinstance(score.meta, dict) else None,
-                        )
-                        score.label = None
-                        score.explanation = None
-                    elif reduced is not None:
-                        db.add(
-                            _remember_score(
-                                RunItemScore(
-                                    run_id=run_id,
-                                    item_id=payload.item_id,
-                                    metric_name=metric_name,
-                                    score_numeric=reduced,
-                                    score_raw=reduced,
-                                    meta=_aggregate_score_meta(
-                                        int(reduced_observations or 0)
-                                    ),
-                                    label=None,
-                                    explanation=None,
-                                )
-                            )
-                        )
+                _record_failed_pass(payload.item_id, payload.pass_number)
             trace_stats_dirty = True
 
         elif isinstance(payload, RunCompletedPayload):
@@ -1676,6 +2248,7 @@ def _ingest_events_sync(
                 pass
 
             # ⚡ Compute and store trace stats from OTEL spans
+            db.flush()
             try:
                 _flush_pending_spans()
                 db.flush()  # ensure all spans from this batch are visible
@@ -1695,39 +2268,20 @@ def _ingest_events_sync(
             # If fewer item rows made it through the event stream, flag the
             # run so the UI can say "incomplete data" instead of quietly
             # presenting a partial run as the whole thing.
+            # Refused events flag the run the same way: new SDKs complete a run
+            # whose only losses are refusals and report how many there were.
+            db.flush()
             try:
-                db.flush()
                 expected = None
                 if isinstance(payload.summary, dict):
                     expected = _int_or_none(payload.summary.get("total_items"))
+                    record_reported_rejections(
+                        run, payload.summary.get("rejected_events")
+                    )
                 if expected is None and isinstance(run.run_metadata, dict):
                     expected = _int_or_none(run.run_metadata.get("total_items"))
-                if expected is not None and expected > 0:
-                    received = (
-                        db.query(func.count(RunItem.item_id))
-                        .filter(RunItem.run_id == run_id)
-                        .scalar()
-                        or 0
-                    )
-                    current = (
-                        dict(run.run_metadata)
-                        if isinstance(run.run_metadata, dict)
-                        else {}
-                    )
-                    if received < expected:
-                        current["ingest_incomplete"] = {
-                            "expected_items": expected,
-                            "received_items": int(received),
-                        }
-                        logger.warning(
-                            "Run %s completed with incomplete ingest: %d/%d items",
-                            run_id,
-                            received,
-                            expected,
-                        )
-                    else:
-                        current.pop("ingest_incomplete", None)
-                    run.run_metadata = _sanitize_for_json(current)
+                _refresh_ingest_flag(db, run, expected)
+                ingest_flag_fresh = True
             except Exception:
                 logger.warning(
                     "Failed to check ingest completeness for run %s",
@@ -1790,39 +2344,26 @@ def _ingest_events_sync(
     # Late-arriving item events (e.g. a retried batch landing after
     # run_completed was already applied) must keep the incomplete-ingest
     # flag honest — a re-sent run_completed would be deduped by event_id.
+    # So must events refused after completion.
     current_md = run.run_metadata if isinstance(run.run_metadata, dict) else {}
-    stale_flag = current_md.get("ingest_incomplete")
-    if isinstance(stale_flag, dict):
-        expected = _int_or_none(stale_flag.get("expected_items"))
-        if expected is not None and expected > 0:
-            try:
-                db.flush()
-                received = (
-                    db.query(func.count(RunItem.item_id))
-                    .filter(RunItem.run_id == run_id)
-                    .scalar()
-                    or 0
-                )
-                if received != _int_or_none(stale_flag.get("received_items")):
-                    updated = dict(current_md)
-                    if received >= expected:
-                        updated.pop("ingest_incomplete", None)
-                    else:
-                        updated["ingest_incomplete"] = {
-                            "expected_items": expected,
-                            "received_items": int(received),
-                        }
-                    run.run_metadata = _sanitize_for_json(updated)
-            except Exception:
-                logger.warning(
-                    "Failed to update ingest completeness for run %s",
-                    run_id,
-                    exc_info=True,
-                )
+    if not ingest_flag_fresh and (
+        isinstance(current_md.get(INGEST_INCOMPLETE_KEY), dict)
+        or (rejections_recorded and completed_by_client(run))
+    ):
+        db.flush()
+        try:
+            _refresh_ingest_flag(db, run)
+        except Exception:
+            logger.warning(
+                "Failed to update ingest completeness for run %s",
+                run_id,
+                exc_info=True,
+            )
 
     if trace_stats_dirty:
         # One refresh per batch. Wrapped in a savepoint so a stats failure
         # (e.g. pending migration) never rolls back the items and scores.
+        db.flush()
         try:
             with db.begin_nested():
                 _refresh_live_trace_stats(
@@ -1836,7 +2377,14 @@ def _ingest_events_sync(
             _invalidate_trace_summary()
 
     db.commit()
-    return JSONResponse({"ok": True, "applied": applied, "skipped": skipped})
+    return _ingest_response(
+        {
+            "applied": applied,
+            "skipped": skipped,
+            "rejected": len(rejections),
+            "rejected_events": rejections,
+        }
+    )
 
 
 @router.post("/runs:upload")

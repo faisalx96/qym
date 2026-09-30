@@ -7,7 +7,8 @@ The canonical models are in `packages/platform/qym_platform/db/models.py`; Alemb
 - `users`: global identity, active flag, and `MEMBER` / `ADMIN` role.
 - `user_identities`: provider/subject mappings for OIDC and local identities.
 - `local_auth_credentials`: password hashes, local-login timestamps, and the `must_change_password` flag set by an admin reset.
-- `projects`: project access boundary and active/archive state.
+- `user_sessions` (`0061`): server-side browser sessions keyed by a digest of the cookie's session token, with provider, created and last-seen times. Sign-out, a password change or reset, and disabling the user delete them; idle sessions expire.
+- `projects`: project access boundary and active/archive state. `archived_at` (`0065`) records when the project was archived (NULL while active); Trash purging of its deleted runs pauses from then until the unarchive.
 - `project_memberships`: one `MEMBER` / `MANAGER` role per user and project.
 - `api_keys`: project-bound key prefix, PBKDF2 hash, creator, recorded scopes, and revocation time. Scopes are stored but are not currently enforced.
 - `project_llm_connections`: encrypted OpenAI-compatible connection settings and the project default.
@@ -15,15 +16,16 @@ The canonical models are in `packages/platform/qym_platform/db/models.py`; Alemb
 
 ## Runs and repeat executions
 
-- `runs`: project, owner, task/dataset/model, workflow state, metadata/config, progress, soft deletion, and `samples` (default `1`).
+- `runs`: project, owner, task/dataset/model, workflow state, metadata/config, progress, soft deletion, and `samples` (default `1`). `purge_clock_started_at` (`0065`) is when a deleted run's Trash grace period started counting (NULL: `deleted_at`); unarchiving its project moves it forward by the time the project spent archived.
 - `run_items`: one representative row per `(run, item)` with input, expected, latest output/error, metadata, latency, and trace links.
-- `run_metric_specs`: immutable score semantics and display order per run/metric.
-- `run_item_scores`: one reduced row per `(run, item, metric)`. For repeat runs, the numeric value is the mean across stored passes.
+- `run_metric_specs`: immutable score semantics and display order per run/metric. `direction` (`maximize` / `minimize`) is nullable since `0063`: NULL means the metric declared none and is shown neutrally. `is_primary` marks the run's declared headline metric.
+- `run_item_scores`: one reduced row per `(run, item, metric)`. For repeat runs, the numeric value is the mean across stored passes, unless a reviewer scored the item as a whole (`meta.item_edit`).
 - `run_item_attempts`: retry attempts keyed by `(run, item, pass, attempt)`; the final attempt in each pass stores that pass's output and trace data.
-- `run_item_pass_scores`: lossless score per `(run, item, metric, pass)`. Migration `0027_pass_score_meta` adds the per-pass `label`, `meta`, and `explanation` used for judge and metric detail.
+- `run_item_pass_scores`: lossless score per `(run, item, metric, pass)`. Migration `0027_pass_score_meta` adds the per-pass `label`, `meta`, and `explanation` used for judge and metric detail. A pass whose task failed is stored as 0 with the label `error` and `meta.task_error` (rows stored before 1.8.0 carry no metadata), from its `item_failed` or, when that was rejected, its failed final attempt.
 - `run_metric_analyses`: cached repeat-analysis payloads keyed by run, metric, threshold, and method version. Score edits invalidate affected cache entries.
 - `run_events`: idempotent `RunEventV1` log, unique by both `(run, event_id)` and `(run, sequence)`.
-- `approvals` and `audit_logs`: run workflow decisions and mutation audit history.
+- `approvals` and `audit_logs`: run workflow decisions and mutation audit history. `approvals.execution_status` (`0062`) keeps the run's execution outcome while `runs.status` shows its review state.
+- `run_workflow_events` (`0062`): append-only submit/approve/reject/unapprove/unreject history with actor, comment and time.
 
 ## Datasets
 

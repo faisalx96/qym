@@ -503,3 +503,38 @@ def test_runs_and_charts_use_actual_post_api_scope_sort_and_selection(
             assert not any(path == "/api/runs" for path, _ in chart.requests)
         finally:
             chart.close()
+
+
+def test_charts_sort_by_another_column_on_the_first_click(browser):
+    """The sort-direction helper lived inside each card's render, out of the
+    header click handler's reach: the first click threw and left the sort
+    half-changed (the new column with the old direction)."""
+    rows = make_runs(6)
+    for i, row in enumerate(rows):
+        row["metrics"] = ["accuracy", "faithfulness"]
+        row["metric_averages"] = {"accuracy": i / 10, "faithfulness": (6 - i) / 10}
+        row["metric_specs"]["faithfulness"] = {"score_type": "continuous", "direction": "maximize"}
+    view = DashboardFixture(browser, view="charts", runs=rows)
+    try:
+        view.open()
+        page = view.page
+        header = page.locator('.sortable-col[data-sort="faithfulness"]').first
+        header.wait_for()
+        card = header.get_attribute("data-card")
+        header.click()
+        page.wait_for_function(
+            f"() => (window.__dashboardTest.state.chartSortState[{card!r}] || {{}}).key === 'faithfulness'"
+        )
+        # A metric column starts highest first, whatever the previous column did.
+        assert page.evaluate(f"window.__dashboardTest.state.chartSortState[{card!r}]") == {
+            "key": "faithfulness",
+            "dir": "desc",
+        }
+        page.locator('.sortable-col[data-sort="model"]').first.click()
+        assert page.evaluate(f"window.__dashboardTest.state.chartSortState[{card!r}]") == {
+            "key": "model",
+            "dir": "asc",
+        }
+        assert view.errors == []
+    finally:
+        view.close()

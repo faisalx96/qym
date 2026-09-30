@@ -2118,7 +2118,9 @@ def test_analysis_targets_include_every_failed_metric_and_skip_each_completed_me
 
 
 @pytest.mark.parametrize("normal_label", [None, "failed", "error", "timeout"])
-@pytest.mark.parametrize("normal_error", [None, False, 0, "", "   "])
+@pytest.mark.parametrize(
+    "normal_error", [None, False, 0, "", "   ", "syntax error near FROM"]
+)
 def test_analysis_targets_skip_task_and_metric_execution_errors(
     db_session: Session,
     normal_label,

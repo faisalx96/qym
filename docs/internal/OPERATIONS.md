@@ -28,7 +28,7 @@ sure one process runs a given job.
 | `QYM_EVENT_LOG_MODE` | `full` | `structural` drops item/metric bodies from `run_events` (bodies live in `run_items`/attempts/scores). Enable after the new image is live |
 | `QYM_SPAN_MAX_BYTES` | `1048576` | Safety ceiling per span; larger spans keep scalar attributes only and are flagged |
 | `QYM_SPAN_RETENTION_DAYS` | `60` | Raw traces older than this are dropped by partition (0 = keep forever) |
-| `QYM_DELETED_RUN_GRACE_DAYS` | `30` | Soft-deleted runs are hard-deleted after this |
+| `QYM_DELETED_RUN_GRACE_DAYS` | `30` | Soft-deleted runs are hard-deleted after this; time their project spends archived does not count |
 | `QYM_DB_POOL_SIZE` / `QYM_DB_MAX_OVERFLOW` | `10` / `10` | API connection pool |
 | `QYM_DB_WORKER_POOL_SIZE` / `QYM_DB_WORKER_MAX_OVERFLOW` | `3` / `2` | Worker pool |
 | `QYM_DB_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement guard on API connections |
@@ -45,14 +45,21 @@ sure one process runs a given job.
   rechecks the run before deleting it. A restore that commits first prevents purge;
   a restore after purge returns 404. Purge waits for dashboard deletion publication
   and for `spans_legacy` to be removed. It resumes after those steps finish.
+- Purge skips deleted runs whose project is archived (Restore refuses them too).
+  `projects.archived_at` records when the pause started; unarchiving moves each
+  deleted run's `runs.purge_clock_started_at` forward by the time since, so its
+  grace period resumes where it stopped. Deleted Runs shows "Purge paused while
+  the project is archived" instead of a date. An archived project with runs in
+  Trash therefore cannot be deleted until it is unarchived and they are purged.
 
 ## Migrations and large tables
 
-The combined migration chain has one head, `0057`, following `0050` through
-`0051`–`0056`. Migrations run before API readiness. Large storage rewrites and index
+The combined migration chain has one head, `0065`, following `0050` through
+`0051`–`0064`. Migrations run before API readiness. Large storage rewrites and index
 builds are deferred to maintenance jobs. Migration `0057` also backfills existing
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
+Migrations `0058`–`0065` are quick DDL or small job/queue inserts.
 
 | Migration | Work during startup | Deferred job (if table is large) |
 |---|---|---|
@@ -63,6 +70,71 @@ startup time on a populated copy before setting deployment readiness deadlines.
 | 0055 | — | `create_deferred_indexes` — extrema partial indexes |
 | 0056 | `dashboard_run_dimensions.hidden_at` | None |
 | 0057 | Pass review scope, deleted-pass marker, index, and approval/catalog backfill | Runs during migration |
+| 0058 | Marks ready dashboard partitions pending | None: the worker republishes each summary from its numeric records (no source rescan) |
+| 0059 | `local_auth_credentials.must_change_password` | None |
+| 0060 | Marks ready dashboard partitions pending (run means count scorer errors as 0) | None: summary republish, as 0058; `SUMMARY_SHAPE` 5 refreshes the rest |
+| 0061 | Empty `user_sessions` table | None. Every signed-in user signs in once after the upgrade |
+| 0062 | Empty `run_workflow_events` table, nullable `approvals.execution_status` | None |
+| 0063 | `run_metric_specs.direction` nullable, `run_metric_specs.is_primary` | `reclassify_metric_errors` — **queued, runs by itself**: rebuilds runs whose verdict reasons were counted as scorer errors, and marks repeat passes whose task failed after a metric was scored |
+| 0064 | — | `project_item_failure_events` — **queued, runs by itself**: rebuilds repeat runs with a pass that failed only through an `item_failed` event |
+| 0065 | Nullable `projects.archived_at` and `runs.purge_clock_started_at`; sets `archived_at` on projects already archived (a handful of rows) | None: Trash purging pauses for archived projects from now on |
+
+After `0060`/`0064` the dashboard worker republishes every ready summary once
+(a "republish wave"; about 45 s per 600 runs on the perf lab, in the
+background). Summaries of `SUMMARY_SHAPE` 5 (repeat-run means judge task
+errors per pass; a completed run's items never received are counted apart as
+`not_received_count`) are rebuilt from the same numeric records; no source
+rows are read. `reclassify_metric_errors` and `project_item_failure_events`
+request a full source rebuild only for the runs they find affected; estimate
+the count before deploying (read-only, works on json and jsonb):
+
+```sql
+SELECT count(DISTINCT s.run_id) FROM run_item_scores s JOIN runs r ON r.id = s.run_id
+WHERE r.deleted_at IS NULL AND s.meta->>'error' IS NOT NULL
+  AND coalesce(lower(trim(s.meta->>'status')), '') NOT IN ('error', 'failed', 'timeout');
+-- repeat for run_item_pass_scores
+```
+
+Both jobs commit one run at a time and retry a deadlock with the dashboard
+worker; check Admin → Maintenance afterwards and re-queue a `failed` job.
+`publish_ingest_flags` is **manual**: start it once so runs finished before
+this release show the Incomplete tag in the runs list.
+
+### Databases that ran the pre-release branch (old revision 0059)
+
+The rebase onto #52 reused revision ids: the pre-release branch's `0059`
+(run means) is not this release's `0059` (`local_auth_credentials.must_change_password`).
+Alembic tracks only the id, so a database stamped with the old `0059` would
+upgrade to head without an error and never get that column; password sign-in,
+sign-up, password change and admin reset then fail with `UndefinedColumn`. Before
+starting this version against such a database, run from the new image:
+
+```bash
+alembic stamp 0058 && alembic upgrade head
+```
+
+This re-applies `0059` onward; `0060` only re-queues dashboard summaries, so
+running it again is harmless. Production never ran the pre-release branch, so
+this applies only to development and perf-lab databases (for example the dev
+compose `docker-db-1` and `qym-db-perf`). A database at the old `0060`–`0062`
+stops the upgrade with a duplicate table or column error instead of skipping
+silently. An old `0063` existed only on an unreleased stream branch; it would
+also upgrade silently (this release's `0064` and `0065` add nothing it
+already has), so recreate such a throwaway database instead.
+
+### API keys that stop working at deploy
+
+Keys of archived projects answer 409 (`X-Qym-Key-State: project_archived`), and
+keys whose non-admin owner is no longer a project member answer 403
+(`owner_removed`) — including members removed before this release. List them
+before deploying so their pipelines can move to a new key:
+
+```sql
+SELECT k.id, k.name, k.prefix, u.email, p.slug, p.is_active
+FROM api_keys k JOIN users u ON u.id = k.user_id JOIN projects p ON p.id = k.project_id
+LEFT JOIN project_memberships m ON m.project_id = k.project_id AND m.user_id = k.user_id
+WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.role <> 'ADMIN'));
+```
 
 ## Recovery runbook (database near its volume limit)
 
@@ -83,7 +155,7 @@ startup time on a populated copy before setting deployment readiness deadlines.
 ### Deploy and run maintenance
 
 1. Deploy the new API with the default `QYM_ROLE=all`. Wait for migration head
-   `0057` and a healthy API. The API process then runs every queued job itself.
+   `0065` and a healthy API. The API process then runs every queued job itself.
    Do not restart the API while a job runs; the job resumes, but each restart
    costs time. Optional split layout: set `QYM_ROLE=api` on the API and start
    one worker with the same image and configuration, `QYM_ROLE=worker`, and
@@ -160,7 +232,7 @@ Use this layout to keep long maintenance jobs away from API rollouts and probes,
 or to run several API replicas with one background process. Same image as the
 API; only the command and two variables differ. One replica. Inherit maintenance
 mode and retention settings from the same configuration as the API. Start this
-deployment only after the API has migrated to `0057`.
+deployment only after the API has migrated to `0065`.
 
 ```yaml
 apiVersion: apps/v1

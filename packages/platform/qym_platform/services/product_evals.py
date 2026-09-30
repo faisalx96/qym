@@ -578,6 +578,19 @@ class ProductEvalJobManager:
         with self._lock:
             return self._jobs.get(job_id)
 
+    def stop_project(self, project_id: str) -> List[ProductEvalJob]:
+        """Ask every unfinished job of a project to stop (used on archive)."""
+        with self._lock:
+            jobs = [
+                job
+                for job in self._jobs.values()
+                if job.project_id == project_id
+                and job.to_dict()["status"] not in TERMINAL_JOB_STATUSES
+            ]
+        for job in jobs:
+            job.request_stop()
+        return jobs
+
     def get_by_qym_run_id(self, run_id: str) -> Optional[ProductEvalJob]:
         with self._lock:
             for job in self._jobs.values():

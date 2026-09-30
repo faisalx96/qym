@@ -17,6 +17,7 @@ from qym_platform.auth_oidc import (
     auth_mode_is_oidc,
     begin_provider_login,
     clear_authenticated_session,
+    end_user_sessions,
     exchange_provider_identity,
     get_session_user_and_provider,
     local_auth_enabled,
@@ -151,7 +152,7 @@ async def auth_callback(
         raise HTTPException(status_code=400, detail="OIDC auth mode is not enabled")
     identity = await exchange_provider_identity(request, provider, settings)
     user = resolve_or_provision_user(db, identity)
-    set_authenticated_session(request, user, provider)
+    set_authenticated_session(db, request, user, provider)
     return RedirectResponse(url=pop_login_next(request), status_code=303)
 
 
@@ -192,7 +193,7 @@ def auth_login_password(
 
     credential.last_login_at = datetime.utcnow()
     db.commit()
-    set_authenticated_session(request, user, "local_password")
+    set_authenticated_session(db, request, user, "local_password")
     return {"ok": True, "next": _resolve_next(request)}
 
 
@@ -230,8 +231,10 @@ def auth_change_password(
     if result.rowcount != 1:
         db.rollback()
         raise _invalid_credentials()
+    # A bulk UPDATE skips the ORM password hook, so end the other sessions here.
+    end_user_sessions(db, user.id)
     db.commit()
-    set_authenticated_session(request, user, "local_password")
+    set_authenticated_session(db, request, user, "local_password")
     return {"ok": True, "next": _resolve_next(request)}
 
 
@@ -282,13 +285,14 @@ def auth_signup_password(
         db.rollback()
         raise HTTPException(status_code=409, detail="An account with this email already exists") from exc
     db.refresh(user)
-    set_authenticated_session(request, user, "local_password")
+    set_authenticated_session(db, request, user, "local_password")
     return {"ok": True, "next": _resolve_next(request)}
 
 
 @router.post("/v1/auth/logout")
-def auth_logout(request: Request) -> Dict[str, Any]:
-    clear_authenticated_session(request)
+def auth_logout(request: Request, db: Session = Depends(get_db)) -> Dict[str, Any]:
+    # Ends the session on the server too, so a copy of the cookie stops working.
+    clear_authenticated_session(db, request)
     return {"ok": True}
 
 

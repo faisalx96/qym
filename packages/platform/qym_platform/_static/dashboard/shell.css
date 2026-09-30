@@ -394,8 +394,24 @@ body {
 .topbar-left { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; }
 
 
-.topbar-stats { display: flex; align-items: center; gap: var(--space-lg); }
-.topbar-stat { display: flex; align-items: center; gap: 6px; font-size: var(--shell-font-sm); color: var(--text-muted); }
+/* KPI chips fill the space beside the breadcrumb in priority order. A chip
+   that does not fit wraps onto a clipped second line, so it drops out
+   instead of covering the breadcrumb. */
+.topbar-stats {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;
+  flex: 1 1 0; min-width: 0; height: 24px; overflow: hidden;
+  column-gap: var(--space-lg); row-gap: 24px;
+}
+.topbar-stats-scope {
+  padding-right: var(--space-lg); border-right: 1px solid var(--border-default);
+  font-size: var(--shell-font-sm); font-weight: 600; color: var(--text-muted);
+  white-space: nowrap; cursor: help;
+}
+.topbar-stat { display: flex; align-items: center; gap: 6px; font-size: var(--shell-font-sm); color: var(--text-muted); white-space: nowrap; }
+.topbar-stat[title] { cursor: help; }
+@media (max-width: 1199px) {
+  .topbar-stat--secondary { display: none; }
+}
 .topbar-stat-value { font-family: var(--font-mono); font-weight: 600; font-size: var(--shell-font-md); color: var(--text-secondary); }
 .topbar-stat-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 
@@ -446,6 +462,41 @@ body {
 /* When no project: hide project switcher and project nav */
 .sidebar.no-project .project-nav-items { display: none; }
 .sidebar.no-project ~ .main-area .breadcrumb-project { display: none; }
+
+/* ════════════════════════════════════════════════
+   ARCHIVED PROJECT (read-only)
+   ════════════════════════════════════════════════ */
+/* Auto-analysis and Reviews exist to change things; they stay hidden. */
+.sidebar.project-archived .nav-item[data-page="analysis"],
+.sidebar.project-archived .nav-item[data-page="reviews"] { display: none; }
+
+.shell-archived-notice {
+  flex-shrink: 0;
+  padding: var(--space-sm) var(--space-lg);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--warning);
+  color: var(--text-secondary);
+  font-size: var(--font-base);
+  line-height: 1.5;
+}
+.shell-archived-notice[hidden] { display: none; }
+.shell-archived-notice strong { color: var(--text-primary); font-weight: 600; }
+
+/* Role / metadata tag recipe (DESIGN_LANGUAGE.md) in the warning tone. */
+.project-archived-tag {
+  flex: none;
+  display: inline-flex; align-items: center;
+  margin-left: var(--space-xs);
+  padding: 1px 6px;
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+  color: var(--warning);
+  font-family: var(--font-sans);
+  font-size: var(--font-xs);
+  font-weight: 650;
+  line-height: 1.5;
+}
 
 
 /* ════════════════════════════════════════════════

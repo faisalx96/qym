@@ -135,7 +135,7 @@
     <tr><td><code>sequence</code></td><td>integer &ge; 1</td><td>Monotonic per stream, starting at 1.</td></tr>
     <tr><td><code>sent_at</code></td><td>datetime</td><td>UTC ISO-8601 (the SDK emits a trailing <code>Z</code>).</td></tr>
     <tr><td><code>type</code></td><td>string</td><td>One of the 11 event types below.</td></tr>
-    <tr><td><code>run_id</code></td><td>UUID</td><td>Must match the run in the URL path, or the event is dropped.</td></tr>
+    <tr><td><code>run_id</code></td><td>UUID</td><td>Must match the run in the URL path, or the line is rejected.</td></tr>
     <tr><td><code>payload</code></td><td>object</td><td>Typed per event type.</td></tr>
   </tbody>
 </table>
@@ -145,16 +145,21 @@
 <div class="docs-callout warn"><svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><p><span class="docs-callout-title">These are platform <em>wire</em> events.</span> Do not confuse them with the SDK's in-process progress events (<code>run_start</code>, <code>item_start</code>, <code>item_complete</code>, <code>run_complete</code>, etc.) delivered to local observers. Those are a separate, local vocabulary covered in <a href="#sdk-guide/observers">Progress &amp; observers</a>.</p></div>
 
 <h2>Idempotency and partial batches</h2>
-<p>Event ingestion is built to be retried safely. Idempotency is keyed on the pair <code>(run_id, event_id)</code>: if an event with that id was already stored, it is skipped rather than applied twice. The endpoint never fails a whole batch over one bad line — it returns <code>200</code> with a small summary:</p>
+<p>Event ingestion is built to be retried safely. Idempotency is keyed on the pair <code>(run_id, event_id)</code>: if an event with that id was already stored, it is skipped rather than applied twice. Each line gets its own verdict, so one bad line never fails the rest of its batch:</p>
 
-<pre data-lang="json">{ "ok": true, "applied": 12, "skipped": 1 }</pre>
+<pre data-lang="json">{ "ok": true, "applied": 12, "skipped": 1, "rejected": 1,
+  "rejected_events": [{ "line": 3, "event_id": "…", "sequence": 3,
+                        "type": "metric_scored", "error": "…" }] }</pre>
 
 <ul>
   <li><strong><code>applied</code></strong> — events newly written.</li>
   <li><strong><code>skipped</code></strong> — duplicates whose <code>(run_id, event_id)</code> was already present.</li>
+  <li><strong><code>rejected</code></strong> / <strong><code>rejected_events</code></strong> — lines that were not stored and never will be (bad JSON or envelope, a mismatched <code>run_id</code>, a payload that fails its schema, a reused <code>sequence</code>, a value the database refuses), with the reason for the first 100.</li>
 </ul>
 
-<div class="docs-callout warn"><svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><p><span class="docs-callout-title">Malformed events are silently dropped.</span> Lines that fail to parse or whose payload <code>run_id</code> does not match the path are discarded with a server-side warning — they count toward neither <code>applied</code> nor <code>skipped</code>. A <code>200</code> with fewer <code>applied</code> than you sent means some events did not land. Validate your payloads against the schema before streaming; a write that silently no-ops is harder to notice than a rejected one.</p></div>
+<p>When every line of a request is rejected the answer is <code>422</code> with the same body, <code>"ok": false</code> and a <code>detail</code>.</p>
+
+<div class="docs-callout warn"><svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><p><span class="docs-callout-title">Rejected lines are reported, not retried.</span> Resending them unchanged is refused again; retry only network errors, <code>408</code>, <code>429</code> and <code>5xx</code>. Rejected events do not hold the run's completion: the run completes and is flagged <strong>Incomplete</strong> (<code>run_metadata.ingest_incomplete</code>) with the events it is missing.</p></div>
 
 <h2>Run status vocabulary</h2>
 <p>A run carries a single workflow status. These are the only values the platform uses; map any UI label back to one of them rather than inventing synonyms.</p>

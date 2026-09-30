@@ -33,8 +33,16 @@ DEFAULT_CONFIDENCE = 0.95
 # ── per-item helpers ─────────────────────────────────────────────────
 
 
-def _pass_count(scores: Sequence[float], threshold: float) -> int:
-    return sum(1 for score in scores if score >= threshold)
+def _pass_count(
+    scores: Sequence[Optional[float]], threshold: float, direction: str = "maximize"
+) -> int:
+    """Passing scores: ``>= threshold``, or ``<= threshold`` when lower is better.
+
+    ``None`` is an errored pass: it never passes.
+    """
+    if direction == "minimize":
+        return sum(1 for score in scores if score is not None and score <= threshold)
+    return sum(1 for score in scores if score is not None and score >= threshold)
 
 
 def unbiased_pass_at_k(n: int, c: int, k: int) -> float:
@@ -72,14 +80,19 @@ def unbiased_pass_hat_k(n: int, c: int, k: int) -> float:
 
 
 def estimate_pass_at(
-    items_scores: Dict[str, List[float]],
+    items_scores: Dict[str, List[Optional[float]]],
     k: int,
     *,
     threshold: float = DEFAULT_THRESHOLD,
+    direction: str = "maximize",
 ) -> float:
-    """Mean unbiased pass@k across items, from all stored passes per item."""
+    """Mean unbiased pass@k across items, from all stored passes per item.
+
+    Passing follows ``direction`` (``<= threshold`` when ``"minimize"``); a
+    ``None`` score is an errored pass and never passes.
+    """
     values = [
-        unbiased_pass_at_k(len(scores), _pass_count(scores, threshold), k)
+        unbiased_pass_at_k(len(scores), _pass_count(scores, threshold, direction), k)
         for scores in items_scores.values()
         if scores
     ]
@@ -87,14 +100,15 @@ def estimate_pass_at(
 
 
 def estimate_pass_hat(
-    items_scores: Dict[str, List[float]],
+    items_scores: Dict[str, List[Optional[float]]],
     k: int,
     *,
     threshold: float = DEFAULT_THRESHOLD,
+    direction: str = "maximize",
 ) -> float:
     """Mean unbiased pass^k across items, from all stored passes per item."""
     values = [
-        unbiased_pass_hat_k(len(scores), _pass_count(scores, threshold), k)
+        unbiased_pass_hat_k(len(scores), _pass_count(scores, threshold, direction), k)
         for scores in items_scores.values()
         if scores
     ]
@@ -102,13 +116,22 @@ def estimate_pass_hat(
 
 
 def group_stats(
-    items_scores: Dict[str, List[float]],
+    items_scores: Dict[str, List[Optional[float]]],
     *,
     threshold: float = DEFAULT_THRESHOLD,
     k: Optional[int] = None,
     report_k: Optional[int] = None,
+    direction: str = "maximize",
 ) -> Dict[str, Optional[float]]:
     """Group metrics over the passes actually run.
+
+    ``direction="minimize"`` (lower is better) passes scores ``<= threshold``
+    and takes the per-item minimum for ``max_at_k`` (the best score).
+
+    A ``None`` score is an errored pass: it counts as a failed pass in
+    ``pass_at_k``, ``pass_hat_k``, ``consistency`` and ``reliability``, and is
+    left out of ``avg_at_k`` and ``max_at_k`` (an item with no other score
+    has no best score).
 
     Returns the platform-compatible set: ``pass_at_k``, ``pass_hat_k``,
     ``avg_at_k`` (mean over all scores), ``max_at_k`` (mean of per-item best),
@@ -126,6 +149,7 @@ def group_stats(
     pass_at_k_sum = 0.0
     pass_hat_k_sum = 0.0
     max_score_sum = 0.0
+    items_with_a_score = 0
     total_score_sum = 0.0
     total_score_count = 0
     consistency_sum = 0.0
@@ -138,7 +162,7 @@ def group_stats(
         if not scores:
             continue
         total_items += 1
-        pass_count = _pass_count(scores, threshold)
+        pass_count = _pass_count(scores, threshold, direction)
         score_count = len(scores)
 
         k_eff = min(report_k, score_count) if report_k else score_count
@@ -153,9 +177,12 @@ def group_stats(
                 reliability_sum += pass_count / score_count
                 items_with_a_pass += 1
 
-        max_score_sum += max(scores)
-        total_score_sum += sum(scores)
-        total_score_count += score_count
+        valid = [score for score in scores if score is not None]
+        if valid:
+            max_score_sum += min(valid) if direction == "minimize" else max(valid)
+            items_with_a_score += 1
+        total_score_sum += sum(valid)
+        total_score_count += len(valid)
 
     resolved_k = k if k is not None else max(
         (len(scores) for scores in items_scores.values()), default=0
@@ -168,7 +195,7 @@ def group_stats(
         "pass_at_k": pass_at_k_sum / total_items if total_items else 0.0,
         "pass_hat_k": pass_hat_k_sum / total_items if total_items else 0.0,
         "avg_at_k": total_score_sum / total_score_count if total_score_count else 0.0,
-        "max_at_k": max_score_sum / total_items if total_items else 0.0,
+        "max_at_k": max_score_sum / items_with_a_score if items_with_a_score else 0.0,
         "consistency": (
             consistency_sum / items_with_multiple if items_with_multiple else None
         ),

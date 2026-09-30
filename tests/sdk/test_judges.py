@@ -227,6 +227,8 @@ class TestCreateJudge:
 
         assert result.score == 0.0
         assert "error" in result.metadata
+        # No verdict: a scorer failure, not a judged 0 (C010).
+        assert result.metadata["status"] == "error"
 
     @pytest.mark.asyncio
     async def test_api_error(self):
@@ -250,6 +252,7 @@ class TestCreateJudge:
         assert result.score == 0.0
         assert "error" in result.metadata
         assert "timeout" in result.metadata["error"]
+        assert result.metadata["status"] == "error"
 
     @pytest.mark.asyncio
     async def test_input_data_substitution(self):

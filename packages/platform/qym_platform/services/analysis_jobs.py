@@ -15,7 +15,7 @@ import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, Iterable, Optional, Set, Tuple
 from uuid import uuid4
 
 from qym_platform.datetime_utils import utc_now_naive
@@ -288,6 +288,24 @@ class AnalysisJobManager:
                 # cooperative flag before aggregation and persistence.
                 loop.call_soon_threadsafe(task.cancel)
             return job
+
+    def active_scope_ids(self) -> Set[str]:
+        """Run ids (or ``project:<slug>`` scopes) that have an unfinished job."""
+        with self._lock:
+            return {job.run_id for job in self._jobs.values() if job.status in ACTIVE_JOB_STATUSES}
+
+    def cancel_scopes(self, scope_ids: Iterable[str]) -> int:
+        """Cancel every unfinished job of these runs or scopes."""
+        wanted = set(scope_ids)
+        with self._lock:
+            job_ids = [
+                job.job_id
+                for job in self._jobs.values()
+                if job.run_id in wanted and job.status in ACTIVE_JOB_STATUSES
+            ]
+        for job_id in job_ids:
+            self.cancel(job_id)
+        return len(job_ids)
 
     def update_progress(self, job: AnalysisJob, **values: Any) -> None:
         with self._lock:

@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Deleted Runs</title>
   <link rel="icon" type="image/png" href="./static/qym_icon.png">
-  <link rel="stylesheet" href="./static/dashboard.css?v=runs-analysis-c1-20260804-16">
-  <link rel="stylesheet" href="./static/shell.css">
-  <script src="./static/auth.js"></script>
-  <script src="./static/shell.js?v=ui-consistency-20260730-15"></script>
+  <link rel="stylesheet" href="./static/dashboard.css?v=p0-20260930">
+  <link rel="stylesheet" href="./static/shell.css?v=p0-20260930-3">
+  <script src="./static/qym_safe.js?v=p0-20260930"></script>
+  <script src="./static/auth.js?v=p0-20260930"></script>
+  <script src="./static/shell.js?v=p0-20260930-3"></script>
   <style>
     .trash-container {
       padding: var(--space-lg) var(--space-xl);
@@ -102,7 +103,7 @@
 
     .trash-table th {
       text-align: left;
-      padding: var(--space-sm) var(--space-lg);
+      padding: var(--space-sm) var(--space-md);
       font-size: var(--font-sm);
       font-weight: 500;
       color: var(--text-muted);
@@ -114,11 +115,23 @@
     }
 
     .trash-table td {
-      padding: var(--space-md) var(--space-lg);
+      padding: var(--space-md);
       font-size: var(--font-base);
       color: var(--text-secondary);
       border-bottom: 1px solid var(--border-default);
       vertical-align: middle;
+    }
+
+    /* Ten columns (with Purges) fit a 1400px viewport on the compact inner
+       gutter; the outer cells keep the panel's edge inset. */
+    .trash-table th:first-child,
+    .trash-table td:first-child {
+      padding-left: var(--space-lg);
+    }
+
+    .trash-table th:last-child,
+    .trash-table td:last-child {
+      padding-right: var(--space-lg);
     }
 
     .trash-table tr:last-child td {
@@ -136,6 +149,10 @@
       font-size: var(--font-sm);
       color: var(--text-muted);
       margin-top: 3px;
+    }
+
+    .trash-run-archived {
+      margin-top: var(--space-xs);
     }
 
     .trash-chip {
@@ -157,6 +174,13 @@
       white-space: nowrap;
     }
 
+    /* Purging waits while the run's project is archived; wraps like a note. */
+    .trash-meta.trash-purge-paused {
+      white-space: normal;
+      max-width: 170px;
+      line-height: 1.4;
+    }
+
     .trash-meta-sub {
       font-size: var(--font-sm);
       color: var(--text-muted);
@@ -171,6 +195,16 @@
 
     .restore-btn {
       min-width: 92px;
+    }
+
+    /* Retention purge countdown. Rows close to their purge date carry a
+       warning edge so they stand out while scanning the queue. */
+    .trash-purge-when {
+      white-space: nowrap;
+    }
+
+    .trash-row--purge-soon td:first-child {
+      box-shadow: inset 3px 0 0 var(--warning);
     }
 
     .restore-btn:disabled {
@@ -208,8 +242,8 @@
       }
     }
   </style>
-  <link rel="stylesheet" href="./static/ui_components.css?v=ui-consistency-20260803-60">
-  <script defer src="./static/ui_components.js?v=ui-consistency-20260803-28"></script>
+  <link rel="stylesheet" href="./static/ui_components.css?v=p0-20260930">
+  <script defer src="./static/ui_components.js?v=p0-20260930-2"></script>
 </head>
 <body>
   <main class="trash-container">
@@ -219,12 +253,17 @@
         <div class="summary-card qym-stat-strip__item">
           <div class="summary-label qym-stat-strip__label">Visible Rows</div>
           <div class="summary-value qym-stat-strip__value" id="trash-stat-visible">0</div>
-          <div class="summary-note">Latest deleted runs available for recovery.</div>
+          <div class="summary-note">Deleted runs available for recovery, up to 200.</div>
         </div>
         <div class="summary-card qym-stat-strip__item">
           <div class="summary-label qym-stat-strip__label">Access Level</div>
           <div class="summary-value qym-stat-strip__value" id="trash-stat-role">—</div>
           <div class="summary-note">Only admins can restore runs.</div>
+        </div>
+        <div class="summary-card qym-stat-strip__item">
+          <div class="summary-label qym-stat-strip__label">Retention</div>
+          <div class="summary-value qym-stat-strip__value" id="trash-stat-retention">—</div>
+          <div class="summary-note" id="trash-stat-retention-note">Time before a deleted run is permanently removed.</div>
         </div>
       </div>
     </div>
@@ -235,7 +274,7 @@
         <div class="panel-header">
           <div>
             <div class="panel-title">Deleted Runs</div>
-            <div class="panel-subtitle">Soft-deleted runs remain here until restored.</div>
+            <div class="panel-subtitle" id="trash-retention-copy">Deleted runs are permanently removed after the retention period. Restore a run before then to keep it.</div>
           </div>
         </div>
         <div id="trash-content"></div>
@@ -264,12 +303,7 @@
       const el = (id) => document.getElementById(id);
 
       function escapeHtml(value) {
-        return String(value == null ? '' : value)
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;');
+        return QymSafe.escapeHtml(value == null ? '' : String(value));
       }
 
       const MODEL_REASONING_BADGE_TITLE = 'Reasoning model';
@@ -305,24 +339,14 @@
         };
       }
 
+      // The page has no toast container of its own; use the shell's.
       function showToast(type, title, message) {
-        const container = el('toast-container');
-        const toast = document.createElement('div');
-        toast.className = `toast toast-${type}`;
-        toast.innerHTML = `
-          <div class="toast-icon">${type === 'success' ? '✓' : '✗'}</div>
-          <div class="toast-content">
-            <div class="toast-title">${escapeHtml(title)}</div>
-            <div class="toast-message">${escapeHtml(message)}</div>
-          </div>
-          <button class="toast-close qym-icon-action" type="button" aria-label="Close notification">×</button>
-        `;
-        toast.querySelector('.toast-close')?.addEventListener('click', () => toast.remove());
-        container.appendChild(toast);
-        setTimeout(() => {
-          toast.classList.add('toast-exit');
-          setTimeout(() => toast.remove(), 300);
-        }, 4000);
+        const text = message ? `${title}: ${message}` : title;
+        if (window.QymShell && window.QymShell.toast) {
+          window.QymShell.toast(text, type === 'success' ? 'success' : 'error');
+        } else if (type !== 'success') {
+          window.alert(text);
+        }
       }
 
       function populateHeaderUser(user) {
@@ -359,6 +383,87 @@
         });
       }
 
+      // Retention purge: the server hard-deletes a run deleted_run_grace_days
+      // after deletion (0 disables it) and reports that value in a header.
+      const PURGE_SOON_DAYS = 3;
+      const DAY_MS = 24 * 60 * 60 * 1000;
+
+      function parseGraceDays(res) {
+        const raw = res.headers.get('X-Qym-Deleted-Run-Grace-Days');
+        if (raw === null || raw === '') return null;
+        const days = parseInt(raw, 10);
+        return Number.isFinite(days) && days >= 0 ? days : null;
+      }
+
+      function pluralDays(days) {
+        return `${days} day${days === 1 ? '' : 's'}`;
+      }
+
+      function renderRetention(graceDays) {
+        if (graceDays === null) return;
+        const copy = el('trash-retention-copy');
+        const value = el('trash-stat-retention');
+        const note = el('trash-stat-retention-note');
+        if (graceDays > 0) {
+          if (copy) copy.textContent = `Deleted runs are permanently removed ${pluralDays(graceDays)} after deletion, not counting time their project spends archived. Restore a run before its purge date to keep it.`;
+          if (value) value.textContent = pluralDays(graceDays);
+          if (note) note.textContent = 'After this, a deleted run and all its results are permanently removed.';
+        } else {
+          if (copy) copy.textContent = 'Automatic purge is off: deleted runs stay here until an admin restores them.';
+          if (value) value.textContent = 'Off';
+          if (note) note.textContent = 'Deleted runs are not purged automatically.';
+        }
+      }
+
+      // Whole days left, rounded down: the countdown never promises more time
+      // than remains before the next retention pass may remove the run.
+      function purgeInfo(run, now) {
+        if (!run.purge_at) return null;
+        const at = new Date(run.purge_at);
+        const ms = at.getTime() - now;
+        if (Number.isNaN(ms)) return null;
+        return {
+          at,
+          due: ms <= 0,
+          days: Math.max(0, Math.floor(ms / DAY_MS)),
+          soon: ms < PURGE_SOON_DAYS * DAY_MS,
+        };
+      }
+
+      function renderPurgeCell(info, run) {
+        // Purging waits while the run's project is archived (Restore does too);
+        // the countdown resumes where it stopped once the project is unarchived.
+        if (run && run.purge_paused) {
+          return '<div class="trash-meta trash-purge-paused" title="The countdown resumes where it stopped when an admin unarchives the project">Purge paused while the project is archived</div>';
+        }
+        if (!info) {
+          return '<div class="trash-meta">Not scheduled</div>';
+        }
+        const date = formatDateTime(info.at.toISOString());
+        const label = info.due
+          ? 'Due now'
+          : (info.days === 0 ? 'in under 1 day' : `in ${pluralDays(info.days)}`);
+        const primary = info.soon
+          ? `<span class="qym-tag ${info.due ? 'qym-tag--danger' : 'qym-tag--warning'} trash-purge-when">${escapeHtml(label)}</span>`
+          : `<span class="trash-purge-when">${escapeHtml(label)}</span>`;
+        return `
+          <div class="trash-meta" title="${escapeHtml(`Permanently removed after ${date.primary} ${date.secondary}`)}">${primary}</div>
+          <div class="trash-meta-sub">${escapeHtml(date.primary)}</div>
+        `;
+      }
+
+      // Soonest purge first; runs without a purge date keep newest-deleted order.
+      function sortByPurge(runs) {
+        const rank = (run) => {
+          const at = run.purge_at ? new Date(run.purge_at).getTime() : NaN;
+          return Number.isNaN(at) ? Infinity : at;
+        };
+        return runs
+          .map((run, index) => ({ run, index }))
+          .sort((a, b) => (rank(a.run) - rank(b.run)) || (a.index - b.index))
+          .map(({ run }) => run);
+      }
+
       function updateStats(count) {
         if (el('trash-count')) el('trash-count').textContent = String(count);
         if (el('trash-stat-visible')) el('trash-stat-visible').textContent = String(count);
@@ -383,6 +488,7 @@
           renderEmptyState('No Deleted Runs', 'The trash is currently empty.');
           return;
         }
+        const now = Date.now();
 
         content.innerHTML = `
           <div class="trash-table-wrap">
@@ -397,19 +503,22 @@
                   <th>Created</th>
                   <th>Deleted</th>
                   <th>Deleted By</th>
+                  <th>Purges</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                ${runs.map((run) => {
+                ${sortByPurge(runs).map((run) => {
                   const created = formatDateTime(run.created_at);
                   const deleted = formatDateTime(run.deleted_at);
+                  const purge = purgeInfo(run, now);
                   const runName = run.run_name || run.id.slice(0, 8);
                   return `
-                    <tr id="row-${escapeHtml(run.id)}">
+                    <tr id="row-${escapeHtml(run.id)}"${purge && purge.soon ? ' class="trash-row--purge-soon"' : ''}>
                       <td>
                         <div class="trash-run-name">${escapeHtml(runName)}</div>
                         <div class="trash-run-id">${escapeHtml(run.id)}</div>
+                        ${run.project_archived ? '<div class="trash-run-archived"><span class="qym-tag qym-tag--warning">Project archived</span></div>' : ''}
                       </td>
                       <td><span class="trash-chip" title="${escapeHtml(run.task || '')}">${escapeHtml(run.task || '—')}</span></td>
                       <td><span class="trash-chip" title="${escapeHtml(run.model || '')}">${renderModelLabel(run.model || '—', hasReasoningTraceStats(run.trace_stats))}</span></td>
@@ -426,8 +535,12 @@
                       <td>
                         <div class="trash-meta">${escapeHtml(run.deleted_by_name || run.deleted_by_user_id || '—')}</div>
                       </td>
+                      <td>${renderPurgeCell(purge, run)}</td>
                       <td class="trash-actions">
-                        <button class="btn btn-secondary restore-btn" type="button" data-run-id="${escapeHtml(run.id)}">Restore</button>
+                        ${run.project_archived
+                          // Archived projects are read-only: unarchive the project first.
+                          ? '<button class="btn btn-secondary restore-btn" type="button" disabled title="Project is archived; unarchive it to restore this run">Restore</button>'
+                          : `<button class="btn btn-secondary restore-btn" type="button" data-run-id="${escapeHtml(run.id)}">Restore</button>`}
                       </td>
                     </tr>
                   `;
@@ -437,7 +550,7 @@
           </div>
         `;
 
-        content.querySelectorAll('.restore-btn').forEach((button) => {
+        content.querySelectorAll('.restore-btn[data-run-id]').forEach((button) => {
           button.addEventListener('click', () => restoreRun(button.dataset.runId));
         });
       }
@@ -465,6 +578,7 @@
             throw new Error(err.detail || 'Failed to load deleted runs');
           }
 
+          renderRetention(parseGraceDays(res));
           const runs = await res.json();
           if (!Array.isArray(runs)) throw new Error('Unexpected response format');
           updateStats(runs.length);
