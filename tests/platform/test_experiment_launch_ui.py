@@ -122,7 +122,7 @@ def test_module_consumes_the_launch_and_picker_apis():
         "save_to_project_models: save",
     ):
         assert needle in MODULE, needle
-    assert "window.QymExperimentLaunch = { mount, BASE_OPTIONS }" in MODULE
+    assert "window.QymExperimentLaunch = { mount, mountEditor, BASE_OPTIONS }" in MODULE
 
 
 def test_start_from_options_with_extension_points():

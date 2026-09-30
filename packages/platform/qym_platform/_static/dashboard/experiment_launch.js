@@ -48,6 +48,17 @@
  * source of truth: role overrides live in st.values, which the Advanced role
  * table edits (the Settings form shows a summary for role tables instead).
  *
+ * Editor mode (#30, plan §9.1): mountEditor({ root, project, me, environment,
+ * baseConfig, baseMeta, initialConfig, onSave, onCancel, ... }) is this same form
+ * on one environment without environments, sweeps, priority, name or preview:
+ * baseConfig (e.g. the current official version, re-mapped) is the base the
+ * "changed" dots and diff count compare with, initialConfig (optional) is laid
+ * on top as edits, and the side panel hands onSave({ config, notes }) the §8.1
+ * document instead of launching. Every branch is gated on `editor`; sweep UI
+ * (#34) must stay off while it is set.
+ * ?base=saved&preset=<id> (with ?env=<eid>) starts the launch form from that
+ * saved preset.
+ *
  * Security: nodes are built with el()/textContent, so no server or user string
  * is parsed as HTML. The only innerHTML is QymTemporaryModel.renderChip(), which
  * escapes its values. Temporary-model keys live only in this closure
@@ -296,6 +307,13 @@
     const project = opts.project || {};
     const me = opts.me || {};
     const isManager = me.role === 'ADMIN' || project.role === 'MANAGER';
+    // Editor mode (#30): see mountEditor(). null for the launch form.
+    const editor = opts.mode === 'editor' ? {
+      env: opts.environment || {},
+      notes: '',
+      saving: false,
+      baseDoc: null, // stable JSON of the base's config: "anything changed?"
+    } : null;
 
     const st = {
       active: true,
@@ -675,6 +693,7 @@
     function baseLabel() {
       const info = st.baseInfo || {};
       const version = info.version != null ? ' v' + info.version : '';
+      if (st.base === 'editor') return info.label || 'Blank';
       if (st.base === 'official') {
         return 'Official defaults' + version + (st.selected.length > 1 && info.envId ? ' · ' + envName(info.envId) : '');
       }
@@ -940,6 +959,20 @@
       } else if (kind === 'clone' && st.clone) {
         config = st.clone.spec || {};
         info.notes = st.clone.notes.slice();
+      } else if (kind === 'editor') {
+        // The caller's base (already re-mapped onto the current schema).
+        const meta = opts.baseMeta || {};
+        config = opts.baseConfig || {};
+        Object.assign(info, {
+          label: meta.label || 'Blank',
+          version: meta.version,
+          versionId: meta.versionId,
+          releaseNotes: meta.releaseNotes || '',
+          summary: meta.summary || null,
+          dropped: meta.dropped || [],
+          errors: meta.errors || [],
+          warnings: meta.warnings || [],
+        });
       }
       await st.datasetsReady; // a base dataset maps onto the project picker
       if (!st.active || generation !== st.baseGeneration) return null;
@@ -995,6 +1028,7 @@
 
     /** After an environment change: default to official defaults, else Blank (§9.2). */
     async function syncBase() {
+      if (editor) { await syncEditorBase(); return; }
       if (!st.selected.length) { renderBase(); return; }
       if (!st.baseEnv || st.selected.indexOf(st.baseEnv) < 0) st.baseEnv = pickBaseEnv();
       const env = envById(st.baseEnv);
@@ -1014,6 +1048,27 @@
       const key = kind + '|' + (kind === 'official' || kind === 'saved' ? (env ? env.id : '') : '');
       if (key !== st.baseKey) await setBase(kind);
       else renderBase();
+    }
+
+    /** Editor mode: lay the caller's base once, then its initialConfig as edits. */
+    async function syncEditorBase() {
+      if (st.baseKey === 'editor|') { renderBase(); return; }
+      if (!(await setBase('editor')) || !st.active) return;
+      editor.baseDoc = stableJson(editorConfig());
+      if (opts.initialConfig) {
+        const draft = baselineFrom(opts.initialConfig);
+        st.values = draft.values;
+        st.invalid = {};
+        st.bindings = draft.bindings;
+        st.evaluatorExtra = draft.evaluatorExtra || {};
+        applyDataset(draft.dataset || { mode: st.datasets && st.datasets.length ? 'project' : 'custom', name: '', ref: '', custom: '' });
+        st.baseInfo.notes = (st.baseInfo.notes || []).concat(draft.notes);
+        renderDataset();
+        renderBase();
+        renderModels();
+        renderSettings();
+        renderPreview();
+      }
     }
 
     function resetAllToBase() {
@@ -1128,6 +1183,32 @@
       return spec;
     }
 
+    /** Editor mode: the §8.1 document to save (no dataset key when none; no keys). */
+    function editorConfig() {
+      const spec = buildSpec();
+      if (spec.evaluator && !spec.evaluator.dataset) delete spec.evaluator.dataset;
+      Object.keys(spec.slot_bindings).forEach((key) => {
+        const b = spec.slot_bindings[key];
+        if (isPlainObject(b) && isPlainObject(b.temporary)) {
+          spec.slot_bindings[key] = { temporary: Object.assign({}, b.temporary) };
+          delete spec.slot_bindings[key].temporary.api_key; // presets never hold a key (§7.5)
+        }
+      });
+      const env = envById(editor.env.id) || editor.env;
+      const hash = env && env.schema_hash;
+      if (hash) spec.schema_hash = hash;
+      return spec;
+    }
+
+    /** JSON with sorted keys, to compare documents built in different orders. */
+    function stableJson(value) {
+      if (Array.isArray(value)) return '[' + value.map(stableJson).join(',') + ']';
+      if (isPlainObject(value)) {
+        return '{' + Object.keys(value).sort().map((k) => JSON.stringify(k) + ':' + stableJson(value[k])).join(',') + '}';
+      }
+      return JSON.stringify(value === undefined ? null : value);
+    }
+
     function buildRequest(dryRun) {
       const spec = buildSpec();
       const refs = {};
@@ -1154,7 +1235,7 @@
     // ── Local validation ────────────────────────────────────────────────
     function localErrors() {
       const errors = [];
-      if (!st.selected.length) errors.push({ pointer: '#environments', message: 'Pick at least one environment.' });
+      if (!st.selected.length && !editor) errors.push({ pointer: '#environments', message: 'Pick at least one environment.' });
       st.selected.forEach((id) => {
         const data = st.envData[id];
         if (data && data.formError) errors.push({ pointer: '#environments', message: data.formError + ' (' + envName(id) + ')' });
@@ -1162,13 +1243,14 @@
       if ((st.base === 'official' || st.base === 'saved') && !(st.baseInfo.loaded && st.baseInfo.versionId)) {
         errors.push({ pointer: '#base', message: st.baseInfo.loading ? 'The base is still loading.' : (st.baseInfo.error || 'The base did not load; pick another base.') });
       }
-      if (!datasetValue()) errors.push({ pointer: '/evaluator/dataset', message: 'Choose a dataset or enter a custom dataset string.' });
+      if (!datasetValue() && !editor) errors.push({ pointer: '/evaluator/dataset', message: 'Choose a dataset or enter a custom dataset string.' });
       Object.keys(st.invalid).forEach((p) => errors.push({ pointer: '/env_overrides' + p, message: st.invalid[p].message }));
       Object.keys(st.values).forEach((p) => envsMissing(p).forEach((id) => errors.push({
         pointer: '/env_overrides' + p, environment_id: id, rule: 'not_in_environment', message: notInEnvMessage(p, id),
       })));
-      if (!st.name.trim()) errors.push({ pointer: '#name', message: 'Name the experiment.' });
+      if (!st.name.trim() && !editor) errors.push({ pointer: '#name', message: 'Name the experiment.' });
       if (advanced) advanced.localErrors().forEach((e) => errors.push(e));
+      if (editor) editorErrors().forEach((e) => errors.push(e));
       return errors;
     }
 
@@ -1179,6 +1261,7 @@
       if (st.timer) clearTimeout(st.timer);
       st.timer = null;
       if (!st.active) return;
+      if (editor) { renderPreviewSoon(); return; } // validated on save, not by a dry run
       if (!st.selected.length || st.selected.some((id) => !st.envData[id] || st.envData[id].loading)) {
         st.preview = null;
         st.previewLoading = false;
@@ -1383,7 +1466,8 @@
       if (!host) return;
       const body = host.querySelector('[data-xl-body]');
       const options = BASE_OPTIONS.concat(st.clone ? [CLONE_OPTION] : []);
-      const children = [el('div', { className: 'qym-segmented', role: 'group', 'aria-label': 'Start from', 'data-xl-base': '1' }, options.map((opt) => {
+      // Editor mode has one fixed base (the caller's): no switcher.
+      const children = editor ? [] : [el('div', { className: 'qym-segmented', role: 'group', 'aria-label': 'Start from', 'data-xl-base': '1' }, options.map((opt) => {
         const active = st.base === opt.kind;
         const avail = opt.available ? baseAvailability(opt.kind) : { ok: false, reason: 'Coming soon' };
         return el('button', {
@@ -1438,6 +1522,7 @@
       official: 'The environment\'s published defaults. Your edits are layered on top: a changed setting shows a dot and resets to the base value.',
       saved: 'A saved preset of this environment. Your edits are layered on top: a changed setting shows a dot and resets to the base value.',
       clone: 'A copy of an earlier experiment\'s configuration. Your edits are layered on top: a changed setting shows a dot and resets to the base value.',
+      editor: 'What you publish is compared with this configuration: a changed setting shows a dot and resets to its value here.',
       blank: 'Blank starts from the environment\'s own settings: only what you change below is sent.',
     };
 
@@ -1475,7 +1560,7 @@
         children.push(listCallout('error', 'The base does not fit the environment\'s current schema', info.errors.map((e) => e.message || e.pointer || 'Invalid value')));
       }
       const warnings = (info.warnings || []).map((w) => w.message || '').filter(Boolean).concat(info.notes || []);
-      if (warnings.length) children.push(listCallout('warning', 'Check before launching', warnings, 'data-xl-base-warnings'));
+      if (warnings.length) children.push(listCallout('warning', editor ? 'Check before saving' : 'Check before launching', warnings, 'data-xl-base-warnings'));
       return el('div', { className: 'xl-base-status', 'data-xl-base-status': '1' }, children);
     }
 
@@ -1618,7 +1703,7 @@
           binding.secretRef ? null : tag('no API key', null),
           el('button', { type: 'button', className: 'xl-link-btn', text: 'Remove', onClick: () => setBinding(slot.slot_key, null) }),
         ]));
-        if (binding.needsKey && !binding.secretRef) children.push(reenterKey(slot, binding));
+        if (binding.needsKey && !binding.secretRef && !editor) children.push(reenterKey(slot, binding));
       }
       if (st.tempFormFor === slot.slot_key && window.QymTemporaryModel) {
         const keys = temporaryKeys();
@@ -1636,7 +1721,7 @@
           },
           onCancel: () => { st.tempFormFor = null; renderModels(); },
         }));
-      } else if (window.QymTemporaryModel) {
+      } else if (window.QymTemporaryModel && !(editor && opts.allowTemporary === false)) {
         children.push(el('div', null, [el('button', {
           type: 'button', className: 'qym-inline-action qym-inline-action--neutral', text: '+ Temporary model',
           onClick: () => { st.tempFormFor = slot.slot_key; renderModels(); },
@@ -2142,6 +2227,7 @@
     function renderPreview() {
       const host = hosts.preview;
       if (!host) return;
+      if (editor) { renderEditorPanel(host); return; }
       const local = localErrors();
       const remote = serverErrors();
       const errors = local.concat(remote);
@@ -2286,6 +2372,7 @@
       const newEnvButton = isManager && window.QymEvalEnvironments && window.QymEvalEnvironments.openAddDialog
         ? el('button', { type: 'button', className: 'qym-inline-action qym-inline-action--neutral', 'data-xl-new-env': '1', text: '+ New environment', onClick: openNewEnvironment })
         : null;
+      if (editor) { renderEditorLayout(); return; }
       const main = el('div', { className: 'xl-main' }, [
         section('environments', 1, 'Environments', 'Where the jobs run. Each selected environment gets one job.', newEnvButton),
         section('dataset', 2, 'Dataset', 'A project dataset (optionally pinned to a version or alias) or a custom dataset string.'),
@@ -2324,6 +2411,150 @@
       renderPreview();
     }
 
+    // ── Editor mode (#30): layout, side panel and save ──────────────────
+    function renderEditorLayout() {
+      const main = el('div', { className: 'xl-main' }, [
+        section('dataset', 1, 'Dataset', 'Optional. A launch from this configuration without a dataset asks for one.'),
+        section('base', 2, 'Compared with', 'The configuration your changes are counted against.'),
+        section('models', 3, 'Models', 'Bind each LLM slot to a project model, or leave it to the environment.'),
+        section('settings', 4, 'Settings', 'Generated from the environment schema. Only changed values are saved.'),
+        el('div', { 'data-xl-advanced': '1', hidden: true }),
+      ]);
+      const saveLabel = opts.saveLabel || 'Save';
+      const panel = el('aside', { className: 'xl-preview', 'aria-label': saveLabel }, [
+        el('div', { className: 'xl-card-header' }, [el('div', null, [
+          el('h2', { className: 'xl-section-title', text: saveLabel }),
+          el('p', { className: 'xl-section-description', text: 'Validated against the environment\'s current schema when you save.' }),
+        ])]),
+        el('div', { className: 'xl-preview-body', 'data-xl-body': '1' }),
+      ]);
+      hosts.preview = panel;
+      mountAdvanced(main.querySelector('[data-xl-advanced]'));
+      root.replaceChildren(el('div', { className: 'xl-page', 'data-xl-launch-form': '1', 'data-xl-mode': 'editor' }, [
+        el('a', {
+          className: 'xl-back', href: '#', text: opts.backLabel || '← Back',
+          onClick: (e) => { e.preventDefault(); if (opts.onCancel) opts.onCancel(); },
+        }),
+        el('h1', { className: 'xl-title', text: opts.title || 'Edit configuration' }),
+        opts.description ? el('p', { className: 'xl-description', text: opts.description }) : null,
+        el('div', { className: 'xl-meta' }, [
+          el('span', { text: editor.env.name || '' }), el('span', { className: 'xl-meta-sep', text: '·' }),
+          el('span', { 'data-xl-base-meta': '1', text: 'Base: ' + baseLabel() }),
+        ]),
+        el('div', { className: 'xl-layout' }, [main, panel]),
+      ]));
+      renderDataset();
+      renderBase();
+      renderModels();
+      renderSettings();
+      renderPreview();
+    }
+
+    /** Problems only the editor has: temporary models (official) and sweeps. */
+    function editorErrors() {
+      const errors = [];
+      if (opts.allowTemporary === false) {
+        Object.keys(st.bindings).forEach((key) => {
+          if (st.bindings[key] && st.bindings[key].kind === 'temporary') {
+            errors.push({ pointer: '/slot_bindings/' + escSeg(key), message: 'Rebind ' + key + ' to a project model: temporary models cannot be published here.' });
+          }
+        });
+      }
+      const spec = buildSpec();
+      if (spec.links || containsSweep(spec)) {
+        errors.push({ pointer: '#advanced-json', message: 'Sweeps are not allowed here: this saves one configuration.' });
+      }
+      return errors;
+    }
+
+    function editorUnchanged() {
+      return editor.baseDoc != null && stableJson(editorConfig()) === editor.baseDoc;
+    }
+
+    function editorBlocker(errors) {
+      if (!st.baseInfo || !st.baseInfo.loaded) return 'Loading…';
+      if (errors.length) return errors.length + ' problem' + (errors.length === 1 ? '' : 's') + ' to fix';
+      if (opts.requireChange && editorUnchanged()) return 'No changes from ' + baseLabel() + ' yet.';
+      if (opts.notesRequired && !editor.notes.trim()) return (opts.notesLabel || 'Notes') + ' are required.';
+      return '';
+    }
+
+    function renderEditorPanel(host) {
+      const errors = localErrors().concat(serverErrors());
+      const datasetText = datasetValue() ? datasetValue() + (st.datasetMode === 'project' && st.datasetRef ? ' · ' + st.datasetRef.slice(2) : '') : 'None';
+      const models = unionSlots().map((slot) => slot.label + ': ' + bindingSummary(slot.slot_key));
+      const unchanged = editorUnchanged();
+      const diff = diffVsBase();
+      const children = [el('dl', { className: 'xl-summary' }, [
+        el('dt', { text: 'Environment' }), el('dd', { text: editor.env.name || '—' }),
+        el('dt', { text: 'Dataset' }), el('dd', { className: st.datasetMode === 'custom' ? 'xl-mono' : null, text: datasetText }),
+        el('dt', { text: 'Compared with' }), el('dd', { 'data-xl-preview-base': '1', text: baseLabel() }),
+        el('dt', { text: 'Diff' }), el('dd', { className: 'xl-mono', 'data-xl-editor-diff': '1', text: diffText() + (!diff.total && editor.baseDoc != null && !unchanged ? ' · evaluation inputs changed' : '') }),
+        el('dt', { text: 'Models' }), el('dd', { text: models.join('; ') || '—' }),
+      ])];
+      const notesId = 'xl-notes-' + (editor.env.id || 'env');
+      const notes = el('textarea', {
+        id: notesId, className: 'xl-textarea', maxlength: '5000', 'data-xl-notes': '1', 'data-xl-pointer': '#notes',
+        placeholder: opts.notesPlaceholder || 'What changed and why',
+        'aria-required': opts.notesRequired ? 'true' : null,
+      });
+      notes.value = editor.notes;
+      children.push(el('div', null, [
+        el('label', { className: 'xl-label', for: notesId, text: (opts.notesLabel || 'Notes') + (opts.notesRequired ? ' (required)' : '') }),
+        notes,
+      ]));
+      const status = el('div', { className: 'xl-status', role: 'status', 'data-xl-status': '1' });
+      children.push(status);
+      if (errors.length) {
+        children.push(el('div', null, [
+          el('div', { className: 'xl-preview-heading', text: 'Validation' }),
+          el('ul', { className: 'xl-errors', 'data-xl-errors': '1' }, errors.map(errorButton)),
+        ]));
+      }
+      if (editor.saveError) children.push(el('div', { className: 'xl-callout xl-callout--error', role: 'alert', text: editor.saveError }));
+      const save = el('button', {
+        type: 'button', className: 'qym-inline-action qym-inline-action--accent', 'data-xl-save': '1',
+        text: editor.saving ? 'Saving…' : (opts.saveLabel || 'Save'),
+        onClick: saveEditor,
+      });
+      const sync = () => {
+        const blocker = editorBlocker(errors);
+        status.textContent = blocker || 'Ready';
+        save.disabled = editor.saving || !!blocker;
+      };
+      notes.addEventListener('input', () => { editor.notes = notes.value; sync(); });
+      sync();
+      children.push(el('div', { className: 'xl-actions' }, [
+        el('button', { type: 'button', className: 'qym-inline-action qym-inline-action--neutral', text: 'Cancel', onClick: () => { if (opts.onCancel) opts.onCancel(); } }),
+        save,
+      ]));
+      const body = host.querySelector('[data-xl-body]');
+      body.replaceChildren.apply(body, children);
+    }
+
+    async function saveEditor() {
+      if (editor.saving || !opts.onSave) return;
+      const local = localErrors();
+      if (local.length) { renderPreview(); focusError(local[0]); return; }
+      editor.saving = true;
+      editor.saveError = '';
+      st.launchErrors = null;
+      renderPreview();
+      let result;
+      try {
+        result = await opts.onSave({ config: editorConfig(), notes: editor.notes.trim(), diff: diffVsBase(), baseLabel: baseLabel() });
+      } catch (err) {
+        result = { ok: false, message: (err && err.message) || 'Could not save' };
+      }
+      if (!st.active) return;
+      editor.saving = false;
+      const errors = result && !result.ok && Array.isArray(result.errors) ? result.errors : [];
+      if (errors.length) st.launchErrors = errors;
+      else if (!result || !result.ok) editor.saveError = result ? (result.message || '') : 'Could not save'; // '' = cancelled
+      renderPreview();
+      if (errors[0]) focusError(errors[0]);
+    }
+
     // ── Advanced panel hook (#24) ───────────────────────────────────────
     // The only coupling with experiment_launch_advanced.js: what it may read and
     // call. Keys stay in st.secrets; the panel only ever sees {"$secret": ref}.
@@ -2331,6 +2562,7 @@
       return {
         el, tag, request, projectPath, has, escSeg, splitPointer, childPointer,
         state: st,
+        mode: editor ? 'editor' : 'launch', // 'editor' (#30): one config, no sweeps
         union, unionSlots, boundPointers, roleColumns, leafControl, onLeafInput, markChanged,
         buildSpec, bindingSummary, clearBinding, loadVersions,
         rerender: () => { renderDataset(); renderModels(); renderSettings(); renderRun(); renderPreview(); },
@@ -2365,8 +2597,21 @@
       const params = new URLSearchParams(window.location.search);
       const cloneId = opts.clone || params.get('clone');
       const envParam = opts.environmentId || params.get('env');
+      if (editor) {
+        st.envs = [editor.env];
+        st.selected = [editor.env.id];
+        loadSelectedEnvData();
+        return;
+      }
       if (cloneId) await loadClone(cloneId, opts.cloneJob || params.get('job') || null);
       else if (envParam) st.selected = [envParam];
+      // ?base=saved&preset=<id>: start from that saved preset (drawer "Open", #30).
+      const presetParam = opts.presetId || params.get('preset');
+      if (!cloneId && presetParam && (opts.baseKind || params.get('base')) === 'saved') {
+        st.base = 'saved';
+        st.baseTouched = true;
+        st.savedPresetId = presetParam;
+      }
       if (!st.active) return;
       renderRun();
       renderBase();
@@ -2375,5 +2620,17 @@
     return { teardown };
   }
 
-  window.QymExperimentLaunch = { mount, BASE_OPTIONS };
+  /**
+   * The launch form as the official-defaults / preset editor (#30, plan §9.1).
+   * options: root, project, me, environment (a list payload), baseConfig and
+   * baseMeta ({label, version, versionId, releaseNotes, summary, dropped, errors,
+   * warnings}), initialConfig, title, description, backLabel, saveLabel,
+   * notesLabel, notesRequired, allowTemporary, requireChange,
+   * onSave({config, notes}) → Promise<{ok, errors?, message?}>, onCancel.
+   */
+  function mountEditor(options) {
+    return mount(Object.assign({}, options, { mode: 'editor' }));
+  }
+
+  window.QymExperimentLaunch = { mount, mountEditor, BASE_OPTIONS };
 })();
