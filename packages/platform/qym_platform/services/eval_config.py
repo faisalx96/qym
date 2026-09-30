@@ -41,7 +41,8 @@ When ``endpoint:primary`` is bound, ``evaluator.model`` and ``evaluator.config.m
 are set to its model so the Models page groups runs correctly (§7.4).
 
 ``validate_config_document`` checks the document's structure, the reserved
-``run_metadata`` prefix, bindings, literal secrets in ``env_overrides``, user-written
+``run_metadata`` prefix, platform-owned fields (``evaluator.model``,
+``evaluator.config.run_name``/``live_mode``/``model``/``models``/``model_full``), bindings, literal secrets in ``env_overrides``, user-written
 ``{{qym:`` placeholder syntax anywhere in the document, then validates
 the materialized body with ``jsonschema`` Draft 2020-12 (the environment's
 ``env_overrides`` schema and the static ``EvaluatorInputs`` schema, D5) and mirrors the
@@ -70,6 +71,7 @@ Every error is a JSON object::
       "rule": "schema" | "unknown_key" | "not_in_environment" | "required" |
               "required_keys" | "min_items" |
               "endpoint_ref" | "report_k" | "reserved_key" | "reserved_placeholder" |
+              "platform_owned" |
               "secret_literal" |
               "binding" | "binding_conflict" | "sweep" | "type",
       "message": "…",
@@ -135,6 +137,27 @@ PLATFORM_OWNED_CONFIG_FIELDS = (
     "model",
     "models",
     "model_full",
+)
+# ``evaluator`` keys the platform owns: ``model`` comes from the ``primary`` slot (§7.4).
+PLATFORM_OWNED_EVALUATOR_FIELDS = ("model",)
+# ``run_metadata`` keys the platform writes at launch (§10.1); shown read-only.
+PLATFORM_METADATA_KEYS = ("qym_launch", "qym_config")
+# User-editable ``evaluator.config`` fields in display order (Advanced panel, §8.4).
+EVALUATOR_INPUT_FIELDS = (
+    "samples",
+    "report_k",
+    "max_concurrency",
+    "max_metric_concurrency",
+    "timeout",
+    "metric_timeout",
+    "max_retries",
+    "metric_max_retries",
+    "task_name",
+    "git_branch",
+    "git_commit",
+    "dataset_version",
+    "dataset_alias",
+    "force_model_override",
 )
 DEFAULT_SAMPLES = 1
 
@@ -208,6 +231,43 @@ def evaluator_config_descriptor() -> dict[str, Any]:
     ``reserved_prefix: "qym_"``.
     """
     return copy.deepcopy(_evaluator_config_descriptor())
+
+
+def evaluator_inputs_panel() -> dict[str, Any]:
+    """The Advanced panel's "Evaluation inputs" contract (§8.4, D5).
+
+    ``descriptor`` is ``evaluator_config_descriptor()``; ``fields`` the editable
+    ``evaluator.config`` fields in display order; ``platform_owned`` the fields the
+    platform fills (read-only in the form, rejected when a document sets them);
+    ``reserved_metadata_prefix``/``platform_metadata_keys`` describe ``run_metadata``.
+    """
+    return {
+        "descriptor": evaluator_config_descriptor(),
+        "fields": list(EVALUATOR_INPUT_FIELDS),
+        "platform_owned": {
+            "config": list(PLATFORM_OWNED_CONFIG_FIELDS),
+            "evaluator": list(PLATFORM_OWNED_EVALUATOR_FIELDS),
+        },
+        "reserved_metadata_prefix": RESERVED_METADATA_PREFIX,
+        "platform_metadata_keys": list(PLATFORM_METADATA_KEYS),
+    }
+
+
+def platform_owned_pointers(document: Mapping[str, Any]) -> list[str]:
+    """Document pointers of platform-owned evaluator fields a user has set."""
+    found = []
+    evaluator = document.get("evaluator")
+    if not isinstance(evaluator, Mapping):
+        return found
+    for name in PLATFORM_OWNED_EVALUATOR_FIELDS:
+        if evaluator.get(name) is not None:
+            found.append("/evaluator/" + name)
+    config = evaluator.get("config")
+    if isinstance(config, Mapping):
+        for name in PLATFORM_OWNED_CONFIG_FIELDS:
+            if config.get(name) is not None:
+                found.append("/evaluator/config/" + name)
+    return found
 
 
 @lru_cache(maxsize=2)
@@ -1062,6 +1122,14 @@ def validate_config_document(
                 "reserved_key",
                 f"run_metadata keys starting with {RESERVED_METADATA_PREFIX!r} "
                 "are reserved for the platform",
+            )
+        )
+    for pointer in platform_owned_pointers(document):
+        located.append(
+            (
+                pointer,
+                "platform_owned",
+                f"{split_pointer(pointer)[-1]} is set by the platform; remove it",
             )
         )
     located += _secret_literal_errors(document.get("env_overrides"), descriptor)
