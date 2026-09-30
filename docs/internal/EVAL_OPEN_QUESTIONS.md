@@ -46,7 +46,7 @@ concurrency limits.
 - Plan §13, §13.1 and §14.1 still describe the old orphan-only cancel and the old cap.
   The runbook is current.
 
-### A2. Encryption key rotation (In progress: `fix/eval-key-rotation-https`, part A)
+### A2. Encryption key rotation (Implemented)
 
 **Question.** There is a single Fernet key, `QYM_LLM_CONFIG_ENCRYPTION_KEY`. Rotating
 it breaks every stored API key. Launch tokens are also derived from that key, so a
@@ -65,7 +65,7 @@ every stored key.
 **Question for review.** Should rotation also be recorded in the audit log, and is there
 a policy on how often to rotate?
 
-### A3. HTTPS for models used in experiments (In progress: `fix/eval-key-rotation-https`, part B; security open item O1)
+### A3. HTTPS for models used in experiments (Implemented; closes security open item O1)
 
 **Question.** Environment URLs must be HTTPS, but project LLM connections and temporary
 models accept public `http://`. When a connection's key is sent to an experiment
@@ -81,6 +81,15 @@ environment, the model URL it points at could be plain HTTP.
 there.
 
 **Reverse.** Turn the error into a warning in the model picker.
+
+**Effects to review.**
+- Connections already marked "Available for experiments" that use `http://` keep the
+  flag. They show as disabled in the picker and are refused at launch and at dispatch.
+  Editing one with the box still ticked returns 400.
+- Jobs already queued with an `http://` model become BLOCKED (`https_required`) at
+  dispatch.
+- A temporary model on a model-only slot, which never sends its URL, is still refused
+  at launch if its URL is `http://`.
 
 ### A4. API validation errors echoed secrets (Implemented, #42)
 
