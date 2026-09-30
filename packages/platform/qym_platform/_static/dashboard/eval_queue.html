@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>قيِّم • Queue</title>
+  <link rel="icon" type="image/png" href="/static/qym_icon.png">
+  <link rel="stylesheet" href="/static/dashboard.css?v=runs-analysis-c1-20260804-16">
+  <link rel="stylesheet" href="/static/shell.css">
+  <script src="/static/auth.js"></script>
+  <script src="/static/shell.js?v=ui-consistency-20260730-16"></script>
+  <script src="/static/qym_table.js"></script>
+  <!--
+    Queue page (plan §12.2a, issue #25): /projects/{slug}/experiments/queue.
+    Page-local recipes use the exq- prefix; shared primitives (qym badges, tags,
+    tabs, controls, inline actions, shell modal) come from the shared layers.
+    Tokens only (docs/DESIGN_LANGUAGE.md). Kept inline so client-side navigation
+    carries it (the shell swaps inline page styles, not linked stylesheets).
+  -->
+  <style>
+    .exq-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-lg); margin-bottom: var(--space-md); }
+    .exq-header-text { min-width: 0; }
+    .exq-title { margin: 0; font-size: var(--font-title); font-weight: 650; color: var(--text-primary); letter-spacing: -0.3px; }
+    .exq-description { margin: 6px 0 0; font-size: var(--font-base); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .exq-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-sm); margin-top: var(--space-sm); font-size: var(--font-base); color: var(--text-muted); }
+    .exq-meta-sep { color: var(--text-dim); }
+    .exq-tabs { margin-bottom: var(--space-lg); }
+    .exq-tabs .exq-tab { display: inline-flex; align-items: center; text-decoration: none; }
+
+    .exq-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-md); }
+    .exq-toolbar-label { font-size: var(--font-sm); color: var(--text-muted); }
+    .exq-toolbar-spacer { flex: 1; }
+    .exq-check { display: inline-flex; align-items: center; gap: var(--space-xs); font-size: var(--font-sm); color: var(--text-muted); cursor: pointer; }
+    .exq-check input { margin: 0; accent-color: var(--accent-primary); }
+    .exq-poll-note { font-size: var(--font-sm); color: var(--text-muted); }
+
+    .exq-envs { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-md); margin-bottom: var(--space-lg); }
+    .exq-env { background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: 8px; padding: var(--space-md) var(--space-lg); min-width: 0; }
+    .exq-env-top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
+    .exq-env-name { margin: 0; font-size: var(--font-md); font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .exq-env-badges { display: inline-flex; gap: var(--space-xs); flex: none; }
+    .exq-env-stats { display: flex; flex-wrap: wrap; gap: var(--space-xs) var(--space-lg); margin-top: var(--space-sm); }
+    .exq-env-stat { display: flex; flex-direction: column; gap: 2px; }
+    .exq-env-label { font-size: var(--font-sm); font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .exq-env-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--font-xl); font-weight: 650; color: var(--text-primary); }
+    .exq-env-value--full { color: var(--warning); }
+    .exq-env-note { margin: var(--space-sm) 0 0; font-size: var(--font-sm); color: var(--text-muted); overflow-wrap: anywhere; }
+    .exq-env-note--error { color: var(--error); }
+    .exq-high { margin-top: var(--space-sm); padding: var(--space-sm) var(--space-md); border: 1px solid var(--warning); border-radius: 6px; font-size: var(--font-sm); color: var(--warning); }
+
+    .exq-card { background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: 8px; overflow: hidden; margin-bottom: var(--space-lg); }
+    .exq-card-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-md); padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--border-subtle); }
+    .exq-section-title { margin: 0; font-size: var(--font-lg); font-weight: 600; color: var(--text-primary); }
+    .exq-section-description { margin: 2px 0 0; font-size: var(--font-sm); color: var(--text-muted); }
+    .exq-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); }
+    .exq-selected { font-size: var(--font-sm); color: var(--text-muted); }
+    .exq-table-wrap { overflow-x: auto; }
+    .exq-table-wrap .qdt-table tbody td { vertical-align: middle; }
+    .exq-table-wrap .qdt-table tbody tr { cursor: default; }
+    .exq-footer-note { padding: var(--space-sm) var(--space-lg); border-top: 1px solid var(--border-subtle); font-size: var(--font-sm); color: var(--text-muted); }
+
+    .exq-link { color: var(--text-primary); font-weight: 600; text-decoration: none; }
+    .exq-link:hover { color: var(--accent-primary); }
+    .exq-sub { margin-top: 2px; font-size: var(--font-sm); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .exq-sub-mono { font-family: var(--font-mono); }
+    .exq-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .exq-num { text-align: right; }
+    td.exq-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .exq-muted { color: var(--text-muted); }
+    .exq-error-text { color: var(--error); }
+    .exq-select-cell { text-align: center; }
+    .exq-select-cell input { margin: 0; accent-color: var(--accent-primary); }
+    .exq-actions-cell { text-align: right; }
+
+    .exq-progress { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .exq-progress-track { position: relative; height: 6px; border-radius: 999px; background: var(--bg-elevated); overflow: hidden; }
+    .exq-progress-fill { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: var(--accent-primary); }
+    .exq-progress-fill--unknown { width: 30%; opacity: 0.5; }
+    .exq-progress-line { display: flex; justify-content: space-between; gap: var(--space-sm); font-size: var(--font-sm); color: var(--text-muted); }
+    .exq-progress-line .exq-run-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .exq-run-link { color: var(--accent-primary); text-decoration: none; font-family: var(--font-mono); }
+    .exq-run-link:hover { text-decoration: underline; }
+
+    .exq-remote-toggle { display: flex; align-items: center; gap: var(--space-sm); width: 100%; padding: 0; border: 0; background: none; cursor: pointer; text-align: left; color: var(--text-primary); font-family: var(--font-sans); }
+    .exq-remote-toggle:focus-visible { outline: 1px solid var(--accent-primary); outline-offset: 2px; }
+    .exq-chevron { color: var(--text-dim); transition: transform 0.15s; }
+    .exq-remote-toggle[aria-expanded="true"] .exq-chevron { transform: rotate(90deg); }
+    .exq-remote-env { border-top: 1px solid var(--border-subtle); }
+    .exq-remote-env:first-child { border-top: 0; }
+    .exq-remote-env-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-sm); padding: var(--space-sm) var(--space-lg); }
+    .exq-remote-env-name { margin: 0; font-size: var(--font-md); font-weight: 600; color: var(--text-primary); }
+    .exq-remote-env-meta { font-size: var(--font-sm); color: var(--text-muted); }
+
+    .exq-empty { padding: var(--space-xl); text-align: center; }
+    .exq-empty-title { margin: 0 0 var(--space-sm); font-size: var(--font-xl); font-weight: 650; color: var(--text-primary); }
+    .exq-empty-body { margin: 0; font-size: var(--font-md); color: var(--text-muted); line-height: 1.5; }
+    .exq-loading { padding: var(--space-xl); text-align: center; font-size: var(--font-base); color: var(--text-muted); }
+    .exq-error { padding: var(--space-md) var(--space-lg); color: var(--error); font-size: var(--font-base); }
+
+    .exq-split { margin-top: var(--space-md); }
+    .exq-split-title { margin: 0; font-size: var(--font-sm); font-weight: 650; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .exq-split-body { margin: 2px 0 0; font-size: var(--font-base); color: var(--text-secondary); line-height: 1.5; }
+    .exq-split-list { margin: var(--space-xs) 0 0; padding-left: var(--space-lg); font-size: var(--font-sm); color: var(--text-muted); }
+    .exq-split--skip .exq-split-body { color: var(--text-muted); }
+    .exq-reason { margin-top: var(--space-md); }
+    .exq-reason-input { min-height: 56px; resize: vertical; }
+  </style>
+  <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60">
+  <script defer src="/static/ui_components.js?v=ui-consistency-20260803-28"></script>
+</head>
+<body>
+  <main class="page exq-page" id="exq-root">
+    <div class="exq-loading">Loading the queue…</div>
+  </main>
+  <script src="/static/eval_queue.js?v=eval-queue-20260930-1"></script>
+</body>
+</html>

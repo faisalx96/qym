@@ -44,6 +44,7 @@
       /\/projects\/[^/]+\/overview$/,
       /\/projects\/[^/]+\/charts$/,
       /\/projects\/[^/]+\/models$/,
+      /\/projects\/[^/]+\/experiments\/queue$/,
       /\/projects\/[^/]+\/experiments$/,
       /\/projects\/[^/]+$/,
       /\/run\/[^/]+\/analyzer$/,
@@ -87,6 +88,7 @@
       else if (rest === 'charts') page = 'charts';
       else if (rest === 'models') page = 'models';
       else if (rest === 'experiments') page = 'experiments';
+      else if (rest === 'experiments/queue') page = 'experiments-queue';
       else if (rest === 'datasets') page = 'datasets';
       else if (rest.startsWith('datasets/')) {
         page = 'datasets';
@@ -172,6 +174,7 @@
     if (relative === '') return true;
     return [
       /^projects\/[^/]+(?:\/(?:runs|overview|charts|models|experiments|datasets(?:\/[^/]+(?:\/compare)?)?|analysis|reviews|settings))?$/,
+      /^projects\/[^/]+\/experiments\/queue$/,
       /^projects\/[^/]+\/runs\/[^/]+$/,
       /^projects\/[^/]+\/runs\/[^/]+\/analyzer$/,
       /^run\/[^/]+$/,
@@ -461,6 +464,7 @@
     analysis: 'Auto-analysis',
     models: 'Models',
     experiments: 'Experiments',
+    'experiments-queue': 'Queue',
     datasets: 'Datasets',
     reviews: 'Reviews',
     traces: 'Traces',
@@ -487,6 +491,9 @@
       } else if (ctx.page === 'compare') {
         crumbs.push({ label: 'Runs', href: projectUrl(ctx.projectSlug) });
         crumbs.push({ label: 'Compare', current: true });
+      } else if (ctx.page === 'experiments-queue') {
+        crumbs.push({ label: 'Experiments', href: projectUrl(ctx.projectSlug, 'experiments') });
+        crumbs.push({ label: 'Queue', current: true });
       } else {
         crumbs.push({ label: PAGE_LABELS[ctx.page] || ctx.page, current: true });
       }
@@ -548,6 +555,7 @@
     'run-detail': 'runs',
     'analyzer': 'analysis',
     'compare': 'runs',
+    'experiments-queue': 'experiments',
   };
 
   function setActiveNav(page) {
