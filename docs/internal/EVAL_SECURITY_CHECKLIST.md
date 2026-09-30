@@ -70,10 +70,11 @@ Regression test: `test_eval_security_checklist.py::test_validation_errors_never_
   `http://`, so #42 leaves it alone. Recommendation: refuse `http://` for connections
   offered to experiments and for temporary models unless
   `QYM_ALLOW_PRIVATE_LLM_BASE_URLS` is set, or warn in the model picker.
-- **O2: the dispatcher trusts the client to redact.** `EvalDispatcher` stores
-  `remote_result` exactly as its client returns it. The production client
-  (`EvalServiceClient`) always redacts, and the end-to-end test goes through it. A
-  custom `client_factory` that returns raw responses would bypass D1, though. Hardening
-  option: call `redact_payload` again where `remote_result` is assigned
-  (`services/eval_dispatcher.py:_apply_poll`). It is not done here because it touches
-  the dispatcher's result handling, which #38 (best-run base) is also changing.
+- **O2 (fixed): the dispatcher trusted the client to redact.** The dispatcher now runs
+  `redact_payload` again on everything it stores from the service (accepted or
+  reconciled remote job, polled `remote_result`, `remote_versioning`) and redacts every
+  job `error`/`wait_reason`, the environment `health_error` and its poll-failure log
+  line (`services/eval_dispatcher.py:_redacted_text`, `_set_status`, `_defer`). Test:
+  `test_eval_dispatcher.py::test_unredacted_service_answers_are_redacted_before_storing`.
+  Remaining limit: redaction is by key name and JSON-in-string, so a secret in free
+  text inside a result field (e.g. a "Bearer ..." in a notes string) is not scrubbed.

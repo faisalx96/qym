@@ -600,7 +600,7 @@ injected timeouts, 5xx, HIGH conflicts and pod crashes): no double submit, no do
 cancel, and the inflight cap held in every run. On PostgreSQL, pod count barely changes
 drain time because the inflight caps are the bottleneck. Reproduce with
 `python tests/platform/eval_dispatch_loadtest.py --workers 8 --faults` (set
-`QYM_TEST_POSTGRES_URL` for PostgreSQL). One known gap: the API's own experiment status
-recompute (used by cancel) does not lock the experiment row, so a queue cancel racing
-the dispatcher settling the last job can leave a stale aggregate status until the next
-change to that experiment.
+`QYM_TEST_POSTGRES_URL` for PostgreSQL). The experiment status recompute is shared by
+the API (cancel, retry) and the dispatcher and locks the experiment row on PostgreSQL,
+so a queue cancel racing the dispatcher settling the last job still settles the
+experiment (`test_eval_dispatcher_concurrency.py::test_queue_cancel_racing_a_dispatcher_settle_settles_the_experiment`).
