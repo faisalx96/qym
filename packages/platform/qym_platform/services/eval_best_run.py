@@ -70,8 +70,14 @@ Response shape (what #38 consumes)::
       "reason": null | "custom_dataset" | "unknown_dataset_version" | "no_metric"
                      | "no_runs_on_version" | "no_runs_for_metric" | "all_excluded",
       "latest_version_with_runs": {"id": "…", "version": "v2", "name": "…",
-                                   "run_count": 4} | null
+                                   "run_count": 4} | null,
+      "latest_remote_versioning": {"versioning": {…}, "job_id": "…",
+                                   "run_id": "…" | null, "finished_at": "…"} | null
     }
+
+``latest_remote_versioning`` (#38) is the newest versioning a finished job of the
+environment reported (``latest_versioning``); the launch form compares a run's
+``remote_versioning`` with it to warn about agent/KB drift.
 
 Nothing here carries a secret: params go through the run panel's redaction and
 ``remote_versioning`` is the redacted copy.
@@ -382,12 +388,48 @@ def sort_key(
     )
 
 
-def _versioning(job: EvalExperimentJob) -> Optional[Dict[str, Any]]:
+def job_versioning(job: EvalExperimentJob) -> Optional[Dict[str, Any]]:
     """Stored ``remote_versioning``, else from the result (legacy flat keys too)."""
     value = job.remote_versioning
     if not isinstance(value, Mapping) or not value:
         value = extract_versioning(job.remote_result)
-    return redact_secret_refs(dict(value)) if isinstance(value, Mapping) else None
+    return (
+        redact_secret_refs(dict(value))
+        if isinstance(value, Mapping) and value
+        else None
+    )
+
+
+# Finished jobs scanned for the newest reported versioning (older ones may not have it).
+_LATEST_VERSIONING_SCAN = 50
+
+
+def latest_versioning(db: Session, env: EvalEnvironment) -> Optional[Dict[str, Any]]:
+    """The newest ``remote_versioning`` a finished job of ``env`` reported (#38).
+
+    ``{"versioning", "job_id", "run_id", "finished_at"}`` or ``None``. This is what
+    the environment runs now, as far as the platform knows: the Evaluation Service
+    exposes no version endpoint, so the latest job result is the source.
+    """
+    jobs = (
+        db.query(EvalExperimentJob)
+        .filter(
+            EvalExperimentJob.environment_id == env.id,
+            EvalExperimentJob.finished_at.isnot(None),
+        )
+        .order_by(EvalExperimentJob.finished_at.desc(), EvalExperimentJob.id.desc())
+        .limit(_LATEST_VERSIONING_SCAN)
+    )
+    for job in jobs:
+        value = job_versioning(job)
+        if value:
+            return {
+                "versioning": value,
+                "job_id": job.id,
+                "run_id": job.run_id,
+                "finished_at": to_api_timestamp(job.finished_at),
+            }
+    return None
 
 
 def _candidates(
@@ -475,7 +517,7 @@ def _run_payload(
         "age_seconds": (
             max(0, int((now - reference).total_seconds())) if reference else None
         ),
-        "remote_versioning": _versioning(job),
+        "remote_versioning": job_versioning(job),
         "params": run_params_summary(run, job),
     }
 
@@ -529,6 +571,7 @@ def rank_best_runs(
         "runs": [],
         "reason": target.reason,
         "latest_version_with_runs": None,
+        "latest_remote_versioning": latest_versioning(db, env),
     }
     if version is None:
         return out
@@ -586,6 +629,8 @@ def rank_best_runs(
 __all__ = [
     "BestRunError",
     "ELIGIBLE_RUN_STATUSES",
+    "job_versioning",
+    "latest_versioning",
     "MAX_ERROR_PERCENT",
     "rank_best_runs",
     "resolve_target",

@@ -19,7 +19,9 @@ descriptor for the launch form's Advanced panel (§8.4, D5; ``eval_config``).
 ``base_source`` (#31, plan §8.2/§9.2) records where the form started. ``official`` and
 ``saved`` must name a version (``preset_version_id``) of that kind of preset belonging
 to one of the selected environments; ``clone`` an experiment (and optional
-``job_id``) of this project. Both are stored canonically. "Run official defaults" is
+``job_id``) of this project; ``best_run`` (#38) an official, not deleted run of this
+project whose job ran on one of the selected environments. All are stored
+canonically. "Run official defaults" is
 a plain create with ``base_source: {kind: official, preset_version_id}`` and the
 version's config re-mapped onto the environment's current schema.
 
@@ -96,6 +98,8 @@ from qym_platform.deps import get_db
 from qym_platform.permissions import is_project_manager
 from qym_platform.secrets import encryption_available
 from qym_platform.services import eval_sweeps
+from qym_platform.services.eval_best_run import BestRunError
+from qym_platform.services.eval_best_run_base import official_run_job
 from qym_platform.services.eval_bindings import resolve_slot_bindings
 from qym_platform.services.eval_config import (
     binding_kind,
@@ -554,6 +558,30 @@ def _clone_base_source(
     return out
 
 
+def _best_run_base_source(
+    db: Session,
+    project_id: str,
+    source: Mapping[str, Any],
+    envs: List[EvalEnvironment],
+) -> Dict[str, Any]:
+    """``best_run``: an official run of this project launched on a selected env.
+
+    Stored canonically as ``{kind, run_id, job_id, experiment_id, environment_id}``.
+    """
+    run_id = _base_ref(source, "run_id", required=True)
+    try:
+        run, job = official_run_job(db, project_id, run_id, [env.id for env in envs])
+    except BestRunError as exc:
+        raise HTTPException(status_code=422, detail=f"base_source.run_id: {exc.detail}")
+    return {
+        "kind": "best_run",
+        "run_id": run.id,
+        "job_id": job.id,
+        "experiment_id": job.experiment_id,
+        "environment_id": job.environment_id,
+    }
+
+
 def _base_source(
     db: Session,
     project_id: str,
@@ -563,8 +591,8 @@ def _base_source(
     """Validate the launch's ``base_source`` (plan §8.2, §9.2).
 
     ``official``/``saved`` must name a version of that kind of preset belonging to one
-    of the selected environments; ``clone`` an experiment (and job) of this project.
-    ``best_run`` is passed through until #38 defines it.
+    of the selected environments; ``clone`` an experiment (and job) of this project;
+    ``best_run`` an official run launched on one of the selected environments.
     """
     raw: Any = req.base_source
     if raw is None:
@@ -582,9 +610,9 @@ def _base_source(
         return _preset_base_source(db, source, envs)
     if kind == "clone":
         return _clone_base_source(db, project_id, source)
-    if kind == "blank":
-        return {"kind": "blank"}
-    return strip_secret_refs(source)
+    if kind == "best_run":
+        return _best_run_base_source(db, project_id, source, envs)
+    return {"kind": "blank"}
 
 
 def _stored_bindings(

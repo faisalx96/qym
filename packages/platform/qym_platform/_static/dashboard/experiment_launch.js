@@ -38,7 +38,15 @@
  * with base kind "clone"; temporary models come without their key and ask for it
  * again. ?env=<eid> preselects an environment ("Run official defaults" fallback).
  *
- * Extension points: BASE_OPTIONS (#38 best-run base),
+ * Best run (#38, plan §10.3): experiment_launch_best_run.js (window.QymLaunchBestRun)
+ * lists the base environment's top-5 official runs on the form's dataset version
+ * (metric selector) through the "Best-run hook" below. Choosing Best run loads the
+ * top run; "Use" on another row switches to it. The run's config comes from
+ * GET …/best-runs/{run_id}/base (re-mapped, connections re-resolved, temporary
+ * models unbound with prompts); the header shows "Base: run … · metric score ·
+ * agent … / kb …" and warns when the environment's latest versions differ.
+ *
+ * Extension points: BASE_OPTIONS,
  * the [data-xl-advanced] host (#24 Advanced panel) and the [data-xl-sweeps] host
  * (#34 sweeps, below).
  *
@@ -73,6 +81,7 @@
     'static/experiment_launch.css?v=experiment-launch-20260930-4',
     'static/experiment_launch_advanced.css?v=experiment-launch-advanced-20260930-1',
     'static/experiment_launch_sweeps.css?v=experiment-launch-sweeps-20260930-1',
+    'static/experiment_launch_best_run.css?v=experiment-launch-best-run-20260930-1',
   ];
   const RUN_NAMES_SHOWN = 12;
   const PREVIEW_DELAY_MS = 600;
@@ -81,11 +90,11 @@
   // services/eval_priority.PREEMPTION_ACK_REQUIRED
   const PREEMPTION_ACK_REQUIRED = 'preemption_acknowledgement_required';
   // "Start from" (§8.2). `available` means implemented; official/saved also need a
-  // published version on the base environment. Best run arrives with #38; "Clone"
-  // only appears for a ?clone= prefill.
+  // published version on the base environment; best run a ranked official run on the
+  // form's project dataset (#38). "Clone" only appears for a ?clone= prefill.
   const BASE_OPTIONS = [
     { kind: 'official', label: 'Official defaults', available: true },
-    { kind: 'best_run', label: 'Best run', available: false },
+    { kind: 'best_run', label: 'Best run', available: true },
     { kind: 'saved', label: 'Saved preset', available: true },
     { kind: 'blank', label: 'Blank', available: true },
   ];
@@ -346,6 +355,8 @@
       baseTouched: false, // the user picked a base: selection changes keep its kind
       baseEnv: null, // environment whose presets are the base
       savedPresetId: '',
+      bestRunId: '', // #38: the run the best-run base loaded ('' = top-ranked)
+      bestRunEnv: '', // environment bestRunId belongs to
       presets: {}, // env id → { loading, error, official, saved }
       baseInfo: { kind: 'blank', loaded: false }, // what the current base loaded
       baseGeneration: 0,
@@ -376,6 +387,7 @@
     const hosts = {};
     let advanced = null; // #24 Advanced panel (experiment_launch_advanced.js)
     let sweeps = null; // #34 sweeps (experiment_launch_sweeps.js); off with `sweeps: false`
+    let bestRun = null; // #38 best-run picker (experiment_launch_best_run.js)
 
     function projectPath(suffix) {
       return 'v1/projects/' + encodeURIComponent(project.id) + suffix;
@@ -696,8 +708,12 @@
       const env = envById(st.baseEnv);
       if (kind === 'blank') return { ok: true };
       if (kind === 'clone') return { ok: !!st.clone };
-      if (kind === 'best_run') return { ok: false, reason: 'Coming soon' };
       if (!env) return { ok: false, reason: 'Pick an environment first' };
+      if (kind === 'best_run') {
+        if (!window.QymLaunchBestRun) return { ok: false, reason: 'The best-run picker did not load' };
+        if (st.datasetMode !== 'project') return { ok: false, reason: 'Runs on a custom dataset string are never ranked' };
+        return st.datasetName ? { ok: true } : { ok: false, reason: 'Pick a project dataset first' };
+      }
       if (kind === 'official') {
         return hasOfficial(env) ? { ok: true } : { ok: false, reason: 'No official defaults are published for ' + env.name };
       }
@@ -720,6 +736,10 @@
         const c = st.clone || {};
         return 'Clone' + (c.sourceName ? ' of ' + c.sourceName : '') + (c.jobId ? ' (one job)' : '');
       }
+      if (st.base === 'best_run') {
+        const header = bestRun && info.loaded ? bestRun.header(info) : '';
+        return header || 'Best run';
+      }
       const opt = BASE_OPTIONS.find((b) => b.kind === st.base);
       return opt ? opt.label : st.base;
     }
@@ -735,6 +755,7 @@
         if (st.clone.jobId) source.job_id = st.clone.jobId;
         return source;
       }
+      if (st.base === 'best_run' && info.loaded && info.runId) return { kind: 'best_run', run_id: info.runId };
       return { kind: 'blank' };
     }
 
@@ -976,6 +997,21 @@
       } else if (kind === 'clone' && st.clone) {
         config = st.clone.spec || {};
         info.notes = st.clone.notes.slice();
+      } else if (kind === 'best_run') {
+        // #38: the chosen run of this environment, else the top-ranked one.
+        const picker = bestRunPicker();
+        const runId = st.bestRunEnv === envId ? st.bestRunId : '';
+        const out = picker ? await picker.load(envId, runId) : { runId: '', error: 'The best-run picker did not load.' };
+        if (!st.active || generation !== st.baseGeneration) return null;
+        st.bestRunId = out.runId || '';
+        st.bestRunEnv = envId;
+        if (out.error || !out.base) {
+          info.loaded = false;
+          info.error = out.error || 'Failed to load that run';
+        } else {
+          config = out.base.config || {};
+          Object.assign(info, picker.info(out.base));
+        }
       }
       await st.datasetsReady; // a base dataset maps onto the project picker
       if (!st.active || generation !== st.baseGeneration) return null;
@@ -987,7 +1023,7 @@
     /** Lay st.base under the form, keeping the edits that still fit. */
     async function setBase(kind) {
       st.base = kind;
-      st.baseKey = kind + '|' + (kind === 'official' || kind === 'saved' ? st.baseEnv : '');
+      st.baseKey = kind + '|' + (kind === 'official' || kind === 'saved' || kind === 'best_run' ? st.baseEnv : '');
       const loaded = await loadBase();
       if (!loaded || !st.active) return null;
       const edits = captureEdits();
@@ -1041,14 +1077,14 @@
       if (kind !== 'clone') {
         if (!st.baseTouched) kind = 'official';
         const available = baseAvailability(kind);
-        if ((kind === 'official' || kind === 'saved') && !available.ok) {
+        if ((kind === 'official' || kind === 'saved' || kind === 'best_run') && !available.ok) {
           st.baseNote = (available.reason || 'That base is not available') + (st.baseTouched ? '' : ' yet') + ', so the form starts from Blank.';
           kind = 'blank';
         } else if (kind !== 'blank') {
           st.baseNote = '';
         }
       }
-      const key = kind + '|' + (kind === 'official' || kind === 'saved' ? (env ? env.id : '') : '');
+      const key = kind + '|' + (kind === 'official' || kind === 'saved' || kind === 'best_run' ? (env ? env.id : '') : '');
       if (key !== st.baseKey) await setBase(kind);
       else renderBase();
     }
@@ -1374,7 +1410,7 @@
         'aria-pressed': st.datasetMode === mode ? 'true' : 'false',
         disabled: mode === 'project' && st.datasets && !st.datasets.length,
         text: label,
-        onClick: () => { st.datasetMode = mode; renderDataset(); renderPreview(); schedulePreview(); },
+        onClick: () => { st.datasetMode = mode; renderDataset(); renderBase(); renderPreview(); schedulePreview(); },
       })));
       const children = [modes];
       if (st.datasetMode === 'project') {
@@ -1388,6 +1424,7 @@
               st.datasetRef = '';
               loadVersions(st.datasetName);
               renderDataset();
+              renderBase(); // best-run availability and list follow the dataset (#38)
               schedulePreview();
             },
           }, [el('option', { value: '', text: 'Choose a dataset…' })].concat(st.datasets.map((ds) => el('option', {
@@ -1402,7 +1439,7 @@
           const versionSelect = el('select', {
             className: 'qym-control qym-select', 'aria-label': 'Dataset version or alias', 'data-xl-pointer': '/evaluator/dataset_version',
             disabled: !st.datasetName,
-            onChange: (e) => { st.datasetRef = e.target.value; schedulePreview(); },
+            onChange: (e) => { st.datasetRef = e.target.value; renderBase(); schedulePreview(); },
           }, versionOptions);
           children.push(el('div', { className: 'xl-row' }, [datasetSelect, versionSelect]));
         }
@@ -1439,13 +1476,15 @@
           onClick: () => { if (!active && avail.ok) chooseBase(opt.kind); },
         });
       }))];
-      const presetBase = st.base === 'official' || st.base === 'saved';
+      const presetBase = st.base === 'official' || st.base === 'saved' || st.base === 'best_run';
       if (presetBase && st.selected.length > 1) {
-        // Presets belong to one environment; the others validate the same config.
+        // Presets and runs belong to one environment; the others validate the same config.
+        const runs = st.base === 'best_run';
         children.push(el('div', { className: 'xl-row' }, [
-          el('span', { className: 'xl-hint', text: 'Presets from' }),
+          el('span', { className: 'xl-hint', text: runs ? 'Runs from' : 'Presets from' }),
           el('select', {
-            className: 'qym-control qym-select', 'aria-label': 'Environment whose presets are the base', 'data-xl-base-env': '1',
+            className: 'qym-control qym-select', 'data-xl-base-env': '1',
+            'aria-label': runs ? 'Environment whose runs are ranked' : 'Environment whose presets are the base',
             onChange: (e) => {
               const previous = st.baseEnv;
               st.baseEnv = e.target.value;
@@ -1471,6 +1510,8 @@
           value: p.id, selected: p.id === st.savedPresetId, text: p.name + ' · v' + p.current_version.version,
         }))));
       }
+      const picker = st.base === 'best_run' ? bestRunPicker() : null;
+      if (picker) children.push(picker.render(st.bestRunEnv === st.baseEnv ? st.bestRunId : ''));
       children.push(baseStatus());
       body.replaceChildren.apply(body, children);
       updateBaseMeta();
@@ -1479,6 +1520,7 @@
     const BASE_HINTS = {
       official: 'The environment\'s published defaults. Your edits are layered on top: a changed setting shows a dot and resets to the base value.',
       saved: 'A saved preset of this environment. Your edits are layered on top: a changed setting shows a dot and resets to the base value.',
+      best_run: 'The configuration of a top-ranked official run on this dataset version, re-mapped onto the current schema. Your edits are layered on top: a changed setting shows a dot and resets to the base value.',
       clone: 'A copy of an earlier experiment\'s configuration. Your edits are layered on top: a changed setting shows a dot and resets to the base value.',
       blank: 'Blank starts from the environment\'s own settings: only what you change below is sent.',
     };
@@ -1507,6 +1549,7 @@
       }
       children.push(el('div', { className: 'xl-hint', text: BASE_HINTS[st.base] || '' }));
       if (info.releaseNotes) children.push(el('div', { className: 'xl-hint xl-base-notes', text: 'Release notes: ' + info.releaseNotes }));
+      if (st.base === 'best_run' && bestRun && info.loaded) bestRun.status(info).forEach((node) => children.push(node));
       if (st.baseNote) children.push(el('div', { className: 'xl-callout', role: 'note', 'data-xl-base-note': '1', text: st.baseNote }));
       if (info.error) children.push(el('div', { className: 'xl-callout xl-callout--error', role: 'alert', text: info.error }));
       if (info.dropped && info.dropped.length) {
@@ -1524,6 +1567,8 @@
     function updateBaseMeta() {
       const meta = root.querySelector('[data-xl-base-meta]');
       if (meta) meta.textContent = 'Base: ' + baseLabel();
+      const drift = root.querySelector('[data-xl-base-drift]');
+      if (drift) drift.hidden = !(st.base === 'best_run' && bestRun && st.baseInfo.loaded && bestRun.drifted(st.baseInfo));
       root.querySelectorAll('[data-xl-diff-count]').forEach((node) => { node.textContent = diffText(); });
     }
 
@@ -2453,7 +2498,9 @@
         }),
         el('h1', { className: 'xl-title', text: 'New experiment' }),
         el('p', { className: 'xl-description', text: 'Configure one Evaluation Service run per environment and launch it.' }),
-        el('div', { className: 'xl-meta' }, [el('span', { text: project.name || '' }), el('span', { className: 'xl-meta-sep', text: '·' }), el('span', { 'data-xl-base-meta': '1', text: 'Base: ' + baseLabel() })]),
+        el('div', { className: 'xl-meta' }, [el('span', { text: project.name || '' }), el('span', { className: 'xl-meta-sep', text: '·' }), el('span', { 'data-xl-base-meta': '1', text: 'Base: ' + baseLabel() }),
+          // #38: the environment's latest agent/KB versions differ from the base run's.
+          el('span', { className: 'qym-tag qym-tag--warning xlb-drift-tag', 'data-xl-base-drift': '1', hidden: true, text: 'Versions changed since this run' })]),
         el('div', { className: 'xl-layout' }, [main, preview]),
       ]));
       renderEnvironments();
@@ -2509,6 +2556,62 @@
       sweeps = null;
       if (!host || !api || !api.mount || opts.sweeps === false) return;
       sweeps = api.mount(host, sweepsApi());
+    }
+
+    // ── Best-run hook (#38) ─────────────────────────────────────────────
+    // What experiment_launch_best_run.js may read and call. It never sees a key.
+    function bestRunTarget() {
+      const project = st.datasetMode === 'project';
+      const ref = project ? st.datasetRef || '' : '';
+      return {
+        envId: st.baseEnv,
+        datasetId: project ? st.datasetName : '',
+        datasetVersion: ref ? ref.slice(2) : '', // 'v:<version>' or 'a:<alias>'
+        custom: !project,
+      };
+    }
+
+    function pickBestRun(runId) {
+      const previous = { id: st.bestRunId, env: st.bestRunEnv };
+      st.bestRunId = runId;
+      st.bestRunEnv = st.baseEnv;
+      chooseBase('best_run', true).then((ok) => {
+        if (ok) return;
+        st.bestRunId = previous.id;
+        st.bestRunEnv = previous.env;
+        renderBase();
+      });
+    }
+
+    /** A temporary model the run used, bound again; its key is asked for (§7.5). */
+    function reuseTemporary(prompt) {
+      const slot = unionSlots().find((s) => s.slot_key === prompt.slot_key);
+      const t = {};
+      ['label', 'model', 'base_url'].forEach((f) => { if (typeof prompt[f] === 'string' && prompt[f]) t[f] = prompt[f]; });
+      if (!slot || !t.model) {
+        toast('Model slot ' + prompt.slot_key + ' is not confirmed on the selected environments', 'error');
+        return;
+      }
+      setBinding(prompt.slot_key, { kind: 'temporary', binding: { temporary: t }, secretRef: null, needsKey: true });
+    }
+
+    function bestRunPicker() {
+      if (!bestRun && window.QymLaunchBestRun) {
+        bestRun = window.QymLaunchBestRun.create({
+          el, tag, request, errorMessage, envPath,
+          target: bestRunTarget,
+          onPick: pickBestRun,
+          useDatasetVersion: (version) => {
+            st.datasetRef = 'v:' + version;
+            renderDataset();
+            renderBase();
+            schedulePreview();
+          },
+          reuseTemporary,
+          rerender: () => { if (st.active) renderBase(); },
+        });
+      }
+      return bestRun;
     }
 
     function teardown() {
