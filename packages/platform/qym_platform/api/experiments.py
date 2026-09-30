@@ -22,6 +22,12 @@ created. Every (combination, environment) document is validated with placeholder
 (``eval_config``), and bindings are checked without decrypting anything
 (``eval_bindings``, ``decrypt=False``). Keys are resolved by the dispatcher.
 
+Multi-environment launches (§6, #33): one spec applies to every selected environment
+(there are no per-environment overrides). A field the spec sets that environment B's
+schema does not declare is a ``not_in_environment`` error for B only, carrying
+``environment_id``/``environment_name``; the dry run lists it and a real launch
+answers 422 before any row is written. The user resets the field or deselects B.
+
 Temporary models (§7.5, #12, ``services/eval_temporary_models``): a binding
 ``{"temporary": {"label", "model", "base_url", "api_key": {"$secret": ref}}}`` with the
 raw key in the request's ``secrets: {ref: key}``. Keys are Fernet-encrypted into
@@ -554,6 +560,7 @@ def _environment_plan(
         slots=slots,
         descriptor=descriptor,
         schema_hash=schema.schema_hash,
+        environment_name=env.name,
     )
     resolution = resolve_slot_bindings(
         db,
@@ -972,7 +979,12 @@ def create_experiment(
         for env in envs:
             schema, plan = _environment_plan(db, env, combo.document, contexts[env.id])
             plan["errors"] = [
-                {**item, "environment_id": env.id, "combo_index": combo.index}
+                {
+                    **item,
+                    "environment_id": env.id,
+                    "environment_name": env.name,
+                    "combo_index": combo.index,
+                }
                 for item in plan["errors"]
             ]
             errors += plan["errors"]

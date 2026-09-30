@@ -304,7 +304,7 @@ def test_env_schema_errors_map_to_form_pointers(schema, slots):
         "/MILVUS_SEARCH_THRESHOLD"
     )
     unknown = errors["/env_overrides/NOT_A_SETTING"]
-    assert unknown["rule"] == "unknown_key" and unknown["form_pointer"] == (
+    assert unknown["rule"] == "not_in_environment" and unknown["form_pointer"] == (
         "/env_overrides"
     )
     timeout = errors["/env_overrides/LLM_OVERRIDES/endpoints/primary/timeout"]
