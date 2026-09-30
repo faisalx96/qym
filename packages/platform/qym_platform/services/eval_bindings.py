@@ -505,18 +505,35 @@ def prepare_dispatch(
             ],
             models=resolution.models,
         )
+    # A temporary model materialized with a key placeholder but resolving to no key
+    # (its ref is gone): never send its model/base URL with the worker's own key.
+    keyless = [
+        BindingProblem(
+            key,
+            "temporary_key_missing",
+            f'The API key of temporary model "{resolution.models[key]["label"]}" '
+            "is no longer stored; enter it again",
+        )
+        for key in sorted(_placeholder_slot_keys(body, role=KEY_ROLE))
+        if resolution._slots[key].kind == "temporary"
+        and resolution.value(key, KEY_ROLE) is None
+    ]
+    if keyless:
+        return DispatchPreparation(problems=keyless, models=resolution.models)
     return DispatchPreparation(
         body=resolution.fill_placeholders(body), models=resolution.models
     )
 
 
-def _placeholder_slot_keys(value: Any) -> set[str]:
+def _placeholder_slot_keys(value: Any, role: Optional[str] = None) -> set[str]:
     if isinstance(value, Mapping):
         value = list(value.values())
     if isinstance(value, list):
-        return set().union(*(_placeholder_slot_keys(v) for v in value))
+        return set().union(*(_placeholder_slot_keys(v, role) for v in value))
     match = _PLACEHOLDER.match(value) if isinstance(value, str) else None
-    return {match.group("slot")} if match else set()
+    if not match or (role is not None and match.group("role") != role):
+        return set()
+    return {match.group("slot")}
 
 
 def mark_job_blocked(

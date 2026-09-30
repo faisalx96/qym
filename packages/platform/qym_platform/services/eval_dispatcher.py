@@ -107,6 +107,7 @@ from .eval_bindings import (
     mark_job_blocked,
     prepare_dispatch,
 )
+from .eval_experiments import clear_secrets_when_settled
 from .eval_model_slots import descriptor_for_schema, list_model_slots
 from .eval_service_client import (
     EnvAuthError,
@@ -119,6 +120,7 @@ from .eval_service_client import (
     RetryableError,
     redact_text,
 )
+from .eval_temporary_models import secret_lookup as temporary_secret_lookup
 from .run_lifecycle import (
     RUN_STATUS_REASON_ADMIN_FORCE_STOP,
     RUN_STATUS_REASON_LEASE_TIMEOUT,
@@ -247,6 +249,14 @@ def recompute_experiment_status(
     status = aggregate_status(statuses)
     if experiment.status != status:
         experiment.status = status
+    if experiment.secrets_encrypted:
+        # Temporary-model keys are dropped once every current job settled (#12).
+        jobs = (
+            db.query(EvalExperimentJob)
+            .filter(EvalExperimentJob.experiment_id == experiment_id)
+            .all()
+        )
+        clear_secrets_when_settled(experiment, jobs)
     return status
 
 
@@ -371,24 +381,12 @@ def default_slot_bindings_for_job(
 
 
 def default_secret_lookup_for(experiment: EvalExperiment) -> Optional[SecretLookup]:
-    blob = experiment.secrets_encrypted
-    if not blob:
-        return None
-    try:
-        secrets = json.loads(decrypt_llm_api_key(blob))
-    except Exception:  # noqa: BLE001 - never surface decryption details
-        logger.warning(
-            "experiment %s: temporary model keys could not be decrypted", experiment.id
-        )
-        return None
-    if not isinstance(secrets, dict):
-        return None
+    """Temporary-model keys from ``experiment.secrets_encrypted`` (#12).
 
-    def lookup(ref: str) -> Optional[str]:
-        value = secrets.get(ref)
-        return value if isinstance(value, str) and value else None
-
-    return lookup
+    Unreadable or cleared keys resolve to nothing, so the job is blocked with
+    ``temporary_key_missing`` ("enter it again").
+    """
+    return temporary_secret_lookup(experiment)
 
 
 # ------------------------------------------------------------------ dispatcher

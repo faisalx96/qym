@@ -19,14 +19,20 @@ validated per environment with placeholders only (``eval_config``), and bindings
 checked without decrypting anything (``eval_bindings``, ``decrypt=False``). Keys are
 resolved by the dispatcher.
 
-Temporary models (§7.5, #12) are **rejected** with a 422 (``code:
-temporary_unsupported``) until #12 adds key storage. ``secrets_encrypted`` stays null.
-Its format is a Fernet-encrypted JSON ``{ref: key}``, and clone never copies it.
+Temporary models (§7.5, #12, ``services/eval_temporary_models``): a binding
+``{"temporary": {"label", "model", "base_url", "api_key": {"$secret": ref}}}`` with the
+raw key in the request's ``secrets: {ref: key}``. Keys are Fernet-encrypted into
+``secrets_encrypted`` (JSON ``{ref: key}``), never returned, and cleared once every
+current job has settled; a retry after that needs ``temporary_keys: {slot_key: key}``
+(422 ``temporary_key_required`` otherwise). ``save_to_project_models: [slot_key]``
+(project managers) turns those temporary models into project connections instead.
+Clone never copies keys.
 
 Stored per job:
 
 - ``params``: ``{"slot_bindings": {slot_key: binding | null}}``. Connection bindings
-  are ``{"connection_id", "name", "model"}``.
+  are ``{"connection_id", "name", "model"}``; temporary bindings keep their key ref
+  (the dispatcher resolves it), which responses strip.
 - ``request_body``: the placeholder ``EvalJobCreate`` with ``user_id`` (creator),
   ``priority``, ``evaluator.config.run_name``/``live_mode`` and the reserved
   ``run_metadata.qym_launch`` (no token) and ``qym_config`` (§10.1). The dispatcher
@@ -82,7 +88,17 @@ from qym_platform.services.eval_model_slots import (
     descriptor_for_schema,
     list_model_slots,
 )
-from qym_platform.services.eval_schema_form import escape_pointer_segment
+from qym_platform.services.eval_temporary_models import (
+    TemporaryModelError,
+    decrypt_secrets,
+    encrypt_secrets,
+    missing_retry_keys,
+    referenced_secrets,
+    retry_secrets,
+    save_as_connection,
+    stored_binding as stored_temporary_binding,
+    temporary_binding_errors,
+)
 from qym_platform.settings import PlatformSettings
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -112,6 +128,11 @@ class ExperimentCreateRequest(BaseModel):
     priority: Optional[EvalPriority] = None
     acknowledge_preemption: bool = False
     dry_run: bool = False
+    # Temporary-model keys ``{ref: key}`` for ``{"$secret": ref}`` in the spec (#12).
+    # ``Any`` so a malformed value is reported by us, never echoed by validation.
+    secrets: Dict[str, Any] = Field(default_factory=dict, repr=False)
+    # Slot keys whose temporary model is saved as a project connection (#12).
+    save_to_project_models: List[str] = Field(default_factory=list, max_length=50)
 
     @field_validator("name")
     @classmethod
@@ -124,6 +145,11 @@ class ExperimentCreateRequest(BaseModel):
 
 class CancelRequest(BaseModel):
     reason: Optional[str] = Field(default=None, max_length=1000)
+
+
+class RetryRequest(BaseModel):
+    # Re-entered temporary-model keys ``{slot_key: key}`` once they were cleared.
+    temporary_keys: Dict[str, Any] = Field(default_factory=dict, repr=False)
 
 
 # --------------------------------------------------------------------------- #
@@ -305,23 +331,9 @@ def _resolve_priority(
     return priority
 
 
-def _binding_error(slot_key: str, code: str, message: str) -> Dict[str, Any]:
-    pointer = "/slot_bindings/" + escape_pointer_segment(slot_key)
-    return {
-        "section": "slot_bindings",
-        "pointer": pointer,
-        "form_pointer": pointer,
-        "field": None,
-        "params": {},
-        "rule": "binding",
-        "code": code,
-        "message": message,
-        "slot_key": slot_key,
-        "environment_id": None,
-    }
-
-
-def _document_errors(spec: Mapping[str, Any]) -> List[Dict[str, Any]]:
+def _document_errors(
+    spec: Mapping[str, Any], secrets: Mapping[str, Any]
+) -> List[Dict[str, Any]]:
     """Checks that don't depend on an environment."""
     errors: List[Dict[str, Any]] = []
     if spec.get("links"):
@@ -337,20 +349,70 @@ def _document_errors(spec: Mapping[str, Any]) -> List[Dict[str, Any]]:
                 "environment_id": None,
             }
         )
-    bindings = spec.get("slot_bindings")
-    if isinstance(bindings, Mapping):
-        for slot_key, binding in bindings.items():
-            if binding_kind(binding) == "temporary":
-                # Hook for #12: temporary keys need experiment secret storage.
-                errors.append(
-                    _binding_error(
-                        str(slot_key),
-                        "temporary_unsupported",
-                        "Temporary models are not supported yet; bind a project "
-                        "model instead",
-                    )
-                )
+    errors += temporary_binding_errors(spec, secrets, _settings())
     return errors
+
+
+def _save_to_project_models(
+    db: Session,
+    principal: Principal,
+    project_id: str,
+    req: ExperimentCreateRequest,
+    spec: Dict[str, Any],
+) -> List[str]:
+    """"Save to project models" (§7.5): swap temporary bindings for new connections.
+
+    Project managers only. A dry run checks without creating anything. Returns the new
+    connection ids; nothing is committed here.
+    """
+    slot_keys = list(dict.fromkeys(req.save_to_project_models))
+    if not slot_keys:
+        return []
+    if not is_project_manager(db, principal, project_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Saving to project models requires a project manager",
+        )
+    bindings = spec.get("slot_bindings")
+    bindings = dict(bindings) if isinstance(bindings, Mapping) else {}
+    created: List[str] = []
+    for slot_key in slot_keys:
+        binding = bindings.get(slot_key)
+        if binding_kind(binding) != "temporary" or not isinstance(
+            binding.get("temporary"), Mapping
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Slot {slot_key!r} is not bound to a temporary model",
+            )
+        temporary = binding["temporary"]
+        ref = (temporary.get("api_key") or {}).get("$secret")
+        api_key = req.secrets.get(ref) if isinstance(ref, str) else None
+        if req.dry_run:
+            continue
+        try:
+            conn = save_as_connection(
+                db,
+                project_id=project_id,
+                user_id=principal.user.id,
+                temporary=temporary,
+                api_key=api_key.strip() if isinstance(api_key, str) else None,
+            )
+        except TemporaryModelError as exc:
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail={"message": str(exc), "code": exc.code, "slot_key": slot_key},
+            )
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail="A project model with that name already exists",
+            )
+        bindings[slot_key] = {"connection_id": conn.id}
+        created.append(conn.id)
+    spec["slot_bindings"] = bindings
+    return created
 
 
 def _base_source(req: ExperimentCreateRequest) -> Dict[str, Any]:
@@ -386,9 +448,19 @@ def _stored_bindings(
                 "name": resolved.get("name") or binding.get("name"),
                 "model": resolved.get("model") or binding.get("model"),
             }
+        elif kind == "temporary":
+            # Keeps the key ref (never a key) for the dispatcher.
+            out[slot_key] = stored_temporary_binding(binding)
         else:
             out[slot_key] = strip_secret_refs(binding)
     return out
+
+
+def _encrypted_secrets(secrets: Mapping[str, str]) -> Optional[str]:
+    try:
+        return encrypt_secrets(secrets, _settings())
+    except TemporaryModelError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc))
 
 
 def _run_name(name: str, env: EvalEnvironment, multi_env: bool) -> str:
@@ -591,6 +663,7 @@ def _serialize_experiment(
         "updated_at": to_api_timestamp(experiment.updated_at),
         "cancelled_at": to_api_timestamp(experiment.cancelled_at),
         "cancelled_by_user_id": experiment.cancelled_by_user_id,
+        "temporary_keys_stored": bool(experiment.secrets_encrypted),
     }
 
 
@@ -677,8 +750,9 @@ def create_experiment(
     priority = _resolve_priority(db, principal, project_id, envs, req.priority)
     base_source = _base_source(req)
     spec = {k: v for k, v in req.spec.items() if k != "base_source"}
+    saved_connection_ids = _save_to_project_models(db, principal, project_id, req, spec)
 
-    errors = _document_errors(spec)
+    errors = _document_errors(spec, req.secrets)
     experiment_id = str(uuid4())
     multi_env = len(envs) > 1
     planned = []
@@ -697,7 +771,7 @@ def create_experiment(
                 "environment_name": env.name,
                 "combo_index": 0,
                 "run_name": _run_name(req.name, env, multi_env),
-                "params": {"slot_bindings": bindings},
+                "params": {"slot_bindings": strip_secret_refs(bindings)},
                 "errors": [e for e in errors if e.get("environment_id") == env.id],
                 "warnings": [{**w, "environment_id": env.id} for w in plan["warnings"]],
                 "request_body": plan["body"],
@@ -745,7 +819,7 @@ def create_experiment(
         environment_ids=[env.id for env in envs],
         base_source=base_source,
         spec=strip_secret_refs(stored_spec),
-        secrets_encrypted=None,
+        secrets_encrypted=_encrypted_secrets(referenced_secrets(spec, req.secrets)),
         priority=priority,
         preemption_acknowledged_at=(
             now
@@ -802,6 +876,7 @@ def create_experiment(
             "environment_ids": [env.id for env in envs],
             "priority": priority.value,
             "job_count": len(envs),
+            "saved_connection_ids": saved_connection_ids,
         },
     )
     db.commit()
@@ -958,10 +1033,16 @@ def retry_experiment_job(
     project_id: str,
     experiment_id: str,
     job_id: str,
+    req: Optional[RetryRequest] = None,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
-    """Clone a failed/cancelled/timed-out/blocked job into a new attempt (plan §13)."""
+    """Clone a failed/cancelled/timed-out/blocked job into a new attempt (plan §13).
+
+    Temporary-model keys cleared since launch must be re-entered as
+    ``temporary_keys: {slot_key: key}``; otherwise 422 ``temporary_key_required``
+    lists the slots that need one.
+    """
     _require_project_access(db, principal, project_id)
     experiment = _get_experiment(db, project_id, experiment_id)
     job = _get_job(db, experiment, job_id)
@@ -991,6 +1072,24 @@ def retry_experiment_job(
         raise HTTPException(
             status_code=409, detail="The job's environment is disabled or missing"
         )
+    secrets, missing = retry_secrets(
+        job.params,
+        decrypt_secrets(experiment.secrets_encrypted),
+        req.temporary_keys if req else {},
+    )
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Enter the API key of each temporary model again",
+                "code": "temporary_key_required",
+                "slots": [item.summary() for item in missing],
+            },
+        )
+    if missing_retry_keys(job.params, {}):
+        # The job uses temporary-model keys. Always write a fresh blob (see
+        # eval_experiments.clear_secrets_when_settled).
+        experiment.secrets_encrypted = _encrypted_secrets(secrets)
     if job.status == EvalJobStatus.BLOCKED:
         # The blocked attempt is replaced: cancel it locally first.
         if (
