@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import secrets
 from typing import Any, Dict, Iterable, Optional
 from uuid import NAMESPACE_URL, uuid5
 
@@ -44,7 +43,7 @@ from qym_platform.secrets import (
     encryption_available,
     resolve_llm_api_key,
 )
-from qym_platform.security import api_key_prefix, hash_api_key
+from qym_platform.security import generate_api_key
 from qym_platform.settings import PlatformSettings
 from qym_platform.services.analysis_prompts import (
     DEFAULT_ANALYSIS_PROMPTS,
@@ -994,13 +993,13 @@ def create_project_api_key(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_project_access(db, principal, project_id)
-    token = secrets.token_urlsafe(32)
+    token, prefix, key_hash = generate_api_key()
     row = ApiKey(
         user_id=principal.user.id,
         project_id=project_id,
         name=req.name,
-        prefix=api_key_prefix(token),
-        key_hash=hash_api_key(token),
+        prefix=prefix,
+        key_hash=key_hash,
         scopes=req.scopes,
     )
     db.add(row)

@@ -81,6 +81,7 @@ from ..db.models import (
 )
 from ..secrets import previous_encryption_keys
 from ..settings import PlatformSettings
+from .eval_submitter_keys import revoke_key_when_settled
 from .run_lifecycle import (
     RUN_STATUS_REASON_CANCELLED_FROM_QUEUE,
     RUN_STATUS_REASON_LEASE_TIMEOUT,
@@ -438,6 +439,10 @@ def recompute_experiment_status(
     ``experiment`` is the row or its id; returns None when the id is unknown. The one
     aggregate rule (``aggregate_status``) for the API, the queue and the dispatcher.
 
+    Once the jobs have settled it also drops the temporary-model keys
+    (``clear_secrets_when_settled``) and, once every current job is terminal, revokes
+    the creator's per-experiment qym API key (``eval_submitter_keys``).
+
     On Postgres the experiment row is locked first (``FOR NO KEY UPDATE``, reloaded),
     so transactions settling sibling jobs recompute one after another and each one
     reads the jobs the previous one committed. Without the lock, two transactions
@@ -474,6 +479,8 @@ def recompute_experiment_status(
     if row.status != status:
         row.status = status
     clear_secrets_when_settled(row, jobs)
+    # The creator's qym API key outlives BLOCKED jobs: they may be retried.
+    revoke_key_when_settled(row, current_jobs(jobs), TERMINAL_JOB_STATUSES)
     return status
 
 

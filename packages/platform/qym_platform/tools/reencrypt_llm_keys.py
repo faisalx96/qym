@@ -8,6 +8,8 @@ key so the previous keys can be dropped. Columns covered:
 - ``project_llm_connections.llm_api_key_encrypted`` (project LLM connections)
 - ``eval_environments.api_key_encrypted`` (Evaluation Service keys)
 - ``eval_experiments.secrets_encrypted`` (temporary-model keys of live experiments)
+- ``eval_experiments.qym_api_key_encrypted`` (the creator's per-experiment qym API
+  key of live experiments; rewriting it only changes the blob, never the key)
 
 It is idempotent: values that already decrypt with the current key are left alone,
 so re-running it rewrites nothing. Each batch is committed separately, and a row is
@@ -50,6 +52,7 @@ ENCRYPTED_COLUMNS: Tuple[Tuple[str, Any, str], ...] = (
     ("project_llm_connections.llm_api_key_encrypted", ProjectLlmConnection, "llm_api_key_encrypted"),
     ("eval_environments.api_key_encrypted", EvalEnvironment, "api_key_encrypted"),
     ("eval_experiments.secrets_encrypted", EvalExperiment, "secrets_encrypted"),
+    ("eval_experiments.qym_api_key_encrypted", EvalExperiment, "qym_api_key_encrypted"),
 )
 
 _MAX_FAILED_IDS = 50

@@ -55,6 +55,7 @@ from qym_platform.db.models import (  # noqa: E402
     EvalExperimentJob,
     EvalJobStatus,
     Project,
+    ProjectMembership,
     User,
 )
 from qym_platform.secrets import encrypt_llm_api_key  # noqa: E402
@@ -65,6 +66,9 @@ from qym_platform.services.eval_dispatcher import (  # noqa: E402
 )
 from qym_platform.services.eval_experiments import (  # noqa: E402
     TERMINAL_JOB_STATUSES,
+)
+from qym_platform.services.eval_submitter_keys import (  # noqa: E402
+    issue_experiment_api_key,
 )
 from qym_platform.services.eval_service_client import (  # noqa: E402
     HighPriorityActive,
@@ -426,6 +430,7 @@ def seed_sweep(
         )
         db.add(project)
         db.flush()
+        db.add(ProjectMembership(project_id=project.id, user_id=user.id))
         env_rows = []
         for index in range(envs):
             env = EvalEnvironment(
@@ -453,6 +458,7 @@ def seed_sweep(
         )
         db.add(experiment)
         db.flush()
+        issue_experiment_api_key(db, experiment)  # as a real launch does
         job_ids: List[str] = []
         combo = 0
         for env, schema in env_rows:

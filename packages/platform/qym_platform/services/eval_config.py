@@ -41,7 +41,8 @@ When ``endpoint:primary`` is bound, ``evaluator.model`` and ``evaluator.config.m
 are set to its model so the Models page groups runs correctly (§7.4).
 
 ``validate_config_document`` checks the document's structure, the reserved
-``run_metadata`` prefix, platform-owned fields (``evaluator.model``,
+``run_metadata`` prefix, platform-owned fields (top-level ``qym_api_key``,
+``evaluator.model``,
 ``evaluator.config.run_name``/``live_mode``/``model``/``models``/``model_full``), bindings, literal secrets in ``env_overrides``, user-written
 ``{{qym:`` placeholder syntax anywhere in the document, then validates
 the materialized body with ``jsonschema`` Draft 2020-12 (the environment's
@@ -140,6 +141,9 @@ PLATFORM_OWNED_CONFIG_FIELDS = (
 )
 # ``evaluator`` keys the platform owns: ``model`` comes from the ``primary`` slot (§7.4).
 PLATFORM_OWNED_EVALUATOR_FIELDS = ("model",)
+# Top-level ``EvalJobCreate`` keys the platform owns. ``qym_api_key`` is the creator's
+# per-experiment key (``eval_submitter_keys``), added in memory at dispatch only.
+PLATFORM_OWNED_BODY_FIELDS = ("qym_api_key",)
 # ``run_metadata`` keys the platform writes at launch (§10.1); shown read-only.
 PLATFORM_METADATA_KEYS = ("qym_launch", "qym_config")
 # User-editable ``evaluator.config`` fields in display order (Advanced panel, §8.4).
@@ -247,6 +251,7 @@ def evaluator_inputs_panel() -> dict[str, Any]:
         "platform_owned": {
             "config": list(PLATFORM_OWNED_CONFIG_FIELDS),
             "evaluator": list(PLATFORM_OWNED_EVALUATOR_FIELDS),
+            "body": list(PLATFORM_OWNED_BODY_FIELDS),
         },
         "reserved_metadata_prefix": RESERVED_METADATA_PREFIX,
         "platform_metadata_keys": list(PLATFORM_METADATA_KEYS),
@@ -875,7 +880,17 @@ def _structure_errors(document: Any) -> list[dict[str, Any]]:
         return [_error("document", "", "type", "The config document must be an object")]
     errors = []
     for key in document:
-        if key not in DOCUMENT_KEYS:
+        if key in PLATFORM_OWNED_BODY_FIELDS:
+            # Never echo the value: it would be a credential.
+            errors.append(
+                _error(
+                    "document",
+                    "/" + escape_pointer_segment(str(key)),
+                    "platform_owned",
+                    f"{key} is set by the platform; remove it",
+                )
+            )
+        elif key not in DOCUMENT_KEYS:
             errors.append(
                 _error(
                     "document",

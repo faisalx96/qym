@@ -10,12 +10,20 @@ put in ``run_metadata.qym_launch.token``:
    concurrent ingests can't both link. ``run_linked_at`` is never cleared: ``run_id``
    is ``ON DELETE SET NULL``, and a hard-deleted run must not reopen the job;
 4. the run's project is the experiment's project. A mismatch with a *valid* token
-   means the environment ingests with another project's key, so the environment gets
+   means the run was not uploaded with the ``qym_api_key`` the dispatcher sent (that
+   key is bound to the experiment's project): the environment's worker ingests with
+   some other key, e.g. its own ingest key of another project. The environment gets
    ``health_error = "runs arriving in project X"``.
 
 On success the run gets ``origin = official``, ``experiment_job_id`` and
 ``owner_user_id = experiment.created_by_user_id``; ``created_by_user_id`` stays the
 ingest principal for audit. Anything else leaves the run ``local``.
+
+Ingest principal. The dispatcher sends ``qym_api_key``, the creator's per-experiment
+key (``eval_submitter_keys``), so a conforming worker creates the run as the creator:
+``created_by_user_id == owner_user_id == creator``. A worker that still uploads with
+the environment's own ingest key keeps working: the run links the same way, and
+ingest lets its ``created_by_user_id`` stream events to the official run.
 
 The token is **always** stripped from whatever ingest stores (run metadata, event log
 payloads) and is never logged. The reserved ``qym_*`` metadata keys are fixed when the
