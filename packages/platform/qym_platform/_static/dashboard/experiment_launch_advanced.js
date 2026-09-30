@@ -8,10 +8,15 @@
  *
  * `api` is the launch form's advancedApi(): its state (st) and helpers. There is
  * one source of truth: env_overrides stay in st.values, bindings in st.bindings,
- * the dataset in st.dataset*. This module only owns what the main form has no
- * control for: evaluator.config inputs, custom run_metadata, and the extra
- * evaluator keys only reachable from Raw JSON (top-level report_k, a
- * dataset_version next to a custom dataset string, links).
+ * the dataset in st.dataset*, linked groups in st.links. This module only owns
+ * what the main form has no control for: evaluator.config inputs, custom
+ * run_metadata, and the extra evaluator keys only reachable from Raw JSON
+ * (top-level report_k, a dataset_version next to a custom dataset string).
+ *
+ * Sweeps (#34): with api.sweeps (experiment_launch_sweeps.js), {"sweep": [...]}
+ * values round-trip: Raw JSON sweeps of settings, role cells, evaluation inputs
+ * and model slots become chips and multi-selects, and "links" becomes st.links.
+ * Without it (a form mounted with `sweeps: false`) sweeps are refused here.
  *
  * Collapsed by default, three tabs:
  *   1. Evaluation inputs: the static EvaluatorRequestConfig descriptor from
@@ -42,7 +47,8 @@
   const PLACEHOLDER_PREFIX = '{{qym:';
   const JSON_POINTER = '#advanced-json';
   const METADATA_POINTER = '/evaluator/config/run_metadata';
-  const SWEEP_MESSAGE = 'Sweeps are not editable in this form yet';
+  const SWEEP_MESSAGE = 'Sweeps are not available in this form';
+  const DATASET_SWEEP_MESSAGE = 'The dataset cannot be swept in this form';
   const TABS = [
     { id: 'inputs', label: 'Evaluation inputs' },
     { id: 'roles', label: 'Role overrides' },
@@ -141,7 +147,6 @@
       meta: [], // [{ id, key, raw }] custom run_metadata rows
       nextMetaId: 1,
       extra: {}, // { report_k, dataset_version } only reachable from Raw JSON
-      links: null, // spec links, only reachable from Raw JSON
       roleSearch: '',
       overriddenOnly: false,
       summaries: [], // role summary nodes rendered into the Settings form
@@ -232,7 +237,6 @@
       }
       if (adv.extra.report_k != null) evaluator.report_k = adv.extra.report_k;
       if (adv.extra.dataset_version != null && evaluator.dataset_version == null) evaluator.dataset_version = adv.extra.dataset_version;
-      if (adv.links) spec.links = clone(adv.links);
       return spec;
     }
 
@@ -359,7 +363,7 @@
             api.onLeafInput(entry, pointer, control, td);
             updateCounts();
           });
-          td.appendChild(control);
+          api.fillCell(td, control, entry, pointer, bound[pointer], row.key + ' · ' + col.label);
           api.markChanged(td, pointer);
           cells.push(td);
         });
@@ -407,6 +411,18 @@
       wrapper.classList.toggle('xl-field--error', has(adv.invalid, name));
     }
 
+    /** Sweeps (#34) of an evaluation input: adv.config[name] = {"sweep": [...]}. */
+    function configTarget(name) {
+      return {
+        get: () => adv.config[name],
+        set: (value) => {
+          delete adv.invalid[name];
+          if (value === undefined) delete adv.config[name];
+          else adv.config[name] = value;
+        },
+      };
+    }
+
     function configField(name) {
       const entry = configEntry(name);
       if (!entry) return null;
@@ -415,8 +431,15 @@
       const wrapper = el('div', { className: 'xl-field', 'data-xa-field': name });
       const id = 'xa-f-' + name;
       const common = { id, 'data-xl-pointer': pointer, 'aria-label': entry.label || name, disabled: locked, title: locked ? 'Set by the dataset picker' : null };
+      const sweepable = !!api.sweeps && !locked && name !== 'dataset_alias' && name !== 'dataset_version';
+      const target = configTarget(name);
       let control;
-      if (entry.type === 'boolean') {
+      if (sweepable && isSweep(adv.config[name])) {
+        control = api.sweeps.editor({
+          entry, pointer, label: entry.label || name, get: target.get, set: target.set,
+          onChange: () => { markConfigField(wrapper, name); updateCounts(); api.schedulePreview(); },
+        });
+      } else if (entry.type === 'boolean') {
         const current = has(adv.config, name) ? adv.config[name] : undefined;
         control = el('select', Object.assign({ className: 'qym-control qym-select xl-wide' }, common), [
           el('option', { value: '', text: entry.has_default ? 'Default (' + JSON.stringify(entry.default) + ')' : 'Service default' }),
@@ -433,7 +456,7 @@
         control.value = has(adv.invalid, name) ? adv.invalid[name].raw : has(adv.config, name) && !locked ? String(adv.config[name]) : '';
       }
       const error = el('div', { className: 'xl-error-text', role: 'alert', text: has(adv.invalid, name) ? adv.invalid[name].message : '' });
-      control.addEventListener(control.tagName === 'SELECT' ? 'change' : 'input', () => {
+      if (!control.hasAttribute('data-xs-sweep')) control.addEventListener(control.tagName === 'SELECT' ? 'change' : 'input', () => {
         const parsed = parseConfigInput(entry, control.value);
         delete adv.invalid[name];
         if (parsed.unset) delete adv.config[name];
@@ -447,8 +470,10 @@
       const reset = el('button', {
         type: 'button', className: 'xl-link-btn xl-reset', text: 'Reset',
         onClick: () => {
+          const swept = isSweep(adv.config[name]);
           delete adv.config[name];
           delete adv.invalid[name];
+          if (swept) { renderInputs(); updateCounts(); api.schedulePreview(); return; }
           control.value = '';
           error.textContent = '';
           markConfigField(wrapper, name);
@@ -461,6 +486,7 @@
         el('label', { className: 'xl-field-label', for: id, text: entry.label || name }),
         el('span', { className: 'xl-field-name', text: name }),
         el('span', { className: 'xl-spacer' }),
+        sweepable && !isSweep(adv.config[name]) ? api.sweeps.toggle({ entry, label: entry.label || name, get: target.get, set: target.set }) : null,
         reset,
       ]));
       wrapper.appendChild(control);
@@ -581,11 +607,10 @@
       const extras = [];
       if (adv.extra.report_k != null) extras.push('evaluator.report_k = ' + adv.extra.report_k);
       if (adv.extra.dataset_version != null) extras.push('evaluator.dataset_version = ' + adv.extra.dataset_version);
-      if (adv.links) extras.push('links (' + adv.links.length + ')');
       if (extras.length) {
         children.push(el('div', { className: 'xl-callout', role: 'note' }, [
           el('div', null, [el('div', { text: 'Also sent, set from Raw JSON:' }), el('div', { className: 'xl-mono', text: extras.join('; ') })]),
-          el('button', { type: 'button', className: 'xl-link-btn', text: 'Remove', onClick: () => { adv.extra = {}; adv.links = null; renderInputs(); api.schedulePreview(); } }),
+          el('button', { type: 'button', className: 'xl-link-btn', text: 'Remove', onClick: () => { adv.extra = {}; renderInputs(); api.schedulePreview(); } }),
         ]));
       }
       nodes.owned = el('div');
@@ -758,13 +783,32 @@
       return problem;
     }
 
+    /** Problems of a {"sweep": [...]} value (#34), mapped to error pointers. */
+    function sweepErrors(entry, value, pointer, errors) {
+      if (!api.sweeps) { errors.push({ pointer, message: SWEEP_MESSAGE }); return false; }
+      const problems = api.sweeps.checkValues(entry, value);
+      problems.forEach((p) => errors.push({ pointer: p.index == null ? pointer : pointer + '/sweep/' + p.index, message: p.message }));
+      return !problems.length;
+    }
+
     function flattenOverrides(value, pointer, model, out, errors) {
       const docPointer = '/env_overrides' + pointer;
       if (value === null) return; // unset: inherit
-      if (isSweep(value)) { errors.push({ pointer: docPointer, message: SWEEP_MESSAGE }); return; }
       const template = pointer ? matchTemplate(model.fields, pointer) : null;
       const entry = template ? model.fields[template] : null;
       if (pointer && !entry) { errors.push({ pointer: docPointer, message: 'Unknown setting for the selected environments' }); return; }
+      if (isSweep(value)) {
+        // Swept values (#34) of one setting: chips in the form.
+        if (!entry || entry.kind !== 'field') { errors.push({ pointer: docPointer, message: 'Only a single setting can be swept' }); return; }
+        const role = roleRowProblem(model, template, pointer);
+        if (role) { errors.push({ pointer: docPointer, message: role }); return; }
+        if (entry.secret || entry.widget === 'secret') {
+          errors.push({ pointer: docPointer, message: 'Keys are never entered here: bind a model slot (project or temporary model) instead' });
+          return;
+        }
+        if (sweepErrors(entry, value, docPointer, errors)) out[pointer] = clone(value);
+        return;
+      }
       if (isPlainObject(value) && (!entry || entry.kind !== 'field')) {
         Object.keys(value).forEach((key) => flattenOverrides(value[key], pointer + '/' + api.escSeg(key), model, out, errors));
         return;
@@ -790,47 +834,72 @@
         const b = raw[slotKey];
         if (!slots.some((s) => s.slot_key === slotKey)) { errors.push({ pointer, message: 'Unknown model slot for the selected environments' }); return; }
         if (b === null || (isPlainObject(b) && Object.keys(b).length === 1 && b.inherit === true)) return;
-        if (isSweep(b)) { errors.push({ pointer, message: SWEEP_MESSAGE }); return; }
-        if (!isPlainObject(b)) { errors.push({ pointer, message: 'Must be {"connection_id": …}, {"temporary": …} or null' }); return; }
-        if (has(b, 'connection_id') && !has(b, 'temporary')) {
-          const extra = Object.keys(b).filter((k) => CONNECTION_KEYS.indexOf(k) < 0);
-          if (extra.length) { errors.push({ pointer, message: 'Unknown binding keys: ' + extra.join(', ') }); return; }
-          if (typeof b.connection_id !== 'string' || !b.connection_id) { errors.push({ pointer: pointer + '/connection_id', message: 'Must be a project model id' }); return; }
-          next[slotKey] = { kind: 'connection', id: b.connection_id };
+        if (isSweep(b)) {
+          // A model sweep (#34): each value is a whole binding (or inherit).
+          if (!api.sweeps) { errors.push({ pointer, message: SWEEP_MESSAGE }); return; }
+          if (!Array.isArray(b.sweep) || !b.sweep.length) { errors.push({ pointer, message: 'A sweep needs a non-empty list of models' }); return; }
+          const items = [];
+          const seen = {};
+          let ok = true;
+          b.sweep.forEach((item, i) => {
+            const at = pointer + '/sweep/' + i;
+            const read = isPlainObject(item) && Object.keys(item).length === 1 && item.inherit === true
+              ? { kind: 'inherit' } : readBinding(item, at, slotKey, errors);
+            if (!read) { ok = false; return; }
+            const value = read.kind === 'inherit' ? { inherit: true } : read.kind === 'connection' ? { connection_id: read.id } : read.binding;
+            const key = api.sweeps.bindingKey(value);
+            if (seen[key]) { errors.push({ pointer: at, message: 'Duplicate model' }); ok = false; return; }
+            seen[key] = true;
+            items.push(value);
+          });
+          if (ok) next[slotKey] = { kind: 'raw', value: { sweep: items } };
           return;
         }
-        if (has(b, 'temporary') && Object.keys(b).length === 1 && isPlainObject(b.temporary)) {
-          const t = b.temporary;
-          const extra = Object.keys(t).filter((k) => TEMPORARY_KEYS.indexOf(k) < 0);
-          if (extra.length) { errors.push({ pointer: pointer + '/temporary', message: 'Unknown temporary model keys: ' + extra.join(', ') }); return; }
-          if (typeof t.model !== 'string' || !t.model) { errors.push({ pointer: pointer + '/temporary/model', message: 'A temporary model needs a model name' }); return; }
-          if ((t.label != null && typeof t.label !== 'string') || (t.base_url != null && typeof t.base_url !== 'string')) {
-            errors.push({ pointer: pointer + '/temporary', message: 'label and base_url must be strings' });
-            return;
-          }
-          let ref = null;
-          if (t.api_key != null) {
-            const valid = isPlainObject(t.api_key) && Object.keys(t.api_key).length === 1 && typeof t.api_key.$secret === 'string';
-            if (!valid) {
-              errors.push({ pointer: pointer + '/temporary/api_key', message: 'Keys are never typed into JSON: use "+ Temporary model" on the model card' });
-              return;
-            }
-            ref = t.api_key.$secret;
-            if (!has(st.secrets, ref)) {
-              errors.push({ pointer: pointer + '/temporary/api_key', message: 'Unknown key reference: add the temporary model again to enter its key' });
-              return;
-            }
-          }
-          const binding = { temporary: {} };
-          TEMPORARY_KEYS.forEach((k) => { if (t[k] != null) binding.temporary[k] = clone(t[k]); });
-          const prev = st.bindings[slotKey];
-          const save = !!(prev && prev.kind === 'temporary' && ref && prev.secretRef === ref && prev.save);
-          next[slotKey] = { kind: 'temporary', binding, secretRef: ref, save };
-          return;
-        }
-        errors.push({ pointer, message: 'Must be {"connection_id": …}, {"temporary": …} or null' });
+        const read = readBinding(b, pointer, slotKey, errors);
+        if (read) next[slotKey] = read;
       });
       return next;
+    }
+
+    /** One {connection_id} or {temporary} binding → the form's binding, or null (errors pushed). */
+    function readBinding(b, pointer, slotKey, errors) {
+      if (!isPlainObject(b)) { errors.push({ pointer, message: 'Must be {"connection_id": …}, {"temporary": …} or null' }); return null; }
+      if (has(b, 'connection_id') && !has(b, 'temporary')) {
+        const extra = Object.keys(b).filter((k) => CONNECTION_KEYS.indexOf(k) < 0);
+        if (extra.length) { errors.push({ pointer, message: 'Unknown binding keys: ' + extra.join(', ') }); return null; }
+        if (typeof b.connection_id !== 'string' || !b.connection_id) { errors.push({ pointer: pointer + '/connection_id', message: 'Must be a project model id' }); return null; }
+        return { kind: 'connection', id: b.connection_id };
+      }
+      if (has(b, 'temporary') && Object.keys(b).length === 1 && isPlainObject(b.temporary)) {
+        const t = b.temporary;
+        const extra = Object.keys(t).filter((k) => TEMPORARY_KEYS.indexOf(k) < 0);
+        if (extra.length) { errors.push({ pointer: pointer + '/temporary', message: 'Unknown temporary model keys: ' + extra.join(', ') }); return null; }
+        if (typeof t.model !== 'string' || !t.model) { errors.push({ pointer: pointer + '/temporary/model', message: 'A temporary model needs a model name' }); return null; }
+        if ((t.label != null && typeof t.label !== 'string') || (t.base_url != null && typeof t.base_url !== 'string')) {
+          errors.push({ pointer: pointer + '/temporary', message: 'label and base_url must be strings' });
+          return null;
+        }
+        let ref = null;
+        if (t.api_key != null) {
+          const valid = isPlainObject(t.api_key) && Object.keys(t.api_key).length === 1 && typeof t.api_key.$secret === 'string';
+          if (!valid) {
+            errors.push({ pointer: pointer + '/temporary/api_key', message: 'Keys are never typed into JSON: use "+ Temporary model" on the model card' });
+            return null;
+          }
+          ref = t.api_key.$secret;
+          if (!has(st.secrets, ref)) {
+            errors.push({ pointer: pointer + '/temporary/api_key', message: 'Unknown key reference: add the temporary model again to enter its key' });
+            return null;
+          }
+        }
+        const binding = { temporary: {} };
+        TEMPORARY_KEYS.forEach((k) => { if (t[k] != null) binding.temporary[k] = clone(t[k]); });
+        const prev = st.bindings[slotKey];
+        const save = !!(prev && prev.kind === 'temporary' && ref && prev.secretRef === ref && prev.save);
+        return { kind: 'temporary', binding, secretRef: ref, save };
+      }
+      errors.push({ pointer, message: 'Must be {"connection_id": …}, {"temporary": …} or null' });
+      return null;
     }
 
     function readEvaluator(doc, errors) {
@@ -845,7 +914,7 @@
       });
       ['dataset', 'dataset_version'].forEach((key) => {
         if (ev[key] == null) return;
-        if (isSweep(ev[key])) errors.push({ pointer: '/evaluator/' + key, message: SWEEP_MESSAGE });
+        if (isSweep(ev[key])) errors.push({ pointer: '/evaluator/' + key, message: DATASET_SWEEP_MESSAGE });
         else if (typeof ev[key] !== 'string') errors.push({ pointer: '/evaluator/' + key, message: 'Must be a string' });
         else out[key] = ev[key];
       });
@@ -879,7 +948,11 @@
         const entry = configEntry(name);
         if (!entry) { errors.push({ pointer, message: 'Unknown key (EvaluatorRequestConfig rejects extra keys)' }); return; }
         if (value == null) return;
-        if (isSweep(value)) { errors.push({ pointer, message: SWEEP_MESSAGE }); return; }
+        if (isSweep(value)) {
+          if (name === 'dataset_alias' || name === 'dataset_version') { errors.push({ pointer, message: DATASET_SWEEP_MESSAGE }); return; }
+          if (sweepErrors(entry, value, pointer, errors)) out.config[name] = clone(value);
+          return;
+        }
         const problem = typeProblem(entry, value);
         if (problem) { errors.push({ pointer, message: problem }); return; }
         out.config[name] = value;
@@ -920,10 +993,15 @@
           if (has(values, pointer)) errors.push({ pointer: '/env_overrides' + pointer, message: 'Filled by the ' + slot.label + ' binding; remove this value or unbind the slot' });
         });
       });
+      // Linked groups (#34): the form's st.links, checked like the service does.
       let links = null;
       if (doc.links != null) {
-        if (!Array.isArray(doc.links)) errors.push({ pointer: '/links', message: 'Must be a list' });
-        else if (doc.links.length) links = clone(doc.links);
+        if (!api.sweeps) errors.push({ pointer: '/links', message: SWEEP_MESSAGE });
+        else {
+          const problems = api.sweeps.checkLinks(doc);
+          problems.forEach((e) => errors.push(e));
+          if (!problems.length && doc.links.length) links = clone(doc.links);
+        }
       }
       return { errors, evaluator, bindings, values, links };
     }
@@ -964,14 +1042,9 @@
       }
       const config = result.evaluator.config;
       const version = applyDataset(result.evaluator, config);
-      // Bindings: drop in-memory keys no binding refers to any more.
-      const keep = {};
-      Object.keys(result.bindings).forEach((k) => { const b = result.bindings[k]; if (b.kind === 'temporary' && b.secretRef) keep[b.secretRef] = true; });
-      Object.keys(st.bindings).forEach((k) => {
-        const b = st.bindings[k];
-        if (b && b.kind === 'temporary' && b.secretRef && !keep[b.secretRef]) api.clearBinding(k);
-      });
+      // Bindings: drop in-memory keys no binding (swept ones too) refers to any more.
       st.bindings = result.bindings;
+      api.pruneSecrets();
       st.values = result.values;
       st.invalid = {};
       adv.config = config;
@@ -980,7 +1053,7 @@
       adv.extra = {};
       if (result.evaluator.report_k != null) adv.extra.report_k = result.evaluator.report_k;
       if (version) adv.extra.dataset_version = version;
-      adv.links = result.links;
+      st.links = result.links || undefined;
       json.dirty = false;
       api.rerender();
       renderActive();
