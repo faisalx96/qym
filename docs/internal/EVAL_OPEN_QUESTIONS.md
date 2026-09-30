@@ -18,7 +18,7 @@ Please review each entry and either confirm it or reply with the change you want
 
 ## A. Critical (security, data loss or cost)
 
-### A1. Remote jobs qym can no longer stop (In progress: `fix/eval-unstoppable-remote-jobs`)
+### A1. Remote jobs qym can no longer stop (Implemented)
 
 **Question.** A job marked TIMED_OUT, or CANCELLED after the 2h15m cancel give-up, can
 keep running on the Evaluation Service. qym then has no way to cancel it:
@@ -37,6 +37,14 @@ cap could overload a shared environment.
 
 **Reverse.** Drop the cap accounting if the Evaluation Service enforces its own
 concurrency limits.
+
+**Notes on the implementation.**
+- Stale counts come from the remote snapshot, so they can lag by up to 30s. A job that
+  just finished locally may briefly count toward the cap.
+- If the cancel at timeout gets a 409, the job becomes TIMED_OUT with the note
+  "already finished".
+- Plan §13, §13.1 and §14.1 still describe the old orphan-only cancel and the old cap.
+  The runbook is current.
 
 ### A2. Encryption key rotation (In progress: `fix/eval-key-rotation-https`, part A)
 
