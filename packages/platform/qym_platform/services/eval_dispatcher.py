@@ -335,8 +335,16 @@ def _stored_run_metadata(job: EvalExperimentJob) -> Optional[Dict[str, Any]]:
     return copy.deepcopy(dict(metadata)) if isinstance(metadata, Mapping) else None
 
 
-def default_add_launch_token(body: Dict[str, Any], job_id: str) -> Dict[str, Any]:
-    """Insert the one-time launch token (raises ``LaunchTokenUnavailable`` without a key)."""
+def default_add_launch_token(
+    body: Dict[str, Any], job_id: str, expected_hash: Optional[str] = None
+) -> Dict[str, Any]:
+    """Insert the one-time launch token (raises ``LaunchTokenUnavailable`` without a key).
+
+    ``expected_hash`` is the job's ``launch_token_hash``: after a key rotation the
+    token is derived with the previous key that matches it.
+    """
+    if expected_hash:
+        return body_with_launch_token(body, job_id, expected_hash=expected_hash)
     return body_with_launch_token(body, job_id)
 
 
@@ -779,6 +787,10 @@ class EvalDispatcher:
             launch = metadata["qym_launch"] = {}
         # Reconcile-after-crash matches on this id; #13 stores the rest of qym_launch.
         launch["job_id"] = job.id
+        if self.add_launch_token is default_add_launch_token:
+            return default_add_launch_token(
+                body, job.id, expected_hash=job.launch_token_hash
+            )
         return self.add_launch_token(body, job.id)
 
     def _begin_submit(

@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
+from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, delete, text
 from sqlalchemy.orm import sessionmaker
@@ -43,7 +44,11 @@ from qym_platform.db.models import (
 )
 from qym_platform.deps import get_db
 from qym_platform.security import api_key_prefix, hash_api_key
-from qym_platform.services.eval_experiments import hash_launch_token
+from qym_platform.services.eval_dispatcher import default_add_launch_token
+from qym_platform.services.eval_experiments import (
+    hash_launch_token,
+    launch_token_hash_for_job,
+)
 from qym_platform.services.eval_run_linking import (
     link_official_run,
     merge_run_metadata,
@@ -341,6 +346,52 @@ def test_mismatch_stays_local(client, sessions, seed, launch_kwargs, caplog):
     assert _env(sessions, seed["env_id"]).health_error is None
     _assert_no_token_stored(sessions)
     assert TOKEN not in caplog.text
+
+
+@pytest.mark.parametrize("keep_previous", [True, False])
+def test_launch_before_key_rotation_links_official_after_it(
+    client, sessions, seed, monkeypatch, keep_previous
+):
+    """Launched under the old key, dispatched after rotating, ingested: official.
+
+    The dispatcher derives the token with the previous key that matches the stored
+    ``launch_token_hash``; ingest only hashes what it receives. Once the old key is
+    dropped the current-key token no longer matches and the run is local.
+    """
+    old_key = Fernet.generate_key().decode("utf-8")
+    monkeypatch.setenv("QYM_LLM_CONFIG_ENCRYPTION_KEY", old_key)
+    job_id = seed["job_id"]
+    with sessions() as db:  # what api/experiments stores at launch
+        db.get(EvalExperimentJob, job_id).launch_token_hash = launch_token_hash_for_job(
+            job_id
+        )
+        db.commit()
+
+    monkeypatch.setenv(
+        "QYM_LLM_CONFIG_ENCRYPTION_KEY", Fernet.generate_key().decode("utf-8")
+    )
+    if keep_previous:
+        monkeypatch.setenv("QYM_LLM_CONFIG_ENCRYPTION_KEYS_PREVIOUS", old_key)
+    else:
+        monkeypatch.delenv("QYM_LLM_CONFIG_ENCRYPTION_KEYS_PREVIOUS", raising=False)
+    stored_hash = _job(sessions, job_id).launch_token_hash
+    sent = default_add_launch_token(
+        {"evaluator": {"config": {"run_metadata": {}}}},
+        job_id,
+        expected_hash=stored_hash,
+    )
+    token = sent["evaluator"]["config"]["run_metadata"]["qym_launch"]["token"]
+
+    run_id = _create(client, _launch(seed, token=token))
+
+    run = _run(sessions, run_id)
+    if keep_previous:
+        assert run.origin == RunOrigin.OFFICIAL
+        assert _job(sessions, job_id).run_id == run_id
+    else:
+        assert run.origin == RunOrigin.LOCAL
+        assert _job(sessions, job_id).run_id is None
+    assert "token" not in run.run_metadata["qym_launch"]
 
 
 def test_no_launch_metadata_is_local(client, sessions, seed):
