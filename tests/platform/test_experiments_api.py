@@ -492,7 +492,7 @@ def test_invalid_documents_are_rejected_with_pointed_errors(
     assert "connection_missing" in codes
 
     swept = _spec()
-    swept["env_overrides"]["MILVUS_SEARCH_THRESHOLD"] = {"sweep": [0.5, 0.7]}
+    swept["env_overrides"]["MILVUS_SEARCH_THRESHOLD"] = {"sweep": []}
     assert _create(client, [env.id], spec=swept).status_code == 422
 
     with session_factory() as s:

@@ -134,6 +134,8 @@ class PlatformSettings(BaseSettings):
     # Dry-run previews are not counted.
     eval_experiment_create_rate_limit: int = Field(default=30, ge=0)
     eval_experiment_create_rate_window_seconds: int = Field(default=3600, ge=1)
+    # Jobs one experiment launch may create (combinations × environments).
+    eval_sweep_max_jobs: int = Field(default=64, ge=1)
 
     # Product eval API
     product_eval_max_workers: int = Field(default=3, ge=1)
