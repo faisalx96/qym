@@ -156,8 +156,12 @@ def test_key_is_encrypted_at_launch_and_never_returned_or_stored(
         "temporary": {**TEMPORARY, "api_key": {"$secret": "k1"}}
     }
     metadata = job.request_body["evaluator"]["config"]["run_metadata"]
-    # qym_config (and spec) carry label/model/base_url only.
-    assert metadata["qym_config"]["slot_bindings"][PRIMARY] == {"temporary": TEMPORARY}
+    # qym_config shows that a key was used, never the ref (#16); spec carries
+    # label/model/base_url only.
+    assert metadata["qym_config"]["slot_bindings"][PRIMARY] == {
+        "temporary": {**TEMPORARY, "api_key": {"$secret": "redacted"}}
+    }
+    assert "k1" not in json.dumps(metadata["qym_config"])
     assert experiment.spec["slot_bindings"][PRIMARY] == {"temporary": TEMPORARY}
     primary = job.request_body["env_overrides"]["LLM_OVERRIDES"]["endpoints"]["primary"]
     assert primary["model"] == "gpt-4o-mini" and primary["base_url"] == BASE_URL
@@ -295,9 +299,7 @@ def test_dispatch_sends_key_in_memory_and_clears_it_when_terminal(
             "timeout": 60,
         }
         qym_config = sent["evaluator"]["config"]["run_metadata"]["qym_config"]
-        assert KEY not in json.dumps(qym_config) and "$secret" not in json.dumps(
-            qym_config
-        )
+        assert KEY not in json.dumps(qym_config) and "k1" not in json.dumps(qym_config)
         # Still in flight: the key is kept (a resubmit after a crash needs it).
         assert _experiment(session_factory, created["id"]).secrets_encrypted
 

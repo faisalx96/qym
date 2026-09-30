@@ -43,10 +43,16 @@ Secrets: the resolved body (decrypted model keys, launch token) exists only in m
 between ``prepare_dispatch`` and the client call. It is never stored, logged or put in
 an exception. Service responses are redacted by ``EvalServiceClient``.
 
+Run metadata (#16): the submitted ``run_metadata`` is the stored one (``qym_config``,
+``qym_launch``, user keys) plus ``qym_launch.token``, nothing else. It is copied from
+``job.request_body`` *after* placeholders are filled, so a ``{{qym:slot:…}}`` string a
+user put in their metadata can never pull a key into ``runs.run_metadata``.
+
 Seams for later issues (all constructor arguments):
 
 - ``add_launch_token(body, job_id)`` inserts the one-time launch token (#13/#16). The
-  default uses ``services.eval_experiments.body_with_launch_token`` when it exists.
+  default is ``services.eval_experiments.body_with_launch_token``. Without
+  ``QYM_LLM_CONFIG_ENCRYPTION_KEY`` the job waits (``QUEUED``) instead of submitting.
 - ``slot_bindings_for_job(job, experiment)``: the combination's bindings. The default is
   ``job.params["slot_bindings"]``, then the ``qym_config`` copy in the stored body.
 - ``secret_lookup_for(experiment)``: resolves temporary-model key refs (#12). The default
@@ -107,7 +113,11 @@ from .eval_bindings import (
     mark_job_blocked,
     prepare_dispatch,
 )
-from .eval_experiments import clear_secrets_when_settled
+from .eval_experiments import (
+    LaunchTokenUnavailable,
+    body_with_launch_token,
+    clear_secrets_when_settled,
+)
 from .eval_model_slots import descriptor_for_schema, list_model_slots
 from .eval_service_client import (
     EnvAuthError,
@@ -229,11 +239,15 @@ def aggregate_status(statuses: Iterable[EvalJobStatus]) -> EvalExperimentStatus:
 def _counted_jobs(experiment_id: str):
     """Jobs that count toward the aggregate status.
 
-    Retried (superseded) rows must be excluded here once #13's ``retry_of_job_id``
-    column lands: add ``.where(~<superseded>)`` to this one query.
+    A retried row is *superseded* (another job's ``retry_of_job_id`` points at it) and
+    is left out: only the latest attempt of each combination counts.
     """
+    retry = aliased(EvalExperimentJob)
+    superseded = (
+        select(retry.id).where(retry.retry_of_job_id == EvalExperimentJob.id).exists()
+    )
     return select(EvalExperimentJob.status).where(
-        EvalExperimentJob.experiment_id == experiment_id
+        EvalExperimentJob.experiment_id == experiment_id, ~superseded
     )
 
 
@@ -355,14 +369,18 @@ def default_client_factory() -> ClientFactory:
     return factory
 
 
-def default_add_launch_token(body: Dict[str, Any], job_id: str) -> Dict[str, Any]:
-    """Insert the one-time launch token (#13 ``body_with_launch_token``) if available."""
+def _stored_run_metadata(job: EvalExperimentJob) -> Optional[Dict[str, Any]]:
+    """A copy of the job's stored ``evaluator.config.run_metadata`` (or ``None``)."""
     try:
-        from . import eval_experiments  # type: ignore[attr-defined]
-    except ImportError:
-        return body
-    adder = getattr(eval_experiments, "body_with_launch_token", None)
-    return adder(body, job_id) if callable(adder) else body
+        metadata = job.request_body["evaluator"]["config"]["run_metadata"]
+    except (KeyError, TypeError):
+        return None
+    return copy.deepcopy(dict(metadata)) if isinstance(metadata, Mapping) else None
+
+
+def default_add_launch_token(body: Dict[str, Any], job_id: str) -> Dict[str, Any]:
+    """Insert the one-time launch token (raises ``LaunchTokenUnavailable`` without a key)."""
+    return body_with_launch_token(body, job_id)
 
 
 def default_slot_bindings_for_job(
@@ -779,12 +797,19 @@ class EvalDispatcher:
         job: EvalExperimentJob,
         experiment: EvalExperiment,
     ) -> Dict[str, Any]:
-        """Final in-memory body: user, priority, ``qym_launch.job_id`` and token."""
+        """Final in-memory body: user, priority, ``qym_launch.job_id`` and token.
+
+        ``run_metadata`` is the stored one, not the placeholder-filled copy: it is
+        persisted by the run, so it must never carry a resolved key.
+        """
         body = copy.deepcopy(resolved)
         body.setdefault("user_id", _service_user_id(experiment))
         body.setdefault("priority", _enum_value(experiment.priority))
         evaluator = body.setdefault("evaluator", {})
         config = evaluator.setdefault("config", {})
+        stored = _stored_run_metadata(job)
+        if stored is not None:
+            config["run_metadata"] = stored
         metadata = config.get("run_metadata")
         if not isinstance(metadata, dict):
             metadata = config["run_metadata"] = {}
@@ -909,7 +934,17 @@ class EvalDispatcher:
                     recompute_experiment_status(db, experiment.id)
                     db.commit()
                     return
-                body = self._submit_body(prep.body or {}, job, experiment)
+                try:
+                    body = self._submit_body(prep.body or {}, job, experiment)
+                except LaunchTokenUnavailable:
+                    del prep
+                    self._defer(
+                        job,
+                        ENV_PAUSE_RECHECK_SECONDS,
+                        "Launch tokens need QYM_LLM_CONFIG_ENCRYPTION_KEY",
+                    )
+                    db.commit()
+                    return
                 del prep
                 db.flush()
                 if not self._begin_submit(db, job, env, first=first):

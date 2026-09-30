@@ -21,6 +21,15 @@ with ``launch_token_hash_for_job`` right after rotating.
 The stored ``request_body`` holds ``qym_launch`` **without** the token; the dispatcher
 calls ``body_with_launch_token`` in memory just before submitting.
 
+Run metadata (plan §10.1). Every job's body carries two reserved
+``evaluator.config.run_metadata`` keys, which the SDK copies into ``runs.run_metadata``:
+``qym_launch`` (``build_qym_launch``) and ``qym_config`` (``build_qym_config``), the §8.1
+document of the job's combination with sweeps resolved. ``qym_config`` is secret-free:
+connection bindings keep ``{connection_id, name, model}`` and every secret ref
+(``{"$secret": ref}``, e.g. a temporary model's key) becomes
+``{"$secret": "redacted"}`` (``redact_secret_refs``), so the run page can show the
+config without the job row.
+
 Retries (plan §13). A retry is a new row with the same ``combo_index``,
 ``attempt + 1`` and ``retry_of_job_id`` set (migration 0063); it gets a new id and so a
 new token. The retried row is *superseded*: kept for history, left out of the
@@ -149,6 +158,156 @@ def body_with_launch_token(
     launch["token"] = launch_token_for_job(job_id, settings)
     metadata["qym_launch"] = launch
     return out
+
+
+# --------------------------------------------------------------------------- run metadata
+
+SECRET_REF_KEY = "$secret"
+REDACTED_SECRET_REF = "redacted"
+# Literal values under these keys are masked in ``qym_config`` (defence in depth: the
+# document validator already rejects literal secrets).
+_SECRET_KEY_NAMES = frozenset(
+    {"api_key", "apikey", "authorization", "password", "secret", "token"}
+)
+_SECRET_KEY_SUFFIXES = ("_api_key", "_apikey", "_password", "_secret", "_token")
+_MASKED = "[REDACTED]"
+_PLACEHOLDER_PREFIX = "{{qym:slot:"
+
+
+def is_secret_ref(value: Any) -> bool:
+    """``{"$secret": ref}``: how specs reference an experiment secret (#12)."""
+    return isinstance(value, Mapping) and SECRET_REF_KEY in value
+
+
+def _is_secret_key(key: Any) -> bool:
+    name = str(key).lower().replace("-", "_")
+    return name in _SECRET_KEY_NAMES or name.endswith(_SECRET_KEY_SUFFIXES)
+
+
+def redact_secret_refs(value: Any) -> Any:
+    """A copy with every ``{"$secret": ref}`` replaced by ``{"$secret": "redacted"}``.
+
+    Generic over where refs appear (bindings, overrides, lists). Literal strings under
+    secret-looking keys (``api_key``, ``*_token``…) are masked too; slot placeholders
+    (``{{qym:slot:…}}``) are kept, they are not secrets.
+    """
+    if is_secret_ref(value):
+        return {SECRET_REF_KEY: REDACTED_SECRET_REF}
+    if isinstance(value, Mapping):
+        out: dict[str, Any] = {}
+        for key, child in value.items():
+            if (
+                _is_secret_key(key)
+                and isinstance(child, str)
+                and child
+                and not child.startswith(_PLACEHOLDER_PREFIX)
+            ):
+                out[key] = _MASKED
+            else:
+                out[key] = redact_secret_refs(child)
+        return out
+    if isinstance(value, list):
+        return [redact_secret_refs(v) for v in value]
+    return copy.deepcopy(value)
+
+
+def display_binding(binding: Any, resolved: Optional[Mapping[str, Any]] = None) -> Any:
+    """A slot binding as ``qym_config`` shows it: never a key.
+
+    ``connection`` → ``{connection_id, name, model}`` (``resolved`` carries the current
+    name and model, as in ``eval_bindings`` ``resolution.models``); ``temporary`` →
+    ``{"temporary": {label, model, base_url[, api_key: {"$secret": "redacted"}]}}``;
+    inherit/``None`` → ``None``.
+    """
+    if binding is None:
+        return None
+    if not isinstance(binding, Mapping):
+        return redact_secret_refs(binding)
+    if set(binding) == {"inherit"} and binding["inherit"] is True:
+        return None
+    resolved = resolved or {}
+    if "connection_id" in binding and "temporary" not in binding:
+        return {
+            "connection_id": binding.get("connection_id"),
+            "name": resolved.get("name") or binding.get("name"),
+            "model": resolved.get("model") or binding.get("model"),
+        }
+    if "temporary" in binding and "connection_id" not in binding:
+        raw = binding.get("temporary")
+        temporary: Mapping[str, Any] = raw if isinstance(raw, Mapping) else {}
+        shown: dict[str, Any] = {
+            key: temporary[key]
+            for key in ("label", "model", "base_url")
+            if key in temporary
+        }
+        if temporary.get("api_key") is not None:
+            shown["api_key"] = {SECRET_REF_KEY: REDACTED_SECRET_REF}
+        return {"temporary": redact_secret_refs(shown)}
+    return redact_secret_refs(binding)
+
+
+def display_bindings(
+    bindings: Any, models: Optional[Mapping[str, Mapping[str, Any]]] = None
+) -> dict[str, Any]:
+    """``display_binding`` for every slot."""
+    if not isinstance(bindings, Mapping):
+        return {}
+    models = models or {}
+    return {
+        key: display_binding(binding, models.get(key))
+        for key, binding in bindings.items()
+    }
+
+
+def build_qym_config(
+    document: Mapping[str, Any],
+    *,
+    schema_hash: Optional[str],
+    base_source: Optional[Mapping[str, Any]],
+    models: Optional[Mapping[str, Mapping[str, Any]]] = None,
+    sweep: Optional[Mapping[str, Any]] = None,
+) -> dict[str, Any]:
+    """``run_metadata.qym_config``: the §8.1 document of one combination (§10.1).
+
+    ``document`` is one combination (sweeps resolved by ``eval_sweeps.expand``).
+    ``models`` maps slot keys to the resolved connection ``{name, model}``; ``sweep``
+    is the combination's ``{pointer: value}`` (job ``params["sweep"]``), included so
+    the run shows which values were swept. The result is secret-free.
+    """
+    evaluator = document.get("evaluator")
+    overrides = document.get("env_overrides")
+    config = {
+        "schema_hash": schema_hash,
+        "base_source": dict(base_source) if base_source else {"kind": "blank"},
+        "evaluator": dict(evaluator) if isinstance(evaluator, Mapping) else {},
+        "slot_bindings": display_bindings(document.get("slot_bindings"), models),
+        "env_overrides": dict(overrides) if isinstance(overrides, Mapping) else {},
+    }
+    if sweep:
+        config["sweep"] = dict(sweep)
+    return redact_secret_refs(config)
+
+
+def build_qym_launch(
+    *,
+    experiment_id: str,
+    job_id: str,
+    environment_id: str,
+    combo_index: int,
+    attempt: int = 0,
+    retry_of_job_id: Optional[str] = None,
+) -> dict[str, Any]:
+    """``run_metadata.qym_launch`` as stored: the token is only added at dispatch."""
+    launch: dict[str, Any] = {
+        "experiment_id": experiment_id,
+        "job_id": job_id,
+        "environment_id": environment_id,
+        "combo_index": combo_index,
+        "attempt": attempt,
+    }
+    if retry_of_job_id:
+        launch["retry_of_job_id"] = retry_of_job_id
+    return launch
 
 
 # --------------------------------------------------------------------------- lineage

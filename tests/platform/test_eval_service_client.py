@@ -174,6 +174,35 @@ def test_list_passes_filters_and_redacts_every_item():
     _assert_no_secrets(result)
 
 
+def test_launch_token_echoed_in_eval_input_is_redacted_but_job_id_kept():
+    token = "qlt_" + "A1b2C3d4" * 5
+    launch = {"experiment_id": "e1", "job_id": "j1", "combo_index": 0, "token": token}
+    eval_input = {
+        "dataset": "ds",
+        "config": {"run_metadata": {"qym_launch": launch, "team": "rag"}},
+    }
+    page = {"items": [_job(eval_input=eval_input)], "total": 1}
+    result, _ = _run(
+        lambda request: httpx.Response(200, json=page),
+        lambda client: client.list(user_id="u"),
+    )
+    got = result["items"][0]["eval_input"]["config"]["run_metadata"]["qym_launch"]
+    assert got == {**launch, "token": esc.REDACTED}
+    assert token not in json.dumps(result)
+    # Reconcile still matches on the job id; other *_token keys are masked too.
+    assert esc.redact_payload({"launch_token": "x", "max_tokens": 5}) == {
+        "launch_token": esc.REDACTED,
+        "max_tokens": 5,
+    }
+    # Free text (errors, logs) never keeps a launch token either.
+    for text in (
+        f"bad token={token}",
+        f"eval failed for {token}",
+        f'"token": "{token}"',
+    ):
+        assert token not in esc.redact_text(text)
+
+
 def test_cancel_posts_user_id():
     result, requests = _run(
         lambda request: httpx.Response(200, json=_job(status="CANCELLED")),
