@@ -55,4 +55,5 @@
   color: var(--text-secondary); font-size: var(--font-base);
 }
 .odx-table .odx-actions-cell { text-align: right; white-space: nowrap; }
+.odx-table .odx-actions-cell .qym-inline-action + .qym-inline-action { margin-left: var(--space-xs); }
 .odx-preset-name { color: var(--text-primary); font-weight: 600; overflow-wrap: anywhere; }

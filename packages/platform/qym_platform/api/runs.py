@@ -59,6 +59,7 @@ from qym_platform.permissions import (
     can_review_run,
     can_view_run,
     has_project_access,
+    is_project_manager,
 )
 from qym_platform.services.eval_run_scores import sync_run_scores
 from qym_platform.services.issue_reviews import change_metric_issue, reconcile_issue_edits
@@ -3329,13 +3330,21 @@ def _can_approve_run(db: Session, principal: Principal, run: Run) -> bool:
     return permission_can_approve_run(db, principal, run)
 
 
-def _run_origin_and_panel(db: Session, run: Run) -> Dict[str, Any]:
+def _run_origin_and_panel(
+    db: Session, run: Run, principal: Optional[Principal] = None
+) -> Dict[str, Any]:
     fields = run_origin_fields(
         run, experiment_refs_for_jobs(db, [run.experiment_job_id])
     )
     panel = run_experiment_panel(db, run)
     if panel is not None and fields["experiment"]:
         panel = {**fields["experiment"], **panel}
+    if panel is not None:
+        # "Promote to official" (#39) opens the official-defaults editor: managers.
+        panel["can_promote"] = bool(
+            principal is not None
+            and is_project_manager(db, principal, run.project_id)
+        )
     return {"origin": fields["origin"], "experiment": panel}
 
 
@@ -3345,6 +3354,7 @@ def _build_run_data(
     *,
     item_ids: Optional[List[str]] = None,
     compact: bool = False,
+    principal: Optional[Principal] = None,
 ) -> Dict[str, Any]:
     """Build the run + snapshot data dict used by the UI."""
     item_query = db.query(RunItem).filter(RunItem.run_id == run.id)
@@ -3829,7 +3839,7 @@ def _build_run_data(
                 # origin (#18) plus the Experiment panel (#26, official runs only;
                 # None for local runs). The panel also carries #18's {id, name,
                 # job_id} experiment ref, which compare.html links with.
-                **_run_origin_and_panel(db, run),
+                **_run_origin_and_panel(db, run, principal),
             },
             "snapshot": {
                 "rows": ui_rows,
@@ -4628,7 +4638,9 @@ def legacy_run_data(
 
     if view not in (None, "full", "compact"):
         raise HTTPException(422, "view must be full or compact")
-    return _build_run_data(db, run, compact=view == "compact")
+    return _build_run_data(
+        db, run, compact=view == "compact", principal=principal
+    )
 
 
 @router.post("/api/runs/update_metric")

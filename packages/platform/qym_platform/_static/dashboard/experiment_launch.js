@@ -2651,6 +2651,14 @@
           }
         });
       }
+      // Promote to official (#39): slots whose temporary model was unbound need a project model.
+      (opts.rebind || []).forEach((item) => {
+        const key = item && item.slot_key;
+        const b = key ? st.bindings[key] : null;
+        if (key && !(b && b.kind === 'connection')) {
+          errors.push({ pointer: '/slot_bindings/' + escSeg(key), message: 'Pick a project model for ' + key + ': the source used temporary model ' + (item.label || item.model || key) + '.' });
+        }
+      });
       const spec = buildSpec();
       if (spec.links || containsSweep(spec)) {
         errors.push({ pointer: '#advanced-json', message: 'Sweeps are not allowed here: this saves one configuration.' });
@@ -2897,7 +2905,8 @@
    * options: root, project, me, environment (a list payload), baseConfig and
    * baseMeta ({label, version, versionId, releaseNotes, summary, dropped, errors,
    * warnings}), initialConfig, title, description, backLabel, saveLabel,
-   * notesLabel, notesRequired, allowTemporary, requireChange,
+   * notesLabel, notesRequired, allowTemporary, requireChange, rebind ([{slot_key,
+   * label, model}]: slots that must be bound to a project model before saving),
    * onSave({config, notes}) → Promise<{ok, errors?, message?}>, onCancel.
    */
   function mountEditor(options) {

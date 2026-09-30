@@ -6,6 +6,11 @@ or a project manager publishes its next version; only project managers (or platf
 admins) create or publish the ``official`` preset. Versions are append-only: there is
 no route that updates or deletes one. ``GET …/versions/{n}?remap=current`` returns a
 version re-mapped onto the environment's current schema without storing it (§9.3).
+
+``GET /v1/projects/{project_id}/eval-environments/{env_id}/promote-prefill`` (#39)
+returns the official-defaults editor prefill for a saved preset, an official run or
+a job (matrix cell). It is read-only: promoting always goes through the editor and
+the publish routes above.
 """
 
 from __future__ import annotations
@@ -24,7 +29,7 @@ from qym_platform.db.models import (
 )
 from qym_platform.deps import get_db
 from qym_platform.permissions import is_project_manager
-from qym_platform.services import eval_presets
+from qym_platform.services import eval_presets, eval_promote
 from qym_platform.services.eval_presets import PresetError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -278,3 +283,37 @@ def publish_preset_version(
         "version": eval_presets.version_payloads(db, env, [version])[0],
         "warnings": warnings,
     }
+
+
+@router.get("/v1/projects/{project_id}/eval-environments/{env_id}/promote-prefill")
+def promote_prefill(
+    project_id: str,
+    env_id: str,
+    kind: str = Query(..., pattern="^(saved|run|job)$"),
+    source_id: str = Query(..., alias="id", min_length=1, max_length=36),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """"Promote to official" prefill (plan §9.1): never publishes, never writes.
+
+    Managers only (the editor it feeds publishes official defaults). The source must
+    belong to this project and environment. The config is re-mapped onto the current
+    schema and temporary-model slots come back unbound, listed in ``unbound``.
+    """
+    _require_project_manager(db, principal, project_id)
+    env = _get_environment(db, project_id, env_id)
+    if not env.is_active:
+        raise HTTPException(
+            status_code=409,
+            detail="This environment is disabled; re-enable it to change its presets",
+        )
+    schema = _current_schema(db, env)
+    try:
+        payload = eval_promote.promote_prefill(
+            db, env, schema, kind=kind, source_id=source_id
+        )
+    except PresetError as exc:
+        raise _http(exc)
+    finally:
+        db.rollback()  # read-only: nothing from this request is ever committed
+    return payload

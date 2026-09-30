@@ -268,6 +268,13 @@
     return !!(experiment && me.id && experiment.created_by_user_id === me.id);
   }
 
+  /** "Promote to official" (#39) opens the official defaults editor: managers only. */
+  function canPromote() {
+    if (state.denied) return false;
+    const me = state.me || {};
+    return me.role === 'ADMIN' || !!(state.project && state.project.role === 'MANAGER');
+  }
+
   const CONTROL_HINT = "Only the experiment's creator or a project manager can do this";
 
   // ── Polling (pauses while the tab is hidden) ───────────────────────────
@@ -732,6 +739,8 @@
       isActive: () => state.active,
       rerender: renderDetail,
       showAttempts: showAttempts,
+      canPromote: canPromote(),
+      projectSlug: state.project.slug,
     };
   }
 
