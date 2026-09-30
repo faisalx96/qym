@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
@@ -12,6 +13,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from qym_platform.auth_oidc import origin_matches_base, session_auth_enabled
 from qym_platform.api.auth import router as auth_router
 from qym_platform.settings import PlatformSettings
+from qym_platform.validation_errors import validation_exception_handler
 from qym_platform.api.web import router as web_router
 from qym_platform.api.projects import router as projects_router
 from qym_platform.api.eval_environments import router as eval_environments_router
@@ -48,6 +50,8 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
         redoc_url=None,
         openapi_url="/openapi.json",
     )
+    # 422 responses must never echo a submitted key (security checklist §15).
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
     from qym_platform.db.session import SessionLocal, build_engine
     from qym_platform.deps import get_db
