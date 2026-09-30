@@ -360,7 +360,7 @@ def _save_to_project_models(
     req: ExperimentCreateRequest,
     spec: Dict[str, Any],
 ) -> List[str]:
-    """"Save to project models" (§7.5): swap temporary bindings for new connections.
+    """Save to project models (§7.5): swap temporary bindings for new connections.
 
     Project managers only. A dry run checks without creating anything. Returns the new
     connection ids; nothing is committed here.

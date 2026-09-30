@@ -197,7 +197,11 @@ def test_launch_requires_the_key_and_a_safe_base_url(client, session_factory, en
     assert "temporary_key_required" in _codes(other_ref)
     assert KEY not in other_ref.text
 
-    for url in ("http://127.0.0.1:8000/v1", "ftp://llm.example.com", "https://u:p@x.io"):
+    for url in (
+        "http://127.0.0.1:8000/v1",
+        "ftp://llm.example.com",
+        "https://u:p@x.io",
+    ):
         bad = _launch(client, [env.id], spec=_temp_spec(base_url=url))
         assert bad.status_code == 422, url
         assert "temporary_base_url_invalid" in _codes(bad)
@@ -350,9 +354,7 @@ def test_dispatch_never_sends_a_temporary_model_without_its_key(
 # --------------------------------------------------------------------------- clearing
 
 
-def test_keys_cleared_only_when_every_current_job_settled(
-    client, session_factory, env
-):
+def test_keys_cleared_only_when_every_current_job_settled(client, session_factory, env):
     other = _add_env(session_factory, "prod")
     created = _launch(client, [env.id, other.id]).json()
     first, second = _jobs(session_factory, created["id"])
@@ -406,9 +408,7 @@ def test_clear_does_not_overwrite_a_blob_written_concurrently(
     assert decrypt_secrets(stored) == {"k1": KEY2}
 
 
-def test_cancel_clears_keys_and_retry_asks_for_them_again(
-    client, session_factory, env
-):
+def test_cancel_clears_keys_and_retry_asks_for_them_again(client, session_factory, env):
     created = _launch(client, [env.id]).json()
     (job,) = _jobs(session_factory, created["id"])
     res = client.post(_url(suffix=f"/{created['id']}/cancel"), headers=_headers(MEMBER))

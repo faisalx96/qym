@@ -144,7 +144,9 @@ def _error(slot_key: str, code: str, message: str) -> Dict[str, Any]:
 
 
 def _usable_key(value: Any) -> bool:
-    return isinstance(value, str) and bool(value.strip()) and len(value) <= MAX_KEY_LENGTH
+    return (
+        isinstance(value, str) and bool(value.strip()) and len(value) <= MAX_KEY_LENGTH
+    )
 
 
 def temporary_binding_errors(
