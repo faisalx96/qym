@@ -13,11 +13,13 @@ Routes live under ``/v1/projects/{project_id}/experiments`` (plan §14).
   from ``eval_experiments`` rows, so it holds across API processes. Dry runs are not
   counted.
 
-This change launches **one** combination (no sweeps; #32/#33) on one or more
-environments: one job per environment, all ``combo_index`` 0. The document is
-validated per environment with placeholders only (``eval_config``), and bindings are
-checked without decrypting anything (``eval_bindings``, ``decrypt=False``). Keys are
-resolved by the dispatcher.
+Sweeps (#32): ``eval_sweeps.expand`` turns the spec (``{"sweep": [...]}`` values and
+``links``) into combinations; each (combination, environment) becomes one job with the
+combination's ``combo_index``, run name, ``params`` and ``qym_config``. The job count is
+capped by ``QYM_EVAL_SWEEP_MAX_JOBS`` (default 64) before anything is validated or
+created. Every (combination, environment) document is validated with placeholders only
+(``eval_config``), and bindings are checked without decrypting anything
+(``eval_bindings``, ``decrypt=False``). Keys are resolved by the dispatcher.
 
 Temporary models (§7.5, #12) are **rejected** with a 422 (``code:
 temporary_unsupported``) until #12 adds key storage. ``secrets_encrypted`` stays null.
@@ -25,8 +27,9 @@ Its format is a Fernet-encrypted JSON ``{ref: key}``, and clone never copies it.
 
 Stored per job:
 
-- ``params``: ``{"slot_bindings": {slot_key: binding | null}}``. Connection bindings
-  are ``{"connection_id", "name", "model"}``.
+- ``params``: ``{"slot_bindings": {slot_key: binding | null}}`` for the combination,
+  plus ``"sweep": {pointer: value}`` when the spec sweeps. Connection bindings are
+  ``{"connection_id", "name", "model"}``.
 - ``request_body``: the placeholder ``EvalJobCreate`` with ``user_id`` (creator),
   ``priority``, ``evaluator.config.run_name``/``live_mode`` and the reserved
   ``run_metadata.qym_launch`` (no token) and ``qym_config`` (§10.1). The dispatcher
@@ -65,8 +68,13 @@ from qym_platform.db.models import (
 from qym_platform.deps import get_db
 from qym_platform.permissions import is_project_manager
 from qym_platform.secrets import encryption_available
+from qym_platform.services import eval_sweeps
 from qym_platform.services.eval_bindings import resolve_slot_bindings
-from qym_platform.services.eval_config import binding_kind, validate_config_document
+from qym_platform.services.eval_config import (
+    binding_kind,
+    is_sweep,
+    validate_config_document,
+)
 from qym_platform.services.eval_experiments import (
     ALREADY_TERMINAL,
     CANCELLED,
@@ -93,7 +101,6 @@ router = APIRouter()
 _PREFIX = "/v1/projects/{project_id}/experiments"
 _PRIORITY_ORDER = {EvalPriority.LOW: 0, EvalPriority.NORMAL: 1, EvalPriority.HIGH: 2}
 _BASE_KINDS = {"official", "saved", "best_run", "blank", "clone"}
-_RUN_NAME_MAX = 200
 _MAX_ENVIRONMENTS = 20
 
 
@@ -106,7 +113,7 @@ class ExperimentCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     description: str = Field(default="", max_length=5000)
     environment_ids: List[str] = Field(..., min_length=1, max_length=_MAX_ENVIRONMENTS)
-    # The §8.1 config document for one combination (no sweeps yet).
+    # The §8.1 config document; values may be {"sweep": [...]}, plus "links".
     spec: Dict[str, Any]
     base_source: Optional[Dict[str, Any]] = None
     priority: Optional[EvalPriority] = None
@@ -324,23 +331,12 @@ def _binding_error(slot_key: str, code: str, message: str) -> Dict[str, Any]:
 def _document_errors(spec: Mapping[str, Any]) -> List[Dict[str, Any]]:
     """Checks that don't depend on an environment."""
     errors: List[Dict[str, Any]] = []
-    if spec.get("links"):
-        errors.append(
-            {
-                "section": "document",
-                "pointer": "/links",
-                "form_pointer": "/links",
-                "field": None,
-                "params": {},
-                "rule": "sweep",
-                "message": "Sweeps and linked groups are not supported yet",
-                "environment_id": None,
-            }
-        )
     bindings = spec.get("slot_bindings")
     if isinstance(bindings, Mapping):
         for slot_key, binding in bindings.items():
-            if binding_kind(binding) == "temporary":
+            swept = binding.get("sweep") if is_sweep(binding) else None
+            candidates = swept if isinstance(swept, list) else [binding]
+            if any(binding_kind(b) == "temporary" for b in candidates):
                 # Hook for #12: temporary keys need experiment secret storage.
                 errors.append(
                     _binding_error(
@@ -391,22 +387,54 @@ def _stored_bindings(
     return out
 
 
-def _run_name(name: str, env: EvalEnvironment, multi_env: bool) -> str:
-    run_name = f"{name} · {env.name}" if multi_env else name
-    return run_name[:_RUN_NAME_MAX]
+def _named_spec_bindings(
+    bindings: Mapping[str, Any], named: Mapping[str, Mapping[str, Any]]
+) -> Dict[str, Any]:
+    """Spec bindings as ``{connection_id, name, model}`` (sweep values too)."""
+
+    def with_name(binding: Any) -> Any:
+        if binding_kind(binding) == "connection":
+            return named.get(binding.get("connection_id"), binding)
+        return binding
+
+    return {
+        key: (
+            {"sweep": [with_name(b) for b in value["sweep"]]}
+            if is_sweep(value) and isinstance(value["sweep"], list)
+            else with_name(value)
+        )
+        for key, value in bindings.items()
+    }
+
+
+def _environment_context(db: Session, env: EvalEnvironment) -> Dict[str, Any]:
+    """The environment's schema, descriptor and confirmed slots (loaded once)."""
+    schema = (
+        db.get(EvalEnvironmentSchema, env.current_schema_id)
+        if env.current_schema_id
+        else None
+    )
+    if schema is None:
+        return {"schema": None}
+    return {
+        "schema": schema,
+        "descriptor": descriptor_for_schema(schema),
+        "slots": [
+            slot
+            for slot in list_model_slots(db, schema.id)
+            if slot.status == EvalModelSlotStatus.CONFIRMED
+        ],
+    }
 
 
 def _environment_plan(
     db: Session,
     env: EvalEnvironment,
     spec: Mapping[str, Any],
+    context: Mapping[str, Any],
 ) -> Tuple[Optional[EvalEnvironmentSchema], Dict[str, Any]]:
-    """Validate the document on one environment (placeholders; nothing decrypted)."""
-    schema = (
-        db.get(EvalEnvironmentSchema, env.current_schema_id)
-        if env.current_schema_id
-        else None
-    )
+    """Validate one combination on one environment (placeholders; nothing decrypted)."""
+    schema = context["schema"]
     if schema is None:
         error: Dict[str, Any] = {
             "section": "document",
@@ -418,12 +446,8 @@ def _environment_plan(
             "message": f'Environment "{env.name}" has no schema yet; refresh it first',
         }
         return None, {"errors": [error], "warnings": [], "body": None, "models": {}}
-    descriptor = descriptor_for_schema(schema)
-    slots = [
-        slot
-        for slot in list_model_slots(db, schema.id)
-        if slot.status == EvalModelSlotStatus.CONFIRMED
-    ]
+    descriptor = context["descriptor"]
+    slots = context["slots"]
     result = validate_config_document(
         spec,
         env_schema=schema.schema_json or {},
@@ -678,37 +702,76 @@ def create_experiment(
     base_source = _base_source(req)
     spec = {k: v for k, v in req.spec.items() if k != "base_source"}
 
-    errors = _document_errors(spec)
+    errors = [
+        {**e, "environment_id": None, "combo_index": None}
+        for e in _document_errors(spec)
+    ]
+    sweep = eval_sweeps.expand(
+        spec,
+        environment_count=len(envs),
+        max_jobs=_settings().eval_sweep_max_jobs,
+        connection_labels=eval_sweeps.connection_labels(db, project_id, spec),
+    )
+    errors += [{**e, "environment_id": None, "combo_index": None} for e in sweep.errors]
+    if not req.dry_run and any(e["rule"] == "sweep_cap" for e in sweep.errors):
+        # Over the cap: refuse before validating or creating anything.
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": sweep.errors[0]["message"],
+                "errors": errors,
+                **sweep.summary(),
+            },
+        )
+
     experiment_id = str(uuid4())
     multi_env = len(envs) > 1
+    contexts = {env.id: _environment_context(db, env) for env in envs}
     planned = []
-    for env in envs:
-        schema, plan = _environment_plan(db, env, spec)
-        for item in plan["errors"]:
-            errors.append({**item, "environment_id": env.id})
-        bindings = _stored_bindings(spec.get("slot_bindings"), plan["models"])
-        planned.append((env, schema, plan, bindings))
+    for combo in sweep.combos:
+        for env in envs:
+            schema, plan = _environment_plan(db, env, combo.document, contexts[env.id])
+            plan["errors"] = [
+                {**item, "environment_id": env.id, "combo_index": combo.index}
+                for item in plan["errors"]
+            ]
+            errors += plan["errors"]
+            bindings = _stored_bindings(
+                combo.document.get("slot_bindings"), plan["models"]
+            )
+            params: Dict[str, Any] = {"slot_bindings": bindings}
+            if sweep.swept:
+                params["sweep"] = combo.params
+            run_name = eval_sweeps.run_name(
+                req.name, combo.label, env.name if multi_env else None
+            )
+            planned.append(
+                (combo, env, schema, plan, strip_secret_refs(params), run_name)
+            )
 
-    preview = []
-    for env, schema, plan, bindings in planned:
-        preview.append(
-            {
-                "environment_id": env.id,
-                "environment_name": env.name,
-                "combo_index": 0,
-                "run_name": _run_name(req.name, env, multi_env),
-                "params": {"slot_bindings": bindings},
-                "errors": [e for e in errors if e.get("environment_id") == env.id],
-                "warnings": [{**w, "environment_id": env.id} for w in plan["warnings"]],
-                "request_body": plan["body"],
-            }
-        )
+    preview = [
+        {
+            "environment_id": env.id,
+            "environment_name": env.name,
+            "combo_index": combo.index,
+            "label": combo.label,
+            "run_name": run_name,
+            "params": params,
+            "errors": plan["errors"],
+            "warnings": [
+                {**w, "environment_id": env.id, "combo_index": combo.index}
+                for w in plan["warnings"]
+            ],
+            "request_body": strip_secret_refs(plan["body"]),
+        }
+        for combo, env, schema, plan, params, run_name in planned
+    ]
 
     if req.dry_run:
         return {
             "dry_run": True,
             "ok": not errors,
-            "job_count": len(envs),
+            **sweep.summary(),
             "priority": priority.value,
             "errors": errors,
             "jobs": preview,
@@ -725,17 +788,17 @@ def create_experiment(
 
     now = utc_now_naive()
     stored_spec = copy.deepcopy(spec)
-    primary_bindings = planned[0][3]
     if isinstance(stored_spec.get("slot_bindings"), Mapping):
         # Keep names next to connection ids, so "Model X no longer exists" can name it.
-        stored_spec["slot_bindings"] = {
-            key: (
-                primary_bindings.get(key)
-                if binding_kind(value) == "connection"
-                else value
-            )
-            for key, value in stored_spec["slot_bindings"].items()
+        named = {
+            b["connection_id"]: b
+            for *_, params, _name in planned
+            for b in params["slot_bindings"].values()
+            if isinstance(b, Mapping) and b.get("connection_id")
         }
+        stored_spec["slot_bindings"] = _named_spec_bindings(
+            stored_spec["slot_bindings"], named
+        )
     experiment = EvalExperiment(
         id=experiment_id,
         project_id=project_id,
@@ -753,35 +816,36 @@ def create_experiment(
             else None
         ),
         status=EvalExperimentStatus.QUEUED,
-        job_count=len(envs),
+        job_count=len(planned),
         created_at=now,
         updated_at=now,
     )
     db.add(experiment)
     db.flush()
-    for env, schema, plan, bindings in planned:
+    for combo, env, schema, plan, params, run_name in planned:
         assert schema is not None and plan["body"] is not None
         job_id = str(uuid4())
-        run_name = _run_name(req.name, env, multi_env)
         db.add(
             EvalExperimentJob(
                 id=job_id,
                 experiment_id=experiment_id,
                 environment_id=env.id,
-                combo_index=0,
+                combo_index=combo.index,
                 attempt=0,
-                params={"slot_bindings": bindings},
+                params=params,
                 request_body=_request_body(
                     plan["body"],
                     experiment_id=experiment_id,
                     job_id=job_id,
                     env=env,
-                    combo_index=0,
+                    combo_index=combo.index,
                     attempt=0,
                     user_id=principal.user.id,
                     priority=priority,
                     run_name=run_name,
-                    qym_config=_qym_config(spec, schema, base_source, bindings),
+                    qym_config=_qym_config(
+                        combo.document, schema, base_source, params["slot_bindings"]
+                    ),
                 ),
                 schema_id=schema.id,
                 launch_token_hash=launch_token_hash_for_job(job_id),
@@ -801,7 +865,8 @@ def create_experiment(
             "name": req.name,
             "environment_ids": [env.id for env in envs],
             "priority": priority.value,
-            "job_count": len(envs),
+            "combo_count": sweep.combo_count,
+            "job_count": len(planned),
         },
     )
     db.commit()
