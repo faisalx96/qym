@@ -42,7 +42,7 @@ def test_alembic_has_one_upgrade_head() -> None:
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["0062"]
+    assert heads == ["0063"]
 
 
 def test_subcategory_taxonomy_migration_preserves_rows_and_defaults_json(
@@ -743,10 +743,27 @@ def _eval_experiment_model_diffs(
             return not sqlite and columns == {"experiment_job_id"}
         return kind == "table"
 
-    context = MigrationContext.configure(
-        connection, opts={"compare_type": True, "include_object": include_object}
-    )
-    return compare_metadata(context, Base.metadata)
+    def diffs() -> list[Any]:
+        context = MigrationContext.configure(
+            connection, opts={"compare_type": True, "include_object": include_object}
+        )
+        return compare_metadata(context, Base.metadata)
+
+    job_columns = {
+        column["name"]
+        for column in sa.inspect(connection).get_columns("eval_experiment_jobs")
+    }
+    if "attempt" in job_columns:
+        return diffs()
+    # The models describe the job table after 0063: compare with it applied.
+    savepoint = connection.begin_nested()
+    try:
+        later = _load_migration("0063_eval_job_attempts.py")
+        later.op = Operations(MigrationContext.configure(connection))
+        later.upgrade()
+        return diffs()
+    finally:
+        savepoint.rollback()
 
 
 def test_eval_experiments_migration_matches_models(
@@ -1089,3 +1106,202 @@ def test_eval_presets_migration_postgres_upgrade_and_downgrade(
 
         migration.upgrade()
         assert PRESET_TABLES <= set(sa.inspect(connection).get_table_names())
+
+
+JOB_INDEXES = {
+    "ix_eval_experiment_jobs_status_next_attempt",
+    "ix_eval_experiment_jobs_environment_status",
+    "ix_eval_experiment_jobs_run_id",
+}
+
+
+def _eval_job_attempt_prerequisites(
+    engine: sa.engine.Engine, monkeypatch: pytest.MonkeyPatch
+) -> ModuleType:
+    """Build the pre-0063 schema (0060-0062) with a job linked to run ``r1``."""
+    previous = _eval_preset_prerequisites(engine, monkeypatch)
+    with engine.begin() as connection:
+        monkeypatch.setattr(
+            previous, "op", Operations(MigrationContext.configure(connection))
+        )
+        previous.upgrade()
+        _insert_experiment(connection, "x1")
+        _insert_job(connection, "j1", run_id="r1")
+        _insert_job(connection, "j2", combo_index=1)
+        connection.execute(
+            sa.text("UPDATE runs SET experiment_job_id = 'j1' WHERE id = 'r1'")
+        )
+    return _load_migration("0063_eval_job_attempts.py")
+
+
+def _assert_eval_job_attempt_constraints(connection: sa.Connection) -> None:
+    """Exercise 0063 backfill, the new unique key, checks, FKs and kept indexes."""
+
+    def scalar(sql: str) -> Any:
+        return connection.execute(sa.text(sql)).scalar_one()
+
+    def rejected(job_id: str, **values: Any) -> None:
+        with pytest.raises(sa.exc.IntegrityError):
+            with connection.begin_nested():
+                _insert_job(connection, job_id, **values)
+
+    # Existing rows are attempt 0 and keep their run links in both directions.
+    rows = connection.execute(
+        sa.text(
+            "SELECT id, attempt, retry_of_job_id, run_id FROM eval_experiment_jobs "
+            "ORDER BY id"
+        )
+    ).all()
+    assert [tuple(r) for r in rows] == [("j1", 0, None, "r1"), ("j2", 0, None, None)]
+    assert scalar("SELECT experiment_job_id FROM runs WHERE id = 'r1'") == "j1"
+    assert JOB_INDEXES | {"ix_eval_experiment_jobs_retry_of_job_id"} <= {
+        index["name"]
+        for index in sa.inspect(connection).get_indexes("eval_experiment_jobs")
+    }
+
+    # A retry is the same combination with the next attempt.
+    _insert_job(connection, "j1-retry", attempt=1, retry_of_job_id="j1")
+    rejected("j1-dup", attempt=1)
+    rejected("bad-attempt", attempt=-1, combo_index=5)
+    rejected("bad-retry-of", attempt=2, retry_of_job_id="missing")
+    # 0061's checks, FKs and the unique run link survive.
+    rejected("bad-status", combo_index=6, status="DONE")
+    rejected("bad-combo", combo_index=-1)
+    rejected("bad-env", combo_index=7, environment_id="missing")
+    rejected("bad-run", combo_index=8, run_id="r1")
+
+    # Deleting the retried attempt keeps the retry, unlinked.
+    connection.execute(sa.text("UPDATE runs SET experiment_job_id = NULL"))
+    connection.execute(sa.text("DELETE FROM eval_experiment_jobs WHERE id = 'j1'"))
+    assert (
+        scalar("SELECT retry_of_job_id FROM eval_experiment_jobs WHERE id = 'j1-retry'")
+        is None
+    )
+    # Restore the pre-test state for the downgrade.
+    connection.execute(
+        sa.text("DELETE FROM eval_experiment_jobs WHERE id = 'j1-retry'")
+    )
+    _insert_job(connection, "j1", run_id="r1")
+    connection.execute(
+        sa.text("UPDATE runs SET experiment_job_id = 'j1' WHERE id = 'r1'")
+    )
+
+
+def _assert_eval_job_attempts_downgraded(connection: sa.Connection) -> None:
+    columns = {
+        column["name"]
+        for column in sa.inspect(connection).get_columns("eval_experiment_jobs")
+    }
+    assert not {"attempt", "retry_of_job_id"} & columns
+    # Only the latest attempt of j2's combination is kept; run links survive.
+    ids = connection.execute(
+        sa.text("SELECT id FROM eval_experiment_jobs ORDER BY id")
+    ).scalars()
+    assert list(ids) == ["j1", "j2-retry"]
+    assert (
+        connection.execute(
+            sa.text("SELECT experiment_job_id FROM runs WHERE id = 'r1'")
+        ).scalar_one()
+        == "j1"
+    )
+    assert JOB_INDEXES <= {
+        index["name"]
+        for index in sa.inspect(connection).get_indexes("eval_experiment_jobs")
+    }
+    with pytest.raises(sa.exc.IntegrityError):
+        with connection.begin_nested():
+            _insert_job(connection, "j1-dup")
+
+
+def _run_eval_job_attempts_round_trip(
+    connection: sa.Connection, migration: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        migration, "op", Operations(MigrationContext.configure(connection))
+    )
+    migration.upgrade()
+    _assert_eval_job_attempt_constraints(connection)
+
+    _insert_job(connection, "j2-retry", combo_index=1, attempt=1, retry_of_job_id="j2")
+    migration.downgrade()
+    _assert_eval_job_attempts_downgraded(connection)
+
+    # Re-upgrading after a downgrade is clean.
+    migration.upgrade()
+    assert (
+        connection.execute(
+            sa.text("SELECT attempt FROM eval_experiment_jobs WHERE id = 'j2-retry'")
+        ).scalar_one()
+        == 0
+    )
+
+
+def test_eval_job_attempts_migration_sqlite_upgrade_and_downgrade(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = sa.create_engine("sqlite://")
+    migration = _eval_job_attempt_prerequisites(engine, monkeypatch)
+
+    with engine.begin() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+        _run_eval_job_attempts_round_trip(connection, migration, monkeypatch)
+        fks = connection.exec_driver_sql(
+            "PRAGMA foreign_key_list(eval_experiment_jobs)"
+        ).all()
+        retry_fk = [fk for fk in fks if fk[3] == "retry_of_job_id"]
+        assert [(fk[2], fk[6]) for fk in retry_fk] == [
+            ("eval_experiment_jobs", "SET NULL")
+        ]
+        run_fks = connection.exec_driver_sql("PRAGMA foreign_key_list(runs)").all()
+        assert [(fk[2], fk[3]) for fk in run_fks] == [
+            ("eval_experiment_jobs", "experiment_job_id")
+        ]
+
+    engine.dispose()
+
+
+def test_eval_job_attempts_migration_matches_models(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The ORM models and migrations 0060-0063 describe the same schema."""
+    engine = sa.create_engine("sqlite://")
+    migration = _eval_job_attempt_prerequisites(engine, monkeypatch)
+
+    with engine.begin() as connection:
+        monkeypatch.setattr(
+            migration, "op", Operations(MigrationContext.configure(connection))
+        )
+        migration.upgrade()
+        assert _eval_experiment_model_diffs(connection, PRESET_TABLES) == []
+    engine.dispose()
+
+
+def test_eval_job_attempts_migration_postgres_upgrade_and_downgrade(
+    monkeypatch: pytest.MonkeyPatch, postgres_engine: sa.engine.Engine
+) -> None:
+    migration = _eval_job_attempt_prerequisites(postgres_engine, monkeypatch)
+
+    with postgres_engine.begin() as connection:
+        _run_eval_job_attempts_round_trip(connection, migration, monkeypatch)
+        inspector = sa.inspect(connection)
+        uniques = {
+            u["name"]: u["column_names"]
+            for u in inspector.get_unique_constraints("eval_experiment_jobs")
+        }
+        assert uniques["uq_eval_experiment_job_attempt"] == [
+            "experiment_id",
+            "environment_id",
+            "combo_index",
+            "attempt",
+        ]
+        assert "uq_eval_experiment_job_combo" not in uniques
+        retry_fk = next(
+            fk
+            for fk in inspector.get_foreign_keys("eval_experiment_jobs")
+            if fk["name"] == "fk_eval_experiment_jobs_retry_of_job_id"
+        )
+        assert retry_fk["options"].get("ondelete") == "SET NULL"
+        assert "ck_eval_experiment_jobs_attempt" in {
+            c["name"] for c in inspector.get_check_constraints("eval_experiment_jobs")
+        }
+        assert _eval_experiment_model_diffs(connection, PRESET_TABLES) == []

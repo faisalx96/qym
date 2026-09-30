@@ -737,7 +737,10 @@ class EvalExperiment(Base):
 
 
 class EvalExperimentJob(Base):
-    """One sweep combination submitted to one environment.
+    """One attempt of one sweep combination submitted to one environment.
+
+    A retry is a new row with the same ``combo_index``, ``attempt + 1`` and
+    ``retry_of_job_id`` pointing at the attempt it replaces (migration 0063).
 
     The dispatcher claims rows by ``(status, next_attempt_at)`` under a lease
     (``lease_owner`` / ``lease_until``). ``run_id`` is set once ingest verifies
@@ -756,6 +759,20 @@ class EvalExperimentJob(Base):
         ForeignKey("eval_environments.id", ondelete="CASCADE"), nullable=False
     )
     combo_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    # 0 for the first submission of a combination; each retry adds a row with +1.
+    attempt: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    # The attempt this row retries (kept for history, left out of the aggregate).
+    retry_of_job_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey(
+            "eval_experiment_jobs.id",
+            ondelete="SET NULL",
+            name="fk_eval_experiment_jobs_retry_of_job_id",
+        ),
+        nullable=True,
+        index=True,
+    )
     # Swept values for this combo (redacted; model slots as connection names).
     params: Mapped[dict[str, Any]] = mapped_column(BIG_JSON, default=dict, nullable=False)
     # Materialized EvalJobCreate body with secret refs, never secret values.
@@ -808,13 +825,15 @@ class EvalExperimentJob(Base):
             "experiment_id",
             "environment_id",
             "combo_index",
-            name="uq_eval_experiment_job_combo",
+            "attempt",
+            name="uq_eval_experiment_job_attempt",
         ),
         Index("ix_eval_experiment_jobs_status_next_attempt", "status", "next_attempt_at"),
         Index("ix_eval_experiment_jobs_environment_status", "environment_id", "status"),
         # A run links to at most one job (the launch token is single-use).
         Index("ix_eval_experiment_jobs_run_id", "run_id", unique=True),
         CheckConstraint("combo_index >= 0", name="ck_eval_experiment_jobs_combo_index"),
+        CheckConstraint("attempt >= 0", name="ck_eval_experiment_jobs_attempt"),
         CheckConstraint(
             "submit_attempts >= 0", name="ck_eval_experiment_jobs_submit_attempts"
         ),
