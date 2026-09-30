@@ -414,6 +414,11 @@ def _keys(pointers: Sequence[str]) -> Dict[str, str]:
     return keys
 
 
+def label_keys(pointers: Sequence[str]) -> Dict[str, str]:
+    """The short label key of every swept pointer, as :func:`combo_label` uses them."""
+    return _keys(list(pointers))
+
+
 def _format_value(value: Any, connection_labels: Mapping[str, str]) -> str:
     if value is None:
         return "inherit"

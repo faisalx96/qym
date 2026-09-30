@@ -12,7 +12,9 @@
  *   POST /v1/projects/{pid}/experiments/{xid}/jobs/{jid}/retry
  * and the environments list (names for the Environments column).
  *
- * The full experiment matrix comes later (#35) and the launch form is #23.
+ * The detail view mounts the combination × environment matrix and the
+ * param-vs-metric chart from experiment_matrix.js (#35) above the job history;
+ * cancel/retry (single, all, and "Retry failed") stay in this file.
  *
  * Security: every node is built with el()/textContent, so no server string
  * (names, emails, errors, params) is ever parsed as HTML; there is no innerHTML.
@@ -540,6 +542,17 @@
     });
     cancelAll.addEventListener('click', () => cancelExperiment());
 
+    const retryable = current.filter((job) => RETRYABLE.indexOf(job.status) >= 0);
+    const retryAllBtn = el('button', {
+      className: 'qym-inline-action qym-inline-action--neutral',
+      type: 'button',
+      'data-exp-retry-all': '1',
+      disabled: !retryable.length || !allowed || state.busy.retryAll,
+      title: !allowed ? CONTROL_HINT : (retryable.length ? 'Queue a new attempt of every failed, cancelled or blocked job' : 'No jobs to retry'),
+      text: state.busy.retryAll ? 'Retrying…' : 'Retry failed (' + retryable.length + ')',
+    });
+    retryAllBtn.addEventListener('click', () => retryAll());
+
     const envNames = (x.environments || []).map((env) => env.name + (env.is_active ? '' : ' (disabled)'));
     const metaParts = [
       x.created_by_email ? 'Created by ' + x.created_by_email : null,
@@ -561,7 +574,7 @@
         el('p', { className: 'exp-description', text: x.description || 'Jobs launched by this experiment, one per combination and environment.' }),
         meta,
       ]),
-      el('div', { className: 'exp-header-actions' }, [badge(x.status, EXPERIMENT_TONES), cancelAll]),
+      el('div', { className: 'exp-header-actions' }, [badge(x.status, EXPERIMENT_TONES), retryAllBtn, cancelAll]),
     ]);
 
     const counts = x.job_counts || {};
@@ -584,7 +597,7 @@
     const card = el('section', { className: 'exp-card' }, [
       el('div', { className: 'exp-card-header' }, [
         el('div', null, [
-          el('h2', { className: 'exp-section-title', text: 'Jobs' }),
+          el('h2', { className: 'exp-section-title', text: 'Job history' }),
           el('p', { className: 'exp-section-description', text: live.length
             ? 'Refreshing automatically while jobs are queued or running.'
             : 'Every job has finished.' }),
@@ -603,7 +616,36 @@
       renderJobsTable(host, visible, allowed);
     }
 
-    root.replaceChildren(header, stats, card);
+    const matrix = jobs.length && window.QymExperimentMatrix ? window.QymExperimentMatrix.render(matrixContext(x, allowed)) : [];
+    root.replaceChildren.apply(root, [header, stats].concat(matrix, [card]));
+  }
+
+  function matrixContext(x, allowed) {
+    return {
+      detail: x,
+      projectId: state.project.id,
+      badge: (status) => badge(status, JOB_TONES),
+      jobActions: (job) => jobActions(job, allowed),
+      runUrl: runUrl,
+      appRoot: appRoot,
+      navigate: navigate,
+      postJson: postJson,
+      toast: toast,
+      errorMessage: errorMessage,
+      isTerminal: isTerminal,
+      isActive: () => state.active,
+      rerender: renderDetail,
+      showAttempts: showAttempts,
+    };
+  }
+
+  function showAttempts(job) {
+    state.showSuperseded = true;
+    renderDetail();
+    const row = root.querySelector('[data-job-id="' + (window.CSS && CSS.escape ? CSS.escape(job.id) : job.id) + '"]');
+    const host = root.querySelector('[data-exp-jobs]');
+    const target = row || host;
+    if (target && target.scrollIntoView) target.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 
   const JOB_COLUMNS = [
@@ -805,6 +847,53 @@
     if (!res.ok) { handleDenied(res, 'Failed to retry the job'); return; }
     toast('Queued attempt ' + ((job.attempt || 1) + 1) + ' of job #' + job.combo_index, 'success');
     if (res.data.experiment) applyDetail(res.data.experiment);
+  }
+
+  async function retryAll() {
+    const x = state.detail;
+    if (!x || state.busy.retryAll) return;
+    const jobs = (x.jobs || []).filter((job) => !job.superseded && RETRYABLE.indexOf(job.status) >= 0);
+    if (!jobs.length) return;
+    const ok = await confirmDialog({
+      title: 'Retry ' + jobs.length + ' job' + (jobs.length === 1 ? '' : 's') + '?',
+      description: ['Every failed, timed out, cancelled or blocked job gets a new attempt; earlier attempts stay in the job history.'],
+      confirmLabel: 'Retry jobs',
+      cancelLabel: 'Don’t retry',
+    });
+    if (!ok || !state.active) return;
+    state.busy.retryAll = true;
+    renderDetail();
+    let acknowledged = false;
+    let queued = 0;
+    let failure = null;
+    let latest = null;
+    for (const job of jobs) {
+      const path = experimentsPath('/' + encodeURIComponent(x.id) + '/jobs/' + encodeURIComponent(job.id) + '/retry');
+      let res = await postJson(path, acknowledged ? { acknowledge_preemption: true } : {});
+      const detail = res.data && res.data.detail;
+      if (!res.ok && res.status === 422 && detail && detail.code === PREEMPTION_ACK_REQUIRED && !acknowledged) {
+        // Same HIGH acknowledgement as a single retry (plan §5.3), asked once for the batch.
+        acknowledged = state.active && await confirmDialog({
+          title: 'Retry at HIGH priority?',
+          description: [errorMessage(res.data, '')],
+          confirmLabel: 'Retry at HIGH',
+          cancelLabel: 'Don’t retry',
+          confirmClass: 'shell-btn-danger',
+        });
+        if (!acknowledged) break;
+        res = await postJson(path, { acknowledge_preemption: true });
+      }
+      if (!state.active) return;
+      if (!res.ok) { failure = res; break; }
+      queued += 1;
+      if (res.data.experiment) latest = res.data.experiment;
+    }
+    state.busy.retryAll = false;
+    if (!state.active) return;
+    if (queued) toast('Queued ' + queued + ' new attempt' + (queued === 1 ? '' : 's'), 'success');
+    if (latest) applyDetail(latest);
+    if (failure) handleDenied(failure, 'Failed to retry every job');
+    else if (!latest) renderDetail();
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────

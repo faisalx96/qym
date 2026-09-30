@@ -57,6 +57,32 @@
     .exp-row--superseded td { color: var(--text-muted); }
     .exp-actions-cell { text-align: right; }
 
+    .exp-mx-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-sm); }
+    .exp-mx-table.qdt-table { table-layout: auto; }
+    .exp-mx-table.qdt-table tbody tr { cursor: default; }
+    .exp-mx-table.qdt-table tbody tr:hover td { background: transparent; }
+    .exp-mx-table.qdt-table tbody td { vertical-align: top; white-space: normal; padding: var(--space-sm) var(--space-md); }
+    .exp-mx-table .exp-mx-combo-head { width: 220px; }
+    .exp-mx-combo { max-width: 260px; }
+    .exp-mx-combo-label { font-family: var(--font-mono); color: var(--text-primary); overflow-wrap: anywhere; }
+    .exp-mx-cell { min-width: 220px; }
+    .exp-mx-cell-top { display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap; }
+    .exp-mx-check { margin: 0; accent-color: var(--accent-primary); }
+    .exp-mx-attempts { padding: 0; border: none; background: none; cursor: pointer; font-family: var(--font-sans); font-size: var(--font-sm); color: var(--info); }
+    .exp-mx-attempts:hover, .exp-mx-attempts:focus-visible { color: var(--accent-primary); }
+    .exp-mx-metric { display: flex; align-items: baseline; gap: var(--space-xs); margin-top: var(--space-xs); min-width: 0; }
+    .exp-mx-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--font-md); font-weight: 600; color: var(--text-primary); }
+    .exp-mx-metric-name { font-size: var(--font-sm); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .exp-mx-run { display: block; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+    .exp-mx-actions.exp-row-actions { justify-content: flex-start; flex-wrap: wrap; margin-top: var(--space-xs); }
+    .exp-mx-chart { padding: var(--space-md) var(--space-lg); }
+    .exp-mx-svg { display: block; width: 100%; max-width: 880px; height: auto; }
+    .exp-mx-svg .exp-mx-axis { font-family: var(--font-mono); font-size: var(--font-sm); fill: var(--text-muted); }
+    .exp-mx-svg .exp-mx-axis-title { font-family: var(--font-sans); }
+    .exp-mx-legend { display: flex; flex-wrap: wrap; gap: var(--space-xs) var(--space-md); margin-top: var(--space-sm); font-size: var(--font-sm); color: var(--text-secondary); }
+    .exp-mx-legend-item { display: inline-flex; align-items: center; gap: var(--space-xs); }
+    .exp-mx-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+
     .exp-stats { margin-bottom: var(--space-lg); }
     .exp-empty { padding: var(--space-xl); text-align: center; }
     .exp-empty-title { margin: 0 0 var(--space-sm); font-size: var(--font-xl); font-weight: 650; color: var(--text-primary); }
@@ -72,6 +98,7 @@
   <main class="page exp-page" id="exp-root" aria-live="polite">
     <div class="exp-loading">Loading experiments…</div>
   </main>
-  <script src="/static/experiments.js?v=experiments-20260930-2"></script>
+  <script src="/static/experiment_matrix.js?v=experiments-20260930-3"></script>
+  <script src="/static/experiments.js?v=experiments-20260930-3"></script>
 </body>
 </html>
