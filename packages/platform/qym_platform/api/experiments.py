@@ -1,6 +1,8 @@
 """Evaluation Service experiments: launch, list, detail, cancel, retry and clone.
 
 Routes live under ``/v1/projects/{project_id}/experiments`` (plan §14).
+``GET .../experiments/evaluator-config`` serves the static ``EvaluatorRequestConfig``
+descriptor for the launch form's Advanced panel (§8.4, D5; ``eval_config``).
 
 - Members may create (``dry_run`` previews without persisting), list, read and clone.
   ``HIGH`` priority needs a project manager and ``acknowledge_preemption: true``
@@ -84,6 +86,7 @@ from qym_platform.services import eval_sweeps
 from qym_platform.services.eval_bindings import resolve_slot_bindings
 from qym_platform.services.eval_config import (
     binding_kind,
+    evaluator_inputs_panel,
     is_sweep,
     validate_config_document,
 )
@@ -1120,6 +1123,18 @@ def create_experiment(
     db.commit()
     db.refresh(experiment)
     return _experiment_detail(db, experiment)
+
+
+# Registered before ``/{experiment_id}`` so the static path is not captured by it.
+@router.get(_PREFIX + "/evaluator-config")
+def get_evaluator_config_panel(
+    project_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Static ``EvaluatorRequestConfig`` descriptor for the Advanced panel (§8.4, D5)."""
+    _require_project_access(db, principal, project_id)
+    return evaluator_inputs_panel()
 
 
 @router.get(_PREFIX)

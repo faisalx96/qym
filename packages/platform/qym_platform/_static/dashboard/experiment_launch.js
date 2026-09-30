@@ -27,6 +27,12 @@
  * the [data-xl-advanced] host (#24 Advanced panel) and specValue() (#34 sweeps
  * write {"sweep": [...]} values into the same spec).
  *
+ * Advanced panel (#24): experiment_launch_advanced.js (window.QymLaunchAdvanced)
+ * mounts into [data-xl-advanced] through the "Advanced panel hook" below. It
+ * reads and writes this form's state (st) through advancedApi(), so there is one
+ * source of truth: role overrides live in st.values, which the Advanced role
+ * table edits (the Settings form shows a summary for role tables instead).
+ *
  * Security: nodes are built with el()/textContent, so no server or user string
  * is parsed as HTML. The only innerHTML is QymTemporaryModel.renderChip(), which
  * escapes its values. Temporary-model keys live only in this closure
@@ -41,6 +47,7 @@
     'static/eval_environments.css?v=eval-environments-20260929-1',
     'static/eval_temporary_model.css?v=eval-temporary-model-20260930-1',
     'static/experiment_launch.css?v=experiment-launch-20260930-1',
+    'static/experiment_launch_advanced.css?v=experiment-launch-advanced-20260930-1',
   ];
   const PREVIEW_DELAY_MS = 600;
   const PRIORITIES = ['LOW', 'NORMAL', 'HIGH'];
@@ -219,6 +226,7 @@
     };
 
     const hosts = {};
+    let advanced = null; // #24 Advanced panel (experiment_launch_advanced.js)
 
     function projectPath(suffix) {
       return 'v1/projects/' + encodeURIComponent(project.id) + suffix;
@@ -493,7 +501,9 @@
       });
       const values = {};
       Object.keys(st.values).forEach((p) => { values[p] = specValue(st.values[p]); });
-      return { evaluator, slot_bindings: bindings, env_overrides: buildOverrides(values) };
+      const spec = { evaluator, slot_bindings: bindings, env_overrides: buildOverrides(values) };
+      if (advanced) advanced.decorateSpec(spec);
+      return spec;
     }
 
     function buildRequest(dryRun) {
@@ -530,12 +540,14 @@
       if (!datasetValue()) errors.push({ pointer: '/evaluator/dataset', message: 'Choose a dataset or enter a custom dataset string.' });
       Object.keys(st.invalid).forEach((p) => errors.push({ pointer: '/env_overrides' + p, message: st.invalid[p].message }));
       if (!st.name.trim()) errors.push({ pointer: '#name', message: 'Name the experiment.' });
+      if (advanced) advanced.localErrors().forEach((e) => errors.push(e));
       return errors;
     }
 
     // ── Preview (debounced dry run) ─────────────────────────────────────
     function schedulePreview() {
       st.launchErrors = null;
+      if (advanced) advanced.onSpecChange();
       if (st.timer) clearTimeout(st.timer);
       st.timer = null;
       if (!st.active) return;
@@ -602,6 +614,7 @@
     }
 
     function focusError(error) {
+      if (advanced) advanced.reveal(error.pointer);
       let target = findTarget(error.pointer);
       if (target && target.closest('[hidden]') && (st.search || st.changedOnly)) {
         st.search = '';
@@ -1059,6 +1072,8 @@
     }
 
     function renderRoleTable(model, table, bound) {
+      // With the Advanced panel, roles are edited in its Role overrides tab only.
+      if (advanced) return advanced.roleTableSummary(model, table);
       const cols = roleColumns(model, table);
       const head = el('tr', null, [el('th', { text: table.row_param || 'role' })].concat(cols.map((c) => el('th', { className: 'xl-mono', text: c.label }))));
       const rows = (table.rows || []).map((row) => {
@@ -1496,6 +1511,7 @@
         el('div', { className: 'xl-preview-body', 'data-xl-body': '1' }),
       ]);
       hosts.preview = preview;
+      mountAdvanced(main.querySelector('[data-xl-advanced]'));
       root.replaceChildren(el('div', { className: 'xl-page', 'data-xl-launch-form': '1' }, [
         el('a', {
           className: 'xl-back', href: opts.listUrl || '#', text: '← Experiments',
@@ -1515,7 +1531,32 @@
       renderPreview();
     }
 
+    // ── Advanced panel hook (#24) ───────────────────────────────────────
+    // The only coupling with experiment_launch_advanced.js: what it may read and
+    // call. Keys stay in st.secrets; the panel only ever sees {"$secret": ref}.
+    function advancedApi() {
+      return {
+        el, tag, request, projectPath, has, escSeg, splitPointer, childPointer,
+        state: st,
+        union, unionSlots, boundPointers, roleColumns, leafControl, onLeafInput, markChanged,
+        buildSpec, bindingSummary, clearBinding, loadVersions,
+        rerender: () => { renderDataset(); renderModels(); renderSettings(); renderRun(); renderPreview(); },
+        renderDataset, renderPreview, schedulePreview, updateChangedCount,
+      };
+    }
+
+    function mountAdvanced(host) {
+      const api = window.QymLaunchAdvanced;
+      if (advanced) advanced.teardown(); // render() again replaces the host
+      advanced = null;
+      if (!host || !api || !api.mount) return;
+      advanced = api.mount(host, advancedApi());
+      host.hidden = !advanced;
+    }
+
     function teardown() {
+      if (advanced) advanced.teardown();
+      advanced = null;
       st.active = false;
       if (st.timer) clearTimeout(st.timer);
       st.timer = null;

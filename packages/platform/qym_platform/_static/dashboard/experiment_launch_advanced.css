@@ -1,0 +1,45 @@
+/*
+ * Advanced panel of the launch form (plan §8.4, issue #24):
+ * experiment_launch_advanced.js. Page-local recipes use the xa- prefix and
+ * reuse the launch form's xl- recipes (experiment_launch.css). Tabs, controls,
+ * inline actions and tags come from ui_components.css and are never restyled
+ * here. Tokens only (docs/DESIGN_LANGUAGE.md).
+ */
+
+.xa-host { display: block; }
+.xa-panel > .xa-summary { display: flex; align-items: flex-start; gap: var(--space-sm); padding: var(--space-md) var(--space-lg); cursor: pointer; list-style: none; }
+.xa-panel > .xa-summary::-webkit-details-marker { display: none; }
+.xa-panel > .xa-summary::before { content: "▶"; margin-top: 3px; color: var(--text-dim); font-size: var(--font-sm); transition: transform 0.15s ease; }
+.xa-panel[open] > .xa-summary::before { transform: rotate(90deg); }
+.xa-panel[open] > .xa-summary { border-bottom: 1px solid var(--border-subtle); }
+
+.xa-tab-count { margin-left: var(--space-xs); font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 400; color: var(--text-muted); }
+.xa-tab-panel { display: grid; gap: var(--space-md); min-width: 0; }
+.xa-tab-panel[hidden] { display: none; }
+
+/* Role overrides */
+.xa-role-block { min-width: 0; }
+.xa-role-block[hidden] { display: none; }
+.xa-role-wrap { max-height: 560px; }
+
+/* Run metadata */
+.xa-meta-list { display: grid; gap: var(--space-xs); }
+.xa-meta-row { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(160px, 2fr) auto; align-items: center; gap: var(--space-xs) var(--space-sm); }
+.xa-meta-error { grid-column: 1 / -1; }
+.xa-meta-error:empty { display: none; }
+.xa-meta-row--error { box-shadow: inset 2px 0 0 var(--error); padding-left: var(--space-xs); }
+
+/* Platform-owned fields */
+.xa-owned { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-xs) var(--space-md); margin: 0; font-size: var(--font-base); }
+.xa-owned dt { font-size: var(--font-sm); color: var(--text-muted); }
+.xa-owned dd { margin: 0; color: var(--text-secondary); overflow-wrap: anywhere; }
+.xa-owned-value { color: var(--text-primary); }
+
+/* Raw JSON */
+.xa-json-editor { min-height: 160px; max-height: 560px; overflow: auto; border: 1px solid var(--border-default); border-radius: var(--control-radius); background: var(--bg-void); }
+.xa-json-editor:focus-within { border-color: var(--accent-primary); }
+.xa-json-editor .cm-editor { min-height: 160px; }
+.xa-json-text { min-height: 320px; border: 0; }
+.xa-json-status { display: grid; gap: var(--space-xs); min-width: 0; }
+.xa-json-errors { display: grid; gap: 2px; margin: 0; padding: 0 0 0 var(--space-md); font-size: var(--font-sm); color: var(--text-secondary); }
+.xa-json-pointer { color: var(--text-muted); overflow-wrap: anywhere; }
