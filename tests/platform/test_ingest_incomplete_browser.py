@@ -107,23 +107,36 @@ def test_runs_list_tags_flagged_runs(browser):
 
 def test_item_whose_completion_was_rejected_says_its_output_never_arrived(browser):
     """Its scores arrived, so it reads like a model that answered nothing
-    unless the card says why the output and duration are missing."""
+    unless the card says why the output and duration are missing. In a
+    completed run the item is not received (its row state): no verdict, and
+    left out of Execution success and the means."""
     fixture = ViewFixture(browser, "run", compact=False, count=6)
     run = fixture.data["run-1"]
     run["run"]["metadata"] = {
         "ingest_incomplete": {"expected_items": 6, "received_items": 6, "rejected_events": 1}
     }
     rejected = run["snapshot"]["rows"][2]
-    rejected.update(output="", output_full="", latency_ms=0, output_received=False)
+    rejected.update(
+        status="not_received",
+        output="",
+        output_full="",
+        latency_ms=0,
+        output_received=False,
+    )
     page = fixture.page
     try:
         fixture.goto()
         cards = page.locator("#items-grid .item-card")
+        tag = cards.nth(2).locator(".qym-tag")
+        assert tag.inner_text() == "Not received"
+        assert "qym-tag--warning" in tag.get_attribute("class")
         cards.nth(2).locator(".item-header-expand").click()
         note = cards.nth(2).locator(".output-missing-note")
         note.wait_for()
-        assert note.inner_text().startswith(
-            "Output not received: the platform rejected this item's completion event"
+        assert note.inner_text() == (
+            "Output not received: the platform rejected this item's outcome event"
+            " (see the notice above). The item is left out of Execution success"
+            " and of the means."
         )
         # Items whose completion arrived carry no note.
         cards.nth(1).locator(".item-header-expand").click()

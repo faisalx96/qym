@@ -10,7 +10,7 @@
   <script src="/static/qym_safe.js?v=p0-20260930"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
   <script src="/static/shell.js?v=p0-20260930-2"></script>
-  <script src="/static/metrics.js?v=p0-20260930-2"></script>
+  <script src="/static/metrics.js?v=p0-20260930-3"></script>
   <script src="/static/run_details.js?v=p0-20260930"></script>
   <script src="/static/trace_viewer.js?v=p0-20260930"></script>
   <script src="/static/step_latency.js?v=p0-20260930"></script>
@@ -859,6 +859,13 @@
       color: var(--accent-primary);
       background: rgba(0, 212, 170, 0.12);
     }
+    .overview-summary-pill.not-received .overview-summary-icon {
+      color: var(--warning);
+      background: rgba(245, 158, 11, 0.12);
+    }
+    .overview-summary-strip.qym-stat-strip.has-not-received {
+      grid-template-columns: repeat(4, max-content);
+    }
     .overview-summary-strip > .overview-summary-pill .overview-summary-value {
       margin-top: 0;
       font-family: var(--font-mono);
@@ -957,7 +964,8 @@
       }
     }
     @media (max-width: 520px) {
-      .overview-summary-strip.qym-stat-strip {
+      .overview-summary-strip.qym-stat-strip,
+      .overview-summary-strip.qym-stat-strip.has-not-received {
         grid-template-columns: minmax(0, 1fr);
         width: 100%;
       }
@@ -7041,16 +7049,21 @@
           : null;
       }
 
-      // A finished run flagged incomplete: an item whose completion event
-      // never arrived has no output or duration. Say so, instead of looking
-      // like a model that returned an empty answer.
+      // An item whose outcome event (item_completed or item_failed) never
+      // arrived has no output or duration. Say so, instead of looking like a
+      // model that returned an empty answer. In a completed run the item is
+      // not received (row status "not_received"): it is left out of
+      // Execution success and of the means, as on the server.
       function outputMissingNote(row) {
         const flag = state.run?.metadata?.ingest_incomplete;
-        if (!row || row.output_received !== false || state.viewPass || !flag || typeof flag !== 'object') return '';
-        const rejected = (parseInt(flag.rejected_events, 10) || 0) > 0;
-        const text = rejected
-          ? 'Output not received: the platform rejected this item\'s completion event (see the notice above). Its scores arrived separately.'
-          : 'Output not received: this item\'s completion event never reached the platform.';
+        const flagged = !!flag && typeof flag === 'object';
+        const notReceived = window.QymMetrics.isNotReceivedRow(row);
+        if (!row || row.output_received !== false || state.viewPass || (!flagged && !notReceived)) return '';
+        const rejected = flagged && (parseInt(flag.rejected_events, 10) || 0) > 0;
+        const text = (rejected
+          ? 'Output not received: the platform rejected this item\'s outcome event (see the notice above).'
+          : 'Output not received: this item\'s outcome event never reached the platform.')
+          + (notReceived ? ' The item is left out of Execution success and of the means.' : '');
         return '<div class="output-missing-note" role="note">' + escapeHtml(text) + '</div>';
       }
 
@@ -8998,7 +9011,8 @@
           ? filteredItemsOverride.map(item => item.row).filter(Boolean)
           : (state.snapshot.rows || []);
         const total = rows.length;
-        const completed = rows.filter(r => r.status === 'completed' || r.__has_output || r.output != null || r.output_full != null || r.error).length;
+        const completed = rows.filter(r => !window.QymMetrics.isNotReceivedRow(r)
+          && (r.status === 'completed' || r.__has_output || r.output != null || r.output_full != null || r.error)).length;
         const failed = rows.reduce((sum, row) => {
           const rowError = window.QymMetrics.isErrorRow(row) ? 1 : 0;
           if (!isRepeatAggregateView()) return sum + rowError;
@@ -9006,17 +9020,24 @@
           return sum + (Number.isFinite(executionErrors) ? Math.max(0, executionErrors) : rowError);
         }, 0);
         const latencies = rows.filter(r => Number.isFinite(r.latency_ms) && r.latency_ms >= 0 && r.status === 'completed').map(r => r.latency_ms);
-        const summaryItem = (kind, label, valueHtml, iconHtml) =>
-          '<div class="overview-summary-pill qym-stat-strip__item ' + kind + '">' +
+        // A completed run's items whose outcome never arrived: neither
+        // completed nor errors (the server's not_received_count).
+        const notReceived = rows.filter(r => window.QymMetrics.isNotReceivedRow(r)).length;
+        const summaryItem = (kind, label, valueHtml, iconHtml, title) =>
+          '<div class="overview-summary-pill qym-stat-strip__item ' + kind + '"' + (title ? ' title="' + escapeAttr(title) + '"' : '') + '>' +
             '<span class="overview-summary-icon">' + iconHtml + '</span>' +
             '<span class="overview-summary-label qym-stat-strip__label">' + label + '</span>' +
             '<span class="overview-summary-value qym-stat-strip__value">' + valueHtml + '</span>' +
           '</div>';
         const runSummaryHtml =
-          '<div class="overview-summary-strip qym-stat-strip">' +
+          '<div class="overview-summary-strip qym-stat-strip' + (notReceived ? ' has-not-received' : '') + '">' +
             summaryItem('total', 'Items', String(total), '<svg viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h10"/></svg>') +
             summaryItem('completed', 'Completed', String(completed), '<svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>') +
             summaryItem('errors', 'Errors', String(failed), '<svg viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>') +
+            (notReceived
+              ? summaryItem('not-received', 'Not received', String(notReceived), '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6"/><path d="M12 17h.01"/></svg>',
+                  'Items whose outcome never reached the platform. They are left out of Execution success and of the means.')
+              : '') +
           '</div>';
 
         const analysisCharts = buildDeepAnalysisCharts(rows);
@@ -9081,7 +9102,7 @@
             }
             const clean = window.QymMetrics.scoreWithoutMetricErrors(row, mIdx, metric);
             if (clean.score !== null) { cleanSum += clean.score; cleanCnt++; }
-            if (score !== null && isError && !window.QymMetrics.isTaskErrorRow(row)) {
+            if (score !== null && isError && !window.QymMetrics.isItemTaskError(row)) {
               errCnt += perPass ? clean.errors : 1;
               errorRows++;
               errBuckets[Math.min(10, Math.floor(Math.round(score * 100) / 10))]++;
@@ -9091,7 +9112,7 @@
             const taskErrors = score === null ? 0 : window.QymMetrics.rowMetricErrorCounts(row, metric).task;
             if (taskErrors > 0) {
               taskErrCnt += perPass ? taskErrors : 1;
-              if (window.QymMetrics.isTaskErrorRow(row)) taskErrorRows++;
+              if (window.QymMetrics.isItemTaskError(row)) taskErrorRows++;
               taskBuckets[Math.min(10, Math.floor(Math.round(score * 100) / 10))]++;
             }
           }
@@ -9192,7 +9213,7 @@
               if (score === null && !isError) continue;
               if (isError) {
                 errorCount++;
-                if (window.QymMetrics.isTaskErrorRow(row)) taskErrorCount++;
+                if (window.QymMetrics.isItemTaskError(row)) taskErrorCount++;
                 continue;
               }
               cleanTrue += score;
@@ -10658,7 +10679,7 @@
             const executionError = attempt.error || attempt.output || '';
             addErrorBucket(buckets, 'Task error', normalizeErrorLabel(executionError, 'Task failed'), 1, itemId);
           }
-        } else if (window.QymMetrics.isTaskErrorRow(row)) {
+        } else if (window.QymMetrics.isItemTaskError(row)) {
           const executionError = row.error || row.__execution_error || row.output_full || row.output || '';
           addErrorBucket(buckets, 'Task error', normalizeErrorLabel(executionError, 'Task failed'), 1, itemId);
         }
@@ -11805,7 +11826,7 @@
           // Save cannot turn the error into a real (for lower-is-better, the
           // best) score.
           const errorPlaceholder = !modified && (hasMetricExecutionError || leftOutError
-            || !!(row && window.QymMetrics.isTaskErrorRow(row)));
+            || !!(row && window.QymMetrics.isItemTaskError(row)));
           const inlineEdit = '<span class="metric-edit-controls chip-edit qym-metric-edit-controls hidden">'
             + '<input class="metric-edit-input" type="text" value="' + escapeAttr(errorPlaceholder ? '' : rawValue) + '"' + (errorPlaceholder ? ' placeholder="Enter a score"' : '') + ' data-row-index="' + escapeAttr(String(rowIndex ?? 0)) + '" data-metric="' + escapeAttr(name) + '" aria-label="New score" />'
             + '<button class="metric-edit-save qym-metric-edit-action" data-row-index="' + escapeAttr(String(rowIndex ?? 0)) + '" data-metric="' + escapeAttr(name) + '" title="Save" aria-label="Save ' + escapeAttr(name) + '">' + SAVE_ICON + '</button>'
@@ -11953,11 +11974,16 @@
             : '';
           // The verdict belongs to the expanded execution, not the aggregate row.
           const pfMType = metric ? (state.metricTypes[metric] || 'score') : 'score';
-          const hasTaskError = window.QymMetrics.isTaskErrorRow(row);
+          // A repeat item's task errors are its failed passes, whichever
+          // pass arrived last (metrics.js hasTaskError).
+          const hasTaskError = window.QymMetrics.hasTaskError(row);
           const taskErrorAttempts = isRepeatItem
             ? passAttempts.filter(Boolean).filter(att => window.QymMetrics.isTaskErrorRow(att))
             : [];
           const hasAnyTaskError = hasTaskError || taskErrorAttempts.length > 0;
+          // A completed run's item whose outcome never arrived has no
+          // verdict: it is neither a pass nor an error (run_means).
+          const notReceived = window.QymMetrics.isNotReceivedRow(row);
           const selectedMetricHasError = metric
             ? window.QymMetrics.hasMetricError(row, metric)
             : false;
@@ -11965,7 +11991,9 @@
           // the item shows as an error, never as a (best) score.
           const scorerErrorLeftOut = selectedMetricHasError && errorsLeftOutFor(metric);
           let pfClass = '';
-          if (hasAnyTaskError || scorerErrorLeftOut) {
+          if (notReceived) {
+            pfClass = 'not-received';
+          } else if (hasAnyTaskError || scorerErrorLeftOut) {
             pfClass = 'error';
           } else if (!selectedMetricHasError && metric && mIdx >= 0 && pfMType !== 'numeric') {
             // No declared direction: no Pass/Fail tag (C008).
@@ -11974,8 +12002,10 @@
               pfClass = pfPassed ? 'pass' : 'fail';
             }
           }
-          const statusLabel = pfClass === 'pass' ? 'Pass' : 'Fail';
-          const statusTitle = hasAnyTaskError
+          const statusLabel = pfClass === 'not-received' ? 'Not received' : pfClass === 'pass' ? 'Pass' : 'Fail';
+          const statusTitle = notReceived
+            ? 'The platform did not receive this item\'s outcome: it is left out of Execution success and of the means'
+            : hasAnyTaskError
             ? (taskErrorAttempts.length
                 ? 'Task execution failed in ' + taskErrorAttempts.length + ' pass' + (taskErrorAttempts.length === 1 ? '' : 'es')
                 : 'Task execution failed')
@@ -11984,6 +12014,8 @@
               : statusLabel + ' on ' + metric;
           const statusTagClass = pfClass === 'pass'
             ? 'qym-tag--success'
+            : pfClass === 'not-received'
+            ? 'qym-tag--warning'
             : 'qym-tag--danger';
           const statusIconOnlyClass = pfClass === 'error' ? ' item-error-indicator' : '';
           const statusContent = pfClass === 'error' ? FAILURE_ICON : statusLabel;
@@ -12117,7 +12149,8 @@
             }
             if (v === null && !hasMetricExecutionError) return '<span class="item-agg-pill qym-item-metric-cell qym-item-metric-cell--empty" data-qym-metric-column="' + i + '" aria-hidden="true"></span>';
             const mType = state.metricTypes[name] || 'score';
-            const cls = v === null ? '' : metricColorClassFor(name, v, mType);
+            // An item never received has no verdict: its scores stay neutral.
+            const cls = v === null || notReceived ? '' : metricColorClassFor(name, v, mType);
             const isReducedBoolean = mType === 'boolean'
               && Number(state.run?.samples || 1) > 1
               && !state.viewPass;

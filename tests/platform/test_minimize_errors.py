@@ -391,7 +391,8 @@ def _repeat(db, run_id="rr"):
 
     a: pass 2 scorer error. b: pass 2 task error (zero-filled, label
     "error"). c: clean. d: pass 3 task error, which is also the item's
-    latest outcome. Stored item values follow the old rule (errors as 0).
+    latest outcome (its RunItem error); it is judged per pass all the same,
+    like b. Stored item values follow the old rule (errors as 0).
     """
     run(
         db,
@@ -461,10 +462,13 @@ def _repeat(db, run_id="rr"):
     db.commit()
 
 
-# h: a (0.2 + 0.4) / 2, b (0.1 + 0.3) / 2, c 0.5; d (task error) left out.
-# q: a 2/3, b 0.5, c 0.5, d task error 0. Without scorer errors a is 1.0.
-REPEAT = {"h": 1.0 / 3, "q": (2 / 3 + 0.5 + 0.5) / 4}
-REPEAT_SCORED = {"q": 0.5}
+# Task errors are judged per pass, whichever pass failed last (d's pass 3 is
+# its RunItem error, and counts like b's pass 2).
+# h: a (0.2 + 0.4) / 2, b (0.1 + 0.3) / 2, c 0.5, d (0.2 + 0.2) / 2.
+# q: a 2/3, b 0.5, c 0.5, d 2/3 (its failed pass as 0). Without scorer errors
+# a is 1.0.
+REPEAT = {"h": 1.2 / 4, "q": (2 / 3 + 0.5 + 0.5 + 2 / 3) / 4}
+REPEAT_SCORED = {"q": (1.0 + 0.5 + 0.5 + 2 / 3) / 4}
 # Per pass (every pass row): h leaves errored passes out, q counts them as 0.
 PASS_MEANS = {
     1: {"h": 0.25, "q": 0.875},
@@ -688,7 +692,7 @@ def test_summary_shape_bump_refreshes_means_without_reading_source_rows(database
     finally:
         event.remove(database, "before_cursor_execute", capture)
     published = projected(database)
-    assert published["summary_shape"] == summaries_service.SUMMARY_SHAPE == 4
+    assert published["summary_shape"] == summaries_service.SUMMARY_SHAPE == 5
     assert published["metric_averages"] == _approx(CLASSIC)
     assert not any(
         table in sql
@@ -911,7 +915,7 @@ def test_editing_a_task_failed_pass_counts_the_reviewer_score(database):
         )
         assert stored.score_numeric == pytest.approx(0.2)
     # b is now (0.1 + 0.2 + 0.3) / 3.
-    expected = dict(REPEAT, h=(0.3 + 0.2 + 0.5) / 3)
+    expected = dict(REPEAT, h=(0.3 + 0.2 + 0.5 + 0.2) / 4)
     drain(database)
     assert projected(database, "rr")["metric_averages"] == _approx(expected)
     assert legacy(database, "rr")["metric_averages"] == _approx(expected)

@@ -332,7 +332,8 @@ def test_runs_list_run_page_and_compare_show_the_same_means(browser):
 
         with _runs_api(seed) as client:
             listed = _listed_means(client)
-            assert listed["run-1"]["h"] == pytest.approx(1 / 3)
+            # Task errors are judged per pass (item d failed its last pass).
+            assert listed["run-1"]["h"] == pytest.approx(0.3)
             fixture = ViewFixture(browser, "run", count=4, samples=3)
             fixtures.append(fixture)
             fixture.api_client = client

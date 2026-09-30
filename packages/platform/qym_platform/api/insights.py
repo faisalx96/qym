@@ -34,6 +34,8 @@ from qym_platform.services.execution_errors import (
 )
 from qym_platform.services.run_means import (
     MetricTotals,
+    mean_task_errors,
+    not_received_clause,
     raw_metric_totals,
     run_metric_count,
     run_metric_mean,
@@ -251,7 +253,11 @@ def project_insights(
             func.count(case((RunItem.error.isnot(None), 1))).label("errors"),
             func.coalesce(func.sum(RunItem.retry_count), 0).label("retries"),
             func.avg(RunItem.latency_ms).label("avg_latency"),
+            func.count(case((not_received_clause(RunItem, Run), 1))).label(
+                "not_received"
+            ),
         )
+        .join(Run, Run.id == RunItem.run_id)
         .filter(RunItem.run_id.in_(run_ids))
         .group_by(RunItem.run_id)
         .all()
@@ -260,6 +266,7 @@ def project_insights(
         row.run_id: {
             "total": int(row.total or 0),
             "errors": int(row.errors or 0),
+            "not_received": int(row.not_received or 0),
             "retries": int(row.retries or 0),
             "avg_latency": float(row.avg_latency) if row.avg_latency is not None else None,
         }
@@ -309,12 +316,11 @@ def project_insights(
         )
         denominator_by_metric: dict[str, int] = {}
         averages: dict[str, float | None] = {}
+        task_errors = mean_task_errors(run.samples, stats["errors"])
         for metric_name in run.metrics or []:
             totals = score_totals.get(run.id, {}).get(metric_name) or MetricTotals()
-            denominator_by_metric[metric_name] = run_metric_count(
-                totals, int(stats["errors"])
-            )
-            averages[metric_name] = run_metric_mean(totals, int(stats["errors"]))
+            denominator_by_metric[metric_name] = run_metric_count(totals, task_errors)
+            averages[metric_name] = run_metric_mean(totals, task_errors)
 
         started_at = run.started_at or run.created_at
         duration_ms = None
@@ -345,10 +351,11 @@ def project_insights(
                 "metric_specs": specs.get(run.id, {}),
                 "total_items": total_items,
                 "error_count": error_count,
+                # Items never received are neither executions nor successes.
                 "success_rate": (
                     execution_success_fields(
-                        total_items,
-                        total_items - error_count,
+                        total_items - int(stats.get("not_received") or 0),
+                        total_items - error_count - int(stats.get("not_received") or 0),
                         repeat_executions.get(run.id),
                     )["success_rate"]
                     if total_items

@@ -108,9 +108,13 @@ from qym_platform.services.run_means import (
     errors_left_out,
     is_metric_error,
     is_task_error_pass,
+    item_not_received,
+    mean_task_errors,
     metric_directions,
     metric_error_candidates,
     metric_mean_fields,
+    not_received_clause,
+    not_received_items,
     pass_metric_totals,
     raw_metric_totals,
     reduce_pass_scores,
@@ -657,8 +661,13 @@ def _repeat_attempt_summaries(
 def _apply_execution_stats(
     stats: Dict[str, Any], repeat: Optional[Dict[str, int]] = None
 ) -> None:
-    """Snapshot stats: execution success counts and success_rate in percent."""
-    fields = execution_success_fields(stats["total"], stats["completed"], repeat)
+    """Snapshot stats: execution success counts and success_rate in percent.
+
+    Items never received are neither executions nor successes.
+    """
+    fields = execution_success_fields(
+        stats["total"] - int(stats.get("not_received") or 0), stats["completed"], repeat
+    )
     stats.update(fields, success_rate=fields["success_rate"] * 100.0)
 
 
@@ -1714,7 +1723,12 @@ def _compute_run_summary(db: Session, run: Run) -> Dict[str, Any]:
         if "total_retries" in repeat_summary:
             total_retries = int(repeat_summary["total_retries"] or 0)
         repeat_executions = repeat_execution_counts(db, [run.id]).get(run.id)
-    success_count = total_items - error_count
+    # Items whose outcome never arrived are neither successes nor executions.
+    not_received_count = sum(
+        item_not_received(run.status, run.samples, it.error, it.output, it.latency_ms)
+        for it in items
+    )
+    success_count = total_items - error_count - not_received_count
     completed_count = len(
         [it for it in items if (it.output is not None) or (it.error is not None)]
     )
@@ -1736,7 +1750,7 @@ def _compute_run_summary(db: Session, run: Run) -> Dict[str, Any]:
     metric_means = metric_mean_fields(
         metrics,
         raw_metric_totals(db, [run.id]).get(run.id, {}) if total_items else {},
-        error_count,
+        mean_task_errors(run.samples, error_count),
         metric_directions(db, [run.id]).get(run.id, {}),
     )
 
@@ -1803,10 +1817,13 @@ def _compute_run_summary(db: Session, run: Run) -> Dict[str, Any]:
         "progress_pct": (completed_count / expected_total) if expected_total else None,
         "success_count": success_count,
         "error_count": error_count,
+        "not_received_count": not_received_count,
         "execution_error_count": execution_error_count,
         **{k: v for k, v in error_details[run.id].items() if k != "pass_error_counts"},
         "total_retries": total_retries,
-        **execution_success_fields(total_items, success_count, repeat_executions),
+        **execution_success_fields(
+            total_items - not_received_count, success_count, repeat_executions
+        ),
         "avg_latency_ms": avg_latency_ms,
         "median_latency_ms": median_latency_ms,
         "langfuse_url": run.run_metadata.get("langfuse_url")
@@ -2465,7 +2482,11 @@ def legacy_list_runs(
             ).label("completed"),
             func.coalesce(func.sum(RunItem.retry_count), 0).label("total_retries"),
             func.avg(RunItem.latency_ms).label("avg_latency"),
+            func.count(case((not_received_clause(RunItem, Run), 1))).label(
+                "not_received"
+            ),
         )
+        .join(Run, Run.id == RunItem.run_id)
         .filter(RunItem.run_id.in_(run_ids))
         .group_by(RunItem.run_id)
         .all()
@@ -2474,6 +2495,7 @@ def legacy_list_runs(
         row.run_id: {
             "total": row.total,
             "error_count": row.error_count,
+            "not_received": int(row.not_received or 0),
             "execution_error_count": len(
                 execution_error_pairs.get(row.run_id, set())
             ),
@@ -2724,7 +2746,8 @@ def legacy_list_runs(
             agg.get("execution_error_count", error_count) or 0
         )
         total_retries = int(agg.get("total_retries") or 0)
-        success_count = total_items - error_count
+        not_received_count = int(agg.get("not_received") or 0)
+        success_count = total_items - error_count - not_received_count
         completed_count = agg["completed"]
         started_at = r.started_at or r.created_at
         ended_at = r.ended_at
@@ -2747,7 +2770,7 @@ def legacy_list_runs(
         metric_means = metric_mean_fields(
             metrics,
             score_totals.get(r.id, {}),
-            error_count,
+            mean_task_errors(r.samples, error_count),
             {
                 name: declared_direction(spec)
                 for name, spec in (metric_specs_by_run.get(r.id) or {}).items()
@@ -2820,13 +2843,16 @@ def legacy_list_runs(
             else None,
             "success_count": success_count,
             "error_count": error_count,
+            "not_received_count": not_received_count,
             "execution_error_count": execution_error_count,
             **{
                 k: v for k, v in error_details[r.id].items() if k != "pass_error_counts"
             },
             "total_retries": total_retries,
             **execution_success_fields(
-                total_items, success_count, repeat_executions.get(r.id)
+                total_items - not_received_count,
+                success_count,
+                repeat_executions.get(r.id),
             ),
             "avg_latency_ms": agg["avg_latency"],
             "median_latency_ms": agg.get("median_latency", 0.0),
@@ -3158,6 +3184,7 @@ def _build_models_runs_data(db: Session, runs: list[Run]) -> list[dict[str, Any]
             "in_progress": 0,
             "pending": 0,
             "failed": 0,
+            "not_received": 0,
         }
         stats_by_run[run.id] = stats
         _dsv = _dataset_version_fields(run, dataset_info)
@@ -3230,6 +3257,26 @@ def _build_models_runs_data(db: Session, runs: list[Run]) -> list[dict[str, Any]
         .order_by(RunItem.run_id.asc(), RunItem.index.asc())
         .all()
     )
+    # Outputs stay unread here: the few items never received come from SQL,
+    # and only for the runs with a candidate (no error and no latency).
+    candidate_runs = {
+        run.id
+        for run in runs
+        if item_not_received(run.status, run.samples, None, None, None)
+    }
+    not_received = not_received_items(
+        db,
+        sorted(
+            {
+                item.run_id
+                for item in item_rows
+                if item.run_id in candidate_runs
+                and item.error is None
+                and item.latency_ms is None
+            }
+        ),
+    )
+    samples_by_run = {run.id: int(getattr(run, "samples", 1) or 1) for run in runs}
 
     for item in item_rows:
         run_data = runs_data.get(item.run_id)
@@ -3237,11 +3284,19 @@ def _build_models_runs_data(db: Session, runs: list[Run]) -> list[dict[str, Any]
             continue
         metrics = metrics_by_run.get(item.run_id, [])
         item_scores = score_by_run_item.get((item.run_id, item.item_id), {})
-        status = "error" if item.error else "completed"
+        status = (
+            "error"
+            if item.error
+            else "not_received"
+            if item.item_id in not_received.get(item.run_id, ())
+            else "completed"
+        )
         stats = stats_by_run[item.run_id]
         stats["total"] += 1
         if status == "error":
             stats["failed"] += 1
+        elif status == "not_received":
+            stats["not_received"] += 1
         else:
             stats["completed"] += 1
 
@@ -3260,6 +3315,12 @@ def _build_models_runs_data(db: Session, runs: list[Run]) -> list[dict[str, Any]
         if passes:
             row["pass_scores"] = passes["scores"]
             row["pass_metric_meta"] = passes["meta"]
+        elif item.error and samples_by_run.get(item.run_id, 1) > 1:
+            # A repeat item's error is only its last pass's. With no errored
+            # pass to ship (a reviewer scored it as a whole), the row still
+            # reads as a repeat row, judged per pass (metrics.js
+            # isRepeatAggregateRow), never as an item-level task error.
+            row["pass_scores"] = {}
         run_data["snapshot"]["rows"].append(row)
     for run_id in {run_id for run_id, _ in errored_passes}:
         if run_id in runs_data:
@@ -3633,13 +3694,23 @@ def _build_run_data(
         "in_progress": 0,
         "pending": 0,
         "failed": 0,
+        "not_received": 0,
     }
     duplicate_counts: Dict[str, int] = {}
     for it in items:
         is_error = bool(it.error)
-        status = "error" if is_error else "completed"
+        # A completed run's item whose outcome never arrived: neither a
+        # success nor an error, and left out of the means (run_means).
+        not_received = not is_error and item_not_received(
+            run.status, run_samples, it.error, it.output, it.latency_ms
+        )
+        status = (
+            "error" if is_error else "not_received" if not_received else "completed"
+        )
         if is_error:
             stats["failed"] += 1
+        elif not_received:
+            stats["not_received"] += 1
         else:
             stats["completed"] += 1
 
@@ -5127,7 +5198,15 @@ def update_metric(
         pass_attempts = [attempts_by_pass.get(p) for p in range(1, run_samples + 1)]
 
     is_error = bool(item.error)
-    status = "error" if is_error else "completed"
+    status = (
+        "error"
+        if is_error
+        else "not_received"
+        if item_not_received(
+            run.status, run_samples, item.error, item.output, item.latency_ms
+        )
+        else "completed"
+    )
     duplicate_counts: Dict[str, int] = {}
     ordered_items = (
         db.query(RunItem)

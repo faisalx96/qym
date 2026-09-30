@@ -57,7 +57,7 @@ All `pass_number` fields are 1-based and default to `1`, preserving compatibilit
 
 - `item_started`: required `item_id`, zero-based `index`, and `input`; optional `pass_number`, `expected`, `item_metadata`, `dataset_item_pk`.
 - `item_attempt_started`: required `item_id`, `attempt_number`; optional `index`, `pass_number`, trace fields, `task_started_at_ms`.
-- `item_attempt_finished`: required `item_id`, `attempt_number`, and `status` (`completed` or `failed`); optional `index`, `pass_number`, latency, trace fields, `error`, and `is_last_attempt`.
+- `item_attempt_finished`: required `item_id`, `attempt_number`, and `status` (`completed` or `failed`); optional `index`, `pass_number`, latency, trace fields, `error`, `output`, and `is_last_attempt`. A final attempt (`is_last_attempt`) also stands in for its item's outcome until `item_completed`/`item_failed` arrives, so a rejected outcome event is not lost: a failed one makes the item a task error (a repeat pass is stored as a failed task, as `item_failed` does), and a completed one with an `output` records it. A classic item of a completed run with no outcome at all is *not received*: left out of Execution success and of the means.
 - `item_completed`: required `item_id`, `output`, non-negative `latency_ms`; optional `index`, `pass_number`, `is_final_pass`, item/task metadata, trace fields, task start time, and retry count.
 - `item_failed`: required `item_id`, `error`; optional `index`, `pass_number`, latency, trace fields, task start time, and retry count.
 

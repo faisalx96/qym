@@ -242,6 +242,7 @@ run_completed</pre>
 <ul>
   <li>If <code>item_completed</code> or <code>item_failed</code> arrives for an item that never had an <code>item_started</code>, the item is created from the completion event (using its <code>index</code> if provided, else <code>0</code>).</li>
   <li><code>item_completed</code> clears any prior error on the item; <code>item_failed</code> records the error string.</li>
+  <li>A final <code>item_attempt_finished</code> (<code>is_last_attempt</code>) stands in for its item's outcome until <code>item_completed</code> or <code>item_failed</code> arrives, so a rejected outcome event is not lost: a failed final attempt makes the item a task error (in a repeat run, that pass a failed pass). An item of a completed run with no outcome at all shows as <strong>Not received</strong> and is left out of Execution success and of the means.</li>
   <li>Any of the item or metric events will mark the run <code>RUNNING</code> again if it was prematurely marked terminal.</li>
   <li>When the task returned an output envelope <code>{"output": ..., "metadata": ...}</code>, send the envelope's metadata as <code>task_metadata</code>; the platform nests it under <code>item_metadata.task_metadata</code>.</li>
 </ul>

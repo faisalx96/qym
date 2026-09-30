@@ -30,6 +30,8 @@ from qym_platform.services.approved_diagnoses import load_approved_diagnoses
 from qym_platform.services.run_means import (
     errored_pass_items,
     is_metric_error,
+    item_not_received,
+    mean_task_errors,
     raw_metric_totals,
     run_metric_mean,
 )
@@ -167,13 +169,30 @@ def _errored_for_minimize(
     )
 
 
+def _task_failed(item: RunItem, run: Run | None = None) -> bool:
+    """An item-level task error. A repeat run judges task errors per pass
+    (``pass_errored``, and its item values): its RunItem error is only the
+    outcome of the pass that arrived last (services/run_means.py)."""
+    return bool(item.error) and (run is None or int(run.samples or 1) <= 1)
+
+
+def _not_received(item: RunItem, run: Run | None) -> bool:
+    """A completed run's item whose outcome never arrived (run_means)."""
+    return run is not None and item_not_received(
+        run.status, run.samples, item.error, item.output, item.latency_ms
+    )
+
+
 def _score_outcome(
     item: RunItem,
     score: RunItemScore | None,
     spec: RunMetricSpec | None,
     pass_errored: bool = False,
+    run: Run | None = None,
 ) -> str:
-    if item.error or _errored_for_minimize(score, spec, pass_errored):
+    if _not_received(item, run):
+        return "unscored"
+    if _task_failed(item, run) or _errored_for_minimize(score, spec, pass_errored):
         return "error"
     if score is None or score.score_numeric is None:
         return "unscored"
@@ -186,14 +205,21 @@ def _score_outcome(
 
 
 def _score_value(
-    item: RunItem, score: RunItemScore | None, spec: RunMetricSpec | None = None
+    item: RunItem,
+    score: RunItemScore | None,
+    spec: RunMetricSpec | None = None,
+    run: Run | None = None,
 ) -> float | None:
-    if _errored_for_minimize(score, spec, False) or (
-        item.error and _direction(spec) == "minimize"
+    task_failed = _task_failed(item, run)
+    if (
+        _not_received(item, run)
+        or _errored_for_minimize(score, spec, False)
+        or (task_failed and _direction(spec) == "minimize")
     ):
-        # A lower-is-better metric leaves errors out of its mean.
+        # Left out of the mean: never received, or an error of a
+        # lower-is-better metric.
         return None
-    if item.error:
+    if task_failed:
         # Match the main dashboard's run-score semantics: errors contribute zero.
         return 0.0
     if score is None or score.score_numeric is None:
@@ -426,7 +452,7 @@ def _load_snapshot(
                     item.item_id,
                     str(metric),
                 ) in snapshot.errored_passes
-                if _score_outcome(item, score, spec, pass_errored) in {
+                if _score_outcome(item, score, spec, pass_errored, run) in {
                     "failed",
                     "error",
                 }:
@@ -436,12 +462,16 @@ def _load_snapshot(
                     {"sum": 0.0, "scored_count": 0, "error_count": 0, "item_count": 0},
                 )
                 stat["item_count"] += 1
-                if item.error:
+                if _task_failed(item, run):
                     stat["error_count"] += 1
-                elif score is not None and score.score_numeric is not None:
+                elif (
+                    score is not None
+                    and score.score_numeric is not None
+                    and not _not_received(item, run)
+                ):
                     stat["sum"] += float(score.score_numeric)
                     stat["scored_count"] += 1
-            if item.error and not metrics:
+            if _task_failed(item, run) and not metrics:
                 snapshot.failed_pairs.add((run.id, item.item_id))
 
             entries = _metric_analysis_entries(
@@ -472,6 +502,7 @@ def _load_snapshot(
                     score,
                     spec,
                     (run.id, item.item_id, metric_name) in snapshot.errored_passes,
+                    run,
                 )
                 source = (
                     str(entry.get("source") or "unknown").strip().lower() or "unknown"
@@ -511,7 +542,7 @@ def _load_snapshot(
                         "source": source,
                         "review_status": review_status,
                         "outcome": outcome,
-                        "score": _score_value(item, score, spec),
+                        "score": _score_value(item, score, spec, run),
                     }
                 )
 
@@ -521,7 +552,10 @@ def _load_snapshot(
     for (run_id, metric), stat in snapshot.score_stats.items():
         totals = (metric_totals.get(run_id) or {}).get(metric)
         if totals is not None:
-            stat["average"] = run_metric_mean(totals, int(stat["error_count"]))
+            stat["average"] = run_metric_mean(
+                totals,
+                mean_task_errors(runs_by_id[run_id].samples, stat["error_count"]),
+            )
 
     # Changes are project-wide by default; narrow them to the run filters above.
     if include_changes:

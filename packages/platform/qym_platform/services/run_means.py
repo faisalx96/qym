@@ -9,11 +9,19 @@ as 0 (C015):
 
 Lower-is-better metrics (declared ``direction="minimize"``) leave errors out
 instead, because 0 is their best value: task errors and scorer errors are not
-counted in the mean, and views show how many there were next to it. In a
-repeat run each item is then the mean over its passes without an error. In
+counted in the mean, and views show how many there were next to it. In
 pass/fail verdicts an errored item or pass is a failure for these metrics.
 
-Items that are still running or were never scored are left out.
+A repeat run (samples > 1) judges task errors per pass. Each item is the mean
+over its passes, where a pass whose task or scorer failed counts as 0, or is
+left out when lower is better (so the item is the mean over its passes
+without an error). Its RunItem holds only the pass that arrived last, so it
+never makes the whole item a task error: the same passes give the same mean
+whichever of them failed last.
+
+Items that are still running or were never scored are left out, and so are
+the items of a completed run whose outcome never reached the platform
+(``item_not_received``).
 
 The run page applies the same rule in ``metrics.js`` (``getRowScore``).
 """
@@ -43,6 +51,80 @@ ITEM_EDIT_KEY = "item_edit"
 # status, the label, and a pass diagnosis (root_cause_changes
 # PASS_ANALYSIS_META_KEY).
 _NOT_SCORE_METADATA = frozenset({"status", "label", "root_cause_analysis"})
+
+
+def mean_task_errors(samples: Any, task_errors: Any) -> int:
+    """Item-level task errors a run mean adds to its denominator.
+
+    A classic run adds every item whose task failed (as 0, or left out when
+    lower is better). A repeat run adds none: its item values already hold
+    each failed pass (ingest stores it as 0, marked as a failed task), and its
+    RunItem error is only the outcome of the pass that arrived last.
+    """
+    return int(task_errors or 0) if int(samples or 1) <= 1 else 0
+
+
+# A completed run, also while it is in review (its data stays as it completed).
+COMPLETED_RUN_STATUSES = ("COMPLETED", "SUBMITTED", "APPROVED", "REJECTED")
+
+
+def item_not_received(
+    run_status: Any, samples: Any, error: Any, output: Any, latency_ms: Any
+) -> bool:
+    """A classic item of a completed run whose outcome never reached the platform.
+
+    item_completed always carries a latency and item_failed an error, so an
+    item with neither, and no output, only started: the platform rejected (or
+    never got) its outcome, and ingest had no final attempt to take it from.
+    It shows as not received and is left out of Execution success and of the
+    means; it is neither a success nor a task error. Items of a run still in
+    progress, stopped or failed are not judged, and a repeat run's items are
+    judged per pass. ``not_received_clause`` is the same rule in SQL, and
+    ``metrics.js`` (``isNotReceivedRow``) reads the row state it produces.
+    """
+    status = str(getattr(run_status, "value", run_status) or "").upper()
+    return (
+        status in COMPLETED_RUN_STATUSES
+        and int(samples or 1) <= 1
+        and error is None
+        and output is None
+        and latency_ms is None
+    )
+
+
+def not_received_clause(item_model, run_model):
+    """``item_not_received`` in SQL, for item rows joined to their run."""
+    from qym_platform.db.models import RunWorkflowStatus
+
+    return and_(
+        run_model.status.in_(
+            [RunWorkflowStatus(status) for status in COMPLETED_RUN_STATUSES]
+        ),
+        func.coalesce(run_model.samples, 1) <= 1,
+        item_model.error.is_(None),
+        item_model.latency_ms.is_(None),
+        # An output set to None is stored as JSON null, not SQL NULL.
+        or_(item_model.output.is_(None), cast(item_model.output, Text) == "null"),
+    )
+
+
+def not_received_items(db, run_ids) -> Dict[str, set]:
+    """Item ids of each classic run that were never received (``item_not_received``)."""
+    from qym_platform.db.models import Run, RunItem
+
+    run_ids = list(run_ids)
+    found: Dict[str, set] = {}
+    for start in range(0, len(run_ids), 400):
+        for run_id, item_id in (
+            db.query(RunItem.run_id, RunItem.item_id)
+            .join(Run, Run.id == RunItem.run_id)
+            .filter(
+                RunItem.run_id.in_(run_ids[start : start + 400]),
+                not_received_clause(RunItem, Run),
+            )
+        ):
+            found.setdefault(run_id, set()).add(item_id)
+    return found
 
 
 def errors_left_out(direction: Optional[str]) -> bool:
@@ -178,7 +260,8 @@ def task_error_pass_candidates(model):
 
 @dataclass
 class MetricTotals:
-    """Score totals for one metric of one run, over items without a task error."""
+    """Score totals for one metric of one run: over the items without a task
+    error in a classic run, over every item in a repeat run."""
 
     score_sum: float = 0.0
     score_count: int = 0
@@ -267,8 +350,8 @@ def apply_repeat_pass_errors(
     """Add a repeat run's pass-level errors to its metric totals.
 
     ``affected`` yields ``(metric, item_value, passes)`` or ``(metric,
-    item_value, passes, item_edited)`` for every item (without a task error)
-    that has at least one errored pass; ``item_value`` is the item's stored
+    item_value, passes, item_edited)`` for every item that has at least one
+    errored pass, whichever pass arrived last; ``item_value`` is the item's stored
     mean over passes and ``passes`` its ``(score, scorer_error)`` or ``(score,
     scorer_error, task_error)`` tuples. The mean without scorer errors
     re-reduces each such item over its passes whose scorer did not fail (a
@@ -374,10 +457,12 @@ def raw_metric_totals(
 ) -> Dict[str, Dict[str, MetricTotals]]:
     """Per-run, per-metric totals from ``RunItemScore`` rows.
 
-    Rows on items with a task error are skipped; callers add those items to
-    the denominator through ``task_errors``. Repeat runs also read the pass
-    rows of items with an errored pass (``apply_repeat_pass_errors``). Every
-    metric with a spec carries its declared direction.
+    In classic runs, rows on items with a task error are skipped; callers add
+    those items to the denominator through ``task_errors``
+    (``mean_task_errors``). Items never received are skipped too. Repeat runs
+    count every item's value, which holds its failed passes, and also read the
+    pass rows of items with an errored pass (``apply_repeat_pass_errors``).
+    Every metric with a spec carries its declared direction.
 
     ``scored_averages=False`` is for callers that need only the run mean
     (``run_metric_mean``): repeat runs then read pass rows only for their
@@ -388,10 +473,13 @@ def raw_metric_totals(
     run_ids = list(run_ids)
     if not run_ids:
         return {}
-    task_ok = (
-        (RunItem.run_id == RunItemScore.run_id)
-        & (RunItem.item_id == RunItemScore.item_id)
-        & RunItem.error.is_(None)
+    item_join = (RunItem.run_id == RunItemScore.run_id) & (
+        RunItem.item_id == RunItemScore.item_id
+    )
+    counted = and_(
+        # A repeat run's RunItem error is only its last pass's outcome.
+        or_(Run.samples > 1, RunItem.error.is_(None)),
+        ~not_received_clause(RunItem, Run),
     )
     totals: Dict[str, Dict[str, MetricTotals]] = {}
     for run_id, metric, score_sum, score_count in (
@@ -401,8 +489,9 @@ def raw_metric_totals(
             func.sum(RunItemScore.score_numeric),
             func.count(RunItemScore.score_numeric),
         )
-        .join(RunItem, task_ok)
-        .filter(RunItemScore.run_id.in_(run_ids))
+        .join(RunItem, item_join)
+        .join(Run, Run.id == RunItem.run_id)
+        .filter(RunItemScore.run_id.in_(run_ids), counted)
         .group_by(RunItemScore.run_id, RunItemScore.metric_name)
     ):
         totals.setdefault(run_id, {})[metric] = MetricTotals(
@@ -415,9 +504,11 @@ def raw_metric_totals(
             RunItemScore.score_numeric,
             RunItemScore.meta["status"].as_string(),
         )
-        .join(RunItem, task_ok)
+        .join(RunItem, item_join)
+        .join(Run, Run.id == RunItem.run_id)
         .filter(
             RunItemScore.run_id.in_(run_ids),
+            counted,
             metric_error_candidates(RunItemScore),
         )
         .yield_per(1000)
@@ -462,20 +553,15 @@ def _repeat_pass_errors(db, left_out_by_run, *, all_metrics=True):
 
     ``left_out_by_run`` maps each repeat run to its lower-is-better metrics.
     Items with a scorer-error pass, and, for those metrics, items with a pass
-    whose task failed. With ``all_metrics=False`` only the lower-is-better
-    metrics are read. One query finds the candidates of every run; only runs
-    with an affected item read their pass rows.
+    whose task failed, whichever pass arrived last. With ``all_metrics=False``
+    only the lower-is-better metrics are read. One query finds the candidates
+    of every run; only runs with an affected item read their pass rows.
     """
-    from qym_platform.db.models import RunItem, RunItemPassScore, RunItemScore
+    from qym_platform.db.models import RunItemPassScore
 
     run_ids = sorted(left_out_by_run)
     if not run_ids:
         return {}
-    task_ok = (
-        (RunItem.run_id == RunItemPassScore.run_id)
-        & (RunItem.item_id == RunItemPassScore.item_id)
-        & RunItem.error.is_(None)
-    )
     any_left_out = sorted(set().union(*left_out_by_run.values()))
     candidates = metric_error_candidates(RunItemPassScore)
     if not all_metrics:
@@ -497,9 +583,9 @@ def _repeat_pass_errors(db, left_out_by_run, *, all_metrics=True):
                 RunItemPassScore.metric_name,
                 RunItemPassScore.meta["status"].as_string(),
                 RunItemPassScore.label,
+            ).filter(
+                RunItemPassScore.run_id.in_(run_ids[start : start + 400]), candidates
             )
-            .join(RunItem, task_ok)
-            .filter(RunItemPassScore.run_id.in_(run_ids[start : start + 400]), candidates)
         ):
             meta = {"status": status}
             left_out = left_out_by_run.get(run_id) or set()

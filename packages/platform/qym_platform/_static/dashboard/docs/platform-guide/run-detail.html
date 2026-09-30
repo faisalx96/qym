@@ -6,7 +6,7 @@
 <p>The header identifies the run, status, owner, task, model, dataset, version, timing, configuration, and execution context. A repeat run also shows its pass count. Available submit, approve, reject, export, and delete actions follow ownership and project-role rules.</p>
 
 <h2>Overview</h2>
-<p>The overview begins with item, completion, and error counts. Metric cards adapt to their type:</p>
+<p>The overview begins with item, completion, and error counts. A completed run whose items did not all report an outcome (the platform rejected their events) also shows <strong>Not received</strong>: those items carry that tag instead of a verdict and are left out of the metric means and of Execution success. Metric cards adapt to their type:</p>
 <ul>
   <li><strong>Boolean metrics</strong> show pass/fail rates.</li>
   <li><strong>Percentage or score metrics</strong> show an average and score distribution.</li>
@@ -18,6 +18,7 @@
 
 <h2>Repeat-run analysis</h2>
 <p>For <code>samples=k</code>, the repeat section adds a metric picker, pass threshold, group metrics, a pass sweep, accuracy-versus-k analysis, correct-pass distribution, and stability views.</p>
+<p>A repeat run judges task errors per pass. Each item's value is the mean over its passes: a pass whose task or scorer failed counts as 0, or is left out when lower is better. Which pass failed does not matter, including the last one.</p>
 
 <table>
   <thead><tr><th>Measure</th><th>Interpretation</th></tr></thead>

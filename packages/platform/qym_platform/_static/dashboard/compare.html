@@ -10,7 +10,7 @@
   <script src="./static/qym_safe.js?v=p0-20260930"></script>
   <script src="./static/auth.js?v=p0-20260930"></script>
   <script src="./static/shell.js?v=p0-20260930-2"></script>
-  <script src="./static/metrics.js?v=p0-20260930-2"></script>
+  <script src="./static/metrics.js?v=p0-20260930-3"></script>
   <script src="./static/run_details.js?v=p0-20260930"></script>
   <script src="./static/trace_viewer.js?v=p0-20260930"></script>
   <script src="./static/step_latency.js?v=p0-20260930"></script>
@@ -10310,7 +10310,7 @@
       function collectRowErrors(row, buckets, runName, itemId) {
         if (!row) return;
         const itemKey = (runName || 'Run') + '::' + (itemId || getRowCompareId(row) || row.item_id || String(row.index || ''));
-        if (window.QymMetrics.isTaskErrorRow(row)) {
+        if (window.QymMetrics.hasTaskError(row)) {
           const executionError = row.error || row.__execution_error || row.output_full || row.output || '';
           addErrorBucket(buckets, 'Task error', normalizeErrorLabel(executionError, 'Task failed'), 1, itemKey, runName);
         }
@@ -11434,7 +11434,7 @@
         if (!row) {
           return { hasError: false, hasTaskError: false, metricErrorNames: [], title: '' };
         }
-        const hasTaskError = window.QymMetrics.isTaskErrorRow(row);
+        const hasTaskError = window.QymMetrics.hasTaskError(row);
         const runData = state.runs[runIdx] || {};
         const metricNames = Array.from(new Set([
           ...(runData.snapshot?.metric_names || runData.run?.metric_names || []),
@@ -11594,7 +11594,7 @@
             // An errored score's stored 0 is a placeholder: the editor opens
             // empty, so an unchanged Save cannot turn the error into a score.
             const errorPlaceholder = !edited && (hasMetricExecutionError || score.errored
-              || window.QymMetrics.isTaskErrorRow(row));
+              || window.QymMetrics.isItemTaskError(row));
             return `<div class="det-toggle metric-compare-row${metricErrorClass}${active ? ' active' : ''}"><button type="button" class="metric-compare-trigger${active ? ' active' : ''}" data-output-metric="${escapeAttr(name)}" aria-expanded="${active}"><span class="det-caret"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 3.5 5 4.5-5 4.5"/></svg></span><span class="det-metric">${escapeHtml(name)}</span>${scoreHtml}${metricErrorIndicator}</button>${compareRunReadOnly(runIdx) ? '' : `<span class="metric-edit-controls qym-metric-edit-controls hidden"><input class="metric-edit-input" type="text" value="${escapeAttr(score.raw == null || errorPlaceholder ? '' : String(score.raw))}"${errorPlaceholder ? ' placeholder="Enter a score"' : ''} data-run-idx="${runIdx}" data-row-index="${escapeAttr(String(row.index ?? 0))}" data-metric="${escapeAttr(name)}" aria-label="New Run ${runIdx + 1} ${escapeAttr(name)} score"><button class="metric-edit-save qym-metric-edit-action" data-run-idx="${runIdx}" data-row-index="${escapeAttr(String(row.index ?? 0))}" data-metric="${escapeAttr(name)}" title="Save" aria-label="Save Run ${runIdx + 1} ${escapeAttr(name)}">${SAVE_ICON}</button><button class="metric-edit-cancel qym-metric-edit-action" type="button" title="Cancel" aria-label="Cancel editing">${CLOSE_ICON}</button><span class="metric-edit-status" aria-live="polite"></span></span><button class="metric-edit-open qym-icon-action" type="button" aria-label="Edit Run ${runIdx + 1} ${escapeAttr(name)}" title="Edit">${EDIT_ICON}</button>`}${edited ? '<span class="metric-edit-badge">Edited</span>' : ''}</div>`;
           }).filter(Boolean).join('');
           return buttons ? `<div class="metric-det-zone"><div class="metric-det-chips">${buttons}</div></div>` : '';

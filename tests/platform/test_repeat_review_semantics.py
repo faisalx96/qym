@@ -120,9 +120,10 @@ def test_item_level_edit_on_a_repeat_item_reaches_every_mean(database):
         # Judged by the reviewer's value, not its errored pass.
         errored = errored_pass_items(db, ["rr"])
         assert ("rr", "a", "h") not in errored and ("rr", "b", "h") in errored
-    # h: a 0.9 (edited), b 0.2, c 0.5; d is a task error.
-    # q: a 0.1 (edited), b 0.5, c 0.5, d 0; without scorer errors the same.
-    expected = {"h": (0.9 + 0.2 + 0.5) / 3, "q": (0.1 + 0.5 + 0.5) / 4}
+    # h: a 0.9 (edited), b 0.2, c 0.5, d 0.2 (its failed pass 3 left out).
+    # q: a 0.1 (edited), b 0.5, c 0.5, d 2/3 (its failed pass 3 as 0);
+    # without scorer errors the same.
+    expected = {"h": (0.9 + 0.2 + 0.5 + 0.2) / 4, "q": (0.1 + 0.5 + 0.5 + 2 / 3) / 4}
     for name, payload in _means_everywhere(database).items():
         assert payload["metric_averages"] == _approx(expected), name
         if name != "js":
@@ -134,7 +135,7 @@ def test_item_level_edit_on_a_repeat_item_reaches_every_mean(database):
         stored = db.query(RunItemScore).filter_by(run_id="rr", item_id="a", metric_name="h").one()
         assert "item_edit" not in stored.meta
         assert stored.score_numeric == pytest.approx(0.4)
-    expected["h"] = (0.4 + 0.2 + 0.5) / 3
+    expected["h"] = (0.4 + 0.2 + 0.5 + 0.2) / 4
     for name, payload in _means_everywhere(database).items():
         assert payload["metric_averages"]["h"] == pytest.approx(expected["h"]), name
 
@@ -319,11 +320,18 @@ def test_source_and_projection_reads_stay_within_the_run(database):
     joins = [s for s in sql if "dashboard_record_state as dashboard_record_state_1" in s]
     assert joins
     assert all("dashboard_record_state_1.run_key =" in s for s in joins)
-    # Source: one candidate query for all repeat runs, not one per run.
+    # Source: one candidate query for all repeat runs, not one per run. It
+    # reads pass rows alone: a repeat item's RunItem error (its last pass)
+    # does not decide which items are read.
     with Session(database) as db, _Statements(database) as sql:
         raw_metric_totals(db, ["rr", "rr2", "rr3"])
-    candidates = [s for s in sql if "from run_item_pass_scores join run_items" in s]
+    candidates = [
+        s
+        for s in sql
+        if "from run_item_pass_scores" in s and "run_item_pass_scores.run_id in (" in s
+    ]
     assert len(candidates) == 1
+    assert "run_items" not in candidates[0]
 
 
 def test_insights_and_models_skip_reads_they_do_not_use(database):

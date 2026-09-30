@@ -91,9 +91,9 @@ def test_run_item_scopes_task_and_metric_errors_to_the_right_surface() -> None:
         "function renderErrorDistributionSection", 1
     )[0]
 
-    assert (
-        "const hasTaskError = window.QymMetrics.isTaskErrorRow(row);" in verdict_block
-    )
+    # A repeat item's task errors are its failed passes, not the status of
+    # the pass that arrived last (metrics.js hasTaskError).
+    assert "const hasTaskError = window.QymMetrics.hasTaskError(row);" in verdict_block
     assert "const taskErrorAttempts = isRepeatItem" in verdict_block
     assert "window.QymMetrics.isTaskErrorRow(att)" in verdict_block
     assert (
@@ -115,11 +115,19 @@ def test_run_item_scopes_task_and_metric_errors_to_the_right_surface() -> None:
     # none = no tag (C008).
     assert "const pfPassed = rowPassesFor(metric, rowScoreFor(row, mIdx, metric));" in verdict_block
     assert "pfClass = pfPassed ? 'pass' : 'fail';" in verdict_block
-    assert "const statusLabel = pfClass === 'pass' ? 'Pass' : 'Fail';" in verdict_block
+    assert (
+        "const statusLabel = pfClass === 'not-received' ? 'Not received' "
+        ": pfClass === 'pass' ? 'Pass' : 'Fail';" in verdict_block
+    )
+    # An item never received has no verdict: it is neither a pass nor an error.
+    assert "const notReceived = window.QymMetrics.isNotReceivedRow(row);" in verdict_block
+    assert "if (notReceived) {\n            pfClass = 'not-received';" in verdict_block
     assert "? 'Task execution failed in ' + taskErrorAttempts.length" in verdict_block
     assert ": 'Task execution failed')" in verdict_block
     assert ": 'qym-tag--danger';" in verdict_block
-    assert "qym-tag--warning" not in verdict_block
+    # Warning is the not-received state's tone only; errors stay danger.
+    assert verdict_block.count("qym-tag--warning") == 1
+    assert "pfClass === 'not-received'\n            ? 'qym-tag--warning'" in verdict_block
     assert "const statusIconOnlyClass = pfClass === 'error'" in verdict_block
     assert "const statusContent = pfClass === 'error' ? FAILURE_ICON" in verdict_block
     assert "const statusAccessibility = pfClass === 'error'" in verdict_block
@@ -187,7 +195,9 @@ def test_run_item_scopes_task_and_metric_errors_to_the_right_surface() -> None:
     assert "const status = String(meta.status || '').trim().toLowerCase();" in metrics_source
     assert "meta.status || meta.label" not in metrics_source
     assert "function hasMetricError(row, metricName = null)" in metrics_source
-    assert "return isTaskErrorRow(row) || hasMetricError(row);" in metrics_source
+    # A repeat row's task errors are its failed passes (hasTaskError).
+    assert "return hasTaskError(row) || hasMetricError(row);" in metrics_source
+    assert "function isRepeatAggregateRow(row)" in metrics_source
     assert (
         "function getRowScore(row, metricIdx, metricName = null, direction = null)"
         in metrics_source
@@ -200,7 +210,7 @@ def test_run_item_scopes_task_and_metric_errors_to_the_right_surface() -> None:
     assert "Array.isArray(row.pass_attempts)" in error_distribution
     assert "for (const attempt of passTaskErrors)" in error_distribution
     assert "attempt.error || attempt.output || ''" in error_distribution
-    assert "} else if (window.QymMetrics.isTaskErrorRow(row)) {" in error_distribution
+    assert "} else if (window.QymMetrics.isItemTaskError(row)) {" in error_distribution
     assert "const passErrors = Array.isArray(perPass)" in error_distribution
     assert "passErrors.length" in error_distribution
 
@@ -352,7 +362,7 @@ def test_runs_badges_separate_error_types_without_changing_item_math() -> None:
     assert "run.samples > 1 ? ' across all passes' : ''" in source
     assert "const retryScope = run.samples > 1 ? ' across all passes' : ' across all items';" in source
     assert "${retryScope}" in source
-    assert "dashboard.js?v=p0-20260930-2" in index
+    assert "dashboard.js?v=p0-20260930-3" in index
 
 
 def test_repeat_run_rows_show_each_pass_retry_count() -> None:
@@ -440,7 +450,7 @@ def test_repeat_parent_checkbox_selects_its_current_scope() -> None:
     assert "isPartiallySelected" not in source
     assert "state.selectedRuns.delete(filePath);" in source
     assert "if (!allSelected) refs.forEach(ref => state.selectedRuns.add(ref));" in source
-    assert "dashboard.js?v=p0-20260930-2" in index
+    assert "dashboard.js?v=p0-20260930-3" in index
 
 
 def test_repeat_comparison_selection_expands_to_exact_passes() -> None:

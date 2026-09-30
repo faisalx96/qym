@@ -78,6 +78,7 @@ from qym_platform.item_identity import (
 from qym_platform.services.metric_semantics import declared_direction
 from qym_platform.services.run_means import (
     errors_left_out,
+    is_task_error_pass,
     reduce_pass_scores,
     task_error_pass_meta,
 )
@@ -1681,6 +1682,112 @@ def _ingest_events_sync(
             _metric_direction(metric_name),
         )
 
+    def _record_failed_pass(item_id: str, pass_number: int) -> None:
+        # A failed pass scores 0 for every metric (mirrors the SDK's
+        # reduction rule) so Pass^k and the reduced mean stay honest.
+        for metric_name in list(run.metrics or []):
+            pass_score = _get_pass_score(item_id, metric_name, pass_number)
+            if not pass_score:
+                pass_score = RunItemPassScore(
+                    run_id=run_id,
+                    item_id=item_id,
+                    metric_name=metric_name,
+                    pass_number=pass_number,
+                    score_numeric=0.0,
+                    label="error",
+                    meta=task_error_pass_meta(None),
+                )
+                _remember_pass_score(pass_score)
+                db.add(pass_score)
+            else:
+                pass_score.score_numeric = 0.0
+                pass_score.label = "error"
+                # A metric scored before the task failed (a cancel
+                # mid-scoring) leaves its metadata: keep it, but mark the
+                # pass as a failed task (run_means.is_task_error_pass).
+                pass_score.meta = task_error_pass_meta(pass_score.meta)
+            reduced, reduced_observations = _reduce_pass_scores(item_id, metric_name)
+            score = _get_score(item_id, metric_name)
+            if score:
+                score.score_numeric = reduced
+                score.score_raw = reduced
+                score.meta = _aggregate_score_meta(
+                    int(reduced_observations or 0),
+                    score.meta if isinstance(score.meta, dict) else None,
+                )
+                score.label = None
+                score.explanation = None
+            elif reduced is not None:
+                db.add(
+                    _remember_score(
+                        RunItemScore(
+                            run_id=run_id,
+                            item_id=item_id,
+                            metric_name=metric_name,
+                            score_numeric=reduced,
+                            score_raw=reduced,
+                            meta=_aggregate_score_meta(int(reduced_observations or 0)),
+                            label=None,
+                            explanation=None,
+                        )
+                    )
+                )
+
+    def _record_final_attempt_outcome(payload: ItemAttemptFinishedPayload) -> None:
+        # A final attempt is evidence of the item's (or the pass's) outcome.
+        # When the item event that reports it (item_failed, item_completed)
+        # did not arrive, because the platform rejected it or it comes later,
+        # the attempt stands in for it, so a failed task never counts as a
+        # clean result. The item event, when it comes, is authoritative.
+        failed = payload.status == "failed"
+        if run.samples > 1:
+            passes = [
+                _get_pass_score(payload.item_id, metric_name, payload.pass_number)
+                for metric_name in list(run.metrics or [])
+            ]
+            # item_failed may have stored the pass as a failed task already.
+            if failed and not all(
+                row is not None and is_task_error_pass(row.label, row.meta)
+                for row in passes
+            ):
+                _record_failed_pass(payload.item_id, payload.pass_number)
+            return
+        if not failed and payload.output is None:
+            # No output to show: without its item_completed the item stays
+            # not received (run_means.item_not_received).
+            return
+        item = _get_item(payload.item_id)
+        if item is None:
+            item = _remember_item(
+                RunItem(
+                    run_id=run_id,
+                    item_id=payload.item_id,
+                    index=payload.index if payload.index is not None else 0,
+                    input={},
+                    expected=None,
+                    item_metadata=_build_item_meta(
+                        payload.task_started_at_ms, payload.attempt_number - 1
+                    ),
+                )
+            )
+            db.add(item)
+        elif (
+            item.error is not None
+            or item.output is not None
+            or item.latency_ms is not None
+        ):
+            return
+        if failed:
+            item.error = payload.error or "Task failed on its final attempt"
+        else:
+            item.output = _sanitize_for_json(payload.output)
+        item.latency_ms = payload.latency_ms
+        item.retry_count = payload.attempt_number - 1
+        if payload.trace_id is not None:
+            item.trace_id = payload.trace_id
+        if payload.trace_url is not None:
+            item.trace_url = payload.trace_url
+
     applied = 0
     trace_stats_dirty = False
     touched_trace_ids: set[str] = set()
@@ -1916,6 +2023,7 @@ def _ingest_events_sync(
                         and attempt_no != payload.attempt_number
                     ):
                         other.is_last_attempt = False
+                _record_final_attempt_outcome(payload)
 
         elif isinstance(payload, MetricScoredPayload):
             mark_run_running(run)
@@ -2109,61 +2217,7 @@ def _ingest_events_sync(
                     item.item_metadata = _sanitize_for_json(md)
             if run.samples > 1:
                 _finish_unfinished_pass(payload)
-                # A failed pass scores 0 for every metric (mirrors the SDK's
-                # reduction rule) so Pass^k and the reduced mean stay honest.
-                for metric_name in list(run.metrics or []):
-                    pass_score = _get_pass_score(
-                        payload.item_id, metric_name, payload.pass_number
-                    )
-                    if not pass_score:
-                        pass_score = RunItemPassScore(
-                            run_id=run_id,
-                            item_id=payload.item_id,
-                            metric_name=metric_name,
-                            pass_number=payload.pass_number,
-                            score_numeric=0.0,
-                            label="error",
-                            meta=task_error_pass_meta(None),
-                        )
-                        _remember_pass_score(pass_score)
-                        db.add(pass_score)
-                    else:
-                        pass_score.score_numeric = 0.0
-                        pass_score.label = "error"
-                        # A metric scored before the task failed (a cancel
-                        # mid-scoring) leaves its metadata: keep it, but mark
-                        # the pass as a failed task (run_means.is_task_error_pass).
-                        pass_score.meta = task_error_pass_meta(pass_score.meta)
-                    reduced, reduced_observations = _reduce_pass_scores(
-                        payload.item_id, metric_name
-                    )
-                    score = _get_score(payload.item_id, metric_name)
-                    if score:
-                        score.score_numeric = reduced
-                        score.score_raw = reduced
-                        score.meta = _aggregate_score_meta(
-                            int(reduced_observations or 0),
-                            score.meta if isinstance(score.meta, dict) else None,
-                        )
-                        score.label = None
-                        score.explanation = None
-                    elif reduced is not None:
-                        db.add(
-                            _remember_score(
-                                RunItemScore(
-                                    run_id=run_id,
-                                    item_id=payload.item_id,
-                                    metric_name=metric_name,
-                                    score_numeric=reduced,
-                                    score_raw=reduced,
-                                    meta=_aggregate_score_meta(
-                                        int(reduced_observations or 0)
-                                    ),
-                                    label=None,
-                                    explanation=None,
-                                )
-                            )
-                        )
+                _record_failed_pass(payload.item_id, payload.pass_number)
             trace_stats_dirty = True
 
         elif isinstance(payload, RunCompletedPayload):

@@ -9,7 +9,8 @@
  * IMPORTANT: Error handling is centralized here (getRowScore). Task and
  * scorer errors count as 0, except for lower-is-better metrics, which leave
  * them out of the mean (0 is their best value) and never count them as a
- * pass. Same rule as services/run_means.py.
+ * pass. A repeat row judges task errors per pass, and an item never received
+ * is left out. Same rule as services/run_means.py.
  */
 
 /**
@@ -73,8 +74,49 @@ function hasMetricError(row, metricName = null) {
   });
 }
 
+/**
+ * A repeat run's item row over all its passes. Rows scoped to one pass (run
+ * page ?pass=N, Compare pass columns, group-analysis pass rows) set
+ * __pass_scope. The row status is only the outcome of the pass that arrived
+ * last, so a repeat row's task errors are judged per pass (its pass
+ * metadata and attempts), never by its status: the same passes give the same
+ * mean whichever of them failed last. Same rule as services/run_means.py.
+ */
+function isRepeatAggregateRow(row) {
+  return !!row && row.__pass_scope !== true
+    && !!row.pass_scores && typeof row.pass_scores === 'object' && !Array.isArray(row.pass_scores);
+}
+
+/**
+ * An item whose task failed as a whole: a classic row, or a row scoped to
+ * one pass. A repeat row's value already holds its failed passes.
+ */
+function isItemTaskError(row) {
+  return isTaskErrorRow(row) && !isRepeatAggregateRow(row);
+}
+
+/**
+ * An item of a completed run whose outcome never reached the platform (the
+ * server's row state "not_received", services/run_means.py
+ * item_not_received): neither a success nor an error, and left out of every
+ * mean.
+ */
+function isNotReceivedRow(row) {
+  return !!row && String(row.status || '').toLowerCase() === 'not_received';
+}
+
+/** Whether a row's task failed: the item, or any pass of a repeat row. */
+function hasTaskError(row) {
+  if (!isRepeatAggregateRow(row)) return isTaskErrorRow(row);
+  const attempts = Array.isArray(row.pass_attempts) ? row.pass_attempts : [];
+  if (attempts.some(attempt => !!attempt && isTaskErrorRow(attempt))) return true;
+  const metas = row.pass_metric_meta && typeof row.pass_metric_meta === 'object' ? row.pass_metric_meta : {};
+  return Object.keys(metas).some(name => Array.isArray(metas[name])
+    && metas[name].some((_, index) => isTaskErrorPass(row, name, index)));
+}
+
 function isErrorRow(row) {
-  return isTaskErrorRow(row) || hasMetricError(row);
+  return hasTaskError(row) || hasMetricError(row);
 }
 
 /** Parse one stored metric value (number, boolean, "80%", "true", ...). */
@@ -251,6 +293,9 @@ function repeatPassOutcomes(row, metricName) {
  * - Lower is better (``direction`` "minimize"): errors are left out (score
  *   null, isError true). A repeat row with errored passes is the mean over
  *   its passes without an error (null when none is left).
+ * A repeat row judges task errors per pass (isRepeatAggregateRow): its value
+ * counts a failed pass as 0 already, whichever pass arrived last. An item
+ * never received has no score and no error (isNotReceivedRow).
  * @param {Object} row - Row data from snapshot
  * @param {number} metricIdx - Index of the metric in metric_values array
  * @param {string|null} metricName - Metric key used to find exception metadata
@@ -259,12 +304,12 @@ function repeatPassOutcomes(row, metricName) {
  * @returns {{score: number|null, isError: boolean}} Score and error flag
  */
 function getRowScore(row, metricIdx, metricName = null, direction = null) {
-  if (!row) return { score: null, isError: false };
+  if (!row || isNotReceivedRow(row)) return { score: null, isError: false };
   const leftOut = errorsLeftOut(direction);
 
   // A task error invalidates every metric. A metric error invalidates only
   // that metric; sibling metrics on the same item retain their real scores.
-  if (isTaskErrorRow(row) && !isReviewedPassSlice(row, metricName)) {
+  if (isItemTaskError(row) && !isReviewedPassSlice(row, metricName)) {
     return { score: leftOut ? null : 0, isError: true };
   }
   // A repeat item scored as a whole by a reviewer: that value, errored
@@ -307,11 +352,18 @@ function getRowScore(row, metricIdx, metricName = null, direction = null) {
  * @returns {{task: number, scorer: number}}
  */
 function rowMetricErrorCounts(row, metricName) {
+  if (isNotReceivedRow(row)) return { task: 0, scorer: 0 };
   const passes = repeatPassOutcomes(row, metricName);
   if (passes) {
     const task = passes.filter(pass => pass.taskError).length;
     const scorer = passes.filter(pass => pass.scorerError).length;
-    if (task || scorer) return { task, scorer };
+    if (task || scorer || isRepeatAggregateRow(row)) return { task, scorer };
+  }
+  // A repeat row without this metric's passes (the Models payload ships
+  // only errored passes a verdict needs): its status is the pass that
+  // arrived last, one failed pass when it is an error.
+  if (isRepeatAggregateRow(row)) {
+    return { task: isTaskErrorRow(row) ? 1 : 0, scorer: hasMetricError(row, metricName) ? 1 : 0 };
   }
   if (isTaskErrorRow(row)) return isReviewedPassSlice(row, metricName) ? { task: 0, scorer: 0 } : { task: 1, scorer: 0 };
   return { task: 0, scorer: hasMetricError(row, metricName) ? 1 : 0 };
@@ -352,7 +404,7 @@ function scoreWithoutMetricErrors(row, metricIdx, metricName, direction = null) 
   }
   const { score, isError } = getRowScore(row, metricIdx, metricName);
   if (score === null) return { score: null, errors: 0 };
-  if (!isError || isTaskErrorRow(row)) return { score, errors: 0 };
+  if (!isError || isItemTaskError(row)) return { score, errors: 0 };
   const passScores = row?.pass_scores?.[metricName];
   const passMeta = row?.pass_metric_meta?.[metricName];
   if (Array.isArray(passScores) && Array.isArray(passMeta) && passMeta.some(isMetricErrorMeta)) {
@@ -1308,6 +1360,10 @@ if (typeof window !== 'undefined') {
   window.QymMetrics = {
     // Core error handling - USE THESE for consistent error treatment
     isTaskErrorRow,
+    isRepeatAggregateRow,
+    isItemTaskError,
+    isNotReceivedRow,
+    hasTaskError,
     isMetricErrorMeta,
     metricMetaDisplayKey,
     hasMetricError,

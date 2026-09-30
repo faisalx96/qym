@@ -3240,22 +3240,30 @@
             if (Array.isArray(ps)) return (ps[p] == null ? '' : ps[p]);
             return row.metric_values ? row.metric_values[i] : '';
           });
-          if (!row.pass_metric_meta) return Object.assign({}, row, { metric_values: mv });
-          // The pass's own metric metadata and task outcome, so a scorer or
-          // task error of this pass follows the metric's error rule
-          // (metrics.js getRowScore) instead of the item's other passes.
+          // The pass's own task outcome, never the item's status (the pass
+          // that arrived last): a failed pass is a task error, and a row
+          // whose last pass failed reads as completed on its other passes.
+          const attempt = Array.isArray(row.pass_attempts) ? row.pass_attempts[p] : null;
+          const passFailed = (!!attempt && window.QymMetrics.isTaskErrorRow(attempt))
+            || metricNames.some(m => window.QymMetrics.isTaskErrorPass(row, m, p));
+          const scoped = {
+            metric_values: mv,
+            status: passFailed ? 'error' : (window.QymMetrics.isTaskErrorRow(row) ? 'completed' : row.status),
+            __pass_scope: true,
+          };
+          if (!row.pass_metric_meta) return Object.assign({}, row, scoped);
+          // The pass's own metric metadata, so a scorer or task error of this
+          // pass follows the metric's error rule (metrics.js getRowScore)
+          // instead of the item's other passes.
           const meta = {};
           metricNames.forEach(m => {
             const values = row.pass_metric_meta[m];
             const value = Array.isArray(values) ? values[p] : null;
             if (value && typeof value === 'object') meta[m] = value;
           });
-          const passFailed = metricNames.some(m => window.QymMetrics.isTaskErrorPass(row, m, p));
-          return Object.assign({}, row, {
-            metric_values: mv,
+          return Object.assign({}, row, scoped, {
             metric_meta: meta,
             pass_metric_meta: null,
-            status: passFailed ? 'error' : row.status,
           });
         });
         out.push({ run: rd.run, snapshot: Object.assign({}, rd.snapshot, { rows: passRows }) });

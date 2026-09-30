@@ -66,7 +66,7 @@ Migrations `0058`–`0064` are quick DDL or small job/queue inserts.
 | 0057 | Pass review scope, deleted-pass marker, index, and approval/catalog backfill | Runs during migration |
 | 0058 | Marks ready dashboard partitions pending | None: the worker republishes each summary from its numeric records (no source rescan) |
 | 0059 | `local_auth_credentials.must_change_password` | None |
-| 0060 | Marks ready dashboard partitions pending (run means count scorer errors as 0) | None: summary republish, as 0058; `SUMMARY_SHAPE` 4 refreshes the rest |
+| 0060 | Marks ready dashboard partitions pending (run means count scorer errors as 0) | None: summary republish, as 0058; `SUMMARY_SHAPE` 5 refreshes the rest |
 | 0061 | Empty `user_sessions` table | None. Every signed-in user signs in once after the upgrade |
 | 0062 | Empty `run_workflow_events` table, nullable `approvals.execution_status` | None |
 | 0063 | `run_metric_specs.direction` nullable, `run_metric_specs.is_primary` | `reclassify_metric_errors` — **queued, runs by itself**: rebuilds runs whose verdict reasons were counted as scorer errors, and marks repeat passes whose task failed after a metric was scored |
@@ -74,7 +74,10 @@ Migrations `0058`–`0064` are quick DDL or small job/queue inserts.
 
 After `0060`/`0064` the dashboard worker republishes every ready summary once
 (a "republish wave"; about 45 s per 600 runs on the perf lab, in the
-background). `reclassify_metric_errors` and `project_item_failure_events`
+background). Summaries of `SUMMARY_SHAPE` 5 (repeat-run means judge task
+errors per pass; a completed run's items never received are counted apart as
+`not_received_count`) are rebuilt from the same numeric records; no source
+rows are read. `reclassify_metric_errors` and `project_item_failure_events`
 request a full source rebuild only for the runs they find affected; estimate
 the count before deploying (read-only, works on json and jsonb):
 
