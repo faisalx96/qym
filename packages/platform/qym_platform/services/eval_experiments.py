@@ -35,9 +35,11 @@ Retries (plan §13). A retry is a new row with the same ``combo_index``,
 new token. The retried row is *superseded*: kept for history, left out of the
 experiment's aggregate status.
 
-Cancellation (plan §13.1) is ``cancel_job``: queued/blocked jobs without a live lease are
-cancelled locally; otherwise ``cancel_requested_at`` is set (and submitted/running jobs
-move to ``CANCELLING``) so the dispatcher performs the remote cancel.
+Cancellation (plan §13.1) is ``cancel_jobs`` (per-job permission, audit, linked run,
+aggregate status) over ``cancel_job`` (the guarded state change): queued/blocked jobs
+without a live lease are cancelled locally; otherwise ``cancel_requested_at`` is set
+(and submitted/running jobs move to ``CANCELLING``) so the dispatcher performs the
+remote cancel on its next tick (``EvalDispatcher._step_cancel``).
 """
 
 from __future__ import annotations
@@ -47,20 +49,31 @@ import copy
 import hashlib
 import hmac
 from datetime import datetime
-from typing import Any, Iterable, Mapping, Optional, Sequence, cast
+from typing import TYPE_CHECKING, Any, Iterable, Mapping, Optional, Sequence, cast
 
-from sqlalchemy import CursorResult, or_, update
+from sqlalchemy import CursorResult, and_, or_, select, update
 from sqlalchemy.orm import Session, object_session
 from sqlalchemy.orm.attributes import set_committed_value
+from sqlalchemy.orm.util import identity_key
 
 from ..datetime_utils import utc_now_naive
 from ..db.models import (
+    AuditLog,
     EvalExperiment,
     EvalExperimentJob,
     EvalExperimentStatus,
     EvalJobStatus,
+    Run,
+    RunWorkflowStatus,
 )
 from ..settings import PlatformSettings
+from .run_lifecycle import (
+    RUN_STATUS_REASON_CANCELLED_FROM_QUEUE,
+    RUN_STATUS_REASON_LEASE_TIMEOUT,
+)
+
+if TYPE_CHECKING:
+    from ..auth import Principal
 
 _TOKEN_KEY_LABEL = b"qym-eval-launch-token-v1"
 TOKEN_PREFIX = "qlt_"
@@ -444,9 +457,13 @@ def _guarded_experiment_update(
 
 # --------------------------------------------------------------------------- cancel
 
+# ``cancel_jobs`` outcomes, per job id (plan §13.1).
 CANCELLED = "cancelled"
 CANCELLING = "cancelling"
 ALREADY_TERMINAL = "already_terminal"
+FORBIDDEN = "forbidden"
+NOT_FOUND = "not_found"  # unknown id, or a job of another project
+CANCELLING_WAIT_REASON = "Cancelling"
 
 
 def _lease_free(now: datetime):
@@ -495,31 +512,33 @@ def cancel_job(
         "updated_at": now,
     }
     try:
+        local = [status.in_(LOCAL_CANCEL_STATUSES), _lease_free(now)]
+        local_values = {
+            "status": EvalJobStatus.CANCELLED,
+            "finished_at": now,
+            "wait_reason": None,
+            "next_attempt_at": None,
+            **fields,
+        }
         # 1. Not submitted and nobody holds the lease: cancel locally.
-        if _guarded_update(
-            db,
-            job.id,
-            [status.in_(LOCAL_CANCEL_STATUSES), _lease_free(now)],
-            {
-                "status": EvalJobStatus.CANCELLED,
-                "finished_at": now,
-                "wait_reason": None,
-                "next_attempt_at": None,
-                **fields,
-            },
-        ):
+        if _guarded_update(db, job.id, local, local_values):
             return CANCELLED
-        # 2. A remote job exists: the dispatcher cancels it on its next tick.
+        # 2. A remote job exists: the dispatcher cancels it on its next tick (due now).
         if _guarded_update(
             db,
             job.id,
             [status.in_(REMOTE_CANCEL_STATUSES)],
-            {"status": EvalJobStatus.CANCELLING, **fields},
+            {
+                "status": EvalJobStatus.CANCELLING,
+                "wait_reason": CANCELLING_WAIT_REASON,
+                "next_attempt_at": now,
+                **fields,
+            },
         ):
             return CANCELLING
         # 3. Being submitted right now (lease held, or the SUBMITTING crash marker):
-        # the dispatcher checks cancel_requested_at right after the service accepts
-        # the job. Otherwise the job is terminal or already cancelling.
+        # the dispatcher checks cancel_requested_at before and right after the submit.
+        # Otherwise the job is terminal or already cancelling.
         _guarded_update(
             db,
             job.id,
@@ -529,6 +548,145 @@ def cancel_job(
             ],
             fields,
         )
+        # 4. The dispatcher may have released the lease between 1 and 3 (e.g. it
+        # blocked or deferred the job): nothing would pick the request up from a
+        # BLOCKED job, so cancel locally now if that is possible.
+        if _guarded_update(db, job.id, local, local_values):
+            return CANCELLED
     finally:
         db.refresh(job)
     return ALREADY_TERMINAL if job.status in TERMINAL_JOB_STATUSES else CANCELLING
+
+
+def stop_linked_run(
+    db: Session, job: EvalExperimentJob, *, now: Optional[datetime] = None
+) -> bool:
+    """Mark the job's linked run ``STOPPED`` / ``cancelled_from_queue`` (plan §13.1).
+
+    A cancelled worker is killed and never sends a terminal event, so the run would
+    stay ``RUNNING``. Only a run without a terminal event is touched (``PENDING``,
+    ``RUNNING``, or a lease-timeout ``STOPPED`` that would otherwise reopen); the
+    ``UPDATE`` is guarded so a run finished concurrently by ingest keeps its outcome.
+    Later events cannot reopen it (``run_lifecycle.mark_run_*``). Caller commits.
+    """
+    run_id = job.run_id or db.scalar(
+        select(Run.id).where(Run.experiment_job_id == job.id).limit(1)
+    )
+    if not run_id:
+        return False
+    # The dashboard outbox hook expires the session around a bulk UPDATE of runs:
+    # flush first so pending changes (e.g. the job's new status) are not discarded.
+    db.flush()
+    result = cast(
+        CursorResult,
+        db.execute(
+            update(Run)
+            .where(
+                Run.id == run_id,
+                or_(
+                    Run.status.in_(
+                        (RunWorkflowStatus.PENDING, RunWorkflowStatus.RUNNING)
+                    ),
+                    and_(
+                        Run.status == RunWorkflowStatus.STOPPED,
+                        Run.status_reason == RUN_STATUS_REASON_LEASE_TIMEOUT,
+                    ),
+                ),
+            )
+            .values(
+                status=RunWorkflowStatus.STOPPED,
+                status_reason=RUN_STATUS_REASON_CANCELLED_FROM_QUEUE,
+                ended_at=now or utc_now_naive(),
+            )
+            .execution_options(synchronize_session=False)
+        ),
+    )
+    stopped = bool(result.rowcount)
+    if stopped:
+        run = db.identity_map.get(identity_key(Run, run_id))
+        if run is not None:
+            db.expire(run)
+    return stopped
+
+
+def can_control_experiment(
+    db: Session, principal: "Principal", experiment: EvalExperiment
+) -> bool:
+    """Cancel/retry: the experiment's creator or a project manager (plan §14)."""
+    from ..permissions import is_project_manager  # avoid an import cycle
+
+    creator = experiment.created_by_user_id
+    if creator and creator == principal.user.id:
+        return True
+    return is_project_manager(db, principal, experiment.project_id)
+
+
+def cancel_jobs(
+    db: Session,
+    job_ids: Sequence[str],
+    principal: "Principal",
+    reason: Optional[str] = None,
+    *,
+    project_id: Optional[str] = None,
+) -> dict[str, str]:
+    """Cancel several jobs, each on its own permission (plan §13.1).
+
+    The one cancel service behind the experiment cancel endpoints and the queue API.
+    Per id: ``forbidden`` unless the caller created the job's experiment or manages
+    its project; otherwise ``cancel_job`` (``cancelled`` for queued/blocked jobs
+    without a live lease, ``cancelling`` when the dispatcher must cancel remotely or
+    is submitting the job right now, ``already_terminal``). Ids that don't exist, or
+    belong to another project when ``project_id`` is given, are ``not_found``.
+
+    A job cancelled here gets its linked run stopped (``stop_linked_run``), one
+    ``AuditLog`` entry is written per job that was cancelled or is cancelling, and
+    every touched experiment's aggregate status is recomputed. Caller commits.
+    """
+    ids = list(dict.fromkeys(job_ids))
+    query = (
+        db.query(EvalExperimentJob, EvalExperiment)
+        .join(EvalExperiment, EvalExperiment.id == EvalExperimentJob.experiment_id)
+        .filter(EvalExperimentJob.id.in_(ids))
+    )
+    if project_id is not None:
+        query = query.filter(EvalExperiment.project_id == project_id)
+    found = {job.id: (job, experiment) for job, experiment in query.all()}
+    allowed: dict[str, bool] = {}
+    touched: dict[str, EvalExperiment] = {}
+    outcomes: dict[str, str] = {}
+    for job_id in ids:
+        pair = found.get(job_id)
+        if pair is None:
+            outcomes[job_id] = NOT_FOUND
+            continue
+        job, experiment = pair
+        if experiment.id not in allowed:
+            allowed[experiment.id] = can_control_experiment(db, principal, experiment)
+        if not allowed[experiment.id]:
+            outcomes[job_id] = FORBIDDEN
+            continue
+        outcome = cancel_job(db, job, user_id=principal.user.id, reason=reason)
+        outcomes[job_id] = outcome
+        if outcome == ALREADY_TERMINAL:
+            continue
+        if outcome == CANCELLED:
+            stop_linked_run(db, job)
+        touched[experiment.id] = experiment
+        db.add(
+            AuditLog(
+                actor_user_id=principal.user.id,
+                action="eval_job.cancel",
+                entity_type="eval_experiment_job",
+                entity_id=job.id,
+                before={},
+                after={
+                    "outcome": outcome,
+                    "reason": reason,
+                    "experiment_id": experiment.id,
+                    "status": job.status.value,
+                },
+            )
+        )
+    for experiment in touched.values():
+        recompute_experiment_status(db, experiment)
+    return outcomes

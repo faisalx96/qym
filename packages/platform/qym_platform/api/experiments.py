@@ -94,7 +94,9 @@ from qym_platform.services.eval_experiments import (
     TERMINAL_JOB_STATUSES,
     build_qym_config,
     build_qym_launch,
+    can_control_experiment,
     cancel_job,
+    cancel_jobs,
     current_jobs,
     launch_token_hash_for_job,
     recompute_experiment_status,
@@ -232,11 +234,7 @@ def _require_control(
     db: Session, principal: Principal, experiment: EvalExperiment
 ) -> None:
     """Cancel/retry: the experiment's creator or a project manager (plan §14)."""
-    if experiment.created_by_user_id and (
-        experiment.created_by_user_id == principal.user.id
-    ):
-        return
-    if is_project_manager(db, principal, experiment.project_id):
+    if can_control_experiment(db, principal, experiment):
         return
     raise HTTPException(
         status_code=403,
@@ -1198,21 +1196,14 @@ def _cancel(
     jobs: List[EvalExperimentJob],
     reason: Optional[str],
 ) -> Dict[str, str]:
-    outcomes: Dict[str, str] = {}
-    for job in jobs:
-        outcome = cancel_job(db, job, user_id=principal.user.id, reason=reason)
-        outcomes[job.id] = outcome
-        if outcome != ALREADY_TERMINAL:
-            _audit(
-                db,
-                principal,
-                "eval_job.cancel",
-                "eval_experiment_job",
-                job.id,
-                {"outcome": outcome, "reason": reason},
-            )
-    recompute_experiment_status(db, experiment)
-    return outcomes
+    """``cancel_jobs`` for jobs of an experiment the caller already controls."""
+    return cancel_jobs(
+        db,
+        [job.id for job in jobs],
+        principal,
+        reason,
+        project_id=experiment.project_id,
+    )
 
 
 @router.post(_PREFIX + "/{experiment_id}/cancel")
