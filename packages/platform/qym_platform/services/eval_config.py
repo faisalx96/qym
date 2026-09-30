@@ -41,7 +41,8 @@ When ``endpoint:primary`` is bound, ``evaluator.model`` and ``evaluator.config.m
 are set to its model so the Models page groups runs correctly (§7.4).
 
 ``validate_config_document`` checks the document's structure, the reserved
-``run_metadata`` prefix, bindings, literal secrets in ``env_overrides``, then validates
+``run_metadata`` prefix, bindings, literal secrets in ``env_overrides``, user-written
+``{{qym:`` placeholder syntax anywhere in the document, then validates
 the materialized body with ``jsonschema`` Draft 2020-12 (the environment's
 ``env_overrides`` schema and the static ``EvaluatorInputs`` schema, D5) and mirrors the
 service's cross-field rules: ``required_keys``/``min_items``/``endpoint_ref`` from the form
@@ -57,7 +58,8 @@ Every error is a JSON object::
       "field": "/LLM_OVERRIDES/{role}/endpoint",   # key in the section descriptor, or null
       "params": {"role": "main"},                  # values of the template segments
       "rule": "schema" | "unknown_key" | "required" | "required_keys" | "min_items" |
-              "endpoint_ref" | "report_k" | "reserved_key" | "secret_literal" |
+              "endpoint_ref" | "report_k" | "reserved_key" | "reserved_placeholder" |
+              "secret_literal" |
               "binding" | "binding_conflict" | "sweep" | "type",
       "message": "…",
       "slot_key": "endpoint:primary"               # only for slot_bindings errors
@@ -122,6 +124,8 @@ PLATFORM_OWNED_CONFIG_FIELDS = (
 )
 DEFAULT_SAMPLES = 1
 
+# Anything containing this prefix is platform syntax; users may never write it.
+PLACEHOLDER_PREFIX = "{{qym:"
 _PLACEHOLDER = re.compile(r"^\{\{qym:slot:(?P<slot>.+):(?P<role>[a-z_]+)\}\}$")
 _SECTIONS = ("env_overrides", "evaluator", "slot_bindings")
 
@@ -882,6 +886,38 @@ def _secret_literal_errors(
     return out
 
 
+def _user_placeholder_errors(
+    value: Any, pointer: str = ""
+) -> list[tuple[str, str, str]]:
+    """User strings (values or keys) that use the platform placeholder syntax.
+
+    Slot placeholders are written only by ``_materialize`` from ``slot_bindings``, and
+    dispatch fills every ``{{qym:slot:…}}`` it finds with the bound value (keys
+    included). A user-written placeholder would route a connection key into a field
+    of their choosing, so the whole ``{{qym:`` prefix is refused anywhere in the
+    document (``env_overrides``, ``evaluator``, ``run_metadata``, temporary models…).
+    """
+    out: list[tuple[str, str, str]] = []
+    message = (
+        f"{PLACEHOLDER_PREFIX!r} is reserved for platform slot placeholders; "
+        "bind a model slot instead"
+    )
+    if isinstance(value, str):
+        if PLACEHOLDER_PREFIX in value:
+            out.append((pointer, "reserved_placeholder", message))
+    elif isinstance(value, Mapping):
+        for key, child in value.items():
+            child_ptr = pointer + "/" + escape_pointer_segment(str(key))
+            if isinstance(key, str) and PLACEHOLDER_PREFIX in key:
+                out.append((child_ptr, "reserved_placeholder", message))
+                continue
+            out += _user_placeholder_errors(child, child_ptr)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            out += _user_placeholder_errors(child, f"{pointer}/{index}")
+    return out
+
+
 def validate_config_document(
     document: Any,
     *,
@@ -942,6 +978,7 @@ def validate_config_document(
             )
         )
     located += _secret_literal_errors(document.get("env_overrides"), descriptor)
+    located += _user_placeholder_errors(dict(document))
 
     # Bindings.
     bindings = document.get("slot_bindings")
