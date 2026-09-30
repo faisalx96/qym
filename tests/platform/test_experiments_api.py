@@ -302,7 +302,7 @@ def test_launch_token_changes_with_key_and_needs_one(monkeypatch, encryption):
     "statuses, expected",
     [
         ([], "QUEUED"),
-        (["QUEUED", "BLOCKED"], "QUEUED"),
+        (["QUEUED", "BLOCKED"], "RUNNING"),
         (["QUEUED", "SUBMITTED"], "RUNNING"),
         (["QUEUED", "SUCCEEDED"], "RUNNING"),
         (["SUCCEEDED", "SUCCEEDED"], "COMPLETED"),

@@ -78,7 +78,6 @@ from typing import (
     Awaitable,
     Callable,
     Dict,
-    Iterable,
     List,
     Mapping,
     Optional,
@@ -114,9 +113,14 @@ from .eval_bindings import (
     prepare_dispatch,
 )
 from .eval_experiments import (
+    ACTIVE_JOB_STATUSES,
+    TERMINAL_JOB_STATUSES,
     LaunchTokenUnavailable,
+    aggregate_status,
     body_with_launch_token,
-    clear_secrets_when_settled,
+)
+from .eval_experiments import (
+    recompute_experiment_status as _recompute_experiment_status,
 )
 from .eval_model_slots import descriptor_for_schema, list_model_slots
 from .eval_service_client import (
@@ -171,23 +175,8 @@ RECONCILE_CLOCK_SKEW = timedelta(minutes=10)
 
 ENV_AUTH_ERROR = "Evaluation service rejected the environment API key"
 
-TERMINAL_JOB_STATUSES = frozenset(
-    {
-        EvalJobStatus.SUCCEEDED,
-        EvalJobStatus.FAILED,
-        EvalJobStatus.CANCELLED,
-        EvalJobStatus.TIMED_OUT,
-    }
-)
 # Occupies an in-flight slot on its environment.
-INFLIGHT_JOB_STATUSES = frozenset(
-    {
-        EvalJobStatus.SUBMITTING,
-        EvalJobStatus.SUBMITTED,
-        EvalJobStatus.RUNNING,
-        EvalJobStatus.CANCELLING,
-    }
-)
+INFLIGHT_JOB_STATUSES = ACTIVE_JOB_STATUSES
 # Statuses this dispatcher claims. CANCELLING belongs to the cancel flow (#19).
 CLAIMABLE_JOB_STATUSES = (
     EvalJobStatus.QUEUED,
@@ -209,69 +198,19 @@ SecretLookupFor = Callable[[EvalExperiment], Optional[SecretLookup]]
 # ------------------------------------------------------------------ pure helpers
 
 
-def aggregate_status(statuses: Iterable[EvalJobStatus]) -> EvalExperimentStatus:
-    """Experiment status from its (non-superseded) job statuses.
-
-    Any job in flight → ``RUNNING``. Queued jobs → ``QUEUED`` until one job has moved,
-    then ``RUNNING``. When nothing is left to dispatch, the outcome is ``COMPLETED``
-    (all succeeded), ``CANCELLED`` (all cancelled), ``PARTIAL`` (some succeeded) or
-    ``FAILED``. ``BLOCKED`` needs a user action, so it counts as not succeeded.
-    """
-    items = [EvalJobStatus(s) for s in statuses]
-    if not items:
-        return EvalExperimentStatus.QUEUED
-    if any(s in INFLIGHT_JOB_STATUSES for s in items):
-        return EvalExperimentStatus.RUNNING
-    if any(s == EvalJobStatus.QUEUED for s in items):
-        if all(s == EvalJobStatus.QUEUED for s in items):
-            return EvalExperimentStatus.QUEUED
-        return EvalExperimentStatus.RUNNING
-    if all(s == EvalJobStatus.CANCELLED for s in items):
-        return EvalExperimentStatus.CANCELLED
-    succeeded = sum(1 for s in items if s == EvalJobStatus.SUCCEEDED)
-    if succeeded == len(items):
-        return EvalExperimentStatus.COMPLETED
-    if succeeded:
-        return EvalExperimentStatus.PARTIAL
-    return EvalExperimentStatus.FAILED
-
-
-def _counted_jobs(experiment_id: str):
-    """Jobs that count toward the aggregate status.
-
-    A retried row is *superseded* (another job's ``retry_of_job_id`` points at it) and
-    is left out: only the latest attempt of each combination counts.
-    """
-    retry = aliased(EvalExperimentJob)
-    superseded = (
-        select(retry.id).where(retry.retry_of_job_id == EvalExperimentJob.id).exists()
-    )
-    return select(EvalExperimentJob.status).where(
-        EvalExperimentJob.experiment_id == experiment_id, ~superseded
-    )
-
-
 def recompute_experiment_status(
     db: Session, experiment_id: str
 ) -> Optional[EvalExperimentStatus]:
-    """Recompute and set ``EvalExperiment.status`` (flushes nothing, commits nothing)."""
+    """Recompute and set ``EvalExperiment.status`` (flushes, commits nothing).
+
+    Delegates to ``eval_experiments.recompute_experiment_status``: one aggregate rule
+    (``aggregate_status``) for the API, the queue and the dispatcher.
+    """
     experiment = db.get(EvalExperiment, experiment_id)
     if experiment is None:
         return None
     db.flush()
-    statuses = [row[0] for row in db.execute(_counted_jobs(experiment_id))]
-    status = aggregate_status(statuses)
-    if experiment.status != status:
-        experiment.status = status
-    if experiment.secrets_encrypted:
-        # Temporary-model keys are dropped once every current job settled (#12).
-        jobs = (
-            db.query(EvalExperimentJob)
-            .filter(EvalExperimentJob.experiment_id == experiment_id)
-            .all()
-        )
-        clear_secrets_when_settled(experiment, jobs)
-    return status
+    return _recompute_experiment_status(db, experiment)
 
 
 def poll_interval(elapsed_seconds: float) -> float:

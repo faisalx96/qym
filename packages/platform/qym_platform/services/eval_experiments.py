@@ -85,7 +85,8 @@ RETRYABLE_STATUSES = frozenset(
         EvalJobStatus.BLOCKED,
     }
 )
-_ACTIVE_STATUSES = frozenset(
+# In flight: occupies a slot on its environment (the dispatcher's inflight cap).
+ACTIVE_JOB_STATUSES = frozenset(
     {
         EvalJobStatus.SUBMITTING,
         EvalJobStatus.SUBMITTED,
@@ -330,26 +331,35 @@ def superseded_job_ids(jobs: Iterable[EvalExperimentJob]) -> set[str]:
 # --------------------------------------------------------------------------- status
 
 
-def aggregate_status(
-    statuses: Sequence[EvalJobStatus],
-) -> EvalExperimentStatus:
-    """Experiment status from its current (non-superseded) jobs (plan §4.5)."""
-    if not statuses:
+def aggregate_status(statuses: Iterable[EvalJobStatus]) -> EvalExperimentStatus:
+    """Experiment status from its current (non-superseded) job statuses (plan §4.5).
+
+    The single implementation, used by the API, the queue and the dispatcher:
+
+    - no jobs, or every job ``QUEUED`` → ``QUEUED``;
+    - any job in flight (``SUBMITTING``/``SUBMITTED``/``RUNNING``/``CANCELLING``) →
+      ``RUNNING``; so is a mix of ``QUEUED`` jobs and jobs that have moved on;
+    - otherwise every job has *settled* (terminal, or ``BLOCKED``: nothing more is
+      dispatched without a user action) → ``COMPLETED`` (all succeeded),
+      ``CANCELLED`` (all cancelled), ``PARTIAL`` (some succeeded) or ``FAILED``.
+      ``BLOCKED`` counts as not succeeded.
+    """
+    items = [EvalJobStatus(s) for s in statuses]
+    if not items:
         return EvalExperimentStatus.QUEUED
-    if any(s not in TERMINAL_JOB_STATUSES for s in statuses):
-        if any(s in _ACTIVE_STATUSES for s in statuses) or any(
-            s in TERMINAL_JOB_STATUSES for s in statuses
-        ):
-            return EvalExperimentStatus.RUNNING
-        return EvalExperimentStatus.QUEUED
-    succeeded = sum(1 for s in statuses if s == EvalJobStatus.SUCCEEDED)
-    cancelled = sum(1 for s in statuses if s == EvalJobStatus.CANCELLED)
-    if succeeded == len(statuses):
+    if any(s in ACTIVE_JOB_STATUSES for s in items):
+        return EvalExperimentStatus.RUNNING
+    if any(s == EvalJobStatus.QUEUED for s in items):
+        if all(s == EvalJobStatus.QUEUED for s in items):
+            return EvalExperimentStatus.QUEUED
+        return EvalExperimentStatus.RUNNING
+    if all(s == EvalJobStatus.CANCELLED for s in items):
+        return EvalExperimentStatus.CANCELLED
+    succeeded = sum(1 for s in items if s == EvalJobStatus.SUCCEEDED)
+    if succeeded == len(items):
         return EvalExperimentStatus.COMPLETED
     if succeeded:
         return EvalExperimentStatus.PARTIAL
-    if cancelled == len(statuses):
-        return EvalExperimentStatus.CANCELLED
     return EvalExperimentStatus.FAILED
 
 
@@ -368,7 +378,8 @@ def recompute_experiment_status(
         .all()
     )
     status = aggregate_status([j.status for j in current_jobs(jobs)])
-    experiment.status = status
+    if experiment.status != status:
+        experiment.status = status
     clear_secrets_when_settled(experiment, jobs)
     return status
 
