@@ -87,6 +87,10 @@ from qym_platform.services.eval_run_linking import (
     merge_run_metadata,
     strip_launch_token,
 )
+from qym_platform.services.eval_run_scores import (
+    SCORABLE_RUN_STATUSES,
+    sync_run_scores,
+)
 from qym_platform.services.event_storage import (
     ingest_settings,
     oversized_span_attributes,
@@ -1885,6 +1889,16 @@ def _ingest_events_sync(
         except Exception as e:
             logger.warning("Live trace aggregation failed for run %s: %s", run_id, e)
             _invalidate_trace_summary()
+
+    # Best-run index (plan §4.7): run_completed, or scores arriving after it, on an
+    # official run. Writes only once the job is terminal too; the dispatcher's hook
+    # covers the other order.
+    if (
+        applied
+        and run.origin == RunOrigin.OFFICIAL
+        and run.status in SCORABLE_RUN_STATUSES
+    ):
+        sync_run_scores(db, run)
 
     db.commit()
     return JSONResponse({"ok": True, "applied": applied, "skipped": skipped})

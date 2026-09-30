@@ -60,6 +60,7 @@ from qym_platform.permissions import (
     can_view_run,
     has_project_access,
 )
+from qym_platform.services.eval_run_scores import sync_run_scores
 from qym_platform.services.issue_reviews import change_metric_issue, reconcile_issue_edits
 from qym_platform.services.run_lifecycle import (
     RUN_STATUS_REASON_ADMIN_FORCE_STOP,
@@ -4269,6 +4270,7 @@ def delete_run_pass(
         )
     except RepeatPassDeletionError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    sync_run_scores(db, run)  # re-score: refresh the best-run index
     db.commit()
     return result
 
@@ -4328,6 +4330,7 @@ def delete_run_passes(
     except RepeatPassDeletionError as exc:
         db.rollback()
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    sync_run_scores(db, run)  # re-score: refresh the best-run index
     db.commit()
     return {
         "ok": True,
@@ -4721,6 +4724,7 @@ def update_metric(
             score_record.score_raw = new_score
 
     score_record.meta = meta
+    sync_run_scores(db, run)  # re-score: refresh the best-run index
     db.commit()
 
     # Build the updated row response matching the compare API format

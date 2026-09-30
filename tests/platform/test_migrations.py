@@ -470,6 +470,7 @@ EXPERIMENT_TABLES = {
 }
 RUN_EXPERIMENT_COLUMNS = {"origin", "experiment_job_id"}
 RUN_EXPERIMENT_INDEXES = {"ix_runs_origin", "ix_runs_experiment_job_id"}
+SCORE_TABLES = frozenset({"eval_run_scores"})  # 0064
 # Revisions after 0061 that change eval_experiment_jobs: (column they add, file).
 LATER_JOB_REVISIONS = (
     ("attempt", "0063_eval_job_attempts.py"),
@@ -489,6 +490,14 @@ def _eval_experiment_prerequisites(
         sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("project_id", sa.String(36), nullable=False),
         sa.Column("task", sa.String(200), nullable=False),
+    )
+    # Referenced by eval_run_scores (0064).
+    sa.Table("datasets", metadata, sa.Column("id", sa.String(36), primary_key=True))
+    sa.Table(
+        "dataset_versions",
+        metadata,
+        sa.Column("id", sa.String(36), primary_key=True),
+        sa.Column("dataset_id", sa.String(36), sa.ForeignKey("datasets.id")),
     )
     metadata.create_all(engine)
     previous = _load_migration("0060_eval_environments.py")
@@ -732,7 +741,7 @@ def _eval_experiment_model_diffs(
         table = obj if kind == "table" else getattr(obj, "table", None)
         if table is None:
             return False
-        if table.name in EVAL_TABLES | EXPERIMENT_TABLES | extra_tables:
+        if table.name in EVAL_TABLES | EXPERIMENT_TABLES | SCORE_TABLES | extra_tables:
             return True
         if table.name != "runs":
             return False
@@ -1332,7 +1341,7 @@ def _eval_run_scores_prerequisites(
 
 
 def _assert_eval_run_scores_upgraded(connection: sa.Connection) -> None:
-    """Exercise the 0064 ``run_linked_at`` backfill."""
+    """Exercise the 0064 ``run_linked_at`` backfill and the empty score index."""
     rows = connection.execute(
         sa.text("SELECT id, run_linked_at FROM eval_experiment_jobs ORDER BY id")
     ).all()
@@ -1340,6 +1349,81 @@ def _assert_eval_run_scores_upgraded(connection: sa.Connection) -> None:
     # The linked job is closed at its last update time; the unlinked one is open.
     assert linked["j1"] is not None and str(linked["j1"]).startswith("2026-09-29")
     assert linked["j2"] is None
+    # Data-free: existing runs are filled by the backfill command, not the migration.
+    assert (
+        connection.execute(sa.text("SELECT COUNT(*) FROM eval_run_scores")).scalar_one()
+        == 0
+    )
+    indexes = {
+        index["name"]: index["column_names"]
+        for index in sa.inspect(connection).get_indexes("eval_run_scores")
+    }
+    assert indexes["ix_eval_run_scores_ranking"] == [
+        "environment_id",
+        "dataset_version_id",
+        "metric_name",
+        "mean_score",
+    ]
+
+
+def _insert_score(connection: sa.Connection, metric: str, **values: Any) -> None:
+    _insert_row(
+        connection,
+        "eval_run_scores",
+        **{
+            "run_id": "r2",
+            "metric_name": metric,
+            "project_id": "p1",
+            "environment_id": "e1",
+            "mean_score": 0.5,
+            "computed_at": TS,
+            **values,
+        },
+    )
+
+
+def _assert_eval_run_score_constraints(connection: sa.Connection) -> None:
+    """Exercise 0064 defaults, key, checks and FK actions on ``eval_run_scores``."""
+
+    def scalar(sql: str) -> Any:
+        return connection.execute(sa.text(sql)).scalar_one()
+
+    def rejected(metric: str, **values: Any) -> None:
+        with pytest.raises(sa.exc.IntegrityError):
+            with connection.begin_nested():
+                _insert_score(connection, metric, **values)
+
+    _insert_row(connection, "datasets", id="d1")
+    _insert_row(connection, "dataset_versions", id="v1", dataset_id="d1")
+    _insert_score(connection, "accuracy", dataset_id="d1", dataset_version_id="v1")
+    row = (
+        connection.execute(sa.text("SELECT * FROM eval_run_scores")).mappings().one()
+    )
+    assert row["direction"] == "maximize"
+    assert (row["item_count"], row["error_item_count"]) == (0, 0)
+    assert row["pass_at_k"] is None and row["completed_at"] is None
+
+    rejected("accuracy")  # (run_id, metric_name) is the key
+    rejected("bad-direction", direction="higher")
+    rejected("bad-errors", item_count=1, error_item_count=2)
+    rejected("bad-count", item_count=-1)
+    rejected("bad-mean", mean_score=None)
+    rejected("bad-env", environment_id="missing")
+    rejected("bad-run", run_id="missing")
+
+    # A deleted dataset (version) only clears the pointer.
+    connection.execute(sa.text("DELETE FROM dataset_versions WHERE id = 'v1'"))
+    connection.execute(sa.text("DELETE FROM datasets WHERE id = 'd1'"))
+    assert scalar("SELECT dataset_version_id FROM eval_run_scores") is None
+    assert scalar("SELECT dataset_id FROM eval_run_scores") is None
+
+    # Rows go with their environment and with their run.
+    _insert_environment(connection, "e9", base_url="https://e9.test")
+    _insert_score(connection, "latency", environment_id="e9")
+    connection.execute(sa.text("DELETE FROM eval_environments WHERE id = 'e9'"))
+    assert scalar("SELECT COUNT(*) FROM eval_run_scores") == 1
+    connection.execute(sa.text("DELETE FROM runs WHERE id = 'r2'"))
+    assert scalar("SELECT COUNT(*) FROM eval_run_scores") == 0
 
 
 def _assert_eval_run_scores_downgraded(connection: sa.Connection) -> None:
@@ -1349,6 +1433,7 @@ def _assert_eval_run_scores_downgraded(connection: sa.Connection) -> None:
     }
     assert "run_linked_at" not in columns
     assert "attempt" in columns  # 0063 is untouched
+    assert "eval_run_scores" not in sa.inspect(connection).get_table_names()
     assert (
         connection.execute(
             sa.text("SELECT run_id FROM eval_experiment_jobs WHERE id = 'j1'")
@@ -1366,6 +1451,7 @@ def _run_eval_run_scores_round_trip(
     migration.upgrade()
     _assert_eval_run_scores_upgraded(connection)
     assert _eval_experiment_model_diffs(connection, PRESET_TABLES) == []
+    _assert_eval_run_score_constraints(connection)
 
     migration.downgrade()
     _assert_eval_run_scores_downgraded(connection)
@@ -1394,3 +1480,25 @@ def test_eval_run_scores_migration_postgres_upgrade_and_downgrade(
 
     with postgres_engine.begin() as connection:
         _run_eval_run_scores_round_trip(connection, migration, monkeypatch)
+        inspector = sa.inspect(connection)
+        pass_at_k = next(
+            column
+            for column in inspector.get_columns("eval_run_scores")
+            if column["name"] == "pass_at_k"
+        )
+        assert pass_at_k["type"].__class__.__name__ == "JSONB"
+        fks = {
+            fk["name"]: fk["options"].get("ondelete")
+            for fk in inspector.get_foreign_keys("eval_run_scores")
+        }
+        assert fks == {
+            "fk_eval_run_scores_run_id": "CASCADE",
+            "fk_eval_run_scores_project_id": "CASCADE",
+            "fk_eval_run_scores_environment_id": "CASCADE",
+            "fk_eval_run_scores_dataset_id": "SET NULL",
+            "fk_eval_run_scores_dataset_version_id": "SET NULL",
+        }
+        assert {
+            "ck_eval_run_scores_direction",
+            "ck_eval_run_scores_counts",
+        } <= {c["name"] for c in inspector.get_check_constraints("eval_run_scores")}
