@@ -2391,7 +2391,7 @@ def test_run_selection_uses_explicit_mode_and_reclaims_checkbox_column() -> None
         styles, ".table-container:not(.select-mode) .run-select-control {"
     )
     assert "display: none;" in hidden_control_rule
-    assert "RUNS_TABLE_BASE_COLUMN_COUNT = 11" in source
+    assert "RUNS_TABLE_BASE_COLUMN_COUNT = 12" in source
     assert '<th class="col-select">' not in markup
     assert '<td class="col-select"' not in source
     assert "--runs-col-select-offset" not in styles

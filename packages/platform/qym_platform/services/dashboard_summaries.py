@@ -834,6 +834,10 @@ def _sync_dimension(db, run_id, version):
         _strip_model_provider,
     )
     from qym_platform.db.models import Approval, Run, User
+    from qym_platform.services.run_origin import (
+        experiment_refs_for_jobs,
+        run_origin_fields,
+    )
 
     run = db.get(Run, run_id)
     dimension = db.get(Dimension, run_id)
@@ -958,6 +962,9 @@ def _sync_dimension(db, run_id, version):
         "langfuse_url": metadata.get("langfuse_url"),
         "langfuse_dataset_id": metadata.get("langfuse_dataset_id"),
         "langfuse_run_id": metadata.get("langfuse_run_id"),
+        **run_origin_fields(
+            run, experiment_refs_for_jobs(db, [run.experiment_job_id])
+        ),
         **dataset,
     }
     if created:
@@ -1230,6 +1237,18 @@ def refresh_run_summary(db, run_id, version):
         repair_extrema(db, run.project_id, bucket, granularity)
 
 
+def _descriptor_origin_stale(run, dimension):
+    """An official run whose descriptor predates the ``origin`` field."""
+    from qym_platform.db.models import RunOrigin
+
+    return (
+        run is not None
+        and dimension is not None
+        and run.origin == RunOrigin.OFFICIAL
+        and "origin" not in (dimension.descriptor or {})
+    )
+
+
 def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
     """Serialize one partition; commit snapshot, deltas and watermark together."""
     from qym_platform.db.models import Run
@@ -1291,14 +1310,17 @@ def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
             # Empty stages and removed source runs must not monopolize the
             # oldest queue slots indefinitely. Existing publications stay intact.
             if partition.backfill_complete:
+                dimension = db.get(Dimension, run_id)
                 if run is None or (
                     summary is not None
-                    and "task_error_count" not in (summary.data or {})
                     and partition.queue_state != "repair_required"
+                    and (
+                        "task_error_count" not in (summary.data or {})
+                        or _descriptor_origin_stale(run, dimension)
+                    )
                 ):
                     # Upgrade the published shape from numeric projection rows.
                     # Migration 0058 queues existing summaries without replaying history.
-                    dimension = db.get(Dimension, run_id)
                     hours = {_hour(dimension.timestamp)} if dimension else set()
                     if run:
                         hours.add(_hour(run.started_at or run.created_at))
@@ -1408,15 +1430,28 @@ def bootstrap_partitions(db, *, limit=100):
 
 def reconcile_summary_shapes(db, *, limit=100):
     """Recover upgrades consumed by an older worker during rolling deployment."""
-    from qym_platform.db.models import Run
+    from qym_platform.db.models import Run, RunOrigin
 
+    # Official runs published before descriptors carried ``origin`` would list
+    # as local; only those few are requeued (``origin`` is indexed).
+    stale_origin = (
+        select(Dimension.run_key)
+        .join(Run, Run.id == Dimension.run_key)
+        .where(
+            Run.origin == RunOrigin.OFFICIAL,
+            Dimension.descriptor["origin"].as_string().is_(None),
+        )
+    )
     outdated = (
         select(Summary.run_key)
         .join(Run, Run.id == Summary.run_key)
         .where(
             Run.deleted_at.is_(None),
             Summary.projection_revision > 0,
-            Summary.data["task_error_count"].as_integer().is_(None),
+            or_(
+                Summary.data["task_error_count"].as_integer().is_(None),
+                Summary.run_key.in_(stale_origin),
+            ),
         )
     )
     eligible = (

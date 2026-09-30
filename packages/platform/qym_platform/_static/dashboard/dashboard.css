@@ -3205,6 +3205,49 @@ body.chart-col-resize-active {
   white-space: nowrap;
 }
 
+/* EXPERIMENT column + "Official run" provenance tag (plan §11). The tag is
+   named "Official run" so it never reads as the "Official defaults" preset. */
+.col-experiment {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.runs-table th.col-experiment,
+.runs-table td.col-experiment {
+  text-align: left;
+}
+
+.experiment-link {
+  color: var(--accent-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-base);
+  text-decoration: none;
+}
+
+.experiment-link:hover,
+.experiment-link:focus-visible {
+  text-decoration: underline;
+}
+
+.experiment-name {
+  color: var(--text-secondary);
+  font-size: var(--font-base);
+}
+
+.origin-badge {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.run-date .origin-badge {
+  margin-left: var(--space-sm);
+  vertical-align: middle;
+}
+
+.origin-filters {
+  flex: 0 0 auto;
+}
+
 .version-badge {
   display: inline-block;
   font-size: var(--font-sm);
