@@ -564,6 +564,12 @@ def cancel_job(
             "next_attempt_at": None,
             **fields,
         }
+        remote_values = {
+            "status": EvalJobStatus.CANCELLING,
+            "wait_reason": CANCELLING_WAIT_REASON,
+            "next_attempt_at": now,
+            **fields,
+        }
         # 1. Not submitted and nobody holds the lease: cancel locally.
         if _guarded_update(db, job.id, local, local_values):
             return CANCELLED
@@ -572,12 +578,7 @@ def cancel_job(
             db,
             job.id,
             [status.in_(REMOTE_CANCEL_STATUSES)],
-            {
-                "status": EvalJobStatus.CANCELLING,
-                "wait_reason": CANCELLING_WAIT_REASON,
-                "next_attempt_at": now,
-                **fields,
-            },
+            remote_values,
         ):
             return CANCELLING
         # 3. Being submitted right now (lease held, or the SUBMITTING crash marker):
@@ -597,6 +598,19 @@ def cancel_job(
         # BLOCKED job, so cancel locally now if that is possible.
         if _guarded_update(db, job.id, local, local_values):
             return CANCELLED
+        # 5. The submit finished between 2 and 3 (SUBMITTING -> SUBMITTED/RUNNING, so
+        # 3 matched nothing; on Postgres 3 may have waited for that very commit): the
+        # remote job exists now, so cancel it remotely as in 2.
+        if _guarded_update(
+            db,
+            job.id,
+            [
+                status.in_(REMOTE_CANCEL_STATUSES),
+                EvalExperimentJob.cancel_requested_at.is_(None),
+            ],
+            remote_values,
+        ):
+            return CANCELLING
     finally:
         db.refresh(job)
     return ALREADY_TERMINAL if job.status in TERMINAL_JOB_STATUSES else CANCELLING

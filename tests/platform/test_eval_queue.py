@@ -8,6 +8,7 @@ cancel service shares with the dispatcher.
 from __future__ import annotations
 
 import sys
+import threading
 from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -345,22 +346,131 @@ def test_cancel_racing_submit(sessions, service, clock, rejected):
     assert d.tick() == 0
 
 
-def test_cancel_between_claim_and_submit_never_submits(sessions, service, clock):
+def _cancel_in_thread(sessions, job_id, user_id, outcomes, errors, wait):
+    """``_cancel`` on its own connection and thread, as a concurrent API request.
+
+    Joins for at most ``wait`` seconds and returns the thread: on Postgres a cancel
+    of a job whose row the dispatcher holds ``FOR UPDATE`` waits for that commit.
+    """
+
+    def run():
+        try:
+            outcomes.append(_cancel(sessions, [job_id], user_id))
+        except Exception as exc:  # noqa: BLE001 - surfaced by the caller's assertion
+            errors.append(repr(exc))
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    thread.join(timeout=wait)
+    return thread
+
+
+def test_cancel_between_claim_and_lock_never_submits(sessions, service, clock):
+    """The cancel lands after the claim (lease held, job still QUEUED) and before
+    the dispatcher locks the row to submit: the job is cancelled, never submitted."""
     seed = _seed(sessions)
     (job_id,) = seed["job_ids"]
-    outcomes = []
+    outcomes, errors = [], []
+    d = _dispatcher(sessions, service, clock)
+    step_queued = d._step_queued
+
+    def cancel_then_step(claimed_id):
+        assert _job(sessions, claimed_id).lease_owner == d.owner
+        thread = _cancel_in_thread(
+            sessions, job_id, seed["user_id"], outcomes, errors, wait=30
+        )
+        assert not thread.is_alive()  # no row lock is held here
+        step_queued(claimed_id)
+
+    d._step_queued = cancel_then_step
+    assert d.tick() == 1
+    assert errors == []
+    assert outcomes == [{job_id: "cancelling"}]  # the lease was held
+    job = _job(sessions, job_id)
+    assert job.status == EvalJobStatus.CANCELLED and job.lease_owner is None
+    assert service.calls["submit"] == 0
+
+
+def test_cancel_racing_the_submit_commit_still_cancels(
+    sessions, service, clock, monkeypatch
+):
+    """The dispatcher's submit completes (SUBMITTING -> SUBMITTED) between the
+    cancel's "remote" and "submitting" steps: the request must not be lost."""
+    seed = _seed(sessions)
+    (job_id,) = seed["job_ids"]
+    _update_job(
+        sessions,
+        job_id,
+        status=EvalJobStatus.SUBMITTING,
+        lease_owner="worker-1",
+        lease_until=clock() + timedelta(minutes=1),
+    )
+    real_update = eval_experiments._guarded_update
+    calls = []
+
+    def guarded_update(db, job_id_, conditions, values):
+        calls.append(values.get("status"))
+        if len(calls) == 3:  # step 3, "being submitted": the submit lands first
+            real_update(
+                db,
+                job_id_,
+                [],
+                {"status": EvalJobStatus.SUBMITTED, "lease_owner": None},
+            )
+        return real_update(db, job_id_, conditions, values)
+
+    monkeypatch.setattr(eval_experiments, "_guarded_update", guarded_update)
+    assert _cancel(sessions, [job_id], seed["user_id"]) == {job_id: "cancelling"}
+    job = _job(sessions, job_id)
+    assert job.status == EvalJobStatus.CANCELLING
+    assert job.cancel_requested_at is not None and job.next_attempt_at is not None
+
+
+def test_cancel_while_the_dispatcher_holds_the_job_row(sessions, service, clock):
+    """The cancel arrives, from another connection, while the dispatcher is inside
+    its submit transaction (job read, SUBMITTING marker not yet written).
+
+    SQLite has no row lock: the cancel commits first and the marker's
+    ``cancel_requested_at IS NULL`` guard stops the submit. On Postgres the cancel
+    waits for the dispatcher's ``FOR UPDATE`` row lock, so it is ordered after the
+    marker: the job is submitted once and cancelled remotely on the next tick.
+    Either way it ends ``CANCELLED`` with nothing left running on the service.
+    """
+    seed = _seed(sessions)
+    (job_id,) = seed["job_ids"]
+    outcomes, errors, threads, waiting = [], [], [], []
 
     def cancel_then_add_token(body, _job_id):
-        # The dispatcher holds the lease and the job is still QUEUED.
-        outcomes.append(_cancel(sessions, [job_id], seed["user_id"]))
+        thread = _cancel_in_thread(
+            sessions, job_id, seed["user_id"], outcomes, errors, wait=0.5
+        )
+        threads.append(thread)
+        waiting.append(thread.is_alive())  # still blocked on the row lock?
         return body
 
     d = _dispatcher(sessions, service, clock, add_launch_token=cancel_then_add_token)
     assert d.tick() == 1
+    (thread,) = threads
+    thread.join(timeout=30)
+    assert not thread.is_alive()
+    assert errors == []
     assert outcomes == [{job_id: "cancelling"}]
+    postgres = sessions.kw["bind"].dialect.name == "postgresql"
+    assert waiting == [postgres]
+    if not postgres:
+        job = _job(sessions, job_id)
+        assert job.status == EvalJobStatus.CANCELLED and job.lease_owner is None
+        assert service.calls["submit"] == 0
+        return
+    assert service.calls["submit"] == 1
     job = _job(sessions, job_id)
-    assert job.status == EvalJobStatus.CANCELLED and job.lease_owner is None
-    assert service.calls["submit"] == 0
+    assert job.status == EvalJobStatus.CANCELLING
+    assert job.cancel_requested_at is not None
+    assert d.tick() == 1
+    job = _job(sessions, job_id)
+    assert job.status == EvalJobStatus.CANCELLED
+    assert service.jobs[job.remote_job_id]["status"] == "CANCELLED"
+    assert service.calls["submit"] == 1
 
 
 def test_cancelling_retries_transport_errors(sessions, service, clock):
