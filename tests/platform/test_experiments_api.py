@@ -205,6 +205,8 @@ def client(session_factory):
 
 def _spec(conn_id: str | None = None, **evaluator) -> dict:
     bindings = {PRIMARY: {"connection_id": conn_id}} if conn_id else {}
+    # Without a bound primary slot, the schema requires a literal model name.
+    primary = {"timeout": 60} if conn_id else {"timeout": 60, "model": "gpt-4o"}
     return {
         "evaluator": {
             "dataset": "playground_set_v2",
@@ -214,7 +216,7 @@ def _spec(conn_id: str | None = None, **evaluator) -> dict:
         "slot_bindings": bindings,
         "env_overrides": {
             "LLM_OVERRIDES": {
-                "endpoints": {"primary": {"timeout": 60}},
+                "endpoints": {"primary": primary},
                 "main": {"endpoint": "primary"},
             },
             "MILVUS_SEARCH_THRESHOLD": 0.7,
