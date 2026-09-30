@@ -99,7 +99,7 @@ launch tokens. An app-wide handler now masks them (`validation_errors.py`).
 **Question for review.** Should the same handler apply to every non-eval endpoint too?
 It already applies app-wide, so confirm that this is intended.
 
-### A7. `qym_api_key` on job creation (In progress: `feat/eval-qym-api-key`)
+### A7. `qym_api_key` on job creation (Implemented)
 
 **Change requested.** `POST /evals` must carry a `qym_api_key` that points to the user
 submitting the job, so the uploaded run is authenticated as that user in the right
@@ -116,6 +116,10 @@ project. The API guide is updated in §3.1, a new §4.0 and §7.
   retried. A retry after revocation mints a new key.
 - **Unavailable key.** If the key or the creator's membership is gone, the job is
   BLOCKED instead of submitted.
+- **Creator left the project.** A retry is refused (409) with a hint to clone the
+  experiment and launch it as yourself.
+- **Experiments launched before 0065.** They have no key, so their queued jobs are
+  BLOCKED ("key unavailable") until retried, which mints one.
 
 **Questions for review.**
 - If a manager retries someone else's experiment, should the key (and run ownership)
