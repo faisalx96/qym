@@ -28,6 +28,15 @@
     .exp-back { display: inline-block; margin-bottom: var(--space-sm); color: var(--text-muted); font-size: var(--font-sm); text-decoration: none; }
     .exp-back:hover { color: var(--accent-primary); }
 
+    .exp-tabs { margin-bottom: var(--space-lg); }
+    .exp-tabs .exp-tab { display: inline-flex; align-items: center; text-decoration: none; }
+    .exp-queue-strip { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-lg); margin-bottom: var(--space-lg); padding: var(--space-sm) var(--space-lg); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: 8px; font-size: var(--font-base); color: var(--text-secondary); }
+    .exp-queue-strip[hidden] { display: none; }
+    .exp-queue-strip-label { font-size: var(--font-sm); font-weight: 650; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .exp-queue-strip-name { color: var(--text-primary); font-weight: 600; }
+    .exp-queue-strip-link { margin-left: auto; color: var(--accent-primary); text-decoration: none; font-size: var(--font-sm); }
+    .exp-queue-strip-link:hover { text-decoration: underline; }
+
     .exp-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-md); }
     .exp-toolbar-label { font-size: var(--font-sm); color: var(--text-muted); }
     .exp-toolbar-spacer { flex: 1; }
@@ -115,6 +124,6 @@
   <!-- Best run (#38): the "Start from best run" picker used by experiment_launch.js. -->
   <script src="/static/experiment_launch_best_run.js?v=experiment-launch-best-run-20260930-1"></script>
   <script src="/static/experiment_launch.js?v=experiment-launch-20260930-6"></script>
-  <script src="/static/experiments.js?v=experiments-20260930-4"></script>
+  <script src="/static/experiments.js?v=experiments-20260930-5"></script>
 </body>
 </html>

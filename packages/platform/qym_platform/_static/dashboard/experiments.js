@@ -19,6 +19,10 @@
  * form (#23) lives in experiment_launch.js (window.QymExperimentLaunch); this file
  * only routes to it (?new=1).
  *
+ * The list carries an Experiments | Queue tab pair (the queue page, #25, lives in
+ * eval_queue.js); the detail view shows a queue strip for this experiment from
+ *   GET /v1/projects/{pid}/eval-queue?experiment_id=<id>
+ *
  * Security: every node is built with el()/textContent, so no server string
  * (names, emails, errors, params) is ever parsed as HTML; there is no innerHTML.
  *
@@ -74,6 +78,7 @@
     crumbLabel: null,
     showSuperseded: false,
     denied: false,
+    queueStrip: null,
     busy: {},
     // polling
     pollTimer: null,
@@ -120,6 +125,10 @@
 
   function experimentUrl(id) {
     return projectPage('/experiments') + (id ? '?experiment=' + encodeURIComponent(id) : '');
+  }
+
+  function queuePageUrl(experimentId) {
+    return projectPage('/experiments/queue') + (experimentId ? '?experiment=' + encodeURIComponent(experimentId) : '');
   }
 
   function runUrl(runId) {
@@ -372,6 +381,58 @@
     state.detail = detail;
     if (changed || !root.querySelector('[data-exp-detail]')) renderDetail();
     schedulePoll(changed);
+    refreshQueueStrip();
+  }
+
+  // ── Queue strip (plan §12.3): where this experiment's pending jobs stand ──
+  async function refreshQueueStrip() {
+    const x = state.detail;
+    if (!x || !(x.jobs || []).some((job) => !isTerminal(job.status))) {
+      if (state.queueStrip) { state.queueStrip = null; replaceQueueStrip(); }
+      return;
+    }
+    const generation = state.generation;
+    const query = '?experiment_id=' + encodeURIComponent(x.id) + '&limit=1000';
+    const res = await request('v1/projects/' + encodeURIComponent(state.project.id) + '/eval-queue' + query);
+    if (!state.active || generation !== state.generation || !res.ok) return;
+    state.queueStrip = res.data;
+    replaceQueueStrip();
+  }
+
+  function replaceQueueStrip() {
+    const current = root.querySelector('[data-exp-queue-strip]');
+    if (current) current.replaceWith(queueStripNode());
+  }
+
+  function queueStripNode() {
+    const node = el('div', { className: 'exp-queue-strip', 'data-exp-queue-strip': '1' });
+    const jobs = (state.queueStrip && state.queueStrip.jobs) || [];
+    if (!jobs.length || !state.detail) { node.hidden = true; return node; }
+    const byEnv = {};
+    jobs.forEach((job) => {
+      const key = job.environment_id;
+      const env = byEnv[key] || (byEnv[key] = { name: job.environment_name || key, queued: 0, running: 0, blocked: 0, position: null });
+      if (job.status === 'QUEUED') {
+        env.queued += 1;
+        if (job.queue_position != null && (env.position === null || job.queue_position < env.position)) env.position = job.queue_position;
+      } else if (job.status === 'BLOCKED') env.blocked += 1;
+      else env.running += 1;
+    });
+    node.appendChild(el('span', { className: 'exp-queue-strip-label', text: 'Queue' }));
+    Object.keys(byEnv).forEach((key) => {
+      const env = byEnv[key];
+      const parts = [];
+      if (env.queued) parts.push(env.queued + ' queued');
+      if (env.running) parts.push(env.running + ' running');
+      if (env.blocked) parts.push(env.blocked + ' blocked');
+      if (env.position !== null) parts.push('position ' + env.position);
+      node.appendChild(el('span', { className: 'exp-queue-strip-env', 'data-exp-queue-env': key }, [
+        el('span', { className: 'exp-queue-strip-name', text: env.name }),
+        ' ' + parts.join(' · '),
+      ]));
+    });
+    node.appendChild(el('a', { className: 'exp-queue-strip-link', href: queuePageUrl(state.detail.id), text: 'Open in queue →' }));
+    return node;
   }
 
   // ── List view ──────────────────────────────────────────────────────────
@@ -407,6 +468,13 @@
       onCancel: () => navigate(experimentUrl(null)),
       onLaunched: (experiment) => navigate(experimentUrl(experiment.id)),
     });
+  }
+
+  function sectionTabs() {
+    return el('nav', { className: 'qym-tabs exp-tabs', role: 'tablist', 'aria-label': 'Experiments sections', 'data-exp-tabs': '1' }, [
+      el('a', { className: 'qym-tabs__tab exp-tab active', role: 'tab', 'aria-selected': 'true', 'aria-current': 'page', href: experimentUrl(null), text: 'Experiments' }),
+      el('a', { className: 'qym-tabs__tab exp-tab', role: 'tab', 'aria-selected': 'false', href: queuePageUrl(null), text: 'Queue' }),
+    ]);
   }
 
   function renderList() {
@@ -476,7 +544,7 @@
       }
     }
 
-    root.replaceChildren(header, toolbar, card);
+    root.replaceChildren(header, sectionTabs(), toolbar, card);
   }
 
   const LIST_COLUMNS = [
@@ -645,7 +713,7 @@
     }
 
     const matrix = jobs.length && window.QymExperimentMatrix ? window.QymExperimentMatrix.render(matrixContext(x, allowed)) : [];
-    root.replaceChildren.apply(root, [header, stats].concat(matrix, [card]));
+    root.replaceChildren.apply(root, [header, stats, queueStripNode()].concat(matrix, [card]));
   }
 
   function matrixContext(x, allowed) {
