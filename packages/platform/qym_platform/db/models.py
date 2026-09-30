@@ -798,6 +798,9 @@ class EvalExperimentJob(Base):
     run_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey("runs.id", ondelete="SET NULL"), nullable=True
     )
+    # When ingest linked a run (0064). Never cleared, so a job whose linked run was
+    # hard-deleted (``run_id`` SET NULL) can't be claimed again by a replayed token.
+    run_linked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     submit_attempts: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False

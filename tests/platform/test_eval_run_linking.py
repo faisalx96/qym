@@ -12,7 +12,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, delete, text
 from sqlalchemy.orm import sessionmaker
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
@@ -360,6 +360,30 @@ def test_replayed_token_is_local_and_keeps_first_link(client, sessions, seed):
     assert replay.experiment_job_id is None
     assert replay.owner_user_id == "ingest"
     assert _job(sessions, seed["job_id"]).run_id == first
+    _assert_no_token_stored(sessions)
+
+
+def test_deleted_linked_run_does_not_reopen_the_job(client, sessions, seed):
+    """``run_id`` is ON DELETE SET NULL; ``run_linked_at`` keeps the job closed."""
+    first = _create(client, _launch(seed))
+    job = _job(sessions, seed["job_id"])
+    assert job.run_id == first and job.run_linked_at is not None
+    linked_at = job.run_linked_at
+
+    # Hard-delete the linked run with FKs enforced: the job's ``run_id`` is SET NULL.
+    with sessions() as db:
+        db.execute(text("PRAGMA foreign_keys=ON"))
+        db.execute(delete(RunEvent).where(RunEvent.run_id == first))
+        db.execute(delete(Run).where(Run.id == first))
+        db.commit()
+    job = _job(sessions, seed["job_id"])
+    assert job.run_id is None and job.run_linked_at == linked_at
+
+    replay = _create(client, _launch(seed))
+    run = _run(sessions, replay)
+    assert run.origin == RunOrigin.LOCAL
+    assert run.experiment_job_id is None
+    assert _job(sessions, seed["job_id"]).run_id is None
     _assert_no_token_stored(sessions)
 
 

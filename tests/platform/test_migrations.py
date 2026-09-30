@@ -42,7 +42,7 @@ def test_alembic_has_one_upgrade_head() -> None:
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["0063"]
+    assert heads == ["0064"]
 
 
 def test_subcategory_taxonomy_migration_preserves_rows_and_defaults_json(
@@ -470,6 +470,11 @@ EXPERIMENT_TABLES = {
 }
 RUN_EXPERIMENT_COLUMNS = {"origin", "experiment_job_id"}
 RUN_EXPERIMENT_INDEXES = {"ix_runs_origin", "ix_runs_experiment_job_id"}
+# Revisions after 0061 that change eval_experiment_jobs: (column they add, file).
+LATER_JOB_REVISIONS = (
+    ("attempt", "0063_eval_job_attempts.py"),
+    ("run_linked_at", "0064_eval_run_scores.py"),
+)
 
 
 def _eval_experiment_prerequisites(
@@ -753,14 +758,20 @@ def _eval_experiment_model_diffs(
         column["name"]
         for column in sa.inspect(connection).get_columns("eval_experiment_jobs")
     }
-    if "attempt" in job_columns:
+    # The models describe the schema at head: apply the later revisions missing here.
+    pending = [
+        filename
+        for marker, filename in LATER_JOB_REVISIONS
+        if marker not in job_columns
+    ]
+    if not pending:
         return diffs()
-    # The models describe the job table after 0063: compare with it applied.
     savepoint = connection.begin_nested()
     try:
-        later = _load_migration("0063_eval_job_attempts.py")
-        later.op = Operations(MigrationContext.configure(connection))
-        later.upgrade()
+        for filename in pending:
+            later = _load_migration(filename)
+            later.op = Operations(MigrationContext.configure(connection))
+            later.upgrade()
         return diffs()
     finally:
         savepoint.rollback()
@@ -1305,3 +1316,81 @@ def test_eval_job_attempts_migration_postgres_upgrade_and_downgrade(
             c["name"] for c in inspector.get_check_constraints("eval_experiment_jobs")
         }
         assert _eval_experiment_model_diffs(connection, PRESET_TABLES) == []
+
+
+def _eval_run_scores_prerequisites(
+    engine: sa.engine.Engine, monkeypatch: pytest.MonkeyPatch
+) -> ModuleType:
+    """Build the pre-0064 schema (0060-0063); job ``j1`` is linked to run ``r1``."""
+    previous = _eval_job_attempt_prerequisites(engine, monkeypatch)
+    with engine.begin() as connection:
+        monkeypatch.setattr(
+            previous, "op", Operations(MigrationContext.configure(connection))
+        )
+        previous.upgrade()
+    return _load_migration("0064_eval_run_scores.py")
+
+
+def _assert_eval_run_scores_upgraded(connection: sa.Connection) -> None:
+    """Exercise the 0064 ``run_linked_at`` backfill."""
+    rows = connection.execute(
+        sa.text("SELECT id, run_linked_at FROM eval_experiment_jobs ORDER BY id")
+    ).all()
+    linked = {row[0]: row[1] for row in rows}
+    # The linked job is closed at its last update time; the unlinked one is open.
+    assert linked["j1"] is not None and str(linked["j1"]).startswith("2026-09-29")
+    assert linked["j2"] is None
+
+
+def _assert_eval_run_scores_downgraded(connection: sa.Connection) -> None:
+    columns = {
+        column["name"]
+        for column in sa.inspect(connection).get_columns("eval_experiment_jobs")
+    }
+    assert "run_linked_at" not in columns
+    assert "attempt" in columns  # 0063 is untouched
+    assert (
+        connection.execute(
+            sa.text("SELECT run_id FROM eval_experiment_jobs WHERE id = 'j1'")
+        ).scalar_one()
+        == "r1"
+    )
+
+
+def _run_eval_run_scores_round_trip(
+    connection: sa.Connection, migration: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        migration, "op", Operations(MigrationContext.configure(connection))
+    )
+    migration.upgrade()
+    _assert_eval_run_scores_upgraded(connection)
+    assert _eval_experiment_model_diffs(connection, PRESET_TABLES) == []
+
+    migration.downgrade()
+    _assert_eval_run_scores_downgraded(connection)
+
+    # Re-upgrading after a downgrade is clean and backfills again.
+    migration.upgrade()
+    _assert_eval_run_scores_upgraded(connection)
+
+
+def test_eval_run_scores_migration_sqlite_upgrade_and_downgrade(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = sa.create_engine("sqlite://")
+    migration = _eval_run_scores_prerequisites(engine, monkeypatch)
+
+    with engine.begin() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+        _run_eval_run_scores_round_trip(connection, migration, monkeypatch)
+    engine.dispose()
+
+
+def test_eval_run_scores_migration_postgres_upgrade_and_downgrade(
+    monkeypatch: pytest.MonkeyPatch, postgres_engine: sa.engine.Engine
+) -> None:
+    migration = _eval_run_scores_prerequisites(postgres_engine, monkeypatch)
+
+    with postgres_engine.begin() as connection:
+        _run_eval_run_scores_round_trip(connection, migration, monkeypatch)
