@@ -251,6 +251,7 @@ Parsed records are written to PostgreSQL; source files are not retained as perma
 ## Related Documentation
 
 - [Platform User Guide](docs/USER_GUIDE.md)
+- [Operations runbook](../../docs/internal/OPERATIONS.md) (including [Evaluation Service experiments](../../docs/internal/OPERATIONS.md#evaluation-service-experiments))
 - [Product Evaluation API Guide](docs/PRODUCT_EVAL_API_GUIDE.md)
 - [Product Evaluation Client Guide](docs/PRODUCT_EVAL_API_CLIENT_GUIDE.md)
 - [LLM analyzer branch changes](../../docs/BRANCH_CHANGES_LLM_ANALYZER.md)
