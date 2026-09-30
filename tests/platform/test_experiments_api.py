@@ -51,10 +51,12 @@ from qym_platform.services.eval_experiments import (
     LaunchTokenUnavailable,
     aggregate_status,
     body_with_launch_token,
+    build_qym_config,
     cancel_job,
     hash_launch_token,
     launch_token_for_job,
     launch_token_hash_for_job,
+    redact_secret_refs,
     verify_launch_token,
 )
 from qym_platform.services.eval_model_slots import sync_model_slots
@@ -68,6 +70,7 @@ MEMBER2 = "member2@example.com"
 OUTSIDER = "outsider@example.com"
 CONN_KEY = "sk-connection-secret-ZZZZ9999"
 PRIMARY = "endpoint:primary"
+
 
 def _url(project_id: str = P1, suffix: str = "") -> str:
     return f"/v1/projects/{project_id}/experiments{suffix}"
@@ -325,6 +328,156 @@ def test_strip_secret_refs_removes_refs_only():
         "b": [{"keep": 1}],
     }
     assert value["a"]["temporary"]["api_key"] == {"$secret": "k1"}  # not mutated
+
+
+# --------------------------------------------------------------------------- run metadata (#16)
+
+TEMP_KEY_REF = "tmp-ref-SHOULD-NOT-LEAK"
+
+
+def _assert_secret_free(value) -> None:
+    """No key, token or secret ref (other than the redacted marker) anywhere."""
+    text = json.dumps(value)
+    assert CONN_KEY not in text and TEMP_KEY_REF not in text and "qlt_" not in text
+
+    def walk(node):
+        if isinstance(node, dict):
+            if "$secret" in node:
+                assert node == {"$secret": "redacted"}, node
+            for child in node.values():
+                walk(child)
+        elif isinstance(node, list):
+            for child in node:
+                walk(child)
+
+    walk(value)
+
+
+def test_redact_secret_refs_is_generic_and_masks_literals():
+    value = {
+        "a": {"temporary": {"model": "m", "api_key": {"$secret": TEMP_KEY_REF}}},
+        "b": [{"$secret": "x"}, {"keep": 1}],
+        "c": {"nested": {"$secret": {"ref": "y"}}},
+        "api_key": CONN_KEY,
+        "launch_token": "qlt_abcdefghijkl",
+        "slot_key": "{{qym:slot:endpoint:primary:api_key}}",
+        "api_base_key": "{{qym:slot:endpoint:primary:api_key}}",
+    }
+    out = redact_secret_refs(value)
+    assert out["a"]["temporary"] == {"model": "m", "api_key": {"$secret": "redacted"}}
+    assert out["b"] == [{"$secret": "redacted"}, {"keep": 1}]
+    assert out["c"] == {"nested": {"$secret": "redacted"}}
+    assert out["api_key"] == "[REDACTED]" and out["launch_token"] == "[REDACTED]"
+    assert out["slot_key"] == value["slot_key"]  # placeholders are not secrets
+    assert value["a"]["temporary"]["api_key"] == {"$secret": TEMP_KEY_REF}
+    _assert_secret_free(out)
+
+
+def test_build_qym_config_is_the_secret_free_combo_document():
+    document = {
+        "evaluator": {"dataset": "d", "config": {"run_metadata": {"team": "rag"}}},
+        "slot_bindings": {
+            PRIMARY: {"connection_id": "c-1"},
+            "endpoint:fast": {
+                "temporary": {
+                    "label": "mini trial",
+                    "model": "gpt-4o-mini",
+                    "base_url": "https://llm.example.com/v1",
+                    "api_key": {"$secret": TEMP_KEY_REF},
+                }
+            },
+            "flat:VIZ_LLM": {"inherit": True},
+            "endpoint:other": None,
+        },
+        "env_overrides": {"MILVUS_SEARCH_THRESHOLD": 0.7},
+    }
+    config = build_qym_config(
+        document,
+        schema_hash="h1",
+        base_source={"kind": "official", "preset_version_id": "pv-1"},
+        models={PRIMARY: {"name": "GPT-4o prod", "model": "gpt-4o", "api_key": "x"}},
+    )
+    assert config == {
+        "schema_hash": "h1",
+        "base_source": {"kind": "official", "preset_version_id": "pv-1"},
+        "evaluator": document["evaluator"],
+        "slot_bindings": {
+            PRIMARY: {"connection_id": "c-1", "name": "GPT-4o prod", "model": "gpt-4o"},
+            "endpoint:fast": {
+                "temporary": {
+                    "label": "mini trial",
+                    "model": "gpt-4o-mini",
+                    "base_url": "https://llm.example.com/v1",
+                    "api_key": {"$secret": "redacted"},
+                }
+            },
+            "flat:VIZ_LLM": None,
+            "endpoint:other": None,
+        },
+        "env_overrides": {"MILVUS_SEARCH_THRESHOLD": 0.7},
+    }
+    _assert_secret_free(config)
+    # The input keeps its refs (the dispatcher still needs them).
+    assert document["slot_bindings"]["endpoint:fast"]["temporary"]["api_key"] == {
+        "$secret": TEMP_KEY_REF
+    }
+    assert build_qym_config({}, schema_hash=None, base_source=None)["base_source"] == {
+        "kind": "blank"
+    }
+
+
+def test_run_metadata_snapshot_describes_the_run_without_the_job_row(
+    client, session_factory, env, conn
+):
+    base_source = {"kind": "official", "preset_version_id": "pv-7"}
+    spec = _spec(conn.id)
+    created = _created(client, [env.id], spec=spec, base_source=base_source)
+    (job,) = _jobs(session_factory, created["id"])
+    metadata = job.request_body["evaluator"]["config"]["run_metadata"]
+    config = metadata["qym_config"]
+    assert config == {
+        "schema_hash": "h-staging",
+        "base_source": base_source,
+        "evaluator": spec["evaluator"],
+        "slot_bindings": {
+            PRIMARY: {
+                "connection_id": conn.id,
+                "name": "GPT-4o prod",
+                "model": "gpt-4o",
+            }
+        },
+        "env_overrides": spec["env_overrides"],
+    }
+    assert set(metadata) == {"team", "qym_launch", "qym_config"}
+    assert metadata["qym_launch"]["job_id"] == job.id
+    _assert_secret_free(metadata)
+
+    # Dispatch adds the token in memory only; the stored body never has it.
+    token = launch_token_for_job(job.id)
+    sent = body_with_launch_token(job.request_body, job.id)
+    sent_launch = sent["evaluator"]["config"]["run_metadata"].pop("qym_launch")
+    assert sent_launch == {**metadata["qym_launch"], "token": token}
+    stored = json.loads(json.dumps(job.request_body))
+    stored["evaluator"]["config"]["run_metadata"].pop("qym_launch")
+    assert sent == stored
+
+    # A retry keeps the snapshot and gets its own launch info (no token).
+    _set_job(session_factory, job.id, status=EvalJobStatus.FAILED)
+    res = client.post(
+        _url(suffix=f"/{created['id']}/jobs/{job.id}/retry"), headers=_headers(MEMBER)
+    )
+    assert res.status_code == 200, res.text
+    retry = {j.id: j for j in _jobs(session_factory, created["id"])}[
+        res.json()["job_id"]
+    ]
+    retry_meta = retry.request_body["evaluator"]["config"]["run_metadata"]
+    assert retry_meta["qym_config"] == config
+    assert retry_meta["qym_launch"]["retry_of_job_id"] == job.id
+    _assert_secret_free(retry_meta)
+    with session_factory() as s:
+        audits = [[a.before, a.after] for a in s.query(AuditLog).all()]
+    assert audits
+    _assert_secret_free(audits)
 
 
 @pytest.mark.parametrize(

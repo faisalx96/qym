@@ -46,16 +46,21 @@ _SENSITIVE_KEYS = {
     "refresh_token",
     "secret",
     "secret_key",
+    # ``run_metadata.qym_launch.token``: the one-time launch token (#16) is echoed back
+    # in ``eval_input`` and must never be stored, returned or logged.
+    "token",
 }
-_SENSITIVE_SUFFIXES = ("_api_key", "_apikey", "_password", "_secret")
+_SENSITIVE_SUFFIXES = ("_api_key", "_apikey", "_password", "_secret", "_token")
 
 # Scrubs secrets out of free text (error details, transport messages).
 _TEXT_SECRET_PATTERNS = (
     re.compile(r"(?i)(bearer\s+)[^\s\"',}]+"),
     re.compile(
-        r"(?i)([\"']?[a-z0-9_]*(?:api_?key|secret|password)[\"']?\s*[:=]\s*[\"']?)"
-        r"[^\"',}\s]+"
+        r"(?i)([\"']?[a-z0-9_]*(?:api_?key|secret|password|token)[\"']?\s*[:=]\s*"
+        r"[\"']?)[^\"',}\s]+"
     ),
+    # A launch token (``eval_experiments.TOKEN_PREFIX``) anywhere in the text.
+    re.compile(r"()\bqlt_[A-Za-z0-9_-]{8,}"),
 )
 
 _HIGH_PRIORITY_ACTIVE_RE = re.compile(

@@ -29,8 +29,10 @@ Stored per job:
   are ``{"connection_id", "name", "model"}``.
 - ``request_body``: the placeholder ``EvalJobCreate`` with ``user_id`` (creator),
   ``priority``, ``evaluator.config.run_name``/``live_mode`` and the reserved
-  ``run_metadata.qym_launch`` (no token) and ``qym_config`` (§10.1). The dispatcher
-  adds the token with ``eval_experiments.body_with_launch_token``.
+  ``run_metadata.qym_launch`` (no token) and ``qym_config`` (§10.1), both built by
+  ``eval_experiments.build_qym_launch``/``build_qym_config``. ``qym_config`` shows
+  secret refs as ``{"$secret": "redacted"}``. The dispatcher adds the token with
+  ``eval_experiments.body_with_launch_token``.
 - ``launch_token_hash``: sha256 of the derived one-time token. The raw token is never
   stored, logged or returned.
 
@@ -72,10 +74,13 @@ from qym_platform.services.eval_experiments import (
     CANCELLED,
     RETRYABLE_STATUSES,
     TERMINAL_JOB_STATUSES,
+    build_qym_config,
+    build_qym_launch,
     cancel_job,
     current_jobs,
     launch_token_hash_for_job,
     recompute_experiment_status,
+    redact_secret_refs,
     superseded_job_ids,
 )
 from qym_platform.services.eval_model_slots import (
@@ -469,17 +474,15 @@ def _request_body(
     config["run_name"] = run_name
     config["live_mode"] = "platform"
     metadata = config.setdefault("run_metadata", {})
-    launch: Dict[str, Any] = {
-        "experiment_id": experiment_id,
-        "job_id": job_id,
-        "environment_id": env.id,
-        "combo_index": combo_index,
-        "attempt": attempt,
-    }
-    if retry_of_job_id:
-        launch["retry_of_job_id"] = retry_of_job_id
-    metadata["qym_launch"] = launch
-    metadata["qym_config"] = strip_secret_refs(qym_config)
+    metadata["qym_launch"] = build_qym_launch(
+        experiment_id=experiment_id,
+        job_id=job_id,
+        environment_id=env.id,
+        combo_index=combo_index,
+        attempt=attempt,
+        retry_of_job_id=retry_of_job_id,
+    )
+    metadata["qym_config"] = redact_secret_refs(qym_config)
     return out
 
 
@@ -487,15 +490,12 @@ def _qym_config(
     spec: Mapping[str, Any],
     schema: EvalEnvironmentSchema,
     base_source: Mapping[str, Any],
-    bindings: Mapping[str, Any],
+    models: Mapping[str, Mapping[str, Any]],
 ) -> Dict[str, Any]:
-    return {
-        "schema_hash": schema.schema_hash,
-        "base_source": copy.deepcopy(dict(base_source)),
-        "evaluator": copy.deepcopy(spec.get("evaluator") or {}),
-        "slot_bindings": copy.deepcopy(dict(bindings)),
-        "env_overrides": copy.deepcopy(spec.get("env_overrides") or {}),
-    }
+    """Secret-free §10.1 snapshot of this combination (``eval_experiments``)."""
+    return build_qym_config(
+        spec, schema_hash=schema.schema_hash, base_source=base_source, models=models
+    )
 
 
 def _job_run_name(job: EvalExperimentJob) -> Optional[str]:
@@ -781,7 +781,7 @@ def create_experiment(
                     user_id=principal.user.id,
                     priority=priority,
                     run_name=run_name,
-                    qym_config=_qym_config(spec, schema, base_source, bindings),
+                    qym_config=_qym_config(spec, schema, base_source, plan["models"]),
                 ),
                 schema_id=schema.id,
                 launch_token_hash=launch_token_hash_for_job(job_id),
@@ -1009,19 +1009,16 @@ def retry_experiment_job(
     body = copy.deepcopy(job.request_body or {})
     config = body.setdefault("evaluator", {}).setdefault("config", {})
     metadata = config.setdefault("run_metadata", {})
-    launch = dict(metadata.get("qym_launch") or {})
-    launch.pop("token", None)
-    launch.update(
-        {
-            "experiment_id": experiment.id,
-            "job_id": new_id,
-            "environment_id": job.environment_id,
-            "combo_index": job.combo_index,
-            "attempt": attempt,
-            "retry_of_job_id": job.id,
-        }
+    metadata["qym_launch"] = build_qym_launch(
+        experiment_id=experiment.id,
+        job_id=new_id,
+        environment_id=job.environment_id,
+        combo_index=job.combo_index,
+        attempt=attempt,
+        retry_of_job_id=job.id,
     )
-    metadata["qym_launch"] = launch
+    if "qym_config" in metadata:
+        metadata["qym_config"] = redact_secret_refs(metadata["qym_config"])
     retry = EvalExperimentJob(
         id=new_id,
         experiment_id=experiment.id,

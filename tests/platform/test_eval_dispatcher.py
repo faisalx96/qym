@@ -47,7 +47,7 @@ from qym_platform.db.models import (
 )
 from qym_platform.secrets import encrypt_llm_api_key
 from qym_platform.services import eval_dispatcher as dispatcher_module
-from qym_platform.services.eval_config import materialize_job_body
+from qym_platform.services.eval_config import is_placeholder, materialize_job_body
 from qym_platform.services.eval_dispatcher import (
     ENV_AUTH_ERROR,
     EvalDispatcher,
@@ -56,6 +56,12 @@ from qym_platform.services.eval_dispatcher import (
     high_backoff,
     launch_job_id,
     poll_interval,
+)
+from qym_platform.services.eval_experiments import (
+    LaunchTokenUnavailable,
+    build_qym_config,
+    build_qym_launch,
+    launch_token_for_job,
 )
 from qym_platform.services.eval_model_slots import detect_model_slots
 from qym_platform.services.eval_schema_form import build_form_descriptor
@@ -1200,3 +1206,220 @@ def test_worker_thread_starts_and_stops(sessions, service, clock):
     finally:
         assert d.stop(timeout=5)
     assert service.calls["submit"] == 1
+
+
+# --------------------------------------------------------------------------- run metadata (#16)
+
+
+def test_superseded_retry_is_left_out_of_aggregate_status(sessions, service, clock):
+    seed = _seed(sessions, jobs=2)
+    first, second = seed["job_ids"]
+    experiment_id = seed["experiment_id"]
+    _update_job(sessions, first, status=EvalJobStatus.FAILED)
+    _update_job(sessions, second, status=EvalJobStatus.SUCCEEDED)
+    retry_id = str(uuid4())
+    with sessions() as db:
+        db.add(
+            EvalExperimentJob(
+                id=retry_id,
+                experiment_id=experiment_id,
+                environment_id=seed["env_id"],
+                combo_index=0,
+                attempt=1,
+                retry_of_job_id=first,
+                schema_id=seed["schema_id"],
+                params={},
+                request_body=_body(seed["user_id"], experiment_id, retry_id),
+                created_at=T0,
+                updated_at=T0,
+            )
+        )
+        db.commit()
+        status = dispatcher_module.recompute_experiment_status(db, experiment_id)
+        assert status == EvalExperimentStatus.RUNNING
+        db.commit()
+
+    _dispatcher(sessions, service, clock).tick()
+    assert service.submitted_job_ids == [retry_id]
+    assert _experiment_status(sessions, experiment_id) == EvalExperimentStatus.RUNNING
+
+    # Without the filter the FAILED first attempt would still count (PARTIAL).
+    _update_job(sessions, retry_id, status=EvalJobStatus.SUCCEEDED)
+    with sessions() as db:
+        status = dispatcher_module.recompute_experiment_status(db, experiment_id)
+        assert status == EvalExperimentStatus.COMPLETED
+    _update_job(sessions, retry_id, status=EvalJobStatus.CANCELLED)
+    with sessions() as db:
+        status = dispatcher_module.recompute_experiment_status(db, experiment_id)
+        assert status == EvalExperimentStatus.PARTIAL
+
+
+_USER_PLACEHOLDER = "{{qym:slot:endpoint:primary:api_key}}"
+_TOKEN_POINTER = "/evaluator/config/run_metadata/qym_launch/token"
+_MISSING = object()
+
+
+def _seed_bound_job(sessions):
+    """One QUEUED job whose body binds ``endpoint:primary`` to a saved connection.
+
+    Its ``run_metadata`` holds ``qym_launch``/``qym_config`` as the API stores them,
+    plus a user key that *looks* like a slot placeholder.
+    """
+    schema_json = json.loads(FIXTURE.read_text())
+    descriptor = build_form_descriptor(schema_json)
+    proposals = detect_model_slots(descriptor)
+    seed = _seed(sessions, schema_json=schema_json, allow_keys=True)
+    job_id = seed["job_ids"][0]
+    with sessions() as db:
+        for p in proposals:
+            db.add(
+                EvalModelSlot(
+                    environment_id=seed["env_id"],
+                    schema_id=seed["schema_id"],
+                    slot_key=p.slot_key,
+                    kind=p.kind,
+                    label=p.label,
+                    field_map=dict(p.field_map),
+                    transport_fields=dict(p.transport_fields),
+                    required=p.required,
+                    status=EvalModelSlotStatus.CONFIRMED,
+                )
+            )
+        conn = ProjectLlmConnection(
+            project_id=seed["project_id"],
+            name="gpt4o",
+            llm_model="gpt-4o",
+            llm_base_url="https://llm.example/v1",
+            llm_api_key_encrypted=encrypt_llm_api_key(MODEL_KEY),
+            llm_api_key_last4=MODEL_KEY[-4:],
+        )
+        db.add(conn)
+        db.flush()
+        bindings = {"endpoint:primary": {"connection_id": conn.id}}
+        doc = {
+            "schema_hash": "h1",
+            "evaluator": {
+                "dataset": "d",
+                "config": {"samples": 1, "run_metadata": {"note": _USER_PLACEHOLDER}},
+            },
+            "slot_bindings": bindings,
+            "env_overrides": {
+                "LLM_OVERRIDES": {
+                    "endpoints": {"primary": {"timeout": 60}},
+                    "main": {"endpoint": "primary"},
+                }
+            },
+        }
+        body = materialize_job_body(
+            doc, [p.to_dict() for p in proposals], descriptor=descriptor, user_id="u"
+        )
+        body["priority"] = "NORMAL"  # the API always stores user_id and priority
+        metadata = body["evaluator"]["config"].setdefault("run_metadata", {})
+        metadata["qym_launch"] = build_qym_launch(
+            experiment_id=seed["experiment_id"],
+            job_id=job_id,
+            environment_id=seed["env_id"],
+            combo_index=0,
+        )
+        metadata["qym_config"] = build_qym_config(
+            doc,
+            schema_hash="h1",
+            base_source={"kind": "blank"},
+            models={"endpoint:primary": {"name": "gpt4o", "model": "gpt-4o"}},
+        )
+        job = db.get(EvalExperimentJob, job_id)
+        job.request_body = body
+        job.params = {"slot_bindings": bindings}
+        db.commit()
+        return seed, job_id, conn.id, body
+
+
+def _diffs(stored, sent, pointer=""):
+    """``(pointer, stored, sent)`` wherever the submitted body differs."""
+    if isinstance(stored, dict) and isinstance(sent, dict):
+        out = []
+        for key in list(stored) + [k for k in sent if k not in stored]:
+            out += _diffs(
+                stored.get(key, _MISSING), sent.get(key, _MISSING), f"{pointer}/{key}"
+            )
+        return out
+    return [] if stored == sent else [(pointer, stored, sent)]
+
+
+def test_submitted_body_is_stored_body_plus_launch_token(
+    sessions, service, clock, caplog
+):
+    seed, job_id, conn_id, stored = _seed_bound_job(sessions)
+    token = launch_token_for_job(job_id)
+    caplog.set_level(logging.DEBUG)
+    _dispatcher(
+        sessions,
+        service,
+        clock,
+        add_launch_token=dispatcher_module.default_add_launch_token,
+    ).tick()
+    assert _job(sessions, job_id).status == EvalJobStatus.SUBMITTED
+    (sent,) = service.bodies
+
+    # Only slot placeholders were resolved, and only the token was added.
+    diffs = _diffs(stored, sent)
+    assert _TOKEN_POINTER in [pointer for pointer, _, _ in diffs]
+    for pointer, before, after in diffs:
+        if pointer == _TOKEN_POINTER:
+            assert (before, after) == (_MISSING, token)
+        else:
+            assert is_placeholder(before), pointer
+            assert not pointer.startswith("/evaluator/config/run_metadata"), pointer
+
+    metadata = sent["evaluator"]["config"]["run_metadata"]
+    # A user value that looks like a placeholder is not filled: no key reaches the run.
+    assert metadata["note"] == _USER_PLACEHOLDER
+    assert MODEL_KEY not in json.dumps(metadata)
+    assert metadata["qym_launch"] == {
+        "experiment_id": seed["experiment_id"],
+        "job_id": job_id,
+        "environment_id": seed["env_id"],
+        "combo_index": 0,
+        "attempt": 0,
+        "token": token,
+    }
+    assert metadata["qym_config"]["slot_bindings"] == {
+        "endpoint:primary": {
+            "connection_id": conn_id,
+            "name": "gpt4o",
+            "model": "gpt-4o",
+        }
+    }
+    assert MODEL_KEY in json.dumps(sent)  # the key itself still goes to the service
+
+    with sessions() as db:
+        rows = [
+            *db.execute(text("SELECT * FROM eval_experiment_jobs")).mappings().all(),
+            *db.execute(text("SELECT * FROM eval_experiments")).mappings().all(),
+        ]
+    persisted = json.dumps([{k: str(v) for k, v in r.items()} for r in rows])
+    assert token not in persisted and MODEL_KEY not in persisted
+    assert token not in caplog.text and MODEL_KEY not in caplog.text
+
+
+def test_missing_launch_token_key_waits_instead_of_submitting(
+    sessions, service, clock, monkeypatch
+):
+    seed = _seed(sessions)
+    job_id = seed["job_ids"][0]
+
+    def unavailable(body, job_id):
+        raise LaunchTokenUnavailable("no key")
+
+    monkeypatch.setattr(dispatcher_module, "body_with_launch_token", unavailable)
+    _dispatcher(
+        sessions,
+        service,
+        clock,
+        add_launch_token=dispatcher_module.default_add_launch_token,
+    ).tick()
+    job = _job(sessions, job_id)
+    assert service.calls["submit"] == 0
+    assert job.status == EvalJobStatus.QUEUED
+    assert "QYM_LLM_CONFIG_ENCRYPTION_KEY" in (job.wait_reason or "")
+    assert job.lease_owner is None
