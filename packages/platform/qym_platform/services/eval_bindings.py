@@ -31,6 +31,8 @@ Blocking problems (``BindingProblem.code``), each with a user-facing message:
 ``connection_unavailable``  ``available_for_experiments`` was turned off
 ``connection_no_model``     the connection has no model name
 ``keys_not_allowed``        a key would be sent to an env without ``allow_connection_keys``
+``https_required``          the slot sends a base URL that is not ``https://`` (unless
+                            ``QYM_ALLOW_PRIVATE_LLM_BASE_URLS``); analyzer use is unaffected
 ``key_unavailable``         the stored key cannot be decrypted (or encryption is off)
 ``temporary_key_missing``   a temporary model's key is no longer stored (re-enter it)
 ``invalid_binding``         the binding is malformed or still a sweep
@@ -65,6 +67,11 @@ from ..db.models import (
     EvalJobStatus,
     ProjectLlmConnection,
 )
+from ..llm_endpoint_security import (
+    EXPERIMENT_HTTPS_REQUIRED_MESSAGE,
+    HTTPS_REQUIRED_CODE,
+    experiment_base_url_needs_https,
+)
 from ..secrets import decrypt_llm_api_key
 from ..settings import PlatformSettings
 from .eval_config import (  # _PLACEHOLDER: the one placeholder grammar
@@ -80,12 +87,14 @@ from .llm_connections import list_experiment_connections
 
 WAIT_REASON_MAX = 200  # EvalExperimentJob.wait_reason is String(200)
 KEY_ROLE = "api_key"
+BASE_URL_ROLE = "base_url"
 
 KEYS_NOT_ALLOWED_REASON = (
     "This environment does not accept model API keys. A manager can enable "
     '"Allow connection keys" in its settings.'
 )
 NO_MODEL_REASON = "This model has no model name"
+HTTPS_REQUIRED_REASON = "This model uses http://. " + EXPERIMENT_HTTPS_REQUIRED_MESSAGE
 
 SecretLookup = Callable[[str], Optional[str]]
 """``lookup(ref) -> key | None`` for temporary-model ``{"$secret": ref}`` keys (#12)."""
@@ -250,17 +259,36 @@ def _display_name(binding: Mapping[str, Any], fallback: str) -> str:
     return name if isinstance(name, str) and name.strip() else fallback
 
 
+def _slot_maps_role(
+    slot_key: str,
+    index: dict[str, dict[str, Any]],
+    descriptor: Optional[Mapping[str, Any]],
+    role: str,
+) -> bool:
+    """Whether the slot maps a ``role`` field. Unknown slots count as yes."""
+    slot = _slot_for(slot_key, index, descriptor or {})
+    if slot is None:
+        return True  # fail closed
+    pointer = slot["field_map"].get(role)
+    return isinstance(pointer, str) and bool(pointer)
+
+
 def _slot_sends_key(
     slot_key: str,
     index: dict[str, dict[str, Any]],
     descriptor: Optional[Mapping[str, Any]],
 ) -> bool:
     """Whether the slot maps an ``api_key`` field. Unknown slots count as yes."""
-    slot = _slot_for(slot_key, index, descriptor or {})
-    if slot is None:
-        return True  # fail closed
-    pointer = slot["field_map"].get(KEY_ROLE)
-    return isinstance(pointer, str) and bool(pointer)
+    return _slot_maps_role(slot_key, index, descriptor, KEY_ROLE)
+
+
+def _slot_sends_base_url(
+    slot_key: str,
+    index: dict[str, dict[str, Any]],
+    descriptor: Optional[Mapping[str, Any]],
+) -> bool:
+    """Whether the slot maps a ``base_url`` field (a model-only slot doesn't)."""
+    return _slot_maps_role(slot_key, index, descriptor, BASE_URL_ROLE)
 
 
 def resolve_slot_bindings(
@@ -287,6 +315,7 @@ def resolve_slot_bindings(
         return result
     index = _slot_index(slots)
     allow_keys = bool(environment.allow_connection_keys)
+    allow_private = (settings or PlatformSettings()).allow_private_llm_base_urls
 
     connection_ids = {
         b["connection_id"]
@@ -325,6 +354,7 @@ def resolve_slot_bindings(
             )
             continue
         sends_key_field = _slot_sends_key(slot_key, index, descriptor)
+        sends_base_url = _slot_sends_base_url(slot_key, index, descriptor)
 
         if kind == "connection":
             cid = binding.get("connection_id")
@@ -346,6 +376,16 @@ def resolve_slot_bindings(
             if not (conn.llm_model or "").strip():
                 problem(
                     slot_key, "connection_no_model", f'Model "{name}" has no model name'
+                )
+                continue
+            if sends_base_url and experiment_base_url_needs_https(
+                conn.llm_base_url, allow_private=allow_private
+            ):
+                problem(
+                    slot_key,
+                    HTTPS_REQUIRED_CODE,
+                    f'Model "{name}" uses an http:// base URL. '
+                    + EXPERIMENT_HTTPS_REQUIRED_MESSAGE,
                 )
                 continue
             has_key = bool(conn.llm_api_key_encrypted)
@@ -397,6 +437,20 @@ def resolve_slot_bindings(
                 f'Temporary model "{label}" has no model name',
             )
             continue
+        base_url = temporary.get("base_url")
+        # Launch checks this in ``eval_temporary_models.temporary_binding_errors``
+        # (once, not per environment); here it guards jobs queued before the rule.
+        if decrypt and sends_base_url and experiment_base_url_needs_https(
+            base_url if isinstance(base_url, str) else None,
+            allow_private=allow_private,
+        ):
+            problem(
+                slot_key,
+                HTTPS_REQUIRED_CODE,
+                f'Temporary model "{label}" uses an http:// base URL. '
+                + EXPERIMENT_HTTPS_REQUIRED_MESSAGE,
+            )
+            continue
         key_ref = temporary.get(KEY_ROLE)
         ref = key_ref.get("$secret") if isinstance(key_ref, Mapping) else None
         api_key = None
@@ -422,7 +476,6 @@ def resolve_slot_bindings(
                         "stored; enter it again",
                     )
                     continue
-        base_url = temporary.get("base_url")
         display = {
             "kind": "temporary",
             "label": label,
@@ -554,10 +607,18 @@ def mark_job_blocked(
 
 
 def _connection_slot_state(
-    conn: ProjectLlmConnection, allow_keys: bool, sends_key_field: bool
+    conn: ProjectLlmConnection,
+    allow_keys: bool,
+    sends_key_field: bool,
+    allow_private: bool = False,
+    sends_base_url: bool = True,
 ) -> tuple[bool, Optional[str], Optional[str]]:
     if not (conn.llm_model or "").strip():
         return False, "connection_no_model", NO_MODEL_REASON
+    if sends_base_url and experiment_base_url_needs_https(
+        conn.llm_base_url, allow_private=allow_private
+    ):
+        return False, HTTPS_REQUIRED_CODE, HTTPS_REQUIRED_REASON
     if sends_key_field and conn.llm_api_key_encrypted and not allow_keys:
         return False, "keys_not_allowed", KEYS_NOT_ALLOWED_REASON
     return True, None, None
@@ -569,25 +630,34 @@ def connection_options(
     slots: Sequence[Any] = (),
     *,
     descriptor: Optional[Mapping[str, Any]] = None,
+    settings: Optional[PlatformSettings] = None,
 ) -> dict[str, Any]:
     """Model-picker data for one environment (#23). Secret-free.
 
-    Lists the project's ``available_for_experiments`` connections. Each option has
+    Lists the project's ``available_for_experiments`` connections (an ``http://`` one
+    is listed disabled with ``reason_code`` ``https_required``). Each option has
     ``available``/``reason_code``/``reason`` for a slot with an API-key field (the usual
     endpoint slot) and, per slot in ``slots``, the same triple under ``slots``. Also
     returns ``temporary_keys_allowed`` and its ``temporary_keys_reason`` for the
     "+ Temporary model" form.
     """
     allow_keys = bool(environment.allow_connection_keys)
+    allow_private = (settings or PlatformSettings()).allow_private_llm_base_urls
     index = _slot_index(slots)
     slot_keys = list(index)
     options = []
     for conn in list_experiment_connections(db, environment.project_id):
-        available, code, reason = _connection_slot_state(conn, allow_keys, True)
+        available, code, reason = _connection_slot_state(
+            conn, allow_keys, True, allow_private
+        )
         per_slot = {}
         for key in slot_keys:
             ok, slot_code, slot_reason = _connection_slot_state(
-                conn, allow_keys, _slot_sends_key(key, index, descriptor)
+                conn,
+                allow_keys,
+                _slot_sends_key(key, index, descriptor),
+                allow_private,
+                _slot_sends_base_url(key, index, descriptor),
             )
             per_slot[key] = {
                 "available": ok,

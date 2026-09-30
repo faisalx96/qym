@@ -13,12 +13,14 @@ import json
 import logging
 from datetime import timedelta
 
+import pytest
 from cryptography.fernet import Fernet
 from sqlalchemy import text
 from test_eval_dispatcher import ENV_KEY, FakeClock, FakeService
 from test_experiments_api import (  # noqa: F401  (pytest fixtures)
     MANAGER,
     MEMBER,
+    P1,
     PRIMARY,
     _add_env,
     _create,
@@ -54,8 +56,10 @@ from qym_platform.services.eval_model_slots import list_model_slots
 from qym_platform.services.eval_presets import prepare_config
 from qym_platform.services.eval_temporary_models import (
     UNBOUND_REASON,
+    TemporaryModelError,
     decrypt_secrets,
     encrypt_secrets,
+    save_as_connection,
     unbind_temporary,
 )
 
@@ -227,6 +231,73 @@ def test_private_base_url_allowed_when_opted_in(
 ):
     monkeypatch.setenv("QYM_ALLOW_PRIVATE_LLM_BASE_URLS", "true")
     res = _launch(client, [env.id], spec=_temp_spec(base_url="http://127.0.0.1:8000"))
+    assert res.status_code == 200, res.text
+
+
+def test_temporary_model_needs_https(client, session_factory, env):
+    res = _launch(
+        client, [env.id], spec=_temp_spec(base_url="http://llm.example.com/v1")
+    )
+    assert res.status_code == 422
+    errors = res.json()["detail"]["errors"]
+    (error,) = [e for e in errors if e["code"] == "https_required"]
+    assert error["slot_key"] == PRIMARY
+    assert "https://" in error["message"]
+    assert KEY not in res.text
+    with session_factory() as s:
+        assert s.query(EvalExperiment).count() == 0
+
+
+def test_public_http_temporary_model_allowed_when_opted_in(
+    client, env, monkeypatch
+):
+    monkeypatch.setenv("QYM_ALLOW_PRIVATE_LLM_BASE_URLS", "true")
+    res = _launch(
+        client, [env.id], spec=_temp_spec(base_url="http://llm.example.com/v1")
+    )
+    assert res.status_code == 200, res.text
+
+
+def test_save_as_connection_refuses_http(session_factory):
+    with session_factory() as s:
+        with pytest.raises(TemporaryModelError) as info:
+            save_as_connection(
+                s,
+                project_id=P1,
+                user_id="manager-1",
+                temporary={**TEMPORARY, "base_url": "http://llm.example.com/v1"},
+                api_key=KEY,
+            )
+        assert info.value.code == "https_required"
+        assert KEY not in str(info.value)
+        assert s.query(ProjectLlmConnection).count() == 0
+
+
+def test_launch_refuses_http_project_connection_per_slot(
+    client, session_factory, env, monkeypatch
+):
+    with session_factory() as s:
+        row = ProjectLlmConnection(
+            project_id=P1,
+            name="plain http",
+            llm_model="gpt-4o",
+            llm_base_url="http://llm.example.com/v1",
+            available_for_experiments=True,
+        )
+        s.add(row)
+        s.commit()
+        conn_id = row.id
+    res = _create(client, [env.id], spec=_spec(conn_id))
+    assert res.status_code == 422
+    errors = res.json()["detail"]["errors"]
+    (error,) = [e for e in errors if e["code"] == "https_required"]
+    assert error["slot_key"] == PRIMARY
+    assert 'Model "plain http"' in error["message"]
+    with session_factory() as s:
+        assert s.query(EvalExperiment).count() == 0
+
+    monkeypatch.setenv("QYM_ALLOW_PRIVATE_LLM_BASE_URLS", "true")
+    res = _create(client, [env.id], spec=_spec(conn_id))
     assert res.status_code == 200, res.text
 
 

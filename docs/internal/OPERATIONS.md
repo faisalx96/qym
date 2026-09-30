@@ -247,19 +247,46 @@ API, because it decrypts keys and calls the services.
 | Variable | Default | Meaning |
 |---|---|---|
 | `QYM_LLM_CONFIG_ENCRYPTION_KEY` | empty | **Required.** Fernet key that encrypts environment keys, LLM connection keys and temporary-model keys. It also derives the one-time launch tokens (HMAC). Without it, creating an environment answers 400, launching or retrying an experiment answers 400, and queued jobs wait with `Launch tokens need QYM_LLM_CONFIG_ENCRYPTION_KEY`. Same value on every API and worker process. |
+| `QYM_LLM_CONFIG_ENCRYPTION_KEYS_PREVIOUS` | empty | Comma-separated keys that were current before a rotation. Still used to decrypt, and to derive launch tokens of jobs launched before the rotation; never used to encrypt. Drop after running `reencrypt_llm_keys` (see below). |
 | `QYM_EVAL_SWEEP_MAX_JOBS` | `64` | Maximum jobs per launch (combinations × environments). Larger launches are refused before anything is written. |
 | `QYM_EVAL_EXPERIMENT_CREATE_RATE_LIMIT` | `30` | Launches per user per window (`0` disables). Counted from `eval_experiments` rows, so it holds across API processes. Dry-run previews are not counted. Over the limit: 429 with `Retry-After`. |
 | `QYM_EVAL_EXPERIMENT_CREATE_RATE_WINDOW_SECONDS` | `3600` | Window of the launch rate limit. |
 | `QYM_ROLE` | `all` | See "Roles and processes". |
-| `QYM_ALLOW_PRIVATE_LLM_BASE_URLS` | `false` | Allows `http://` and private or loopback environment URLs (and private connection and temporary-model URLs). Keep it off in shared deployments. |
+| `QYM_ALLOW_PRIVATE_LLM_BASE_URLS` | `false` | Allows `http://` and private or loopback environment URLs, private connection and temporary-model URLs, and `http://` models in experiments. Keep it off in shared deployments. |
 
-**Rotating `QYM_LLM_CONFIG_ENCRYPTION_KEY`** is not supported in place: the key is
-used as-is, with no key list. After a change, stored environment keys, connection keys
-and temporary-model keys no longer decrypt. Environments pause (`Environment API key
-cannot be decrypted`) until a manager re-enters their keys, and connection keys must be
-re-entered too. Jobs launched before the change but submitted after it get a launch
-token that no longer matches the stored hash, so their runs are stored as **local**.
-Drain the queue before rotating, and re-enter every key afterwards.
+**Rotating `QYM_LLM_CONFIG_ENCRYPTION_KEY`.** Decryption tries the current key and then
+every key in `QYM_LLM_CONFIG_ENCRYPTION_KEYS_PREVIOUS` (Fernet `MultiFernet`), while
+new values are always encrypted with the current key. The dispatcher derives each
+job's launch token with whichever configured key matches the job's stored
+`launch_token_hash`, so a job launched before the rotation and submitted after it still
+links as **official**. Procedure:
+
+1. Generate a new key (`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`).
+2. On every API and worker process, set `QYM_LLM_CONFIG_ENCRYPTION_KEY` to the new key
+   and add the old key to `QYM_LLM_CONFIG_ENCRYPTION_KEYS_PREVIOUS` (comma-separated
+   if older keys are still listed there).
+3. Deploy. Everything keeps working: stored keys decrypt with the previous key.
+4. Re-encrypt the stored values with the new key:
+
+   ```bash
+   python -m qym_platform.tools.reencrypt_llm_keys --dry-run   # counts only
+   python -m qym_platform.tools.reencrypt_llm_keys
+   ```
+
+   It covers `project_llm_connections.llm_api_key_encrypted`,
+   `eval_environments.api_key_encrypted` and `eval_experiments.secrets_encrypted`,
+   commits per batch (`--batch-size`, default 200), skips values already on the
+   current key (so it is safe to re-run) and prints JSON counts per column
+   (`scanned`, `already_current`, `reencrypted`, `failed`, `failed_ids`,
+   `skipped_changed`). It never prints keys. Exit code 1 means some values decrypt
+   with no configured key (listed by row id in `failed_ids`); re-enter those keys.
+   Exit code 2 means the current key is missing or malformed.
+5. Wait until no job launched before step 3 is still `QUEUED`, `BLOCKED` or
+   `SUBMITTING`, because their launch tokens still need the old key. Then remove the
+   old key from `QYM_LLM_CONFIG_ENCRYPTION_KEYS_PREVIOUS` and deploy again. A job
+   submitted after the old key is gone sends a token that doesn't match; the
+   dispatcher logs `launch_token_hash matches no configured encryption key` (job id
+   only) and the run is stored as **local**.
 
 Per-environment settings (**Project Settings → Environments → Policies**, manager only):
 `max_inflight_jobs` (default 5), `default_priority` and `max_priority` (default
@@ -492,9 +519,10 @@ job history.
 | `Rejected by the evaluation service` | The service answered 422 (or another 4xx). `error` holds its message, with `loc` paths | Usually schema drift: **Refresh schema** on the environment, fix the setting, retry. A 4xx other than 422 may be a service-side bug |
 | `Model "X" no longer exists` | The bound project connection was deleted | Relaunch with another model (a retry reuses the same binding) |
 | `Model "X" is no longer available for experiments` | **Available for experiments** was cleared on the connection | Re-enable it, then retry |
+| `Model "X" uses an http:// base URL. Experiments need an https:// base URL…` (also for temporary models) | The model's base URL is plain `http://`, and `QYM_ALLOW_PRIVATE_LLM_BASE_URLS` is off | Change the connection to `https://` (or relaunch with an `https://` model), then retry |
 | `Model "X" has no model name` | The connection has an empty model | Set the model on the connection, then retry |
 | `Model "X" needs its API key, but this environment does not accept model keys` (also for temporary models) | **Allow connection keys** is off on the environment | A manager enables it, or relaunch with a keyless model |
-| `The API key of model "X" could not be decrypted` | The connection's key was encrypted under another `QYM_LLM_CONFIG_ENCRYPTION_KEY` | Re-enter the connection key, then retry |
+| `The API key of model "X" could not be decrypted` | The connection's key was encrypted under a key that is neither `QYM_LLM_CONFIG_ENCRYPTION_KEY` nor listed in `QYM_LLM_CONFIG_ENCRYPTION_KEYS_PREVIOUS` | Add the old key to `QYM_LLM_CONFIG_ENCRYPTION_KEYS_PREVIOUS` and run `reencrypt_llm_keys`, or re-enter the connection key; then retry |
 | `The API key of temporary model "X" is no longer stored; enter it again` | The experiment's temporary keys were cleared (every job settled) | **Retry** and enter the key when asked |
 | `Model slot '…' has no binding` / `has an invalid binding` / `still holds a sweep` | A corrupt stored binding | Relaunch from the form |
 | `Environment is disabled` | The environment was disabled | Re-enable it, then retry |
@@ -609,15 +637,19 @@ qym.
   stored or returned (D1); the remote snapshot keeps an allow-list of columns only.
 - Environment URLs are `https://` only (unless `QYM_ALLOW_PRIVATE_LLM_BASE_URLS`), and
   every service call uses the SSRF-safe transport (pinned DNS, no redirects).
+- Models used in experiments are `https://` only too (same exception): a temporary
+  model with an `http://` base URL is refused at launch (`https_required`), an `http://`
+  project connection is listed disabled in the model picker, refused per slot at launch,
+  and blocks a queued job at dispatch, and it can't be marked **Available for
+  experiments**. Root-cause-analyzer connections still accept public `http://`.
 - Model keys only go to environments with **Allow connection keys**, which only a
   manager can enable and which resets when the URL changes.
 - `HIGH` priority needs the environment's `max_priority`, a project manager, and an
   explicit acknowledgement, on launch and on retry (D9).
 - Audit log actions: `eval_job.cancel`, `eval_job.retry`, `eval_remote_job.cancel`.
 
-The full verification, with the enforcing code, tests, and two open items (plain
-`http://` connection and temporary-model URLs; the dispatcher trusting its client to
-redact), is in [`EVAL_SECURITY_CHECKLIST.md`](EVAL_SECURITY_CHECKLIST.md).
+The full verification, with the enforcing code and tests, is in
+[`EVAL_SECURITY_CHECKLIST.md`](EVAL_SECURITY_CHECKLIST.md).
 
 ### Multi-pod and load testing
 

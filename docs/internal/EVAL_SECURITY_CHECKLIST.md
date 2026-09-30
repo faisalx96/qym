@@ -23,9 +23,10 @@ review and closed in #42. **Open** means documented and not fixed.
 | 1c | Keys are never logged | `services/eval_service_client.py:redact_text` and `redact_headers` (the client logs a redacted `Authorization`, and errors are scrubbed); the dispatcher decrypts keys in memory only (`services/eval_bindings.py:resolve_slot_bindings`, `prepare_dispatch`); `EvalServiceClient.__repr__` leaves out the key | `test_eval_security_checklist.py::test_keys_and_tokens_never_leak_across_launch_dispatch_ingest_cancel` (caplog at DEBUG, all loggers); `test_eval_dispatcher.py::test_resolved_keys_and_launch_token_never_persisted_or_logged`; `test_eval_bindings.py::test_keys_never_logged_persisted_or_repr`, `::test_undecryptable_key_blocks_without_leaking`; `test_eval_service_client.py::test_error_detail_with_secret_is_scrubbed` | Verified |
 | 1d | Keys never appear in `spec`, `params`, `qym_config` or copies of remote responses | `api/experiments.py:_stored_bindings`, `_named_spec_bindings`, `_qym_config`; `services/eval_experiments.py:build_qym_config`, `redact_secret_refs`; `services/eval_config.py:validate_config_document` (rejects secret literals in `env_overrides`); `services/eval_remote_queue.py:snapshot_item` (allow-list) | `test_eval_security_checklist.py::test_keys_and_tokens_never_leak_across_launch_dispatch_ingest_cancel` (dump of every row in every table); `test_eval_sweeps.py` (secrets kept out of `params`/`qym_config`); `test_experiment_launch_advanced.py::test_temporary_keys_only_appear_as_refs`; `test_eval_config.py::test_secret_literals_in_env_overrides_are_rejected`; `test_eval_queue_snapshots.py::test_snapshot_item_keeps_only_allowed_fields` | Verified |
 | 2 | Environment creation is refused without `QYM_LLM_CONFIG_ENCRYPTION_KEY` (same rule as LLM connections) | `api/eval_environments.py:create_environment` and `_stored_key` (`secrets.py:encryption_available`); `services/eval_temporary_models.py:temporary_binding_errors`; `services/eval_experiments.py:_token_subkey` (`LaunchTokenUnavailable`) | `test_eval_environments_api.py::test_create_refused_without_encryption_key`; `test_eval_temporary_models.py::test_keys_need_encryption_configured`; `test_secret_storage.py::test_create_reports_missing_encryption_key`; `test_experiments_api.py::test_launch_token_changes_with_key_and_needs_one`; `test_eval_dispatcher.py::test_missing_launch_token_key_waits_instead_of_submitting` | Verified |
+| 2b | The encryption key can be rotated without losing stored keys or official links (not in §15; added with the rotation support) | `secrets.py:decrypt_llm_api_key` (`MultiFernet` over `QYM_LLM_CONFIG_ENCRYPTION_KEY` then `QYM_LLM_CONFIG_ENCRYPTION_KEYS_PREVIOUS`; `encrypt_llm_api_key` uses the current key only; a malformed key is reported by setting name, never echoed); `services/eval_experiments.py:launch_token_for_job` (`expected_hash`: re-derives with each previous key and compares in constant time), passed the stored `launch_token_hash` by `services/eval_dispatcher.py:default_add_launch_token`; ingest is unchanged (`services/eval_run_linking.py` hashes the presented token); `tools/reencrypt_llm_keys.py` (idempotent, commits per batch, prints counts and row ids only) | `test_encryption_key_rotation.py` (previous-key decryption, current-key encryption, token key selection, tool dry run, idempotence, unreadable values, no secrets in output); `test_eval_dispatcher.py::test_launch_before_rotation_sends_token_matching_stored_hash`, `::test_launch_hash_matching_no_key_sends_current_token_and_logs`; `test_eval_run_linking.py::test_launch_before_key_rotation_links_official_after_it` | Verified |
 | 3a | Environment URLs are HTTPS-only unless `QYM_ALLOW_PRIVATE_LLM_BASE_URLS` is set | `api/eval_environments.py:normalize_environment_url` (scheme, credentials, private literal IPs); `EvalServiceClient.__init__` re-validates | `test_eval_security_checklist.py::test_base_url_policy_for_environments_connections_and_temporary_models`; `test_eval_environments_api.py::test_https_required_unless_private_allowed`, `::test_invalid_urls_refused`, `::test_private_address_refused_by_default`; `test_eval_service_client.py::test_private_base_url_rejected_unless_allowed` | Verified |
 | 3b | SSRF-safe transport (DNS pinned, no redirects) for every service call | `llm_endpoint_security.py:create_llm_http_client` (`PinnedAsyncTransport`, `follow_redirects=False`), used by `EvalServiceClient` (default factory in `services/eval_dispatcher.py:default_client_factory` and `api/eval_environments.py:get_eval_client_factory`) | `test_eval_service_client.py::test_default_client_uses_ssrf_safe_transport_and_timeouts`, `::test_allow_private_defaults_to_platform_setting`; `test_secret_storage.py::test_llm_endpoint_validation_rechecks_current_dns`, `::test_llm_transport_connects_to_the_validated_address` | Verified |
-| 3c | Connection and temporary-model base URLs pass the same check (§7.5) | `api/projects.py:_validate_llm_base_url`; `services/eval_temporary_models.py:temporary_binding_errors`, `save_as_connection` | `test_eval_security_checklist.py::test_base_url_policy_for_environments_connections_and_temporary_models`; `test_secret_storage.py::test_private_llm_base_url_is_blocked_by_default`; `test_eval_temporary_models.py::test_launch_requires_the_key_and_a_safe_base_url`, `::test_private_base_url_allowed_when_opted_in` | Verified (see open item O1) |
+| 3c | Connection and temporary-model base URLs pass the same check (§7.5) | `api/projects.py:_validate_llm_base_url`; `services/eval_temporary_models.py:temporary_binding_errors`, `save_as_connection` | `test_eval_security_checklist.py::test_base_url_policy_for_environments_connections_and_temporary_models`; `test_secret_storage.py::test_private_llm_base_url_is_blocked_by_default`; `test_eval_temporary_models.py::test_launch_requires_the_key_and_a_safe_base_url`, `::test_private_base_url_allowed_when_opted_in` | Verified (plus HTTPS for experiments, O1) |
 | 4a | Connection keys go only to environments with `allow_connection_keys` | `services/eval_bindings.py:resolve_slot_bindings` (`keys_not_allowed`), `connection_options`; `services/eval_temporary_models.py:temporary_binding_errors`; the launch refuses such a binding (422) and the dispatcher blocks one | `test_eval_security_checklist.py::test_connection_key_opt_in_is_manager_only_and_keys_follow_it`; `test_eval_bindings.py::test_keys_never_sent_without_opt_in`, `::test_model_only_slot_works_without_opt_in`, `::test_keyless_connection_works_without_opt_in`; `test_eval_temporary_models.py::test_keys_only_sent_to_environments_that_opt_in` | Verified |
 | 4b | Only a manager can enable `allow_connection_keys`, and changing the URL resets it | Every environment write goes through `_require_project_manager` (`api/eval_environments.py:create_environment`, `update_environment`); `update_environment` resets the flag when `base_url` changes | `test_eval_security_checklist.py::test_connection_key_opt_in_is_manager_only_and_keys_follow_it`; `test_eval_environments_api.py::test_connection_key_opt_in_is_manager_only`, `::test_member_reads_manager_writes`, `::test_url_change_resets_connection_key_opt_in` | Verified |
 | 5 | D1: `LLM_OVERRIDES.endpoints.*.api_key` is redacted in every remote response before it is stored or returned | `services/eval_service_client.py:redact_payload` (nested, plus JSON-in-string), applied in `submit`, `get`, `cancel` and `list`; `_redact_schema` for `env_overrides_schema`; `_validation_errors` drops the echoed `input`; `services/eval_remote_queue.py:snapshot_item` keeps allow-listed columns only | `test_eval_security_checklist.py::test_keys_and_tokens_never_leak_across_launch_dispatch_ingest_cancel` (the service echoes flattened `LLM_OVERRIDES`), `::test_orphan_cancel_is_manager_only_and_audited`; `test_eval_service_client.py::test_submit_202_sends_bearer_and_redacts_echoed_provider_keys`, `::test_get_redacts_structured_overrides_and_quotes_job_id`, `::test_list_passes_filters_and_redacts_every_item`, `::test_env_overrides_schema_keeps_shape_but_masks_secret_defaults`, `::test_422_preserves_loc_and_drops_echoed_input`; `test_eval_queue_snapshots.py::test_real_client_list_response_is_allow_listed`, `::test_refresh_stores_redacted_snapshot_and_queries_pending_running`; `test_eval_queue.py::test_remote_orphan_cancel_errors_are_redacted` | Verified |
@@ -60,16 +61,37 @@ Regression test: `test_eval_security_checklist.py::test_validation_errors_never_
 
 ## Open items
 
-- **O1: connection and temporary-model base URLs may use plain `http://`.** §15 asks
-  for HTTPS only on *environment* URLs. §7.5 sends temporary-model URLs through the
-  same `validate_llm_base_url` check as project connections, and that check accepts
-  public `http://` hosts (it still refuses credentials, fragments and private
-  addresses). When `allow_connection_keys` is on, the environment's worker could then
-  send a provider key to that endpoint in cleartext. Requiring HTTPS for connections
-  would change the existing root-cause-analyzer connections, which already accept
-  `http://`, so #42 leaves it alone. Recommendation: refuse `http://` for connections
-  offered to experiments and for temporary models unless
-  `QYM_ALLOW_PRIVATE_LLM_BASE_URLS` is set, or warn in the model picker.
+- **O1 (fixed): connection and temporary-model base URLs could use plain `http://`.**
+  `validate_llm_base_url` accepts public `http://` hosts, so with
+  `allow_connection_keys` on, a worker could have sent a provider key to such an
+  endpoint in cleartext. Models used in experiments now need `https://` unless
+  `QYM_ALLOW_PRIVATE_LLM_BASE_URLS` is set (local development); root-cause-analyzer
+  connections still accept public `http://`. The rule is
+  `llm_endpoint_security.py:experiment_base_url_needs_https` (code `https_required`),
+  applied in:
+  - `services/eval_temporary_models.py:temporary_binding_errors` (launch, once per
+    slot) and `save_as_connection` ("Save to project models");
+  - `services/eval_bindings.py:resolve_slot_bindings`: a bound `http://` connection is a
+    per-slot launch error and blocks a queued job at dispatch; a temporary model is
+    re-checked at dispatch for jobs queued before the rule. A slot that maps no
+    `base_url` field (model-only) never sends the URL, so it is not affected;
+  - `services/eval_bindings.py:connection_options`: the model picker lists an `http://`
+    connection disabled, with `reason_code: https_required`;
+  - `api/projects.py:_apply_connection_key`: turning on **Available for experiments**
+    for an `http://` connection answers 400; a new `http://` connection created without
+    the flag is analysis-only.
+
+  Tests: `test_eval_temporary_models.py::test_temporary_model_needs_https`,
+  `::test_public_http_temporary_model_allowed_when_opted_in`,
+  `::test_save_as_connection_refuses_http`,
+  `::test_launch_refuses_http_project_connection_per_slot`;
+  `test_eval_bindings.py::test_http_connection_is_refused_per_slot`,
+  `::test_connection_without_base_url_is_not_an_https_problem`,
+  `::test_http_connection_allowed_with_private_urls_opt_in`,
+  `::test_http_connection_listed_disabled_in_picker`,
+  `::test_http_connection_on_model_only_slot_is_allowed`,
+  `::test_http_temporary_model_blocks_at_dispatch`;
+  `test_secret_storage.py::test_http_connection_cannot_be_available_for_experiments`.
 - **O2 (fixed): the dispatcher trusted the client to redact.** The dispatcher now runs
   `redact_payload` again on everything it stores from the service (accepted or
   reconciled remote job, polled `remote_result`, `remote_versioning`) and redacts every

@@ -61,6 +61,7 @@ from qym_platform.services.eval_experiments import (
     LaunchTokenUnavailable,
     build_qym_config,
     build_qym_launch,
+    hash_launch_token,
     launch_token_for_job,
 )
 from qym_platform.services.eval_model_slots import detect_model_slots
@@ -1549,3 +1550,65 @@ def test_missing_launch_token_key_waits_instead_of_submitting(
     assert job.status == EvalJobStatus.QUEUED
     assert "QYM_LLM_CONFIG_ENCRYPTION_KEY" in (job.wait_reason or "")
     assert job.lease_owner is None
+
+
+# --------------------------------------------------------------------------- key rotation
+
+
+def _rotate(monkeypatch, *, previous: str) -> None:
+    """New current key, the old one(s) in ``QYM_LLM_CONFIG_ENCRYPTION_KEYS_PREVIOUS``."""
+    monkeypatch.setenv(
+        "QYM_LLM_CONFIG_ENCRYPTION_KEY", Fernet.generate_key().decode("utf-8")
+    )
+    monkeypatch.setenv("QYM_LLM_CONFIG_ENCRYPTION_KEYS_PREVIOUS", previous)
+
+
+def test_launch_before_rotation_sends_token_matching_stored_hash(
+    sessions, service, clock, monkeypatch, caplog
+):
+    old_key = os.environ["QYM_LLM_CONFIG_ENCRYPTION_KEY"]
+    seed = _seed(sessions)  # the environment key is encrypted with the old key
+    job_id = seed["job_ids"][0]
+    old_token = launch_token_for_job(job_id)
+    _update_job(sessions, job_id, launch_token_hash=hash_launch_token(old_token))
+    _rotate(monkeypatch, previous=old_key)
+    assert launch_token_for_job(job_id) != old_token
+    caplog.set_level(logging.DEBUG)
+
+    _dispatcher(
+        sessions,
+        service,
+        clock,
+        add_launch_token=dispatcher_module.default_add_launch_token,
+    ).tick()
+
+    assert _job(sessions, job_id).status == EvalJobStatus.SUBMITTED
+    (sent,) = service.bodies
+    token = sent["evaluator"]["config"]["run_metadata"]["qym_launch"]["token"]
+    assert token == old_token
+    assert hash_launch_token(token) == _job(sessions, job_id).launch_token_hash
+    assert old_token not in caplog.text
+
+
+def test_launch_hash_matching_no_key_sends_current_token_and_logs(
+    sessions, service, clock, caplog
+):
+    seed = _seed(sessions)
+    job_id = seed["job_ids"][0]
+    # Created under a key that has since been dropped entirely.
+    _update_job(sessions, job_id, launch_token_hash=hash_launch_token("tok-unknown"))
+    caplog.set_level(logging.DEBUG)
+
+    _dispatcher(
+        sessions,
+        service,
+        clock,
+        add_launch_token=dispatcher_module.default_add_launch_token,
+    ).tick()
+
+    (sent,) = service.bodies
+    token = sent["evaluator"]["config"]["run_metadata"]["qym_launch"]["token"]
+    assert token == launch_token_for_job(job_id)
+    assert "matches no configured encryption key" in caplog.text
+    assert job_id in caplog.text
+    assert token not in caplog.text

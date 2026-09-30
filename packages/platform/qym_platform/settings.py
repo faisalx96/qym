@@ -79,6 +79,10 @@ class PlatformSettings(BaseSettings):
 
     # Secrets
     llm_config_encryption_key: str = Field(default="")
+    # Rotation: comma-separated Fernet keys that were current before. Values
+    # encrypted with them still decrypt (MultiFernet); new values always use
+    # ``llm_config_encryption_key``. Drop once ``tools.reencrypt_llm_keys`` ran.
+    llm_config_encryption_keys_previous: str = Field(default="")
     allow_private_llm_base_urls: bool = Field(
         default=False,
         description=(

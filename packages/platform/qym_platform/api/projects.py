@@ -29,6 +29,7 @@ from qym_platform.deps import get_db
 from qym_platform.llm_endpoint_security import (
     LlmEndpointValidationError,
     create_llm_http_client,
+    experiment_base_url_needs_https,
     validate_llm_base_url,
 )
 from qym_platform.openai_compat import create_chat_completion_compat
@@ -467,10 +468,23 @@ def _apply_connection_key(
     conn.name = req.name.strip()
     conn.llm_base_url = _validate_llm_base_url(req.llm_base_url, settings)
     conn.llm_model = req.llm_model.strip()
+    # Experiments need HTTPS (analyzer use keeps accepting public http://).
+    plain_http = experiment_base_url_needs_https(
+        conn.llm_base_url, allow_private=settings.allow_private_llm_base_urls
+    )
+    if req.available_for_experiments and plain_http:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Only https:// connections can be available for experiments. Use an "
+                'https:// base URL or turn off "Available for experiments".'
+            ),
+        )
     if req.available_for_experiments is not None:
         conn.available_for_experiments = req.available_for_experiments
     elif is_new:
-        conn.available_for_experiments = True
+        # Omitted on create: an http:// connection is analysis-only.
+        conn.available_for_experiments = not plain_http
 
     api_key = req.llm_api_key.strip()
     if api_key == "__KEEP__":

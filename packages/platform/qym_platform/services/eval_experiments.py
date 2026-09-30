@@ -10,13 +10,16 @@ retry creates a new row (new id), so every job has its own token; one-time use i
 enforced at ingest (#17) by ``job.run_id IS NULL`` (plus the unique ``run_id``); ingest
 compares hashes in constant time with ``verify_launch_token``.
 
-Key rotation: rotating ``QYM_LLM_CONFIG_ENCRYPTION_KEY`` changes every derived token,
-so the tokens of existing jobs are invalidated. A job submitted *after* the rotation
-(queued, or resubmitted by crash recovery) sends a new token that no longer matches its
-stored ``launch_token_hash``, and its run is ingested as ``local``. A job already
-submitted with the old token still links, because ingest only hashes what it receives,
-unless it is resubmitted. Rotate while no jobs are queued, or re-hash non-terminal jobs
-with ``launch_token_hash_for_job`` right after rotating.
+Key rotation: rotating ``QYM_LLM_CONFIG_ENCRYPTION_KEY`` changes every derived token.
+The old key goes into ``QYM_LLM_CONFIG_ENCRYPTION_KEYS_PREVIOUS``, and the dispatcher
+passes the job's stored ``launch_token_hash`` as ``expected_hash``: the token is derived
+with the current key, and if its hash doesn't match, with each previous key (constant
+time), so a job created before the rotation and submitted after it still sends the token
+ingest expects and links as ``official``. Ingest needs no change: it only hashes what
+it receives. If no configured key matches (the old key was already dropped), the
+current-key token is sent, a warning is logged (job id only), and the run is ingested as
+``local``. Keep the previous key configured until no job created before the rotation is
+still waiting to be submitted.
 
 The stored ``request_body`` holds ``qym_launch`` **without** the token; the dispatcher
 calls ``body_with_launch_token`` in memory just before submitting.
@@ -48,6 +51,7 @@ import base64
 import copy
 import hashlib
 import hmac
+import logging
 from datetime import datetime
 from typing import (
     TYPE_CHECKING,
@@ -75,6 +79,7 @@ from ..db.models import (
     Run,
     RunWorkflowStatus,
 )
+from ..secrets import previous_encryption_keys
 from ..settings import PlatformSettings
 from .run_lifecycle import (
     RUN_STATUS_REASON_CANCELLED_FROM_QUEUE,
@@ -83,6 +88,8 @@ from .run_lifecycle import (
 
 if TYPE_CHECKING:
     from ..auth import Principal
+
+logger = logging.getLogger(__name__)
 
 _TOKEN_KEY_LABEL = b"qym-eval-launch-token-v1"
 TOKEN_PREFIX = "qlt_"
@@ -125,23 +132,51 @@ class LaunchTokenUnavailable(RuntimeError):
 # --------------------------------------------------------------------------- tokens
 
 
+def _subkey_for_secret(secret: str) -> bytes:
+    return hmac.new(secret.encode("utf-8"), _TOKEN_KEY_LABEL, hashlib.sha256).digest()
+
+
 def _token_subkey(settings: Optional[PlatformSettings] = None) -> bytes:
     secret = ((settings or PlatformSettings()).llm_config_encryption_key or "").strip()
     if not secret:
         raise LaunchTokenUnavailable(
             "Launch tokens need QYM_LLM_CONFIG_ENCRYPTION_KEY to be configured"
         )
-    return hmac.new(secret.encode("utf-8"), _TOKEN_KEY_LABEL, hashlib.sha256).digest()
+    return _subkey_for_secret(secret)
+
+
+def _token_with_subkey(subkey: bytes, job_id: str) -> str:
+    digest = hmac.new(subkey, job_id.encode("utf-8"), hashlib.sha256).digest()
+    return TOKEN_PREFIX + base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
 
 
 def launch_token_for_job(
-    job_id: str, settings: Optional[PlatformSettings] = None
+    job_id: str,
+    settings: Optional[PlatformSettings] = None,
+    *,
+    expected_hash: Optional[str] = None,
 ) -> str:
-    """The raw one-time launch token of a job. Never store, log or return it."""
-    digest = hmac.new(
-        _token_subkey(settings), job_id.encode("utf-8"), hashlib.sha256
-    ).digest()
-    return TOKEN_PREFIX + base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+    """The raw one-time launch token of a job. Never store, log or return it.
+
+    With ``expected_hash`` (the job's stored ``launch_token_hash``), a token whose
+    hash doesn't match is re-derived with each key of
+    ``QYM_LLM_CONFIG_ENCRYPTION_KEYS_PREVIOUS`` and the matching one is returned, so a
+    key rotation between launch and submit doesn't turn the run ``local``.
+    """
+    runtime_settings = settings or PlatformSettings()
+    current = _token_with_subkey(_token_subkey(runtime_settings), job_id)
+    if not expected_hash or verify_launch_token(current, expected_hash):
+        return current
+    for secret in previous_encryption_keys(runtime_settings):
+        candidate = _token_with_subkey(_subkey_for_secret(secret), job_id)
+        if verify_launch_token(candidate, expected_hash):
+            return candidate
+    logger.warning(
+        "eval job %s: launch_token_hash matches no configured encryption key; "
+        "sending the current-key token (the run will be ingested as local)",
+        job_id,
+    )
+    return current
 
 
 def hash_launch_token(token: str) -> str:
@@ -166,11 +201,14 @@ def body_with_launch_token(
     body: Mapping[str, Any],
     job_id: str,
     settings: Optional[PlatformSettings] = None,
+    *,
+    expected_hash: Optional[str] = None,
 ) -> dict[str, Any]:
     """A copy of a stored ``request_body`` with ``qym_launch.token`` filled in.
 
     For the dispatcher, in memory, right before submitting. The result must not be
-    persisted or logged.
+    persisted or logged. ``expected_hash`` is the job's ``launch_token_hash`` (see
+    ``launch_token_for_job``: it picks a previous key after a rotation).
     """
     out = copy.deepcopy(dict(body))
     evaluator = out.setdefault("evaluator", {})
@@ -178,7 +216,9 @@ def body_with_launch_token(
     metadata = config.setdefault("run_metadata", {})
     launch = dict(metadata.get("qym_launch") or {})
     launch["job_id"] = job_id
-    launch["token"] = launch_token_for_job(job_id, settings)
+    launch["token"] = launch_token_for_job(
+        job_id, settings, expected_hash=expected_hash
+    )
     metadata["qym_launch"] = launch
     return out
 
