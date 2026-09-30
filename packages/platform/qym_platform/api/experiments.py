@@ -1407,34 +1407,70 @@ def retry_experiment_job(
 def clone_experiment(
     project_id: str,
     experiment_id: str,
+    job_id: Optional[str] = Query(default=None, max_length=36),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     """A launch-form prefill from an experiment. Nothing is persisted.
+
+    With ``job_id`` ("Rerun with this config" on the run page, #26) the prefill is that
+    one combination: its secret-free ``qym_config`` document (sweeps resolved) on its
+    own environment, instead of the experiment's whole sweep.
 
     Never carries ``secrets_encrypted`` or a secret ref: temporary models keep their
     label, model and base URL, and the key must be entered again (§7.5).
     """
     _require_project_access(db, principal, project_id)
     experiment = _get_experiment(db, project_id, experiment_id)
+    job = _get_job(db, experiment, job_id) if job_id else None
+    wanted = [job.environment_id] if job else list(experiment.environment_ids or [])
     active = {
         env.id
         for env in db.query(EvalEnvironment).filter(
             EvalEnvironment.project_id == project_id,
-            EvalEnvironment.id.in_(list(experiment.environment_ids or [])),
+            EvalEnvironment.id.in_(wanted),
             EvalEnvironment.is_active.is_(True),
         )
     }
-    environment_ids = [e for e in experiment.environment_ids or [] if e in active]
-    return {
+    prefill: Dict[str, Any] = {
         "name": f"{experiment.name} (copy)"[:200],
         "description": experiment.description,
-        "environment_ids": environment_ids,
-        "unavailable_environment_ids": [
-            e for e in experiment.environment_ids or [] if e not in active
-        ],
+        "environment_ids": [e for e in wanted if e in active],
+        "unavailable_environment_ids": [e for e in wanted if e not in active],
         "base_source": {"kind": "clone", "experiment_id": experiment.id},
         "cloned_base_source": strip_secret_refs(experiment.base_source or {}),
         "priority": experiment.priority.value,
         "spec": strip_secret_refs(experiment.spec or {}),
     }
+    if job is None:
+        return prefill
+    snapshot = _job_qym_config(job) or {}
+    spec: Dict[str, Any] = {
+        key: snapshot[key]
+        for key in ("evaluator", "env_overrides", "slot_bindings")
+        if isinstance(snapshot.get(key), Mapping)
+    }
+    prefill.update(
+        {
+            "name": f"{experiment.name} (rerun)"[:200],
+            "base_source": {
+                "kind": "clone",
+                "experiment_id": experiment.id,
+                "job_id": job.id,
+            },
+            "cloned_base_source": strip_secret_refs(
+                snapshot.get("base_source") or experiment.base_source or {}
+            ),
+            # Without a stored snapshot (pre-#16 job) fall back to the whole spec.
+            "spec": spec if spec else prefill["spec"],
+            "combo": {
+                "job_id": job.id,
+                "combo_index": job.combo_index,
+                "environment_id": job.environment_id,
+                "schema_hash": snapshot.get("schema_hash"),
+                "sweep": strip_secret_refs((job.params or {}).get("sweep") or {}),
+                "from_snapshot": bool(spec),
+            },
+        }
+    )
+    return prefill
