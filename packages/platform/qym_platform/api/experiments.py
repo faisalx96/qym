@@ -16,6 +16,13 @@ descriptor for the launch form's Advanced panel (§8.4, D5; ``eval_config``).
   from ``eval_experiments`` rows, so it holds across API processes. Dry runs are not
   counted.
 
+``base_source`` (#31, plan §8.2/§9.2) records where the form started. ``official`` and
+``saved`` must name a version (``preset_version_id``) of that kind of preset belonging
+to one of the selected environments; ``clone`` an experiment (and optional
+``job_id``) of this project. Both are stored canonically. "Run official defaults" is
+a plain create with ``base_source: {kind: official, preset_version_id}`` and the
+version's config re-mapped onto the environment's current schema.
+
 Sweeps (#32): ``eval_sweeps.expand`` turns the spec (``{"sweep": [...]}`` values and
 ``links``) into combinations; each (combination, environment) becomes one job with the
 combination's ``combo_index``, run name, ``params`` and ``qym_config``. The job count is
@@ -71,6 +78,9 @@ from qym_platform.auth import Principal, require_ui_principal
 from qym_platform.datetime_utils import to_api_timestamp, utc_now_naive
 from qym_platform.db.models import (
     AuditLog,
+    EvalConfigPreset,
+    EvalConfigPresetKind,
+    EvalConfigPresetVersion,
     EvalEnvironment,
     EvalEnvironmentSchema,
     EvalExperiment,
@@ -446,18 +456,134 @@ def _save_to_project_models(
     return created
 
 
-def _base_source(req: ExperimentCreateRequest) -> Dict[str, Any]:
+def _base_ref(source: Mapping[str, Any], key: str, *, required: bool) -> Optional[str]:
+    value = source.get(key)
+    if value is None and not required:
+        return None
+    if not isinstance(value, str) or not value.strip() or len(value) > 64:
+        raise HTTPException(
+            status_code=422,
+            detail=f"base_source.{key} is required for a {source.get('kind')} base",
+        )
+    return value.strip()
+
+
+def _preset_base_source(
+    db: Session, source: Mapping[str, Any], envs: List[EvalEnvironment]
+) -> Dict[str, Any]:
+    """``official``/``saved``: a version of that kind of preset of a selected env.
+
+    Stored canonically as ``{kind, preset_id, preset_version_id, version,
+    environment_id}``. A version that does not exist and one of an environment that
+    is not part of the launch get the same answer, so nothing leaks across projects.
+    """
+    kind = source.get("kind")
+    version_id = _base_ref(source, "preset_version_id", required=True)
+    row = (
+        db.query(EvalConfigPresetVersion, EvalConfigPreset)
+        .join(EvalConfigPreset, EvalConfigPreset.id == EvalConfigPresetVersion.preset_id)
+        .filter(EvalConfigPresetVersion.id == version_id)
+        .first()
+    )
+    if row is None or row[1].environment_id not in {env.id for env in envs}:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "base_source.preset_version_id is not a preset version of the "
+                "selected environments"
+            ),
+        )
+    version, preset = row
+    expected = (
+        EvalConfigPresetKind.OFFICIAL if kind == "official" else EvalConfigPresetKind.SAVED
+    )
+    if preset.kind != expected:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "base_source.preset_version_id is not a version of the official "
+                "defaults"
+                if kind == "official"
+                else "base_source.preset_version_id is not a saved preset version"
+            ),
+        )
+    return {
+        "kind": kind,
+        "preset_id": preset.id,
+        "preset_version_id": version.id,
+        "version": version.version,
+        "environment_id": preset.environment_id,
+    }
+
+
+def _clone_base_source(
+    db: Session, project_id: str, source: Mapping[str, Any]
+) -> Dict[str, Any]:
+    """``clone``: an experiment of this project and, optionally, one of its jobs."""
+    experiment_id = _base_ref(source, "experiment_id", required=True)
+    job_id = _base_ref(source, "job_id", required=False)
+    experiment = (
+        db.query(EvalExperiment.id)
+        .filter(
+            EvalExperiment.id == experiment_id,
+            EvalExperiment.project_id == project_id,
+        )
+        .first()
+    )
+    if experiment is None:
+        raise HTTPException(
+            status_code=422,
+            detail="base_source.experiment_id is not an experiment of this project",
+        )
+    out: Dict[str, Any] = {"kind": "clone", "experiment_id": experiment_id}
+    if job_id is not None:
+        job = (
+            db.query(EvalExperimentJob.id)
+            .filter(
+                EvalExperimentJob.id == job_id,
+                EvalExperimentJob.experiment_id == experiment_id,
+            )
+            .first()
+        )
+        if job is None:
+            raise HTTPException(
+                status_code=422,
+                detail="base_source.job_id is not a job of that experiment",
+            )
+        out["job_id"] = job_id
+    return out
+
+
+def _base_source(
+    db: Session,
+    project_id: str,
+    req: ExperimentCreateRequest,
+    envs: List[EvalEnvironment],
+) -> Dict[str, Any]:
+    """Validate the launch's ``base_source`` (plan §8.2, §9.2).
+
+    ``official``/``saved`` must name a version of that kind of preset belonging to one
+    of the selected environments; ``clone`` an experiment (and job) of this project.
+    ``best_run`` is passed through until #38 defines it.
+    """
     raw: Any = req.base_source
     if raw is None:
         raw = req.spec.get("base_source")
     source: Dict[str, Any] = (
         dict(raw) if isinstance(raw, Mapping) and raw else {"kind": "blank"}
     )
-    if source.get("kind") not in _BASE_KINDS:
+    kind = source.get("kind")
+    if kind not in _BASE_KINDS:
         raise HTTPException(
             status_code=422,
             detail=f"base_source.kind must be one of {sorted(_BASE_KINDS)}",
         )
+    if kind in ("official", "saved"):
+        return _preset_base_source(db, source, envs)
+    if kind == "clone":
+        return _clone_base_source(db, project_id, source)
+    if kind == "blank":
+        return {"kind": "blank"}
     return strip_secret_refs(source)
 
 
@@ -896,7 +1022,7 @@ def create_experiment(
             )
     envs = _load_environments(db, project_id, req.environment_ids)
     priority = _resolve_priority(db, principal, project_id, envs, req.priority)
-    base_source = _base_source(req)
+    base_source = _base_source(db, project_id, req, envs)
     spec = {k: v for k, v in req.spec.items() if k != "base_source"}
     saved_connection_ids = _save_to_project_models(db, principal, project_id, req, spec)
 

@@ -450,11 +450,42 @@ def _slot_summary(slots: List[EvalModelSlot]) -> Dict[str, Any]:
     }
 
 
+def _official_presets(db: Session, env_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+    """Per environment: its published official defaults (plan §9.2), if any.
+
+    ``{env_id: {"preset_id", "version_id", "version"}}``; environments without an
+    official preset, or whose preset has no current version, are left out.
+    """
+    if not env_ids:
+        return {}
+    Preset = db_models.EvalConfigPreset
+    Version = db_models.EvalConfigPresetVersion
+    rows = (
+        db.query(Preset.environment_id, Preset.id, Version.id, Version.version)
+        .join(
+            Version,
+            (Version.id == Preset.current_version_id)
+            & (Version.preset_id == Preset.id),
+        )
+        .filter(
+            Preset.environment_id.in_(env_ids),
+            Preset.kind == db_models.EvalConfigPresetKind.OFFICIAL,
+        )
+        .all()
+    )
+    return {
+        env_id: {"preset_id": preset_id, "version_id": version_id, "version": version}
+        for env_id, preset_id, version_id, version in rows
+    }
+
+
 def _serialize_environment(
     env: EvalEnvironment,
     schema: Optional[EvalEnvironmentSchema],
     slot_summary: Dict[str, Any],
+    official: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    official = official or {}
     return {
         "id": env.id,
         "project_id": env.project_id,
@@ -477,6 +508,10 @@ def _serialize_environment(
         "health_error": env.health_error,
         "is_active": bool(env.is_active),
         "model_slots": slot_summary,
+        # Published official defaults ("Run official defaults", plan §9.2).
+        "official_preset_id": official.get("preset_id"),
+        "official_preset_version_id": official.get("version_id"),
+        "official_preset_version": official.get("version"),
         "created_by_user_id": env.created_by_user_id,
         "created_at": to_api_timestamp(env.created_at),
         "updated_at": to_api_timestamp(env.updated_at),
@@ -490,7 +525,9 @@ def _environment_payload(db: Session, env: EvalEnvironment) -> Dict[str, Any]:
         else None
     )
     slots = list_model_slots(db, schema.id) if schema else []
-    return _serialize_environment(env, schema, _slot_summary(slots))
+    return _serialize_environment(
+        env, schema, _slot_summary(slots), _official_presets(db, [env.id]).get(env.id)
+    )
 
 
 def _slots_payload(slots: List[EvalModelSlot]) -> Dict[str, Any]:
@@ -533,6 +570,7 @@ def list_environments(
         ):
             counts.setdefault(schema_id, {})[status.value] = total
 
+    officials = _official_presets(db, [e.id for e in envs])
     payload = []
     for env in envs:
         by_status = {s.value: 0 for s in EvalModelSlotStatus}
@@ -546,7 +584,10 @@ def list_environments(
         }
         payload.append(
             _serialize_environment(
-                env, schemas.get(env.current_schema_id or ""), summary
+                env,
+                schemas.get(env.current_schema_id or ""),
+                summary,
+                officials.get(env.id),
             )
         )
     return {"environments": payload}

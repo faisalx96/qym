@@ -118,17 +118,19 @@ def test_module_consumes_the_launch_and_picker_apis():
         "'/versions?project_slug='",
         "projectPath('/experiments')",
         "dry_run: !!dryRun",
-        "base_source: { kind: st.base }",
+        "base_source: baseSource(),",
         "save_to_project_models: save",
     ):
         assert needle in MODULE, needle
     assert "window.QymExperimentLaunch = { mount, BASE_OPTIONS }" in MODULE
 
 
-def test_start_from_is_blank_only_with_extension_points():
+def test_start_from_options_with_extension_points():
     base = re.search(r"const BASE_OPTIONS = \[(.*?)\];", MODULE, re.S).group(1)
     available = re.findall(r"kind: '(\w+)'[^}]*available: true", base)
-    assert available == ["blank"]
+    # Official/saved arrived with #31 (tests/platform/test_experiment_launch_base.py);
+    # best run waits for #38.
+    assert available == ["official", "saved", "blank"]
     for kind in ("official", "best_run", "saved"):
         assert f"kind: '{kind}'" in base
     assert "'data-xl-advanced': '1'" in MODULE  # #24 Advanced panel host

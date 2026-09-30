@@ -222,8 +222,14 @@
       });
       const meta = metadataState().values;
       if (Object.keys(meta).length) config.run_metadata = meta;
-      // Values the Dataset section set (dataset_alias) win over these.
-      if (Object.keys(config).length) evaluator.config = Object.assign(config, evaluator.config || {});
+      // Panel edits win over the base's evaluator inputs (#31 st.evaluatorExtra);
+      // the Dataset section's dataset_alias wins over both.
+      if (Object.keys(config).length) {
+        const current = evaluator.config || {};
+        const merged = Object.assign({}, current, config);
+        if (has(current, 'dataset_alias')) merged.dataset_alias = current.dataset_alias;
+        evaluator.config = merged;
+      }
       if (adv.extra.report_k != null) evaluator.report_k = adv.extra.report_k;
       if (adv.extra.dataset_version != null && evaluator.dataset_version == null) evaluator.dataset_version = adv.extra.dataset_version;
       if (adv.links) spec.links = clone(adv.links);

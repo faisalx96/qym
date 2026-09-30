@@ -10,6 +10,8 @@
  *   createSlotEditor({...})                                       "Group LLM settings"
  *   renderFormPreview(descriptor)                                 read-only generated form
  *   HIGH_PRIORITY_WARNING / highPriorityWarning(envName)          §5.3 preemption text
+ *   runOfficialDefaults({ projectId, projectSlug, env, canManage, onLaunched })
+ *                                    "Run official defaults" one click (§9.2, #31)
  *
  * Security: every server or user string goes through esc() before it reaches
  * innerHTML. The environment API key only exists in its password input until
@@ -259,8 +261,8 @@
   }
 
   /**
-   * Official preset version (plan §9, issues #27/#28). No backend yet: once the
-   * environment payload carries ``official_preset_version`` this renders it.
+   * Official preset version (plan §9, issues #27/#28/#31): the environment payload
+   * carries ``official_preset_version`` (null until official defaults are published).
    */
   function officialPresetVersionHtml(env) {
     const version = env && env.official_preset_version;
@@ -300,6 +302,7 @@
           <td class="env-num">${esc(env.max_inflight_jobs == null ? '—' : env.max_inflight_jobs)}</td>
           <td class="env-actions-cell">
             <div class="env-row-actions">
+              ${canRunOfficial(env) ? `<button class="btn btn-secondary env-btn-sm" type="button" data-env-run-official="${id}" title="${esc(`Launch a 1-job experiment with official defaults v${env.official_preset_version}`)}">Run official defaults</button>` : ''}
               <button class="btn btn-secondary env-btn-sm" type="button" data-env-open="${id}">${canManage ? 'Manage' : 'View'}</button>
               ${canManage ? `<button class="btn btn-secondary env-btn-sm" type="button" data-env-test="${id}">Test</button>` : ''}
             </div>
@@ -1427,6 +1430,136 @@
     return drawer;
   }
 
+  // ── "Run official defaults" (plan §9.2, issue #31) ─────────────────────
+  // services/eval_priority.PREEMPTION_ACK_REQUIRED
+  const PREEMPTION_ACK_REQUIRED = 'preemption_acknowledgement_required';
+
+  function canRunOfficial(env) {
+    return !!(env && env.is_active && env.current_schema_id && env.official_preset_id && env.official_preset_version != null);
+  }
+
+  function projectSlugFromPath() {
+    const match = window.location.pathname.match(/\/projects\/([^/]+)(?:\/|$)/);
+    return match ? decodeURIComponent(match[1]) : '';
+  }
+
+  function experimentsUrl(slug, query) {
+    const root = (window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '');
+    return `${root}/projects/${encodeURIComponent(slug)}/experiments?${query}`;
+  }
+
+  function navigateTo(url) {
+    if (window.QymShell && window.QymShell.navigateTo) window.QymShell.navigateTo(url);
+    else window.location.href = url;
+  }
+
+  /**
+   * Why a re-mapped official version cannot launch in one click (null when it can).
+   *
+   * Temporary models: official defaults never hold one (publishing refuses them,
+   * plan §9.1), and a key is never stored in a preset (§7.5). A temporary binding
+   * found here is therefore stale data. It is not quietly switched to Inherit
+   * (that would run a different model than the official defaults name): the launch
+   * form opens instead, where the key can be entered or the slot changed.
+   */
+  function officialLaunchBlocker(env, version, remap) {
+    const label = `Official defaults v${version.version}`;
+    if (!remap || remap.ok === false || (remap.errors || []).length) {
+      return `${label} need changes for the current schema of “${env.name}”.`;
+    }
+    const config = remap.config || {};
+    const evaluator = config.evaluator || {};
+    if (typeof evaluator.dataset !== 'string' || !evaluator.dataset) {
+      return `${label} do not name a dataset; pick one.`;
+    }
+    const bindings = config.slot_bindings || {};
+    if (Object.keys(bindings).some((key) => bindings[key] && typeof bindings[key] === 'object' && bindings[key].temporary)) {
+      return `${label} use a temporary model, which needs its API key.`;
+    }
+    const models = (version.warnings || []).filter((w) => w && (w.rule === 'connection_missing' || w.rule === 'connection_unavailable'));
+    if (models.length) return models[0].message || 'A model of the official defaults is not available.';
+    return null;
+  }
+
+  /**
+   * One click: a 1-job experiment on ``env`` with ``base_source = {kind: official,
+   * preset_version_id}`` and the current official version re-mapped onto the
+   * environment's current schema (§9.2, §9.3). When it cannot launch as is (no
+   * dataset, re-map errors, a missing model, HIGH default for a non-manager,
+   * validation errors) the launch form opens on that environment instead, where
+   * Official defaults is the default base. HIGH asks for the §5.3 acknowledgement.
+   */
+  async function runOfficialDefaults(options) {
+    const opts = options || {};
+    const env = opts.env || {};
+    const slug = opts.projectSlug || projectSlugFromPath();
+    const review = (reason) => {
+      toast(`${reason} Opening the launch form.`, 'info');
+      navigateTo(experimentsUrl(slug, `new=1&env=${encodeURIComponent(env.id)}`));
+      return null;
+    };
+    if (!canRunOfficial(env)) {
+      toast(`No official defaults are published for “${env.name || 'this environment'}”.`, 'error');
+      return null;
+    }
+    const res = await request(envPath(opts.projectId, `/${encodeURIComponent(env.id)}/presets/${encodeURIComponent(env.official_preset_id)}/versions/${encodeURIComponent(env.official_preset_version)}?remap=current`));
+    if (!res.ok) {
+      toast(errorMessage(res.data, 'Could not load the official defaults'), 'error');
+      return null;
+    }
+    const version = res.data.version || {};
+    const remap = res.data.remap;
+    const blocker = officialLaunchBlocker(env, version, remap);
+    if (blocker) return review(blocker);
+    if ((remap.dropped || []).length) {
+      const ok = await confirmDialog({
+        title: 'Launch official defaults?',
+        description: [remap.summary || 'Some settings are no longer supported.', 'Those settings keep the environment’s own values.'],
+        confirmLabel: 'Launch anyway',
+        cancelLabel: 'Don’t launch',
+      });
+      if (!ok) return null;
+    }
+    const body = {
+      name: `${env.name} · official v${version.version}`.slice(0, 200),
+      environment_ids: [env.id],
+      spec: remap.config,
+      base_source: { kind: 'official', preset_version_id: version.id },
+    };
+    const confirmHigh = (description) => confirmDialog({
+      title: 'Launch at HIGH priority?',
+      description,
+      confirmLabel: 'Launch at HIGH',
+      cancelLabel: 'Don’t launch',
+      confirmClass: 'shell-btn-danger',
+    });
+    if (env.default_priority === 'HIGH') {
+      if (!opts.canManage) return review(`“${env.name}” launches at HIGH by default, which needs a project manager; pick a priority.`);
+      if (!(await confirmHigh([highPriorityWarning(env.name)]))) return null;
+      body.acknowledge_preemption = true;
+    }
+    const send = () => request(`v1/projects/${encodeURIComponent(opts.projectId)}/experiments`, sendJson('POST', body));
+    let launch = await send();
+    let detail = launch.data && launch.data.detail;
+    if (!launch.ok && launch.status === 422 && detail && detail.code === PREEMPTION_ACK_REQUIRED) {
+      if (!(await confirmHigh([errorMessage(launch.data, highPriorityWarning(env.name))]))) return null;
+      body.acknowledge_preemption = true;
+      launch = await send();
+      detail = launch.data && launch.data.detail;
+    }
+    if (launch.ok && launch.data && launch.data.id) {
+      toast(`Launched official defaults v${version.version} on “${env.name}”`, 'success');
+      if (opts.onLaunched) opts.onLaunched(launch.data);
+      else navigateTo(experimentsUrl(slug, `experiment=${encodeURIComponent(launch.data.id)}`));
+      return launch.data;
+    }
+    if (launch.status === 422 && detail && Array.isArray(detail.errors) && detail.errors.length) {
+      return review(`Official defaults v${version.version} do not validate:${detail.errors[0].message || 'invalid value'}.`);
+    }
+    toast(errorMessage(launch.data, 'Failed to launch the official defaults'), 'error');
+    return null;
+  }
+
   // ── Settings panel controller ──────────────────────────────────────────
   const panels = new WeakMap();
 
@@ -1439,9 +1572,17 @@
       opts.tbody.addEventListener('click', async (event) => {
         const button = event.target.closest('button');
         if (!button) return;
-        const env = ctl.envs.find((e) => e.id === (button.dataset.envOpen || button.dataset.envTest));
+        const env = ctl.envs.find((e) => e.id === (button.dataset.envOpen || button.dataset.envTest || button.dataset.envRunOfficial));
         if (!env) return;
-        if (button.dataset.envOpen) {
+        if (button.dataset.envRunOfficial) {
+          if (button.disabled) return;
+          const done = spinnerLabel(button, '');
+          try {
+            await runOfficialDefaults({ projectId: ctl.opts.projectId, projectSlug: ctl.opts.projectSlug, env, canManage: ctl.opts.canManage });
+          } finally {
+            done();
+          }
+        } else if (button.dataset.envOpen) {
           openEnvironmentDrawer({ projectId: ctl.opts.projectId, env, canManage: ctl.opts.canManage, onChange: () => ctl.reload() });
         } else if (button.dataset.envTest && ctl.opts.canManage) {
           const done = spinnerLabel(button, '');
@@ -1492,6 +1633,8 @@
     renderFormPreview,
     renderEnvironmentRows,
     officialPresetVersionHtml,
+    runOfficialDefaults,
+    canRunOfficial,
     HIGH_PRIORITY_WARNING,
     highPriorityWarning,
     // Exposed for tests and the Experiments page.
