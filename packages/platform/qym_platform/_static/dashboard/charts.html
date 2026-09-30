@@ -27,6 +27,11 @@
       <button class="filter-btn qym-segmented__option" data-filter="today" aria-pressed="false">Today</button>
       <button class="filter-btn qym-segmented__option" data-filter="week" aria-pressed="false">7d</button>
     </div>
+    <div class="origin-filters qym-segmented" role="group" aria-label="Run origin" data-qym-segmented-key="run-origin">
+      <button class="origin-filter-btn qym-segmented__option active" data-origin="all" aria-pressed="true">All</button>
+      <button class="origin-filter-btn qym-segmented__option" data-origin="official" aria-pressed="false" title="Runs dispatched by the platform and verified at ingest">Official</button>
+      <button class="origin-filter-btn qym-segmented__option" data-origin="local" aria-pressed="false" title="Runs from a laptop, CI or any unverified source">Local</button>
+    </div>
     <div class="command-bar-filter-row">
       <div class="filter-dropdowns">
         <div class="multi-select-wrapper" id="task-filter-wrapper">

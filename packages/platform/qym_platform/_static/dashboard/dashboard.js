@@ -192,6 +192,7 @@
     filterStatuses: new Set(),
     filterVersions: new Set(),
     filterUsers: new Set(),
+    filterOrigin: 'all',
     knownVersions: new Set(),
     knownVersionsProjectSlug: '',
     currentView: window.__QYM_INITIAL_VIEW__ || 'charts',
@@ -272,7 +273,7 @@
     { key: GROUP_CONSISTENCY_COLUMN_KEY, label: 'Consistency' },
     { key: GROUP_RELIABILITY_COLUMN_KEY, label: 'Reliability' },
   ];
-  const RUNS_TABLE_BASE_COLUMN_COUNT = 11;
+  const RUNS_TABLE_BASE_COLUMN_COUNT = 12;
   const MODELS_VIEW_SCORE_STAT_KEYS = ['passAtK', 'passHatK', 'maxAtK', 'consistency', 'reliability', 'avgScore', 'failedCount', 'totalRetries', 'avgLatency', 'medianLatency', 'correctDistribution'];
   const MODELS_VIEW_NUMERIC_STAT_KEYS = ['avgScore', 'minScore', 'maxAtK', 'stddevScore', 'totalScoreSum', 'failedCount', 'totalRetries', 'avgLatency', 'medianLatency'];
   function _traceMetricsForRuns(runs = null) {
@@ -423,6 +424,37 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  // Origin (plan §11): "Official run" is the badge for a platform-dispatched,
+  // ingest-verified run. It is distinct from the "Official defaults" preset.
+  const ORIGIN_FILTER_VALUES = ['all', 'official', 'local'];
+  const OFFICIAL_RUN_BADGE_TITLE = 'Dispatched by the platform and verified at ingest';
+
+  function getRunOrigin(run) {
+    return run && run.origin === 'official' ? 'official' : 'local';
+  }
+
+  function renderOfficialRunBadge(run) {
+    if (getRunOrigin(run) !== 'official') return '';
+    return `<span class="qym-tag qym-tag--accent origin-badge" title="${escapeHtml(OFFICIAL_RUN_BADGE_TITLE)}">Official run</span>`;
+  }
+
+  function experimentUrlForRun(run) {
+    const experimentId = run && run.experiment && run.experiment.id;
+    const slug = (state.currentProject && state.currentProject.slug) || getProjectSlugFromPath();
+    if (!experimentId || !slug) return '';
+    return projectUrl(slug, `experiments?experiment=${encodeURIComponent(experimentId)}`);
+  }
+
+  function renderExperimentCell(run) {
+    const experiment = run && run.experiment;
+    if (!experiment || !experiment.id) return '<span class="metric-na">—</span>';
+    const name = String(experiment.name || String(experiment.id).slice(0, 8));
+    const label = name.length > 28 ? name.slice(0, 27) + '…' : name;
+    const href = experimentUrlForRun(run);
+    if (!href) return `<span class="experiment-name" title="${escapeHtml(name)}">${escapeHtml(label)}</span>`;
+    return `<a class="experiment-link" href="${escapeHtml(href)}" title="Open experiment ${escapeHtml(name)}" onclick="event.stopPropagation()">${escapeHtml(label)}</a>`;
   }
 
   const MODEL_REASONING_BADGE_TITLE = 'Reasoning model';
@@ -651,6 +683,7 @@
       statuses: [...state.filterStatuses].sort(),
       versions: [...state.filterVersions].sort(),
       users: [...state.filterUsers].sort(),
+      origin: state.filterOrigin,
     });
   }
 
@@ -1778,6 +1811,9 @@
     } else if (state.filterUsers.has('__none__')) {
       runs = [];
     }
+    if (state.filterOrigin !== 'all') {
+      runs = runs.filter(r => getRunOrigin(r) === state.filterOrigin);
+    }
 
     // Sort
     sortRuns(runs);
@@ -1994,7 +2030,7 @@
     // Update subtitle with filter info
     const subtitleEl = $('.charts-subtitle');
     if (subtitleEl) {
-      const isFiltered = state.quickFilter !== 'all' || state.filterStatuses.size > 0 || state.filterVersions.size > 0;
+      const isFiltered = state.quickFilter !== 'all' || state.filterOrigin !== 'all' || state.filterStatuses.size > 0 || state.filterVersions.size > 0;
       if (isFiltered) {
         subtitleEl.textContent = `Filtered: ${usesDashboardSummary() ? state.dashboardOverview.total_runs : state.filteredRuns.length} runs • Showing average metric scores across all items`;
       } else {
@@ -2005,7 +2041,7 @@
     if (!chartData || chartData.combos.length === 0) {
       el('charts-grid').innerHTML = `
         <div class="chart-no-data" style="grid-column: 1/-1;">
-          ${state.quickFilter !== 'all' || state.filterStatuses.size > 0 || state.filterVersions.size > 0
+          ${state.quickFilter !== 'all' || state.filterOrigin !== 'all' || state.filterStatuses.size > 0 || state.filterVersions.size > 0
             ? 'No runs match current filters'
             : 'No data available for charts. Run some evaluations first.'}
         </div>
@@ -3432,6 +3468,7 @@
                 : (anyRepeatRows ? '<span class="samples-toggle-spacer" aria-hidden="true"></span>' : '')}
               <span class="run-id" title="${run.run_id}">${run.external_run_id ? truncateText(run.external_run_id, 30) : run.run_id.substring(0, 8)}</span>
               ${run.samples > 1 ? `<span class="run-pass-count">x${run.samples}</span>` : ''}
+              ${renderOfficialRunBadge(run)}
             </div>
           </td>
           <td class="col-status">
@@ -3465,6 +3502,7 @@
             </span>
           </td>
           <td class="col-analysis" onclick="event.stopPropagation()">${renderAnalysisCell(run, status)}</td>
+          <td class="col-experiment">${renderExperimentCell(run)}</td>
           <td class="col-version">
             ${run.git_commit ? `<span class="version-badge qym-tag" title="${run.git_branch ? run.git_branch + '/' : ''}${run.git_commit}">${run.git_branch ? run.git_branch + '/' : ''}${run.git_commit}</span>` : '<span style="color:var(--text-muted)">—</span>'}
           </td>
@@ -3951,6 +3989,7 @@
             ? `<span class="timestamp" title="${escapeHtml(passDate.full)}"><span class="date">${passDate.date}</span><span class="timestamp-sep">·</span><span class="time">${passDate.time}</span></span>`
             : '<span class="metric-na">—</span>'}</td>
           <td class="col-analysis" onclick="event.stopPropagation()">${renderAnalysisCell(parentRun, runStatus, firstPass, pass.analysis_cause_count)}</td>
+          ${inherit('col-experiment')}
           ${inherit('col-version')}
           ${metricCells}${visibleTraceMetrics.length > 0 ? '<td class="col-trace-separator"></td>' : ''}
           ${visibleSystemColumns.has('latency') ? latencyCell('col-latency', pass.avg_latency_ms, avgLatencyWinners) : ''}
@@ -4472,6 +4511,7 @@
     const countText = filtered === total ? `${total} runs` : `${filtered} of ${total} runs`;
 
     const hasFilters = state.quickFilter !== 'all'
+      || state.filterOrigin !== 'all'
       || state.filterTasks.size > 0
       || (state.filterModels.size > 0)
       || state.filterDatasets.size > 0
@@ -4504,6 +4544,8 @@
       } else if (state.filterUsers.has('__none__')) {
         parts.push('user: none');
       }
+      if (state.filterOrigin === 'official') parts.push('official runs');
+      if (state.filterOrigin === 'local') parts.push('local runs');
       if (state.quickFilter === 'today') parts.push('today');
       if (state.quickFilter === 'week') parts.push('last 7d');
       filterText = countText + (parts.length > 0 ? ` — ${parts.join(', ')}` : '');
@@ -4789,6 +4831,7 @@
     if (state.filterDatasets.size > 0) n++;
     if (state.filterUsers.size > 0) n++;
     if (state.quickFilter !== 'all') n++;
+    if (state.filterOrigin !== 'all') n++;
     return n;
   }
 
@@ -4812,6 +4855,14 @@
     });
   }
 
+  function setOriginFilterSelection(origin) {
+    $$('.origin-filter-btn').forEach(btn => {
+      const active = btn.dataset.origin === origin;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+
   function clearAllFilters() {
     state.filterTasks.clear();
     state.filterModels.clear();
@@ -4821,6 +4872,8 @@
     state.filterUsers.clear();
     state.quickFilter = 'all';
     setQuickFilterSelection('all');
+    state.filterOrigin = 'all';
+    setOriginFilterSelection('all');
     populateFilterDropdowns();
     render();
   }
@@ -5564,7 +5617,7 @@
             const runDisplayName = getRunDisplayName(run);
             html += `<label class="run-selection-item ${isSelected ? 'selected' : ''}">
               <input type="checkbox" data-file="${escapeHtml(run.file_path)}" ${isSelected ? 'checked' : ''} />
-              <div class="run-info"><div class="run-name" title="${escapeHtml(runDisplayName)}">${escapeHtml(runDisplayName)}</div><div class="run-date">${formatDate(run.timestamp).full}</div></div>
+              <div class="run-info"><div class="run-name" title="${escapeHtml(runDisplayName)}">${escapeHtml(runDisplayName)}</div><div class="run-date">${formatDate(run.timestamp).full}${renderOfficialRunBadge(run)}</div></div>
               ${score !== undefined ? `<span class="run-score ${scoreClass}">${scoreDisplay}</span>` : ''}
             </label>`;
           }
@@ -5655,7 +5708,7 @@
             <input type="checkbox" data-file="${run.file_path}" ${isSelected ? 'checked' : ''} />
             <div class="run-info">
               <div class="run-name" title="${escapeHtml(runDisplayName)}">${escapeHtml(runDisplayName)}</div>
-              <div class="run-date">${dt.full}</div>
+              <div class="run-date">${dt.full}${renderOfficialRunBadge(run)}</div>
             </div>
             ${score !== undefined ? `<span class="run-score ${scoreClass}">${scoreDisplay}</span>` : ''}
           </label>
@@ -6671,6 +6724,7 @@
       datasets: [...state.filterDatasets], statuses: [...state.filterStatuses],
       versions: [...state.filterVersions], users: [...state.filterUsers],
     };
+    if (state.filterOrigin !== 'all') filters.origins = [state.filterOrigin];
     if (state.quickFilter === 'today') {
       const start = new Date(now);
       start.setHours(0, 0, 0, 0);
@@ -7283,6 +7337,9 @@
       if (skipFilter !== 'users' && state.filterUsers.size > 0 && !state.filterUsers.has('__none__')) {
         runs = runs.filter(r => matchesFilterSelection(state.filterUsers, getRunOwnerKey(r)));
       }
+      if (state.filterOrigin !== 'all') {
+        runs = runs.filter(r => getRunOrigin(r) === state.filterOrigin);
+      }
       return runs;
     }
 
@@ -7297,6 +7354,7 @@
       .sort((a, b) => getOwnerFilterLabel(a).localeCompare(getOwnerFilterLabel(b)))
       .concat(ownerValues.includes(EMPTY_FILTER_VALUE) ? [EMPTY_FILTER_VALUE] : []);
     const constrainingFiltersActive = state.quickFilter !== 'all'
+      || state.filterOrigin !== 'all'
       || state.filterTasks.size > 0
       || state.filterDatasets.size > 0
       || state.filterModels.size > 0
@@ -7420,6 +7478,18 @@
     btn.addEventListener('click', () => {
       state.quickFilter = btn.dataset.filter;
       setQuickFilterSelection(state.quickFilter);
+      state.focusedIndex = -1;
+      render();
+    });
+  });
+
+  // Origin facet (All / Official / Local)
+  $$('.origin-filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const origin = btn.dataset.origin;
+      if (!ORIGIN_FILTER_VALUES.includes(origin) || origin === state.filterOrigin) return;
+      state.filterOrigin = origin;
+      setOriginFilterSelection(origin);
       state.focusedIndex = -1;
       render();
     });
@@ -7736,6 +7806,7 @@
       filterDatasets: [...state.filterDatasets],
       filterUsers: [...state.filterUsers],
       quickFilter: state.quickFilter,
+      filterOrigin: state.filterOrigin,
       chartFirstColWidth: state.chartFirstColWidth,
     };
     sessionStorage.setItem(getDashboardStateKey(), JSON.stringify(stateToSave));
@@ -7781,6 +7852,10 @@
         if (parsed.quickFilter) {
           state.quickFilter = parsed.quickFilter;
           setQuickFilterSelection(state.quickFilter);
+        }
+        if (ORIGIN_FILTER_VALUES.includes(parsed.filterOrigin)) {
+          state.filterOrigin = parsed.filterOrigin;
+          setOriginFilterSelection(state.filterOrigin);
         }
         applyChartFirstColWidth(parsed.chartFirstColWidth || CHART_FIRST_COL_DEFAULT_WIDTH);
       } catch (e) {

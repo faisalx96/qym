@@ -71,6 +71,11 @@ from qym_platform.services.run_lifecycle import (
 from qym_platform.services.eval_run_linking import strip_launch_token
 from qym_platform.services.run_experiment_panel import run_experiment_panel
 from qym_platform.services.run_payloads import compact_row, detail_item_ids, search_conditions
+from qym_platform.services.run_origin import (
+    experiment_refs_for_jobs,
+    parse_origin_filter,
+    run_origin_fields,
+)
 from qym_platform.services.repeat_passes import (
     RepeatPassDeletionError,
     delete_repeat_pass,
@@ -2259,9 +2264,20 @@ def legacy_list_runs(
     owner_user_id: Optional[str] = Query(
         default=None, description="Filter by run owner user id"
     ),
+    origin: Optional[str] = Query(
+        default=None,
+        description=(
+            "Filter by run origin: 'official' (dispatched by the platform and "
+            "verified at ingest), 'local', or 'all' (default)"
+        ),
+    ),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
+    try:
+        origin_filter = parse_origin_filter(origin)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
     # A unique tie-breaker keeps offset pages disjoint when runs share a timestamp.
     q = Run.active(db).order_by(Run.created_at.desc(), Run.id.asc())
 
@@ -2330,6 +2346,8 @@ def legacy_list_runs(
             q = q.filter(Run.status.in_(statuses))
     if exclude_live:
         q = q.filter(~Run.status.in_(_LIVE_RUN_STATUSES))
+    if origin_filter is not None:
+        q = q.filter(Run.origin == origin_filter)
 
     user_filter = (owner_user_id or user_id or user or "").strip()
     if user_filter:
@@ -2703,6 +2721,9 @@ def legacy_list_runs(
 
     # --- Build summaries from pre-fetched data ---
     dataset_info = _dataset_version_info_map(db, runs)
+    experiment_refs = experiment_refs_for_jobs(
+        db, (r.experiment_job_id for r in runs)
+    )
     tasks: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
     for r in runs:
         agg = item_agg.get(
@@ -2874,6 +2895,7 @@ def legacy_list_runs(
             "product_eval": r.run_metadata.get("product_eval")
             if isinstance(r.run_metadata, dict)
             else None,
+            **run_origin_fields(r, experiment_refs),
         }
 
         task = summary["task_name"]
@@ -3287,6 +3309,16 @@ def legacy_compare(
 def _can_approve_run(db: Session, principal: Principal, run: Run) -> bool:
     """Check if the principal can approve or reject this run."""
     return permission_can_approve_run(db, principal, run)
+
+
+def _run_origin_and_panel(db: Session, run: Run) -> Dict[str, Any]:
+    fields = run_origin_fields(
+        run, experiment_refs_for_jobs(db, [run.experiment_job_id])
+    )
+    panel = run_experiment_panel(db, run)
+    if panel is not None and fields["experiment"]:
+        panel = {**fields["experiment"], **panel}
+    return {"origin": fields["origin"], "experiment": panel}
 
 
 def _build_run_data(
@@ -3776,8 +3808,10 @@ def _build_run_data(
                     if isinstance(run_metadata, dict)
                     else None
                 ),
-                # Official runs only (plan §11, #26); None for local runs.
-                "experiment": run_experiment_panel(db, run),
+                # origin (#18) plus the Experiment panel (#26, official runs only;
+                # None for local runs). The panel also carries #18's {id, name,
+                # job_id} experiment ref, which compare.html links with.
+                **_run_origin_and_panel(db, run),
             },
             "snapshot": {
                 "rows": ui_rows,
