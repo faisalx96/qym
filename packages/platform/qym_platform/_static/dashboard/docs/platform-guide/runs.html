@@ -5,7 +5,16 @@
 <h2>Read and narrow the table</h2>
 <p>Use the toolbar to filter by task, dataset and version, model, status, or owner. <strong>Columns</strong> controls visible metrics and system fields. Its <strong>Frozen columns</strong> section chooses which of run name, status, task, model, dataset, owner, and date stay in place while the table scrolls sideways: all of them by default. Unfreeze some to see more scores on a narrower screen; the choice is remembered in this browser, and <strong>Reset to default</strong> freezes them all again. Click a column heading to sort; click the run name to open its detail page.</p>
 
-<p>Each row shows workflow status, run identity, task, model, dataset, code version, metric means, latency, owner, date, duration, and available actions. Running repeat evaluations also show current pass progress.</p>
+<p>Each row shows workflow status, run identity, task, model, dataset, code version, metric means, latency, owner, date, duration, and available actions. Running repeat evaluations also show current pass progress. A finished run tagged <strong>Incomplete</strong> completed without all of its data: some items never arrived, or the platform rejected some of its events. Hover the tag for the reason; the run page lists what is missing.</p>
+
+<h3>The numbers above the table</h3>
+<p>The top bar (and each project card on Overview) sums the runs in scope: <strong>All runs</strong> in the project, or <strong>Filtered runs</strong> while filters are active. Hover a number for its definition.</p>
+<ul>
+  <li><strong>Runs</strong> &mdash; runs in scope.</li>
+  <li><strong>Execution success</strong> &mdash; the share of item executions that ran without a task error. A repeat run counts each item once per pass, judged by that pass's last attempt. Metric (scorer) errors do not lower it; they count in runs with errors. It replaces the older <em>Avg Success</em>, so it can differ from earlier releases.</li>
+  <li><strong>Runs with errors</strong> &mdash; runs with at least one task or metric error.</li>
+  <li><strong>Models</strong> and <strong>Items</strong> &mdash; distinct model names (reasoning and standard variants count once) and items evaluated (a repeat run counts each item once).</li>
+</ul>
 
 <h2>Expand a repeat row</h2>
 <p>A repeat evaluation is one row marked with its pass count (<code>&times;k</code> / <code>k passes</code>). It represents one run in which every dataset item was executed k times. Open its chevron to reveal:</p>

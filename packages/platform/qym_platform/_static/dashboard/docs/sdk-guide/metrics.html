@@ -119,18 +119,22 @@ def json_validity(output, expected=None):
             metadata={"parser": "json.loads"},
         )</pre>
 
-<h2>Errored metrics are excluded from aggregation</h2>
-<p>This is the most important and least obvious behavior. A metric return that contains an <code>error</code> key &mdash; whether you returned it deliberately, or qym caught an exception &mdash; is recorded as <code>score=0.0</code> but is <strong>not</strong> counted in the metric's mean. It is counted as an error instead.</p>
+<h2>Errored metrics in the local summary and on the platform</h2>
+<p>This is the most important and least obvious behavior. A metric return that contains an <code>error</code> key &mdash; whether you returned it deliberately, or qym caught an exception &mdash; is recorded as <code>score=0.0</code> and marked as a scorer error. The two places that aggregate it treat it differently:</p>
+<ul>
+<li><strong>The platform run mean</strong> (runs list, run page, Compare, Models) counts it as 0, or leaves it out for a lower-is-better metric (see Direction above), and shows how many scorer errors there were next to the mean.</li>
+<li><strong>The SDK's local summary</strong> (<code>get_metric_stats</code>, <code>summary()</code>) leaves it out of the metric's mean and counts it as an error instead.</li>
+</ul>
 
-<p>Verified in <code>qym/core/results.py</code> (<code>get_metric_stats</code>): a score dict with an <code>error</code> key increments an <code>errors</code> counter and is skipped; the reported <code>success_rate</code> is then:</p>
+<p>Locally, verified in <code>qym/core/results.py</code> (<code>get_metric_stats</code>): a score dict with an <code>error</code> key increments an <code>errors</code> counter and is skipped; the reported <code>success_rate</code> is then:</p>
 
 <pre data-lang="text">success_rate = len(scores) / (len(scores) + errors)</pre>
 
 <p>The practical consequences:</p>
 <ul>
-<li>A metric that <strong>raises</strong> is caught by qym and recorded as <code>{"score": 0, "error": &lt;traceback&gt;}</code> &mdash; so it drops out of the mean but pulls down <code>success_rate</code>.</li>
+<li>A metric that <strong>raises</strong> is caught by qym and recorded as <code>{"score": 0, "error": &lt;traceback&gt;}</code> &mdash; it pulls down <code>success_rate</code>, is left out of the local mean, and counts as 0 in the platform mean of a higher-is-better or undeclared metric.</li>
 <li>A metric that returns a normal low score (e.g. <code>0.0</code> for a failed check) <strong>does</strong> count toward the mean. This is the difference between "the model scored badly" and "the metric itself failed."</li>
-<li>If you want a bad output to lower the average, return <code>0.0</code>; if you want it to register as an infrastructure failure, surface an <code>error</code> key.</li>
+<li>If the metric worked and the output is bad, return <code>0.0</code> (with the reason under <code>metadata.reason</code>); if the metric itself failed, raise or surface an <code>error</code> key so it is triaged as a scorer error. On the platform either one lowers a higher-is-better mean; only the error is counted and flagged as one.</li>
 </ul>
 
 <div class="docs-callout tip"><svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg><p><span class="docs-callout-title">Score low output, do not raise.</span> For ordinary "bad answer" cases, return <code>0.0</code> &mdash; not an exception. Reserve exceptions/error keys for genuine metric failures (a dependency is down, parsing the wrong shape) that you want to triage separately from model quality.</p></div>
@@ -182,7 +186,7 @@ def grounded_in_context(output, expected=None):
 </tbody>
 </table>
 
-<p>A timed-out metric records an <code>error</code> key after its retries are exhausted, so per the rule above it is excluded from the metric mean and lowers metric <code>success_rate</code>. It has no special timeout label. Raise the budget for legitimately slow checks, or lower the retry count when fast failure matters more.</p>
+<p>A timed-out metric records an <code>error</code> key after its retries are exhausted, so per the rule above it is a scorer error: it counts as 0 in the platform run mean, or is left out of it for a lower-is-better metric, is left out of the local summary's mean, and lowers metric <code>success_rate</code>. It has no special timeout label. Raise the budget for legitimately slow checks, or lower the retry count when fast failure matters more.</p>
 
 <pre data-lang="python">from qym import Evaluator
 from qym.core.config import EvaluatorConfig

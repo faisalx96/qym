@@ -125,7 +125,7 @@ result = Evaluator(task, dataset, metrics=[helpfulness]).run(show_tui=False)</pr
 </div>
 
 <h2>Return shapes, in brief</h2>
-<p>Built-ins return one of three shapes, all normalized into a <code>MetricResult</code> internally: a bare number (mapped straight to <code>score</code>), a <code>{"score": ..., "metadata": {...}}</code> dict, or — for judges — a full <code>MetricResult</code> carrying <code>score</code>, <code>label</code>, and <code>explanation</code>. One detail to know now: a metric that returns a dict containing an <code>"error"</code> key is recorded with score <code>0.0</code> and excluded from aggregate scoring rather than dragging the average down silently. The full return-type contract for your own metrics lives in <a href="#sdk-guide/metrics">Metrics (deep dive)</a>.</p>
+<p>Built-ins return one of three shapes, all normalized into a <code>MetricResult</code> internally: a bare number (mapped straight to <code>score</code>), a <code>{"score": ..., "metadata": {...}}</code> dict, or — for judges — a full <code>MetricResult</code> carrying <code>score</code>, <code>label</code>, and <code>explanation</code>. One detail to know now: a metric that returns a dict containing an <code>"error"</code> key is recorded as a scorer error with score <code>0.0</code>: the platform counts it as 0 in the run mean (or leaves it out for a lower-is-better metric) and shows how many there were next to the mean, so it never lowers the average silently. The full return-type contract for your own metrics lives in <a href="#sdk-guide/metrics">Metrics (deep dive)</a>.</p>
 
 <h2>Picking a starter set</h2>
 <div class="docs-cards">

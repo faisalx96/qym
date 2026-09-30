@@ -1,3 +1,28 @@
+# September 2026 — SDK 1.8.0 / Platform 0.4.0
+
+Fixes every P0 issue from the September design review: scores mean the same on every page, big runs open fast, reviews and archived projects stay as decided, and access ends when it should. The platform now requires `qym>=1.8.0`.
+
+## Before you update
+
+- **Everyone signs in once.** Sessions now live on the server (sign-out, password changes, resets and disabling a user end them everywhere). Cookies issued before the update carry no session and are refused. During a rolling deploy, users who sign in through an old pod are asked again by a new one.
+- **Some API keys stop working at deploy.** Keys of archived projects answer 409 (`project_archived`); keys whose owner is no longer a member of the key's project (and is not an admin) answer 403 (`owner_removed`), including members removed before this release. `docs/internal/OPERATIONS.md` has a query that lists them.
+- **Background work starts by itself after migrating to `0064`.** Every dashboard summary is republished once from its numeric records (`0060`, summary shape 4). `reclassify_metric_errors` (`0063`) and `project_item_failure_events` (`0064`) rebuild only the runs they find affected. `publish_ingest_flags` is manual: start it from Admin → Maintenance so runs finished before the update show the Incomplete tag in the runs list. The runbook lists each migration and job.
+- **Metric errors change meaning for old SDKs.** Only `meta.status` (error, failed, timeout) marks a scorer error now. Judge failures from SDK 1.7.0 and older carried only `metadata.error`, so they read as a reason with a score of 0, also for history once the reclassify job has run.
+- **Directions matter.** A metric with `direction="minimize"` leaves task and scorer errors out of its mean (0 is its best value) and never counts them as passes. Other metrics count errors as 0. A metric without a direction is shown neutrally (no red/green, no Pass/Fail).
+- **Runs with rejected events complete, flagged Incomplete, with SDK 1.8.0.** Older SDKs hold `run_completed` when a refused event was the only line in its request (in practice a slow LLM-judge `metric_scored` the platform refuses), so such a run ends STOPPED instead.
+
+## What changed
+
+- Run means, pass means and error counts agree on the runs list, run page, Compare, Models, Overview, Charts and Insights. A reviewer's score counts everywhere it was given: on a pass, on a failed task, or on a repeat item as a whole.
+- Execution success counts every pass of a repeat run; the KPI strip (Execution success, Runs with errors, Models, Items) covers the whole project or the active filter.
+- Reviews: approved runs are locked against late data, each run keeps a review history, and withdrawing a decision restores the real execution outcome.
+- Archived projects are read-only (reads work, writes answer 409); archiving stops the project's running product evals and analyses, and the Archive dialog lists runs still in progress.
+- Ingest judges each line on its own: one refused event no longer fails its batch, and the response lists `rejected_events`. A request whose every line is refused answers 422.
+- Run and Compare text shows exactly as stored by default, with a Raw/Rendered switch; the Runs table lets you choose frozen columns.
+- SDK 1.8.0: `direction` and `primary_metric`, verdict reasons under `metadata.reason`, rejected-event reporting and completion flagged incomplete.
+
+---
+
 # September 2026 — SDK 1.7.0 / Platform 0.3.0
 
 - Runs distinguish task failures from failed metric checks with the original ⚠ symbol: red for tasks, yellow for metrics. Retries use blue ↻. Counts open a breakdown; affected metric scores carry a warning.

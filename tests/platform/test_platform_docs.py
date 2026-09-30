@@ -89,9 +89,22 @@ def test_metric_error_docs_match_the_status_contract() -> None:
         path.relative_to(DASHBOARD_DOCS).as_posix(): _read(path)
         for path in DASHBOARD_DOCS.rglob("*.html")
     }
+    # Every wording the guides used for the old rule; the SDK's local
+    # summary (get_metric_stats) is described as such, with other words.
+    stale = (
+        "excluded from the mean",
+        "excluded from the metric mean",
+        "excluded from aggregation",
+        "excluded from aggregate scoring",
+        "excluded from that metric's aggregate",
+        "excludes the item from aggregation",
+        "drops out of the mean",
+        "drops out of the average",
+    )
     for name, text in guides.items():
-        assert "excluded from the mean" not in text, name
-        assert "excludes the item from aggregation" not in text, name
+        flat = " ".join(text.split())
+        for phrase in stale:
+            assert phrase not in flat, (name, phrase)
         assert 'metadata={"error": "..."}' not in text, name
     judges = guides["sdk-guide/judges.html"]
     assert 'metadata={"status": "error", "error": "..."}' in judges
@@ -106,3 +119,24 @@ def test_product_eval_docs_use_one_native_repeat_run() -> None:
     for guide in (client, operator):
         assert "samples=k" in guide
     assert "does not create `k` dashboard runs" in client
+
+
+def test_ingestion_docs_describe_per_line_rejections() -> None:
+    """The ingest contract (C024, C005): each line gets a verdict, rejected
+    lines are listed, and an all-rejected request answers 422."""
+    for page in ("developer/ingestion.html", "developer/api-overview.html"):
+        text = " ".join(_read(DASHBOARD_DOCS / page).split())
+        assert "rejected_events" in text, page
+        assert "422" in text, page
+        assert "Incomplete" in text, page
+        for stale in ("always returns <code>200</code>", "silently dropped", "the event is dropped"):
+            assert stale not in text, (page, stale)
+
+
+def test_platform_guide_explains_kpis_incomplete_runs_and_text_mode() -> None:
+    runs = " ".join(_read(DASHBOARD_DOCS / "platform-guide/runs.html").split())
+    assert "Execution success" in runs and "Runs with errors" in runs
+    assert "once per pass" in runs
+    assert "<strong>Incomplete</strong>" in runs
+    detail = " ".join(_read(DASHBOARD_DOCS / "platform-guide/run-detail.html").split())
+    assert "<strong>Raw</strong>" in detail and "Rendered" in detail

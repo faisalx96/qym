@@ -48,11 +48,12 @@ sure one process runs a given job.
 
 ## Migrations and large tables
 
-The combined migration chain has one head, `0057`, following `0050` through
-`0051`–`0056`. Migrations run before API readiness. Large storage rewrites and index
+The combined migration chain has one head, `0064`, following `0050` through
+`0051`–`0063`. Migrations run before API readiness. Large storage rewrites and index
 builds are deferred to maintenance jobs. Migration `0057` also backfills existing
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
+Migrations `0058`–`0064` are quick DDL or small job/queue inserts.
 
 | Migration | Work during startup | Deferred job (if table is large) |
 |---|---|---|
@@ -63,6 +64,45 @@ startup time on a populated copy before setting deployment readiness deadlines.
 | 0055 | — | `create_deferred_indexes` — extrema partial indexes |
 | 0056 | `dashboard_run_dimensions.hidden_at` | None |
 | 0057 | Pass review scope, deleted-pass marker, index, and approval/catalog backfill | Runs during migration |
+| 0058 | Marks ready dashboard partitions pending | None: the worker republishes each summary from its numeric records (no source rescan) |
+| 0059 | `local_auth_credentials.must_change_password` | None |
+| 0060 | Marks ready dashboard partitions pending (run means count scorer errors as 0) | None: summary republish, as 0058; `SUMMARY_SHAPE` 4 refreshes the rest |
+| 0061 | Empty `user_sessions` table | None. Every signed-in user signs in once after the upgrade |
+| 0062 | Empty `run_workflow_events` table, nullable `approvals.execution_status` | None |
+| 0063 | `run_metric_specs.direction` nullable, `run_metric_specs.is_primary` | `reclassify_metric_errors` — **queued, runs by itself**: rebuilds runs whose verdict reasons were counted as scorer errors, and marks repeat passes whose task failed after a metric was scored |
+| 0064 | — | `project_item_failure_events` — **queued, runs by itself**: rebuilds repeat runs with a pass that failed only through an `item_failed` event |
+
+After `0060`/`0064` the dashboard worker republishes every ready summary once
+(a "republish wave"; about 45 s per 600 runs on the perf lab, in the
+background). `reclassify_metric_errors` and `project_item_failure_events`
+request a full source rebuild only for the runs they find affected; estimate
+the count before deploying (read-only, works on json and jsonb):
+
+```sql
+SELECT count(DISTINCT s.run_id) FROM run_item_scores s JOIN runs r ON r.id = s.run_id
+WHERE r.deleted_at IS NULL AND s.meta->>'error' IS NOT NULL
+  AND coalesce(lower(trim(s.meta->>'status')), '') NOT IN ('error', 'failed', 'timeout');
+-- repeat for run_item_pass_scores
+```
+
+Both jobs commit one run at a time and retry a deadlock with the dashboard
+worker; check Admin → Maintenance afterwards and re-queue a `failed` job.
+`publish_ingest_flags` is **manual**: start it once so runs finished before
+this release show the Incomplete tag in the runs list.
+
+### API keys that stop working at deploy
+
+Keys of archived projects answer 409 (`X-Qym-Key-State: project_archived`), and
+keys whose non-admin owner is no longer a project member answer 403
+(`owner_removed`) — including members removed before this release. List them
+before deploying so their pipelines can move to a new key:
+
+```sql
+SELECT k.id, k.name, k.prefix, u.email, p.slug, p.is_active
+FROM api_keys k JOIN users u ON u.id = k.user_id JOIN projects p ON p.id = k.project_id
+LEFT JOIN project_memberships m ON m.project_id = k.project_id AND m.user_id = k.user_id
+WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.role <> 'ADMIN'));
+```
 
 ## Recovery runbook (database near its volume limit)
 
@@ -83,7 +123,7 @@ startup time on a populated copy before setting deployment readiness deadlines.
 ### Deploy and run maintenance
 
 1. Deploy the new API with the default `QYM_ROLE=all`. Wait for migration head
-   `0057` and a healthy API. The API process then runs every queued job itself.
+   `0064` and a healthy API. The API process then runs every queued job itself.
    Do not restart the API while a job runs; the job resumes, but each restart
    costs time. Optional split layout: set `QYM_ROLE=api` on the API and start
    one worker with the same image and configuration, `QYM_ROLE=worker`, and
@@ -160,7 +200,7 @@ Use this layout to keep long maintenance jobs away from API rollouts and probes,
 or to run several API replicas with one background process. Same image as the
 API; only the command and two variables differ. One replica. Inherit maintenance
 mode and retention settings from the same configuration as the API. Start this
-deployment only after the API has migrated to `0057`.
+deployment only after the API has migrated to `0064`.
 
 ```yaml
 apiVersion: apps/v1
