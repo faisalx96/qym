@@ -39,8 +39,17 @@
  * again. ?env=<eid> preselects an environment ("Run official defaults" fallback).
  *
  * Extension points: BASE_OPTIONS (#38 best-run base),
- * the [data-xl-advanced] host (#24 Advanced panel) and specValue() (#34 sweeps
- * write {"sweep": [...]} values into the same spec).
+ * the [data-xl-advanced] host (#24 Advanced panel) and the [data-xl-sweeps] host
+ * (#34 sweeps, below).
+ *
+ * Sweeps (#34): experiment_launch_sweeps.js (window.QymLaunchSweeps) mounts into
+ * [data-xl-sweeps] through the "Sweeps hook" below, unless mount() gets
+ * `sweeps: false` (a form without sweeps, e.g. the official-defaults editor).
+ * A swept value is stored as its spec value {"sweep": [...]}: in st.values, in
+ * st.bindings as { kind: 'raw', value: {sweep: [binding, ...]} }, or in the
+ * Advanced panel's evaluator config; linked groups are st.links. So buildSpec()
+ * sends sweeps as they are, and the Raw JSON tab round-trips them. The preview
+ * shows "Preview N runs" and Launch is disabled over the run limit.
  *
  * Advanced panel (#24): experiment_launch_advanced.js (window.QymLaunchAdvanced)
  * mounts into [data-xl-advanced] through the "Advanced panel hook" below. It
@@ -61,9 +70,11 @@
   const STYLESHEETS = [
     'static/eval_environments.css?v=eval-environments-20260929-1',
     'static/eval_temporary_model.css?v=eval-temporary-model-20260930-1',
-    'static/experiment_launch.css?v=experiment-launch-20260930-3',
+    'static/experiment_launch.css?v=experiment-launch-20260930-4',
     'static/experiment_launch_advanced.css?v=experiment-launch-advanced-20260930-1',
+    'static/experiment_launch_sweeps.css?v=experiment-launch-sweeps-20260930-1',
   ];
+  const RUN_NAMES_SHOWN = 12;
   const PREVIEW_DELAY_MS = 600;
   const PRIORITIES = ['LOW', 'NORMAL', 'HIGH'];
   const PRIORITY_ORDER = { LOW: 0, NORMAL: 1, HIGH: 2 };
@@ -286,7 +297,28 @@
       delete t.api_key;
       return 't:' + JSON.stringify(t);
     }
+    if (isSweepValue(b.value) && window.QymLaunchSweeps) {
+      return 's:' + JSON.stringify(b.value.sweep.map(window.QymLaunchSweeps.bindingKey));
+    }
     return 'r:' + JSON.stringify(b.value);
+  }
+
+  /** {"$secret": ref} refs under a spec value (a swept temporary model's key). */
+  function secretRefsIn(value, out) {
+    if (Array.isArray(value)) value.forEach((v) => secretRefsIn(v, out));
+    else if (isPlainObject(value)) {
+      if (typeof value.$secret === 'string') out.push(value.$secret);
+      else Object.keys(value).forEach((k) => secretRefsIn(value[k], out));
+    }
+    return out;
+  }
+
+  /** Key refs a form binding holds (their keys live in st.secrets). */
+  function bindingSecretRefs(b) {
+    if (!b) return [];
+    if (b.kind === 'temporary') return b.secretRef ? [b.secretRef] : [];
+    if (b.kind === 'raw') return secretRefsIn(b.value, []);
+    return [];
   }
 
   // ── Mount ──────────────────────────────────────────────────────────────
@@ -332,6 +364,7 @@
       priority: '',
       name: '',
       preview: null,
+      maxJobs: null, // run limit from the last dry run (#34)
       previewError: '',
       previewLoading: false,
       launchErrors: null,
@@ -342,6 +375,7 @@
 
     const hosts = {};
     let advanced = null; // #24 Advanced panel (experiment_launch_advanced.js)
+    let sweeps = null; // #34 sweeps (experiment_launch_sweeps.js); off with `sweeps: false`
 
     function projectPath(suffix) {
       return 'v1/projects/' + encodeURIComponent(project.id) + suffix;
@@ -541,14 +575,17 @@
     }
 
     // ── Bindings ────────────────────────────────────────────────────────
-    function clearBinding(slotKey) {
+    /** Unbind a slot and forget its keys, except the refs in `keep`. */
+    function clearBinding(slotKey, keep) {
       const current = st.bindings[slotKey];
-      if (current && current.kind === 'temporary' && current.secretRef) delete st.secrets[current.secretRef];
+      bindingSecretRefs(current).forEach((ref) => {
+        if (!keep || keep.indexOf(ref) < 0) delete st.secrets[ref];
+      });
       delete st.bindings[slotKey];
     }
 
     function setBinding(slotKey, binding) {
-      clearBinding(slotKey);
+      clearBinding(slotKey, bindingSecretRefs(binding)); // a model sweep keeps its keys
       if (binding) {
         st.bindings[slotKey] = binding;
         // A bound slot fills its fields: drop raw values there (binding_conflict otherwise).
@@ -612,8 +649,8 @@
         return b.id;
       }
       if (b.kind === 'raw') {
-        const n = isSweepValue(b.value) ? b.value.sweep.length : 0;
-        return n ? 'Sweep of ' + n + ' models' : 'From the base';
+        const n = isSweepValue(b.value) && Array.isArray(b.value.sweep) ? b.value.sweep.length : 0;
+        return isSweepValue(b.value) ? 'Sweep of ' + n + ' model' + (n === 1 ? '' : 's') : 'From the base';
       }
       const t = b.binding.temporary || {};
       return 'Temporary: ' + (t.label || t.model);
@@ -883,8 +920,7 @@
     function pruneSecrets() {
       const refs = {};
       Object.keys(st.bindings).forEach((k) => {
-        const b = st.bindings[k];
-        if (b && b.kind === 'temporary' && b.secretRef) refs[b.secretRef] = true;
+        bindingSecretRefs(st.bindings[k]).forEach((ref) => { refs[ref] = true; });
       });
       Object.keys(st.secrets).forEach((ref) => { if (!refs[ref]) delete st.secrets[ref]; });
     }
@@ -955,9 +991,10 @@
       const loaded = await loadBase();
       if (!loaded || !st.active) return null;
       const edits = captureEdits();
+      const links = st.links; // linked groups of kept sweeps survive (pruned by the sweeps hook)
       applyBaseline(loaded.base);
       st.baseInfo = loaded.info;
-      st.links = kind === 'clone' && st.clone ? deepCopy(st.clone.linkedGroups) : undefined;
+      st.links = kind === 'clone' && st.clone ? deepCopy(st.clone.linkedGroups) : links;
       const result = replayEdits(edits);
       renderDataset();
       renderBase();
@@ -1026,6 +1063,7 @@
       });
       st.bindings = bindings;
       pruneSecrets();
+      if (st.base === 'clone' && st.clone) st.links = deepCopy(st.clone.linkedGroups);
       if (st.baseline.dataset) applyDataset(st.baseline.dataset);
       renderDataset();
       renderBase();
@@ -1103,9 +1141,9 @@
       return st.datasetMode === 'custom' ? st.customDataset.trim() : st.datasetName;
     }
 
-    /** Hook for sweeps (#34): a field's spec value; today always the single value. */
+    /** A field's spec value: a single value or, with sweeps (#34), {"sweep": [...]} as stored. */
     function specValue(value) {
-      return value;
+      return deepCopy(value);
     }
 
     function buildSpec() {
@@ -1134,9 +1172,9 @@
       const save = [];
       Object.keys(st.bindings).forEach((key) => {
         const b = st.bindings[key];
-        if (b.kind !== 'temporary') return;
-        if (b.secretRef && has(st.secrets, b.secretRef)) refs[b.secretRef] = st.secrets[b.secretRef];
-        if (b.save) save.push(key);
+        // Temporary models, swept ones too: keys go in `secrets`, never in the spec.
+        bindingSecretRefs(b).forEach((ref) => { if (has(st.secrets, ref)) refs[ref] = st.secrets[ref]; });
+        if (b.kind === 'temporary' && b.save) save.push(key);
       });
       const body = {
         name: st.name.trim() || (dryRun ? 'Untitled experiment' : ''),
@@ -1169,6 +1207,7 @@
       })));
       if (!st.name.trim()) errors.push({ pointer: '#name', message: 'Name the experiment.' });
       if (advanced) advanced.localErrors().forEach((e) => errors.push(e));
+      if (sweeps) sweeps.localErrors().forEach((e) => errors.push(e));
       return errors;
     }
 
@@ -1176,6 +1215,7 @@
     function schedulePreview() {
       st.launchErrors = null;
       if (advanced) advanced.onSpecChange();
+      if (sweeps) sweeps.onSpecChange();
       if (st.timer) clearTimeout(st.timer);
       st.timer = null;
       if (!st.active) return;
@@ -1203,6 +1243,7 @@
       if (res.ok) {
         st.preview = res.data;
         st.previewError = '';
+        if (res.data && res.data.max_jobs != null) st.maxJobs = res.data.max_jobs;
       } else {
         st.preview = null;
         st.previewError = errorMessage(res.data, 'The preview failed');
@@ -1216,6 +1257,7 @@
       const seen = {};
       return source.filter((e) => {
         if (local.indexOf(e.pointer) >= 0) return false;
+        if (e.rule === 'sweep_cap') return false; // the over-limit callout says it
         const key = [e.pointer, e.message, e.environment_id].join('|');
         if (seen[key]) return false;
         seen[key] = true;
@@ -1576,6 +1618,9 @@
         }),
       ] : []));
       const fills = Object.keys(slot.field_map).map((role) => ROLE_LABELS[role] || role).join(', ');
+      // A swept slot (#34) is a multi-select of models instead of one picker.
+      const swept = sweeps ? sweeps.modelCard(slot, { head, fills }) : null;
+      if (swept) return swept;
 
       const select = el('select', {
         className: 'qym-control qym-select xl-wide', 'aria-label': slot.label + ' model',
@@ -1636,11 +1681,14 @@
           },
           onCancel: () => { st.tempFormFor = null; renderModels(); },
         }));
-      } else if (window.QymTemporaryModel) {
-        children.push(el('div', null, [el('button', {
-          type: 'button', className: 'qym-inline-action qym-inline-action--neutral', text: '+ Temporary model',
-          onClick: () => { st.tempFormFor = slot.slot_key; renderModels(); },
-        })]));
+      } else if (window.QymTemporaryModel || sweeps) {
+        children.push(el('div', { className: 'xl-row' }, [
+          window.QymTemporaryModel ? el('button', {
+            type: 'button', className: 'qym-inline-action qym-inline-action--neutral', text: '+ Temporary model',
+            onClick: () => { st.tempFormFor = slot.slot_key; renderModels(); },
+          }) : null,
+          sweeps ? sweeps.modelToggle(slot) : null,
+        ]));
       }
       return el('div', { className: 'xl-model-card', 'data-xl-model-card': slot.slot_key }, children);
     }
@@ -1711,11 +1759,14 @@
     }
 
     function onLeafInput(entry, pointer, control, wrapper) {
-      const parsed = parseInput(entry, control.value);
-      delete st.invalid[pointer];
-      if (parsed.unset) delete st.values[pointer];
-      else if (parsed.error) { delete st.values[pointer]; st.invalid[pointer] = { message: parsed.error, raw: control.value }; }
-      else st.values[pointer] = parsed.value;
+      // A sweep editor (#34) already wrote {"sweep": [...]} into st.values.
+      if (!control.hasAttribute('data-xs-sweep')) {
+        const parsed = parseInput(entry, control.value);
+        delete st.invalid[pointer];
+        if (parsed.unset) delete st.values[pointer];
+        else if (parsed.error) { delete st.values[pointer]; st.invalid[pointer] = { message: parsed.error, raw: control.value }; }
+        else st.values[pointer] = parsed.value;
+      }
       markChanged(wrapper, pointer);
       updateChangedCount();
       renderPreviewSoon();
@@ -1729,11 +1780,20 @@
         : entry.has_default ? 'Default: ' + formatValue(entry.default) : 'Inherited from environment';
       const common = { 'data-xl-pointer': docPointer, 'aria-label': label, disabled: !!bound, title: bound ? 'Filled by the ' + bound + ' model' : null };
       let control;
+      if (isSweepValue(current) && sweeps && !bound) {
+        // Swept values (#34): chips; edits fire `input` on the editor (see onLeafInput).
+        return sweeps.editor({
+          entry, pointer: docPointer, label,
+          options: entry.widget === 'endpoint-ref' ? endpointOptions(entry, fields) : null,
+          get: () => st.values[pointer],
+          set: (value) => sweepTarget(pointer).set(value),
+        });
+      }
       if (isSweepValue(current)) {
-        // A swept value from a cloned experiment: launched as is (sweep editing is #34).
+        // Without the sweeps module (e.g. `sweeps: false`): launched as is.
         control = el('input', Object.assign({}, common, {
           className: 'qym-control qym-input xl-wide xl-mono', type: 'text', disabled: true,
-          title: 'Swept values from the cloned experiment; they are launched as they are',
+          title: 'Swept values; they are launched as they are',
         }));
         control.value = 'Sweep: ' + current.sweep.map(formatValue).join(', ');
         return control;
@@ -1776,6 +1836,41 @@
           : current === undefined ? '' : String(current);
       }
       return control;
+    }
+
+    // ── Sweeps on settings (#34) ────────────────────────────────────────
+    /** Read/write access to one env_overrides value for the sweeps module. */
+    function sweepTarget(pointer) {
+      return {
+        get: () => st.values[pointer],
+        set: (value) => {
+          delete st.invalid[pointer];
+          if (value === undefined) delete st.values[pointer];
+          else st.values[pointer] = value;
+        },
+      };
+    }
+
+    /** "+ values" on a field that is not swept yet (null without sweeps). */
+    function sweepToggle(entry, pointer, boundBy, label) {
+      if (!sweeps || boundBy || isSweepValue(st.values[pointer])) return null;
+      const target = sweepTarget(pointer);
+      return sweeps.toggle({ entry, label, get: target.get, set: target.set });
+    }
+
+    /** A role-table cell: the control plus its "+ values" (#34). */
+    function fillCell(td, control, entry, pointer, boundBy, label) {
+      const toggle = sweepToggle(entry, pointer, boundBy, label);
+      if (!toggle) { td.appendChild(control); return; }
+      td.appendChild(el('div', { className: 'xl-cell-sweep' }, [control, toggle]));
+    }
+
+    /** After a field starts or stops sweeping: re-render the views that show it. */
+    function refreshSweeps() {
+      renderSettings();
+      updateChangedCount();
+      renderPreviewSoon();
+      schedulePreview();
     }
 
     function hintText(entry) {
@@ -1824,7 +1919,11 @@
         entry.label && entry.label !== entry.name ? el('span', { className: 'xl-field-name', text: entry.name }) : null,
         entry.required ? tag('required', 'role') : null,
         bound[pointer] ? tag('slot: ' + bound[pointer], 'accent') : null,
-      ].concat(missing.map((id) => tag('not in ' + envName(id), 'warning'))).concat([el('span', { className: 'xl-spacer' }), bound[pointer] ? null : reset]));
+      ].concat(missing.map((id) => tag('not in ' + envName(id), 'warning'))).concat([
+        el('span', { className: 'xl-spacer' }),
+        sweepToggle(entry, pointer, bound[pointer], label),
+        bound[pointer] ? null : reset,
+      ]));
       const id = 'xl-f-' + Math.random().toString(36).slice(2, 10);
       control.id = id;
       head.querySelector('label').setAttribute('for', id);
@@ -1869,7 +1968,7 @@
           const td = el('td');
           const control = leafControl(entry, pointer, model.fields, bound[pointer], row.key + ' · ' + col.label);
           control.addEventListener(control.tagName === 'SELECT' ? 'change' : 'input', () => onLeafInput(entry, pointer, control, td));
-          td.appendChild(control);
+          fillCell(td, control, entry, pointer, bound[pointer], row.key + ' · ' + col.label);
           markChanged(td, pointer);
           cells.push(td);
         });
@@ -2129,6 +2228,11 @@
     function errorButton(error) {
       const where = [];
       if (error.environment_id && st.selected.length > 1) where.push(envName(error.environment_id));
+      if (error.combo_index != null && st.preview && st.preview.combo_count > 1) {
+        // A swept combination (#34): name it by its values.
+        const job = (st.preview.jobs || []).find((j) => j.combo_index === error.combo_index && j.label);
+        where.push(job ? job.label : 'combination ' + (error.combo_index + 1));
+      }
       if (error.pointer && error.pointer.charAt(0) === '/') where.push(error.pointer);
       return el('li', null, [el('button', {
         type: 'button', className: 'xl-error-item', 'data-xl-error': error.pointer || '',
@@ -2157,24 +2261,38 @@
       ]);
       const children = [summary];
 
+      const runs = runCount();
+      const overCap = overRunLimit();
       let status;
       if (!st.selected.length) status = 'Pick an environment to preview.';
       else if (st.previewLoading) status = 'Checking…';
       else if (st.previewError) status = st.previewError;
+      else if (overCap) status = 'Over the run limit';
       else if (errors.length) status = errors.length + ' problem' + (errors.length === 1 ? '' : 's') + ' to fix';
       else if (st.preview) status = 'Ready to launch';
       else status = '';
       if (st.preview && !st.previewLoading) {
         const jobs = st.preview.jobs || [];
         const count = st.preview.job_count != null ? st.preview.job_count : jobs.length;
-        children.push(el('div', null, [
-          el('div', { className: 'xl-preview-heading', text: 'Jobs' }),
-          el('div', { className: 'xl-hint' }, [el('span', { className: 'xl-mono', text: String(count) }), ' job' + (count === 1 ? '' : 's') + (st.preview.max_jobs ? ' (cap ' + st.preview.max_jobs + ')' : '')]),
-          el('ul', { className: 'xl-run-names', 'aria-label': 'Run names' }, jobs.slice(0, 10).map((job) => el('li', { text: job.run_name || '' }))),
+        const combos = st.preview.combo_count;
+        children.push(el('div', { 'data-xl-run-preview': '1' }, [
+          el('div', { className: 'xl-preview-heading', text: 'Preview ' + count + ' run' + (count === 1 ? '' : 's') }),
+          el('div', { className: 'xl-hint' }, [
+            combos != null && combos > 1 ? el('span', { className: 'xl-mono', text: combos + ' × ' + st.selected.length + ' = ' }) : null,
+            el('span', { className: 'xl-mono', 'data-xl-run-count': '1', text: String(count) }),
+            ' run' + (count === 1 ? '' : 's') + (st.preview.max_jobs ? ' (limit ' + st.preview.max_jobs + ')' : ''),
+          ]),
+          sweeps ? sweeps.previewAxes(st.preview) : null,
+          el('ul', { className: 'xl-run-names', 'aria-label': 'Run names' }, jobs.slice(0, RUN_NAMES_SHOWN).map((job) => el('li', { text: job.run_name || '' }))),
+          jobs.length > RUN_NAMES_SHOWN ? el('div', { className: 'xl-hint', text: '+ ' + (jobs.length - RUN_NAMES_SHOWN) + ' more' }) : null,
         ]));
         if (st.preview.preemption_warning) {
           children.push(el('div', { className: 'xl-callout xl-callout--warning', role: 'note', text: st.preview.preemption_warning }));
         }
+      }
+      if (overCap) {
+        children.push(el('div', { className: 'xl-callout xl-callout--error', role: 'alert', 'data-xl-over-cap': '1',
+          text: runs + ' runs is over the limit of ' + maxJobs() + '. Remove swept values or environments to launch.' }));
       }
       children.push(el('div', { className: 'xl-status', role: 'status', 'data-xl-status': '1', text: status }));
       if (errors.length) {
@@ -2185,8 +2303,9 @@
       }
       const launch = el('button', {
         type: 'button', className: 'qym-inline-action qym-inline-action--accent', 'data-xl-launch': '1',
-        disabled: st.launching || !st.selected.length,
-        text: st.launching ? 'Launching…' : 'Launch',
+        disabled: st.launching || !st.selected.length || overCap,
+        title: overCap ? 'Over the run limit' : null,
+        text: st.launching ? 'Launching…' : runs > 1 ? 'Launch ' + runs + ' runs' : 'Launch',
         onClick: launchExperiment,
       });
       children.push(el('div', { className: 'xl-actions' }, [
@@ -2197,9 +2316,29 @@
       body.replaceChildren.apply(body, children);
     }
 
+    /** The run limit (QYM_EVAL_SWEEP_MAX_JOBS) as the last dry run reported it. */
+    function maxJobs() {
+      if (st.preview && st.preview.max_jobs != null) return st.preview.max_jobs;
+      return st.maxJobs != null ? st.maxJobs : null;
+    }
+
+    /** Runs this launch creates: the dry run's count, or the local estimate while it runs. */
+    function runCount() {
+      if (st.preview && !st.previewLoading && st.preview.job_count != null) return st.preview.job_count;
+      return sweeps ? sweeps.jobEstimate() : st.selected.length;
+    }
+
+    /** Submit is disabled over the cap (plan §8.3). */
+    function overRunLimit() {
+      const cap = maxJobs();
+      if (cap == null) return false;
+      const estimate = sweeps ? sweeps.jobEstimate() : st.selected.length;
+      return estimate > cap || runCount() > cap;
+    }
+
     // ── Launch ──────────────────────────────────────────────────────────
     async function launchExperiment() {
-      if (st.launching) return;
+      if (st.launching || overRunLimit()) return;
       const local = localErrors();
       if (local.length) {
         renderPreview();
@@ -2292,7 +2431,8 @@
         section('base', 3, 'Start from', 'The base configuration your edits are layered on.'),
         section('models', 4, 'Models', 'Bind each LLM slot to a project model, a temporary model, or leave it to the environment.'),
         section('settings', 5, 'Settings', 'Generated from the environment schema. Only changed values are sent.'),
-        // Extension point: the Advanced panel (#24) mounts here.
+        // Extension points: sweeps (#34) and the Advanced panel (#24) mount here.
+        el('div', { 'data-xl-sweeps': '1', hidden: true }),
         el('div', { 'data-xl-advanced': '1', hidden: true }),
         section('run', 6, 'Priority and name', 'HIGH preempts other users\' jobs and needs a project manager.'),
       ]);
@@ -2304,6 +2444,7 @@
         el('div', { className: 'xl-preview-body', 'data-xl-body': '1' }),
       ]);
       hosts.preview = preview;
+      mountSweeps(main.querySelector('[data-xl-sweeps]'));
       mountAdvanced(main.querySelector('[data-xl-advanced]'));
       root.replaceChildren(el('div', { className: 'xl-page', 'data-xl-launch-form': '1' }, [
         el('a', {
@@ -2332,9 +2473,10 @@
         el, tag, request, projectPath, has, escSeg, splitPointer, childPointer,
         state: st,
         union, unionSlots, boundPointers, roleColumns, leafControl, onLeafInput, markChanged,
-        buildSpec, bindingSummary, clearBinding, loadVersions,
+        buildSpec, bindingSummary, clearBinding, pruneSecrets, loadVersions, fillCell,
         rerender: () => { renderDataset(); renderModels(); renderSettings(); renderRun(); renderPreview(); },
         renderDataset, renderPreview, schedulePreview, updateChangedCount,
+        sweeps, // #34: null when sweeps are off
       };
     }
 
@@ -2347,7 +2489,31 @@
       host.hidden = !advanced;
     }
 
+    // ── Sweeps hook (#34) ───────────────────────────────────────────────
+    // What experiment_launch_sweeps.js may read and call. It never reads keys:
+    // a new temporary model's key goes to rememberSecret() and stays in st.secrets.
+    function sweepsApi() {
+      return {
+        el, tag, escSeg, splitPointer, root,
+        state: st,
+        union, unionSlots, slotConnections, temporaryKeys, buildSpec, maxJobs,
+        setBinding, renderModels, schedulePreview,
+        refresh: refreshSweeps,
+        rememberSecret: (ref, key) => { st.secrets[ref] = key; },
+      };
+    }
+
+    function mountSweeps(host) {
+      const api = window.QymLaunchSweeps;
+      if (sweeps) sweeps.teardown(); // render() again replaces the host
+      sweeps = null;
+      if (!host || !api || !api.mount || opts.sweeps === false) return;
+      sweeps = api.mount(host, sweepsApi());
+    }
+
     function teardown() {
+      if (sweeps) sweeps.teardown();
+      sweeps = null;
       if (advanced) advanced.teardown();
       advanced = null;
       st.active = false;

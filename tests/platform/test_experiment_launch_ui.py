@@ -134,8 +134,10 @@ def test_start_from_options_with_extension_points():
     for kind in ("official", "best_run", "saved"):
         assert f"kind: '{kind}'" in base
     assert "'data-xl-advanced': '1'" in MODULE  # #24 Advanced panel host
-    assert "function specValue(value)" in MODULE  # #34 sweeps hook
-    assert "{ sweep:" not in MODULE and "links:" not in MODULE  # no sweeps UI yet
+    assert "function specValue(value)" in MODULE
+    # #34 sweeps live in their own module (tests/platform/test_experiment_launch_sweeps.py).
+    assert "'data-xl-sweeps': '1'" in MODULE
+    assert "{ sweep:" not in MODULE and "links:" not in MODULE
 
 
 def test_form_sections_and_preview():
@@ -203,7 +205,9 @@ def test_keys_stay_in_memory_and_strings_never_parse_as_html():
     # Keys: only in st.secrets and the request body; dropped on teardown/launch.
     assert "st.secrets[result.secretRef] = result.apiKey" in MODULE
     assert MODULE.count("st.secrets = {}") >= 2
-    assert "delete st.secrets[current.secretRef]" in MODULE
+    # Unbinding forgets the slot's keys (a model sweep's too, #34).
+    assert "bindingSecretRefs(current).forEach((ref) => {" in MODULE
+    assert "delete st.secrets[ref]" in MODULE
 
 
 def test_styles_follow_the_design_language():
