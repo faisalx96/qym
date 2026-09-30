@@ -90,6 +90,7 @@
 .xl-role-table td { padding: var(--space-xs) var(--space-sm); border-top: 1px solid var(--border-subtle); font-size: var(--font-base); color: var(--text-secondary); vertical-align: middle; }
 .xl-role-name { font-family: var(--font-mono); color: var(--text-primary); white-space: nowrap; }
 .xl-cell--changed { box-shadow: inset 2px 0 0 var(--accent-primary); }
+.xl-cell--error { box-shadow: inset 2px 0 0 var(--error); }
 .xl-empty { padding: var(--space-md); text-align: center; font-size: var(--font-base); color: var(--text-muted); }
 
 /* Preview */

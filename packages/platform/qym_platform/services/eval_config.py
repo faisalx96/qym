@@ -49,6 +49,16 @@ service's cross-field rules: ``required_keys``/``min_items``/``endpoint_ref`` fr
 descriptor (``endpoints`` contains ``primary``; a role's ``endpoint`` exists) and the
 effective ``report_k <= samples``. Schema errors caused by placeholders are ignored.
 
+Fields absent from the environment's schema (plan §6, multi-environment launches):
+an ``env_overrides`` key the schema does not declare is a ``not_in_environment``
+error naming the environment, never a silent pass-through that the Evaluation Service
+rejects with a 422 (``extra="forbid"``) or drops (``extra="ignore"``). Objects that
+declare ``properties`` but say nothing about ``additionalProperties`` are validated as
+closed; an explicit ``additionalProperties: true`` or a schema-valued one (maps such
+as ``endpoints``) still accepts extra keys. A multi-environment spec is validated once
+per environment, so a field set for every environment but missing in env B is an
+error for B only; the user resets the field or deselects B.
+
 Every error is a JSON object::
 
     {
@@ -57,7 +67,8 @@ Every error is a JSON object::
       "form_pointer": "/env_overrides/LLM_OVERRIDES/{role}/endpoint",
       "field": "/LLM_OVERRIDES/{role}/endpoint",   # key in the section descriptor, or null
       "params": {"role": "main"},                  # values of the template segments
-      "rule": "schema" | "unknown_key" | "required" | "required_keys" | "min_items" |
+      "rule": "schema" | "unknown_key" | "not_in_environment" | "required" |
+              "required_keys" | "min_items" |
               "endpoint_ref" | "report_k" | "reserved_key" | "reserved_placeholder" |
               "secret_literal" |
               "binding" | "binding_conflict" | "sweep" | "type",
@@ -99,6 +110,7 @@ from .eval_schema_form import (
     json_pointer,
     match_pointer,
     split_pointer,
+    unescape_pointer_segment,
 )
 from .eval_service_client import redact_text
 
@@ -113,6 +125,8 @@ DOCUMENT_KEYS = (
     "base_source",
 )
 RESERVED_METADATA_PREFIX = "qym_"
+# Rule of an env_overrides key the environment's schema does not declare (§6).
+NOT_IN_ENVIRONMENT = "not_in_environment"
 PRIMARY_SLOT_KEY = "endpoint:primary"
 # EvaluatorRequestConfig fields the platform owns (§8.4); shown read-only in the form.
 PLATFORM_OWNED_CONFIG_FIELDS = (
@@ -689,6 +703,77 @@ def _flatten(error: ValidationError, prefix: str) -> list[tuple[str, str, str]]:
     return [(path, "schema", error.message)]
 
 
+def _closed_schema(schema: Any) -> Any:
+    """A copy where objects with ``properties`` and no ``additionalProperties`` are closed.
+
+    JSON Schema allows undeclared keys by default, but a key the environment does not
+    declare is at best ignored by the service, so it is reported as
+    ``not_in_environment``. An explicit ``additionalProperties`` (``true`` or a map's
+    item schema), ``patternProperties`` or ``unevaluatedProperties`` is left alone, as
+    are objects composed with ``$ref``/``allOf``/``anyOf``/``oneOf``/``if`` (another
+    branch may declare the key) and members of a multi-branch ``allOf``.
+    """
+
+    def walk(node: Any, composed: bool) -> Any:
+        if isinstance(node, list):
+            return [walk(item, composed) for item in node]
+        if not isinstance(node, dict):
+            return node
+        out: dict[str, Any] = {}
+        for key, value in node.items():
+            if key == "allOf" and isinstance(value, list):
+                out[key] = [walk(item, len(value) > 1) for item in value]
+            elif key in ("properties", "$defs", "definitions", "patternProperties"):
+                out[key] = (
+                    {k: walk(v, False) for k, v in value.items()}
+                    if isinstance(value, dict)
+                    else value
+                )
+            elif key in ("enum", "const", "default", "examples"):
+                out[key] = value
+            else:
+                out[key] = walk(value, False)
+        if (
+            not composed
+            and isinstance(node.get("properties"), dict)
+            and not any(
+                k in node
+                for k in (
+                    "additionalProperties",
+                    "patternProperties",
+                    "unevaluatedProperties",
+                    "allOf",
+                    "anyOf",
+                    "oneOf",
+                    "$ref",
+                    "$dynamicRef",
+                    "if",
+                    "dependentSchemas",
+                )
+            )
+        ):
+            out["additionalProperties"] = False
+        return out
+
+    return walk(copy.deepcopy(schema), False)
+
+
+def _not_in_environment(
+    item: tuple[str, str, str], environment_name: Optional[str]
+) -> tuple[str, str, str]:
+    """Re-code an ``env_overrides`` unknown key as ``not_in_environment``."""
+    pointer, rule, message = item
+    if rule != "unknown_key" or not pointer.startswith("/env_overrides/"):
+        return item
+    key = unescape_pointer_segment(pointer.rsplit("/", 1)[1])
+    where = (
+        f'environment "{environment_name}"'
+        if environment_name
+        else "this environment's schema"
+    )
+    return (pointer, NOT_IN_ENVIRONMENT, f"{key!r} is not in {where}")
+
+
 # --------------------------------------------------------------------------- validation
 
 
@@ -927,6 +1012,7 @@ def validate_config_document(
     resolver: BindingResolver = placeholder_resolver,
     schema_hash: Optional[str] = None,
     require_dataset: bool = True,
+    environment_name: Optional[str] = None,
 ) -> ConfigValidationResult:
     """Validate one combination of a config document for one environment.
 
@@ -934,6 +1020,7 @@ def validate_config_document(
     form descriptor (built when omitted); ``slots`` its model slots. ``schema_hash`` is
     the environment's current hash (a mismatch is a warning; re-mapping is §9.3).
     ``require_dataset=False`` suits presets that leave the dataset to the launch form.
+    ``environment_name`` is named in ``not_in_environment`` messages.
     The result's ``body`` is the materialized ``EvalJobCreate`` (without ``user_id``),
     or ``None`` when there are errors.
     """
@@ -1003,7 +1090,12 @@ def validate_config_document(
                         "slot_bindings",
                         ptr,
                         "binding",
-                        f"Unknown model slot {slot_key!r}",
+                        f"Unknown model slot {slot_key!r}"
+                        + (
+                            f' (not in environment "{environment_name}")'
+                            if environment_name
+                            else ""
+                        ),
                         slot_key=slot_key,
                     )
                 )
@@ -1040,7 +1132,7 @@ def validate_config_document(
     schema_located: list[tuple[str, str, str]] = []
     try:
         Draft202012Validator.check_schema(dict(env_schema))
-        env_validator = Draft202012Validator(dict(env_schema))
+        env_validator = Draft202012Validator(_closed_schema(dict(env_schema)))
     except SchemaError as exc:
         errors.append(
             _error(
@@ -1061,7 +1153,9 @@ def validate_config_document(
     # Placeholders are not real values: ignore their pattern/enum/format errors.
     # jsonschema messages echo the value: never for a secret field.
     schema_located = [
-        (p, r, _redacted_message(p, m, descriptor))
+        _not_in_environment(
+            (p, r, _redacted_message(p, m, descriptor)), environment_name
+        )
         for p, r, m in schema_located
         if not is_placeholder(_get(body, split_pointer(p)))
         and not any(p == s or p.startswith(s + "/") for s in sweep_ptrs)

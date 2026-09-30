@@ -155,6 +155,33 @@
     if (!pointer) return [];
     return pointer.split('/').slice(1).map((s) => s.replace(/~1/g, '/').replace(/~0/g, '~'));
   }
+  function templateParam(segment) {
+    return segment.length > 2 && segment.charAt(0) === '{' && segment.charAt(segment.length - 1) === '}';
+  }
+  /** Descriptor pointer for a concrete pointer, or null (mirrors match_pointer). */
+  function matchPointer(descriptor, pointer) {
+    const fields = (descriptor && descriptor.fields) || {};
+    let candidates = (descriptor && descriptor.root) || [];
+    let current = null;
+    const segments = splitPointer(pointer);
+    for (let i = 0; i < segments.length; i += 1) {
+      const seg = segments[i];
+      let chosen = null;
+      ['literal', 'row', 'key'].some((rank) => candidates.some((child) => {
+        const entry = fields[child];
+        if (!entry) return false;
+        const last = entry.path[entry.path.length - 1];
+        if (rank === 'literal') chosen = !templateParam(last) && last === seg ? child : null;
+        else if (rank === 'row') chosen = entry.kind === 'role_table' && (entry.rows || []).some((r) => r.key === seg) ? child : null;
+        else chosen = templateParam(last) && entry.kind !== 'role_table' ? child : null;
+        return !!chosen;
+      }));
+      if (!chosen) return null;
+      current = chosen;
+      candidates = fields[chosen].children || [];
+    }
+    return current;
+  }
   /** A child's concrete pointer: its template relative to the parent's template. */
   function childPointer(parentTemplate, parentConcrete, childTemplate) {
     return parentConcrete + childTemplate.slice(parentTemplate.length);
@@ -236,6 +263,14 @@
     function selectedEnvs() {
       return st.selected.map(envById).filter(Boolean);
     }
+    /** Selected envs whose schema lacks an env_overrides pointer (§6 "not in env"). */
+    function envsMissing(pointer) {
+      return st.selected.filter((id) => st.envData[id] && st.envData[id].form && !matchPointer(st.envData[id].form, pointer));
+    }
+    function notInEnvMessage(pointer, id) {
+      const segments = splitPointer(pointer);
+      return (segments[segments.length - 1] || pointer) + ' is not in environment "' + envName(id) + '": reset it or deselect ' + envName(id) + '.';
+    }
 
     // ── Loading ─────────────────────────────────────────────────────────
     async function loadEnvironments(selectId) {
@@ -282,6 +317,7 @@
       await Promise.all(ids.map((id) => loadEnvData(id, force)));
       if (!st.active) return;
       pruneBindings();
+      pruneOrphanValues();
       renderModels();
       renderSettings();
       renderRun();
@@ -387,6 +423,14 @@
         Object.keys(slot.field_map).forEach((role) => { out[slot.field_map[role]] = slot.label; });
       });
       return out;
+    }
+
+    /** Drop edits no selected environment knows (like pruneBindings); needs every form. */
+    function pruneOrphanValues() {
+      if (!st.selected.length || st.selected.some((id) => !st.envData[id] || !st.envData[id].form)) return;
+      [st.values, st.invalid].forEach((map) => Object.keys(map).forEach((p) => {
+        if (envsMissing(p).length === st.selected.length) delete map[p];
+      }));
     }
 
     function pruneBindings() {
@@ -529,6 +573,9 @@
       });
       if (!datasetValue()) errors.push({ pointer: '/evaluator/dataset', message: 'Choose a dataset or enter a custom dataset string.' });
       Object.keys(st.invalid).forEach((p) => errors.push({ pointer: '/env_overrides' + p, message: st.invalid[p].message }));
+      Object.keys(st.values).forEach((p) => envsMissing(p).forEach((id) => errors.push({
+        pointer: '/env_overrides' + p, environment_id: id, rule: 'not_in_environment', message: notInEnvMessage(p, id),
+      })));
       if (!st.name.trim()) errors.push({ pointer: '#name', message: 'Name the experiment.' });
       return errors;
     }
@@ -918,10 +965,20 @@
     function markChanged(wrapper, pointer) {
       if (!wrapper) return;
       const changed = has(st.values, pointer) || has(st.invalid, pointer);
-      if (wrapper.tagName === 'TD') wrapper.classList.toggle('xl-cell--changed', changed);
-      else {
+      const missing = has(st.values, pointer) ? envsMissing(pointer) : [];
+      const note = missing.map((id) => notInEnvMessage(pointer, id)).join(' ');
+      if (wrapper.tagName === 'TD') {
+        wrapper.classList.toggle('xl-cell--changed', changed);
+        wrapper.classList.toggle('xl-cell--error', !!missing.length);
+        if (missing.length) wrapper.title = note;
+        else wrapper.removeAttribute('title');
+      } else {
         wrapper.classList.toggle('xl-field--changed', changed);
-        wrapper.classList.toggle('xl-field--error', has(st.invalid, pointer));
+        wrapper.classList.toggle('xl-field--error', has(st.invalid, pointer) || !!missing.length);
+        let inline = wrapper.querySelector('[data-xl-env-error]');
+        if (missing.length && !inline) wrapper.appendChild(inline = el('div', { className: 'xl-error-text', role: 'alert', 'data-xl-env-error': '1' }));
+        if (inline && !missing.length) inline.remove();
+        else if (inline) inline.textContent = note;
       }
     }
 
@@ -1062,7 +1119,9 @@
       const cols = roleColumns(model, table);
       const head = el('tr', null, [el('th', { text: table.row_param || 'role' })].concat(cols.map((c) => el('th', { className: 'xl-mono', text: c.label }))));
       const rows = (table.rows || []).map((row) => {
-        const cells = [el('td', { className: 'xl-role-name', title: row.description || null, text: row.key })];
+        const absent = model.envs.length > 1 ? envsMissing(row.pointer) : [];
+        const name = absent.length ? el('span', { className: 'xl-row' }, [el('span', { text: row.key })].concat(absent.map((id) => tag('not in ' + envName(id), 'warning')))) : row.key;
+        const cells = [el('td', { className: 'xl-role-name', title: row.description || null }, [name])];
         const pointers = [];
         cols.forEach((col) => {
           const pointer = childPointer(table.pointer, row.pointer, col.template);
