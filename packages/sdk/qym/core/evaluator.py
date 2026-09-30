@@ -26,7 +26,7 @@ from rich.console import Console
 from rich.live import Live
 from rich.table import Table
 
-from .results import EvaluationResult
+from .results import METRIC_ERROR_STATUSES, EvaluationResult
 from .checkpoint import (
     CheckpointWriter,
     load_checkpoint_state,
@@ -84,8 +84,9 @@ import logging
 logger = logging.getLogger(__name__)
 from ..platform.defaults import DEFAULT_PLATFORM_URL
 
-# ``metadata.status`` values that mark a metric (scorer) execution failure.
-_METRIC_ERROR_STATUSES = frozenset({"error", "failed", "timeout"})
+# ``metadata.status`` values that mark a metric (scorer) execution failure
+# (the local stats read the same ones).
+_METRIC_ERROR_STATUSES = frozenset(METRIC_ERROR_STATUSES)
 
 
 def _utc_now_str() -> str:
@@ -1072,6 +1073,9 @@ class Evaluator:
                     else {}
                 ),
             },
+            # Each metric's direction decides how errors enter its local
+            # stats, as on the platform.
+            metric_specs=dict(getattr(self, "metric_specs", {}) or {}),
         )
         result.samples = self.samples
         result.report_k = self.config.report_k
@@ -1636,22 +1640,7 @@ class Evaluator:
                 if self.samples <= 1:
                     return
                 try:
-                    slice_stats: Dict[str, Any] = {}
-                    for m in metric_names:
-                        values: List[float] = []
-                        for entries_by_pass in result.passes.values():
-                            entry = entries_by_pass.get(pass_number)
-                            if entry is None:
-                                continue
-                            if "error" in entry:
-                                values.append(0.0)
-                                continue
-                            val = result._main_numeric_score(
-                                (entry.get("scores") or {}).get(m)
-                            )
-                            values.append(val if val is not None else 0.0)
-                        if values:
-                            slice_stats[m] = sum(values) / len(values)
+                    slice_stats: Dict[str, Any] = result.pass_means(pass_number)
                     payload = {
                         "pass_number": pass_number,
                         "samples": self.samples,
@@ -2691,7 +2680,12 @@ class Evaluator:
             if metric_status not in {"timeout", "error"}:
                 validated_score = spec.validate_score(raw_score_value)
             else:
-                validated_score = result.score
+                # A scorer error scores 0 whatever score the metric returned
+                # with its error status, as a raised metric does: the run
+                # mean counts it as 0 (or leaves it out when lower is better)
+                # and it is never a pass, locally and on the platform.
+                validated_score = 0.0
+                raw_score_value = 0
             result.score = validated_score
             main_val = result.score
 

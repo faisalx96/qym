@@ -58,13 +58,13 @@ print(result.get_metric_stats("exact_match"))</pre>
 <table>
   <thead><tr><th>Method</th><th>Returns</th><th>What it does</th></tr></thead>
   <tbody>
-    <tr><td><code>get_metric_stats(metric_name)</code></td><td>dict</td><td>Aggregates one metric across successful items: <code>{mean, std, min, max, success_rate}</code>. For repeat runs (<code>samples&gt;1</code>) the stats cover every pass (mean per attempt) and gain <code>ci_low</code>/<code>ci_high</code> (bootstrap 95% CI).</td></tr>
-    <tr><td><code>group_stats(metric=None, threshold=0.8)</code></td><td>dict</td><td>Repeat runs: the group set <code>{pass_at_k, pass_hat_k, avg_at_k, max_at_k, consistency, reliability, k}</code> with k = samples.</td></tr>
-    <tr><td><code>pass_at(k)</code> / <code>pass_hat(k)</code></td><td>float</td><td>Repeat runs: unbiased Pass@k / Pass^k for <strong>any k &le; samples</strong>, computed from the stored passes — no re-running.</td></tr>
+    <tr><td><code>get_metric_stats(metric_name)</code></td><td>dict</td><td>Aggregates one metric by the platform's error rule (below): <code>{mean, std, min, max, success_rate}</code> plus <code>count</code> (items in the mean), <code>error_count</code> (<code>task_error_count</code> + <code>metric_error_count</code>), <code>errors_left_out</code> and <code>direction</code>. For repeat runs (<code>samples&gt;1</code>) each item is the mean over its passes and <code>mean</code> is the mean over items (the mean per attempt when every pass counts); the error counts count passes, and the dict gains <code>ci_low</code>/<code>ci_high</code> (bootstrap 95% CI).</td></tr>
+    <tr><td><code>group_stats(metric=None, threshold=None)</code></td><td>dict</td><td>Repeat runs: the group set <code>{pass_at_k, pass_hat_k, avg_at_k, max_at_k, consistency, reliability, k, threshold, direction}</code> with k = samples, as the platform computes it. It follows the metric's direction: for a lower-is-better metric a pass is <code>score &lt;= threshold</code> and <code>max_at_k</code> is the mean of each item's lowest (best) score. An errored pass is never a pass. <code>threshold</code> defaults to the metric's <code>pass_threshold</code>, else 0.2 for a lower-is-better metric and 0.8 otherwise.</td></tr>
+    <tr><td><code>pass_at(k)</code> / <code>pass_hat(k)</code></td><td>float</td><td>Repeat runs: unbiased Pass@k / Pass^k for <strong>any k &le; samples</strong>, computed from the stored passes — no re-running. Same direction and threshold default as <code>group_stats</code>.</td></tr>
     <tr><td><code>get_timing_stats()</code></td><td>dict</td><td>Task-duration aggregates across successful items: <code>{mean, std, min, max, total}</code>.</td></tr>
     <tr><td><code>successful_items()</code></td><td>List[str]</td><td>Item IDs that succeeded (the keys of <code>results</code>).</td></tr>
     <tr><td><code>failed_items()</code></td><td>List[str]</td><td>Item IDs that failed (the keys of <code>errors</code>).</td></tr>
-    <tr><td><code>summary()</code></td><td>str</td><td>A plain-text summary string (run name, totals, per-metric mean/std/range, error list).</td></tr>
+    <tr><td><code>summary()</code></td><td>str</td><td>A plain-text summary string (run name, totals, per-metric mean/std/range and how many errors each metric had, error list).</td></tr>
     <tr><td><code>to_dict()</code></td><td>dict</td><td>Full structured snapshot (see below) — the same shape written by JSON export.</td></tr>
     <tr><td><code>save(format, filepath, output_dir)</code></td><td>str</td><td>Writes an artifact and returns its path. See <strong>Saving artifacts</strong> below.</td></tr>
     <tr><td><code>print_summary(html_url=None)</code></td><td>None</td><td>Renders a Rich summary panel — but only when summaries are enabled (see the gating note below).</td></tr>
@@ -72,14 +72,14 @@ print(result.get_metric_stats("exact_match"))</pre>
 </table>
 
 <h3>How metric aggregation handles errors</h3>
-<p>This is the SDK's local summary. The platform run mean differs: it counts a scorer error as 0, or leaves it out for a lower-is-better metric (see <a href="#sdk-guide/metrics">Metrics</a>). Locally, <code>get_metric_stats()</code> only reads from successful items, and within those it applies a precise rule for how each score is counted:</p>
+<p>The local stats follow the same rule as the platform run mean, so <code>get_metric_stats()</code>, <code>summary()</code>, <code>to_dict()</code> and the Rich summary panel read the same numbers as the runs list and the run page. Each item's score is counted like this:</p>
 <ul>
   <li>A <strong>bool</strong> counts as <code>1.0</code> / <code>0.0</code>.</li>
-  <li>A plain <strong>number</strong> counts as itself.</li>
-  <li>A <strong>dict with a numeric <code>score</code></strong> contributes <code>score</code>.</li>
-  <li>A <strong>dict containing an <code>error</code> key</strong> is <em>excluded</em> from <code>mean/std/min/max</code> and instead lowers that metric's reported <code>success_rate</code>.</li>
+  <li>A plain <strong>number</strong> counts as itself; a <strong>dict with a numeric <code>score</code></strong> or a <code>MetricResult</code> contributes its <code>score</code>.</li>
+  <li>A <strong>scorer error</strong> (a dict with an <code>error</code> key, a metric that raised or timed out, or a <code>metadata.status</code> of error, failed or timeout) and a <strong>task error</strong> (an item in <code>errors</code>) count as <code>0</code> for a higher-is-better metric and for a metric that declares no direction.</li>
+  <li>For a lower-is-better metric (<code>direction="minimize"</code>) the same errors are <em>left out</em> of <code>mean/std/min/max</code>, because 0 is its best value. If every item errored, the metric has no mean: <code>mean</code>, <code>std</code>, <code>min</code> and <code>max</code> are <code>None</code>, and the summary prints <code>n/a</code>.</li>
 </ul>
-<p>So in the local summary a metric failure does not pull the mean toward zero: it is left out of the average and surfaces as a reduced metric success rate. Timeouts follow the same rule after <code>metric_max_retries</code> is exhausted; they are stored as score <code>0</code> plus an <code>error</code>, not as a special timeout label or a real quality zero. See <a href="#sdk-guide/config">Configs &amp; options</a>.</p>
+<p>Either way the errors are counted: <code>error_count</code> is <code>task_error_count</code> + <code>metric_error_count</code>, <code>errors_left_out</code> says which rule applied, and <code>summary()</code> and the Rich panel say for each metric how many errored and whether they counted as 0 or were left out. <code>success_rate</code> in the stats is the share of scored items whose scorer did not fail (for a repeat run, the run's <code>success_rate</code>: the share of items with a successful pass). Repeat runs apply the rule to every pass, so the error counts count passes. A timeout after <code>metric_max_retries</code> is a scorer error like any other: stored as score <code>0</code> plus an <code>error</code>, not as a special timeout label. See <a href="#sdk-guide/metrics">Metrics</a> and <a href="#sdk-guide/config">Configs &amp; options</a>.</p>
 
 <div class="docs-callout tip"><svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg><p><span class="docs-callout-title">The console prints nothing by default.</span> <code>run()</code> calls <code>print_summary()</code>, but it is a no-op unless you opt in with <code>QYM_SHOW_SUMMARY=1</code> (also accepts <code>true</code>/<code>yes</code>/<code>on</code>). If you want the summary unconditionally from code, call <code>result.print_summary(force=True)</code> or just print <code>result.summary()</code>.</p></div>
 
@@ -94,8 +94,18 @@ print(result.get_metric_stats("exact_match"))</pre>
   "total_items": 20,
   "success_rate": 0.95,
   "metrics": ["exact_match"],
+  "metric_specs": {
+    "exact_match": {
+      "schema_version": 2, "score_type": "boolean", "direction": "maximize", "pass_threshold": null,
+      "sample_reducer": "mean", "run_reducer": "mean", "unit": null, "precision": null
+    }
+  },
   "metric_stats": {
-    "exact_match": { "mean": 0.8, "std": 0.41, "min": 0.0, "max": 1.0, "success_rate": 1.0 }
+    "exact_match": {
+      "mean": 0.8, "std": 0.41, "min": 0.0, "max": 1.0, "success_rate": 1.0,
+      "count": 20, "error_count": 1, "task_error_count": 1, "metric_error_count": 0,
+      "errors_left_out": false, "direction": "maximize"
+    }
   },
   "langfuse_url": null,
   "inputs": { "item_0": "..." },

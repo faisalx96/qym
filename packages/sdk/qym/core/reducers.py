@@ -80,14 +80,19 @@ def unbiased_pass_hat_k(n: int, c: int, k: int) -> float:
 
 
 def estimate_pass_at(
-    items_scores: Dict[str, List[float]],
+    items_scores: Dict[str, List[Optional[float]]],
     k: int,
     *,
     threshold: float = DEFAULT_THRESHOLD,
+    direction: str = "maximize",
 ) -> float:
-    """Mean unbiased pass@k across items, from all stored passes per item."""
+    """Mean unbiased pass@k across items, from all stored passes per item.
+
+    Passing follows ``direction`` (``<= threshold`` when ``"minimize"``); a
+    ``None`` score is an errored pass and never passes.
+    """
     values = [
-        unbiased_pass_at_k(len(scores), _pass_count(scores, threshold), k)
+        unbiased_pass_at_k(len(scores), _pass_count(scores, threshold, direction), k)
         for scores in items_scores.values()
         if scores
     ]
@@ -95,14 +100,15 @@ def estimate_pass_at(
 
 
 def estimate_pass_hat(
-    items_scores: Dict[str, List[float]],
+    items_scores: Dict[str, List[Optional[float]]],
     k: int,
     *,
     threshold: float = DEFAULT_THRESHOLD,
+    direction: str = "maximize",
 ) -> float:
     """Mean unbiased pass^k across items, from all stored passes per item."""
     values = [
-        unbiased_pass_hat_k(len(scores), _pass_count(scores, threshold), k)
+        unbiased_pass_hat_k(len(scores), _pass_count(scores, threshold, direction), k)
         for scores in items_scores.values()
         if scores
     ]

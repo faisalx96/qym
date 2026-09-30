@@ -231,3 +231,51 @@ def test_declared_error_status_is_reported_as_metric_error(monkeypatch) -> None:
     assert events[0]["score_numeric"] == 0.0
     tracker.set_metric_error.assert_called_once_with(0, "judge")
     tracker.update_metric.assert_not_called()
+
+
+def test_declared_error_status_records_a_score_of_zero(monkeypatch) -> None:
+    """A scorer error scores 0 whatever score the metric returned with its
+    error status, as a raised metric does: the platform counts the stored
+    score, and a mean must not rise (nor a pass count) from a failed scorer.
+    The local stats read it the same way (score_outcome)."""
+    from qym.core.results import score_outcome
+    from qym.metrics.result import MetricResult
+
+    for name in ("QYM_API_KEY", "QYM_BASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+
+    def judge(output: str, expected: str) -> MetricResult:
+        del output, expected
+        return MetricResult(score=0.95, kind="llm", metadata={"status": "failed"})
+
+    def timed(output: str, expected: str) -> dict:
+        del output, expected
+        return {"score": 0.9, "metadata": {"status": "timeout"}}
+
+    for metric, status in ((judge, "error"), (timed, "timeout")):
+        evaluator = Evaluator(
+            task=lambda value: value,
+            dataset=_ErrorDataset(),
+            metrics=[metric],
+            config={
+                "run_name": "declared-status-zero",
+                "checkpoint_enabled": False,
+                "otel_enabled": False,
+            },
+        )
+        evaluator._platform_stream = MagicMock()
+        item = _Item("status-item", "status", "ok")
+        _, stored = asyncio.run(
+            evaluator._run_single_metric(
+                metric.__name__, metric, "ok", "ok", 0, item, ItemSpans(), {}
+            )
+        )
+        [event] = [
+            call.args[1]
+            for call in evaluator._platform_stream.emit.call_args_list
+            if call.args[0] == "metric_scored"
+        ]
+        assert event["meta"]["status"] == status
+        assert (event["score_numeric"], event["score_value"]) == (0.0, 0)
+        assert event["score_raw"]["score"] == 0.0
+        assert score_outcome(stored) == (None, True)

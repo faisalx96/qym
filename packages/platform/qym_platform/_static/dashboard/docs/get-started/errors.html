@@ -115,7 +115,7 @@ export QYM_API_KEY=&lt;platform-api-key&gt;</pre>
 <pre data-lang="bash">qym metric list</pre>
 
 <h3>A metric that hangs: the metric_timeout wall</h3>
-<p>Each metric attempt has a wall-clock budget, <code>metric_timeout</code>, defaulting to <strong>60.0 seconds</strong>. qym retries a timed-out attempt up to <code>metric_max_retries</code> times (default <strong>2</strong>). If the last attempt also times out, the metric is recorded like every other metric failure: score <code>0</code> plus an <code>error</code> message, with no special timeout label. The error counts as 0 in the platform run mean, or is left out of it for a lower-is-better metric, and lowers metric success rate.</p>
+<p>Each metric attempt has a wall-clock budget, <code>metric_timeout</code>, defaulting to <strong>60.0 seconds</strong>. qym retries a timed-out attempt up to <code>metric_max_retries</code> times (default <strong>2</strong>). If the last attempt also times out, the metric is recorded like every other metric failure: score <code>0</code> plus an <code>error</code> message, with no special timeout label. The error counts as 0 in the run mean (on the platform and in the local summary), or is left out of it for a lower-is-better metric, and lowers metric success rate.</p>
 <pre data-lang="python">config = {
     "metric_timeout": 180.0,
     "metric_max_retries": 1,
@@ -165,7 +165,7 @@ Received: question</pre>
 <p>Individual item failures don't stop the run — the rest of the dataset still completes. Failed items are encoded in the saved artifacts so you can find them quickly:</p>
 <ul>
   <li>A task that raised is written with the output column set to <code>ERROR: &lt;message&gt;</code>, and each metric score set to <code>N/A</code>.</li>
-  <li>A metric that returns a dict containing an <code>error</code> key is scored <code>0.0</code> for that item. The local summary (<code>get_metric_stats</code>) leaves it out of that metric's aggregate; the platform run mean counts it as 0 (or leaves it out for a lower-is-better metric) and shows the error count beside the mean.</li>
+  <li>A metric that returns a dict containing an <code>error</code> key is scored <code>0.0</code> for that item. Like a failed task, it counts as 0 in the run mean, or is left out of it for a lower-is-better metric; the error count is shown beside the mean. The local summary (<code>get_metric_stats</code>, <code>summary()</code>) and the platform apply this same rule.</li>
   <li>The saved path is in <code>result.last_saved_path</code>; per-item rows live under <code>qym_results/&lt;task&gt;/&lt;model&gt;/&lt;date&gt;/</code>.</li>
 </ul>
 <p>To pull just the failures of a stored run from the CLI:</p>

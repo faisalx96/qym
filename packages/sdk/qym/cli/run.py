@@ -250,7 +250,9 @@ def run_create(
                 err_console.print(f"{res.run_name} Success Rate: {res.success_rate:.1%}")
                 for metric_name in metrics_list:
                     stats = res.get_metric_stats(metric_name)
-                    err_console.print(f"{res.run_name} {metric_name}: {stats['mean']:.3f}")
+                    # No mean when every item of a lower-is-better metric errored.
+                    mean = "n/a" if stats["mean"] is None else f"{stats['mean']:.3f}"
+                    err_console.print(f"{res.run_name} {metric_name}: {mean}")
         else:
             for res in run_results:
                 res.print_summary()

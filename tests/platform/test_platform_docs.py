@@ -140,3 +140,39 @@ def test_platform_guide_explains_kpis_incomplete_runs_and_text_mode() -> None:
     assert "<strong>Incomplete</strong>" in runs
     detail = " ".join(_read(DASHBOARD_DOCS / "platform-guide/run-detail.html").split())
     assert "<strong>Raw</strong>" in detail and "Rendered" in detail
+
+
+def test_guides_describe_one_error_rule_for_local_and_platform_stats() -> None:
+    """The SDK's local stats use the platform's error rule (final review,
+    option B); no guide may describe a separate local rule."""
+    stale = (
+        "The platform run mean differs",
+        "Errored metrics in the local summary and on the platform",
+        "treat it differently",
+        "left out of the local",
+        "leaves it out of the metric's mean and counts it as an error instead",
+        "in the local summary a metric failure",
+        "leaves it out of that metric's aggregate",
+        "counts as 0 in the platform run mean",
+    )
+    for path in DASHBOARD_DOCS.rglob("*.html"):
+        flat = " ".join(_read(path).split())
+        for phrase in stale:
+            assert phrase not in flat, (path.name, phrase)
+    results = " ".join(_read(DASHBOARD_DOCS / "sdk-guide/results.html").split())
+    assert "The local stats follow the same rule as the platform run mean" in results
+    for field in ("error_count", "task_error_count", "metric_error_count", "errors_left_out"):
+        assert field in results, field
+    metrics = " ".join(_read(DASHBOARD_DOCS / "sdk-guide/metrics.html").split())
+    assert "<h2>How errored metrics enter the mean</h2>" in metrics
+    assert "The SDK's local stats" in metrics
+    # A metric's own error status is a scorer error recorded as 0 (the
+    # evaluator zeroes the score it came with), on both sides.
+    assert "sets its own <code>metadata.status</code> to error, failed or timeout" in metrics
+    repeats = " ".join(_read(DASHBOARD_DOCS / "sdk-guide/repeats.html").split())
+    assert "<code>score &lt;= threshold</code> for a lower-is-better metric" in repeats
+    guide = " ".join(
+        _read(ROOT / "packages" / "sdk" / "docs" / "USER_GUIDE.md").split()
+    )
+    assert "one rule for the platform and for the local summary" in guide
+    assert "defaults to `score >= 0.8`" not in guide
