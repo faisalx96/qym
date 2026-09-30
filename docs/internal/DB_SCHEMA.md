@@ -8,7 +8,7 @@ The canonical models are in `packages/platform/qym_platform/db/models.py`; Alemb
 - `user_identities`: provider/subject mappings for OIDC and local identities.
 - `local_auth_credentials`: password hashes, local-login timestamps, and the `must_change_password` flag set by an admin reset.
 - `user_sessions` (`0061`): server-side browser sessions keyed by a digest of the cookie's session token, with provider, created and last-seen times. Sign-out, a password change or reset, and disabling the user delete them; idle sessions expire.
-- `projects`: project access boundary and active/archive state.
+- `projects`: project access boundary and active/archive state. `archived_at` (`0065`) records when the project was archived (NULL while active); Trash purging of its deleted runs pauses from then until the unarchive.
 - `project_memberships`: one `MEMBER` / `MANAGER` role per user and project.
 - `api_keys`: project-bound key prefix, PBKDF2 hash, creator, recorded scopes, and revocation time. Scopes are stored but are not currently enforced.
 - `project_llm_connections`: encrypted OpenAI-compatible connection settings and the project default.
@@ -16,7 +16,7 @@ The canonical models are in `packages/platform/qym_platform/db/models.py`; Alemb
 
 ## Runs and repeat executions
 
-- `runs`: project, owner, task/dataset/model, workflow state, metadata/config, progress, soft deletion, and `samples` (default `1`).
+- `runs`: project, owner, task/dataset/model, workflow state, metadata/config, progress, soft deletion, and `samples` (default `1`). `purge_clock_started_at` (`0065`) is when a deleted run's Trash grace period started counting (NULL: `deleted_at`); unarchiving its project moves it forward by the time the project spent archived.
 - `run_items`: one representative row per `(run, item)` with input, expected, latest output/error, metadata, latency, and trace links.
 - `run_metric_specs`: immutable score semantics and display order per run/metric. `direction` (`maximize` / `minimize`) is nullable since `0063`: NULL means the metric declared none and is shown neutrally. `is_primary` marks the run's declared headline metric.
 - `run_item_scores`: one reduced row per `(run, item, metric)`. For repeat runs, the numeric value is the mean across stored passes, unless a reviewer scored the item as a whole (`meta.item_edit`).

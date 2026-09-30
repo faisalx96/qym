@@ -88,6 +88,8 @@ async function tryToLeave(page) {
 async function resetWhilePending(browser) {
   const { page, state, errors } = await harness(browser);
   await page.locator('#edit-user-reset-password').click();
+  // A reset ends every session of the user, whatever they signed in with.
+  assert.match(await page.locator('#shell-confirm-dialog').innerText(), /They are signed out of every browser\./);
   await page.locator('#shell-confirm-cancel').click();
   assert.equal(state.resets, 0, 'Cancelling the confirmation must not reset');
   assert.equal(await modalOpen(page), true);

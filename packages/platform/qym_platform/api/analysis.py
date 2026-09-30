@@ -61,6 +61,7 @@ from qym_platform.permissions import (
     has_project_access,
     is_project_archived,
     is_project_manager,
+    project_for_read_by_slug,
     require_project_writable,
 )
 from qym_platform.secrets import resolve_llm_api_key
@@ -210,15 +211,11 @@ def _resolve_analysis_scope(
     """Resolve either a run or an explicitly project-scoped analyzer context."""
     if scope_id.startswith(_PROJECT_ANALYSIS_SCOPE_PREFIX):
         project_slug = scope_id[len(_PROJECT_ANALYSIS_SCOPE_PREFIX) :].strip()
-        project = (
-            db.query(Project)
-            .filter(Project.slug == project_slug, Project.is_active.is_(True))
-            .first()
-        )
-        if project is None:
-            raise HTTPException(status_code=404, detail="Project not found")
-        if not has_project_access(db, principal, project.id):
-            raise HTTPException(status_code=403, detail="Access denied")
+        # An archived project's catalog and rules stay readable to its members
+        # (the run page reads its category catalog). ``modify`` also guards
+        # manager-only reads, so each write checks require_project_writable
+        # itself, as it does for a run scope.
+        project = project_for_read_by_slug(db, principal, project_slug)
         if modify and not is_project_manager(db, principal, project.id):
             raise HTTPException(
                 status_code=403, detail="Project manager access required"
@@ -7565,6 +7562,8 @@ def _project_category_catalog_scope(
     )
     if modify:
         db.query(Project.id).filter(Project.id == scope.project_id).with_for_update().one()
+        # Only writes pass modify here; an archived project's catalog is read-only.
+        require_project_writable(db, scope.project_id)
     return scope.project_id, is_project_manager(db, principal, scope.project_id)
 
 
@@ -8887,12 +8886,12 @@ def list_corrections(
     )
     active_query = apply_reviewable_run_filter(active_query, db, principal)
     if project_slug:
-        project = (
-            db.query(Project)
-            .filter(Project.slug == project_slug, Project.is_active.is_(True))
-            .first()
-        )
-        if not project:
+        project = db.query(Project).filter(Project.slug == project_slug).first()
+        # Runs of an archived project have left the queue: its members get an
+        # empty queue, anyone else "Project not found" as before.
+        if not project or (
+            not project.is_active and not has_project_access(db, principal, project.id)
+        ):
             raise HTTPException(status_code=404, detail="Project not found")
         active_query = active_query.filter(Run.project_id == project.id)
 

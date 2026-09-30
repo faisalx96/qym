@@ -25,11 +25,11 @@ def require_project_writable(db: Session, project_id: Optional[str]) -> None:
     """Refuse a change to an archived project: it is read-only until unarchived.
 
     Every route that changes a project's data (runs, items, scores, reviews,
-    analysis, settings, members, API keys) calls this after its access check,
-    so a non-member still gets 403/404 rather than learning the project state.
-    Reads never call it. Exempt on purpose: the admin archive, unarchive and
-    delete endpoints, and actions that only take access or work away (revoking
-    a key, removing a member, cancelling a running analysis job).
+    analysis, datasets, settings, members, API keys) calls this after its
+    access check, so a non-member still gets 403/404 rather than learning the
+    project state. Reads never call it. Exempt on purpose: the admin archive,
+    unarchive and delete endpoints, and actions that only take access or work
+    away (revoking a key, removing a member, cancelling a running analysis job).
     tests/platform/test_archived_project_read_only.py lists every write route.
     """
     if is_project_archived(db, project_id):
@@ -38,6 +38,25 @@ def require_project_writable(db: Session, project_id: Optional[str]) -> None:
             detail=ARCHIVED_PROJECT_DETAIL,
             headers={PROJECT_STATE_HEADER: "archived"},
         )
+
+
+def project_for_read_by_slug(db: Session, principal: Principal, project_slug: str) -> Project:
+    """The project a UI read names by slug, archived or not.
+
+    An archived project is read-only, not hidden: admins and its members still
+    open its pages and read its runs, datasets and settings, while every write
+    answers 409 through ``require_project_writable``. Anyone else is refused
+    exactly as before: an archived project stays "Project not found" (404) to
+    them, an active one "Access denied" (403).
+    """
+    project = db.query(Project).filter(Project.slug == project_slug).first()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not has_project_access(db, principal, project.id):
+        if not project.is_active:
+            raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=403, detail="Access denied")
+    return project
 
 
 def get_project_membership(db: Session, user_id: str, project_id: str) -> ProjectMembership | None:

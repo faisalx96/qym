@@ -138,7 +138,7 @@ Auth modes:
 
 For GitLab, create an OAuth application (instance, group, or user level) with the redirect URI `${QYM_BASE_URL}/v1/auth/callback/gitlab`, the scopes `openid`, `email`, and `profile`, and **Confidential** enabled. The platform reads `${QYM_AUTH_GITLAB_URL}/.well-known/openid-configuration`, so the container must reach GitLab and trust its TLS certificate. A GitLab login links to an existing qym account with the same verified email, so qym trusts GitLab's email verification: only enable GitLab login when users cannot set an unconfirmed email on the instance (email confirmation on, or emails managed by LDAP/admins). Otherwise a GitLab user could claim another person's qym account, including an admin's. qym keys a GitLab account by the ID token issuer and subject, so a second GitLab instance cannot sign in as a user of the first. If the GitLab external URL changes, users relink by verified email at their next sign-in.
 
-Admins can reset a forgotten local password from **Admin → Users → Edit → Reset Password**. The platform shows a one-time password once; the user signs in with it and must choose a new password before a session starts. A temporary password works once, and a later reset replaces it.
+Admins can reset a forgotten local password from **Admin → Users → Edit → Reset Password**. The platform shows a one-time password once; the user signs in with it and must choose a new password before a session starts. A temporary password works once, and a later reset replaces it. A reset also signs the user out of every browser, whatever they signed in with (a GitLab, Google or GitHub user signs straight back in with that provider).
 
 In session-based modes, `QYM_BASE_URL` must match the browser origin. Browser writes without Bearer authentication are restricted to that origin.
 
@@ -153,7 +153,7 @@ The platform has two role layers:
 | Platform | `MEMBER`, `ADMIN` | Admins manage users and projects, access every project, and restore deleted runs. |
 | Project | `MEMBER`, `MANAGER` | Members work with project runs, reviews, datasets, API keys, and LLM connections. Managers also manage membership and approve or reject submitted runs. |
 
-An admin or an existing project manager can create a project; its creator becomes a manager. A project must always retain at least one manager. Projects containing runs are archived instead of physically deleted.
+An admin or an existing project manager can create a project; its creator becomes a manager. A project must always retain at least one manager. Projects containing runs are archived instead of physically deleted. An archived project leaves the project list and its API keys stop working, but admins and its members still open it read-only from **Admin → Projects** or a link (runs, dashboard, datasets, settings); every change answers `409` until an admin unarchives it, except revoking API keys, removing members and deleting the project. Trash purging of its deleted runs pauses meanwhile and resumes where it stopped after the unarchive.
 
 ### Project API Keys
 

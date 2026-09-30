@@ -463,6 +463,41 @@ body {
 .sidebar.no-project .project-nav-items { display: none; }
 .sidebar.no-project ~ .main-area .breadcrumb-project { display: none; }
 
+/* ════════════════════════════════════════════════
+   ARCHIVED PROJECT (read-only)
+   ════════════════════════════════════════════════ */
+/* Auto-analysis and Reviews exist to change things; they stay hidden. */
+.sidebar.project-archived .nav-item[data-page="analysis"],
+.sidebar.project-archived .nav-item[data-page="reviews"] { display: none; }
+
+.shell-archived-notice {
+  flex-shrink: 0;
+  padding: var(--space-sm) var(--space-lg);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--warning);
+  color: var(--text-secondary);
+  font-size: var(--font-base);
+  line-height: 1.5;
+}
+.shell-archived-notice[hidden] { display: none; }
+.shell-archived-notice strong { color: var(--text-primary); font-weight: 600; }
+
+/* Role / metadata tag recipe (DESIGN_LANGUAGE.md) in the warning tone. */
+.project-archived-tag {
+  flex: none;
+  display: inline-flex; align-items: center;
+  margin-left: var(--space-xs);
+  padding: 1px 6px;
+  border-radius: var(--control-radius);
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+  color: var(--warning);
+  font-family: var(--font-sans);
+  font-size: var(--font-xs);
+  font-weight: 650;
+  line-height: 1.5;
+}
+
 
 /* ════════════════════════════════════════════════
    SHELL MODAL (create project, etc.)

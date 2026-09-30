@@ -37,7 +37,11 @@ from qym_platform.db.models import (
 )
 from qym_platform.deps import get_db
 from qym_platform.item_identity import build_identity_fingerprint
-from qym_platform.permissions import has_project_access
+from qym_platform.permissions import (
+    has_project_access,
+    project_for_read_by_slug,
+    require_project_writable,
+)
 from qym_platform.services.dataset_search import filter_dataset_item_search
 
 
@@ -135,9 +139,16 @@ def _require_scope(principal: Principal, scope: str) -> None:
         require_api_key_scope(principal, scope)
 
 
-def _project_for_request(db: Session, principal: Principal, project_slug: Optional[str]) -> Project:
-    # Archived projects are hidden like on the run routes: their datasets can be
-    # neither read nor changed until an admin unarchives the project.
+def _project_for_request(
+    db: Session, principal: Principal, project_slug: Optional[str], *, write: bool = False
+) -> Project:
+    """The project a dataset request acts on.
+
+    API keys of an archived project are refused before this (409). A UI user
+    who names an archived project by slug reads its datasets like on the run
+    routes (members and admins only); every write (``write=True``) answers
+    409 "Project is archived" until an admin unarchives the project.
+    """
     active = db.query(Project).filter(Project.is_active.is_(True))
     if principal.project_id:
         project = active.filter(Project.id == principal.project_id).first()
@@ -145,11 +156,9 @@ def _project_for_request(db: Session, principal: Principal, project_slug: Option
             raise HTTPException(status_code=403, detail="API key project not found")
         return project
     if project_slug:
-        project = active.filter(Project.slug == project_slug).first()
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
-        if not has_project_access(db, principal, project.id):
-            raise HTTPException(status_code=403, detail="Access denied")
+        project = project_for_read_by_slug(db, principal, project_slug)
+        if write:
+            require_project_writable(db, project.id)
         return project
     project = active.order_by(Project.name).first()
     if not project:
@@ -1178,7 +1187,7 @@ def create_dataset(
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, req.project_slug)
+    project = _project_for_request(db, principal, req.project_slug, write=True)
     slug = _slugify(req.slug or req.name)
     _free_slug_from_deleted(db, project, slug)
     dataset = Dataset(
@@ -1223,7 +1232,7 @@ def update_dataset(
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, project_slug)
+    project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     if req.name is not None:
         dataset.name = req.name.strip()
@@ -1254,7 +1263,7 @@ def delete_dataset(
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:delete")
-    project = _project_for_request(db, principal, project_slug)
+    project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     dataset.deleted_at = utc_now_naive()
     db.commit()
@@ -1398,7 +1407,7 @@ def create_version(
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, project_slug)
+    project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     source_ref = req.from_version or req.from_alias
     parent = _resolve_version(db, dataset, source_ref) if source_ref else None
@@ -1452,7 +1461,7 @@ def publish_version(
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, project_slug)
+    project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     version = _resolve_version(db, dataset, version_ref)
     items = db.query(DatasetItem).filter(DatasetItem.dataset_version_id == version.id).order_by(DatasetItem.index).all()
@@ -1487,7 +1496,7 @@ def update_version(
 ) -> Dict[str, Any]:
     """Edit version metadata. The vN identifier itself is immutable."""
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, project_slug)
+    project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     version = _resolve_version(db, dataset, version_ref)
     if req.name is not None:
@@ -1561,7 +1570,7 @@ def set_alias(
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, project_slug)
+    project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     version = _resolve_version(db, dataset, req.version)
     alias = _set_alias(db, dataset, alias_name, version, principal.user.id)
@@ -1738,7 +1747,7 @@ def create_item(
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, project_slug)
+    project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
@@ -1823,7 +1832,7 @@ def update_item(
     A full body (every field) still replaces the whole item, as the History revert does.
     """
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, project_slug)
+    project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
@@ -1876,7 +1885,7 @@ def delete_item(
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, project_slug)
+    project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
@@ -1907,7 +1916,7 @@ def bulk_items(
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, project_slug)
+    project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
@@ -2408,7 +2417,7 @@ async def upload_dataset(
       otherwise create it. A different name that only shares the slug is a 409.
     """
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, project_slug)
+    project = _project_for_request(db, principal, project_slug, write=True)
     clean_name = (name or "").strip()
     if not clean_name:
         raise HTTPException(status_code=400, detail="Dataset name is required")

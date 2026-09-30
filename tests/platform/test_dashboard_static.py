@@ -1762,10 +1762,10 @@ def test_changed_route_assets_are_cache_versioned() -> None:
     assert "/static/docs.js?v=p0-20260930" in docs
     # The project-not-found page loads the same shared shell assets as the
     # dashboard pages, every one of them versioned.
-    for asset in ("shell.css", "auth.js"):
-        assert f'{{static_root}}/{asset}?v=p0-20260930"' in runs_api
+    assert '{static_root}/auth.js?v=p0-20260930"' in runs_api
+    assert '{static_root}/shell.css?v=p0-20260930-3"' in runs_api
     assert '{static_root}/dashboard.css?v=p0-20260930"' in runs_api
-    assert '{static_root}/shell.js?v=p0-20260930-2"' in runs_api
+    assert '{static_root}/shell.js?v=p0-20260930-3"' in runs_api
 
 
 def test_every_page_versions_the_shared_shell_assets() -> None:

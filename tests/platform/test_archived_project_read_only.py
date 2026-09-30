@@ -1,9 +1,11 @@
 """An archived project is read-only everywhere.
 
-Its runs stay readable by id (run page, compare, review history, exports), but
-every write answers 409 "Project is archived; unarchive it to make changes"
-through one helper, permissions.require_project_writable. Project-slug routes
-keep hiding the project (404) and its API keys keep answering 409.
+Admins and its members still read it: its runs (list, run page, compare,
+review history, exports), dashboard, datasets and settings, by slug or by id.
+Every write answers 409 "Project is archived; unarchive it to make changes"
+through one helper, permissions.require_project_writable, and its API keys
+keep answering 409. Non-members still get "Project not found" (404), as
+before. Revoking a key and removing a member stay allowed.
 
 ``test_every_write_route_is_classified`` is the guard that keeps it that way:
 a new POST/PUT/PATCH/DELETE route fails it until it is listed below as refused,
@@ -65,6 +67,7 @@ from qym_platform.security import api_key_prefix, hash_api_key
 ORIGIN = "http://localhost:8000"
 ADMIN = {"X-User-Email": "admin@x.com", "Origin": ORIGIN}
 MGR = {"X-User-Email": "mgr@x.com", "Origin": ORIGIN}
+MEMBER = {"X-User-Email": "member@x.com", "Origin": ORIGIN}
 OUTSIDER = {"X-User-Email": "outsider@x.com", "Origin": ORIGIN}
 KEY_TOKEN = "tok-archived-project-key"
 KEY = {"Authorization": f"Bearer {KEY_TOKEN}"}
@@ -371,126 +374,147 @@ REFUSED = [
 
 _P = "/api/projects/{project_slug}"
 _Q = "?project_slug=pa"
-# Project-slug routes keep hiding an archived project from UI sessions (404).
-HIDDEN = [
-    ("PUT", f"{_P}/analysis-category-catalog", "/api/projects/pa/analysis-category-catalog", {"json": {}}),
+# Project-slug writes. The archived project is readable to its members, so
+# its writes reach the shared 409 like every other write.
+PROJECT_SLUG_WRITES = [
+    ("PUT", f"{_P}/analysis-category-catalog", "/api/projects/pa/analysis-category-catalog", {"json": {}}, MGR),
     (
         "POST",
         f"{_P}/analysis-category-catalog/versions/{{version_id}}:restore",
         "/api/projects/pa/analysis-category-catalog/versions/c1:restore",
         {"json": {}},
+        MGR,
     ),
     (
         "POST",
         f"{_P}/analysis-category-catalog/{{version_ref}}/restore",
         "/api/projects/pa/analysis-category-catalog/1/restore",
         {"json": {}},
+        MGR,
     ),
-    ("POST", f"{_P}/analysis-examples", "/api/projects/pa/analysis-examples", {"json": {}}),
-    ("POST", f"{_P}/analysis-documents", "/api/projects/pa/analysis-documents", _FILE),
+    ("POST", f"{_P}/analysis-documents", "/api/projects/pa/analysis-documents", _FILE, MGR),
     (
         "PATCH",
         f"{_P}/analysis-documents/{{document_id}}",
         "/api/projects/pa/analysis-documents/doc1",
         {"json": {"selected": False}},
+        MGR,
     ),
-    ("DELETE", f"{_P}/analysis-documents/{{document_id}}", "/api/projects/pa/analysis-documents/doc1", None),
-    ("PATCH", f"{_P}/analysis-context", "/api/projects/pa/analysis-context", {"json": {}}),
-    ("POST", f"{_P}/analysis-rules/infer", "/api/projects/pa/analysis-rules/infer", {"json": {}}),
-    ("POST", f"{_P}/analysis-rule-jobs", "/api/projects/pa/analysis-rule-jobs", {"json": {}}),
-    ("POST", f"{_P}/analysis-rule-jobs/{{job_id}}/cancel", "/api/projects/pa/analysis-rule-jobs/j1/cancel", None),
-    ("POST", f"{_P}/analysis-rule-versions", "/api/projects/pa/analysis-rule-versions", {"json": {}}),
+    ("DELETE", f"{_P}/analysis-documents/{{document_id}}", "/api/projects/pa/analysis-documents/doc1", None, MGR),
+    ("PATCH", f"{_P}/analysis-context", "/api/projects/pa/analysis-context", {"json": {}}, MGR),
+    ("POST", f"{_P}/analysis-rules/infer", "/api/projects/pa/analysis-rules/infer", {"json": {}}, MGR),
+    ("POST", f"{_P}/analysis-rule-jobs", "/api/projects/pa/analysis-rule-jobs", {"json": {}}, MGR),
+    ("POST", f"{_P}/analysis-rule-versions", "/api/projects/pa/analysis-rule-versions", {"json": {}}, MGR),
     (
         "POST",
         f"{_P}/analysis-rule-versions/{{version_ref}}:publish",
         "/api/projects/pa/analysis-rule-versions/1:publish",
         {"json": {}},
+        MGR,
     ),
     (
         "POST",
         f"{_P}/analysis-rule-aliases/{{alias_name}}",
         "/api/projects/pa/analysis-rule-aliases/production",
         {"json": {"version": "1"}},
+        MGR,
     ),
     (
         "POST",
         f"{_P}/analysis-rule-versions/{{target_ref}}:merge",
         "/api/projects/pa/analysis-rule-versions/1:merge",
         {"json": {"source_version": "2"}},
+        MGR,
     ),
     (
         "POST",
         f"{_P}/analysis-rule-versions/{{version_id}}/activate",
         "/api/projects/pa/analysis-rule-versions/v1/activate",
         None,
+        MGR,
     ),
-    ("DELETE", f"{_P}/analysis-rule-versions/{{version_id}}", "/api/projects/pa/analysis-rule-versions/v1", None),
+    ("DELETE", f"{_P}/analysis-rule-versions/{{version_id}}", "/api/projects/pa/analysis-rule-versions/v1", None, MGR),
     (
         "POST",
         f"{_P}/analysis-rule-versions/{{version_id}}/restore",
         "/api/projects/pa/analysis-rule-versions/v1/restore",
         None,
+        ADMIN,
     ),
     (
         "DELETE",
         f"{_P}/analysis-rule-versions/{{version_id}}/permanent",
         "/api/projects/pa/analysis-rule-versions/v1/permanent",
         None,
+        ADMIN,
     ),
-    # Datasets: the resolver hides archived projects (API keys get 409 below).
-    ("POST", "/v1/datasets", "/v1/datasets", {"json": {"name": "n", "project_slug": "pa"}}),
-    ("PATCH", "/v1/datasets/{dataset_ref}", "/v1/datasets/golden" + _Q, {"json": {}}),
-    ("DELETE", "/v1/datasets/{dataset_ref}", "/v1/datasets/golden" + _Q, None),
-    ("POST", "/v1/datasets/{dataset_ref}/versions", "/v1/datasets/golden/versions" + _Q, {"json": {}}),
+]
+
+# Dataset writes by a UI session naming the project (API keys get 409 below).
+DATASET_WRITES = [
+    ("POST", "/v1/datasets", "/v1/datasets", {"json": {"name": "n", "project_slug": "pa"}}, MGR),
+    ("PATCH", "/v1/datasets/{dataset_ref}", "/v1/datasets/golden" + _Q, {"json": {}}, MGR),
+    ("DELETE", "/v1/datasets/{dataset_ref}", "/v1/datasets/golden" + _Q, None, MGR),
+    ("POST", "/v1/datasets/{dataset_ref}/versions", "/v1/datasets/golden/versions" + _Q, {"json": {}}, MGR),
     (
         "POST",
         "/v1/datasets/{dataset_ref}/versions/{version_ref}:publish",
         "/v1/datasets/golden/versions/v1:publish" + _Q,
         {"json": {}},
+        MGR,
     ),
     (
         "PATCH",
         "/v1/datasets/{dataset_ref}/versions/{version_ref}",
         "/v1/datasets/golden/versions/v1" + _Q,
         {"json": {}},
+        MGR,
     ),
     (
         "POST",
         "/v1/datasets/{dataset_ref}/aliases/{alias_name}",
         "/v1/datasets/golden/aliases/production" + _Q,
         {"json": {"version": "v1"}},
+        MGR,
     ),
     (
         "POST",
         "/v1/datasets/{dataset_ref}/versions/{version_ref}/items",
         "/v1/datasets/golden/versions/v1/items" + _Q,
         {"json": {"input": "q"}},
+        MGR,
     ),
     (
         "PATCH",
         "/v1/datasets/{dataset_ref}/versions/{version_ref}/items/{item_id}",
         "/v1/datasets/golden/versions/v1/items/i1" + _Q,
         {"json": {}},
+        MGR,
     ),
     (
         "DELETE",
         "/v1/datasets/{dataset_ref}/versions/{version_ref}/items/{item_id}",
         "/v1/datasets/golden/versions/v1/items/i1" + _Q,
         None,
+        MGR,
     ),
     (
         "POST",
         "/v1/datasets/{dataset_ref}/versions/{version_ref}/items:bulk",
         "/v1/datasets/golden/versions/v1/items:bulk" + _Q,
         {"json": {}},
+        MGR,
     ),
     (
         "POST",
         "/v1/datasets:upload",
         "/v1/datasets:upload",
         {"data": {"name": "n", "project_slug": "pa"}, "files": {"file": ("d.csv", b"input\nq\n", "text/csv")}},
+        MGR,
     ),
 ]
+
+REFUSED += PROJECT_SLUG_WRITES + DATASET_WRITES
 
 # Routes only an API key can call: the key itself is refused (C023).
 KEY_ONLY = [
@@ -530,6 +554,7 @@ ALLOWED = {
     ("POST", "/v1/admin/projects/{project_id}/unarchive"): "admin lifecycle",
     ("DELETE", "/v1/admin/projects/{project_id}"): "admin lifecycle",
     # Reads sent as POST (large filters and id lists).
+    ("POST", "/api/projects/{project_slug}/analysis-examples"): "read",
     ("POST", "/api/dashboard/models"): "read",
     ("POST", "/api/dashboard/runs"): "read",
     ("POST", "/api/dashboard/overview"): "read",
@@ -548,6 +573,7 @@ ALLOWED = {
     ("DELETE", "/v1/projects/{project_id}/api-keys/{key_id}"): "revokes a key",
     ("POST", "/api/runs/{run_id:path}/analysis-jobs/{job_id}/cancel"): "stops a running job",
     ("POST", "/api/runs/{run_id:path}/analysis-rule-jobs/{job_id}/cancel"): "stops a running job",
+    ("POST", "/api/projects/{project_slug}/analysis-rule-jobs/{job_id}/cancel"): "stops a running job",
 }
 
 
@@ -556,7 +582,7 @@ def _ids(rows):
 
 
 def test_every_write_route_is_classified():
-    """A new write route must be listed as refused, hidden, key-only or allowed."""
+    """A new write route must be listed as refused, key-only or allowed."""
     app = create_app()
     routes = {
         (method, route.path)
@@ -566,7 +592,6 @@ def test_every_write_route_is_classified():
     }
     classified = [
         *((m, t) for m, t, *_ in REFUSED),
-        *((m, t) for m, t, *_ in HIDDEN),
         *((m, t) for m, t, *_ in KEY_ONLY),
         *ALLOWED,
     ]
@@ -598,14 +623,20 @@ def test_the_same_writes_still_reach_their_handler_on_an_active_project(
     assert response.json().get("detail") != ARCHIVED_PROJECT_DETAIL
 
 
-@pytest.mark.parametrize("method,template,path,kwargs", HIDDEN, ids=_ids(HIDDEN))
-def test_project_slug_writes_keep_hiding_an_archived_project(archived, method, template, path, kwargs):
-    response = _call(archived, method, path, kwargs, MGR)
+_SLUG_WRITES = PROJECT_SLUG_WRITES + DATASET_WRITES
+
+
+@pytest.mark.parametrize("method,template,path,kwargs,headers", _SLUG_WRITES, ids=_ids(_SLUG_WRITES))
+def test_project_slug_writes_hide_an_archived_project_from_non_members(
+    archived, method, template, path, kwargs, headers
+):
+    """A non-member learns nothing new: the archived project stays "not found"."""
+    response = _call(archived, method, path, kwargs, OUTSIDER)
     assert response.status_code == 404, response.text
     assert response.json()["detail"] == "Project not found"
 
 
-_DATASET_KEY_WRITES = [row for row in HIDDEN if row[1].startswith("/v1/datasets")]
+_DATASET_KEY_WRITES = [row[:4] for row in DATASET_WRITES]
 
 
 @pytest.mark.parametrize("method,template,path,kwargs", [*_DATASET_KEY_WRITES, *KEY_ONLY], ids=_ids([*_DATASET_KEY_WRITES, *KEY_ONLY]))
@@ -880,24 +911,122 @@ def test_rule_inference_saves_nothing_once_the_project_is_archived(client, sessi
 # ── Run links of an archived project ─────────────────────────────────────────
 
 
-def test_project_run_links_open_the_read_only_run_page(archived, session_factory):
-    """SDK live links and bookmarks use /projects/{slug}/runs/{id}; they keep working."""
-    response = archived.get("/projects/pa/runs/r1?pass=1", headers=MGR, follow_redirects=False)
-    assert response.status_code == 307, response.text
-    assert response.headers["location"] == "/run/r1?pass=1"
-    assert archived.get("/run/r1", headers=MGR).status_code == 200
+_READABLE_PAGES = (
+    "/projects/pa",
+    "/projects/pa/overview",
+    "/projects/pa/charts",
+    "/projects/pa/models",
+    "/projects/pa/datasets",
+    "/projects/pa/datasets/golden",
+    "/projects/pa/datasets/golden/compare",
+    "/projects/pa/settings",
+    "/projects/pa/runs/r1",
+)
+# Pages that exist to change things stay hidden while the project is archived.
+_HIDDEN_PAGES = (
+    "/projects/pa/reviews",
+    "/projects/pa/analysis",
+    "/projects/pa/runs/r1/analyzer",
+)
 
-    # The project itself stays hidden, and nobody learns more than before.
-    for headers, path in (
-        (OUTSIDER, "/projects/pa/runs/r1"),  # cannot view the run
-        (MGR, "/projects/other/runs/r1"),  # the run is not in that project
-        (MGR, "/projects/pa/runs/r-trash"),  # deleted
-        (MGR, "/projects/pa/runs/missing"),
-        (MGR, "/projects/pa/overview"),
-    ):
+
+@pytest.mark.parametrize("headers", [ADMIN, MGR, MEMBER], ids=["admin", "manager", "member"])
+def test_project_pages_of_an_archived_project_open_read_only(archived, headers):
+    for path in _READABLE_PAGES:
+        response = archived.get(path, headers=headers, follow_redirects=False)
+        assert response.status_code == 200, (path, response.status_code)
+    for path in _HIDDEN_PAGES:
         response = archived.get(path, headers=headers, follow_redirects=False)
         assert response.status_code == 404, (path, response.status_code)
         assert "Project not found" in response.text
+
+
+def test_project_pages_of_an_archived_project_stay_not_found_to_non_members(archived):
+    """A non-member learns nothing new: "Project not found", as before."""
+    for path in _READABLE_PAGES + _HIDDEN_PAGES:
+        response = archived.get(path, headers=OUTSIDER, follow_redirects=False)
+        assert response.status_code == 404, (path, response.status_code)
+        assert "Project not found" in response.text
+    # An active project answers a non-member "Access denied", unchanged.
+    archived.post("/v1/admin/projects/pa/unarchive", headers=ADMIN)
+    assert archived.get("/projects/pa/settings", headers=OUTSIDER).status_code == 403
+
+
+def test_project_run_links_of_an_archived_project_open_the_run_page(archived):
+    """SDK live links and bookmarks use /projects/{slug}/runs/{id}; the run page
+    opens there, in the project's read-only context."""
+    response = archived.get("/projects/pa/runs/r1?pass=1", headers=MGR, follow_redirects=False)
+    assert response.status_code == 200, response.text
+    assert 'id="run-content"' in response.text
+    assert archived.get("/run/r1", headers=MGR).status_code == 200
+    response = archived.get("/projects/pa/runs/r1", headers=OUTSIDER, follow_redirects=False)
+    assert response.status_code == 404
+    assert "Project not found" in response.text
+
+
+_SLUG_READS = [
+    ("GET", "/api/runs?project_slug=pa", None),
+    ("GET", "/api/runs/live?project_slug=pa", None),
+    ("POST", "/api/dashboard/runs", {"json": {"project_slug": "pa"}}),
+    ("POST", "/api/dashboard/kpis", {"json": {"project_slug": "pa"}}),
+    ("POST", "/api/dashboard/overview", {"json": {"project_slug": "pa"}}),
+    ("GET", "/v1/datasets?project_slug=pa", None),
+    ("GET", "/api/projects/pa/analysis-category-catalog", None),
+    ("GET", "/api/projects/pa/analysis-config", None),
+    ("GET", "/api/projects/pa/insights", None),
+    ("GET", "/api/corrections?project_slug=pa", None),
+]
+
+
+@pytest.mark.parametrize("method,path,kwargs", _SLUG_READS, ids=[row[1] for row in _SLUG_READS])
+def test_project_slug_reads_of_an_archived_project_serve_members(archived, method, path, kwargs):
+    for headers in (MEMBER, MGR, ADMIN):
+        response = _call(archived, method, path, kwargs, headers)
+        assert response.status_code == 200, (headers["X-User-Email"], response.text)
+    refused = _call(archived, method, path, kwargs, OUTSIDER)
+    assert refused.status_code == 404, refused.text
+    assert refused.json()["detail"] == "Project not found"
+
+
+def test_project_lookup_by_slug_is_unchanged_for_archived_projects(archived):
+    """The shell opens an archived project from a link through this lookup."""
+    for headers in (MEMBER, MGR, ADMIN):
+        response = archived.get("/v1/projects/by-slug/pa", headers=headers)
+        assert response.status_code == 200, response.text
+        assert response.json()["is_active"] is False
+    assert archived.get("/v1/projects/by-slug/pa", headers=OUTSIDER).status_code == 403
+
+
+def test_archived_project_reads_return_its_data(archived, session_factory):
+    runs = archived.get("/api/runs?project_slug=pa", headers=MEMBER).json()
+    listed = {
+        run["run_id"]
+        for models in runs["tasks"].values()
+        for rows in models.values()
+        for run in rows
+    }
+    assert "r1" in listed and "r-trash" not in listed
+    assert runs["project"]["slug"] == "pa"
+    project = archived.get("/v1/projects/by-slug/pa", headers=MEMBER).json()
+    assert project["is_active"] is False
+    # The review queue left archived runs out: an empty queue, not an error.
+    assert archived.get("/api/corrections?project_slug=pa", headers=MEMBER).json()["total"] == 0
+    catalog = archived.get("/api/projects/pa/analysis-category-catalog", headers=MEMBER).json()
+    assert "categories" in catalog
+    # Settings reads by project id keep working, as before.
+    for path in ("/v1/projects/pa/members", "/v1/projects/pa/api-keys", "/v1/projects/pa/llm-connections"):
+        assert archived.get(path, headers=MGR).status_code == 200, path
+        assert archived.get(path, headers=OUTSIDER).status_code == 403, path
+
+
+def test_archived_projects_stay_out_of_the_project_switcher(archived):
+    """/v1/me feeds the switcher and the landing page: active projects only."""
+    for headers in (ADMIN, MGR, MEMBER):
+        me = archived.get("/v1/me", headers=headers).json()
+        assert "pa" not in [project["slug"] for project in me["projects"]]
+    # Admin > Projects lists it, so an admin can open it from there.
+    listed = archived.get("/v1/projects", headers=ADMIN).json()["projects"]
+    assert [(p["slug"], p["is_active"]) for p in listed] == [("pa", False)]
 
 
 def test_project_run_links_of_an_active_project_are_unchanged(client):
@@ -971,3 +1100,34 @@ def test_archive_dialogs_fetch_the_preview_before_archiving() -> None:
         assert "confirmArchiveProject" in source, page
     assert "/archive-preview" in shell
     assert "remaining results will be lost" in shell
+
+
+def test_unarchive_dialogs_name_the_keys_first() -> None:
+    dashboard = ROOT / "packages" / "platform" / "qym_platform" / "_static" / "dashboard"
+    shell = (dashboard / "shell.js").read_text(encoding="utf-8")
+    for page in ("project_settings.html", "admin.html"):
+        source = (dashboard / page).read_text(encoding="utf-8")
+        assert "confirmUnarchiveProject" in source, page
+        assert "revokeFirst" in source, page
+    assert "/unarchive-preview" in shell
+    assert "start working again" in shell
+
+
+def test_docs_describe_archived_projects_as_decided() -> None:
+    """Readable read-only, security actions kept, purge paused, reset signs out."""
+    docs = ROOT / "packages" / "platform" / "qym_platform" / "_static" / "dashboard" / "docs"
+    guide = " ".join((docs / "platform-guide" / "projects-data-review.html").read_text(encoding="utf-8").split())
+    assert "stay readable under a read-only notice" in guide
+    assert "admins and managers revoke API keys and remove members" in guide
+    assert "purge paused" in guide
+    endpoints = (docs / "developer" / "endpoints.html").read_text(encoding="utf-8")
+    assert "unarchive-preview" in endpoints and "purge_paused" in endpoints
+    assert "Signs the user out of every browser" in endpoints
+    user_guide = (ROOT / "packages" / "platform" / "docs" / "USER_GUIDE.md").read_text(encoding="utf-8")
+    readme = (ROOT / "packages" / "platform" / "README.md").read_text(encoding="utf-8")
+    for text in (user_guide, readme):
+        assert "signs the user out of every browser" in text
+        assert "read-only" in text
+    operations = (ROOT / "docs" / "internal" / "OPERATIONS.md").read_text(encoding="utf-8")
+    assert "alembic stamp 0058 && alembic upgrade head" in operations
+    assert "Production never ran the pre-release branch" in operations

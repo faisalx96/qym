@@ -6,10 +6,10 @@
   <title>قيِّم • Project Settings</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=p0-20260930">
-  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930">
+  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
   <script src="/static/qym_safe.js?v=p0-20260930"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p0-20260930-2"></script>
+  <script src="/static/shell.js?v=p0-20260930-3"></script>
   <style>
     .settings-page { }
     .settings-header { margin-bottom: var(--space-xl); }
@@ -76,6 +76,8 @@
     .form-label { font-size: var(--font-sm); font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; }
     .form-group .form-input { width: 100%; box-sizing: border-box; background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 6px; color: var(--text-primary); padding: var(--space-sm) var(--space-md); font-size: var(--font-sm); font-family: var(--font-sans); }
 
+    .settings-archived-note { margin-top: var(--space-sm); color: var(--text-secondary); font-size: var(--font-base); line-height: 1.5; }
+    .settings-archived-note[hidden] { display: none; }
     .danger-card { border-color: rgba(239,68,68,0.3); }
     .danger-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-lg); }
     .danger-row + .danger-row { margin-top: var(--space-lg); padding-top: var(--space-lg); border-top: 1px solid var(--border-subtle); }
@@ -194,6 +196,7 @@
     <div class="settings-header">
       <h1 id="project-title">Project Settings</h1>
       <p id="project-subtitle">Manage members, API keys, and integrations for this project.</p>
+      <p class="settings-archived-note" id="settings-archived-note" role="note" hidden></p>
     </div>
 
     <div class="settings-tabs qym-tabs" role="tablist" aria-label="Project settings sections">
@@ -253,7 +256,7 @@
         <div class="card-header">
           <div><div class="card-title">API Keys</div><div class="card-subtitle">Project-scoped keys for programmatic access</div></div>
         </div>
-        <div class="add-bar">
+        <div class="add-bar" id="key-form">
           <input class="form-input" id="key-name" placeholder="Key name" />
           <button class="btn btn-primary" id="create-key-btn" type="button" style="padding:0 var(--space-md);font-size:var(--font-sm);">Create Key</button>
         </div>
@@ -276,7 +279,7 @@
             <tbody id="llm-connections-tbody"></tbody>
           </table>
         </div>
-        <div class="card-body" style="border-top:1px solid var(--border-subtle);">
+        <div class="card-body" id="llm-form" style="border-top:1px solid var(--border-subtle);">
           <div class="form-label" id="llm-form-title" style="margin-bottom:12px;">Add a connection</div>
           <input type="hidden" id="llm-edit-id" value="" />
           <div class="form-grid">
@@ -288,7 +291,7 @@
           <div class="note" id="llm-note"></div>
           <div class="llm-message" id="llm-message"></div>
         </div>
-        <div class="card-footer">
+        <div class="card-footer" id="llm-form-footer">
           <button class="btn btn-secondary" id="cancel-llm-btn" type="button" style="display:none;">Cancel</button>
           <button class="btn btn-secondary" id="test-llm-btn" type="button" style="display:none;">Test</button>
           <button class="btn btn-primary" id="save-llm-btn" type="button">Add connection</button>
@@ -384,11 +387,11 @@
         <div class="card-header"><div><div class="card-title" style="color:var(--error);">Danger Zone</div><div class="card-subtitle">Admin actions. Archiving can be undone; deleting cannot.</div></div></div>
         <div class="card-body">
           <div class="danger-row">
-            <div><div class="danger-label">Archive this project</div><div class="danger-desc">Hide the project, stop its API keys and make it read-only. Runs, datasets, members and settings are kept, and an admin can unarchive it from Admin → Projects.</div></div>
+            <div><div class="danger-label" id="archive-label">Archive this project</div><div class="danger-desc" id="archive-desc">Hide the project from the project list, stop its API keys and make it read-only. Its members can still open its runs, datasets and settings; an admin can unarchive it here or in Admin → Projects.</div></div>
             <button class="btn btn-secondary" id="archive-project-btn" type="button" style="flex-shrink:0">Archive</button>
           </div>
           <div class="danger-row">
-            <div><div class="danger-label">Delete this project</div><div class="danger-desc">Permanently delete the project with its datasets, API keys, members, LLM connections and analysis settings. A project with runs cannot be deleted until its runs are deleted and purged from Trash; archive it instead.</div></div>
+            <div><div class="danger-label">Delete this project</div><div class="danger-desc" id="delete-desc">Permanently delete the project with its datasets, API keys, members, LLM connections and analysis settings. A project with runs cannot be deleted until its runs are deleted and purged from Trash; archive it instead.</div></div>
             <button class="btn" id="delete-project-btn" type="button" style="background:var(--error);color:white;border:none;flex-shrink:0">Delete</button>
           </div>
         </div>
@@ -456,6 +459,13 @@
         return state.me?.role === 'ADMIN' || state.project?.role === 'MANAGER';
       }
 
+      // An archived project is read-only (every change answers 409), except the
+      // security actions: revoking API keys, removing members, and for admins
+      // unarchiving or deleting the project.
+      function isReadOnly() {
+        return state.project?.is_active === false;
+      }
+
       function canRevokeKey(key) {
         return state.me?.role === 'ADMIN' || canManageMembers() || key.creator?.id === state.me?.id;
       }
@@ -513,10 +523,10 @@
             <td>${key}</td>
             <td style="text-align:right">
               <div class="row-actions" style="justify-content:flex-end">
-                ${c.is_default ? '' : `<button class="btn btn-secondary" style="${act}" data-conn-default="${id}" type="button">Set default</button>`}
+                ${c.is_default || isReadOnly() ? '' : `<button class="btn btn-secondary" style="${act}" data-conn-default="${id}" type="button">Set default</button>`}
                 <button class="btn btn-secondary" style="${act}" data-conn-test="${id}" type="button">Test</button>
-                <button class="btn btn-secondary" style="${act}" data-conn-edit="${id}" type="button">Edit</button>
-                <button class="btn btn-danger" style="${act}" data-conn-delete="${id}" type="button">Delete</button>
+                ${isReadOnly() ? '' : `<button class="btn btn-secondary" style="${act}" data-conn-edit="${id}" type="button">Edit</button>
+                <button class="btn btn-danger" style="${act}" data-conn-delete="${id}" type="button">Delete</button>`}
               </div>
             </td>
           </tr>`;
@@ -712,16 +722,35 @@
         initializePromptUi();
         renderPromptStatuses();
         activatePrompt(promptUi.activeKey);
+        const readOnly = isReadOnly();
+        document.getElementById('prompt-editor-field').readOnly = readOnly;
+        // Inline actions set their own display, so hide them through style.
+        document.getElementById('restore-prompt-btn').style.display = readOnly ? 'none' : '';
+        document.getElementById('save-prompt-btn').style.display = readOnly ? 'none' : '';
       }
 
       // ── Render ──
       function render() {
         const p = state.project;
+        const readOnly = isReadOnly();
+        const isAdmin = state.me?.role === 'ADMIN';
         document.getElementById('project-title').textContent = p.name;
-        document.getElementById('project-subtitle').textContent = `Manage members, API keys, and integrations for ${p.name}.`;
+        document.getElementById('project-subtitle').textContent = readOnly
+          ? `Members, API keys, and integrations of ${p.name}.`
+          : `Manage members, API keys, and integrations for ${p.name}.`;
+        // The shell says the project is archived; say what still works here.
+        const archivedNote = document.getElementById('settings-archived-note');
+        archivedNote.hidden = !readOnly;
+        archivedNote.textContent = !readOnly ? '' : isAdmin
+          ? 'Settings are read-only while the project is archived. You can still revoke API keys and remove members, and unarchive or delete the project in Danger Zone.'
+          : canManageMembers()
+            ? 'Settings are read-only while the project is archived. You can still revoke API keys and remove members; only an admin can unarchive it.'
+            : 'Settings are read-only while the project is archived. You can still revoke your own API keys.';
 
         // General tab
         document.getElementById('gen-name').value = p.name;
+        document.getElementById('gen-name').readOnly = readOnly;
+        document.getElementById('save-general-btn').closest('.card-footer').style.display = readOnly ? 'none' : '';
         document.getElementById('gen-slug').value = p.slug;
         document.getElementById('project-summary').innerHTML = [
           ['Slug', p.slug], ['Role', p.role || 'MEMBER'], ['Members', String(state.members.length)], ['Status', p.is_active ? 'ACTIVE' : 'ARCHIVED'],
@@ -729,11 +758,18 @@
 
         renderPrompts();
 
-        // Archive and Delete are admin-only on the server too.
+        // Archive, Unarchive and Delete are admin-only on the server too.
         const dangerTab = document.getElementById('settings-tab-danger');
-        const isAdmin = state.me?.role === 'ADMIN';
         dangerTab.hidden = !isAdmin;
         dangerTab.disabled = !isAdmin;
+        document.getElementById('archive-label').textContent = readOnly ? 'Unarchive this project' : 'Archive this project';
+        document.getElementById('archive-desc').textContent = readOnly
+          ? 'Make the project editable again and return it to the project list. Its API keys that are not revoked start working again, and deleted runs in Trash resume their purge countdown.'
+          : 'Hide the project from the project list, stop its API keys and make it read-only. Its members can still open its runs, datasets and settings; an admin can unarchive it here or in Admin → Projects.';
+        document.getElementById('archive-project-btn').textContent = readOnly ? 'Unarchive' : 'Archive';
+        document.getElementById('delete-desc').textContent = readOnly
+          ? 'Permanently delete the project with its datasets, API keys, members, LLM connections and analysis settings. A project with runs cannot be deleted until its runs are deleted and purged from Trash, and purging is paused while the project is archived.'
+          : 'Permanently delete the project with its datasets, API keys, members, LLM connections and analysis settings. A project with runs cannot be deleted until its runs are deleted and purged from Trash; archive it instead.';
 
         // Members tab
         document.getElementById('member-count-label').textContent = `${state.members.length} members in this project`;
@@ -742,20 +778,25 @@
           .filter(u => !currentIds.has(u.id))
           .map(u => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.display_name || u.email)}</option>`)
           .join('');
-        document.getElementById('member-form').style.display = canManageMembers() ? 'flex' : 'none';
-        document.getElementById('member-note').textContent = canManageMembers()
-          ? 'Managers and admins can add, remove, and promote members.'
-          : 'Member management is limited to project managers and admins.';
+        document.getElementById('member-form').style.display = canManageMembers() && !readOnly ? 'flex' : 'none';
+        document.getElementById('member-note').textContent = readOnly
+          ? (canManageMembers()
+            ? 'Members can still be removed. Adding members and changing roles waits until the project is unarchived.'
+            : 'Member management is limited to project managers and admins.')
+          : canManageMembers()
+            ? 'Managers and admins can add, remove, and promote members.'
+            : 'Member management is limited to project managers and admins.';
+        const editRoles = canManageMembers() && !readOnly;
 
         document.getElementById('members-tbody').innerHTML = state.members.map(m => `
           <tr>
             <td><div style="font-weight:500;color:var(--text-primary)">${escapeHtml(m.display_name || m.email)}</div></td>
             <td><span style="font-family:var(--font-mono);font-size:var(--font-sm);color:var(--text-muted)">${escapeHtml(m.email)}</span></td>
-            <td>${canManageMembers()
+            <td>${editRoles
               ? `<select class="form-select" data-member-role="${escapeHtml(m.user_id)}"><option value="MEMBER" ${m.role==='MEMBER'?'selected':''}>Member</option><option value="MANAGER" ${m.role==='MANAGER'?'selected':''}>Manager</option></select>`
               : `<span class="role-badge qym-tag qym-tag--role ${m.role==='MANAGER'?'manager':'member'}">${escapeHtml(m.role || 'MEMBER')}</span>`}</td>
             <td style="font-size:var(--font-sm);color:var(--text-muted)">${ts(m.created_at)}</td>
-            <td style="text-align:right">${canManageMembers() ? `<div class="row-actions" style="justify-content:flex-end"><button class="btn btn-secondary" style="padding:4px 10px;font-size:var(--font-sm)" data-member-save="${escapeHtml(m.user_id)}">Save</button><button class="btn btn-danger" style="padding:4px 10px;font-size:var(--font-sm)" data-member-remove="${escapeHtml(m.user_id)}">Remove</button></div>` : ''}</td>
+            <td style="text-align:right">${canManageMembers() ? `<div class="row-actions" style="justify-content:flex-end">${editRoles ? `<button class="btn btn-secondary" style="padding:4px 10px;font-size:var(--font-sm)" data-member-save="${escapeHtml(m.user_id)}">Save</button>` : ''}<button class="btn btn-danger" style="padding:4px 10px;font-size:var(--font-sm)" data-member-remove="${escapeHtml(m.user_id)}">Remove</button></div>` : ''}</td>
           </tr>`).join('');
 
         document.querySelectorAll('[data-member-save]').forEach(btn => {
@@ -796,7 +837,8 @@
           });
         });
 
-        // API Keys tab
+        // API Keys tab: revoking stays possible while the project is archived.
+        document.getElementById('key-form').style.display = readOnly ? 'none' : '';
         document.getElementById('keys-tbody').innerHTML = state.apiKeys.map(k => `
           <tr>
             <td style="font-weight:500;color:var(--text-primary)">${escapeHtml(k.name || 'default')}</td>
@@ -808,11 +850,32 @@
 
         document.querySelectorAll('[data-key-revoke]').forEach(btn => {
           btn.addEventListener('click', async () => {
-            if (!confirm('Revoke this API key?')) return;
-            await fetchJson(`v1/projects/${state.project.id}/api-keys/${btn.dataset.keyRevoke}`, { method: 'DELETE' });
+            const key = state.apiKeys.find(k => k.id === btn.dataset.keyRevoke);
+            const lines = [`Revoke the API key "${key ? (key.name || 'default') : 'this key'}"? Anything using it stops working at once. This cannot be undone.`];
+            if (window.QymShell && window.QymShell.openConfirmDialog) {
+              const confirmation = await window.QymShell.openConfirmDialog({
+                title: 'Revoke API key?',
+                description: lines,
+                confirmLabel: 'Revoke key',
+                confirmClass: 'shell-btn-danger',
+              });
+              if (!confirmation || !confirmation.confirmed) return;
+            } else if (!confirm(lines.join('\n'))) {
+              return;
+            }
+            try {
+              await fetchJson(`v1/projects/${state.project.id}/api-keys/${btn.dataset.keyRevoke}`, { method: 'DELETE' });
+              toast('API key revoked', 'success');
+            } catch (err) {
+              toast('Failed: ' + (err.message || 'Unknown error'), 'error');
+            }
             await load();
           });
         });
+
+        // LLM connections: only the dry-run Test stays while archived.
+        document.getElementById('llm-form').hidden = readOnly;
+        document.getElementById('llm-form-footer').style.display = readOnly ? 'none' : '';
       }
 
       // ── Event handlers ──
@@ -1165,26 +1228,59 @@
         return `This permanently deletes "${name}" with ${list}.`;
       }
 
+      // What archiving does, as the Admin > Projects dialog says it.
+      function archiveDialogLines(name) {
+        return [
+          `"${name}" will be hidden from the project list and its API keys will stop working.`,
+          'Admins and its members can still open its runs, datasets and settings, read-only. Nothing can be changed until an admin unarchives it, except that admins and managers can still revoke API keys and remove members, and an admin can delete the project.',
+          'Deleted runs of the project stay in Trash: their purge is paused until it is unarchived.',
+        ];
+      }
+
       async function archiveProject() {
         await fetchJson(`v1/admin/projects/${state.project.id}/archive`, { method: 'POST' });
         handleProjectRemovalSuccess('Project archived');
       }
 
+      async function unarchiveProject() {
+        const name = state.project.name;
+        if (window.QymShell && window.QymShell.confirmUnarchiveProject) {
+          // Names the API keys that start working again; they can be revoked first.
+          const confirmation = await window.QymShell.confirmUnarchiveProject({ id: state.project.id, name });
+          if (confirmation && confirmation.revokeFirst) {
+            document.getElementById('settings-tab-apikeys').click();
+            return;
+          }
+          if (!confirmation || !confirmation.confirmed) return;
+        } else if (!confirm(`Unarchive "${name}"? Its API keys that are not revoked start working again.`)) {
+          return;
+        }
+        try {
+          const result = await fetchJson(`v1/admin/projects/${state.project.id}/unarchive`, { method: 'POST' });
+          if (window.QymShell && window.QymShell.upsertProject && result) window.QymShell.upsertProject(result);
+          toast('Project unarchived', 'success');
+          await load();
+        } catch (err) {
+          showProjectRemovalError(err);
+        }
+      }
+
       document.getElementById('archive-project-btn').addEventListener('click', async () => {
         if (!state.project) return;
+        if (isReadOnly()) {
+          await unarchiveProject();
+          return;
+        }
         const name = state.project.name;
         if (window.QymShell && window.QymShell.confirmArchiveProject) {
           // Lists runs still in progress: archiving loses their remaining results.
           const confirmation = await window.QymShell.confirmArchiveProject({
             id: state.project.id,
             name,
-            description: [
-              `"${name}" will be hidden from navigation and its API keys will stop working.`,
-              'Runs, datasets, members and settings are kept and stay readable, but nothing can be changed until an admin unarchives it from Admin → Projects.',
-            ],
+            description: archiveDialogLines(name),
           });
           if (!confirmation || !confirmation.confirmed) return;
-        } else if (!confirm(`Archive "${name}"? It will be hidden and its API keys will stop working. Nothing is deleted, and an admin can unarchive it.`)) {
+        } else if (!confirm(archiveDialogLines(name).join('\n'))) {
           return;
         }
         try {
@@ -1206,6 +1302,21 @@
           return;
         }
         if (!preview) return;
+        if (!preview.can_delete && preview.archived) {
+          // Already archived: its deleted runs wait in Trash with purging paused.
+          if (hasDialog) {
+            const choice = await window.QymShell.openConfirmDialog({
+              title: 'This project cannot be deleted yet',
+              description: [preview.blocked_reason],
+              cancelLabel: 'Close',
+              confirmLabel: 'Open Deleted Runs',
+            });
+            if (choice && choice.confirmed) window.QymShell.navigateTo(apiUrl('trash'));
+          } else {
+            alert(preview.blocked_reason);
+          }
+          return;
+        }
         if (!preview.can_delete) {
           let archiveInstead = false;
           if (hasDialog) {
@@ -1253,7 +1364,12 @@
         }
       });
 
-      load().catch(err => {
+      load().then(() => {
+        // ?tab=apikeys opens a tab directly (Admin > Projects: "Revoke keys first").
+        const wanted = new URLSearchParams(window.location.search).get('tab');
+        const tab = wanted ? document.getElementById('settings-tab-' + wanted) : null;
+        if (tab && !tab.hidden && !tab.disabled) tab.click();
+      }).catch(err => {
         document.querySelector('main').innerHTML = `<div class="settings-page"><div class="card"><div class="card-body">${escapeHtml(err.message)}</div></div></div>`;
       });
     })();

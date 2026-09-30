@@ -21,6 +21,10 @@
   let _projects = [];
   let _currentProject = null;
   let _routeCtx = null;
+  // An archived project stays out of the switcher list (/v1/me lists active
+  // projects), but admins and its members open it read-only from Admin or a
+  // link: the shell loads it by slug and keeps it here.
+  let _archivedProject = null;
 
   // ══════════════════════════════════════════════════
   // URL PARSING
@@ -105,7 +109,7 @@
       }
       else if (rest.startsWith('runs/')) { page = 'run-detail'; subId = rest.slice(5); }
 
-      return { projectSlug: slug, page: page, subId: subId };
+      return { projectSlug: slug, page: page, subId: subId, explicitProject: true };
     }
 
     // Legacy run detail: /run/{id} — keep project context from last known project.
@@ -218,6 +222,7 @@
 
   function projectExists(projectSlug) {
     if (!projectSlug) return false;
+    if (_archivedProject && _archivedProject.slug === projectSlug) return true;
     var projects = _user && Array.isArray(_user.projects) ? _user.projects : _projects;
     return projects.some(function (project) {
       return project && project.slug === projectSlug;
@@ -230,6 +235,9 @@
       _currentProject = _user.projects.find(function (project) {
         return project && project.slug === _routeCtx.projectSlug;
       }) || null;
+      if (!_currentProject && _archivedProject && _archivedProject.slug === _routeCtx.projectSlug) {
+        _currentProject = _archivedProject;
+      }
     } else {
       _currentProject = null;
     }
@@ -241,10 +249,58 @@
       } else {
         sidebar.classList.add('no-project');
       }
+      sidebar.classList.toggle('project-archived', isProjectArchived());
     }
 
     var triggerText = document.querySelector('.project-trigger-text');
     if (triggerText && _currentProject) triggerText.textContent = _currentProject.name;
+    // Pages may render their own crumbs, so the tag is updated in place.
+    var archivedTag = document.querySelector('.breadcrumb-project-btn .project-archived-tag');
+    if (archivedTag && !isProjectArchived()) archivedTag.remove();
+    if (!archivedTag && triggerText && isProjectArchived()) {
+      triggerText.insertAdjacentHTML('afterend', '<span class="project-archived-tag">Archived</span>');
+    }
+    renderArchivedNotice();
+  }
+
+  // The current project is archived: its pages are read-only and every write
+  // answers 409 "Project is archived", so pages leave their edit controls out.
+  function isProjectArchived() {
+    return !!(_currentProject && _currentProject.is_active === false);
+  }
+
+  // Load an archived project named in the URL (not in /v1/me). Only archived
+  // projects are kept: an active project missing from the list is one the
+  // user cannot open, which stays "Project not found".
+  async function loadArchivedProject(slug) {
+    if (!slug) return false;
+    try {
+      var res = await fetch(apiUrl('v1/projects/by-slug/' + encodeURIComponent(slug)), { credentials: 'same-origin' });
+      if (!res.ok) return false;
+      var project = await res.json();
+      if (!project || project.slug !== slug || project.is_active !== false) return false;
+      _archivedProject = project;
+      return true;
+    } catch (_err) {
+      return false;
+    }
+  }
+
+  // Pages whose read-only state the shell announces. Compare and Reviews keep
+  // their own notices (they can mix projects).
+  var ARCHIVED_NOTICE_PAGES = {
+    runs: true, overview: true, charts: true, models: true, datasets: true, settings: true, 'run-detail': true,
+  };
+
+  function renderArchivedNotice() {
+    var notice = document.getElementById('shell-archived-notice');
+    if (!notice) return;
+    var show = isProjectArchived() && !!(_routeCtx && ARCHIVED_NOTICE_PAGES[_routeCtx.page]);
+    notice.hidden = !show;
+    notice.innerHTML = show
+      ? '<strong>Read-only.</strong> "' + esc(_currentProject.name || _currentProject.slug) + '" is archived. '
+        + 'You can open its runs, datasets and settings, but nothing can be changed until an admin unarchives it.'
+      : '';
   }
 
   // A remembered project that is gone (archived, or access removed) is no
@@ -257,9 +313,9 @@
   }
 
   // Pages reached without a project in the URL (/run/{id}) tell the shell
-  // which project they belong to once they know. An archived project, or one
-  // the user is not a member of, gives no project context: the sidebar shows
-  // no project links and the breadcrumb names the archived project.
+  // which project they belong to once they know. An archived project becomes
+  // a read-only context (whoever can view the run can open its project); one
+  // the user cannot open gives no project context.
   var _pendingPageProject = null;
   function setPageProject(project) {
     if (!_routeCtx) return;
@@ -269,12 +325,23 @@
     }
     _pendingPageProject = null;
     var slug = project && project.slug ? String(project.slug) : null;
-    var usable = !!(slug && !project.archived && projectExists(slug));
+    var archived = !!(project && project.archived);
+    if (slug && archived && !projectExists(slug)) {
+      // Enough for the context now; the full project (role) follows.
+      _archivedProject = { id: project.id, slug: slug, name: String(project.name || slug), is_active: false, role: '' };
+      loadArchivedProject(slug).then(function (loaded) {
+        if (loaded && _routeCtx && _routeCtx.projectSlug === slug) {
+          updateCurrentProjectForRoute();
+          renderBreadcrumbs(computeBreadcrumbs(_routeCtx));
+        }
+      });
+    }
+    var usable = !!(slug && projectExists(slug));
     _routeCtx.projectSlug = usable ? slug : null;
     _routeCtx.guessedProject = false;
-    _routeCtx.archivedProjectName = !usable && project && project.archived ? String(project.name || slug || '') : null;
     updateCurrentProjectForRoute();
-    if (usable) {
+    // An archived project never becomes the remembered project.
+    if (usable && !archived) {
       try { localStorage.setItem('qym:last-project-slug', slug); } catch (_err) { /* private mode */ }
     }
     renderBreadcrumbs(computeBreadcrumbs(_routeCtx));
@@ -313,6 +380,11 @@
 
   function upsertProject(project) {
     if (!project) return;
+    // Unarchived: it is an ordinary project again.
+    if (_archivedProject && project.is_active !== false
+        && ((project.id && project.id === _archivedProject.id) || (project.slug && project.slug === _archivedProject.slug))) {
+      _archivedProject = null;
+    }
     var nextProjects = (_user && Array.isArray(_user.projects) ? _user.projects : _projects).slice();
     var idx = nextProjects.findIndex(function (item) {
       if (!item) return false;
@@ -524,7 +596,6 @@
       crumbs.push({ label: ctx.subId || 'Run', href: getAppRootPath() + 'run/' + encodeURIComponent(ctx.subId || '') });
       crumbs.push({ label: 'Auto-analysis', current: true });
     } else if (ctx.page === 'run-detail') {
-      if (ctx.archivedProjectName) crumbs.push({ label: 'Archived project: ' + ctx.archivedProjectName, current: true });
       crumbs.push({ label: ctx.subId || 'Run Detail', current: true });
     } else {
       crumbs.push({ label: PAGE_LABELS[ctx.page] || 'Home', current: true });
@@ -550,6 +621,7 @@
                   : iconRaw('project', 10, 10))
           +   '</span>'
           +   '<span class="project-trigger-text">' + esc(c.label) + '</span>'
+          +   (isProjectArchived() ? '<span class="project-archived-tag">Archived</span>' : '')
           +   '<span class="project-trigger-chevron">' + iconRaw('chevronDown', 10, 10) + '</span>'
           + '</button>'
           + '<div class="project-popover" id="shell-project-popover">'
@@ -602,7 +674,11 @@
     var list = document.getElementById('shell-project-list');
     if (!list) return;
     var query = (filter || '').toLowerCase();
-    var filtered = _projects.filter(function (p) {
+    var listed = _projects.slice();
+    if (isProjectArchived() && !listed.some(function (p) { return p.slug === _currentProject.slug; })) {
+      listed.unshift(_currentProject);
+    }
+    var filtered = listed.filter(function (p) {
       return !query || p.name.toLowerCase().indexOf(query) !== -1 || p.slug.toLowerCase().indexOf(query) !== -1;
     });
     var html = '';
@@ -611,6 +687,7 @@
       html += '<a class="popover-item' + (isActive ? ' active' : '') + '" data-slug="' + esc(p.slug) + '" href="' + esc(projectUrl(p.slug)) + '">'
         + '<span class="popover-item-icon">' + identiconHTML(p.slug, { cell: 2, gap: 1, showEmpty: false }) + '</span>'
         + '<span>' + esc(p.name) + '</span>'
+        + (p.is_active === false ? '<span class="project-archived-tag">Archived</span>' : '')
         + (isActive ? '<span class="popover-item-check">' + iconRaw('check', 14, 14) + '</span>' : '')
         + '</a>';
     });
@@ -832,6 +909,9 @@
         +   '</div>'
         +   '<div class="shell-modal-footer">'
         +     '<button class="shell-btn shell-btn-secondary" id="shell-confirm-cancel" type="button">' + esc(options.cancelLabel || 'Cancel') + '</button>'
+        +     (options.altLabel
+                ? '<button class="shell-btn shell-btn-secondary" id="shell-confirm-alt" type="button">' + esc(options.altLabel) + '</button>'
+                : '')
         +     '<button class="shell-btn ' + (options.confirmClass || 'shell-btn-primary') + '" id="shell-confirm-submit" type="button">' + esc(options.confirmLabel || 'Confirm') + '</button>'
         +   '</div>'
         + '</div>';
@@ -842,6 +922,7 @@
 
       var closeBtn = dialog.querySelector('.shell-modal-close');
       var cancelBtn = document.getElementById('shell-confirm-cancel');
+      var altBtn = document.getElementById('shell-confirm-alt');
       var confirmBtn = document.getElementById('shell-confirm-submit');
       var input = document.getElementById('shell-confirm-input');
       var errorEl = document.getElementById('shell-confirm-error');
@@ -893,6 +974,8 @@
 
       if (closeBtn) closeBtn.addEventListener('click', function () { close({ confirmed: false, value: null }); });
       if (cancelBtn) cancelBtn.addEventListener('click', function () { close({ confirmed: false, value: null }); });
+      // The optional third action (altLabel) resolves { alternative: true }.
+      if (altBtn) altBtn.addEventListener('click', function () { close({ confirmed: false, alternative: true, value: null }); });
       if (confirmBtn) confirmBtn.addEventListener('click', submit);
       if (input) {
         input.addEventListener('input', refreshState);
@@ -989,12 +1072,70 @@
     return openConfirmDialog({
       title: 'Archive project?',
       description: project.description || [
-        '"' + name + '" will be hidden from navigation and its API keys will stop working.',
+        '"' + name + '" will be hidden from the project list and its API keys will stop working.',
       ],
       warning: warning,
       confirmLabel: warning ? 'Archive anyway' : 'Archive project',
       confirmClass: warning ? 'shell-btn-danger' : 'shell-btn-primary',
     });
+  }
+
+  // Unarchive confirmation shared by Admin > Projects and Project Settings.
+  // Unarchiving turns the project's API keys back on at once, so name the keys
+  // that start working again and offer to revoke them first, which stays
+  // possible while the project is archived (Project Settings > API Keys).
+  // Resolves like openConfirmDialog, or { confirmed: false, revokeFirst: true }.
+  async function confirmUnarchiveProject(project) {
+    project = project || {};
+    var name = project.name || 'this project';
+    var preview = null;
+    try {
+      var res = await fetch(apiUrl('v1/admin/projects/' + encodeURIComponent(project.id) + '/unarchive-preview'), {
+        credentials: 'same-origin',
+      });
+      if (res.status === 403) {
+        toast('Only an admin can unarchive a project.', 'error');
+        return { confirmed: false };
+      }
+      if (res.ok) preview = await res.json();
+    } catch (_err) {
+      preview = null;
+    }
+    var count = preview ? Number(preview.active_api_key_count) || 0 : 0;
+    var warning = null;
+    if (!preview) {
+      warning = {
+        lead: 'API keys could not be checked.',
+        text: 'Unarchiving turns every API key of this project that is not revoked back on at once.',
+      };
+    } else if (count > 0) {
+      var keys = Array.isArray(preview.active_api_keys) ? preview.active_api_keys : [];
+      warning = {
+        lead: count === 1 ? '1 API key starts working again.' : count + ' API keys start working again.',
+        text: 'Unarchiving turns ' + (count === 1 ? 'it' : 'them') + ' back on at once. To keep a key off, revoke it first in Project Settings > API Keys; that works while the project stays archived.',
+        itemsLabel: 'API keys that start working again',
+        items: keys.map(function (key) {
+          var owner = key.creator ? (key.creator.display_name || key.creator.email) : '';
+          return { title: key.name || 'default', meta: owner ? 'created by ' + owner : '' };
+        }),
+        more: Math.max(0, count - keys.length),
+      };
+    }
+    var keysAhead = !preview || count > 0;
+    var result = await openConfirmDialog({
+      title: 'Unarchive project?',
+      description: [
+        '"' + name + '" returns to the project list and can be changed again.',
+        preview && count === 0 ? 'It has no active API keys, so no key starts working again.' : '',
+        'Deleted runs of the project in Trash resume their purge countdown where it paused.',
+      ],
+      warning: warning,
+      altLabel: keysAhead ? 'Revoke keys first' : '',
+      confirmLabel: keysAhead ? 'Unarchive anyway' : 'Unarchive project',
+      confirmClass: keysAhead ? 'shell-btn-danger' : 'shell-btn-primary',
+    });
+    if (result && result.alternative) return { confirmed: false, revokeFirst: true };
+    return result;
   }
 
   // ══════════════════════════════════════════════════
@@ -1350,7 +1491,9 @@
   // ══════════════════════════════════════════════════
 
   function switchProject(slug) {
-    localStorage.setItem('qym:last-project-slug', slug);
+    if (!(_archivedProject && _archivedProject.slug === slug)) {
+      localStorage.setItem('qym:last-project-slug', slug);
+    }
     navigateTo(projectUrl(slug));
   }
 
@@ -1475,6 +1618,10 @@
     setActiveNav(_routeCtx.page);
     updateCurrentProjectForRoute();
     if (_user) dropMissingGuessedProject();
+    if (_routeCtx.explicitProject && _user && !projectExists(_routeCtx.projectSlug)
+        && await loadArchivedProject(_routeCtx.projectSlug)) {
+      updateCurrentProjectForRoute();
+    }
 
     if (_routeCtx.projectSlug && _user && !projectExists(_routeCtx.projectSlug)) {
       renderProjectNotFound(_routeCtx.projectSlug);
@@ -1652,8 +1799,16 @@
       content.appendChild(document.body.firstChild);
     }
 
+    // Read-only notice of an archived project (renderArchivedNotice).
+    var archivedNotice = document.createElement('div');
+    archivedNotice.className = 'shell-archived-notice';
+    archivedNotice.id = 'shell-archived-notice';
+    archivedNotice.setAttribute('role', 'note');
+    archivedNotice.hidden = true;
+
     // Assemble
     mainArea.appendChild(topbar);
+    mainArea.appendChild(archivedNotice);
     mainArea.appendChild(content);
     wrapper.appendChild(sidebar);
     wrapper.appendChild(mainArea);
@@ -1695,11 +1850,16 @@
       }
       if (!res.ok) return;
       _user = await res.json();
+      _projects = _user.projects || [];
+      // An archived project named in the URL opens read-only. Load it before
+      // pages see the user, so they start from the right project.
+      if (_routeCtx.explicitProject && !projectExists(_routeCtx.projectSlug)) {
+        await loadArchivedProject(_routeCtx.projectSlug);
+      }
       window.__QYM_USER__ = _user;
       populateUser(_user);
 
       // Fetch all projects for the switcher
-      _projects = _user.projects || [];
       updateCurrentProjectForRoute();
       dropMissingGuessedProject();
       if (_pendingPageProject) setPageProject(_pendingPageProject);
@@ -1819,6 +1979,8 @@
     openCreateProjectDialog: openCreateProjectDialog,
     openConfirmDialog: openConfirmDialog,
     confirmArchiveProject: confirmArchiveProject,
+    confirmUnarchiveProject: confirmUnarchiveProject,
+    isProjectArchived: isProjectArchived,
     upsertProject: upsertProject,
     removeProject: removeProject,
     projectExists: projectExists,

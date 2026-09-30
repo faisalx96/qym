@@ -4,7 +4,9 @@ Age-based span retention preserves items, attempts, scores, and summaries.
 Raw spans older than ``QYM_SPAN_RETENTION_DAYS`` are removed by dropping whole
 monthly partitions — instant, no dead tuples, disk returned immediately.
 Soft-deleted runs older than ``QYM_DELETED_RUN_GRACE_DAYS`` are hard-deleted
-(children cascade via migration 0054).
+(children cascade via migration 0054). Purging pauses while a run's project is
+archived (Restore is refused there too) and resumes on unarchive where it
+stopped: ``resume_purge_clocks`` moves the run's purge clock forward.
 """
 
 from __future__ import annotations
@@ -13,8 +15,9 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, select, text, update
 from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -90,19 +93,77 @@ def drop_expired_span_partitions(engine: Engine, *, retention_days: int, now: da
     return dropped
 
 
-def purge_due_at(deleted_at: Optional[datetime], grace_days: int) -> Optional[datetime]:
-    """When ``purge_soft_deleted_runs`` may hard-delete a run (None: never)."""
+def purge_due_at(
+    deleted_at: Optional[datetime],
+    grace_days: int,
+    purge_clock_started_at: Optional[datetime] = None,
+) -> Optional[datetime]:
+    """When ``purge_soft_deleted_runs`` may hard-delete a run (None: never).
+
+    The grace period counts from ``purge_clock_started_at`` once an unarchive
+    has moved it forward, else from ``deleted_at``. A run of an archived
+    project is not purged at all until the project is unarchived.
+    """
     if deleted_at is None or grace_days <= 0:
         return None
-    return deleted_at + timedelta(days=grace_days)
+    return max(deleted_at, purge_clock_started_at or deleted_at) + timedelta(days=grace_days)
+
+
+def resume_purge_clocks(db: Session, project_id: str, paused: timedelta) -> int:
+    """Credit the time a project spent archived to its deleted runs' purge clocks.
+
+    Runs as part of the unarchive transaction, through the session's connection
+    so the dashboard outbox does not see a source change. A project's Trash is
+    small; each run keeps its own clock, so a run deleted between two archive
+    periods is credited only for the second.
+    """
+    from qym_platform.db.models import Run
+
+    if paused <= timedelta(0):
+        return 0
+    runs = Run.__table__
+    conn = db.connection()
+    rows = conn.execute(
+        select(runs.c.id, runs.c.deleted_at, runs.c.purge_clock_started_at).where(
+            runs.c.project_id == project_id, runs.c.deleted_at.isnot(None)
+        )
+    ).all()
+    if not rows:
+        return 0
+    conn.execute(
+        update(runs)
+        .where(runs.c.id == bindparam("run_id"))
+        .values(purge_clock_started_at=bindparam("clock")),
+        [
+            {"run_id": row.id, "clock": max(row.deleted_at, row.purge_clock_started_at or row.deleted_at) + paused}
+            for row in rows
+        ],
+    )
+    return len(rows)
+
+
+# A deleted run is due once its purge clock ran out and its project is active.
+# ``deleted_at`` never runs ahead of the clock, so its index still bounds the
+# scan; the clock and project checks only filter that range. Kept in one place
+# for the candidate query, the per-run recheck and the DELETE itself.
+_PURGE_DUE = (
+    "deleted_at IS NOT NULL AND deleted_at < :c"
+    " AND (purge_clock_started_at IS NULL OR purge_clock_started_at < :c)"
+    " AND EXISTS (SELECT 1 FROM projects p WHERE p.id = runs.project_id AND p.is_active = :active)"
+)
 
 
 def purge_soft_deleted_runs(engine: Engine, *, grace_days: int, limit: int = 50, now: datetime = None) -> List[str]:
-    """Hard-delete runs soft-deleted more than ``grace_days`` ago (children cascade)."""
+    """Hard-delete runs soft-deleted more than ``grace_days`` ago (children cascade).
+
+    Runs of an archived project are skipped: purging pauses until an admin
+    unarchives it (``resume_purge_clocks`` then credits the paused time).
+    """
     if grace_days <= 0:
         return []
     now = now or datetime.utcnow()
     cutoff = now - timedelta(days=grace_days)
+    due = {"c": cutoff, "active": True}
     purged: List[str] = []
     with engine.begin() as conn:
         # The legacy FK still prevents cascades while the span copy is pending.
@@ -116,21 +177,20 @@ def purge_soft_deleted_runs(engine: Engine, *, grace_days: int, limit: int = 50,
         ids = [
             r[0]
             for r in conn.execute(
-                text(
-                    "SELECT id FROM runs WHERE deleted_at IS NOT NULL AND deleted_at < :c ORDER BY deleted_at LIMIT :n"
-                ),
-                {"c": cutoff, "n": limit},
+                text(f"SELECT id FROM runs WHERE {_PURGE_DUE} ORDER BY deleted_at LIMIT :n"),
+                {**due, "n": limit},
             )
         ]
     for run_id in ids:
         with engine.begin() as conn:
             if engine.dialect.name == "postgresql":
                 conn.execute(text("SET LOCAL lock_timeout = '5s'"))
-            candidate = "SELECT id FROM runs WHERE id = :r AND deleted_at < :c"
+            # Rechecked: the project may have been archived since the scan.
+            candidate = f"SELECT id FROM runs WHERE id = :r AND {_PURGE_DUE}"
             if engine.dialect.name == "postgresql":
                 candidate += " FOR UPDATE SKIP LOCKED"
             if (
-                conn.execute(text(candidate), {"r": run_id, "c": cutoff}).scalar()
+                conn.execute(text(candidate), {**due, "r": run_id}).scalar()
                 is None
             ):
                 continue
@@ -145,8 +205,8 @@ def purge_soft_deleted_runs(engine: Engine, *, grace_days: int, limit: int = 50,
             # Cascade source rows before taking the partition lock: backfill
             # and normal writes also lock source rows before their partition.
             deleted = conn.execute(
-                text("DELETE FROM runs WHERE id = :r AND deleted_at < :c"),
-                {"r": run_id, "c": cutoff},
+                text(f"DELETE FROM runs WHERE id = :r AND {_PURGE_DUE}"),
+                {**due, "r": run_id},
             ).rowcount
             if not deleted:
                 continue

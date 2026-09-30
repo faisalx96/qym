@@ -6,10 +6,10 @@
   <title>قيِّم • Deleted Runs</title>
   <link rel="icon" type="image/png" href="./static/qym_icon.png">
   <link rel="stylesheet" href="./static/dashboard.css?v=p0-20260930">
-  <link rel="stylesheet" href="./static/shell.css?v=p0-20260930">
+  <link rel="stylesheet" href="./static/shell.css?v=p0-20260930-3">
   <script src="./static/qym_safe.js?v=p0-20260930"></script>
   <script src="./static/auth.js?v=p0-20260930"></script>
-  <script src="./static/shell.js?v=p0-20260930-2"></script>
+  <script src="./static/shell.js?v=p0-20260930-3"></script>
   <style>
     .trash-container {
       padding: var(--space-lg) var(--space-xl);
@@ -172,6 +172,13 @@
       font-size: var(--font-sm);
       color: var(--text-secondary);
       white-space: nowrap;
+    }
+
+    /* Purging waits while the run's project is archived; wraps like a note. */
+    .trash-meta.trash-purge-paused {
+      white-space: normal;
+      max-width: 170px;
+      line-height: 1.4;
     }
 
     .trash-meta-sub {
@@ -398,7 +405,7 @@
         const value = el('trash-stat-retention');
         const note = el('trash-stat-retention-note');
         if (graceDays > 0) {
-          if (copy) copy.textContent = `Deleted runs are permanently removed ${pluralDays(graceDays)} after deletion. Restore a run before its purge date to keep it.`;
+          if (copy) copy.textContent = `Deleted runs are permanently removed ${pluralDays(graceDays)} after deletion, not counting time their project spends archived. Restore a run before its purge date to keep it.`;
           if (value) value.textContent = pluralDays(graceDays);
           if (note) note.textContent = 'After this, a deleted run and all its results are permanently removed.';
         } else {
@@ -423,7 +430,12 @@
         };
       }
 
-      function renderPurgeCell(info) {
+      function renderPurgeCell(info, run) {
+        // Purging waits while the run's project is archived (Restore does too);
+        // the countdown resumes where it stopped once the project is unarchived.
+        if (run && run.purge_paused) {
+          return '<div class="trash-meta trash-purge-paused" title="The countdown resumes where it stopped when an admin unarchives the project">Purge paused while the project is archived</div>';
+        }
         if (!info) {
           return '<div class="trash-meta">Not scheduled</div>';
         }
@@ -523,7 +535,7 @@
                       <td>
                         <div class="trash-meta">${escapeHtml(run.deleted_by_name || run.deleted_by_user_id || '—')}</div>
                       </td>
-                      <td>${renderPurgeCell(purge)}</td>
+                      <td>${renderPurgeCell(purge, run)}</td>
                       <td class="trash-actions">
                         ${run.project_archived
                           // Archived projects are read-only: unarchive the project first.

@@ -108,6 +108,13 @@
     } catch {}
   }
 
+  // An archived project opens read-only: its runs, charts and models stay
+  // readable, every change answers 409, so no write control is offered.
+  function isProjectReadOnly() {
+    if (state.currentProject && state.currentProject.is_active === false) return true;
+    return !!(window.QymShell && window.QymShell.isProjectArchived && window.QymShell.isProjectArchived());
+  }
+
   function projectUrl(slug, suffix = '') {
     const encoded = encodeURIComponent(slug || '');
     const cleanSuffix = String(suffix || '').replace(/^\/+/, '');
@@ -3108,6 +3115,11 @@
     const causeCount = isPassScoped
       ? Number(analysisCauseCount || 0)
       : Number(run.analysis_cause_count || 0);
+    if (isProjectReadOnly()) {
+      if (causeCount <= 0) return '<span class="metric-na">—</span>';
+      const count = `${causeCount} cause${causeCount === 1 ? '' : 's'}`;
+      return `<span style="color:var(--text-muted);font-size:var(--font-sm)" title="${count} found">${count}</span>`;
+    }
     const analyzerHref = analyzerUrlForRun(run, passNumber);
     if (causeCount > 0) {
       const label = `${causeCount} cause${causeCount === 1 ? '' : 's'}`;
@@ -3698,11 +3710,12 @@
       const projectRole = (state.currentProject && state.currentProject.role) || '';
       const isOwner = !!(state.currentUser && run.owner && run.owner.id === state.currentUser.id);
       const isProjectManager = globalRole === 'ADMIN' || projectRole === 'MANAGER';
-      const canApprove = isProjectManager && status === 'SUBMITTED';
-      const canUnapprove = isProjectManager && status === 'APPROVED';
-      const canUnreject = isProjectManager && status === 'REJECTED';
-      const canSubmit = isOwner && (status === 'COMPLETED' || status === 'FAILED' || status === 'REJECTED');
-      const canDelete = globalRole === 'ADMIN' || isProjectManager || isOwner;
+      const writable = !isProjectReadOnly();
+      const canApprove = writable && isProjectManager && status === 'SUBMITTED';
+      const canUnapprove = writable && isProjectManager && status === 'APPROVED';
+      const canUnreject = writable && isProjectManager && status === 'REJECTED';
+      const canSubmit = writable && isOwner && (status === 'COMPLETED' || status === 'FAILED' || status === 'REJECTED');
+      const canDelete = writable && (globalRole === 'ADMIN' || isProjectManager || isOwner);
       const progressText = (status === 'RUNNING' && run.progress_total)
         ? `${run.progress_completed || 0}/${run.progress_total}`
         : (status === 'RUNNING' ? `${run.progress_completed || 0}` : '');
@@ -4955,7 +4968,7 @@
           return (canManageProject || ownsRun) && passIsDeletable;
         });
       const hasSelectedPasses = selectedRefs.some(isPassRef);
-      deleteBtn.style.display = isCohortMode ? 'none' : 'inline-flex';
+      deleteBtn.style.display = isCohortMode || isProjectReadOnly() ? 'none' : 'inline-flex';
       deleteBtn.disabled = !allDeletable;
       deleteBtn.title = allDeletable
         ? (hasSelectedPasses ? 'Delete selected runs and passes' : 'Delete selected runs')
@@ -4971,7 +4984,7 @@
         const isOwner = !!(currentUserId && r.owner && r.owner.id === currentUserId);
         return isOwner && (status === 'COMPLETED' || status === 'FAILED' || status === 'REJECTED');
       });
-      publishBtn.style.display = (allSubmittable && !isCohortMode) ? 'inline-flex' : 'none';
+      publishBtn.style.display = (allSubmittable && !isCohortMode && !isProjectReadOnly()) ? 'inline-flex' : 'none';
       publishBtn.textContent = 'Submit';
     }
   }
@@ -6846,8 +6859,10 @@
     showDashboardChrome();
     state.runs = data;
     if (data && data.project) {
-      state.currentProject = data.project;
-      if (state.currentProject && state.currentProject.slug) {
+      // Keep what the list payload does not carry (role, is_active).
+      const known = state.currentProject && state.currentProject.slug === data.project.slug ? state.currentProject : {};
+      state.currentProject = { ...known, ...data.project };
+      if (state.currentProject.slug && !isProjectReadOnly()) {
         storeProjectSlug(state.currentProject.slug);
       }
     }
@@ -7090,10 +7105,13 @@
 
     const currentSlug = getProjectSlugFromPath();
     if (currentSlug) {
-      const current = projects.find(project => project.slug === currentSlug) || null;
+      // An archived project is not in me.projects: the shell loads it from the URL.
+      const shellProject = window.QymShell && window.QymShell.getProject ? window.QymShell.getProject() : null;
+      const current = projects.find(project => project.slug === currentSlug)
+        || (shellProject && shellProject.slug === currentSlug ? shellProject : null);
       state.currentProject = current || (me?.role === 'ADMIN' ? { slug: currentSlug, name: currentSlug, role: 'ADMIN' } : null);
       if (state.currentProject) {
-        storeProjectSlug(state.currentProject.slug);
+        if (!isProjectReadOnly()) storeProjectSlug(state.currentProject.slug);
         hideProjectChooser();
         return true;
       }

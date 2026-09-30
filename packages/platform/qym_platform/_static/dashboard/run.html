@@ -6,10 +6,10 @@
   <title>قيِّم • Run Detail</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=p0-20260930">
-  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930">
+  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
   <script src="/static/qym_safe.js?v=p0-20260930"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p0-20260930-2"></script>
+  <script src="/static/shell.js?v=p0-20260930-3"></script>
   <script src="/static/metrics.js?v=p0-20260930-3"></script>
   <script src="/static/run_details.js?v=p0-20260930"></script>
   <script src="/static/trace_viewer.js?v=p0-20260930"></script>
@@ -6931,10 +6931,8 @@
           if (!project || !project.slug) return;
           // /run/{id} starts from the last visited project; give the shell the real one.
           if (!IS_EXPORT && window.QymShell && window.QymShell.setPageProject) window.QymShell.setPageProject(project);
-          // An archived project's pages answer "Project not found"; send links to the project list.
-          const home = project.archived
-            ? (window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '') + '/'
-            : projectUrl(project.slug);
+          // An archived project's runs list stays readable, like an active one's.
+          const home = projectUrl(project.slug);
           setHrefIfPresent('back-link-header', home);
           setHrefIfPresent('back-link-error', home);
           setHrefIfPresent('back-link-empty', home);
@@ -7325,6 +7323,8 @@
       document.addEventListener('qym:before-navigate', () => {
         itemRenderVersion++;
         if (runDetails) runDetails.stop();
+        // The body outlives in-app navigation: the next run may be editable.
+        document.body.classList.remove('run-read-only');
       }, { once: true });
 
       function requiredTextSearches() {
@@ -14712,6 +14712,8 @@
       function applyReadOnlyMode() {
         if (!isProjectReadOnly()) return;
         document.body.classList.add('run-read-only');
+        // The shell announces an archived project above every one of its pages.
+        if (window.QymShell && window.QymShell.isProjectArchived) return;
         const content = el('run-content');
         if (!content || content.querySelector('.run-read-only-notice')) return;
         const notice = document.createElement('div');

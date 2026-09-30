@@ -207,17 +207,23 @@ def test_archived_project_pauses_keys_until_unarchived(client, session_factory):
     assert client.get("/v1/datasets", headers=_key("mgr-token")).status_code == 200
 
 
-def test_dataset_api_hides_archived_projects_from_ui_sessions(client, session_factory):
+def test_dataset_api_serves_archived_projects_read_only_to_ui_sessions(client, session_factory):
     assert client.get("/v1/datasets?project_slug=pa", headers=_ui("mgr@x.com")).status_code == 200
     with session_factory() as db:
         db.get(Project, "pa").is_active = False
         db.commit()
-    assert client.get("/v1/datasets?project_slug=pa", headers=_ui("mgr@x.com")).status_code == 404
+    # Members read an archived project's datasets; changes answer 409.
+    assert client.get("/v1/datasets?project_slug=pa", headers=_ui("mgr@x.com")).status_code == 200
     created = client.post(
-        "/v1/datasets?project_slug=pa", json={"name": "golden"}, headers=_ui("mgr@x.com")
+        "/v1/datasets", json={"name": "golden", "project_slug": "pa"}, headers=_ui("mgr@x.com")
     )
-    assert created.status_code == 404
-    # No slug: the fallback project must also be an active one.
+    assert created.status_code == 409
+    assert "archived" in created.json()["detail"]
+    # A non-member still finds no such project.
+    _remove_membership_row(session_factory, "former")
+    refused = client.get("/v1/datasets?project_slug=pa", headers=_ui("former@x.com"))
+    assert refused.status_code == 404 and refused.json()["detail"] == "Project not found"
+    # No slug: the fallback project must still be an active one.
     assert client.get("/v1/datasets", headers=_ui("admin@x.com")).status_code == 404
 
 

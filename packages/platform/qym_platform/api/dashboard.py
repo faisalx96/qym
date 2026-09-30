@@ -19,7 +19,7 @@ from qym_platform.db.dashboard_models import (
 )
 from qym_platform.db.models import Project, ProjectMembership, UserRole
 from qym_platform.deps import get_db
-from qym_platform.permissions import has_project_access
+from qym_platform.permissions import project_for_read_by_slug
 from qym_platform.settings import PlatformSettings
 from qym_platform.services.dashboard_cache import DashboardSnapshotCache
 
@@ -73,11 +73,8 @@ def _parse_filters(raw: Optional[str]) -> dict:
 def _project(db, principal, slug):
     query = select(Project).where(Project.is_active.is_(True))
     if slug:
-        project = db.scalar(query.where(Project.slug == slug))
-        if project is None:
-            raise HTTPException(404, "Project not found")
-        if not has_project_access(db, principal, project.id):
-            raise HTTPException(403, "Access denied")
+        # Archived projects stay readable to their members (read-only).
+        project = project_for_read_by_slug(db, principal, slug)
     else:
         if principal.auth_type != "none" and principal.user.role != UserRole.ADMIN:
             query = query.join(

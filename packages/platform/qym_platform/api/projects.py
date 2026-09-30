@@ -61,8 +61,9 @@ from qym_platform.services.analysis_prompts import (
     DEFAULT_ANALYSIS_PROMPTS,
     serialize_analysis_prompt_settings,
 )
+from qym_platform.services.retention import resume_purge_clocks
 from qym_platform.services.root_cause_categories import DEFAULT_ROOT_CAUSE_TAXONOMY
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -1137,15 +1138,38 @@ def update_project(
     # and unarchive endpoints, so it records the same audit action.
     if changes:
         _audit_project(db, principal, project, "project.updated", dict(changes))
-    if req.is_active is not None and req.is_active != project.is_active:
+    toggled = req.is_active is not None and req.is_active != project.is_active
+    if toggled:
         action = "project.unarchived" if req.is_active else "project.archived"
         _audit_project(db, principal, project, action, {"is_active": req.is_active})
-        changes["is_active"] = req.is_active
     for field, value in changes.items():
         setattr(project, field, value)
+    if toggled:
+        _set_project_archived(db, project, not req.is_active)
     db.commit()
     db.refresh(project)
     return _project_payload(db, project, principal)
+
+
+def _set_project_archived(db: Session, project: Project, archived: bool) -> None:
+    """Archive or unarchive a project, pausing its Trash purge meanwhile.
+
+    Retention does not purge deleted runs of an archived project (Restore
+    refuses them too). Unarchiving credits the time it spent archived to each
+    deleted run's purge clock, so the countdown resumes where it paused.
+    """
+    now = utc_now_naive()
+    if archived:
+        if project.is_active:
+            project.is_active = False
+            project.archived_at = now
+        return
+    if project.is_active:
+        return
+    if project.archived_at is not None:
+        resume_purge_clocks(db, project.id, now - project.archived_at)
+    project.is_active = True
+    project.archived_at = None
 
 
 def _audit_project(
@@ -1213,7 +1237,7 @@ def _project_deletion_counts(db: Session, project_id: str) -> Dict[str, int]:
     }
 
 
-def _deletion_blocker(counts: Dict[str, int]) -> Optional[str]:
+def _deletion_blocker(counts: Dict[str, int], *, archived: bool = False) -> Optional[str]:
     runs, trashed = counts["runs"], counts["runs_in_trash"]
     if not runs and not trashed:
         return None
@@ -1226,12 +1250,19 @@ def _deletion_blocker(counts: Dict[str, int]) -> Optional[str]:
     grace_days = PlatformSettings().deleted_run_grace_days
     if grace_days > 0:
         purge = f"deleted runs are purged {grace_days} day{'s' if grace_days != 1 else ''} after deletion"
+        if archived:
+            purge += ", and purging is paused while the project is archived"
     else:
         purge = "automatic Trash purging is turned off on this platform"
+    advice = (
+        "It stays archived and keeps its data."
+        if archived
+        else "Archive it instead to hide it now and keep its data."
+    )
     return (
         f"This project still has {' and '.join(parts)}. Runs are never deleted with "
         "a project: it can be deleted only once all its runs are deleted and purged "
-        f"from Trash ({purge}). Archive it instead to hide it now and keep its data."
+        f"from Trash ({purge}). {advice}"
     )
 
 
@@ -1336,7 +1367,7 @@ def archive_project(
     project = _get_project(db, project_id)
     if project.is_active:
         _audit_project(db, principal, project, "project.archived", {"is_active": False})
-        project.is_active = False
+        _set_project_archived(db, project, True)
         db.commit()
     _stop_project_jobs(db, project)
     return {"ok": True, "project_id": project.id, "archived": True}
@@ -1378,10 +1409,75 @@ def unarchive_project(
     project = _get_project(db, project_id)
     if not project.is_active:
         _audit_project(db, principal, project, "project.unarchived", {"is_active": True})
-        project.is_active = True
+        _set_project_archived(db, project, False)
         db.commit()
         db.refresh(project)
     return _project_payload(db, project, principal)
+
+
+# How many API keys the Unarchive dialog names; it adds "and N more".
+_UNARCHIVE_PREVIEW_KEY_LIMIT = 10
+
+
+@router.get("/v1/admin/projects/{project_id}/unarchive-preview")
+def project_unarchive_preview(
+    project_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """API keys that start working again when the project is unarchived.
+
+    Only keys that would authenticate: not revoked, their owner active and
+    still a member of the project (or an admin). The Unarchive dialog lists
+    them so an admin can revoke a key first, which stays possible while the
+    project is archived.
+    """
+    _require_admin(principal)
+    project = _get_project(db, project_id)
+    keys = (
+        db.query(ApiKey, User)
+        .join(User, User.id == ApiKey.user_id)
+        .outerjoin(
+            ProjectMembership,
+            and_(
+                ProjectMembership.project_id == ApiKey.project_id,
+                ProjectMembership.user_id == ApiKey.user_id,
+            ),
+        )
+        .filter(
+            ApiKey.project_id == project.id,
+            ApiKey.revoked_at.is_(None),
+            User.is_active.is_(True),
+            or_(ProjectMembership.id.isnot(None), User.role == UserRole.ADMIN),
+        )
+    )
+    total = keys.count()
+    rows = (
+        keys.order_by(ApiKey.created_at.desc(), ApiKey.id)
+        .limit(_UNARCHIVE_PREVIEW_KEY_LIMIT)
+        .all()
+    )
+    return {
+        "project_id": project.id,
+        "name": project.name,
+        "slug": project.slug,
+        "archived": not project.is_active,
+        "active_api_key_count": total,
+        "active_api_keys": [
+            {
+                "id": key.id,
+                "name": key.name,
+                "prefix": key.prefix,
+                "creator": {
+                    "id": user.id,
+                    "email": user.email,
+                    "display_name": user.display_name,
+                },
+                "created_at": to_api_timestamp(key.created_at),
+            }
+            for key, user in rows
+        ],
+    }
 
 
 # How many in-progress runs the Archive dialog names; it adds "and N more".
@@ -1449,11 +1545,12 @@ def project_deletion_preview(
     _require_admin(principal)
     project = _get_project(db, project_id)
     counts = _project_deletion_counts(db, project.id)
-    blocker = _deletion_blocker(counts)
+    blocker = _deletion_blocker(counts, archived=not project.is_active)
     return {
         "project_id": project.id,
         "name": project.name,
         "slug": project.slug,
+        "archived": not project.is_active,
         "counts": counts,
         "can_delete": blocker is None,
         "blocked_reason": blocker,
@@ -1485,7 +1582,7 @@ def delete_project(
             detail="Confirm deletion by passing the project name or slug as `confirm`",
         )
     counts = _project_deletion_counts(db, project.id)
-    blocker = _deletion_blocker(counts)
+    blocker = _deletion_blocker(counts, archived=not project.is_active)
     if blocker:
         raise HTTPException(status_code=409, detail=blocker)
     _audit_project(db, principal, project, "project.deleted", {"deleted": counts})

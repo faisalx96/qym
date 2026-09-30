@@ -42,7 +42,7 @@ def test_alembic_has_one_upgrade_head() -> None:
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["0064"]
+    assert heads == ["0065"]
 
 
 def test_migrations_name_their_own_revision_in_job_logs() -> None:
@@ -130,6 +130,46 @@ def test_item_failure_events_migration_queues_the_repair_job_for_repeat_runs(
             ("project_item_failure_events", "queued")
         ]
     assert "project_item_failure_events" in maintenance.registry()
+
+
+def test_purge_pause_migration_adds_nullable_columns_and_starts_archived_pauses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    migration = _load_migration("0065_archived_project_purge_pause.py")
+    engine = sa.create_engine("sqlite://")
+    metadata = sa.MetaData()
+    projects = sa.Table(
+        "projects",
+        metadata,
+        sa.Column("id", sa.String(length=36), primary_key=True),
+        sa.Column("is_active", sa.Boolean()),
+    )
+    sa.Table("runs", metadata, sa.Column("id", sa.String(length=36), primary_key=True))
+    metadata.create_all(engine)
+
+    with engine.begin() as connection:
+        connection.execute(
+            projects.insert(),
+            [{"id": "live", "is_active": True}, {"id": "archived", "is_active": False}],
+        )
+        monkeypatch.setattr(
+            migration, "op", Operations(MigrationContext.configure(connection))
+        )
+        migration.upgrade()
+        inspector = sa.inspect(connection)
+        columns = {c["name"]: c for c in inspector.get_columns("projects")}
+        assert columns["archived_at"]["nullable"] is True
+        run_columns = {c["name"]: c for c in inspector.get_columns("runs")}
+        assert run_columns["purge_clock_started_at"]["nullable"] is True
+        rows = dict(connection.execute(sa.text("SELECT id, archived_at FROM projects")).all())
+        # A project archived before this version pauses its purge from now on.
+        assert rows["live"] is None and rows["archived"] is not None
+
+        migration.downgrade()
+        inspector = sa.inspect(connection)
+        assert "archived_at" not in {c["name"] for c in inspector.get_columns("projects")}
+        assert "purge_clock_started_at" not in {c["name"] for c in inspector.get_columns("runs")}
+    engine.dispose()
 
 
 def test_subcategory_taxonomy_migration_preserves_rows_and_defaults_json(

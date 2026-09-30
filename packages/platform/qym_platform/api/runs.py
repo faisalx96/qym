@@ -59,6 +59,7 @@ from qym_platform.permissions import (
     can_review_run,
     can_view_run,
     has_project_access,
+    project_for_read_by_slug,
     require_project_writable,
 )
 from qym_platform.services.issue_reviews import change_metric_issue, reconcile_issue_edits
@@ -1200,17 +1201,17 @@ def _project_path_prefix(request: Request, project_slug: str) -> str:
 
 
 def _resolve_project_by_slug_for_ui(
-    db: Session, principal: Principal, project_slug: str
+    db: Session,
+    principal: Principal,
+    project_slug: str,
+    *,
+    allow_archived: bool = True,
 ) -> Project:
-    project = (
-        db.query(Project)
-        .filter(Project.slug == project_slug, Project.is_active.is_(True))
-        .first()
-    )
-    if not project:
+    # An archived project's pages open read-only for its members and admins.
+    # Auto-analysis and Reviews stay hidden: they exist to change things.
+    project = project_for_read_by_slug(db, principal, project_slug)
+    if not allow_archived and not project.is_active:
         raise HTTPException(status_code=404, detail="Project not found")
-    if not has_project_access(db, principal, project.id):
-        raise HTTPException(status_code=403, detail="Access denied")
     return project
 
 
@@ -1243,10 +1244,10 @@ def _project_not_found_page(request: Request, project_slug: str) -> HTMLResponse
   <title>قيِّم • Project Not Found</title>
   <link rel="icon" type="image/png" href="{static_root}/qym_icon.png">
   <link rel="stylesheet" href="{static_root}/dashboard.css?v=p0-20260930">
-  <link rel="stylesheet" href="{static_root}/shell.css?v=p0-20260930">
+  <link rel="stylesheet" href="{static_root}/shell.css?v=p0-20260930-3">
   <script src="{static_root}/qym_safe.js?v=p0-20260930"></script>
   <script src="{static_root}/auth.js?v=p0-20260930"></script>
-  <script src="{static_root}/shell.js?v=p0-20260930-2"></script>
+  <script src="{static_root}/shell.js?v=p0-20260930-3"></script>
 </head>
 <body>
   <main style="min-height:50vh;display:flex;align-items:center;justify-content:center;padding:32px;color:var(--text-muted);">
@@ -1265,7 +1266,7 @@ def _project_not_found_page(request: Request, project_slug: str) -> HTMLResponse
 
 
 def _guard_project_page(
-    request: Request, db: Session, project_slug: str
+    request: Request, db: Session, project_slug: str, *, allow_archived: bool = True
 ) -> Optional[Any]:
     redirect = _maybe_redirect_to_login(request, db)
     if redirect:
@@ -1278,7 +1279,9 @@ def _guard_project_page(
             x_email=request.headers.get("X-Email"),
             x_admin_bootstrap=request.headers.get("X-Admin-Bootstrap"),
         )
-        _resolve_project_by_slug_for_ui(db, principal, project_slug)
+        _resolve_project_by_slug_for_ui(
+            db, principal, project_slug, allow_archived=allow_archived
+        )
     except HTTPException as exc:
         if exc.status_code == 404:
             return _project_not_found_page(request, project_slug)
@@ -2081,7 +2084,7 @@ def reviews_index(request: Request, db: Session = Depends(get_db)) -> Any:
 def project_reviews_index(
     project_slug: str, request: Request, db: Session = Depends(get_db)
 ) -> Any:
-    guarded = _guard_project_page(request, db, project_slug)
+    guarded = _guard_project_page(request, db, project_slug, allow_archived=False)
     if guarded:
         return guarded
     return reviews_index(request=request, db=db)
@@ -2186,7 +2189,7 @@ def project_analysis_ui(
     db: Session = Depends(get_db),
 ) -> Any:
     """Serve the project's first-class auto-analysis workspace."""
-    guarded = _guard_project_page(request, db, project_slug)
+    guarded = _guard_project_page(request, db, project_slug, allow_archived=False)
     if guarded:
         return guarded
     canonical = _canonical_project_analysis_redirect(project_slug, request, db)
@@ -2205,7 +2208,7 @@ def project_analyzer_ui(
     request: Request,
     db: Session = Depends(get_db),
 ) -> Any:
-    guarded = _guard_project_page(request, db, project_slug)
+    guarded = _guard_project_page(request, db, project_slug, allow_archived=False)
     if guarded:
         return guarded
     canonical = _canonical_project_run_analyzer_redirect(
@@ -2236,36 +2239,8 @@ def project_run_ui(
 ) -> Any:
     guarded = _guard_project_page(request, db, project_slug)
     if guarded:
-        if guarded.status_code == 404:
-            archived = _archived_project_run_redirect(request, db, project_slug, run_id)
-            if archived:
-                return archived
         return guarded
     return run_ui(run_id=run_id, request=request, db=db)
-
-
-def _archived_project_run_redirect(
-    request: Request, db: Session, project_slug: str, run_id: str
-) -> RedirectResponse | None:
-    """Send a run link of an archived project to its read-only run page.
-
-    The archived project stays hidden, but its runs stay readable by id, so
-    live links printed by the SDK and bookmarks keep opening the run.
-    Anyone who cannot view the run still gets "Project not found".
-    """
-    run = _visible_run_for_redirect(db, request, run_id)
-    if run is None:
-        return None
-    project = db.get(Project, run.project_id)
-    if project is None or project.is_active or project.slug != project_slug:
-        return None
-    url = (
-        _analysis_project_base(request).rstrip("/")
-        + "/run/"
-        + quote(run.id, safe="")
-        + (f"?{request.url.query}" if request.url.query else "")
-    )
-    return RedirectResponse(url=url, status_code=307)
 
 
 def _published_run_rows(db: Session, run_ids: List[str]) -> Dict[str, Dict[str, Any]]:
@@ -2328,15 +2303,8 @@ def legacy_list_runs(
 
     selected_project = None
     if project_slug:
-        selected_project = (
-            db.query(Project)
-            .filter(Project.slug == project_slug, Project.is_active.is_(True))
-            .first()
-        )
-        if not selected_project:
-            raise HTTPException(status_code=404, detail="Project not found")
-        if not has_project_access(db, principal, selected_project.id):
-            raise HTTPException(status_code=403, detail="Access denied")
+        # An archived project's runs list stays readable to its members.
+        selected_project = project_for_read_by_slug(db, principal, project_slug)
     else:
         if principal.auth_type == "none" or principal.user.role == UserRole.ADMIN:
             selected_project = (
@@ -2950,15 +2918,7 @@ def list_live_runs(
             Project.is_active.is_(True)
         )
     elif project_slug:
-        selected_project = (
-            db.query(Project)
-            .filter(Project.slug == project_slug, Project.is_active.is_(True))
-            .first()
-        )
-        if not selected_project:
-            raise HTTPException(status_code=404, detail="Project not found")
-        if not has_project_access(db, principal, selected_project.id):
-            raise HTTPException(status_code=403, detail="Access denied")
+        selected_project = project_for_read_by_slug(db, principal, project_slug)
         q = q.filter(Run.project_id == selected_project.id)
     else:
         if principal.auth_type == "none" or principal.user.role == UserRole.ADMIN:
@@ -4136,7 +4096,11 @@ def list_deleted_runs(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> List[Dict[str, Any]]:
-    """List soft-deleted runs (admin only) with the date retention purges each."""
+    """List soft-deleted runs (admin only) with the date retention purges each.
+
+    Purging pauses while a run's project is archived: such a row has no
+    ``purge_at`` and ``purge_paused`` is true.
+    """
     if principal.user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Admin only")
     # The maintenance worker hard-deletes runs this long after deletion; 0 = never.
@@ -4144,11 +4108,15 @@ def list_deleted_runs(
     response.headers["X-Qym-Deleted-Run-Grace-Days"] = str(grace_days)
 
     # The list is capped, so with purge on it keeps the runs closest to their
-    # purge date (oldest deletions); otherwise the newest deletions.
+    # purge date (earliest purge clocks); otherwise the newest deletions.
     deleted_runs = (
         db.query(Run)
         .filter(Run.deleted_at.isnot(None))
-        .order_by(Run.deleted_at.asc() if grace_days > 0 else Run.deleted_at.desc())
+        .order_by(
+            func.coalesce(Run.purge_clock_started_at, Run.deleted_at).asc()
+            if grace_days > 0
+            else Run.deleted_at.desc()
+        )
         .limit(200)
         .all()
     )
@@ -4200,7 +4168,12 @@ def list_deleted_runs(
                 "deleted_by_user_id": r.deleted_by_user_id,
                 "deleted_by_name": deleters.get(r.deleted_by_user_id, ""),
                 "created_at": to_api_timestamp(r.created_at),
-                "purge_at": to_api_timestamp(purge_due_at(r.deleted_at, grace_days)),
+                "purge_at": None
+                if r.project_id in archived_projects
+                else to_api_timestamp(
+                    purge_due_at(r.deleted_at, grace_days, r.purge_clock_started_at)
+                ),
+                "purge_paused": grace_days > 0 and r.project_id in archived_projects,
                 "project_archived": r.project_id in archived_projects,
             }
         )
@@ -5694,6 +5667,8 @@ def delete_run(
     snapshot = run.audit_snapshot()
     run.deleted_at = utc_now_naive()
     run.deleted_by_user_id = principal.user.id
+    # The Trash grace period counts from this deletion.
+    run.purge_clock_started_at = None
     _set_dashboard_visibility(db, run.id, False)
 
     audit = AuditLog(
@@ -5743,6 +5718,7 @@ def restore_run(
     run.deleted_at = None
     _set_dashboard_visibility(db, run.id, True)
     run.deleted_by_user_id = None
+    run.purge_clock_started_at = None
 
     audit = AuditLog(
         actor_user_id=principal.user.id,

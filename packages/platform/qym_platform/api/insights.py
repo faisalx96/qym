@@ -26,7 +26,7 @@ from qym_platform.db.models import (
     RunWorkflowStatus,
 )
 from qym_platform.deps import get_db
-from qym_platform.permissions import has_project_access
+from qym_platform.permissions import project_for_read_by_slug
 from qym_platform.settings import PlatformSettings
 from qym_platform.services.execution_errors import (
     execution_success_fields,
@@ -94,16 +94,8 @@ def _metric_spec_payload(spec: RunMetricSpec) -> dict[str, Any]:
 
 
 def _project(db: Session, principal: Principal, project_slug: str) -> Project:
-    project = (
-        db.query(Project)
-        .filter(Project.slug == project_slug, Project.is_active.is_(True))
-        .first()
-    )
-    if project is None:
-        raise HTTPException(status_code=404, detail="Project not found")
-    if not has_project_access(db, principal, project.id):
-        raise HTTPException(status_code=403, detail="Access denied")
-    return project
+    # Archived projects stay readable to their members (read-only).
+    return project_for_read_by_slug(db, principal, project_slug)
 
 
 @router.get("/api/projects/{project_slug}/insights")

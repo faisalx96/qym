@@ -99,8 +99,8 @@ def test_trash_lists_soonest_purge_first_and_flags_rows_near_purge(browser):
     try:
         page.locator(".trash-table tbody tr").nth(3).wait_for()
         assert page.locator("#trash-retention-copy").inner_text() == (
-            "Deleted runs are permanently removed 30 days after deletion. "
-            "Restore a run before its purge date to keep it."
+            "Deleted runs are permanently removed 30 days after deletion, not counting "
+            "time their project spends archived. Restore a run before its purge date to keep it."
         )
         assert page.locator("#trash-stat-retention").inner_text() == "30 days"
         order = page.eval_on_selector_all(

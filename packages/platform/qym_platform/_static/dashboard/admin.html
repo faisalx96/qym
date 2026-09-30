@@ -6,10 +6,10 @@
   <title>قيِّم • Admin</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=p0-20260930">
-  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930">
+  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
   <script src="/static/qym_safe.js?v=p0-20260930"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p0-20260930-2"></script>
+  <script src="/static/shell.js?v=p0-20260930-3"></script>
   <style>
     .admin-page { }
     .admin-header { margin-bottom: var(--space-xl); }
@@ -568,6 +568,12 @@
         tbody.innerHTML = renderRunRows(state.recentRuns, true);
       }
 
+      // An archived project opens read-only from here (it is not in the switcher).
+      function projectHref(slug, page) {
+        const root = (window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '');
+        return `${root}/projects/${encodeURIComponent(slug)}${page ? '/' + page : ''}`;
+      }
+
       function renderProjects() {
         document.getElementById('project-count-label').textContent = `${state.projects.length} projects`;
         document.getElementById('projects-tbody').innerHTML = state.projects.map(p => `
@@ -578,9 +584,11 @@
             <td>${escapeHtml(String(p.member_count || 0))}</td>
             <td><div class="row-actions">
               ${p.is_active
-                ? `<a class="btn btn-secondary" href="${escapeHtml((window.__QYM_ROOT_PATH__ || '').replace(/\/$/, ''))}/projects/${encodeURIComponent(p.slug)}/settings" style="padding:4px 10px;font-size:var(--font-sm)">Settings</a>
+                ? `<a class="btn btn-secondary" href="${escapeHtml(projectHref(p.slug, 'settings'))}" style="padding:4px 10px;font-size:var(--font-sm)">Settings</a>
               <button class="btn btn-secondary" style="padding:4px 10px;font-size:var(--font-sm)" data-project-archive="${escapeHtml(p.id)}">Archive</button>`
-                : `<button class="btn btn-secondary" style="padding:4px 10px;font-size:var(--font-sm)" data-project-unarchive="${escapeHtml(p.id)}">Unarchive</button>`}
+                : `<a class="btn btn-secondary" href="${escapeHtml(projectHref(p.slug))}" style="padding:4px 10px;font-size:var(--font-sm)" title="Open the archived project, read-only">Open</a>
+              <a class="btn btn-secondary" href="${escapeHtml(projectHref(p.slug, 'settings'))}" style="padding:4px 10px;font-size:var(--font-sm)" title="Revoke API keys, remove members or delete the project">Settings</a>
+              <button class="btn btn-secondary" style="padding:4px 10px;font-size:var(--font-sm)" data-project-unarchive="${escapeHtml(p.id)}">Unarchive</button>`}
             </div></td>
           </tr>`).join('');
 
@@ -591,8 +599,9 @@
           const name = project ? project.name : 'this project';
           if (archived) {
             const lines = [
-              `"${name}" will be hidden from navigation and its API keys will stop working.`,
-              'Runs, datasets, members and settings are kept and stay readable, but nothing can be changed until you unarchive it here.',
+              `"${name}" will be hidden from the project list and its API keys will stop working.`,
+              'Admins and its members can still open its runs, datasets and settings, read-only. Nothing can be changed until you unarchive it here, except that admins and managers can still revoke API keys and remove members, and an admin can delete the project.',
+              'Deleted runs of the project stay in Trash: their purge is paused until it is unarchived.',
             ];
             if (window.QymShell && window.QymShell.confirmArchiveProject) {
               // Lists runs still in progress: archiving loses their remaining results.
@@ -605,6 +614,16 @@
             } else if (!confirm(lines.join('\n'))) {
               return;
             }
+          } else if (window.QymShell && window.QymShell.confirmUnarchiveProject) {
+            // Names the API keys that start working again; they can be revoked first.
+            const confirmation = await window.QymShell.confirmUnarchiveProject({ id: projectId, name });
+            if (confirmation && confirmation.revokeFirst && project) {
+              window.QymShell.navigateTo(projectHref(project.slug, 'settings') + '?tab=apikeys');
+              return;
+            }
+            if (!confirmation || !confirmation.confirmed) return;
+          } else if (!confirm(`Unarchive "${name}"? Its API keys that are not revoked start working again.`)) {
+            return;
           }
           const msgEl = document.getElementById('project-message');
           if (msgEl) { msgEl.style.color = ''; msgEl.textContent = archived ? 'Archiving...' : 'Unarchiving...'; }
@@ -730,7 +749,7 @@
         const errEl = document.getElementById('edit-user-error');
         errEl.textContent = '';
         const description = [
-          `Reset the password for ${user.email}? The current password stops working now.`,
+          `Reset the password for ${user.email}? The current password stops working now. They are signed out of every browser.`,
           'You will get a one-time password to give to the user. They must choose a new password when they sign in.',
         ];
         const confirmation = window.QymShell?.openConfirmDialog

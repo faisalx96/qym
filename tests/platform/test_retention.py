@@ -117,6 +117,32 @@ def test_purge_cascades_children_after_grace(migrated_postgres):
         assert conn.execute(text("SELECT count(*) FROM run_items WHERE run_id = 'fresh'")).scalar() == 1
 
 
+def test_purge_pauses_while_the_project_is_archived(migrated_postgres):
+    """Postgres twin of the SQLite pause tests: the boolean join and the
+    clock filter hold in the scan, the per-run recheck and the DELETE."""
+    engine = migrated_postgres
+    now = datetime(2026, 9, 14)
+    from qym_platform.migrations_support import ensure_month_partitions_between
+
+    ensure_month_partitions_between(engine, now - timedelta(days=40), now)
+    with engine.begin() as conn:
+        _seed_run(conn, "paused", now - timedelta(days=5), deleted_at=now - timedelta(days=40))
+        conn.execute(
+            text("UPDATE projects SET is_active = false, archived_at = :a WHERE id = 'p'"),
+            {"a": now - timedelta(days=20)},
+        )
+    assert retention.purge_soft_deleted_runs(engine, grace_days=30, now=now) == []
+    # Unarchived after 20 days: the clock moved forward by the pause.
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE projects SET is_active = true, archived_at = NULL WHERE id = 'p'"))
+        conn.execute(
+            text("UPDATE runs SET purge_clock_started_at = :c WHERE id = 'paused'"),
+            {"c": now - timedelta(days=20)},
+        )
+    assert retention.purge_soft_deleted_runs(engine, grace_days=30, now=now) == []
+    assert retention.purge_soft_deleted_runs(engine, grace_days=30, now=now + timedelta(days=11)) == ["paused"]
+
+
 def _restore_client(engine):
     from fastapi.testclient import TestClient
     from sqlalchemy.orm import Session, sessionmaker

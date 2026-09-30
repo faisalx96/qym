@@ -6,10 +6,10 @@
   <title>قيِّم • Datasets</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=p0-20260930">
-  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930">
+  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
   <script src="/static/qym_safe.js?v=p0-20260930"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p0-20260930-2"></script>
+  <script src="/static/shell.js?v=p0-20260930-3"></script>
   <script src="/static/qym_table.js"></script>
   <script src="/static/metrics.js?v=p0-20260930-3"></script>
   <script src="/static/trace_viewer.js?v=p0-20260930"></script>
@@ -1213,6 +1213,15 @@
       }
       return project;
     }
+    // An archived project opens read-only: its datasets, versions and items stay
+    // readable, every change answers 409, so no edit control is offered.
+    function projectReadOnly(){
+      const project = state.project || resolveProjectFromShell();
+      return !!(project && project.is_active === false);
+    }
+    function canEditVersion(v){
+      return !!(v && v.status === 'draft' && !projectReadOnly());
+    }
     function projectCrumb(){
       const project = state.project || resolveProjectFromShell() || { slug: state.slug, name: state.slug };
       state.project = project;
@@ -1417,7 +1426,7 @@
       ]); });
       controls.appendChild(dsxSearchControl(search));
       controls.appendChild(sortSel);
-      controls.appendChild(newBtn);
+      if (!projectReadOnly()) controls.appendChild(newBtn);
       bar.appendChild(controls);
       container.appendChild(bar);
 
@@ -1476,7 +1485,7 @@
           empty.appendChild(el('p', null, state.datasets.length === 0
             ? 'Curate examples once, version them, and run them against any model.'
             : 'Try a different search term.'));
-          if (state.datasets.length === 0) {
+          if (state.datasets.length === 0 && !projectReadOnly()) {
             const acts = el('div', { className: 'dsx-empty-actions' });
             const firstBtn = el('button', { className: 'shell-btn shell-btn-primary', 'aria-haspopup': 'menu' }, '+ Create your first dataset');
             firstBtn.addEventListener('click', e => { e.stopPropagation(); openContextMenu(firstBtn, [
@@ -2528,6 +2537,10 @@
       right.innerHTML = '';
       right.appendChild(versionSelectorPill());
       const v = state.activeVersion;
+      if (projectReadOnly()) {
+        if (v) right.appendChild(overflowMenuButton());
+        return;
+      }
       if (!v) {
         // No versions yet: the only meaningful action is creating the first draft.
         right.appendChild(el('button', { className: 'shell-btn shell-btn-primary', onclick: () => createDraftFromVersionFlow() }, '+ Create first draft'));
@@ -2555,12 +2568,13 @@
         e.stopPropagation();
         const v = state.activeVersion;
         const menu = [];
+        const readOnly = projectReadOnly();
         if (v) {
-          menu.push({ label: 'Name version…', onClick: nameVersionFlow });
+          if (!readOnly) menu.push({ label: 'Name version…', onClick: nameVersionFlow });
           menu.push({ label: 'Compare…', onClick: openCompareFlow });
           menu.push({ label: '↓ Download JSONL', onClick: () => window.open(apiUrl('/v1/datasets/' + encodeURIComponent(state.datasetRef) + '/versions/' + encodeURIComponent(v.version) + ':download?project_slug=' + encodeURIComponent(state.slug)), '_blank', 'noopener') });
         }
-        menu.push({ label: '↑ Upload file as new version…', onClick: openNewVersionUpload });
+        if (!readOnly) menu.push({ label: '↑ Upload file as new version…', onClick: openNewVersionUpload });
         openContextMenu(btn, menu);
       });
       return btn;
@@ -2616,16 +2630,20 @@
       titleRow.appendChild(Shell.identicon(state.dataset.slug || state.datasetRef, { cell: 4, gap: 2 }));
       const nameEl = el('h1', { className: 'dsx-hero-name' });
       nameEl.appendChild(document.createTextNode(state.dataset.name));
-      nameEl.appendChild(el('span', { className: 'dsx-name-edit', title: 'Rename', onclick: renameDatasetFlow }, '✎'));
+      if (!projectReadOnly()) nameEl.appendChild(el('span', { className: 'dsx-name-edit', title: 'Rename', onclick: renameDatasetFlow }, '✎'));
       titleRow.appendChild(nameEl);
       idCol.appendChild(titleRow);
 
-      if (state.dataset.description) {
+      if (state.dataset.description && projectReadOnly()) {
+        const descEl = el('p', { className: 'dsx-hero-desc' });
+        descEl.textContent = state.dataset.description;
+        idCol.appendChild(descEl);
+      } else if (state.dataset.description) {
         const descEl = el('p', { className: 'dsx-hero-desc', title: 'Click to edit description', style: { cursor: 'pointer' } });
         descEl.textContent = state.dataset.description;
         descEl.addEventListener('click', editDescriptionFlow);
         idCol.appendChild(descEl);
-      } else {
+      } else if (!projectReadOnly()) {
         // No description: a compact, obviously-clickable affordance instead of a big italic placeholder.
         const addDesc = el('button', { className: 'dsx-hero-add-desc', type: 'button', title: 'Add a description', onclick: editDescriptionFlow }, '+ Add a description');
         idCol.appendChild(addDesc);
@@ -2777,15 +2795,18 @@
       if (!v) {
         const e = el('div', { className: 'dsx-empty' });
         e.appendChild(el('h3', null, 'No versions yet'));
-        e.appendChild(el('p', null, 'Create a first draft to start adding items.'));
-        const acts = el('div', { className: 'dsx-empty-actions' });
-        acts.appendChild(el('button', { className: 'shell-btn shell-btn-primary', onclick: () => createDraftFromVersionFlow() }, '+ Create first draft'));
-        e.appendChild(acts);
+        if (!projectReadOnly()) {
+          e.appendChild(el('p', null, 'Create a first draft to start adding items.'));
+          const acts = el('div', { className: 'dsx-empty-actions' });
+          acts.appendChild(el('button', { className: 'shell-btn shell-btn-primary', onclick: () => createDraftFromVersionFlow() }, '+ Create first draft'));
+          e.appendChild(acts);
+        }
         host.appendChild(e);
         return;
       }
 
       const isDraft = v.status === 'draft';
+      const editable = canEditVersion(v);
 
       const toolbar = el('div', { className: 'dsx-items-toolbar' });
       const left = el('div', { className: 'left' });
@@ -2835,7 +2856,7 @@
         const oldTr = state.itemRowMap.get(updated.id);
         if (!oldTr || !oldTr.isConnected) return false;
         const showIdColumn = list.some(item => hasUserProvidedItemId(item.item_id));
-        const newTr = renderItemRow(list[idx], isDraft, showIdColumn, (state.itemsList && state.itemsList.metricNames) || []);
+        const newTr = renderItemRow(list[idx], editable, showIdColumn, (state.itemsList && state.itemsList.metricNames) || []);
         state.itemRowMap.set(updated.id, newTr);
         oldTr.replaceWith(newTr);
         return true;
@@ -2895,7 +2916,7 @@
           e.appendChild(el('h3', null, filtered ? 'No items match these filters' : (isDraft ? 'This draft is empty' : 'This version has no items')));
           if (filtered) {
             e.appendChild(el('p', null, 'Try another search or clear the filters.'));
-          } else if (isDraft) {
+          } else if (editable) {
             e.appendChild(el('p', null, 'Add items one at a time, or import a file.'));
             const acts = el('div', { className: 'dsx-empty-actions' });
             acts.appendChild(el('button', { className: 'shell-btn shell-btn-primary', onclick: () => openNewItemFlow() }, '+ Add item'));
@@ -2955,13 +2976,13 @@
             loadItems({ keepTable: true });
           },
           renderRow: item => {
-            const tr = renderItemRow(item, isDraft, showIdColumn, metricNames);
+            const tr = renderItemRow(item, editable, showIdColumn, metricNames);
             state.itemRowMap.set(item.id, tr);
             return tr;
           },
         });
 
-        if (isDraft) {
+        if (editable) {
           const addBtn = el('button', { className: 'dsx-addrow', onclick: () => openNewItemFlow() }, '+ Add new item');
           const ftr = el('div', { style: { padding: '10px var(--space-xl)' } });
           ftr.appendChild(addBtn);
@@ -3170,16 +3191,16 @@
       main.appendChild(titleWrap);
 
       const actions = el('div', { className: 'dsx-item-actions' });
-      if (v.status !== 'draft') {
+      if (v.status !== 'draft' && !projectReadOnly()) {
         actions.appendChild(el('button', { className: 'shell-btn shell-btn-primary qym-inline-action', type: 'button', onclick: () => createDraftFromVersionFlow(v.version, { itemId: item.item_id }) }, 'Create draft to edit'));
       }
-      if (v.status === 'draft' && itemTab === 'details') {
+      if (canEditVersion(v) && itemTab === 'details') {
         actions.appendChild(el('button', { className: 'shell-btn shell-btn-danger qym-inline-action', type: 'button', onclick: () => deleteItemPageItem(item, v) }, 'Delete'));
         actions.appendChild(el('span', { className: 'dsx-item-actions-sep', 'aria-hidden': 'true' }));
       }
       actions.appendChild(el('button', { className: 'shell-btn shell-btn-secondary qym-inline-action', type: 'button', title: 'Previous item', onclick: () => navigateItemPage(item, -1) }, 'Previous'));
       actions.appendChild(el('button', { className: 'shell-btn shell-btn-secondary qym-inline-action', type: 'button', title: 'Next item', onclick: () => navigateItemPage(item, 1) }, 'Next'));
-      if (v.status === 'draft' && itemTab === 'details') {
+      if (canEditVersion(v) && itemTab === 'details') {
         actions.appendChild(el('button', { className: 'shell-btn shell-btn-primary qym-inline-action', type: 'button', onclick: () => saveItemPageItem(item, v) }, 'Save changes'));
       }
       main.appendChild(actions);
@@ -3241,7 +3262,7 @@
     }
 
     function renderItemPageDetails(host, item, v){
-      const isDraft = v.status === 'draft';
+      const isDraft = canEditVersion(v);
       const grid = el('div', { className: 'dsx-item-details-grid' });
       const main = el('div', { className: 'dsx-item-field-stack' });
       const side = el('div', { className: 'dsx-item-side' });
@@ -3618,6 +3639,7 @@
     async function openItemDrawerImpl(itemId){
       const v = state.activeVersion; if (!v) return;
       const isDraft = v.status === 'draft';
+      const editable = canEditVersion(v);
       // Update URL
       if (state.itemId !== itemId) { history.replaceState({}, '', buildUrl({ item: itemId })); state.itemId = itemId; }
 
@@ -3682,7 +3704,7 @@
       }
 
       function renderDetails(body){
-        if (!isDraft) {
+        if (!isDraft && !projectReadOnly()) {
           const hint = el('div', { className: 'shell-form-help' });
           hint.innerHTML = 'This version is published. <button class="shell-btn shell-btn-primary" style="padding:4px 10px;margin-left:6px;font-size:var(--font-sm);">Create draft to edit</button>';
           hint.querySelector('button').addEventListener('click', () => { drawer.close(); createDraftFromVersionFlow(v.version); });
@@ -3692,7 +3714,7 @@
         body.appendChild(buildJSONField('Expected output', 'expected_output'));
         body.appendChild(buildJSONField('Metadata', 'metadata'));
 
-        if (isDraft) {
+        if (editable) {
           const footer = el('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '8px', marginTop: '12px' } });
           const delBtn = el('button', { className: 'shell-btn shell-btn-danger', onclick: deleteItem }, 'Delete');
           const saveBtn = el('button', { className: 'shell-btn shell-btn-primary', onclick: saveItem }, 'Save changes');
@@ -3718,7 +3740,7 @@
         let expanded = false;
         const expandBtn = el('button', { title: 'Expand / collapse' }, '⤢ Expand');
 
-        if (!isDraft) {
+        if (!editable) {
           // Read-only: colorized, full-height view (no cramped textarea).
           const view = el('pre', { className: 'dsx-json-view' + (raw === '' ? ' empty' : '') });
           if (raw === '') view.textContent = '(empty)';
@@ -3947,7 +3969,7 @@
               head.appendChild(el('span', { className: 'when' }, relTime(r.created_at)));
               entry.appendChild(head);
               entry.appendChild(historyDiffBody(r.before, r.after));
-              if (isDraft) {
+              if (editable) {
                 const actions = el('div', { className: 'dsx-history-actions' });
                 actions.appendChild(el('button', { className: 'shell-btn shell-btn-secondary', style: { padding: '4px 10px', fontSize: 'var(--font-sm)' }, onclick: () => revertToRevision(r, body) }, '↩ Revert to this'));
                 entry.appendChild(actions);
@@ -4261,17 +4283,20 @@
     // SETTINGS TAB
     // -------------------------------------------------------------
     function renderSettingsTab(host){
+      const readOnly = projectReadOnly();
       const wrap = el('div', { className: 'dsx-settings', style: { padding: 'var(--space-lg) var(--space-xl)' } });
       const card = el('div', { className: 'dsx-settings-card' });
       card.appendChild(el('h3', null, 'General'));
       const nameField = el('div', { className: 'shell-form-field' });
       nameField.appendChild(el('label', { className: 'shell-form-label' }, 'Name'));
       const nameIn = el('input', { className: 'shell-form-input', value: state.dataset.name || '' });
+      nameIn.readOnly = readOnly;
       nameField.appendChild(nameIn); card.appendChild(nameField);
       const descField = el('div', { className: 'shell-form-field' });
       descField.appendChild(el('label', { className: 'shell-form-label' }, 'Description'));
       const descIn = el('textarea', { className: 'shell-form-input', rows: 3, style: { resize: 'vertical' } });
       descIn.value = state.dataset.description || '';
+      descIn.readOnly = readOnly;
       descField.appendChild(descIn); card.appendChild(descField);
       const tagsField = el('div', { className: 'shell-form-field' });
       tagsField.appendChild(el('label', { className: 'shell-form-label' }, 'Tags'));
@@ -4279,7 +4304,8 @@
       const tags = (state.dataset.tags || []).slice();
       function renderTags(){
         tagsChips.innerHTML = '';
-        tags.forEach((t, i) => { const c = el('span', { className: 'dsx-chip-item' }); c.appendChild(document.createTextNode(t)); c.appendChild(el('button', { onclick: () => { tags.splice(i, 1); renderTags(); } }, '×')); tagsChips.appendChild(c); });
+        tags.forEach((t, i) => { const c = el('span', { className: 'dsx-chip-item' }); c.appendChild(document.createTextNode(t)); if (!readOnly) c.appendChild(el('button', { onclick: () => { tags.splice(i, 1); renderTags(); } }, '×')); tagsChips.appendChild(c); });
+        if (readOnly) return;
         const inp = el('input', { placeholder: 'add tag…' });
         inp.addEventListener('keydown', e => { if (e.key === 'Enter' && inp.value.trim()) { tags.push(inp.value.trim()); inp.value=''; renderTags(); } });
         tagsChips.appendChild(inp);
@@ -4292,6 +4318,11 @@
           state.dataset = upd.dataset || upd; Shell.toast('Settings saved', 'success'); refreshDetailView({ force: true });
         } catch(e) { Shell.toast(e.message || 'Save failed', 'error'); }
       } }, 'Save changes');
+      if (readOnly) {
+        wrap.appendChild(card);
+        host.appendChild(wrap);
+        return;
+      }
       card.appendChild(saveBtn);
       wrap.appendChild(card);
 

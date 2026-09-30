@@ -149,6 +149,10 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     slug: Mapped[str] = mapped_column(String(200), nullable=False, unique=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    # When the project was archived (NULL while it is active). Trash purging of
+    # its deleted runs is paused meanwhile; unarchiving moves their purge
+    # clocks forward by the time since (Run.purge_clock_started_at).
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -471,6 +475,11 @@ class Run(Base):
 
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None, index=True)
     deleted_by_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    # When the Trash grace period of a deleted run started counting; NULL
+    # counts it from deleted_at (services/retention.py). Purging pauses while
+    # the run's project is archived, so unarchiving moves this forward by the
+    # time the project spent archived.
+    purge_clock_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     items: Mapped[list["RunItem"]] = relationship("RunItem", lazy="noload", foreign_keys="RunItem.run_id")
     scores: Mapped[list["RunItemScore"]] = relationship("RunItemScore", lazy="noload", foreign_keys="RunItemScore.run_id")

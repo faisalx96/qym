@@ -62,6 +62,8 @@ Users cannot reset their own password. An admin opens **Admin → Users → Edit
 
 A temporary password works once, and a later reset replaces it. For a user who only signed in through a provider, the reset also creates a password login.
 
+A reset also signs the user out of every browser, whatever they signed in with; the confirmation says so. A user who signs in through GitLab, Google or GitHub can sign straight back in with that provider.
+
 Session-based deployments require `QYM_AUTH_SESSION_SECRET`. Browser writes are protected by a same-origin check; configure the externally visible `QYM_BASE_URL` correctly when the app is behind a proxy.
 
 ### Roles
@@ -266,6 +268,8 @@ A running evaluation with no events beyond `QYM_RUN_STALE_TIMEOUT_SECONDS` is la
 Deleting a run is a soft delete with an audit record. Owners, project managers, and global admins can delete according to permission checks; only a global admin can restore it from **Deleted Runs**.
 
 Deleting a project archives it when it already contains runs. An empty project can be physically deleted.
+
+An archived project leaves the project list and switcher and its API keys stop working, but admins and its members still open it read-only from **Admin → Projects** or a link: runs, run pages, compare, dashboard, charts, models, datasets and settings, under a notice that says it is archived. Nothing can be changed until an admin unarchives it, except that admins and managers can still revoke API keys and remove members, and an admin can delete the project. Deleted runs of an archived project stay in **Deleted Runs** with "Purge paused while the project is archived": their grace period resumes where it stopped once the project is unarchived. **Unarchive** asks first and names the API keys that start working again, with **Revoke keys first** to open the project's API keys.
 
 ## Connect the SDK and CLI
 

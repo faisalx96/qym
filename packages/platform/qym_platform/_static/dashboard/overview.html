@@ -6,10 +6,10 @@
   <title>قيِّم • Dashboard</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=p0-20260930">
-  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930">
+  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
   <script src="/static/qym_safe.js?v=p0-20260930"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p0-20260930-2"></script>
+  <script src="/static/shell.js?v=p0-20260930-3"></script>
   <script src="/static/kpis.js?v=p0-20260930"></script>
   <style>
     .overview { }
@@ -359,6 +359,8 @@
           document.getElementById('view-all-runs').href = projectUrl(slug);
           document.getElementById('live-runs-link').href = projectUrl(slug);
           document.getElementById('view-all-reviews').href = projectUrl(slug, 'reviews');
+          // An archived project's runs leave the review queue and its Reviews page stays hidden.
+          document.getElementById('view-all-reviews').hidden = !!(project && project.is_active === false);
           document.getElementById('view-approved-runs').href = projectUrl(slug);
         }
 
