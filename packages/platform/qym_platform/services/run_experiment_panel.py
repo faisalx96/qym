@@ -55,6 +55,36 @@ def _mapping(value: Any) -> Dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
 
 
+def run_params_summary(
+    run: Run, job: Optional[EvalExperimentJob] = None
+) -> Dict[str, Any]:
+    """The secret-free launch parameters of an official run, without any query.
+
+    ``{"sweep": {pointer: value}, "slot_bindings": {slot: binding}, "base_source":
+    {...} | None, "schema_hash": str | None, "samples": int | None, "has_config":
+    bool}``, read from ``qym_config`` with the job row (when given) as the fallback
+    for the swept values, as the panel does.
+    """
+    config = _mapping(_mapping(run.run_metadata).get("qym_config"))
+    evaluator = _mapping(config.get("evaluator"))
+    samples = _mapping(evaluator.get("config")).get("samples")
+    sweep = _clean(_mapping(config.get("sweep")))
+    if not sweep and job is not None:
+        sweep = _clean(_mapping(_mapping(job.params).get("sweep")))
+    return {
+        "sweep": sweep,
+        "slot_bindings": _clean(_mapping(config.get("slot_bindings"))),
+        "base_source": _clean(_mapping(config.get("base_source"))) or None,
+        "schema_hash": config.get("schema_hash"),
+        "samples": (
+            samples
+            if isinstance(samples, int) and not isinstance(samples, bool)
+            else (int(run.samples) if run.samples else None)
+        ),
+        "has_config": bool(config),
+    }
+
+
 def run_experiment_panel(db: Session, run: Run) -> Optional[Dict[str, Any]]:
     """The panel payload for an official run, ``None`` otherwise."""
     if run.origin != RunOrigin.OFFICIAL:
