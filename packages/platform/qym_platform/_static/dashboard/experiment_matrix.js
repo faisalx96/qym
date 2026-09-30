@@ -15,6 +15,11 @@
  *   POST /v1/projects/{pid}/eval-environments/{env_id}/presets
  * Temporary models are saved without their key (the preset API drops it).
  *
+ * "Promote to official" (#39; managers only, ctx.canPromote) opens the official
+ * defaults editor on the settings page, prefilled from the cell's job config:
+ *   /projects/{slug}/settings?tab=environments&env=<env_id>&promote=job&id=<job_id>
+ * Only ids travel in the URL; nothing is published until the manager publishes.
+ *
  * Security: every node is built with el()/createElementNS and text goes through
  * textContent, so no server string is ever parsed as HTML.
  */
@@ -193,6 +198,7 @@
     const actions = ctx.jobActions(job);
     actions.classList.add('exp-mx-actions');
     actions.appendChild(savePresetButton(ctx, view, job, env));
+    if (ctx.canPromote) actions.appendChild(promoteButton(ctx, job, env));
     td.appendChild(actions);
     return td;
   }
@@ -295,6 +301,32 @@
       text: busy ? 'Saving…' : 'Save as preset',
     });
     btn.addEventListener('click', (event) => { event.stopPropagation(); savePreset(ctx, view, job); });
+    return btn;
+  }
+
+  // ── Promote to official (#39) ───────────────────────────────────────────
+  function promoteUrl(ctx, job) {
+    const params = new URLSearchParams();
+    params.set('tab', 'environments');
+    params.set('env', String(job.environment_id));
+    params.set('promote', 'job');
+    params.set('id', String(job.id));
+    return ctx.appRoot() + 'projects/' + encodeURIComponent(ctx.projectSlug || '') + '/settings?' + params.toString();
+  }
+
+  function promoteButton(ctx, job, env) {
+    const reason = !job.qym_config
+      ? 'This job has no stored configuration'
+      : (env && !env.active ? 'The environment is disabled' : (!ctx.projectSlug ? 'Unavailable' : null));
+    const btn = el('button', {
+      type: 'button',
+      className: 'qym-inline-action qym-inline-action--neutral',
+      'data-exp-promote': job.id,
+      disabled: !!reason,
+      title: reason || 'Open the official defaults editor of ' + (job.environment_name || 'its environment') + ' with this cell’s configuration; nothing is published until you publish',
+      text: 'Promote to official',
+    });
+    btn.addEventListener('click', (event) => { event.stopPropagation(); ctx.navigate(promoteUrl(ctx, job)); });
     return btn;
   }
 
@@ -502,7 +534,8 @@
     /**
      * ctx: { detail, projectId, badge(status), jobActions(job), runUrl(id), appRoot(),
      *        navigate(url), postJson(path, body), toast(msg, type), errorMessage(data, fb),
-     *        isTerminal(status), isActive(), rerender(), showAttempts(job) }
+     *        isTerminal(status), isActive(), rerender(), showAttempts(job),
+     *        canPromote, projectSlug }
      * Returns the section nodes to mount, in order.
      */
     render: function (ctx) {

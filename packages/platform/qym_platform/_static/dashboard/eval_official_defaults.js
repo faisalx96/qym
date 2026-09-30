@@ -9,14 +9,24 @@
  *       opens read-only) and "Saved presets" (name, author, updated; open in the
  *       launch form). onEdit({ fromVersion }) opens the editor; without it (or
  *       when the API says the viewer cannot publish) no write action is shown.
+ *       Managers also get "Promote to official" on each saved preset (#39):
+ *       onEdit({ promote: { kind: 'saved', id } }).
  *
  *   window.QymOfficialDefaults.openEditor({
- *     host, hide, project, me, env, fromVersion, onPublished, onClose })
+ *     host, hide, project, me, env, fromVersion, promote, onPublished, onClose })
  *       Mounts the launch form in editor mode (QymExperimentLaunch.mountEditor)
  *       into `host`: the current official version (re-mapped onto the current
  *       schema) is the base the diff counts against, `fromVersion` (optional) is
  *       laid on top as edits. Publish needs release notes and posts
  *       POST …/presets (v1, kind official) or POST …/presets/{id}/versions.
+ *
+ *   Promote to official (#39, plan §9.1): `promote` = { kind: saved|run|job, id }
+ *       loads GET …/eval-environments/{env}/promote-prefill (managers; re-mapped
+ *       onto the current schema, temporary slots unbound) and lays it on top of
+ *       the current official version as edits. It never publishes: the manager
+ *       reviews the diff and publishes from the editor as usual. Slots that held a
+ *       temporary model are passed as `rebind`, so Publish stays disabled until
+ *       each is bound to a project model.
  *
  * APIs (api/eval_presets.py): GET …/presets (can_publish_official, can_publish),
  * GET …/presets/{id}/versions, GET …/versions/{n}?remap=current, the two POSTs
@@ -32,7 +42,7 @@
   'use strict';
   if (window.QymOfficialDefaults) return;
 
-  const STYLESHEET = 'static/eval_official_defaults.css?v=eval-official-defaults-20260930-1';
+  const STYLESHEET = 'static/eval_official_defaults.css?v=eval-official-defaults-20260930-2';
 
   // ── Utilities ──────────────────────────────────────────────────────────
   function el(tag, attrs, children) {
@@ -353,6 +363,7 @@
 
     function savedSection() {
       const saved = (st.data && st.data.saved) || [];
+      const promotable = canPublish() && typeof opts.onEdit === 'function' && env.is_active !== false;
       const children = [el('div', { className: 'env-section-head' }, [el('div', null, [
         el('div', { className: 'env-section-title', text: 'Saved presets' }),
         el('div', { className: 'env-section-desc', text: 'Named starting points saved on this environment. Open one in the launch form to start from it.' }),
@@ -367,11 +378,18 @@
             text: 'Open in launch form',
             onClick: () => navigateTo(experimentsUrl(opts.projectSlug, 'new=1&env=' + encodeURIComponent(env.id) + '&base=saved&preset=' + encodeURIComponent(preset.id))),
           }) : null;
+          // Opens the editor prefilled with this preset; never publishes (#39).
+          const promote = promotable && version ? el('button', {
+            type: 'button', className: 'qym-inline-action qym-inline-action--neutral', 'data-odx-promote': preset.id,
+            text: 'Promote to official',
+            title: 'Open the official defaults editor with this preset, compared with the current version; nothing is published until you publish',
+            onClick: () => opts.onEdit({ fromVersion: null, promote: { kind: 'saved', id: preset.id } }),
+          }) : null;
           return el('tr', { 'data-odx-saved': preset.id }, [
             el('td', null, [el('span', { className: 'odx-preset-name', text: preset.name }), ' ', version ? tag('v' + version.version, 'version') : null]),
             el('td', { text: author(preset.created_by) }),
             el('td', { className: 'env-mono', title: absTime(preset.updated_at) || null, text: relTime(preset.updated_at) || '—' }),
-            el('td', { className: 'odx-actions-cell' }, [open]),
+            el('td', { className: 'odx-actions-cell' }, [open, promote]),
           ]);
         });
         children.push(el('div', { className: 'odx-table-wrap' }, [el('table', { className: 'odx-table' }, [
@@ -397,6 +415,28 @@
     const res = await request(presetsPath(projectId, envId, '/' + encodeURIComponent(presetId) + '/versions/' + encodeURIComponent(version) + '?remap=current'));
     if (!res.ok || !res.data.remap) return { error: errorMessage(res.data, 'Failed to load v' + version) };
     return { version: res.data.version || {}, remap: res.data.remap };
+  }
+
+  /** The editor prefill for a promote source (#39); read-only on the server. */
+  async function promotePrefill(projectId, envId, promote) {
+    const query = 'kind=' + encodeURIComponent(promote.kind) + '&id=' + encodeURIComponent(promote.id);
+    const res = await request('v1/projects/' + encodeURIComponent(projectId) + '/eval-environments/' + encodeURIComponent(envId) + '/promote-prefill?' + query);
+    if (!res.ok) return { error: errorMessage(res.data, 'Could not load the configuration to promote') };
+    return res.data || {};
+  }
+
+  /** Remap, model and temporary-slot notes of a promote prefill, for the editor. */
+  function promoteWarnings(promoted) {
+    const from = (promoted.source && promoted.source.label) || 'The source';
+    const remap = promoted.remap || {};
+    const out = [];
+    (remap.dropped || []).forEach((d) => out.push({ message: from + ': ' + (d.label || d.pointer) + ' was dropped (' + (d.message || d.reason || 'no longer supported') + ').' }));
+    (remap.errors || []).forEach((e) => out.push({ message: from + ': ' + (e.message || e.pointer || 'Invalid value') }));
+    (promoted.warnings || []).forEach((w) => { if (w && w.message) out.push({ message: w.message }); });
+    (promoted.unbound || []).forEach((u) => out.push({
+      message: 'Rebind ' + u.slot_key + ': it used temporary model ' + (u.label || u.model || u.slot_key) + '. Pick a project model before publishing.',
+    }));
+    return out;
   }
 
   async function openEditor(options) {
@@ -436,7 +476,14 @@
       };
     }
     let initialConfig = null;
-    if (official && o.fromVersion && o.fromVersion !== (current && current.version)) {
+    let promoted = null;
+    if (o.promote && o.promote.kind && o.promote.id) {
+      promoted = await promotePrefill(project.id, env.id, o.promote);
+      if (promoted.error) { toast(promoted.error, 'error'); return null; }
+      initialConfig = promoted.config || {};
+      baseMeta.warnings = (baseMeta.warnings || []).concat(promoteWarnings(promoted));
+      if (promoted.remap && promoted.remap.summary) toast(promoted.remap.summary, 'info');
+    } else if (official && o.fromVersion && o.fromVersion !== (current && current.version)) {
       const from = await remapped(project.id, env.id, official.id, o.fromVersion);
       if (from.error) { toast(from.error, 'error'); return null; }
       initialConfig = from.remap.config || {};
@@ -501,15 +548,19 @@
       baseMeta,
       initialConfig,
       title: 'Official defaults · ' + (env.name || ''),
-      description: initialConfig
-        ? 'A draft from v' + o.fromVersion + ', compared with the current version. Nothing changes until you publish.'
-        : 'Edit the environment\'s official defaults and publish them as a new version.',
+      description: promoted
+        ? 'Promoting ' + ((promoted.source && promoted.source.label) || 'a configuration') + ', compared with ' + (current ? 'the current version' : 'Blank') + '. Nothing changes until you publish.'
+        : initialConfig
+          ? 'A draft from v' + o.fromVersion + ', compared with the current version. Nothing changes until you publish.'
+          : 'Edit the environment\'s official defaults and publish them as a new version.',
       backLabel: '← Environments',
       saveLabel: 'Publish v' + next,
       notesLabel: 'Release notes',
       notesPlaceholder: 'What changed and why (required)',
       notesRequired: true,
       allowTemporary: false,
+      // Slots the promoted source bound to a temporary model: Publish waits for a project model.
+      rebind: promoted ? (promoted.unbound || []) : [],
       requireChange: !!current,
       onSave: publish,
       onCancel: close,
@@ -517,5 +568,5 @@
     return { close };
   }
 
-  window.QymOfficialDefaults = { renderDrawerSection, openEditor, _internal: { versionView, flattenSettings } };
+  window.QymOfficialDefaults = { renderDrawerSection, openEditor, _internal: { versionView, flattenSettings, promoteWarnings } };
 })();

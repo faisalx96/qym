@@ -188,7 +188,7 @@
     }
   </style>
   <link rel="stylesheet" href="/static/eval_environments.css?v=eval-environments-20260929-1">
-  <link rel="stylesheet" href="/static/eval_official_defaults.css?v=eval-official-defaults-20260930-1">
+  <link rel="stylesheet" href="/static/eval_official_defaults.css?v=eval-official-defaults-20260930-2">
   <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60">
   <script defer src="/static/ui_components.js?v=ui-consistency-20260803-28"></script>
   <script src="/static/eval_environments.js?v=eval-environments-20260930-3"></script>
@@ -196,7 +196,7 @@
   <script src="/static/eval_temporary_model.js?v=eval-temporary-model-20260930-1"></script>
   <script src="/static/experiment_launch_advanced.js?v=experiment-launch-advanced-20260930-3"></script>
   <script src="/static/experiment_launch.js?v=experiment-launch-20260930-5"></script>
-  <script src="/static/eval_official_defaults.js?v=eval-official-defaults-20260930-1"></script>
+  <script src="/static/eval_official_defaults.js?v=eval-official-defaults-20260930-2"></script>
 </head>
 <body>
   <main class="settings-page">
@@ -517,6 +517,38 @@
         await loadConnections();
         render();
         mountEnvironments();
+        openFromUrl();
+      }
+
+      // Deep links: ?tab=environments selects the tab; with &env=<id>&promote=
+      // saved|run|job&id=<source id> ("Promote to official" on the run page and the
+      // experiment matrix, #39) it opens the official defaults editor prefilled from
+      // that source. Only ids travel in the URL; the editor never publishes by itself.
+      let urlHandled = false; // load() runs again after edits; the link is read once
+      async function openFromUrl() {
+        if (urlHandled) return;
+        urlHandled = true;
+        const params = new URLSearchParams(window.location.search);
+        const tab = document.getElementById('settings-tab-' + (params.get('tab') || ''));
+        if (tab) tab.click();
+        const kind = params.get('promote');
+        const sourceId = params.get('id');
+        const envId = params.get('env');
+        if (!kind && !sourceId) return;
+        // One-shot: a reload must not reopen the editor.
+        ['promote', 'id', 'env'].forEach((key) => params.delete(key));
+        const query = params.toString();
+        window.history.replaceState(null, '', window.location.pathname + (query ? '?' + query : ''));
+        if (!['saved', 'run', 'job'].includes(kind) || !sourceId || !envId) return;
+        let env = null;
+        try {
+          const data = await fetchJson(`v1/projects/${encodeURIComponent(state.project.id)}/eval-environments/${encodeURIComponent(envId)}`);
+          env = data && (data.environment || data);
+        } catch (err) {
+          toast(err.message || 'Environment not found', 'error');
+          return;
+        }
+        if (env && env.id) openOfficialDefaultsEditor({ env, promote: { kind, id: sourceId } });
       }
 
       // ── Evaluation Service environments (members read, managers write) ──
@@ -540,7 +572,7 @@
       }
 
       // Environments → env → Official defaults (#30): the launch form without sweeps.
-      function openOfficialDefaultsEditor({ env, fromVersion }) {
+      function openOfficialDefaultsEditor({ env, fromVersion, promote }) {
         if (!window.QymOfficialDefaults) return;
         window.QymOfficialDefaults.openEditor({
           host: document.getElementById('env-editor-host'),
@@ -553,6 +585,7 @@
           me: state.me,
           env,
           fromVersion,
+          promote,
           onPublished: () => { if (envPanel) envPanel.reload(); },
         });
       }
