@@ -11,6 +11,7 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from fastapi.testclient import TestClient
 from sqlalchemy import column, create_engine, inspect, select, table, text
 from sqlalchemy.engine import make_url
@@ -185,9 +186,10 @@ def test_postgres_full_chain_upgrade_p1_downgrade_reupgrade(postgres, populated)
         seed(engine, before_dashboard=True)
         expected = source_snapshot(engine)
     command.upgrade(config, "head")
+    head = ScriptDirectory.from_config(config).get_current_head()
     with engine.connect() as connection:
         assert (
-            connection.scalar(text("select version_num from alembic_version")) == "0064"
+            connection.scalar(text("select version_num from alembic_version")) == head
         )
         inspector = inspect(connection)
         assert "ix_dashboard_event_retention" in {
