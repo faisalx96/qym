@@ -710,6 +710,9 @@ def test_step_latency_starts_collapsed_on_the_run_page(browser):
         assert disclosure.get_attribute("aria-expanded") == "false"
         assert page.locator("#step-latency-panel .sl-plot").count() == 0
         assert "1 step" in page.locator("#step-latency-panel .sl-summary").inner_text()
+        # One title only: the section header names it, the disclosure is an action.
+        assert disclosure.inner_text().strip() == "Show distributions"
+        assert "Step latency distributions" not in page.locator("#step-latency-panel").inner_text()
         disclosure.click()
         page.wait_for_selector("#step-latency-panel .sl-plot svg")
         assert (
@@ -717,6 +720,10 @@ def test_step_latency_starts_collapsed_on_the_run_page(browser):
                 "aria-expanded"
             )
             == "true"
+        )
+        assert (
+            page.locator("#step-latency-panel [data-sl-disclosure]").inner_text().strip()
+            == "Hide distributions"
         )
         # Opening it used the data already loaded.
         assert len(view.latency_selections()) == 1

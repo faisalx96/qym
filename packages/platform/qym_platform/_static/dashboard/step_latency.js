@@ -883,11 +883,12 @@
       const open = state.panelOpen;
       container.innerHTML = '<div class="metric-card sl-card sl-collapsible' + (open ? " is-open" : "") + '">' +
         '<div class="ri-header sl-header"><div>' +
-          // The run page's section header names the section; this row is
-          // the card-title disclosure (C058 header recipe + C143).
+          // The run page's section header already names the section, so
+          // the disclosure is an action label, not a second title (C058, C143).
           '<div class="sl-title"><button type="button" class="sl-disclosure" ' +
             'data-sl-disclosure aria-expanded="' + open + '">' + DISCLOSURE_ICON +
-            "<span>" + title + "</span></button></div>" +
+            "<span>" + (open ? "Hide distributions" : "Show distributions") +
+            "</span></button></div>" +
           '<div class="ri-header-copy">' + copy + "</div>" +
         "</div>" + panelSummaryHtml() + "</div>" +
         (open ? '<div class="sl-body">' + controls + body + "</div>" : "") +
