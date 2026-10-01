@@ -29,6 +29,7 @@ from qym_platform.db.models import (
     User,
     UserRole,
 )
+from migration_seed import insert_at_revision
 
 MIGRATIONS = (
     Path(__file__).resolve().parents[2] / "packages/platform/qym_platform/migrations"
@@ -62,107 +63,122 @@ def postgres(request, monkeypatch):
 
 
 def seed(engine, *, before_dashboard=False):
-    with Session(engine) as db:
-        if before_dashboard:
-            db.info["dashboard_projection_worker"] = True
-        db.add(User(id="owner", email="owner@example.invalid", role=UserRole.ADMIN))
-        db.flush()
-        db.add(
-            Project(
-                id="project", name="Project", slug="project", created_by_user_id="owner"
-            )
+    """Historical source rows, inserted at the database's current revision.
+
+    Rows go in through Core with only the columns this revision has (ORM
+    models describe the head schema), and without the ORM hooks that register
+    new rows with the dashboard outbox: like data written before the
+    dashboard existed. ``before_dashboard`` is kept for callers; it is always
+    the case now.
+    """
+    now = datetime.now()
+    with engine.begin() as connection:
+        insert_at_revision(
+            connection, User, {"id": "owner", "email": "owner@example.invalid", "role": UserRole.ADMIN}
         )
-        db.flush()
-        db.add(
-            Run(
-                id="run",
-                project_id="project",
-                owner_user_id="owner",
-                created_by_user_id="owner",
-                task="test",
-                dataset="test",
-                model=None,
-                metrics=["quality"],
-                run_config={},
-                run_metadata={"total_items": 1},
-                status=RunWorkflowStatus.COMPLETED,
-                created_at=datetime.now(),
-                started_at=datetime.now(),
-                last_event_at=datetime.now(),
-            )
+        insert_at_revision(
+            connection,
+            Project,
+            {"id": "project", "name": "Project", "slug": "project", "created_by_user_id": "owner"},
         )
-        db.flush()
-        db.add(
-            ProjectAnalysisCategoryCatalogVersion(
-                id="catalog",
-                project_id="project",
-                version=1,
-                content_hash="f" * 64,
-                subcategory_taxonomy={
+        insert_at_revision(
+            connection,
+            Run,
+            {
+                "id": "run",
+                "project_id": "project",
+                "owner_user_id": "owner",
+                "created_by_user_id": "owner",
+                "task": "test",
+                "dataset": "test",
+                "model": None,
+                "metrics": ["quality"],
+                "run_config": {},
+                "run_metadata": {"total_items": 1},
+                "status": RunWorkflowStatus.COMPLETED,
+                "created_at": now,
+                "started_at": now,
+                "last_event_at": now,
+            },
+        )
+        insert_at_revision(
+            connection,
+            ProjectAnalysisCategoryCatalogVersion,
+            {
+                "id": "catalog",
+                "project_id": "project",
+                "version": 1,
+                "content_hash": "f" * 64,
+                "subcategory_taxonomy": {
                     "reasoning": {"math": {"label": "Math", "description": "Preserve"}}
                 },
-            )
+            },
         )
-        db.execute(
-            ReviewCorrection.__table__.insert().values(
-                run_id="run",
-                item_id="item",
-                task="test",
-                ai_root_cause="reasoning",
-                human_root_cause="reasoning",
-                ai_root_cause_issues=[
+        insert_at_revision(
+            connection,
+            ReviewCorrection,
+            {
+                "run_id": "run",
+                "item_id": "item",
+                "task": "test",
+                "ai_root_cause": "reasoning",
+                "human_root_cause": "reasoning",
+                "ai_root_cause_issues": [
                     {"category": "reasoning", "subcategory": "math", "finding": "AI"}
                 ],
-                human_root_cause_issues=[
+                "human_root_cause_issues": [
                     {"category": "reasoning", "subcategory": "math", "finding": "Human"}
                 ],
-            )
+            },
         )
-        db.add(
-            RunItem(
-                run_id="run",
-                item_id="item",
-                input={"preserve": "source"},
-                output="original",
-                latency_ms=12,
-            )
+        insert_at_revision(
+            connection,
+            RunItem,
+            {
+                "run_id": "run",
+                "item_id": "item",
+                "input": {"preserve": "source"},
+                "output": "original",
+                "latency_ms": 12,
+            },
         )
-        db.add(
-            RunItemScore(
-                run_id="run", item_id="item", metric_name="quality", score_numeric=0.75
-            )
+        insert_at_revision(
+            connection,
+            RunItemScore,
+            {"run_id": "run", "item_id": "item", "metric_name": "quality", "score_numeric": 0.75},
         )
-        db.add(
-            RunEvent(
-                run_id="run",
-                event_id=str(uuid4()),
-                sequence=1,
-                sent_at=datetime.now(),
-                type="item_completed",
-                payload={"preserve": True},
-            )
+        insert_at_revision(
+            connection,
+            RunEvent,
+            {
+                "run_id": "run",
+                "event_id": str(uuid4()),
+                "sequence": 1,
+                "sent_at": now,
+                "type": "item_completed",
+                "payload": {"preserve": True},
+            },
         )
-        db.commit()
 
 
 def source_snapshot(engine):
-    with Session(engine) as db:
-        source = db.scalar(select(RunItem))
+    """The seeded source values, read with plain SQL so it works at any revision."""
+    with engine.connect() as connection:
+        def one(sql):
+            return connection.execute(text(sql)).scalar()
+
+        source = connection.execute(text("SELECT input, output FROM run_items")).one()
         return {
-            "run": db.get(Run, "run").id,
+            "run": one("SELECT id FROM runs WHERE id = 'run'"),
             "input": source.input,
             "output": source.output,
-            "score": db.scalar(select(RunItemScore.score_numeric)),
-            "event": db.scalar(select(RunEvent.payload)),
-            "subcategory_taxonomy": db.scalar(
-                select(ProjectAnalysisCategoryCatalogVersion.subcategory_taxonomy)
+            "score": one("SELECT score_numeric FROM run_item_scores"),
+            "event": one("SELECT payload FROM run_events"),
+            "subcategory_taxonomy": one(
+                "SELECT subcategory_taxonomy FROM project_analysis_category_catalog_versions"
             ),
-            "ai_root_cause_issues": db.scalar(
-                select(ReviewCorrection.ai_root_cause_issues)
-            ),
-            "human_root_cause_issues": db.scalar(
-                select(ReviewCorrection.human_root_cause_issues)
-            ),
+            "ai_root_cause_issues": one("SELECT ai_root_cause_issues FROM review_corrections"),
+            "human_root_cause_issues": one("SELECT human_root_cause_issues FROM review_corrections"),
         }
 
 
