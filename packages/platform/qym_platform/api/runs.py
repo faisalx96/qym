@@ -53,6 +53,7 @@ from qym_platform.item_identity import (
     finalize_compare_alignment,
 )
 from qym_platform.permissions import (
+    ARCHIVED_PROJECT_DETAIL,
     can_approve_run as permission_can_approve_run,
     can_delete_run,
     can_modify_run,
@@ -1244,10 +1245,10 @@ def _project_not_found_page(request: Request, project_slug: str) -> HTMLResponse
   <title>قيِّم • Project Not Found</title>
   <link rel="icon" type="image/png" href="{static_root}/qym_icon.png">
   <link rel="stylesheet" href="{static_root}/dashboard.css?v=p0-20260930">
-  <link rel="stylesheet" href="{static_root}/shell.css?v=p0-20260930-3">
+  <link rel="stylesheet" href="{static_root}/shell.css?v=p1-20261001">
   <script src="{static_root}/qym_safe.js?v=p0-20260930"></script>
   <script src="{static_root}/auth.js?v=p0-20260930"></script>
-  <script src="{static_root}/shell.js?v=p0-20260930-3"></script>
+  <script src="{static_root}/shell.js?v=p1-20261001"></script>
 </head>
 <body>
   <main style="min-height:50vh;display:flex;align-items:center;justify-content:center;padding:32px;color:var(--text-muted);">
@@ -4090,16 +4091,49 @@ def export_run_html(
     )
 
 
+TRASH_PAGE_MAX = 200
+
+
+def _trash_like(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+def _deleted_runs_query(db: Session, project_id: Optional[str], search: str):
+    query = db.query(Run).filter(Run.deleted_at.isnot(None))
+    if project_id:
+        query = query.filter(Run.project_id == project_id)
+    term = (search or "").strip().lower()
+    if term:
+        pattern = _trash_like(term)
+        run_name = func.coalesce(Run.run_config["run_name"].as_string(), "")
+        query = query.filter(
+            or_(
+                func.lower(run_name).like(pattern, escape="\\"),
+                func.lower(func.coalesce(Run.external_run_id, "")).like(pattern, escape="\\"),
+                func.lower(Run.id).like(pattern, escape="\\"),
+            )
+        )
+    return query
+
+
 @router.get("/api/runs/trash")
 def list_deleted_runs(
     response: Response,
+    limit: int = Query(default=TRASH_PAGE_MAX, ge=1, le=TRASH_PAGE_MAX),
+    offset: int = Query(default=0, ge=0),
+    project_id: Optional[str] = Query(default=None),
+    q: str = Query(default="", max_length=200),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> List[Dict[str, Any]]:
     """List soft-deleted runs (admin only) with the date retention purges each.
 
-    Purging pauses while a run's project is archived: such a row has no
-    ``purge_at`` and ``purge_paused`` is true.
+    Pages through every deleted run: ``limit``/``offset`` select the page and
+    ``X-Qym-Total-Count`` carries how many match, so none is ever out of reach.
+    ``project_id`` and ``q`` (run name or id) narrow the list. Purging pauses
+    while a run's project is archived: such a row has no ``purge_at`` and
+    ``purge_paused`` is true.
     """
     if principal.user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Admin only")
@@ -4107,17 +4141,21 @@ def list_deleted_runs(
     grace_days = PlatformSettings().deleted_run_grace_days
     response.headers["X-Qym-Deleted-Run-Grace-Days"] = str(grace_days)
 
-    # The list is capped, so with purge on it keeps the runs closest to their
-    # purge date (earliest purge clocks); otherwise the newest deletions.
+    query = _deleted_runs_query(db, project_id, q)
+    total = query.order_by(None).count()
+    response.headers["X-Qym-Total-Count"] = str(total)
+    # With purge on, the runs closest to their purge date (earliest purge
+    # clocks) come first; otherwise the newest deletions. The id keeps pages
+    # stable when several runs share a timestamp.
     deleted_runs = (
-        db.query(Run)
-        .filter(Run.deleted_at.isnot(None))
-        .order_by(
+        query.order_by(
             func.coalesce(Run.purge_clock_started_at, Run.deleted_at).asc()
             if grace_days > 0
-            else Run.deleted_at.desc()
+            else Run.deleted_at.desc(),
+            Run.id.asc(),
         )
-        .limit(200)
+        .offset(offset)
+        .limit(limit)
         .all()
     )
 
@@ -4130,16 +4168,17 @@ def list_deleted_runs(
 
     # Runs of archived projects cannot be restored until the project is.
     project_ids = {r.project_id for r in deleted_runs}
-    archived_projects = (
+    projects = (
         {
-            row[0]
-            for row in db.query(Project.id).filter(
-                Project.id.in_(project_ids), Project.is_active.is_(False)
+            row.id: row
+            for row in db.query(Project.id, Project.name, Project.slug, Project.is_active).filter(
+                Project.id.in_(project_ids)
             )
         }
         if project_ids
-        else set()
+        else {}
     )
+    archived_projects = {pid for pid, row in projects.items() if not row.is_active}
 
     dataset_info = _dataset_version_info_map(db, deleted_runs)
     result = []
@@ -4175,9 +4214,40 @@ def list_deleted_runs(
                 ),
                 "purge_paused": grace_days > 0 and r.project_id in archived_projects,
                 "project_archived": r.project_id in archived_projects,
+                "project_id": r.project_id,
+                "project_name": projects[r.project_id].name if r.project_id in projects else "",
+                "project_slug": projects[r.project_id].slug if r.project_id in projects else "",
             }
         )
     return result
+
+
+@router.get("/api/runs/trash/projects")
+def list_deleted_run_projects(
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> List[Dict[str, Any]]:
+    """Projects that have deleted runs, with how many each (admin only)."""
+    if principal.user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    rows = (
+        db.query(Project.id, Project.name, Project.slug, Project.is_active, func.count(Run.id))
+        .join(Run, Run.project_id == Project.id)
+        .filter(Run.deleted_at.isnot(None))
+        .group_by(Project.id, Project.name, Project.slug, Project.is_active)
+        .order_by(Project.name.asc())
+        .all()
+    )
+    return [
+        {
+            "id": pid,
+            "name": name,
+            "slug": slug,
+            "archived": not is_active,
+            "deleted_runs": int(count or 0),
+        }
+        for pid, name, slug, is_active, count in rows
+    ]
 
 
 @router.get("/api/runs/{run_id}/passes")
@@ -5696,9 +5766,59 @@ def restore_run(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
-    """Restore a soft-deleted run (admin only)."""
+    """Restore a soft-deleted run (admin only).
+
+    ``{"run_id": ...}`` restores one run and fails as before. ``{"run_ids":
+    [...]}`` restores up to 200 runs in one transaction; runs that are no
+    longer in Trash or belong to an archived project are skipped and listed in
+    ``skipped`` with the reason, so one stale row does not block the rest.
+    """
     if principal.user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Admin only")
+
+    run_ids = request.get("run_ids")
+    if run_ids is not None:
+        if (
+            not isinstance(run_ids, list)
+            or not run_ids
+            or not all(isinstance(value, str) and value for value in run_ids)
+        ):
+            raise HTTPException(status_code=400, detail="run_ids must be a non-empty list of run ids")
+        if len(run_ids) > TRASH_PAGE_MAX:
+            raise HTTPException(
+                status_code=400, detail=f"Restore at most {TRASH_PAGE_MAX} runs at a time"
+            )
+        wanted = list(dict.fromkeys(run_ids))
+        runs = {
+            run.id: run
+            for run in db.query(Run)
+            .filter(Run.id.in_(wanted), Run.deleted_at.isnot(None))
+            .order_by(Run.id)
+            .with_for_update()
+            .populate_existing()
+            .all()
+        }
+        archived = {
+            row[0]
+            for row in db.query(Project.id).filter(
+                Project.id.in_({run.project_id for run in runs.values()}),
+                Project.is_active.is_(False),
+            )
+        } if runs else set()
+        restored: List[str] = []
+        skipped: List[Dict[str, str]] = []
+        # One lock order (by id) for the Run rows and their projection rows.
+        for run_id in sorted(wanted):
+            run = runs.get(run_id)
+            if run is None:
+                skipped.append({"run_id": run_id, "reason": "Deleted run not found"})
+            elif run.project_id in archived:
+                skipped.append({"run_id": run_id, "reason": ARCHIVED_PROJECT_DETAIL})
+            else:
+                _restore_deleted_run(db, run, principal)
+                restored.append(run_id)
+        db.commit()
+        return {"ok": True, "restored": restored, "skipped": skipped}
 
     run_id = request.get("run_id")
     if not run_id:
@@ -5715,23 +5835,27 @@ def restore_run(
         raise HTTPException(status_code=404, detail="Deleted run not found")
     require_project_writable(db, run.project_id)
 
+    _restore_deleted_run(db, run, principal)
+    db.commit()
+
+    return {"ok": True}
+
+
+def _restore_deleted_run(db: Session, run: Run, principal: Principal) -> None:
     run.deleted_at = None
     _set_dashboard_visibility(db, run.id, True)
     run.deleted_by_user_id = None
     run.purge_clock_started_at = None
-
-    audit = AuditLog(
-        actor_user_id=principal.user.id,
-        action="run.restored",
-        entity_type="run",
-        entity_id=run.id,
-        before={"deleted_at": True},
-        after={},
+    db.add(
+        AuditLog(
+            actor_user_id=principal.user.id,
+            action="run.restored",
+            entity_type="run",
+            entity_id=run.id,
+            before={"deleted_at": True},
+            after={},
+        )
     )
-    db.add(audit)
-    db.commit()
-
-    return {"ok": True}
 
 
 @router.post("/v1/runs/{run_id}/submit")

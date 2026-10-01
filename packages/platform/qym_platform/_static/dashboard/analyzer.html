@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Auto-analysis</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p0-20260930">
-  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001">
+  <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
   <script src="/static/qym_safe.js?v=p0-20260930"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p0-20260930-3"></script>
+  <script src="/static/shell.js?v=p1-20261001"></script>
   <script src="/static/metrics.js?v=p0-20260930-3"></script>
   <script src="/static/qym_table.js"></script>
-  <script src="/static/playground.js?v=p0-20260930"></script>
+  <script src="/static/playground.js?v=p1-20261001"></script>
   <style>
     /* Typography and color roles follow docs/DESIGN_LANGUAGE.md. */
     .analysis-page {
@@ -5209,7 +5209,8 @@
         const contextActions = projectPanel.querySelector('.pg-context-actions');
         const contextStatus = document.getElementById('pg-context-status');
         const contextFeedback = document.getElementById('pg-context-feedback');
-        const documentInput = document.getElementById('pg-document-input');
+        // Members without upload access get the list but no file input.
+        const documentInput = document.getElementById('pg-document-input') || document.getElementById('pg-document-list');
         const documentsSection = documentInput && documentInput.closest('.pg-section');
         const documentsBody = documentsSection && documentsSection.querySelector('.pg-section-body');
 
@@ -5370,6 +5371,13 @@
         if (documentList) libraryBody.append(documentList);
         libraryCard.append(libraryBody);
         documentsPanel.append(uploadCard, libraryCard);
+        // Read-only members: no upload card, and the library says why.
+        const readOnlyDocuments = uploadBody.querySelector('#pg-document-read-only');
+        if (readOnlyDocuments) {
+          uploadCard.hidden = true;
+          uploadCard.style.display = 'none';
+          libraryBody.prepend(readOnlyDocuments);
+        }
         if (documentsSection) documentsSection.remove();
 
         const projectFooter = document.createElement('footer');

@@ -6,280 +6,139 @@
   <title>قيِّم • Deleted Runs</title>
   <link rel="icon" type="image/png" href="./static/qym_icon.png">
   <link rel="stylesheet" href="./static/dashboard.css?v=p0-20260930">
-  <link rel="stylesheet" href="./static/shell.css?v=p0-20260930-3">
+  <link rel="stylesheet" href="./static/shell.css?v=p1-20261001">
   <script src="./static/qym_safe.js?v=p0-20260930"></script>
   <script src="./static/auth.js?v=p0-20260930"></script>
-  <script src="./static/shell.js?v=p0-20260930-3"></script>
+  <script src="./static/shell.js?v=p1-20261001"></script>
+  <script src="./static/qym_table.js"></script>
   <style>
-    .trash-container {
-      padding: var(--space-lg) var(--space-xl);
-      overflow-y: auto;
+    .trash-page {
+      padding: var(--space-xl) var(--space-lg);
+      min-width: 0;
     }
 
-    .section {
-      margin-bottom: var(--space-xl);
-    }
+    .trash-header { margin-bottom: var(--space-lg); }
+    .trash-header h1 { font-size: var(--font-title); font-weight: 650; margin: 0; letter-spacing: -0.3px; color: var(--text-primary); }
+    .trash-header p { font-size: var(--font-base); color: var(--text-muted); margin: 6px 0 0; line-height: 1.5; }
+    .trash-meta-line { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-xs); font-size: var(--font-base); color: var(--text-muted); }
+    .trash-meta-line > span + span::before { content: '·'; margin-right: var(--space-sm); color: var(--text-dim); }
+    .trash-meta-value { color: var(--text-secondary); }
 
-    .section-title {
-      font-size: var(--font-sm);
-      font-weight: 600;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: var(--space-md);
-    }
-
-    .trash-summary {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: var(--space-md);
-    }
-
-    .summary-card {
-      background: var(--bg-surface);
-      border: 1px solid var(--border-default);
-      border-radius: 8px;
-      padding: var(--space-md);
-    }
-
-    .summary-label {
-      font-size: var(--font-sm);
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.3px;
-      margin-bottom: 4px;
-    }
-
-    .summary-value {
-      font-size: var(--font-lg);
-      font-weight: 600;
-      color: var(--text-primary);
-      font-family: var(--font-mono);
-    }
-
-    .summary-note {
-      margin-top: 6px;
-      font-size: var(--font-sm);
-      color: var(--text-muted);
-    }
-
-    .panel {
+    .trash-panel {
       background: var(--bg-surface);
       border: 1px solid var(--border-default);
       border-radius: 8px;
       overflow: hidden;
     }
 
-    .panel-header {
+    .trash-toolbar {
       display: flex;
-      justify-content: space-between;
+      flex-wrap: wrap;
       align-items: center;
-      gap: var(--space-md);
+      gap: var(--space-sm);
       padding: var(--space-md) var(--space-lg);
       border-bottom: 1px solid var(--border-default);
     }
+    .trash-toolbar .qym-search { width: 260px; max-width: 100%; }
+    .trash-toolbar .qym-select { width: 220px; max-width: 100%; }
+    .trash-toolbar-spacer { flex: 1 1 auto; }
+    .trash-selection-label { font-size: var(--font-sm); color: var(--text-muted); }
+    .trash-toolbar .qym-inline-action:disabled { opacity: 0.45; cursor: not-allowed; }
 
-    .panel-title {
-      font-size: var(--font-sm);
-      font-weight: 600;
-      color: var(--text-primary);
+    /* The table scrolls sideways when it is wider than the panel; the
+       Restore column stays pinned to the right edge so it is always in view. */
+    .trash-table-wrap { overflow-x: auto; }
+    .trash-table tbody tr { cursor: default; }
+    .trash-table tbody td { height: 40px; }
+    .trash-table th.trash-col-select,
+    .trash-table td.trash-col-select { text-align: center; padding-left: var(--space-sm); padding-right: 0; }
+    .trash-table th.trash-col-actions,
+    .trash-table td.trash-col-actions {
+      position: sticky;
+      right: 0;
+      text-align: right;
+      box-shadow: inset 1px 0 0 var(--border-subtle);
     }
+    .trash-table th.trash-col-actions { z-index: 6; }
+    .trash-table td.trash-col-actions { background: var(--bg-surface); overflow: visible; }
+    .trash-table tbody tr:hover td.trash-col-actions { background: var(--bg-hover); }
+    .trash-table input[type="checkbox"] { width: 14px; height: 14px; margin: 0; cursor: pointer; accent-color: var(--accent-primary); }
+    .trash-table input[type="checkbox"]:disabled { cursor: not-allowed; }
 
-    .panel-subtitle {
-      font-size: var(--font-sm);
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
-
-    .trash-table-wrap {
-      overflow: auto;
-    }
-
-    .trash-table {
-      width: 100%;
-      min-width: 1060px;
-      border-collapse: collapse;
-    }
-
-    .trash-table th {
-      text-align: left;
-      padding: var(--space-sm) var(--space-md);
-      font-size: var(--font-sm);
-      font-weight: 500;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.3px;
-      background: var(--bg-elevated);
-      border-bottom: 1px solid var(--border-default);
-      white-space: nowrap;
-    }
-
-    .trash-table td {
-      padding: var(--space-md);
-      font-size: var(--font-base);
-      color: var(--text-secondary);
-      border-bottom: 1px solid var(--border-default);
-      vertical-align: middle;
-    }
-
-    /* Ten columns (with Purges) fit a 1400px viewport on the compact inner
-       gutter; the outer cells keep the panel's edge inset. */
-    .trash-table th:first-child,
-    .trash-table td:first-child {
-      padding-left: var(--space-lg);
-    }
-
-    .trash-table th:last-child,
-    .trash-table td:last-child {
-      padding-right: var(--space-lg);
-    }
-
-    .trash-table tr:last-child td {
-      border-bottom: none;
-    }
-
-    .trash-run-name {
-      color: var(--text-primary);
-      font-weight: 500;
-      word-break: break-word;
-    }
-
-    .trash-run-id {
-      font-family: var(--font-mono);
-      font-size: var(--font-sm);
-      color: var(--text-muted);
-      margin-top: 3px;
-    }
-
-    .trash-run-archived {
-      margin-top: var(--space-xs);
-    }
-
-    .trash-chip {
-      display: inline-block;
-      max-width: 220px;
-      padding: 2px 8px;
-      border-radius: 4px;
-      background: var(--bg-elevated);
-      color: var(--text-secondary);
-      white-space: nowrap;
+    .trash-run { display: flex; flex-direction: column; min-width: 0; }
+    .trash-run-name,
+    .trash-run-id,
+    .trash-cell-text {
+      display: block;
+      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
-      vertical-align: middle;
-    }
-
-    .trash-meta {
-      font-size: var(--font-sm);
-      color: var(--text-secondary);
       white-space: nowrap;
     }
+    .trash-run-name { color: var(--text-primary); font-weight: 500; }
+    .trash-run-id { font-family: var(--font-mono); font-size: var(--font-sm); color: var(--text-muted); }
+    .trash-project-tag { margin-left: var(--space-xs); }
+    .trash-table .model-label { display: inline-flex; align-items: center; max-width: 100%; min-width: 0; white-space: nowrap; }
+    .trash-table .model-label-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-    /* Purging waits while the run's project is archived; wraps like a note. */
-    .trash-meta.trash-purge-paused {
-      white-space: normal;
-      max-width: 170px;
-      line-height: 1.4;
-    }
+    .trash-meta { font-size: var(--font-sm); color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .trash-meta-sub { font-size: var(--font-sm); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .trash-meta.trash-purge-paused { white-space: normal; line-height: 1.35; }
+    .trash-purge-when { white-space: nowrap; }
+    .trash-row--purge-soon td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
 
-    .trash-meta-sub {
-      font-size: var(--font-sm);
-      color: var(--text-muted);
-      margin-top: 2px;
-      font-family: var(--font-mono);
-    }
+    .restore-btn { padding: 4px 10px; font-size: var(--font-sm); }
+    .trash-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .restore-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    .trash-actions {
-      text-align: right;
-      white-space: nowrap;
-    }
-
-    .restore-btn {
-      min-width: 92px;
-    }
-
-    /* Retention purge countdown. Rows close to their purge date carry a
-       warning edge so they stand out while scanning the queue. */
-    .trash-purge-when {
-      white-space: nowrap;
-    }
-
-    .trash-row--purge-soon td:first-child {
-      box-shadow: inset 3px 0 0 var(--warning);
-    }
-
-    .restore-btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .empty-state {
-      padding: var(--space-xl);
-      text-align: center;
-      color: var(--text-muted);
-      font-size: var(--font-sm);
-    }
-
-    .empty-state-title {
-      font-size: var(--font-lg);
-      color: var(--text-primary);
-      margin-bottom: var(--space-sm);
-    }
-
-    .panel-tools {
+    .trash-footer {
       display: flex;
-      align-items: center;
-      gap: var(--space-sm);
+      justify-content: flex-end;
+      padding: var(--space-sm) var(--space-lg);
+      border-top: 1px solid var(--border-default);
     }
+    .trash-footer[hidden] { display: none; }
+
+    .empty-state { padding: var(--space-xl); text-align: center; color: var(--text-muted); font-size: var(--font-md); line-height: 1.5; }
+    .empty-state-title { font-size: var(--font-xl); font-weight: 650; color: var(--text-primary); margin-bottom: var(--space-sm); }
 
     @media (max-width: 800px) {
-      .trash-container {
-        padding: var(--space-md);
-      }
-
-      .panel-header {
-        flex-direction: column;
-        align-items: flex-start;
-      }
+      .trash-page { padding: var(--space-md); }
+      .trash-toolbar { padding: var(--space-md); }
+      .trash-toolbar .qym-search,
+      .trash-toolbar .qym-select { width: 100%; }
     }
   </style>
   <link rel="stylesheet" href="./static/ui_components.css?v=p0-20260930">
   <script defer src="./static/ui_components.js?v=p0-20260930-2"></script>
 </head>
 <body>
-  <main class="trash-container">
-    <div class="section">
-      <div class="section-title">Overview</div>
-      <div class="trash-summary qym-stat-strip">
-        <div class="summary-card qym-stat-strip__item">
-          <div class="summary-label qym-stat-strip__label">Visible Rows</div>
-          <div class="summary-value qym-stat-strip__value" id="trash-stat-visible">0</div>
-          <div class="summary-note">Deleted runs available for recovery, up to 200.</div>
-        </div>
-        <div class="summary-card qym-stat-strip__item">
-          <div class="summary-label qym-stat-strip__label">Access Level</div>
-          <div class="summary-value qym-stat-strip__value" id="trash-stat-role">—</div>
-          <div class="summary-note">Only admins can restore runs.</div>
-        </div>
-        <div class="summary-card qym-stat-strip__item">
-          <div class="summary-label qym-stat-strip__label">Retention</div>
-          <div class="summary-value qym-stat-strip__value" id="trash-stat-retention">—</div>
-          <div class="summary-note" id="trash-stat-retention-note">Time before a deleted run is permanently removed.</div>
-        </div>
+  <main class="trash-page">
+    <header class="trash-header">
+      <h1>Deleted runs</h1>
+      <p id="trash-retention-copy">Deleted runs are permanently removed after the retention period. Restore a run before then to keep it.</p>
+      <div class="trash-meta-line">
+        <span>Retention <span class="trash-meta-value" id="trash-stat-retention">—</span></span>
+        <span><span class="trash-meta-value" id="trash-stat-total">—</span> deleted runs</span>
+        <span>Only admins can restore runs</span>
       </div>
-    </div>
+    </header>
 
-    <div class="section">
-      <div class="section-title">Recovery Queue</div>
-      <div class="panel">
-        <div class="panel-header">
-          <div>
-            <div class="panel-title">Deleted Runs</div>
-            <div class="panel-subtitle" id="trash-retention-copy">Deleted runs are permanently removed after the retention period. Restore a run before then to keep it.</div>
-          </div>
-        </div>
-        <div id="trash-content"></div>
+    <section class="trash-panel" aria-label="Deleted runs">
+      <div class="trash-toolbar" role="toolbar" aria-label="Deleted runs filters and actions">
+        <input class="qym-control qym-search" id="trash-search" type="search" placeholder="Search run name or ID" aria-label="Search deleted runs by name or ID" autocomplete="off" />
+        <select class="qym-control qym-select" id="trash-project" aria-label="Project">
+          <option value="">All projects</option>
+        </select>
+        <span class="trash-toolbar-spacer"></span>
+        <span class="trash-selection-label" id="trash-selection-label" aria-live="polite"></span>
+        <button class="qym-inline-action qym-inline-action--accent" id="trash-restore-selected" type="button" disabled>Restore selected</button>
       </div>
-    </div>
+      <div id="trash-content"></div>
+      <div class="trash-footer" id="trash-footer" hidden>
+        <div id="trash-pagination"></div>
+      </div>
+    </section>
   </main>
 
   <script>
@@ -306,6 +165,18 @@
         return QymSafe.escapeHtml(value == null ? '' : String(value));
       }
 
+      const PAGE_SIZE = 50;
+      const view = {
+        page: 1,
+        total: 0,
+        query: '',
+        projectId: '',
+        rows: [],
+        selected: new Set(),
+        loadSeq: 0,
+        searchTimer: null,
+      };
+
       const MODEL_REASONING_BADGE_TITLE = 'Reasoning model';
       const MODEL_REASONING_BADGE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6" /><path d="M10 21h4" /><path d="M12 2a7 7 0 0 0-4.2 12.6c.7.5 1.2 1.4 1.2 2.3V18h6v-1.1c0-.9.5-1.8 1.2-2.3A7 7 0 0 0 12 2Z" /></svg>';
 
@@ -320,14 +191,7 @@
       }
 
       function renderModelLabel(modelName, hasReasoning) {
-        return '<span class="model-label"><span class="model-label-text">' + escapeHtml(modelName || '—') + '</span>' + (hasReasoning ? '<span class="model-reasoning-badge" title="' + escapeHtml(MODEL_REASONING_BADGE_TITLE) + '" aria-label="' + escapeHtml(MODEL_REASONING_BADGE_TITLE) + '">' + MODEL_REASONING_BADGE_ICON + '</span>' : '') + '</span>';
-      }
-
-      function getInitials(name) {
-        if (!name) return '?';
-        const parts = name.trim().split(/\s+/);
-        if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-        return name.substring(0, 2).toUpperCase();
+        return '<span class="model-label" title="' + escapeHtml(modelName || '') + '"><span class="model-label-text">' + escapeHtml(modelName || '—') + '</span>' + (hasReasoning ? '<span class="model-reasoning-badge" title="' + escapeHtml(MODEL_REASONING_BADGE_TITLE) + '" aria-label="' + escapeHtml(MODEL_REASONING_BADGE_TITLE) + '">' + MODEL_REASONING_BADGE_ICON + '</span>' : '') + '</span>';
       }
 
       function formatDateTime(isoStr) {
@@ -347,40 +211,6 @@
         } else if (type !== 'success') {
           window.alert(text);
         }
-      }
-
-      function populateHeaderUser(user) {
-        if (!user) return;
-        const displayName = user.display_name || (user.email ? user.email.split('@')[0] : 'User');
-        const initials = getInitials(displayName);
-
-        if (el('header-user-avatar')) el('header-user-avatar').textContent = initials;
-        if (el('header-user-name')) el('header-user-name').textContent = displayName;
-        if (el('header-menu-avatar')) el('header-menu-avatar').textContent = initials;
-        if (el('header-user-email')) el('header-user-email').textContent = user.email || '';
-        if (el('header-user-role')) el('header-user-role').textContent = user.role || '';
-        if (el('header-admin-link')) el('header-admin-link').style.display = user.role === 'ADMIN' ? '' : 'none';
-        if (el('trash-stat-role')) el('trash-stat-role').textContent = user.role || '—';
-      }
-
-      function setupHeaderUserDropdown() {
-        const dropdown = el('header-user-dropdown');
-        const trigger = el('header-user-trigger');
-        if (!dropdown || !trigger || trigger.dataset.initialized) return;
-        trigger.dataset.initialized = 'true';
-
-        trigger.addEventListener('click', (event) => {
-          event.stopPropagation();
-          dropdown.classList.toggle('open');
-        });
-
-        document.addEventListener('click', (event) => {
-          if (!dropdown.contains(event.target)) dropdown.classList.remove('open');
-        });
-
-        document.addEventListener('keydown', (event) => {
-          if (event.key === 'Escape') dropdown.classList.remove('open');
-        });
       }
 
       // Retention purge: the server hard-deletes a run deleted_run_grace_days
@@ -403,15 +233,12 @@
         if (graceDays === null) return;
         const copy = el('trash-retention-copy');
         const value = el('trash-stat-retention');
-        const note = el('trash-stat-retention-note');
         if (graceDays > 0) {
           if (copy) copy.textContent = `Deleted runs are permanently removed ${pluralDays(graceDays)} after deletion, not counting time their project spends archived. Restore a run before its purge date to keep it.`;
           if (value) value.textContent = pluralDays(graceDays);
-          if (note) note.textContent = 'After this, a deleted run and all its results are permanently removed.';
         } else {
           if (copy) copy.textContent = 'Automatic purge is off: deleted runs stay here until an admin restores them.';
           if (value) value.textContent = 'Off';
-          if (note) note.textContent = 'Deleted runs are not purged automatically.';
         }
       }
 
@@ -452,7 +279,8 @@
         `;
       }
 
-      // Soonest purge first; runs without a purge date keep newest-deleted order.
+      // The server sends the soonest purge first; keep that order within a page
+      // (runs without a purge date keep their order at the end).
       function sortByPurge(runs) {
         const rank = (run) => {
           const at = run.purge_at ? new Date(run.purge_at).getTime() : NaN;
@@ -462,11 +290,6 @@
           .map((run, index) => ({ run, index }))
           .sort((a, b) => (rank(a.run) - rank(b.run)) || (a.index - b.index))
           .map(({ run }) => run);
-      }
-
-      function updateStats(count) {
-        if (el('trash-count')) el('trash-count').textContent = String(count);
-        if (el('trash-stat-visible')) el('trash-stat-visible').textContent = String(count);
       }
 
       function renderEmptyState(title, message) {
@@ -480,79 +303,168 @@
         `;
       }
 
+      // Most important first, so on a narrow screen the columns that scroll
+      // out of view are the descriptive ones; Restore stays pinned right.
+      const COLUMNS = [
+        { id: 'select', label: '', width: 36, minWidth: 36, className: 'trash-col-select', resizable: false },
+        { id: 'run', label: 'Run', width: 192, minWidth: 180, flex: 3, className: 'trash-col-run' },
+        { id: 'project', label: 'Project', width: 126, minWidth: 100, flex: 1, className: 'trash-col-project' },
+        { id: 'purge', label: 'Purges', width: 124, minWidth: 110, className: 'trash-col-purge' },
+        { id: 'deleted', label: 'Deleted', width: 132, minWidth: 116, className: 'trash-col-deleted' },
+        { id: 'status', label: 'Status', width: 104, minWidth: 96, className: 'trash-col-status' },
+        { id: 'model', label: 'Model', width: 140, minWidth: 90, className: 'trash-col-model' },
+        { id: 'task', label: 'Task', width: 100, minWidth: 80, className: 'trash-col-task' },
+        { id: 'dataset', label: 'Dataset', width: 120, minWidth: 90, className: 'trash-col-dataset' },
+        { id: 'actions', label: '', width: 88, minWidth: 88, className: 'trash-col-actions', resizable: false },
+      ];
+
+      function renderRow(run, now) {
+        const deleted = formatDateTime(run.deleted_at);
+        const created = formatDateTime(run.created_at);
+        const purge = purgeInfo(run, now);
+        const runName = run.run_name || run.id.slice(0, 8);
+        const restorable = !run.project_archived;
+        const tr = document.createElement('tr');
+        tr.id = `row-${run.id}`;
+        if (purge && purge.soon) tr.className = 'trash-row--purge-soon';
+        tr.innerHTML = `
+          <td class="trash-col-select">${restorable
+            ? `<input type="checkbox" data-select-run="${escapeHtml(run.id)}" aria-label="Select ${escapeHtml(runName)}"${view.selected.has(run.id) ? ' checked' : ''}>`
+            : `<input type="checkbox" disabled aria-label="${escapeHtml(runName)} cannot be restored while its project is archived" title="Unarchive the project to restore this run">`}</td>
+          <td class="trash-col-run">
+            <div class="trash-run" title="${escapeHtml(`${runName}\n${run.id}\nCreated ${created.primary} ${created.secondary}`)}">
+              <span class="trash-run-name">${escapeHtml(runName)}</span>
+              <span class="trash-run-id">${escapeHtml(run.id)}</span>
+            </div>
+          </td>
+          <td class="trash-col-project">
+            <span class="trash-cell-text" title="${escapeHtml(run.project_name || '')}">${escapeHtml(run.project_name || '—')}${run.project_archived ? '<span class="qym-tag qym-tag--warning trash-project-tag">Project archived</span>' : ''}</span>
+          </td>
+          <td class="trash-col-purge">${renderPurgeCell(purge, run)}</td>
+          <td class="trash-col-deleted">
+            <div class="trash-meta" title="${escapeHtml(`${deleted.primary} ${deleted.secondary}`)}">${escapeHtml(deleted.primary)}</div>
+            <div class="trash-meta-sub">by ${escapeHtml(run.deleted_by_name || run.deleted_by_user_id || '—')}</div>
+          </td>
+          <td class="trash-col-status"><span class="status-badge qym-badge status-${escapeHtml(run.status || 'PENDING')}">${escapeHtml(run.status || '—')}</span></td>
+          <td class="trash-col-model">${renderModelLabel(run.model || '—', hasReasoningTraceStats(run.trace_stats))}</td>
+          <td class="trash-col-task"><span class="trash-cell-text" title="${escapeHtml(run.task || '')}">${escapeHtml(run.task || '—')}</span></td>
+          <td class="trash-col-dataset"><span class="trash-cell-text" title="${escapeHtml(run.dataset || '')}">${escapeHtml(run.dataset || '—')}</span></td>
+          <td class="trash-col-actions">${restorable
+            ? `<button class="btn btn-secondary restore-btn" type="button" data-run-id="${escapeHtml(run.id)}" aria-label="Restore ${escapeHtml(runName)}">Restore</button>`
+            // Archived projects are read-only: unarchive the project first.
+            : '<button class="btn btn-secondary restore-btn" type="button" disabled title="Project is archived; unarchive it to restore this run">Restore</button>'}</td>
+        `;
+        return tr;
+      }
+
+      function restorableIds() {
+        return view.rows.filter((run) => !run.project_archived).map((run) => run.id);
+      }
+
+      function syncSelection() {
+        const ids = restorableIds();
+        const chosen = ids.filter((id) => view.selected.has(id));
+        const button = el('trash-restore-selected');
+        const label = el('trash-selection-label');
+        if (button) {
+          button.disabled = chosen.length === 0;
+          button.textContent = chosen.length ? `Restore ${chosen.length} selected` : 'Restore selected';
+        }
+        if (label) label.textContent = chosen.length ? `${chosen.length} of ${ids.length} on this page selected` : '';
+        const all = document.getElementById('trash-select-page');
+        if (all) {
+          all.checked = ids.length > 0 && chosen.length === ids.length;
+          all.indeterminate = chosen.length > 0 && chosen.length < ids.length;
+          all.disabled = ids.length === 0;
+        }
+      }
+
       function renderTrashTable(runs) {
         const content = el('trash-content');
         if (!content) return;
+        view.rows = sortByPurge(runs);
 
-        if (!runs.length) {
-          renderEmptyState('No Deleted Runs', 'The trash is currently empty.');
+        if (!view.rows.length) {
+          if (view.query || view.projectId) {
+            renderEmptyState('No matching deleted runs', 'No deleted run matches this search and project. Clear the filters to see every deleted run.');
+          } else {
+            renderEmptyState('No deleted runs', 'Deleted runs appear here until they are restored or purged.');
+          }
+          syncSelection();
           return;
         }
         const now = Date.now();
-
-        content.innerHTML = `
-          <div class="trash-table-wrap">
-            <table class="trash-table">
-              <thead>
-                <tr>
-                  <th>Run</th>
-                  <th>Task</th>
-                  <th>Model</th>
-                  <th>Dataset</th>
-                  <th>Status</th>
-                  <th>Created</th>
-                  <th>Deleted</th>
-                  <th>Deleted By</th>
-                  <th>Purges</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                ${sortByPurge(runs).map((run) => {
-                  const created = formatDateTime(run.created_at);
-                  const deleted = formatDateTime(run.deleted_at);
-                  const purge = purgeInfo(run, now);
-                  const runName = run.run_name || run.id.slice(0, 8);
-                  return `
-                    <tr id="row-${escapeHtml(run.id)}"${purge && purge.soon ? ' class="trash-row--purge-soon"' : ''}>
-                      <td>
-                        <div class="trash-run-name">${escapeHtml(runName)}</div>
-                        <div class="trash-run-id">${escapeHtml(run.id)}</div>
-                        ${run.project_archived ? '<div class="trash-run-archived"><span class="qym-tag qym-tag--warning">Project archived</span></div>' : ''}
-                      </td>
-                      <td><span class="trash-chip" title="${escapeHtml(run.task || '')}">${escapeHtml(run.task || '—')}</span></td>
-                      <td><span class="trash-chip" title="${escapeHtml(run.model || '')}">${renderModelLabel(run.model || '—', hasReasoningTraceStats(run.trace_stats))}</span></td>
-                      <td><span class="trash-chip" title="${escapeHtml(run.dataset || '')}">${escapeHtml(run.dataset || '—')}</span></td>
-                      <td><span class="status-badge qym-badge status-${escapeHtml(run.status || 'PENDING')}">${escapeHtml(run.status || '—')}</span></td>
-                      <td>
-                        <div class="trash-meta">${escapeHtml(created.primary)}</div>
-                        <div class="trash-meta-sub">${escapeHtml(created.secondary)}</div>
-                      </td>
-                      <td>
-                        <div class="trash-meta">${escapeHtml(deleted.primary)}</div>
-                        <div class="trash-meta-sub">${escapeHtml(deleted.secondary)}</div>
-                      </td>
-                      <td>
-                        <div class="trash-meta">${escapeHtml(run.deleted_by_name || run.deleted_by_user_id || '—')}</div>
-                      </td>
-                      <td>${renderPurgeCell(purge, run)}</td>
-                      <td class="trash-actions">
-                        ${run.project_archived
-                          // Archived projects are read-only: unarchive the project first.
-                          ? '<button class="btn btn-secondary restore-btn" type="button" disabled title="Project is archived; unarchive it to restore this run">Restore</button>'
-                          : `<button class="btn btn-secondary restore-btn" type="button" data-run-id="${escapeHtml(run.id)}">Restore</button>`}
-                      </td>
-                    </tr>
-                  `;
-                }).join('')}
-              </tbody>
-            </table>
-          </div>
-        `;
-
-        content.querySelectorAll('.restore-btn[data-run-id]').forEach((button) => {
-          button.addEventListener('click', () => restoreRun(button.dataset.runId));
+        content.innerHTML = '<div class="trash-table-wrap" id="trash-table-wrap"></div>';
+        const host = el('trash-table-wrap');
+        window.QymDataTable.render({
+          host,
+          columns: COLUMNS,
+          rows: view.rows,
+          tableClass: 'trash-table',
+          storageKey: 'trash-v2',
+          renderRow: (run) => renderRow(run, now),
         });
+        const selectHeader = host.querySelector('thead th.trash-col-select');
+        if (selectHeader) {
+          selectHeader.textContent = '';
+          selectHeader.removeAttribute('title');
+          selectHeader.innerHTML = '<input type="checkbox" id="trash-select-page" aria-label="Select every restorable run on this page">';
+        }
+        const actionsHeader = host.querySelector('thead th.trash-col-actions');
+        if (actionsHeader) actionsHeader.innerHTML = '<span class="trash-visually-hidden">Actions</span>';
+        host.querySelectorAll('.restore-btn[data-run-id]').forEach((button) => {
+          button.addEventListener('click', () => restoreRuns([button.dataset.runId]));
+        });
+        host.querySelectorAll('input[data-select-run]').forEach((box) => {
+          box.addEventListener('change', () => {
+            if (box.checked) view.selected.add(box.dataset.selectRun);
+            else view.selected.delete(box.dataset.selectRun);
+            syncSelection();
+          });
+        });
+        const all = el('trash-select-page');
+        if (all) {
+          all.addEventListener('change', () => {
+            restorableIds().forEach((id) => (all.checked ? view.selected.add(id) : view.selected.delete(id)));
+            host.querySelectorAll('input[data-select-run]').forEach((box) => { box.checked = all.checked; });
+            syncSelection();
+          });
+        }
+        syncSelection();
+      }
+
+      function renderPager() {
+        const footer = el('trash-footer');
+        const host = el('trash-pagination');
+        if (!footer || !host) return;
+        footer.hidden = view.total <= PAGE_SIZE;
+        if (footer.hidden) {
+          host.innerHTML = '';
+          return;
+        }
+        if (!window.QymUIComponents || !window.QymUIComponents.renderPagination) {
+          // ui_components.js is deferred; a fast first load can beat it.
+          if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', renderPager, { once: true });
+          else window.addEventListener('load', renderPager, { once: true });
+          return;
+        }
+        window.QymUIComponents.renderPagination(host, {
+          total: view.total,
+          page: view.page,
+          pageSize: PAGE_SIZE,
+          noun: 'deleted runs',
+          onPageChange: (page) => {
+            view.page = page;
+            loadTrash();
+          },
+        });
+      }
+
+      function updateTotal() {
+        const total = el('trash-stat-total');
+        if (total) total.textContent = view.query || view.projectId
+          ? `${view.total.toLocaleString()} matching`
+          : view.total.toLocaleString();
       }
 
       async function loadMe() {
@@ -560,17 +472,44 @@
         if (window.QymAuth && window.QymAuth.handle401(res)) return;
         if (!res.ok) throw new Error('Failed to load current user');
         const me = await res.json();
-        populateHeaderUser(me);
-        setupHeaderUserDropdown();
         if (window.QymAuth) await window.QymAuth.maybePromptBootstrapAdmin(me);
       }
 
-      async function loadTrash() {
+      async function loadProjects() {
+        const select = el('trash-project');
+        if (!select) return;
         try {
-          const res = await fetch(apiUrl('api/runs/trash'), { credentials: 'include' });
+          const res = await fetch(apiUrl('api/runs/trash/projects'), { credentials: 'include' });
+          if (!res.ok) return;
+          const projects = await res.json();
+          if (!Array.isArray(projects)) return;
+          const current = view.projectId;
+          select.innerHTML = '<option value="">All projects</option>' + projects
+            .filter((project) => project && project.id)
+            .map((project) => `<option value="${escapeHtml(project.id)}">${escapeHtml(project.name || project.slug || project.id)}${project.archived ? ' (archived)' : ''} · ${Number(project.deleted_runs || 0).toLocaleString()}</option>`)
+            .join('');
+          select.value = current;
+        } catch (_) {
+          // The filter is optional; the list still loads.
+        }
+      }
+
+      async function loadTrash() {
+        const seq = ++view.loadSeq;
+        const params = new URLSearchParams({
+          limit: String(PAGE_SIZE),
+          offset: String((view.page - 1) * PAGE_SIZE),
+        });
+        if (view.projectId) params.set('project_id', view.projectId);
+        if (view.query) params.set('q', view.query);
+        try {
+          const res = await fetch(apiUrl('api/runs/trash?' + params.toString()), { credentials: 'include' });
+          if (seq !== view.loadSeq) return;
+          if (window.QymAuth && window.QymAuth.handle401(res)) return;
           if (res.status === 403) {
-            updateStats(0);
-            renderEmptyState('Admin Access Required', 'Only admins can view and restore deleted runs.');
+            view.total = 0;
+            updateTotal();
+            renderEmptyState('Admin access required', 'Only admins can view and restore deleted runs.');
             return;
           }
           if (!res.ok) {
@@ -580,58 +519,107 @@
 
           renderRetention(parseGraceDays(res));
           const runs = await res.json();
+          if (seq !== view.loadSeq) return;
           if (!Array.isArray(runs)) throw new Error('Unexpected response format');
-          updateStats(runs.length);
+          const total = parseInt(res.headers.get('X-Qym-Total-Count') || '', 10);
+          view.total = Number.isFinite(total) ? total : (view.page - 1) * PAGE_SIZE + runs.length;
+          // A restore can empty the last page: step back to the new last page.
+          if (!runs.length && view.page > 1 && view.total > 0) {
+            view.page = Math.max(1, Math.ceil(view.total / PAGE_SIZE));
+            return loadTrash();
+          }
+          updateTotal();
           renderTrashTable(runs);
+          renderPager();
         } catch (err) {
-          updateStats(0);
-          renderEmptyState('Load Failed', err.message || 'Could not load deleted runs.');
+          if (seq !== view.loadSeq) return;
+          renderEmptyState('Could not load deleted runs', err.message || 'Could not load deleted runs.');
         }
       }
 
-      async function restoreRun(runId) {
-        const button = document.querySelector(`button.restore-btn[data-run-id="${CSS.escape(runId)}"]`);
-        if (button) {
-          button.disabled = true;
-          button.textContent = 'Restoring...';
-        }
+      async function restoreRuns(runIds) {
+        const ids = runIds.filter(Boolean);
+        if (!ids.length) return;
+        const buttons = ids
+          .map((id) => document.querySelector(`button.restore-btn[data-run-id="${CSS.escape(id)}"]`))
+          .filter(Boolean);
+        buttons.forEach((button) => { button.disabled = true; button.textContent = 'Restoring…'; });
+        const bulk = el('trash-restore-selected');
+        if (ids.length > 1 && bulk) { bulk.disabled = true; bulk.textContent = 'Restoring…'; }
 
         try {
           const res = await fetch(apiUrl('api/runs/restore'), {
             method: 'POST',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ run_id: runId }),
+            body: JSON.stringify(ids.length === 1 ? { run_id: ids[0] } : { run_ids: ids }),
           });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.detail || 'Restore failed');
 
-          if (!res.ok) {
-            const data = await res.json().catch(() => ({}));
-            throw new Error(data.detail || 'Restore failed');
+          const restored = ids.length === 1 ? ids : (data.restored || []);
+          const skipped = ids.length === 1 ? [] : (data.skipped || []);
+          restored.forEach((id) => {
+            view.selected.delete(id);
+            document.getElementById(`row-${id}`)?.remove();
+          });
+          if (ids.length === 1) {
+            showToast('success', 'Run Restored', 'The run was restored successfully.');
+          } else if (restored.length) {
+            showToast('success', `Restored ${restored.length} run${restored.length === 1 ? '' : 's'}`,
+              skipped.length ? `${skipped.length} could not be restored (${skipped[0].reason})` : '');
+          } else {
+            showToast('error', 'Restore Failed', skipped.length ? skipped[0].reason : 'Nothing was restored.');
           }
-
-          document.getElementById(`row-${runId}`)?.remove();
-          const remaining = document.querySelectorAll('.trash-table tbody tr').length;
-          updateStats(remaining);
-          if (remaining === 0) {
-            renderEmptyState('No Deleted Runs', 'The trash is currently empty.');
-          }
-          showToast('success', 'Run Restored', 'The run was restored successfully.');
+          await Promise.all([loadTrash(), loadProjects()]);
         } catch (err) {
-          if (button) {
-            button.disabled = false;
-            button.textContent = 'Restore';
-          }
+          buttons.forEach((button) => { button.disabled = false; button.textContent = 'Restore'; });
+          syncSelection();
           showToast('error', 'Restore Failed', err.message || 'Could not restore run.');
         }
       }
 
+      function wireToolbar() {
+        const search = el('trash-search');
+        if (search) {
+          search.addEventListener('input', () => {
+            clearTimeout(view.searchTimer);
+            view.searchTimer = setTimeout(() => {
+              const next = search.value.trim();
+              if (next === view.query) return;
+              view.query = next;
+              view.page = 1;
+              view.selected.clear();
+              loadTrash();
+            }, 250);
+          });
+        }
+        const project = el('trash-project');
+        if (project) {
+          project.addEventListener('change', () => {
+            view.projectId = project.value;
+            view.page = 1;
+            view.selected.clear();
+            loadTrash();
+          });
+        }
+        const bulk = el('trash-restore-selected');
+        if (bulk) {
+          bulk.addEventListener('click', () => {
+            const ids = restorableIds().filter((id) => view.selected.has(id));
+            restoreRuns(ids);
+          });
+        }
+      }
+
       async function init() {
+        wireToolbar();
         try {
           await loadMe();
-        } catch {
-          setupHeaderUserDropdown();
+        } catch (_) {
+          // The list reports its own access errors.
         }
-        await loadTrash();
+        await Promise.all([loadTrash(), loadProjects()]);
       }
 
       init();

@@ -710,6 +710,27 @@ body {
   animation: shellToastIn 0.2s ease;
 }
 
+.shell-toast--action {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.shell-toast-action {
+  flex: none;
+  padding: 2px var(--space-sm);
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
+  color: var(--accent-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.shell-toast-action:hover,
+.shell-toast-action:focus-visible { background: var(--bg-hover); }
+
 .shell-toast.success { border-color: var(--success); }
 .shell-toast.error { border-color: var(--error); }
 .shell-toast.info { border-color: var(--accent-secondary); }

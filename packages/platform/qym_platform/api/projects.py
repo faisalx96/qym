@@ -860,6 +860,50 @@ def list_project_members(
     return {"members": [_serialize_member(member, user) for member, user in members]}
 
 
+def _like_contains(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+@router.get("/v1/projects/{project_id}/member-candidates")
+def list_member_candidates(
+    project_id: str,
+    q: str = Query(default="", max_length=200),
+    limit: int = Query(default=20, ge=1, le=50),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Active users who are not members yet, for the Add member picker.
+
+    Only people who can add members may search the user directory; plain
+    members never receive other users' emails from here.
+    """
+    _require_project_access(db, principal, project_id)
+    if not can_manage_project_members(db, principal, project_id):
+        raise HTTPException(status_code=403, detail="Manager only")
+    member_ids = select(ProjectMembership.user_id).where(
+        ProjectMembership.project_id == project_id
+    )
+    query = db.query(User).filter(User.is_active.is_(True), User.id.notin_(member_ids))
+    term = q.strip()
+    if term:
+        pattern = _like_contains(term.lower())
+        query = query.filter(
+            or_(
+                func.lower(User.email).like(pattern, escape="\\"),
+                func.lower(func.coalesce(User.display_name, "")).like(pattern, escape="\\"),
+            )
+        )
+    users = query.order_by(User.email).limit(limit + 1).all()
+    return {
+        "users": [
+            {"id": user.id, "email": user.email, "display_name": user.display_name}
+            for user in users[:limit]
+        ],
+        "has_more": len(users) > limit,
+    }
+
+
 @router.post("/v1/projects/{project_id}/members")
 def add_project_member(
     project_id: str,
@@ -1120,8 +1164,16 @@ def update_project(
     _require_admin(principal)
     project = _get_project(db, project_id)
     changes: Dict[str, Any] = {}
-    if req.name is not None and req.name.strip() != project.name:
-        changes["name"] = req.name.strip()
+    if req.name is not None:
+        next_name = req.name.strip()
+        if not next_name:
+            raise HTTPException(status_code=400, detail="Project name is required")
+        if len(next_name) > 200:
+            raise HTTPException(
+                status_code=400, detail="Project name must be 200 characters or fewer"
+            )
+        if next_name != project.name:
+            changes["name"] = next_name
     if req.slug is not None:
         next_slug = _slugify(req.slug)
         conflict = (

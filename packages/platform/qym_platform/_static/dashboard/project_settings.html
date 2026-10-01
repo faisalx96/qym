@@ -6,10 +6,10 @@
   <title>قيِّم • Project Settings</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=p0-20260930">
-  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
+  <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
   <script src="/static/qym_safe.js?v=p0-20260930"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p0-20260930-3"></script>
+  <script src="/static/shell.js?v=p1-20261001"></script>
   <style>
     .settings-page { }
     .settings-header { margin-bottom: var(--space-xl); }
@@ -33,6 +33,20 @@
     .add-bar .form-select, .add-bar .form-input { font-family: var(--font-sans); font-size: var(--font-base); background-color: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 6px; padding: var(--space-sm) var(--space-md); color: var(--text-primary); }
     .add-bar .form-select { width: 160px; flex: none; padding-right: 30px; }
     .add-bar .form-input { flex: 1; min-width: 0; }
+    /* Add member: a search over people who are not members yet (managers and admins). */
+    .member-picker { position: relative; flex: 1; min-width: 0; display: flex; }
+    /* The results list may extend below the members card. */
+    #panel-members .card { overflow: visible; }
+    .member-picker .form-input { width: 100%; }
+    .member-results {
+      position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20; max-height: 280px; overflow-y: auto;
+      background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    }
+    .member-results[hidden] { display: none; }
+    .member-result { display: flex; align-items: baseline; gap: var(--space-sm); width: 100%; padding: var(--space-sm) var(--space-md); border: 0; background: transparent; color: var(--text-primary); font-family: var(--font-sans); font-size: var(--font-base); text-align: left; cursor: pointer; }
+    .member-result[aria-selected="true"], .member-result:hover { background: var(--bg-hover); }
+    .member-result-email { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--font-sm); }
+    .member-results-note { padding: var(--space-sm) var(--space-md); color: var(--text-muted); font-size: var(--font-sm); }
     /* Native selects get the same appearance reset + custom chevron as .filter-select
        so dropdowns match across the platform instead of showing the OS default arrow. */
     .form-select {
@@ -214,11 +228,11 @@
         <div class="card-header"><div><div class="card-title">Project Details</div><div class="card-subtitle">Name and slug</div></div></div>
         <div class="card-body">
           <div class="form-grid">
-            <div class="form-group"><label class="form-label">Project Name</label><input class="form-input" id="gen-name" type="text" /></div>
+            <div class="form-group"><label class="form-label" for="gen-name">Project Name</label><input class="form-input" id="gen-name" type="text" maxlength="200" readonly /><div class="note" id="gen-name-note" hidden></div></div>
             <div class="form-group"><label class="form-label">Slug</label><input class="form-input" id="gen-slug" type="text" style="font-family:var(--font-mono);font-size:var(--font-base);" readonly /></div>
           </div>
         </div>
-        <div class="card-footer"><button class="btn btn-primary" id="save-general-btn" type="button">Save Changes</button></div>
+        <div class="card-footer"><button class="btn btn-primary" id="save-general-btn" type="button" disabled>Save Changes</button></div>
       </div>
       <div class="card">
         <div class="card-header"><div><div class="card-title">Overview</div></div></div>
@@ -233,12 +247,15 @@
       <div class="card">
         <div class="card-header"><div><div class="card-title">Members</div><div class="card-subtitle" id="member-count-label"></div></div></div>
         <div class="add-bar" id="member-form">
-          <select class="form-select" id="member-user"></select>
+          <div class="member-picker">
+            <input class="form-input" id="member-search" type="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="member-results" aria-label="Person to add" placeholder="Search people by name or email" autocomplete="off" />
+            <div class="member-results" id="member-results" role="listbox" aria-label="People who are not members" hidden></div>
+          </div>
           <select class="form-select" id="member-role" style="width:140px;">
             <option value="MEMBER">Member</option>
             <option value="MANAGER">Manager</option>
           </select>
-          <button class="btn btn-primary" id="add-member-btn" type="button" style="padding:0 var(--space-md);font-size:var(--font-sm);">Add</button>
+          <button class="btn btn-primary" id="add-member-btn" type="button" style="padding:0 var(--space-md);font-size:var(--font-sm);" disabled>Add</button>
         </div>
         <div class="note" id="member-note" style="padding:0 var(--space-lg);"></div>
         <div class="card-body flush">
@@ -445,7 +462,7 @@
         return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       }
 
-      let state = { me: null, project: null, members: [], users: [], apiKeys: [], analysisPrompts: null };
+      let state = { me: null, project: null, members: [], apiKeys: [], analysisPrompts: null };
 
       async function fetchJson(path, options) {
         const res = await fetch(apiUrl(path), options);
@@ -473,14 +490,14 @@
       // ── Load data ──
       async function load() {
         const slug = projectSlug();
-        const [me, project, users] = await Promise.all([
+        // The user directory is not loaded here: managers search it through
+        // member-candidates when they add someone; members never see it.
+        const [me, project] = await Promise.all([
           fetchJson('v1/me'),
           fetchJson(`v1/projects/by-slug/${encodeURIComponent(slug)}`),
-          fetchJson('v1/users'),
         ]);
         state.me = me;
         state.project = project;
-        state.users = users || [];
         state.members = ((await fetchJson(`v1/projects/${project.id}/members`)) || {}).members || [];
         state.apiKeys = ((await fetchJson(`v1/projects/${project.id}/api-keys`)) || {}).api_keys || [];
         state.analysisPrompts = canManageMembers()
@@ -747,10 +764,16 @@
             ? 'Settings are read-only while the project is archived. You can still revoke API keys and remove members; only an admin can unarchive it.'
             : 'Settings are read-only while the project is archived. You can still revoke your own API keys.';
 
-        // General tab
-        document.getElementById('gen-name').value = p.name;
-        document.getElementById('gen-name').readOnly = readOnly;
-        document.getElementById('save-general-btn').closest('.card-footer').style.display = readOnly ? 'none' : '';
+        // General tab: renaming is admin-only on the server (PATCH /v1/admin/projects).
+        const canRename = isAdmin && !readOnly;
+        const nameInput = document.getElementById('gen-name');
+        if (!general.saving) nameInput.value = p.name;
+        nameInput.readOnly = !canRename;
+        const nameNote = document.getElementById('gen-name-note');
+        nameNote.hidden = canRename || readOnly;
+        nameNote.textContent = canRename || readOnly ? '' : 'Only admins can rename a project.';
+        document.getElementById('save-general-btn').closest('.card-footer').style.display = canRename ? '' : 'none';
+        syncGeneralSave();
         document.getElementById('gen-slug').value = p.slug;
         document.getElementById('project-summary').innerHTML = [
           ['Slug', p.slug], ['Role', p.role || 'MEMBER'], ['Members', String(state.members.length)], ['Status', p.is_active ? 'ACTIVE' : 'ARCHIVED'],
@@ -773,11 +796,6 @@
 
         // Members tab
         document.getElementById('member-count-label').textContent = `${state.members.length} members in this project`;
-        const currentIds = new Set(state.members.map(m => m.user_id));
-        document.getElementById('member-user').innerHTML = state.users
-          .filter(u => !currentIds.has(u.id))
-          .map(u => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.display_name || u.email)}</option>`)
-          .join('');
         document.getElementById('member-form').style.display = canManageMembers() && !readOnly ? 'flex' : 'none';
         document.getElementById('member-note').textContent = readOnly
           ? (canManageMembers()
@@ -879,11 +897,158 @@
       }
 
       // ── Event handlers ──
+      // ── General: rename (admins) ──
+      const general = { saving: false };
+
+      function syncGeneralSave() {
+        const button = document.getElementById('save-general-btn');
+        const input = document.getElementById('gen-name');
+        button.textContent = general.saving ? 'Saving…' : 'Save Changes';
+        if (!state.project) { button.disabled = true; return; }
+        const next = input.value.trim();
+        button.disabled = general.saving || input.readOnly || !next || next === state.project.name;
+      }
+
+      document.getElementById('gen-name').addEventListener('input', syncGeneralSave);
+      document.getElementById('gen-name').addEventListener('keydown', event => {
+        if (event.key === 'Enter' && !document.getElementById('save-general-btn').disabled) {
+          event.preventDefault();
+          document.getElementById('save-general-btn').click();
+        }
+      });
+      document.getElementById('save-general-btn').addEventListener('click', async () => {
+        const input = document.getElementById('gen-name');
+        const name = input.value.trim();
+        if (!state.project || !name || name === state.project.name || general.saving) return;
+        general.saving = true;
+        input.readOnly = true;
+        syncGeneralSave();
+        try {
+          const updated = await fetchJson(`v1/admin/projects/${state.project.id}`, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+          });
+          if (updated) {
+            state.project = { ...state.project, ...updated, role: state.project.role };
+            // Keep the sidebar switcher and breadcrumb in step without a reload.
+            if (window.QymShell && window.QymShell.upsertProject) window.QymShell.upsertProject(updated);
+            input.value = updated.name;
+            toast(`Project renamed to “${updated.name}”`, 'success');
+          }
+        } catch (err) {
+          toast('Rename failed: ' + (err.message || 'Unknown error'), 'error');
+        } finally {
+          general.saving = false;
+          if (state.project) render();
+        }
+      });
+
+      // ── Members: add someone who is not a member yet ──
+      const memberPicker = { selected: null, results: [], active: -1, timer: null, seq: 0, hasMore: false };
+
+      function closeMemberResults() {
+        const input = document.getElementById('member-search');
+        document.getElementById('member-results').hidden = true;
+        input.setAttribute('aria-expanded', 'false');
+        input.removeAttribute('aria-activedescendant');
+        memberPicker.active = -1;
+      }
+
+      function renderMemberResults(message) {
+        const list = document.getElementById('member-results');
+        const input = document.getElementById('member-search');
+        if (message) {
+          list.innerHTML = `<div class="member-results-note">${escapeHtml(message)}</div>`;
+        } else {
+          list.innerHTML = memberPicker.results.map((user, index) => `
+            <button type="button" class="member-result" role="option" id="member-option-${index}" data-candidate-index="${index}" aria-selected="${index === memberPicker.active ? 'true' : 'false'}">
+              <span>${escapeHtml(user.display_name || user.email)}</span>
+              <span class="member-result-email">${escapeHtml(user.email)}</span>
+            </button>`).join('')
+            + (memberPicker.hasMore ? '<div class="member-results-note">Keep typing to narrow the list.</div>' : '');
+        }
+        list.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
+        if (memberPicker.active >= 0) input.setAttribute('aria-activedescendant', `member-option-${memberPicker.active}`);
+        else input.removeAttribute('aria-activedescendant');
+      }
+
+      async function searchMemberCandidates() {
+        if (!state.project || !canManageMembers()) return;
+        const query = document.getElementById('member-search').value.trim();
+        const seq = ++memberPicker.seq;
+        try {
+          const data = await fetchJson(`v1/projects/${state.project.id}/member-candidates?limit=20&q=${encodeURIComponent(query)}`);
+          if (seq !== memberPicker.seq || !data) return;
+          memberPicker.results = data.users || [];
+          memberPicker.hasMore = !!data.has_more;
+          memberPicker.active = memberPicker.results.length ? 0 : -1;
+          renderMemberResults(memberPicker.results.length ? '' : (query ? `No one outside the project matches “${query}”.` : 'Everyone is already a member.'));
+        } catch (err) {
+          if (seq === memberPicker.seq) renderMemberResults('Could not search people: ' + (err.message || 'Unknown error'));
+        }
+      }
+
+      function chooseMemberCandidate(index) {
+        const user = memberPicker.results[index];
+        if (!user) return;
+        memberPicker.selected = user;
+        document.getElementById('member-search').value = user.display_name ? `${user.display_name} (${user.email})` : user.email;
+        document.getElementById('add-member-btn').disabled = false;
+        closeMemberResults();
+      }
+
+      const memberSearch = document.getElementById('member-search');
+      memberSearch.addEventListener('input', () => {
+        memberPicker.selected = null;
+        document.getElementById('add-member-btn').disabled = true;
+        clearTimeout(memberPicker.timer);
+        memberPicker.timer = setTimeout(searchMemberCandidates, 200);
+      });
+      memberSearch.addEventListener('focus', () => {
+        if (!memberPicker.selected) searchMemberCandidates();
+      });
+      memberSearch.addEventListener('keydown', event => {
+        const open = !document.getElementById('member-results').hidden;
+        if (event.key === 'Escape' && open) {
+          event.preventDefault();
+          closeMemberResults();
+        } else if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && open && memberPicker.results.length) {
+          event.preventDefault();
+          const step = event.key === 'ArrowDown' ? 1 : -1;
+          memberPicker.active = (memberPicker.active + step + memberPicker.results.length) % memberPicker.results.length;
+          renderMemberResults('');
+        } else if (event.key === 'Enter') {
+          event.preventDefault();
+          if (open && memberPicker.active >= 0) chooseMemberCandidate(memberPicker.active);
+          else if (memberPicker.selected) document.getElementById('add-member-btn').click();
+        }
+      });
+      document.getElementById('member-results').addEventListener('mousedown', event => {
+        // Keep focus in the search field while picking.
+        event.preventDefault();
+        const option = event.target.closest('[data-candidate-index]');
+        if (option) chooseMemberCandidate(Number(option.dataset.candidateIndex));
+      });
+      document.addEventListener('click', event => {
+        if (!event.target.closest('.member-picker')) closeMemberResults();
+      });
+
       document.getElementById('add-member-btn').addEventListener('click', async () => {
-        const userId = document.getElementById('member-user').value;
-        if (!userId) return;
-        await fetchJson(`v1/projects/${state.project.id}/members`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: userId, role: document.getElementById('member-role').value }) });
-        await load();
+        const user = memberPicker.selected;
+        if (!user) return;
+        const button = document.getElementById('add-member-btn');
+        button.disabled = true;
+        try {
+          await fetchJson(`v1/projects/${state.project.id}/members`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: user.id, role: document.getElementById('member-role').value }) });
+          memberPicker.selected = null;
+          memberPicker.results = [];
+          document.getElementById('member-search').value = '';
+          toast(`Added ${user.display_name || user.email}`, 'success');
+          await load();
+        } catch (err) {
+          button.disabled = false;
+          toast('Could not add the member: ' + (err.message || 'Unknown error'), 'error');
+        }
       });
 
       // ── New-key modal ──

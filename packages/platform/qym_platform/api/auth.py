@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import secrets
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -33,6 +34,7 @@ from qym_platform.auth_oidc import (
 )
 from qym_platform.db.models import LocalAuthCredential, User, UserIdentity, UserRole
 from qym_platform.deps import get_db
+from qym_platform.login_throttle import client_key, login_throttle
 from qym_platform.security import hash_password, verify_password
 from qym_platform.settings import PlatformSettings
 
@@ -44,14 +46,33 @@ def _platform_static_dir() -> Path:
     return Path(__file__).resolve().parent.parent / "_static"
 
 
-def _login_bootstrap_payload(settings: PlatformSettings) -> Dict[str, Any]:
+def _signup_allowed(db: Session, settings: PlatformSettings) -> bool:
+    """Self sign-up needs QYM_AUTH_LOCAL_SIGNUP, except before any admin exists.
+
+    Until someone holds the admin role, the first person must be able to
+    create an account and claim it with the bootstrap token.
+    """
+    if not local_auth_enabled(settings):
+        return False
+    if settings.auth_local_signup:
+        return True
+    admin_exists = (
+        db.query(User.id)
+        .filter(User.role == UserRole.ADMIN, User.is_active.is_(True))
+        .first()
+        is not None
+    )
+    return not admin_exists
+
+
+def _login_bootstrap_payload(db: Session, settings: PlatformSettings) -> Dict[str, Any]:
     local_enabled = local_auth_enabled(settings)
     return {
         "auth_mode": settings.auth_mode,
         "providers": provider_catalog(settings),
         "local_auth": {
             "enabled": local_enabled,
-            "signup_enabled": local_enabled,
+            "signup_enabled": _signup_allowed(db, settings),
         },
     }
 
@@ -88,13 +109,40 @@ def _invalid_credentials() -> HTTPException:
     return HTTPException(status_code=401, detail="Invalid email or password")
 
 
-def _verified_local_credential(db: Session, email: str, password: str) -> tuple[User, LocalAuthCredential]:
-    user = db.query(User).filter(User.email == _normalize_email(email)).first()
-    if not user or not user.is_active:
+_DUMMY_PASSWORD_HASH: Optional[bytes] = None
+
+
+def _dummy_password_hash() -> bytes:
+    global _DUMMY_PASSWORD_HASH
+    if _DUMMY_PASSWORD_HASH is None:
+        _DUMMY_PASSWORD_HASH = hash_password(secrets.token_urlsafe(24))
+    return _DUMMY_PASSWORD_HASH
+
+
+def _verified_local_credential(
+    db: Session, request: Request, email: str, password: str
+) -> tuple[User, LocalAuthCredential]:
+    """Check an email and password, throttling failures per email and client.
+
+    Every failure costs one password hash, whether or not the account exists,
+    so neither the answer nor its timing tells which emails have accounts.
+    """
+    normalized = _normalize_email(email)
+    throttle = login_throttle(request)
+    client = client_key(request)
+    throttle.check(normalized, client)
+    user = db.query(User).filter(User.email == normalized).first()
+    credential = (
+        db.query(LocalAuthCredential).filter(LocalAuthCredential.user_id == user.id).first()
+        if user is not None and user.is_active
+        else None
+    )
+    stored_hash = credential.password_hash if credential is not None else _dummy_password_hash()
+    password_ok = verify_password(password, stored_hash)
+    if credential is None or not password_ok:
+        throttle.record_failure(normalized, client)
         raise _invalid_credentials()
-    credential = db.query(LocalAuthCredential).filter(LocalAuthCredential.user_id == user.id).first()
-    if not credential or not verify_password(password, credential.password_hash):
-        raise _invalid_credentials()
+    throttle.record_success(normalized)
     return user, credential
 
 
@@ -114,7 +162,7 @@ def login_page(
         raise HTTPException(status_code=404, detail="Login UI not found")
     html = idx.read_text(encoding="utf-8")
     root_path = request_root_path(request)
-    html = html.replace("__QYM_LOGIN_BOOTSTRAP_JSON__", json.dumps(_login_bootstrap_payload(settings)))
+    html = html.replace("__QYM_LOGIN_BOOTSTRAP_JSON__", json.dumps(_login_bootstrap_payload(db, settings)))
     html = html.replace("__QYM_ROOT_PATH_JSON__", json.dumps(root_path))
     html = html.replace("__QYM_PREFIX__", root_path)
     html = html.replace(
@@ -125,9 +173,9 @@ def login_page(
 
 
 @router.get("/v1/auth/providers")
-def auth_providers() -> Dict[str, Any]:
+def auth_providers(db: Session = Depends(get_db)) -> Dict[str, Any]:
     settings = PlatformSettings()
-    return _login_bootstrap_payload(settings)
+    return _login_bootstrap_payload(db, settings)
 
 
 @router.get("/v1/auth/login/{provider}", response_model=None)
@@ -180,7 +228,7 @@ def auth_login_password(
     settings = PlatformSettings()
     _ensure_local_auth_enabled(settings)
 
-    user, credential = _verified_local_credential(db, payload.email, payload.password)
+    user, credential = _verified_local_credential(db, request, payload.email, payload.password)
     if credential.must_change_password:
         # A temporary password only unlocks the change-password step; no session yet.
         return JSONResponse(
@@ -206,7 +254,9 @@ def auth_change_password(
     settings = PlatformSettings()
     _ensure_local_auth_enabled(settings)
 
-    user, credential = _verified_local_credential(db, payload.email, payload.current_password)
+    user, credential = _verified_local_credential(
+        db, request, payload.email, payload.current_password
+    )
     verified_hash = bytes(credential.password_hash)
     if payload.new_password == payload.current_password:
         raise HTTPException(status_code=400, detail="The new password must be different from the current password")
@@ -246,14 +296,25 @@ def auth_signup_password(
 ) -> Dict[str, Any]:
     settings = PlatformSettings()
     _ensure_local_auth_enabled(settings)
+    if not _signup_allowed(db, settings):
+        raise HTTPException(
+            status_code=403,
+            detail="Sign-up is turned off. Ask an admin to add your account.",
+        )
 
     email = _normalize_email(payload.email)
+    # "Already exists" answers tell which emails have accounts; they count as
+    # failed attempts for the client like wrong passwords do.
+    throttle = login_throttle(request)
+    client = client_key(request)
+    throttle.check(email, client)
     try:
         password_hash = hash_password(payload.password)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if db.query(User.id).filter(User.email == email).first():
+        throttle.record_failure(email, client)
         raise HTTPException(status_code=409, detail="An account with this email already exists")
 
     user = User(

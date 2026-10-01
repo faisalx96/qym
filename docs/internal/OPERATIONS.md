@@ -31,6 +31,8 @@ sure one process runs a given job.
 | `QYM_SPAN_MAX_BYTES` | `1048576` | Safety ceiling per span; larger spans keep scalar attributes only and are flagged |
 | `QYM_SPAN_RETENTION_DAYS` | `60` | Raw traces older than this are dropped by partition (0 = keep forever) |
 | `QYM_DELETED_RUN_GRACE_DAYS` | `30` | Soft-deleted runs are hard-deleted after this; time their project spends archived does not count |
+| `QYM_AUTH_LOCAL_SIGNUP` | `false` | Email/password self sign-up; off means admins add people (open only while no active admin exists) |
+| `QYM_AUTH_LOGIN_MAX_FAILURES_PER_EMAIL` / `..._PER_CLIENT` / `QYM_AUTH_LOGIN_FAILURE_WINDOW_SECONDS` | `5` / `30` / `300` | Failed password sign-ins before `429`; counted per API pod. Without uvicorn `--proxy-headers` every client shares the ingress address, so the per-client limit applies to all of them together |
 | `QYM_DB_POOL_SIZE` / `QYM_DB_MAX_OVERFLOW` | `10` / `10` | API connection pool |
 | `QYM_DB_WORKER_POOL_SIZE` / `QYM_DB_WORKER_MAX_OVERFLOW` | `3` / `2` | Worker pool |
 | `QYM_DB_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement guard on API connections |

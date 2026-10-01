@@ -5207,8 +5207,12 @@ def list_analysis_documents(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
-    """List documents owned by the run's project."""
-    run = _document_library_run(db, principal, run_id, modify=True)
+    """List documents owned by the run's project.
+
+    Every project member may read them, like the rules and catalog; only
+    uploading, selecting and deleting need analyzer access.
+    """
+    run = _document_library_run(db, principal, run_id)
     documents = (
         db.query(AnalyzerDocument)
         .filter(AnalyzerDocument.project_id == run.project_id)
@@ -7476,6 +7480,13 @@ def get_analysis_config(
         ),
         "can_manage_analysis_rules": is_project_manager(
             db, principal, run.project_id
+        ),
+        # Upload, select and delete documents and run analysis: managers, and
+        # the run's owner on a run scope (members get a read-only workspace).
+        "can_operate_analyzer": (
+            is_project_manager(db, principal, run.project_id)
+            if isinstance(run, _ProjectAnalysisScope)
+            else _can_operate_analyzer(db, principal, run)
         ),
         "can_manage_category_catalog": is_project_manager(
             db, principal, run.project_id

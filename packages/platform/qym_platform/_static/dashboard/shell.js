@@ -1160,12 +1160,14 @@
         var helpHtml = f.help ? '<div class="shell-modal-note" style="margin-top:4px;">' + esc(f.help) + '</div>' : '';
         var inputHtml = '';
         if (f.type === 'textarea') {
-          inputHtml = '<textarea class="shell-form-input" id="' + id + '" data-field="' + esc(f.name) + '" rows="' + (f.rows || 3) + '" placeholder="' + esc(f.placeholder || '') + '">' + esc(f.value || '') + '</textarea>';
+          // The value is set as a property after mounting (below), never as markup.
+          inputHtml = '<textarea class="shell-form-input" id="' + id + '" data-field="' + esc(f.name) + '" rows="' + (f.rows || 3) + '" placeholder="' + esc(f.placeholder || '') + '"></textarea>';
         } else if (f.type === 'select') {
           var opts = (f.options || []).map(function (o) {
             var ov = typeof o === 'object' ? o.value : o;
             var ol = typeof o === 'object' ? o.label : o;
-            return '<option value="' + esc(ov) + '"' + (String(ov) === String(f.value) ? ' selected' : '') + '>' + esc(ol) + '</option>';
+            // String() first: esc() drops falsy values, and an option may be 0.
+            return '<option value="' + esc(ov == null ? '' : String(ov)) + '"' + (String(ov) === String(f.value) ? ' selected' : '') + '>' + esc(ol == null ? '' : String(ol)) + '</option>';
           }).join('');
           inputHtml = '<select class="shell-form-input" id="' + id + '" data-field="' + esc(f.name) + '">' + opts + '</select>';
         } else if (f.type === 'checkbox') {
@@ -1179,7 +1181,7 @@
           labelHtml = '';
           helpHtml = '';
         } else {
-          inputHtml = '<input class="shell-form-input" type="' + (f.type || 'text') + '" id="' + id + '" data-field="' + esc(f.name) + '" placeholder="' + esc(f.placeholder || '') + '" value="' + esc(f.value || '') + '" autocomplete="off" />';
+          inputHtml = '<input class="shell-form-input" type="' + esc(f.type || 'text') + '" id="' + id + '" data-field="' + esc(f.name) + '" placeholder="' + esc(f.placeholder || '') + '" autocomplete="off" />';
         }
         return '<div class="shell-form-group">' + labelHtml + inputHtml + helpHtml + '</div>';
       }).join('');
@@ -1225,6 +1227,13 @@
         ? options.mount
         : document.body;
       mount.appendChild(dialog);
+      // Text values go in as DOM properties, so quotes, angle brackets and
+      // ampersands round-trip exactly and can never end an attribute early.
+      fields.forEach(function (f, idx) {
+        if (f.type === 'select' || f.type === 'checkbox') return;
+        var input = dialog.querySelector('#shell-form-field-' + idx);
+        if (input) input.value = f.value == null ? '' : String(f.value);
+      });
 
       var closeBtn = dialog.querySelector('.shell-modal-close');
       var cancelBtn = document.getElementById('shell-form-cancel');
@@ -1735,18 +1744,47 @@
   // TOAST
   // ══════════════════════════════════════════════════
 
-  function toast(message, type) {
+  // options.action = { label, onClick } adds one button (e.g. Undo) that runs
+  // once and closes the toast; options.duration keeps it longer than 4s.
+  function toast(message, type, options) {
     var container = document.getElementById('shell-toast-container');
     if (!container) return;
+    options = options || {};
     var el = document.createElement('div');
     el.className = 'shell-toast' + (type ? ' ' + type : '');
-    el.textContent = message;
-    container.appendChild(el);
-    setTimeout(function () {
+    el.setAttribute('role', 'status');
+    var dismissed = false;
+    function dismiss() {
+      if (dismissed) return;
+      dismissed = true;
       el.style.opacity = '0';
       el.style.transition = 'opacity 0.3s ease';
       setTimeout(function () { el.remove(); }, 300);
-    }, 4000);
+    }
+    var action = options.action;
+    if (action && action.label && typeof action.onClick === 'function') {
+      el.classList.add('shell-toast--action');
+      var text = document.createElement('span');
+      text.className = 'shell-toast-message';
+      text.textContent = message;
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'shell-toast-action';
+      button.textContent = action.label;
+      button.addEventListener('click', function () {
+        if (dismissed) return;
+        button.disabled = true;
+        dismiss();
+        action.onClick();
+      });
+      el.appendChild(text);
+      el.appendChild(button);
+    } else {
+      el.textContent = message;
+    }
+    container.appendChild(el);
+    setTimeout(dismiss, Math.max(1000, Number(options.duration) || 4000));
+    return { element: el, dismiss: dismiss };
   }
 
   // ══════════════════════════════════════════════════

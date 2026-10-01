@@ -80,7 +80,9 @@ def list_users(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> list[Dict[str, Any]]:
-    _ = principal
+    # The whole user directory is for admins. Project managers look people up
+    # through GET /v1/projects/{id}/member-candidates instead.
+    _require_admin(principal)
     users = db.query(User).filter(User.is_active == True).order_by(User.email).all()
     return [
         {
@@ -174,6 +176,15 @@ def admin_update_user(
         user.display_name = req.display_name.strip()
     if req.is_active is False and user.id == principal.user.id:
         raise HTTPException(status_code=400, detail="You cannot disable your own account")
+    if (
+        user.id == principal.user.id
+        and user.role == UserRole.ADMIN
+        and req.role is not None
+        and req.role != UserRole.ADMIN
+    ):
+        # Another admin can change it; demoting yourself ends your admin access
+        # in the middle of the page that manages it.
+        raise HTTPException(status_code=409, detail="You cannot remove your own admin role")
     will_be_admin = (req.role if req.role is not None else user.role) == UserRole.ADMIN and (
         req.is_active if req.is_active is not None else user.is_active
     )

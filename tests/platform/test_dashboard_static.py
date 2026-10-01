@@ -1763,9 +1763,9 @@ def test_changed_route_assets_are_cache_versioned() -> None:
     # The project-not-found page loads the same shared shell assets as the
     # dashboard pages, every one of them versioned.
     assert '{static_root}/auth.js?v=p0-20260930"' in runs_api
-    assert '{static_root}/shell.css?v=p0-20260930-3"' in runs_api
+    assert '{static_root}/shell.css?v=p1-20261001"' in runs_api
     assert '{static_root}/dashboard.css?v=p0-20260930"' in runs_api
-    assert '{static_root}/shell.js?v=p0-20260930-3"' in runs_api
+    assert '{static_root}/shell.js?v=p1-20261001"' in runs_api
 
 
 def test_every_page_versions_the_shared_shell_assets() -> None:
@@ -2233,8 +2233,8 @@ def test_clear_filter_control_has_aligned_label_and_soft_count_pill() -> None:
     for page in DASHBOARD_DIR.glob("*.html"):
         source = page.read_text(encoding="utf-8")
         if page.name == "analyzer.html":
-            assert "dashboard.css?v=p0-20260930" in source
-            assert "playground.js?v=p0-20260930" in source
+            assert "dashboard.css?v=p1-20261001" in source
+            assert "playground.js?v=p1-20261001" in source
             assert "ui_components.css?v=p0-20260930" in source
             assert "ui_components.js?v=p0-20260930-2" in source
             continue
@@ -3431,7 +3431,7 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert '"type": "retrying"' in analysis_api
     assert "state.phase === 'retrying'" in playground
     assert "Retrying timed-out analysis…" in playground
-    assert "playground.js?v=p0-20260930" in (
+    assert "playground.js?v=p1-20261001" in (
         DASHBOARD_DIR / "analyzer.html"
     ).read_text(encoding="utf-8")
     assert "Timeout retries: <strong>" in playground
