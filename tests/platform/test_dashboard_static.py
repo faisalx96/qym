@@ -1767,7 +1767,7 @@ def test_changed_route_assets_are_cache_versioned() -> None:
     # The project-not-found page loads the same shared shell assets as the
     # dashboard pages, every one of them versioned.
     assert '{static_root}/auth.js?v=p0-20260930"' in runs_api
-    assert '{static_root}/shell.css?v=p0-20260930-3"' in runs_api
+    assert '{static_root}/shell.css?v=p1-20261001"' in runs_api
     assert '{static_root}/dashboard.css?v=p1-20261001"' in runs_api
     assert '{static_root}/shell.js?v=p1-20261001"' in runs_api
 
