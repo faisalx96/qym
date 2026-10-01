@@ -1,6 +1,6 @@
-# Unreleased — P1 design review (Platform)
+# October 2026 — Platform 0.5.0 (SDK 1.8.0 unchanged)
 
-Fixes the P1 issues of the September design review: a run page you can read and filter without the page moving, a Reviews queue with project approval rules, faster dataset search and comparisons, and safer admin and sign-in. The platform version for this release is still to be decided.
+Fixes the P1 issues of the September design review: a run page you can read and filter without the page moving, a Reviews queue with project approval rules, faster dataset search and comparisons, and safer admin and sign-in. It needs no SDK update: SDK 1.8.0 works as is.
 
 ## Before you update
 
