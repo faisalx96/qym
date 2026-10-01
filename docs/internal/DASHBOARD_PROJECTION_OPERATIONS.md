@@ -37,6 +37,24 @@ published descriptor and numerical values remain visible until its pending
 outbox and all backfill source kinds have completed. New terminal historical
 runs are published only when their complete numerical snapshot is ready.
 
+The catalog revision hashes every run's publication counter, presence, list
+status and hidden flag; on PostgreSQL the hash is computed in the database, and a request reads it once for its page,
+overview and KPIs. Each API process reuses page, overview, catalog and KPI
+snapshots keyed by that revision (and by filters, sort and hidden-task policy);
+an idle entry expires after five minutes and any published change misses it.
+Deleting, restoring, submitting, approving, rejecting and withdrawing a review
+decision update the run's dimension in the same transaction (and bump the
+publication counter of an already published summary; a pending summary stays
+at revision 0 so the run keeps showing as pending), so the next list request
+shows the change without waiting for the worker, which later republishes the
+same values.
+
+Filters accept `q`, a case-insensitive search (at most 200 characters) over the
+run's displayed name (`external_run_id`), its run name, and the start of its
+run ID. A page orders narrow keys first and then reads only the page's rows; the
+nearest distinct means shown beside each metric value come from one query over
+the page's (task, model, dataset) groups.
+
 While an authorized project's historical backfill is unfinished, freshness also
 reports `backfilling: true`. This includes the gap between the final source scan
 and first summary publication. Ordinary updates and newly created runs do not

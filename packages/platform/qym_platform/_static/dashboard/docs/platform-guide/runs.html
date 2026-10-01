@@ -3,6 +3,7 @@
 <p class="docs-lead">The Runs page is the project ledger: filter it to a comparable slice, open a run for evidence, or select whole runs and individual repeat passes for comparison.</p>
 
 <h2>Read and narrow the table</h2>
+<p><strong>Search runs</strong> (press <code>/</code>) finds a run by the name the table shows, its run name, or the start of its run ID. The search is part of the page address, so a reload, the Back button, or a shared link keeps it. The time control limits runs to today, the last 7 or 30 days, or a <strong>Range</strong> of two dates (both included).</p>
 <p>Use the toolbar to filter by task, dataset and version, model, status, or owner. <strong>Columns</strong> controls visible metrics and system fields. Its <strong>Frozen columns</strong> section chooses which of run name, status, task, model, dataset, owner, and date stay in place while the table scrolls sideways: all of them by default. Unfreeze some to see more scores on a narrower screen; the choice is remembered in this browser, and <strong>Reset to default</strong> freezes them all again. Click a column heading to sort; click the run name to open its detail page.</p>
 
 <p>Each row shows workflow status, run identity, task, model, dataset, code version, metric means, latency, owner, date, duration, and available actions. Running repeat evaluations also show current pass progress. A finished run tagged <strong>Incomplete</strong> completed without all of its data: some items never arrived, or the platform rejected some of its events. Hover the tag for the reason; the run page lists what is missing. An item whose failure event was rejected still counts as a task error when its final attempt failed; an item with no outcome at all shows as <strong>Not received</strong> and is left out of Execution success and of the means.</p>
@@ -59,7 +60,7 @@
 <p>The baseline and column choice are kept in the link (<code>baseline</code>, <code>columns=runs</code>). When the runs used different datasets or dataset versions, a notice says so: score changes can then come from the data, and only items present in both runs are paired. On a run page, <strong>Compare with previous</strong> opens the run next to the previous finished run of the same task, model and dataset, as the baseline; the button shows the change in the run's primary metric (the two run means, not tested for noise).</p>
 
 <h2>Review workflow</h2>
-<p>An owner submits a finished run (a project manager or admin can submit it on the owner's behalf); a project manager or admin approves or rejects it and can later withdraw that decision. Submitting always asks for confirmation first, with an optional comment kept in the review history. Managers and admins can also transfer a run to another project member from its row actions. While a run is submitted or approved its scores cannot be edited or reset on the run or Compare page, and its passes cannot be deleted. While a run is submitted, approved, or rejected its results are frozen: late events from the evaluation client cannot change its scores or move it back to running. Withdrawing a decision returns the run to its execution result, so a failed run stays failed. The run page lists every submission, decision, and withdrawal with who made it, when, and the comment.</p>
+<p>An owner submits a finished run (a project manager or admin can submit it on the owner's behalf); a project manager or admin approves or rejects it and can later withdraw that decision. Submitting always asks for confirmation first, with an optional comment kept in the review history. Managers and admins can also transfer a run to another project member from its row actions. The row shows the new status and its next actions as soon as the action succeeds; if an action is refused, the message says why (for example, that the run is already submitted). While a run is submitted or approved its scores cannot be edited or reset on the run or Compare page, and its passes cannot be deleted. While a run is submitted, approved, or rejected its results are frozen: late events from the evaluation client cannot change its scores or move it back to running. Withdrawing a decision returns the run to its execution result, so a failed run stays failed. The run page lists every submission, decision, and withdrawal with who made it, when, and the comment.</p>
 
 <h2>How cohort accounting works</h2>
 <p>Cohorts compare equal numbers of executions, not equal numbers of rows:</p>
@@ -86,13 +87,18 @@
 </div>
 
 <h2>Keyboard shortcuts</h2>
+<p>These single keys work on the Runs page when no field, menu, or dialog has focus, and never with Ctrl, Cmd, or Alt held. Press <code>?</code>, or <strong>Shortcuts</strong> at the right of the status bar, to list them. To stop letter and number keys from acting at all (for example with speech input), turn off <strong>Single-key shortcuts</strong> in that list; the choice is remembered in this browser and also applies to the trace viewer's <code>j</code>, <code>k</code>, and <code>/</code>. <code>Esc</code> keeps working, and the <strong>Shortcuts</strong> button turns them back on.</p>
 <table>
   <thead><tr><th>Key</th><th>Action</th></tr></thead>
   <tbody>
-    <tr><td><code>j</code> / <code>k</code></td><td>Move row focus down / up.</td></tr>
+    <tr><td><code>j</code> / <code>k</code></td><td>Move row focus down / up, across pages.</td></tr>
+    <tr><td><code>g</code> / <code>G</code></td><td>Focus the first run / the last run of the whole list.</td></tr>
     <tr><td><code>Enter</code></td><td>Open the focused run.</td></tr>
     <tr><td><code>x</code></td><td>Toggle the focused row's selection.</td></tr>
     <tr><td><code>c</code></td><td>Open a ready comparison or cohort.</td></tr>
+    <tr><td><code>/</code></td><td>Search runs.</td></tr>
+    <tr><td><code>1</code> &ndash; <code>4</code></td><td>Time range: all, today, last 7 days, last 30 days.</td></tr>
+    <tr><td><code>?</code></td><td>Show the shortcuts.</td></tr>
     <tr><td><code>Esc</code></td><td>Clear selection or cancel cohort mode.</td></tr>
   </tbody>
 </table>

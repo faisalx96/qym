@@ -47,8 +47,9 @@ def _rule(css: str, selector: str) -> str:
 def test_dashboard_delete_action_binding_allows_non_deletable_runs() -> None:
     source = DASHBOARD_JS.read_text(encoding="utf-8")
 
-    assert "const deleteBtn = tr.querySelector('.delete-run');" in source
-    assert "if (deleteBtn) deleteBtn.addEventListener('click'" in source
+    # Row actions are delegated once on the tbody; a row without a Delete
+    # action simply has no .delete-run to match.
+    assert "else if (control.matches('.delete-run')) confirmDeleteRun(run.file_path, run.run_id);" in source
     assert "tr.querySelector('.delete-run').addEventListener" not in source
 
 
@@ -441,12 +442,11 @@ def test_repeat_parent_checkbox_selects_its_current_scope() -> None:
     # Collapsed repeat rows represent the logical run; expanded rows represent
     # the selectable execution members shown directly beneath them.
     assert "samplesOpen ? 'Select all passes for' : 'Select run'" in source
-    assert "if (expanded) {\n            toggleExpandedPassSelection(run, tr);" in source
+    assert "state._runsTableCtx.toggleExpandedPassSelection(run, row);" in source
     assert "checkbox.checked = state.selectedRuns.has(filePath);" in source
     assert "checkbox.checked = refs.length > 0 && selectedCount === refs.length;" in source
     assert "checkbox.indeterminate = selectedCount > 0 && selectedCount < refs.length;" in source
-    assert "const repeatExpanded = run.samples > 1" in source
-    assert "checkbox.indeterminate = repeatExpanded" in source
+    assert "checkbox.indeterminate = samplesOpen && selectedPassCount > 0" in source
     assert "isPartiallySelected" not in source
     assert "state.selectedRuns.delete(filePath);" in source
     assert "if (!allSelected) refs.forEach(ref => state.selectedRuns.add(ref));" in source
@@ -497,9 +497,10 @@ def test_repeat_run_expander_uses_accessible_attached_inspector() -> None:
     styles = (DASHBOARD_DIR / "dashboard.css").read_text(encoding="utf-8")
 
     assert '<button type="button" class="samples-toggle' in source
-    assert 'aria-expanded="${samplesOpen ? \'true\' : \'false\'}"' in source
+    # The open state lives outside the keyed row markup; the native button
+    # gives Enter and Space activation.
+    assert "toggle.setAttribute('aria-expanded', samplesOpen ? 'true' : 'false');" in source
     assert 'aria-controls="${samplesPanelId}"' in source
-    assert "event.key !== 'Enter' && event.key !== ' '" in source
     assert "toggle.setAttribute('aria-expanded'" in source
     assert 'class="samples-detail-panel"' in source
     assert "samples-retry-btn" in source
@@ -534,7 +535,7 @@ def test_repeat_drawer_follows_mock_option_c() -> None:
 
     # leading disclosure chevron before the run name (mock C's toggle), the
     # pass-count chip after it, and a spacer aligning chevron-less rows
-    toggle_at = source.index('class="samples-toggle qym-icon-action${samplesOpen')
+    toggle_at = source.index('class="samples-toggle qym-icon-action"')
     run_id_at = source.index('<span class="run-id"', toggle_at)
     assert toggle_at < run_id_at < source.index('class="run-pass-count"', toggle_at)
     assert 'class="samples-toggle-spacer"' in source
@@ -587,7 +588,7 @@ def test_repeat_drawer_follows_mock_option_c() -> None:
     assert "${latencyStat}" in source
 
     # the whole repeat-run row is an expand target (name still navigates)
-    assert "const rowToggle = tr.querySelector('.samples-toggle');" in source
+    assert "const rowToggle = row.querySelector('.samples-toggle');" in source
 
     # user-initiated expands fade in (opacity only — a transform would unpin
     # the sticky columns); collapse is instant and re-renders have no motion
@@ -1763,8 +1764,8 @@ def test_changed_route_assets_are_cache_versioned() -> None:
     # The project-not-found page loads the same shared shell assets as the
     # dashboard pages, every one of them versioned.
     assert '{static_root}/auth.js?v=p0-20260930"' in runs_api
-    assert '{static_root}/shell.css?v=p1-20261001"' in runs_api
-    assert '{static_root}/dashboard.css?v=p0-20260930"' in runs_api
+    assert '{static_root}/shell.css?v=p0-20260930-3"' in runs_api
+    assert '{static_root}/dashboard.css?v=p1-20261001"' in runs_api
     assert '{static_root}/shell.js?v=p1-20261001"' in runs_api
 
 
@@ -2425,7 +2426,7 @@ def test_run_selection_uses_explicit_mode_and_reclaims_checkbox_column() -> None
     assert "const selectionAvailable = !!state.runs && (usesDashboardSummary() ? state.dashboardOverview.total_count > 0 : state.flatRuns.length > 0);" in source
     assert "selectMode: false" in source
     assert "function setSelectMode(enabled)" in source
-    assert "tableView.classList.toggle('select-mode', state.selectMode);" in source
+    assert "el('table-view')?.classList.toggle('select-mode', state.selectMode);" in source
     assert "selectModeBtn.textContent = state.selectMode ? 'Done' : 'Select';" in source
     assert "el('select-mode-btn')?.addEventListener('click', () => setSelectMode(!state.selectMode));" in source
     select_mode = source.split("function setSelectMode(enabled)", 1)[1].split(

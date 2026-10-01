@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Charts</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p0-20260930">
-  <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001">
+  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
   <script src="/static/qym_safe.js?v=p0-20260930"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
   <script src="/static/shell.js?v=p1-20261001"></script>
@@ -24,10 +24,25 @@
         <div class="multi-select-dropdown" id="metric-visibility-dropdown"></div>
       </div>
     </div>
-    <div class="quick-filters qym-segmented" role="group" aria-label="Time range">
-      <button class="filter-btn qym-segmented__option active" data-filter="all" aria-pressed="true">All</button>
-      <button class="filter-btn qym-segmented__option" data-filter="today" aria-pressed="false">Today</button>
-      <button class="filter-btn qym-segmented__option" data-filter="week" aria-pressed="false">7d</button>
+    <div class="time-range-control multi-select-wrapper">
+      <div class="quick-filters qym-segmented" role="group" aria-label="Time range">
+        <button class="filter-btn qym-segmented__option active" data-filter="all" aria-pressed="true">All</button>
+        <button class="filter-btn qym-segmented__option" data-filter="today" aria-pressed="false">Today</button>
+        <button class="filter-btn qym-segmented__option" data-filter="week" aria-pressed="false" title="Last 7 days">7d</button>
+        <button class="filter-btn qym-segmented__option" data-filter="month" aria-pressed="false" title="Last 30 days">30d</button>
+        <button class="filter-btn qym-segmented__option" data-filter="custom" aria-pressed="false" aria-haspopup="dialog" aria-expanded="false" aria-controls="time-range-dropdown" title="Choose a date range">Range</button>
+      </div>
+      <div class="multi-select-dropdown time-range-dropdown" id="time-range-dropdown" role="dialog" aria-label="Date range">
+        <div class="time-range-fields">
+          <label class="time-range-field"><span>From</span><input type="date" id="time-range-from" class="qym-control qym-input"></label>
+          <label class="time-range-field"><span>To</span><input type="date" id="time-range-to" class="qym-control qym-input"></label>
+        </div>
+        <p class="time-range-error" id="time-range-error" role="alert"></p>
+        <div class="time-range-actions">
+          <button type="button" class="qym-inline-action qym-inline-action--neutral" id="time-range-cancel">Cancel</button>
+          <button type="button" class="qym-inline-action qym-inline-action--accent" id="time-range-apply">Apply</button>
+        </div>
+      </div>
     </div>
     <div class="command-bar-filter-row">
       <div class="filter-dropdowns">

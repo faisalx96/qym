@@ -873,6 +873,34 @@ def extrema_payload(bucket):
     }
 
 
+def dashboard_approval_info(db, approval):
+    """The review decision a runs-list row shows (None without an approval)."""
+    from qym_platform.api.runs import _iso
+    from qym_platform.db.models import User
+
+    if not approval:
+        return None
+    decider = (
+        db.get(User, approval.decision_by_user_id)
+        if approval.decision_by_user_id
+        else None
+    )
+    return {
+        "decision": getattr(approval.decision, "value", approval.decision),
+        "decision_at": _iso(approval.decision_at) if approval.decision_at else None,
+        "decision_by": (
+            {
+                "id": decider.id,
+                "email": decider.email,
+                "display_name": decider.display_name or decider.email.split("@")[0],
+            }
+            if decider
+            else None
+        ),
+        "comment": approval.comment or "",
+    }
+
+
 def _sync_dimension(db, run_id, version):
     from qym_platform.api.runs import (
         _dataset_version_fields,
@@ -920,28 +948,9 @@ def _sync_dimension(db, run_id, version):
         if owner
         else None
     )
-    approval = db.scalar(select(Approval).where(Approval.run_id == run.id))
-    approval_info = None
-    if approval:
-        decider = (
-            db.get(User, approval.decision_by_user_id)
-            if approval.decision_by_user_id
-            else None
-        )
-        approval_info = {
-            "decision": getattr(approval.decision, "value", approval.decision),
-            "decision_at": _iso(approval.decision_at) if approval.decision_at else None,
-            "decision_by": (
-                {
-                    "id": decider.id,
-                    "email": decider.email,
-                    "display_name": decider.display_name or decider.email.split("@")[0],
-                }
-                if decider
-                else None
-            ),
-            "comment": approval.comment or "",
-        }
+    approval_info = dashboard_approval_info(
+        db, db.scalar(select(Approval).where(Approval.run_id == run.id))
+    )
     dataset = _dataset_version_fields(run, _dataset_version_info_map(db, [run]))
     raw_model = _strip_model_provider(run.model or "")
     trace = metadata.get("trace_stats")
@@ -2022,20 +2031,78 @@ def dashboard_freshness(db, project_ids):
     )
     # Include membership, including revision-zero pending runs. A sum alone
     # misses their insertion and can collide after a purge and publication.
-    # Read only identity/revision columns, streamed in deterministic order.
-    revision = 0
-    catalog_hash = hashlib.sha256()
-    for run_key, published_revision, present in db.execute(
-        select(Summary.run_key, Summary.projection_revision, Dimension.present)
-        .outerjoin(Dimension, Dimension.run_key == Summary.run_key)
-        .where(Summary.project_key.in_(projects))
-        .order_by(Summary.run_key)
-        .execution_options(yield_per=1000)
-    ):
-        revision += int(published_revision or 0)
-        catalog_hash.update(
-            json.dumps([run_key, published_revision, present], separators=(",", ":")).encode()
+    # Review actions and deletes change the list row's status and visibility
+    # at once; a published run also moves its revision, but a pending
+    # (revision-zero) run must stay pending, so both columns are hashed too.
+    # Read only identity/revision columns, in deterministic order.
+    def catalog(*columns):
+        return (
+            select(*columns)
+            .select_from(Summary)
+            .outerjoin(Dimension, Dimension.run_key == Summary.run_key)
+            .where(Summary.project_key.in_(projects))
         )
+
+    if db.get_bind().dialect.name == "postgresql":
+        from sqlalchemy import String, cast, literal_column
+        from sqlalchemy.dialects.postgresql import aggregate_order_by
+
+        # Every list request reads this; hash inside the database instead of
+        # streaming one row per run of the project into Python.
+        member = func.concat_ws(
+            ":",
+            Summary.run_key,
+            func.coalesce(Summary.projection_revision, 0),
+            func.coalesce(cast(Dimension.present, String), "null"),
+            func.coalesce(Dimension.status, ""),
+            case((Dimension.hidden_at.is_(None), "shown"), else_="hidden"),
+        )
+        revision, digest = db.execute(
+            catalog(
+                func.coalesce(func.sum(Summary.projection_revision), 0),
+                # sha256, not md5: md5() fails on FIPS-mode servers.
+                func.encode(
+                    func.sha256(
+                        func.convert_to(
+                            func.coalesce(
+                                func.string_agg(
+                                    member,
+                                    aggregate_order_by(
+                                        literal_column("','"), Summary.run_key
+                                    ),
+                                ),
+                                "",
+                            ),
+                            "UTF8",
+                        )
+                    ),
+                    "hex",
+                ),
+            )
+        ).one()
+        catalog_revision = f"pg:{digest}"
+    else:
+        revision = 0
+        catalog_hash = hashlib.sha256()
+        for run_key, published_revision, present, status, hidden_at in db.execute(
+            catalog(
+                Summary.run_key,
+                Summary.projection_revision,
+                Dimension.present,
+                Dimension.status,
+                Dimension.hidden_at,
+            )
+            .order_by(Summary.run_key)
+            .execution_options(yield_per=1000)
+        ):
+            revision += int(published_revision or 0)
+            catalog_hash.update(
+                json.dumps(
+                    [run_key, published_revision, present, status, hidden_at is not None],
+                    separators=(",", ":"),
+                ).encode()
+            )
+        catalog_revision = catalog_hash.hexdigest()
     pending, oldest, backfilling, unpublished, failed = db.execute(
         select(
             func.count(),
@@ -2075,7 +2142,7 @@ def dashboard_freshness(db, project_ids):
     ).one()
     return {
         "revision": int(revision),
-        "catalog_revision": catalog_hash.hexdigest(),
+        "catalog_revision": catalog_revision,
         "freshness": {
             "updating": bool(pending),
             "pending_partitions": int(pending),

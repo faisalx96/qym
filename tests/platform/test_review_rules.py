@@ -565,7 +565,7 @@ def test_runs_list_confirms_submission_and_offers_manager_actions():
     js = (DASHBOARD / "dashboard.js").read_text(encoding="utf-8")
     index = (DASHBOARD / "index.html").read_text(encoding="utf-8")
     # The row icon and the bulk button open the confirmation, never POST directly.
-    assert "showWorkflowModal('submit', run.run_id, getRunDisplayName(run), { runs: [run] });" in js
+    assert "showWorkflowModal('submit', run.run_id, name, { runs: [run] });" in js
     assert "showWorkflowModal('submit', null, '', { runs: selectedRuns });" in js
     assert "apiUrl('v1/runs/submit')" in js
     assert "for (const run of submittable)" not in js

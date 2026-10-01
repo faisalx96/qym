@@ -2572,6 +2572,13 @@
     }
     // Don't handle keys if search is focused (except Escape)
     if (S.el.search === document.activeElement) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // Letter keys honour the Runs page's single-key shortcuts switch (WCAG 2.1.4).
+    if (e.key.length === 1) {
+      try {
+        if (window.localStorage.getItem("qym:single-key-shortcuts") === "off") return;
+      } catch (_) {}
+    }
     if (e.key === "ArrowDown" || e.key === "j") { e.preventDefault(); navigate(1); }
     else if (e.key === "ArrowUp" || e.key === "k") { e.preventDefault(); navigate(-1); }
     else if (e.key === "Enter" || e.key === "ArrowRight") { e.preventDefault(); if (S.selected && !S.expanded.has(S.selected)) { S.expanded.add(S.selected); renderTree(); } }

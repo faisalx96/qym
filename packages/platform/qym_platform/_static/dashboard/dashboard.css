@@ -777,8 +777,10 @@ html {
 .command-bar {
   display: flex;
   align-items: center;
-  flex-wrap: nowrap;
-  gap: var(--space-md);
+  /* Wrap at every width: the bar must never widen the page (the shell's
+     content area scrolls on both axes, so overflow here scrolls the page). */
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
   padding: var(--space-sm) var(--space-lg);
   background: var(--bg-base);
   border-bottom: 1px solid var(--border-subtle);
@@ -839,6 +841,81 @@ html {
 .quick-filters {
   display: flex;
   gap: 4px;
+}
+
+/* Runs search: first in the command bar, focused with "/". */
+.runs-search {
+  flex: 0 1 240px;
+  min-width: 160px;
+}
+
+.runs-search > input {
+  width: 100%;
+  padding-right: 28px;
+}
+
+.runs-search-kbd {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.runs-search:focus-within .runs-search-kbd,
+.runs-search:has(> input:not(:placeholder-shown)) .runs-search-kbd {
+  display: none;
+}
+
+/* Custom date range popover under the time segment. */
+.time-range-control {
+  flex-shrink: 0;
+}
+
+.time-range-dropdown {
+  min-width: 260px;
+  max-height: none;
+  overflow: visible;
+  padding: var(--space-md);
+}
+
+.time-range-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-sm);
+}
+
+.time-range-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.time-range-field input {
+  width: 100%;
+  padding: 0 var(--space-xs);
+  color-scheme: dark;
+}
+
+.time-range-error {
+  min-height: 0;
+  margin: var(--space-xs) 0 0;
+  font-size: var(--font-sm);
+  color: var(--error);
+}
+
+.time-range-error:empty {
+  display: none;
+}
+
+.time-range-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
 }
 
 .filter-btn {
@@ -930,8 +1007,9 @@ html {
 }
 
 .command-bar-filter-row {
-  flex: 1;
-  min-width: 0;
+  /* Takes the rest of the row, or its own row when less than this is left. */
+  flex: 1 1 auto;
+  min-width: min(100%, 560px);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -944,7 +1022,7 @@ html {
   gap: var(--space-sm);
   flex: 1;
   min-width: 0;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   overflow-y: visible;
 }
@@ -4141,6 +4219,35 @@ body.chart-col-resize-active {
   gap: var(--space-sm);
   padding: var(--space-xs) 0;
   font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.shortcut-setting {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.shortcut-setting input {
+  margin-top: 2px;
+  accent-color: var(--accent-primary);
+}
+
+.shortcut-setting strong {
+  display: block;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.shortcut-setting-note {
+  display: block;
   color: var(--text-muted);
 }
 

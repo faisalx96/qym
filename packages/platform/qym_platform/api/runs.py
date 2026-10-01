@@ -752,6 +752,21 @@ def _completed_pass_outputs(
     return recovered
 
 
+def _bump_published_summary(db: Session, run_id: str) -> None:
+    """Move a published summary's revision so cached list pages miss.
+
+    A pending summary (revision 0) keeps revision 0: bumping it would list the
+    run as published with no numbers and hide it from the unpublished count.
+    The catalog revision hashes the dimension's status and visibility, so
+    cached pages still miss for a pending run.
+    """
+    from qym_platform.db.dashboard_models import DashboardRunSummary
+
+    summary = db.get(DashboardRunSummary, run_id, populate_existing=True, with_for_update=True)
+    if summary is not None and int(summary.projection_revision or 0) > 0:
+        summary.projection_revision = int(summary.projection_revision) + 1
+
+
 def _set_dashboard_visibility(db: Session, run_id: str, visible: bool) -> None:
     """Hide/show the run in projection-backed lists immediately.
 
@@ -759,7 +774,7 @@ def _set_dashboard_visibility(db: Session, run_id: str, visible: bool) -> None:
     moves); ``hidden_at`` is the operator-facing flag lists filter on.
     """
     from qym_platform.db.dashboard_models import (
-        DashboardPartitionState, DashboardRunDimension, DashboardRunSummary,
+        DashboardPartitionState, DashboardRunDimension,
     )
 
     # Source writes already hold the Run lock. Match the worker's partition
@@ -770,9 +785,35 @@ def _set_dashboard_visibility(db: Session, run_id: str, visible: bool) -> None:
         if dimension is None or (dimension.hidden_at is None) == visible:
             return
         dimension.hidden_at = None if visible else utc_now_naive()
-        summary = db.get(DashboardRunSummary, run_id, populate_existing=True, with_for_update=True)
-        if summary is not None:
-            summary.projection_revision = int(summary.projection_revision or 0) + 1
+        _bump_published_summary(db, run_id)
+
+
+def _publish_dashboard_review_state(db: Session, run: Run, approval: Any) -> None:
+    """Show a review decision in projection-backed lists immediately.
+
+    The summary worker republishes the same values later; the new status (and
+    a published summary's bumped revision) moves the catalog revision, so no
+    cached list page keeps the old status or keeps offering the old action.
+    """
+    from qym_platform.db.dashboard_models import (
+        DashboardPartitionState, DashboardRunDimension,
+    )
+    from qym_platform.services.dashboard_summaries import dashboard_approval_info
+
+    # Same lock order as _set_dashboard_visibility: Run (held), partition, projection.
+    with db.no_autoflush:
+        db.get(DashboardPartitionState, run.id, populate_existing=True, with_for_update=True)
+        dimension = db.get(DashboardRunDimension, run.id, populate_existing=True, with_for_update=True)
+        if dimension is None:
+            return
+        status = str(getattr(run.status, "value", run.status))
+        dimension.status = status
+        dimension.descriptor = {
+            **(dimension.descriptor or {}),
+            "status": status,
+            "approval": dashboard_approval_info(db, approval),
+        }
+        _bump_published_summary(db, run.id)
 
 
 def _lock_pass_mutation_run(db: Session, run_id: str, expected_version: Any) -> Run:
@@ -1256,8 +1297,8 @@ def _project_not_found_page(request: Request, project_slug: str) -> HTMLResponse
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Project Not Found</title>
   <link rel="icon" type="image/png" href="{static_root}/qym_icon.png">
-  <link rel="stylesheet" href="{static_root}/dashboard.css?v=p0-20260930">
-  <link rel="stylesheet" href="{static_root}/shell.css?v=p1-20261001">
+  <link rel="stylesheet" href="{static_root}/dashboard.css?v=p1-20261001">
+  <link rel="stylesheet" href="{static_root}/shell.css?v=p0-20260930-3">
   <script src="{static_root}/qym_safe.js?v=p0-20260930"></script>
   <script src="{static_root}/auth.js?v=p0-20260930"></script>
   <script src="{static_root}/shell.js?v=p1-20261001"></script>
@@ -6244,6 +6285,8 @@ def _submit_locked(
             else None
         ),
     )
+    # The list shows the new status before the worker republishes (C040).
+    _publish_dashboard_review_state(db, run, approval)
 
 
 def _submit_comment(body: Optional[Dict[str, Any]]) -> str:
@@ -6449,6 +6492,7 @@ def _decide_run(
         approval=approval,
         at=now,
     )
+    _publish_dashboard_review_state(db, run, approval)
     db.commit()
     return {"ok": True, "status": run.status}
 

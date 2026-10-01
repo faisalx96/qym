@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import bisect
+import copy
 import hashlib
 import json
+import math
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Optional
@@ -23,10 +26,15 @@ from qym_platform.permissions import project_for_read_by_slug
 from qym_platform.settings import PlatformSettings
 from qym_platform.services.dashboard_cache import DashboardSnapshotCache
 
-_overview_cache = DashboardSnapshotCache()
-_page_cache = DashboardSnapshotCache()
-_catalog_cache = DashboardSnapshotCache(max_entries=4, max_bytes=16 * 1024 * 1024)
-_kpi_cache = DashboardSnapshotCache()
+# Entries are keyed by the catalog revision, which moves with every published
+# change, so the TTL only bounds how long an idle entry holds memory.
+_SNAPSHOT_TTL_SECONDS = 300.0
+_overview_cache = DashboardSnapshotCache(ttl=_SNAPSHOT_TTL_SECONDS)
+_page_cache = DashboardSnapshotCache(ttl=_SNAPSHOT_TTL_SECONDS)
+_catalog_cache = DashboardSnapshotCache(
+    max_entries=4, max_bytes=16 * 1024 * 1024, ttl=_SNAPSHOT_TTL_SECONDS
+)
+_kpi_cache = DashboardSnapshotCache(ttl=_SNAPSHOT_TTL_SECONDS)
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 _FILTER_COLUMNS = {
@@ -39,15 +47,27 @@ _FILTER_COLUMNS = {
 }
 
 
+_MAX_SEARCH_LENGTH = 200
+
+
 def _parse_filters(raw: Optional[str]) -> dict:
     try:
         value = json.loads(raw or "{}")
     except (ValueError, TypeError):
         raise HTTPException(400, "Invalid dashboard filters") from None
     if not isinstance(value, dict) or set(value) - (
-        set(_FILTER_COLUMNS) | {"since", "until"}
+        set(_FILTER_COLUMNS) | {"since", "until", "q"}
     ):
         raise HTTPException(400, "Invalid dashboard filters")
+    if "q" in value:
+        if value["q"] is not None and (
+            not isinstance(value["q"], str) or len(value["q"]) > _MAX_SEARCH_LENGTH
+        ):
+            raise HTTPException(400, "Invalid search text")
+        # One cache entry per distinct search; blank text is no search.
+        value["q"] = " ".join((value["q"] or "").split()).lower()
+        if not value["q"]:
+            del value["q"]
     for key in _FILTER_COLUMNS:
         values = value.get(key, [])
         if (
@@ -170,7 +190,23 @@ def _filter_conditions(filters, *, skip=None, facets=False):
         conditions.append(Dimension.timestamp >= filters["since"])
     if filters.get("until") is not None:
         conditions.append(Dimension.timestamp < filters["until"])
+    if filters.get("q"):
+        conditions.append(_search_condition(filters["q"]))
     return conditions
+
+
+def _search_condition(text):
+    """Find a run by the name the list shows, its run name, or its id."""
+    needle = text.lower()
+
+    def contains(column):
+        return func.lower(func.coalesce(column, "")).contains(needle, autoescape=True)
+
+    return or_(
+        contains(Dimension.descriptor["external_run_id"].as_string()),
+        contains(Dimension.descriptor["run_name"].as_string()),
+        func.lower(Dimension.run_key).startswith(needle, autoescape=True),
+    )
 
 
 def _query(*columns):
@@ -183,40 +219,33 @@ def _query(*columns):
 
 def _ordered_query(conditions, *columns):
     # First-seen groups are established before dropdown/time filtering in the UI.
-    raw_model = Dimension.descriptor["model_name"].as_string()
-    task_first = (
+    # Window maxima over the project's present runs give each run its group
+    # order in one pass; joining two GROUP BY subqueries made the planner loop
+    # an index scan once per group. Models group by the typed model column:
+    # reading the name out of every run's JSON descriptor dominated the query.
+    raw_model = Dimension.model
+    first = (
         select(
-            Dimension.task.label("task"), func.max(Dimension.created_at).label("first")
+            Dimension.run_key.label("run_key"),
+            func.max(Dimension.created_at)
+            .over(partition_by=Dimension.task)
+            .label("task_first"),
+            func.max(Dimension.created_at)
+            .over(partition_by=(Dimension.task, raw_model))
+            .label("model_first"),
         )
         .where(conditions[0], Dimension.present.is_(True))
-        .group_by(Dimension.task)
-        .subquery()
-    )
-    model_first = (
-        select(
-            Dimension.task.label("task"),
-            raw_model.label("model"),
-            func.max(Dimension.created_at).label("first"),
-        )
-        .where(conditions[0], Dimension.present.is_(True))
-        .group_by(Dimension.task, raw_model)
         .subquery()
     )
     query = (
         _query(*columns)
-        .join(task_first, task_first.c.task == Dimension.task)
-        .join(
-            model_first,
-            and_(
-                model_first.c.task == Dimension.task, model_first.c.model == raw_model
-            ),
-        )
+        .join(first, first.c.run_key == Dimension.run_key)
         .where(*conditions)
     )
     order = [
-        task_first.c.first.desc(),
+        first.c.task_first.desc(),
         Dimension.task,
-        model_first.c.first.desc(),
+        first.c.model_first.desc(),
         raw_model,
         Dimension.created_at.desc(),
         Dimension.run_key,
@@ -355,7 +384,12 @@ def _stream(db, conditions, sort=None, collation=None):
 def _freshness(db, project):
     from qym_platform.services.dashboard_summaries import dashboard_freshness
 
-    return dashboard_freshness(db, [project["id"]] if project else [])
+    # One read per repeatable-read snapshot: the page, overview and KPIs of a
+    # request all key their caches on the same revision.
+    key = ("dashboard_freshness", project["id"] if project else None)
+    if key not in db.info:
+        db.info[key] = dashboard_freshness(db, [project["id"]] if project else [])
+    return copy.deepcopy(db.info[key])
 
 
 def _facets(db, base, filters):
@@ -546,83 +580,75 @@ def _build_overview(db, project, filters, sort="time-desc", collation=None):
     return result
 
 
+def _metric_number(value):
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
 def _neighbors(db, conditions, rows):
-    """Read adjacent distinct means for page values without fetching history."""
-    groups = {
-        (row["task_name"], row["model_key"], row.get("dataset_name") or "")
-        for row in rows
-    }
-    metrics = {metric for row in rows for metric in (row.get("metric_averages") or {})}
-    raw_model = Dimension.model
+    """Read adjacent distinct means for page values without fetching history.
+
+    One query reads the metric means of the page's (task, model, dataset)
+    groups; a query per metric made the page cost grow with every metric.
+    """
     dataset = Dimension.descriptor["dataset_name"].as_string()
+    wanted = {}
     for row in rows:
         row["metric_neighbor_values"] = {}
-    for metric in metrics:
-        value = Summary.data["metric_averages"][metric].as_float()
-        grouped = (
-            _query(
-                Dimension.task.label("task"),
-                raw_model.label("model"),
-                dataset.label("dataset"),
-                value.label("value"),
-            )
-            .where(
-                *conditions,
-                value.isnot(None),
-                or_(
-                    *(
-                        and_(
-                            Dimension.task == task, raw_model == model, dataset == data
-                        )
-                        for task, model, data in groups
-                    )
-                ),
-            )
-            .distinct()
-            .cte()
+        group = (row["task_name"], row["model_key"], row.get("dataset_name") or "")
+        for metric, value in (row.get("metric_averages") or {}).items():
+            if _metric_number(value) is not None:
+                wanted.setdefault(group, set()).add(metric)
+    if not wanted:
+        return
+    distinct = {}
+    for task, model, data, averages in db.execute(
+        _query(
+            Dimension.task, Dimension.model, dataset, Summary.data["metric_averages"]
         )
-        adjacent = select(
-            grouped,
-            func.lag(grouped.c.value)
-            .over(
-                partition_by=(grouped.c.task, grouped.c.model, grouped.c.dataset),
-                order_by=grouped.c.value,
-            )
-            .label("lower"),
-            func.lead(grouped.c.value)
-            .over(
-                partition_by=(grouped.c.task, grouped.c.model, grouped.c.dataset),
-                order_by=grouped.c.value,
-            )
-            .label("upper"),
-        ).cte()
-        requested = [
-            and_(
-                adjacent.c.task == row["task_name"],
-                adjacent.c.model == (row["model_key"]),
-                adjacent.c.dataset == (row.get("dataset_name") or ""),
-                adjacent.c.value == row["metric_averages"][metric],
-            )
-            for row in rows
-            if row.get("metric_averages", {}).get(metric) is not None
-        ]
-        if not requested:
+        .where(
+            *conditions,
+            or_(
+                *(
+                    and_(
+                        Dimension.task == task,
+                        Dimension.model == model,
+                        dataset == data,
+                    )
+                    for task, model, data in wanted
+                )
+            ),
+        )
+        .execution_options(yield_per=500)
+    ):
+        group = (task, model, data)
+        metrics = wanted.get(group)
+        if not metrics or not isinstance(averages, dict):
             continue
-        lookup = {
-            (task, model, dataset, value): [lower, upper]
-            for task, model, dataset, value, lower, upper in db.execute(
-                select(adjacent).where(or_(*requested))
-            )
-        }
-        for row in rows:
-            key = (
-                row["task_name"],
-                row["model_key"],
-                row.get("dataset_name") or "",
-                row.get("metric_averages", {}).get(metric),
-            )
-            if key in lookup:
-                row["metric_neighbor_values"][metric] = lookup[key]
+        for metric in metrics:
+            number = _metric_number(averages.get(metric))
+            if number is not None:
+                distinct.setdefault((group, metric), set()).add(number)
+    ordered = {key: sorted(values) for key, values in distinct.items()}
+    for row in rows:
+        group = (row["task_name"], row["model_key"], row.get("dataset_name") or "")
+        for metric, value in (row.get("metric_averages") or {}).items():
+            number = _metric_number(value)
+            values = ordered.get((group, metric))
+            if number is None or not values:
+                continue
+            index = bisect.bisect_left(values, number)
+            if index >= len(values) or values[index] != number:
+                continue
+            row["metric_neighbor_values"][metric] = [
+                values[index - 1] if index > 0 else None,
+                values[index + 1] if index + 1 < len(values) else None,
+            ]
 
 
 def _requested_ids(raw):
@@ -747,15 +773,27 @@ def _build_page(
     if dataset is not None:
         filtered.append(Dimension.descriptor["dataset_name"].as_string() == dataset)
     total = db.scalar(_query(func.count()).where(*filtered)) or 0
-    query, legacy_order = _ordered_query(filtered)
-    rows = [
-        _row(dimension, summary)
-        for dimension, summary in db.execute(
+    # Order and page over narrow keys first, then read only the page's wide
+    # descriptor and summary rows.
+    query, legacy_order = _ordered_query(filtered, Dimension.run_key)
+    page_ids = list(
+        db.scalars(
             query.order_by(*_sort(sort, collation), *legacy_order)
             .offset(offset)
             .limit(limit)
         )
-    ]
+    )
+    by_id = (
+        {
+            dimension.run_key: _row(dimension, summary)
+            for dimension, summary in db.execute(
+                _query().where(Dimension.run_key.in_(page_ids))
+            )
+        }
+        if page_ids
+        else {}
+    )
+    rows = [by_id[run_id] for run_id in page_ids if run_id in by_id]
     if include_neighbors:
         _neighbors(db, filtered, rows)
     pinned = []

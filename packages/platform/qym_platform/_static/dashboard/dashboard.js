@@ -193,6 +193,8 @@
     tablePage: 1,
     tableFilterKey: '',
     quickFilter: 'all',
+    customRange: { from: '', to: '' },  // quickFilter 'custom': local YYYY-MM-DD dates, both inclusive
+    searchQuery: '',  // Runs page text search (name or id), kept in ?q=
     filterTasks: new Set(),
     filterModels: new Set(),  // Multi-select for models
     filterDatasets: new Set(),
@@ -253,6 +255,8 @@
     '#2dd4bf', '#c084fc', '#fcd34d', '#6ee7b7'
   ];
   const TABLE_PAGE_SIZE = 50;
+  // Per-browser switch for the Runs single-key shortcuts (WCAG 2.1.4).
+  const SINGLE_KEY_SHORTCUTS_KEY = 'qym:single-key-shortcuts';
   const CHART_FIRST_COL_DEFAULT_WIDTH = 320;
   const CHART_FIRST_COL_MIN_WIDTH = 280;
   const CHART_FIRST_COL_MAX_WIDTH = 720;
@@ -607,17 +611,68 @@
     return totalSeconds + 's';
   }
 
-  function isToday(isoStr) {
-    const d = new Date(isoStr);
-    const now = new Date();
-    return d.toDateString() === now.toDateString();
+  // Time range of the segmented filter as [since, until) instants; null = open.
+  function parseLocalDate(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+    if (!match) return null;
+    const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    return Number.isNaN(date.getTime()) ? null : date;
   }
 
-  function isWithinDays(isoStr, days) {
-    const d = new Date(isoStr);
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - days);
-    return d >= cutoff;
+  function timeFilterBounds(now = new Date()) {
+    let since = null;
+    let until = null;
+    if (state.quickFilter === 'today') {
+      since = new Date(now);
+      since.setHours(0, 0, 0, 0);
+      until = new Date(since);
+      until.setDate(until.getDate() + 1);
+    } else if (state.quickFilter === 'week' || state.quickFilter === 'month') {
+      since = new Date(now);
+      since.setDate(since.getDate() - (state.quickFilter === 'week' ? 7 : 30));
+    } else if (state.quickFilter === 'custom') {
+      since = parseLocalDate(state.customRange.from);
+      const last = parseLocalDate(state.customRange.to);
+      if (last) {
+        until = new Date(last);
+        until.setDate(until.getDate() + 1);
+      }
+    }
+    return { since, until };
+  }
+
+  function runMatchesTimeFilter(run, bounds = timeFilterBounds()) {
+    if (!bounds.since && !bounds.until) return true;
+    const date = new Date(run.timestamp);
+    if (Number.isNaN(date.getTime())) return false;
+    return (!bounds.since || date >= bounds.since) && (!bounds.until || date < bounds.until);
+  }
+
+  // The Runs search applies to the Runs table only (Charts and Models share
+  // the other filters but have no search box).
+  function activeSearchQuery() {
+    return state.currentView === 'table' ? state.searchQuery : '';
+  }
+
+  function runMatchesSearch(run, query = activeSearchQuery()) {
+    if (!query) return true;
+    const needle = query.toLowerCase();
+    return [run.external_run_id, run.run_name].some(value => String(value || '').toLowerCase().includes(needle))
+      || String(run.run_id || '').toLowerCase().startsWith(needle);
+  }
+
+  function formatRangeDate(value) {
+    const date = parseLocalDate(value);
+    return date ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+  }
+
+  function customRangeLabel() {
+    const from = formatRangeDate(state.customRange.from);
+    const to = formatRangeDate(state.customRange.to);
+    if (from && to) return from === to ? from : `${from} – ${to}`;
+    if (from) return `From ${from}`;
+    if (to) return `Until ${to}`;
+    return 'Range';
   }
 
   function truncateText(text, maxLen = null) {
@@ -666,6 +721,8 @@
   function getTableFilterKey() {
     return JSON.stringify({
       quickFilter: state.quickFilter,
+      customRange: state.quickFilter === 'custom' ? state.customRange : null,
+      q: activeSearchQuery(),
       tasks: [...state.filterTasks].sort(),
       models: [...state.filterModels].sort(),
       datasets: [...state.filterDatasets].sort(),
@@ -796,7 +853,8 @@
   // GENERIC MULTI-SELECT BUILDER
   // ═══════════════════════════════════════════════════
 
-  function buildMultiSelect({ btnId, dropdownId, stateSet, values, labelFn, htmlLabelFn, defaultLabel, showSearch, searchPlaceholder, colorFn, onchange }) {
+  function buildMultiSelect(options) {
+    const { btnId, dropdownId, stateSet, values, labelFn, htmlLabelFn, defaultLabel, showSearch, searchPlaceholder, colorFn, onchange } = options;
     const btn = el(btnId);
     const dropdown = el(dropdownId);
     if (!btn || !dropdown) return;
@@ -832,6 +890,30 @@
       const labelHtml = htmlLabelFn ? htmlLabelFn(v, label) : escapeHtml(label);
       return `<div class="multi-select-option qym-dropdown__option${emptyClass}" data-value="${escapeHtml(v)}" data-search-label="${escapeHtml(label)}" title="${escapeHtml(label)}"${hidden}>${colorDot}<input type="checkbox" aria-label="${escapeHtml(label)}" ${checked} /><span>${labelHtml}</span><button type="button" class="ms-only-btn qym-dropdown__only" aria-label="Show only ${escapeHtml(label)}" title="Show only this option">Only</button></div>`;
     }).join('');
+    // Never rebuild a menu the user has open: a background refresh would drop
+    // focus and the search caret. Its options refresh when it closes.
+    const syncArgs = { btnId, dropdownId, stateSet, values, defaultLabel, labelFn, htmlLabelFn };
+    if (dropdown._qymOptionsHtml !== undefined && dropdown.classList.contains('open')) {
+      dropdown._qymPendingOptions = dropdown._qymOptionsHtml === html ? null : options;
+      syncMultiSelect(syncArgs);
+      return;
+    }
+    dropdown._qymPendingOptions = null;
+    if (dropdown._qymOptionsHtml === html) {
+      syncMultiSelect(syncArgs);
+      return;
+    }
+    if (!dropdown._qymCloseWatch) {
+      dropdown._qymCloseWatch = new MutationObserver(() => {
+        const pending = dropdown._qymPendingOptions;
+        if (pending && !dropdown.classList.contains('open')) {
+          dropdown._qymPendingOptions = null;
+          buildMultiSelect(pending);
+        }
+      });
+      dropdown._qymCloseWatch.observe(dropdown, { attributes: true, attributeFilter: ['class'] });
+    }
+    dropdown._qymOptionsHtml = html;
     dropdown.innerHTML = html;
 
     // Wire search
@@ -1068,6 +1150,7 @@
       btn.title = 'Columns will appear when metrics are available';
       dropdown.classList.remove('open');
       dropdown.innerHTML = '';
+      dropdown._qymOptionsHtml = undefined;
       return;
     }
     btn.disabled = false;
@@ -1082,7 +1165,7 @@
     const restoreFrozenFocus = focusedFrozen?.dataset?.frozenColumn
       ? `input[data-frozen-column="${focusedFrozen.dataset.frozenColumn}"]`
       : (focusedFrozen?.id === 'mv-frozen-reset' ? '#mv-frozen-reset' : '');
-    dropdown.innerHTML =
+    const html =
       '<div class="model-search-box qym-dropdown__search"><input type="text" class="model-search-input qym-control qym-search" placeholder="Search columns..." value="' + escapeHtml(searchValue) + '" /></div>' +
       '<div class="ms-actions qym-dropdown__actions">' +
         '<button class="ms-action-btn qym-dropdown__action" id="mv-select-all">All</button>' +
@@ -1118,6 +1201,28 @@
 
     // Update button text
     updateMetricVisibilityBtn(metricOptions);
+
+    // As for the filter menus: an open or unchanged Columns menu is synced in
+    // place, never rebuilt under the user; an open one refreshes on close.
+    if (dropdown._qymOptionsHtml !== undefined && (dropdown.classList.contains('open') || dropdown._qymOptionsHtml === html)) {
+      dropdown._qymPendingOptions = dropdown._qymOptionsHtml === html ? null : [availableMetrics, runs];
+      syncMetricVisibilityDropdownState(metricOptions);
+      syncRunsFrozenColumnControls();
+      return;
+    }
+    dropdown._qymPendingOptions = null;
+    if (!dropdown._qymCloseWatch) {
+      dropdown._qymCloseWatch = new MutationObserver(() => {
+        const pending = dropdown._qymPendingOptions;
+        if (pending && !dropdown.classList.contains('open')) {
+          dropdown._qymPendingOptions = null;
+          populateMetricVisibility(...pending);
+        }
+      });
+      dropdown._qymCloseWatch.observe(dropdown, { attributes: true, attributeFilter: ['class'] });
+    }
+    dropdown._qymOptionsHtml = html;
+    dropdown.innerHTML = html;
 
     // Wire search input for metrics
     const mvSearchInput = dropdown.querySelector('.model-search-input');
@@ -1812,15 +1917,9 @@
     }
     let runs = [...state.flatRuns];
 
-    // Quick filter (time-based)
-    switch (state.quickFilter) {
-      case 'today':
-        runs = runs.filter(r => isToday(r.timestamp));
-        break;
-      case 'week':
-        runs = runs.filter(r => isWithinDays(r.timestamp, 7));
-        break;
-    }
+    // Quick filter (time-based) and the Runs search
+    const bounds = timeFilterBounds();
+    runs = runs.filter(r => runMatchesTimeFilter(r, bounds) && runMatchesSearch(r));
 
     // Dropdown filters
     if (state.filterTasks.size > 0 && !state.filterTasks.has('__none__')) {
@@ -3572,6 +3671,242 @@
     });
   }
 
+  // Controls that keep keyboard focus when their row is rebuilt, most specific first.
+  const RUNS_ROW_FOCUS_TARGETS = [
+    '.row-checkbox', '.samples-toggle', '.run-id', '.run-analysis-chip', '.run-analysis-start',
+    '.actions-trigger', '.approve-run', '.reject-run', '.unapprove-run', '.unreject-run',
+    '.submit-run', '.transfer-run', '.delete-run',
+  ];
+
+  function runsSamplesPanelId(runId) {
+    return `samples-detail-${String(runId || '').replace(/[^A-Za-z0-9_-]/g, '_')}`;
+  }
+
+  // Per-view state of one keyed run row: index, stripes, focus, selection and
+  // the open state of a repeat run. Cheap enough to run for every row.
+  function syncRunsRowState(row, run, idx) {
+    if (!row || !run) return;
+    const samplesOpen = run.samples > 1 && !!(state._samplesExpanded || {})[run.run_id];
+    const selectedPassCount = samplesOpen
+      ? Array.from(state.selectedRuns).filter(ref => isPassRef(ref) && passRefBase(ref) === run.file_path).length
+      : 0;
+    const isSelected = samplesOpen
+      ? selectedPassCount > 0 && selectedPassCount === Number(run.samples)
+      : state.selectedRuns.has(run.file_path);
+    row.dataset.idx = String(idx);
+    row.classList.toggle('run-row-even', idx % 2 === 0);
+    row.classList.toggle('run-row-odd', idx % 2 !== 0);
+    row.classList.toggle('selected', isSelected);
+    row.classList.toggle('focused', idx === state.focusedIndex);
+    row.classList.toggle('samples-open', samplesOpen);
+    const checkbox = row.querySelector('.row-checkbox');
+    if (checkbox) {
+      checkbox.checked = isSelected;
+      checkbox.indeterminate = samplesOpen && selectedPassCount > 0 && selectedPassCount < Number(run.samples);
+      checkbox.setAttribute('aria-label', `${samplesOpen ? 'Select all passes for' : 'Select run'} ${run.external_run_id || run.run_id || ''}`);
+    }
+    const toggle = row.querySelector('.samples-toggle');
+    if (toggle) {
+      const label = `${samplesOpen ? 'Collapse' : 'Expand'} ${run.samples} pass results`;
+      toggle.classList.toggle('open', samplesOpen);
+      toggle.setAttribute('aria-expanded', samplesOpen ? 'true' : 'false');
+      toggle.setAttribute('aria-label', label);
+      toggle.title = label;
+    }
+  }
+
+  function runsTableRows() {
+    const tbody = el('runs-tbody');
+    return tbody ? Array.from(tbody.children).filter(row => row.dataset.file && !row.hasAttribute('data-samples-for')) : [];
+  }
+
+  // Moving the highlight touches two rows, never the table.
+  function syncRunsRowFocus() {
+    let focusedRow = null;
+    runsTableRows().forEach(row => {
+      const focused = Number(row.dataset.idx) === state.focusedIndex;
+      row.classList.toggle('focused', focused);
+      if (focused) focusedRow = row;
+    });
+    return focusedRow;
+  }
+
+  function renderSelectModeControls() {
+    const selectionAvailable = !!state.runs && (usesDashboardSummary() ? state.dashboardOverview.total_count > 0 : state.flatRuns.length > 0);
+    if (!selectionAvailable && !state.dashboardOverview?.freshness?.updating) {
+      state.selectMode = false;
+      state.selectedRuns.clear();
+      state.cohortAnchorRuns = null;
+    } else if (state.selectedRuns.size > 0 || state.cohortAnchorRuns) {
+      state.selectMode = true;
+    }
+    el('table-view')?.classList.toggle('select-mode', state.selectMode);
+    const selectModeBtn = el('select-mode-btn');
+    if (selectModeBtn) {
+      const modeVisible = state.currentView === 'table';
+      selectModeBtn.style.display = modeVisible ? 'inline-flex' : 'none';
+      selectModeBtn.disabled = !selectionAvailable;
+      selectModeBtn.textContent = state.selectMode ? 'Done' : 'Select';
+      selectModeBtn.setAttribute('aria-pressed', state.selectMode ? 'true' : 'false');
+      selectModeBtn.classList.toggle('qym-inline-action--neutral', !state.selectMode);
+      selectModeBtn.classList.toggle('qym-inline-action--accent', state.selectMode);
+    }
+  }
+
+  function syncRunsSelectAll() {
+    const selectAllCheckbox = el('select-all');
+    if (!selectAllCheckbox) return;
+    const visibleFilePaths = runsTableRows().map(row => decodeURIComponent(row.dataset.file));
+    const selectedCount = visibleFilePaths.filter(filePath => state.selectedRuns.has(filePath)).length;
+    selectAllCheckbox.disabled = visibleFilePaths.length === 0;
+    selectAllCheckbox.checked = visibleFilePaths.length > 0 && selectedCount === visibleFilePaths.length;
+    selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < visibleFilePaths.length;
+  }
+
+  // A selection change patches checkboxes, row classes and the selection bar
+  // instead of re-rendering the table and every filter.
+  function syncRunsSelection() {
+    const ctx = state._runsTableCtx;
+    const tbody = el('runs-tbody');
+    if (state.currentView !== 'table' || !ctx || !tbody || !runsTableRows().length) {
+      render();
+      return;
+    }
+    const wasSelectMode = el('table-view')?.classList.contains('select-mode');
+    renderSelectModeControls();
+    // The checkbox column changes the frozen columns' widths.
+    if (wasSelectMode !== state.selectMode) scheduleRunsStickyColumnSizing();
+    tbody.querySelectorAll('tr[data-samples-for] .pass-checkbox').forEach(checkbox => {
+      checkbox.checked = state.selectedRuns.has(checkbox.dataset.passRef);
+    });
+    runsTableRows().forEach(row => {
+      const run = ctx.runFor(decodeURIComponent(row.dataset.file));
+      if (!run) return;
+      syncRunsRowState(row, run, Number(row.dataset.idx));
+      if (run.samples > 1 && state._samplesExpanded?.[run.run_id]) ctx.syncRepeatParentSelection(run, row);
+    });
+    syncRunsSelectAll();
+    renderComparePanel();
+  }
+
+  function closeRunActionsMenu(row) {
+    row?.querySelector('.actions-dropdown')?.classList.remove('open');
+  }
+
+  // The list shows a review action as soon as the server confirms it, so the
+  // row stops offering the old action; the refresh that follows reconciles
+  // the row with the published projection.
+  function applyRunWorkflowResult(filePath, status) {
+    const nextStatus = String(status || '').toUpperCase();
+    if (!nextStatus) return;
+    const patch = run => {
+      if (run && run.file_path === filePath) run.status = nextStatus;
+    };
+    state.flatRuns.forEach(patch);
+    (state.filteredRuns || []).forEach(patch);
+    (state.dashboardPage?.rows || []).forEach(patch);
+    state.dashboardPinnedRuns.forEach(patch);
+    if (state.currentView === 'table' && el('runs-tbody')) renderTableView();
+    renderComparePanel();
+  }
+
+  // One set of listeners for every row the table ever renders.
+  function wireRunsTableEvents() {
+    const tbody = el('runs-tbody');
+    if (!tbody || tbody._qymRowEvents) return;
+    tbody._qymRowEvents = true;
+    const rowFor = target => {
+      const row = target && target.closest ? target.closest('tr[data-file]') : null;
+      return row && row.parentElement === tbody && !row.hasAttribute('data-samples-for') ? row : null;
+    };
+    const runFor = row => state._runsTableCtx?.runFor(decodeURIComponent(row.dataset.file)) || null;
+
+    // Capture phase: row controls handle the event before it reaches the row.
+    tbody.addEventListener('click', event => {
+      const row = rowFor(event.target);
+      if (!row) return;
+      const control = event.target.closest('.samples-toggle, .run-id, .run-analysis-chip, .run-analysis-start, .actions-trigger, .submit-run, .transfer-run, .approve-run, .reject-run, .unapprove-run, .unreject-run, .delete-run');
+      if (!control || !row.contains(control)) return;
+      const run = runFor(row);
+      if (!run) return;
+      event.stopPropagation();
+      if (control.matches('.samples-toggle')) {
+        state._runsTableCtx.toggleSamples(control);
+        return;
+      }
+      if (control.matches('.run-id')) {
+        openRun(run.file_path, event);
+        return;
+      }
+      event.preventDefault();
+      if (control.matches('.run-analysis-chip, .run-analysis-start')) {
+        navigateTo(control.href);
+        return;
+      }
+      if (control.matches('.actions-trigger')) {
+        const menu = row.querySelector('.actions-dropdown');
+        document.querySelectorAll('.actions-dropdown.open').forEach(other => {
+          if (other !== menu) other.classList.remove('open');
+        });
+        menu?.classList.toggle('open');
+        return;
+      }
+      closeRunActionsMenu(row);
+      const name = getRunDisplayName(run);
+      const target = { filePath: run.file_path };
+      // Submit confirms first, with an optional comment (C061).
+      if (control.matches('.submit-run')) showWorkflowModal('submit', run.run_id, name, { runs: [run] });
+      else if (control.matches('.transfer-run')) showTransferOwnershipModal(run);
+      else if (control.matches('.approve-run')) showWorkflowModal('approve', run.run_id, name, target);
+      else if (control.matches('.reject-run')) showWorkflowModal('reject', run.run_id, name, target);
+      else if (control.matches('.unapprove-run')) showWorkflowModal('unapprove', run.run_id, name, target);
+      else if (control.matches('.unreject-run')) showWorkflowModal('unreject', run.run_id, name, target);
+      else if (control.matches('.delete-run')) confirmDeleteRun(run.file_path, run.run_id);
+    }, true);
+
+    tbody.addEventListener('auxclick', event => {
+      if (event.button !== 1) return;
+      const row = rowFor(event.target);
+      if (!row || !event.target.closest('.run-id')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const run = runFor(row);
+      if (run) openRun(run.file_path, event);
+    }, true);
+
+    tbody.addEventListener('change', event => {
+      const checkbox = event.target.closest('.row-checkbox');
+      const row = checkbox && rowFor(checkbox);
+      const run = row && runFor(row);
+      if (!run) return;
+      if (run.samples > 1 && state._samplesExpanded?.[run.run_id]) {
+        state._runsTableCtx.toggleExpandedPassSelection(run, row);
+      } else {
+        toggleSelect(run.file_path);
+      }
+    });
+
+    // Bubble phase: a plain click on the row moves the highlight; on a repeat
+    // run it opens or closes the passes. Interactive children stop the event.
+    tbody.addEventListener('click', event => {
+      const row = rowFor(event.target);
+      if (!row) return;
+      state.focusedIndex = Number(row.dataset.idx);
+      const rowToggle = row.querySelector('.samples-toggle');
+      if (rowToggle) {
+        rowToggle.click();
+        return;
+      }
+      syncRunsRowFocus();
+    });
+
+    tbody.addEventListener('dblclick', event => {
+      const row = rowFor(event.target);
+      const run = row && runFor(row);
+      if (run) openRun(run.file_path);
+    });
+  }
+
   function renderTableView() {
     const allRuns = state.filteredRuns;
     const tbody = el('runs-tbody');
@@ -3661,25 +3996,13 @@
     const anyRepeatRows = runs.some(r => r.samples > 1);
     if (headerRow) headerRow.classList.toggle('has-repeat-rows', anyRepeatRows);
 
-    tbody.innerHTML = runs.map((run, pageIdx) => {
-      const idx = pagination.start + pageIdx;
+    // Rows are keyed by run: a refresh, sort or page change rebuilds only the
+    // rows whose markup changed. Focus, selection, stripes and the open state
+    // of repeat runs are not part of the markup; syncRunsRowState applies them.
+    const runRowHtml = run => {
       const dt = formatDate(run.timestamp);
       const durationText = formatDurationMs(run.duration_ms);
-      const isFocused = idx === state.focusedIndex;
-      const samplesOpen = run.samples > 1 && !!(state._samplesExpanded || {})[run.run_id];
-      const selectedPassCount = samplesOpen
-        ? Array.from(state.selectedRuns).filter(ref => isPassRef(ref) && passRefBase(ref) === run.file_path).length
-        : 0;
-      const isSelected = samplesOpen
-        ? selectedPassCount > 0 && selectedPassCount === Number(run.samples)
-        : state.selectedRuns.has(run.file_path);
-      const samplesPanelId = `samples-detail-${idx}`;
-      const rowClasses = [
-        idx % 2 === 0 ? 'run-row-even' : 'run-row-odd',
-        isSelected ? 'selected' : '',
-        isFocused ? 'focused' : '',
-        samplesOpen ? 'samples-open' : '',
-      ].filter(Boolean).join(' ');
+      const samplesPanelId = runsSamplesPanelId(run.run_id);
 
       // Generate metric columns
       const metricCells = metricsToShow.map(metric => {
@@ -3750,25 +4073,20 @@
       }
 
       return `
-        <tr data-idx="${idx}" data-file="${encodeURIComponent(run.file_path)}"
-            data-can-delete-pass="${canDelete && !['RUNNING', 'PENDING', 'SUBMITTED', 'APPROVED'].includes(status) ? 'true' : 'false'}"
-            class="${rowClasses}">
+        <tr data-file="${encodeURIComponent(run.file_path)}"
+            data-can-delete-pass="${canDelete && !['RUNNING', 'PENDING', 'SUBMITTED', 'APPROVED'].includes(status) ? 'true' : 'false'}">
           <td class="col-run">
             <div class="run-cell-content">
               <label class="custom-checkbox run-select-control" onclick="event.stopPropagation()">
-                <input type="checkbox" class="row-checkbox"
-                  aria-label="${samplesOpen ? 'Select all passes for' : 'Select run'} ${escapeHtml(run.external_run_id || run.run_id || '')}"
-                  ${isSelected ? 'checked' : ''} />
+                <input type="checkbox" class="row-checkbox" />
                 <span class="checkmark"></span>
               </label>
-              ${run.samples > 1 ? `<button type="button" class="samples-toggle qym-icon-action${samplesOpen ? ' open' : ''}"
+              ${run.samples > 1 ? `<button type="button" class="samples-toggle qym-icon-action"
                 data-run-id="${escapeHtml(run.run_id)}" data-panel-id="${samplesPanelId}"
                 data-count="${escapeHtml(run.samples)}"
                 data-status="${escapeHtml(status)}"
                 data-live="${status === 'RUNNING' || status === 'PENDING' ? 'true' : 'false'}"
-                aria-expanded="${samplesOpen ? 'true' : 'false'}" aria-controls="${samplesPanelId}"
-                aria-label="${samplesOpen ? 'Collapse' : 'Expand'} ${run.samples} pass results"
-                title="${samplesOpen ? 'Collapse' : 'Expand'} ${run.samples} pass results"><svg class="samples-toggle-chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m4 6 4 4 4-4"></path></svg></button>`
+                aria-controls="${samplesPanelId}"><svg class="samples-toggle-chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m4 6 4 4 4-4"></path></svg></button>`
                 : (anyRepeatRows ? '<span class="samples-toggle-spacer" aria-hidden="true"></span>' : '')}
               <span class="run-id" title="${escapeHtml(run.run_id)}">${run.external_run_id ? truncateText(run.external_run_id, 30) : escapeHtml(run.run_id.substring(0, 8))}</span>
               ${run.samples > 1 ? `<span class="run-pass-count">x${run.samples}</span>` : ''}
@@ -3895,152 +4213,64 @@
           </td>
         </tr>
       `;
-    }).join('');
+    };
+
+    // Keep the control a keyboard or screen-reader user is on when its row
+    // has to be rebuilt.
+    const active = document.activeElement;
+    const activeRow = active && tbody.contains(active) ? active.closest('tr[data-file]') : null;
+    const activeFocus = activeRow ? {
+      file: activeRow.dataset.file,
+      selector: RUNS_ROW_FOCUS_TARGETS.find(selector => active.matches(selector)) || null,
+    } : null;
+
+    const structure = JSON.stringify([
+      metricsToShow, visibleTraceMetrics.map(tm => tm.key), [...visibleSystemColumns], anyRepeatRows,
+    ]);
+    const reuse = tbody.dataset.rowStructure === structure;
+    tbody.dataset.rowStructure = structure;
+    const existing = new Map();
+    Array.from(tbody.children).forEach(child => {
+      // Expanded pass rows are re-inserted below for every open repeat run.
+      if (reuse && child.dataset.file && !child.hasAttribute('data-samples-for')) {
+        existing.set(child.dataset.file, child);
+      } else {
+        child.remove();
+      }
+    });
+    const template = document.createElement('template');
+    const ordered = runs.map(run => {
+      const key = encodeURIComponent(run.file_path);
+      const html = runRowHtml(run);
+      let row = existing.get(key);
+      existing.delete(key);
+      if (!row || row._qymRowHtml !== html) {
+        if (row) row.remove();
+        template.innerHTML = html.trim();
+        row = template.content.firstElementChild;
+        row._qymRowHtml = html;
+      }
+      return row;
+    });
+    existing.forEach(row => row.remove());
+    let cursor = tbody.firstElementChild;
+    ordered.forEach(row => {
+      if (row === cursor) {
+        cursor = cursor.nextElementSibling;
+      } else {
+        tbody.insertBefore(row, cursor);
+      }
+    });
+    const runsByFile = new Map(runs.map(run => [run.file_path, run]));
+    ordered.forEach((row, pageIdx) => syncRunsRowState(row, runs[pageIdx], pagination.start + pageIdx));
+    if (activeFocus && !tbody.contains(document.activeElement)) {
+      const row = Array.from(tbody.children).find(candidate => candidate.dataset.file === activeFocus.file);
+      const target = row && activeFocus.selector ? row.querySelector(activeFocus.selector) : row?.querySelector('.row-checkbox');
+      target?.focus({ preventScroll: true });
+    }
 
     // Update sort indicators
     updateSortIndicators();
-
-    // Wire events
-    tbody.querySelectorAll('tr[data-idx]').forEach(tr => {
-      const idx = parseInt(tr.dataset.idx);
-      const filePath = decodeURIComponent(tr.dataset.file);
-      const run = state.filteredRuns[idx - (usesDashboardPage() ? state.dashboardPage.offset : 0)];
-
-      const checkbox = tr.querySelector('.row-checkbox');
-      if (checkbox) {
-        const repeatExpanded = run.samples > 1 && !!state._samplesExpanded?.[run.run_id];
-        const selectedPasses = repeatExpanded
-          ? Array.from(state.selectedRuns).filter(ref => isPassRef(ref) && passRefBase(ref) === filePath).length
-          : 0;
-        checkbox.indeterminate = repeatExpanded
-          && selectedPasses > 0
-          && selectedPasses < Number(run.samples);
-        checkbox.addEventListener('click', (e) => {
-          e.stopPropagation();
-        });
-        checkbox.addEventListener('change', () => {
-          const expanded = run.samples > 1 && !!state._samplesExpanded?.[run.run_id];
-          if (expanded) {
-            toggleExpandedPassSelection(run, tr);
-          } else {
-            toggleSelect(filePath);
-          }
-        });
-      }
-
-      const analysisLink = tr.querySelector('.run-analysis-chip, .run-analysis-start');
-      if (analysisLink) {
-        analysisLink.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          navigateTo(analysisLink.href);
-        });
-      }
-
-      tr.querySelector('.run-id').addEventListener('click', (e) => {
-        e.stopPropagation();
-        openRun(filePath, e);
-      });
-      tr.querySelector('.run-id').addEventListener('auxclick', (e) => {
-        if (e.button !== 1) return;
-        e.preventDefault();
-        e.stopPropagation();
-        openRun(filePath, e);
-      });
-
-      const closeDropdown = () => {
-        tr.querySelector('.actions-dropdown')?.classList.remove('open');
-      };
-
-      const submitBtn = tr.querySelector('.submit-run');
-      if (submitBtn) submitBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeDropdown();
-        // Confirm first, with an optional comment (C061).
-        showWorkflowModal('submit', run.run_id, getRunDisplayName(run), { runs: [run] });
-      });
-
-      const transferBtn = tr.querySelector('.transfer-run');
-      if (transferBtn) transferBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeDropdown();
-        showTransferOwnershipModal(run);
-      });
-
-      const approveBtn = tr.querySelector('.approve-run');
-      if (approveBtn) approveBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeDropdown();
-        showWorkflowModal('approve', run.run_id, getRunDisplayName(run));
-      });
-
-      const rejectBtn = tr.querySelector('.reject-run');
-      if (rejectBtn) rejectBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeDropdown();
-        showWorkflowModal('reject', run.run_id, getRunDisplayName(run));
-      });
-
-      const unapproveBtn = tr.querySelector('.unapprove-run');
-      if (unapproveBtn) unapproveBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeDropdown();
-        showWorkflowModal('unapprove', run.run_id, getRunDisplayName(run));
-      });
-
-      const unrejectBtn = tr.querySelector('.unreject-run');
-      if (unrejectBtn) unrejectBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeDropdown();
-        showWorkflowModal('unreject', run.run_id, getRunDisplayName(run));
-      });
-
-      const deleteBtn = tr.querySelector('.delete-run');
-      if (deleteBtn) deleteBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeDropdown();
-        confirmDeleteRun(filePath, run.run_id);
-      });
-
-      // Actions dropdown toggle
-      const actionsDropdown = tr.querySelector('.actions-dropdown');
-      const actionsTrigger = tr.querySelector('.actions-trigger');
-      if (actionsTrigger && actionsDropdown) {
-        actionsTrigger.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          // Close any other open dropdowns
-          document.querySelectorAll('.actions-dropdown.open').forEach(d => {
-            if (d !== actionsDropdown) d.classList.remove('open');
-          });
-          actionsDropdown.classList.toggle('open');
-        });
-      }
-
-      tr.addEventListener('click', () => {
-        state.focusedIndex = idx;
-        // Repeat runs: the whole row is the expand target — the run name
-        // keeps navigating, but any other click toggles the passes (interactive
-        // children all stopPropagation, so they never land here).
-        const rowToggle = tr.querySelector('.samples-toggle');
-        if (rowToggle) {
-          rowToggle.click();
-          return;
-        }
-        renderTableView();
-      });
-
-      tr.addEventListener('dblclick', () => {
-        openRun(filePath);
-      });
-    });
 
     // Repeat runs expand in the table's native group dialect (mock option C):
     // a group-metrics strip styled like a group header, then one real table
@@ -4437,7 +4667,7 @@
         if (isPassRef(ref) && passRefBase(ref) === filePath) state.selectedRuns.delete(ref);
       });
       if (!allSelected) refs.forEach(ref => state.selectedRuns.add(ref));
-      render();
+      syncRunsSelection();
     }
 
     function insertSamplesDetail(runId, row, panelId, animate) {
@@ -4680,48 +4910,41 @@
           }
         }
       }
-      toggle.addEventListener('keydown', event => {
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        event.preventDefault();
-        toggle.click();
-      });
-      toggle.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const row = toggle.closest('tr');
-        if (!runId || !row) return;
-        const expanded = !state._samplesExpanded[runId];
-        const sampleCount = toggle.dataset.count || '';
-        state._samplesExpanded[runId] = expanded;
-        toggle.classList.toggle('open', expanded);
-        toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-        toggle.setAttribute('aria-label', `${expanded ? 'Collapse' : 'Expand'} ${sampleCount} pass results`);
-        toggle.title = `${expanded ? 'Collapse' : 'Expand'} ${sampleCount} pass results`;
-        row.classList.toggle('samples-open', expanded);
-        if (expanded) {
-          insertSamplesDetail(runId, row, panelId, true);
-          // The fetch fills the optimistic rows in place — no re-animation.
-          if (!state._samplesData[runId]) loadSamplesData(runId, row, panelId, false);
-        } else {
-          // Collapse instantly: rows can't animate height, so a fade would
-          // just hold their space and then snap — instant reads as crisp.
-          samplesDetailRows(runId).forEach(detail => detail.remove());
-          const run = runs.find(candidate => candidate.run_id === runId);
-          if (run) syncRepeatParentSelection(run, row);
-          scheduleRunsStickyColumnSizing();
-        }
-      });
     });
 
-    renderTablePagination(pagination);
-
-    const selectAllCheckbox = el('select-all');
-    if (selectAllCheckbox) {
-      const visibleFilePaths = runs.map(run => run.file_path);
-      const selectedCount = visibleFilePaths.filter(filePath => state.selectedRuns.has(filePath)).length;
-      selectAllCheckbox.disabled = visibleFilePaths.length === 0;
-      selectAllCheckbox.checked = visibleFilePaths.length > 0 && selectedCount === visibleFilePaths.length;
-      selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < visibleFilePaths.length;
+    function toggleSamples(toggle) {
+      const runId = toggle.dataset.runId;
+      const panelId = toggle.dataset.panelId;
+      const row = toggle.closest('tr');
+      if (!runId || !row) return;
+      const expanded = !state._samplesExpanded[runId];
+      state._samplesExpanded[runId] = expanded;
+      const run = runs.find(candidate => candidate.run_id === runId);
+      if (run) syncRunsRowState(row, run, Number(row.dataset.idx));
+      if (expanded) {
+        insertSamplesDetail(runId, row, panelId, true);
+        // The fetch fills the optimistic rows in place — no re-animation.
+        if (!state._samplesData[runId]) loadSamplesData(runId, row, panelId, false);
+      } else {
+        // Collapse instantly: rows can't animate height, so a fade would
+        // just hold their space and then snap — instant reads as crisp.
+        samplesDetailRows(runId).forEach(detail => detail.remove());
+        if (run) syncRepeatParentSelection(run, row);
+        scheduleRunsStickyColumnSizing();
+      }
     }
+
+    // Row events are delegated once on the tbody (see wireRunsTableEvents);
+    // they act on the rows of the latest render.
+    state._runsTableCtx = {
+      runFor: filePath => runsByFile.get(filePath) || null,
+      toggleSamples,
+      toggleExpandedPassSelection,
+      syncRepeatParentSelection,
+    };
+
+    renderTablePagination(pagination);
+    syncRunsSelectAll();
     scheduleRunsStickyColumnSizing();
   }
 
@@ -4846,6 +5069,7 @@
     const countText = filtered === total ? `${total} runs` : `${filtered} of ${total} runs`;
 
     const hasFilters = state.quickFilter !== 'all'
+      || !!activeSearchQuery()
       || state.filterTasks.size > 0
       || (state.filterModels.size > 0)
       || state.filterDatasets.size > 0
@@ -4885,8 +5109,11 @@
       } else if (state.filterUsers.has('__none__')) {
         parts.push('user: none');
       }
+      if (activeSearchQuery()) parts.push(`search: "${activeSearchQuery()}"`);
       if (state.quickFilter === 'today') parts.push('today');
       if (state.quickFilter === 'week') parts.push('last 7d');
+      if (state.quickFilter === 'month') parts.push('last 30d');
+      if (state.quickFilter === 'custom') parts.push(customRangeLabel());
       filterText = countText + (parts.length > 0 ? ` — ${parts.join(', ')}` : '');
     }
 
@@ -5037,39 +5264,22 @@
     const gridView = el('grid-view');
     const timelineView = el('timeline-view');
     const modelsView = el('models-view');
-    const selectionAvailable = !!state.runs && (usesDashboardSummary() ? state.dashboardOverview.total_count > 0 : state.flatRuns.length > 0);
-
-    if (!selectionAvailable && !state.dashboardOverview?.freshness?.updating) {
-      state.selectMode = false;
-      state.selectedRuns.clear();
-      state.cohortAnchorRuns = null;
-    } else if (state.selectedRuns.size > 0 || state.cohortAnchorRuns) {
-      state.selectMode = true;
-    }
-    if (tableView) {
-      tableView.classList.toggle('select-mode', state.selectMode);
-    }
-    const selectModeBtn = el('select-mode-btn');
-    if (selectModeBtn) {
-      const modeVisible = state.currentView === 'table';
-      selectModeBtn.style.display = modeVisible ? 'inline-flex' : 'none';
-      selectModeBtn.disabled = !selectionAvailable;
-      selectModeBtn.textContent = state.selectMode ? 'Done' : 'Select';
-      selectModeBtn.setAttribute('aria-pressed', state.selectMode ? 'true' : 'false');
-      selectModeBtn.classList.toggle('qym-inline-action--neutral', !state.selectMode);
-      selectModeBtn.classList.toggle('qym-inline-action--accent', state.selectMode);
-    }
+    renderSelectModeControls();
     // Keep selection controls coherent even when loading/empty states return early.
     renderComparePanel();
+
+    // Each page carries only its own view's container (Runs has no charts or
+    // models view), so every container is optional here.
+    const hideViews = () => {
+      [chartsView, tableView, gridView, timelineView, modelsView].forEach(view => {
+        if (view) view.style.display = 'none';
+      });
+    };
 
     if (!state.runs) {
       loading.style.display = 'flex';
       empty.style.display = 'none';
-      chartsView.style.display = 'none';
-      tableView.style.display = 'none';
-      gridView.style.display = 'none';
-      timelineView.style.display = 'none';
-      if (modelsView) modelsView.style.display = 'none';
+      hideViews();
       return;
     }
 
@@ -5096,11 +5306,7 @@
         selectAllCheckbox.disabled = true;
       }
       empty.style.display = 'flex';
-      chartsView.style.display = 'none';
-      tableView.style.display = 'none';
-      gridView.style.display = 'none';
-      timelineView.style.display = 'none';
-      if (modelsView) modelsView.style.display = 'none';
+      hideViews();
       return;
     }
 
@@ -5174,6 +5380,7 @@
     if (state.filterDatasets.size > 0) n++;
     if (state.filterUsers.size > 0) n++;
     if (state.quickFilter !== 'all') n++;
+    if (activeSearchQuery()) n++;
     return n;
   }
 
@@ -5195,6 +5402,35 @@
       btn.classList.toggle('active', active);
       btn.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
+    const rangeButton = $('.filter-btn[data-filter="custom"]');
+    if (rangeButton) {
+      rangeButton.textContent = filter === 'custom' ? customRangeLabel() : 'Range';
+      rangeButton.title = filter === 'custom' ? `Runs from ${customRangeLabel()} (click to change)` : 'Choose a date range';
+    }
+  }
+
+  function applyQuickFilter(filter) {
+    state.quickFilter = filter;
+    setQuickFilterSelection(filter);
+    state.focusedIndex = -1;
+    render();
+  }
+
+  function setSearchQuery(value, { updateInput = false } = {}) {
+    const query = String(value || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+    const input = el('runs-search');
+    if (updateInput && input) input.value = query;
+    if (query === state.searchQuery) return;
+    state.searchQuery = query;
+    // Keep the search in the URL so Back, reload and shared links keep it.
+    try {
+      const url = new URL(window.location.href);
+      if (query) url.searchParams.set('q', query);
+      else url.searchParams.delete('q');
+      window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+    } catch {}
+    state.focusedIndex = -1;
+    render();
   }
 
   function clearAllFilters() {
@@ -5206,7 +5442,10 @@
     state.filterUsers.clear();
     state.quickFilter = 'all';
     setQuickFilterSelection('all');
-    populateFilterDropdowns();
+    if (state.searchQuery) {
+      setSearchQuery('', { updateInput: true });
+      return;
+    }
     render();
   }
 
@@ -6209,14 +6448,16 @@
     if (state.selectedRuns.has(filePath)) {
       state.selectedRuns.delete(filePath);
     } else {
-      if (!canSelectForCohortB(filePath)) return;
-      // Selecting the whole run supersedes any of its picked passes.
-      for (const ref of Array.from(state.selectedRuns)) {
-        if (isPassRef(ref) && passRefBase(ref) === filePath) state.selectedRuns.delete(ref);
+      // A refused pick still resets the checkbox the browser already ticked.
+      if (canSelectForCohortB(filePath)) {
+        // Selecting the whole run supersedes any of its picked passes.
+        for (const ref of Array.from(state.selectedRuns)) {
+          if (isPassRef(ref) && passRefBase(ref) === filePath) state.selectedRuns.delete(ref);
+        }
+        state.selectedRuns.add(filePath);
       }
-      state.selectedRuns.add(filePath);
     }
-    render();
+    syncRunsSelection();
   }
 
   function setSelectMode(enabled) {
@@ -6225,7 +6466,7 @@
       state.selectedRuns.clear();
       state.cohortAnchorRuns = null;
     }
-    render();
+    syncRunsSelection();
   }
 
   function toggleModelFilter(model) {
@@ -6259,6 +6500,7 @@
   function selectAll() {
     if (getActiveCohortAnchorRuns()) {
       showToast('error', 'Select All Disabled In Cohort Mode', 'Choose Cohort B runs explicitly so you can control membership and avoid overlap with Cohort A.');
+      syncRunsSelectAll();
       return;
     }
     const { pageRuns } = getTablePageSlice(state.filteredRuns);
@@ -6269,14 +6511,14 @@
     } else {
       visibleFilePaths.forEach(filePath => state.selectedRuns.add(filePath));
     }
-    render();
+    syncRunsSelection();
   }
 
   function clearSelection() {
     const restoreTableFocus = !!document.activeElement?.closest?.('#compare-panel, .run-select-control');
     state.selectedRuns.clear();
     state.cohortAnchorRuns = null;
-    render();
+    syncRunsSelection();
     if (restoreTableFocus) el('select-all')?.focus({ preventScroll: true });
   }
 
@@ -6403,7 +6645,7 @@
       state.selectedRuns.delete(passRefBase(ref));
       state.selectedRuns.add(ref);
     }
-    render();
+    syncRunsSelection();
   }
 
   function openCohortComparison(e) {
@@ -6674,7 +6916,10 @@
     });
   }
 
+  // options: { runs } for submit (one or many runs); { filePath } for the
+  // other actions so the row can show the new status at once (C040).
   function showWorkflowModal(action, runId, runName, options) {
+    const filePath = (options && options.filePath) || runId;
     const modal = el('workflow-modal');
     const titleEl = el('workflow-modal-title');
     const descEl = el('workflow-modal-description');
@@ -6729,6 +6974,8 @@
           const result = await response.json().catch(() => ({}));
           const restored = String(result.status || 'completed').toLowerCase();
           modal.style.display = 'none';
+          // Show the new status (and the actions it allows) at once.
+          if (result.status) applyRunWorkflowResult(filePath, result.status);
           await fetchRuns({ refreshAllPages: true });
           showToast(
             'success',
@@ -6777,6 +7024,8 @@
         if (response.ok) {
           modal.style.display = 'none';
           if (many) runs.forEach(r => state.selectedRuns.delete(r.file_path));
+          // Show the new status (and the actions it allows) at once (C040).
+          runs.forEach(r => { if (r.file_path) applyRunWorkflowResult(r.file_path, 'SUBMITTED'); });
           await fetchRuns({ refreshAllPages: true });
           showToast('success', 'Submitted', many ? `Submitted ${runs.length} runs for approval` : 'Run submitted for approval');
         } else {
@@ -6853,19 +7102,25 @@
     });
   }
 
-  function moveFocus(delta) {
-    const newIdx = state.focusedIndex + delta;
-    if (newIdx >= 0 && newIdx < (usesDashboardPage() ? state.dashboardPage.total_runs : state.filteredRuns.length)) {
-      state.focusedIndex = newIdx;
-      setTablePage(Math.floor(newIdx / TABLE_PAGE_SIZE) + 1);
-      render();
+  function runsTotalCount() {
+    return usesDashboardPage() ? state.dashboardPage.total_runs : state.filteredRuns.length;
+  }
 
-      // Scroll into view
-      const row = $(`tr[data-idx="${newIdx}"]`);
-      if (row) {
-        row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      }
+  // Focus a row by its index across all pages. On the current page this only
+  // moves the highlight; another page is fetched and lands on the row.
+  function focusRunIndex(newIdx) {
+    if (newIdx < 0 || newIdx >= runsTotalCount()) return;
+    state.focusedIndex = newIdx;
+    const page = Math.floor(newIdx / TABLE_PAGE_SIZE) + 1;
+    if (page !== state.tablePage || !state._runsTableCtx) {
+      setTablePage(page);
+      render();
     }
+    syncRunsRowFocus()?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function moveFocus(delta) {
+    focusRunIndex(state.focusedIndex + delta);
   }
 
   function openFocusedRun() {
@@ -7051,7 +7306,7 @@
     state.aggregations = usesDashboardSummary() ? state.dashboardOverview.aggregations : computeAggregations(state.flatRuns);
     state.chartData = usesDashboardSummary() ? buildDashboardChartData() : computeChartData(state.flatRuns);
     saveRunsDataCache(data);
-    populateFilterDropdowns();
+    // render() rebuilds the filter menus; doing it here as well doubled the work.
     populateMetricVisibility();
     el('last-updated').textContent = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     render();
@@ -7304,18 +7559,10 @@
       datasets: [...state.filterDatasets], statuses: [...state.filterStatuses],
       versions: [...state.filterVersions], users: [...state.filterUsers],
     };
-    if (state.quickFilter === 'today') {
-      const start = new Date(now);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(start);
-      end.setDate(end.getDate() + 1);
-      filters.since = start.toISOString();
-      filters.until = end.toISOString();
-    } else if (state.quickFilter === 'week') {
-      const start = new Date(now);
-      start.setDate(start.getDate() - 7);
-      filters.since = start.toISOString();
-    }
+    const { since, until } = timeFilterBounds(now);
+    if (since) filters.since = since.toISOString();
+    if (until) filters.until = until.toISOString();
+    if (activeSearchQuery()) filters.q = activeSearchQuery();
     return filters;
   }
 
@@ -7552,6 +7799,25 @@
       queueRunsFetch({});
       return;
     }
+    // A poll that brings back exactly what the page shows must not touch the
+    // table, the filter menus or keyboard focus.
+    const overviewMark = page.overview ? [
+      page.overview.catalog_revision, page.overview.revision, page.overview.total_runs,
+      page.overview.total_count, page.overview.facets, page.overview.kpis, page.overview.freshness,
+    ] : null;
+    const signature = JSON.stringify([
+      key, page.rows, pinnedRows, page.total_runs, page.freshness, page.revision, page.catalog_revision,
+      overviewMark, retained,
+    ]);
+    if (state.dashboardPage && state.dashboardRequestKey === key && signature === state._dashboardPageSignature) {
+      el('table-view')?.setAttribute('aria-busy', 'false');
+      const updated = el('last-updated');
+      if (updated) updated.textContent = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      renderDashboardFreshness(page.freshness || state.dashboardOverview?.freshness);
+      try { updateRunsRefreshCadence && updateRunsRefreshCadence(); } catch {}
+      return;
+    }
+    state._dashboardPageSignature = signature;
     const total = Number(page.total_runs || 0);
     if (offset >= total && offset > 0) {
       state.tablePage = Math.max(1, Math.ceil(total / TABLE_PAGE_SIZE));
@@ -7892,15 +8158,8 @@
     // For each filter, compute applicable values from runs matching ALL OTHER active filters.
     // This ensures each dropdown only shows values that would produce results.
     function runsExcluding(skipFilter) {
-      let runs = state.flatRuns;
-      switch (state.quickFilter) {
-        case 'today':
-          runs = runs.filter(r => isToday(r.timestamp));
-          break;
-        case 'week':
-          runs = runs.filter(r => isWithinDays(r.timestamp, 7));
-          break;
-      }
+      const bounds = timeFilterBounds();
+      let runs = state.flatRuns.filter(r => runMatchesTimeFilter(r, bounds) && runMatchesSearch(r));
       if (skipFilter !== 'tasks' && state.filterTasks.size > 0 && !state.filterTasks.has('__none__')) {
         runs = runs.filter(r => matchesFilterSelection(state.filterTasks, r.task_name));
       }
@@ -7933,6 +8192,7 @@
       .sort((a, b) => getOwnerFilterLabel(a).localeCompare(getOwnerFilterLabel(b)))
       .concat(ownerValues.includes(EMPTY_FILTER_VALUE) ? [EMPTY_FILTER_VALUE] : []);
     const constrainingFiltersActive = state.quickFilter !== 'all'
+      || !!activeSearchQuery()
       || state.filterTasks.size > 0
       || state.filterDatasets.size > 0
       || state.filterModels.size > 0
@@ -8053,13 +8313,88 @@
 
   // Quick filters
   $$('.filter-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      state.quickFilter = btn.dataset.filter;
-      setQuickFilterSelection(state.quickFilter);
-      state.focusedIndex = -1;
-      render();
+    btn.addEventListener('click', (e) => {
+      if (btn.dataset.filter === 'custom') {
+        e.stopPropagation();
+        toggleTimeRangeDropdown();
+        return;
+      }
+      toggleTimeRangeDropdown(false);
+      applyQuickFilter(btn.dataset.filter);
     });
   });
+
+  // Custom date range: two inclusive local dates, applied explicitly.
+  function toggleTimeRangeDropdown(open) {
+    const dropdown = el('time-range-dropdown');
+    const button = $('.filter-btn[data-filter="custom"]');
+    if (!dropdown) return;
+    const next = open === undefined ? !dropdown.classList.contains('open') : open;
+    if (next) {
+      document.querySelectorAll('.multi-select-dropdown.open').forEach(other => {
+        if (other !== dropdown) other.classList.remove('open');
+      });
+      el('time-range-from').value = state.customRange.from || '';
+      el('time-range-to').value = state.customRange.to || '';
+      el('time-range-error').textContent = '';
+    }
+    dropdown.classList.toggle('open', next);
+    button?.setAttribute('aria-expanded', next ? 'true' : 'false');
+    if (next) el('time-range-from')?.focus();
+  }
+
+  el('time-range-apply')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const from = el('time-range-from').value;
+    const to = el('time-range-to').value;
+    if (!from && !to) {
+      el('time-range-error').textContent = 'Choose a start date, an end date, or both.';
+      return;
+    }
+    if (from && to && from > to) {
+      el('time-range-error').textContent = 'The start date is after the end date.';
+      return;
+    }
+    state.customRange = { from, to };
+    toggleTimeRangeDropdown(false);
+    applyQuickFilter('custom');
+    $('.filter-btn[data-filter="custom"]')?.focus();
+  });
+  el('time-range-cancel')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleTimeRangeDropdown(false);
+    $('.filter-btn[data-filter="custom"]')?.focus();
+  });
+  el('time-range-dropdown')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleTimeRangeDropdown(false);
+      $('.filter-btn[data-filter="custom"]')?.focus();
+    } else if (e.key === 'Enter' && e.target.matches('input')) {
+      e.preventDefault();
+      el('time-range-apply')?.click();
+    }
+  });
+
+  // Runs search: debounced, matched on the server against the run name the
+  // list shows, the run name and the run id.
+  const runsSearch = el('runs-search');
+  if (runsSearch) {
+    const applySearch = debounce(() => setSearchQuery(runsSearch.value), 200);
+    runsSearch.addEventListener('input', applySearch);
+    runsSearch.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        e.preventDefault();
+        if (runsSearch.value) setSearchQuery('', { updateInput: true });
+        else runsSearch.blur();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        setSearchQuery(runsSearch.value);
+      }
+    });
+  }
 
   // View toggle (Charts vs Runs vs Models)
   $$('.view-toggle-btn').forEach(btn => {
@@ -8112,6 +8447,8 @@
     }
   });
 
+  wireRunsTableEvents();
+
   // Select all checkbox
   el('select-all')?.addEventListener('click', (e) => e.stopPropagation());
   el('select-all')?.addEventListener('change', selectAll);
@@ -8143,8 +8480,44 @@
   el('delete-selected')?.addEventListener('click', confirmDeleteSelected);
   el('compare-clear')?.addEventListener('click', clearSelection);
 
-  // Keyboard navigation
+  // Keyboard navigation. Single-key shortcuts act on the Runs table only, can
+  // be turned off in the shortcuts help (WCAG 2.1.4), never fire with a
+  // modifier key, and never fire while a menu, dialog or popover is open.
+  function singleKeyShortcutsEnabled() {
+    try {
+      return window.localStorage.getItem(SINGLE_KEY_SHORTCUTS_KEY) !== 'off';
+    } catch {
+      return true;
+    }
+  }
+
+  function setSingleKeyShortcutsEnabled(enabled) {
+    try {
+      if (enabled) window.localStorage.removeItem(SINGLE_KEY_SHORTCUTS_KEY);
+      else window.localStorage.setItem(SINGLE_KEY_SHORTCUTS_KEY, 'off');
+    } catch {}
+  }
+
+  function shortcutOverlayOpen() {
+    if (document.querySelector('.multi-select-dropdown.open, .actions-dropdown.open')) return true;
+    return Array.from(document.querySelectorAll('.modal, .shell-modal-backdrop, [role="dialog"][aria-modal="true"]'))
+      .some(node => node.getClientRects().length > 0);
+  }
+
+  const shortcutsToggle = el('single-key-shortcuts-toggle');
+  if (shortcutsToggle) {
+    shortcutsToggle.checked = singleKeyShortcutsEnabled();
+    shortcutsToggle.addEventListener('change', () => setSingleKeyShortcutsEnabled(shortcutsToggle.checked));
+  }
+
   document.addEventListener('keydown', (e) => {
+    // A page left through in-app navigation keeps no say over the next page.
+    if (!dashboardActive) return;
+    if (e.key === 'Escape' && el('help-modal')?.style.display === 'flex') {
+      e.preventDefault();
+      el('help-modal').style.display = 'none';
+      return;
+    }
     // Keyboard shortcuts must not take over native interactive controls.
     if (e.target.closest('input, select, textarea, button, a, [contenteditable="true"]')) {
       if (e.key === 'Escape') {
@@ -8158,6 +8531,18 @@
       }
       return;
     }
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+    // Charts and Models load this script too but have no runs table.
+    if (state.currentView !== 'table' || !el('runs-tbody')) return;
+    if (shortcutOverlayOpen()) return;
+
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (state.selectMode) setSelectMode(false);
+      else clearSelection();
+      return;
+    }
+    if (!singleKeyShortcutsEnabled()) return;
 
     switch (e.key) {
       case 'j':
@@ -8171,18 +8556,13 @@
         moveFocus(-1);
         break;
       case 'g':
-        if (!e.shiftKey) {
-          e.preventDefault();
-          state.focusedIndex = 0;
-          setTablePage(1);
-          render();
-        }
+        e.preventDefault();
+        focusRunIndex(0);
         break;
       case 'G':
+        // The last run of the whole list, not of the current page.
         e.preventDefault();
-        state.focusedIndex = state.filteredRuns.length - 1;
-        setTablePage(getTablePageCount(state.filteredRuns.length));
-        render();
+        focusRunIndex(runsTotalCount() - 1);
         break;
       case 'Enter':
         e.preventDefault();
@@ -8201,10 +8581,12 @@
           openComparison();
         }
         break;
-      case 'Escape':
-        e.preventDefault();
-        if (state.selectMode) setSelectMode(false);
-        else clearSelection();
+      case '/':
+        if (el('runs-search')) {
+          e.preventDefault();
+          el('runs-search').focus();
+          el('runs-search').select();
+        }
         break;
       case '?':
         e.preventDefault();
@@ -8213,33 +8595,12 @@
       case '1':
       case '2':
       case '3':
-        const filters = ['all', 'today', 'week'];
-        const idx = parseInt(e.key) - 1;
-        if (idx >= 0 && idx < filters.length) {
-          e.preventDefault();
-          state.quickFilter = filters[idx];
-          setQuickFilterSelection(state.quickFilter);
-          render();
-        }
-        break;
-      case 't':
+      case '4': {
+        const filter = ['all', 'today', 'week', 'month'][Number(e.key) - 1];
         e.preventDefault();
-        state.currentView = 'table';
-        $$('.view-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === 'table'));
-        render();
+        applyQuickFilter(filter);
         break;
-      case 'h':
-        e.preventDefault();
-        state.currentView = 'charts';
-        $$('.view-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === 'charts'));
-        render();
-        break;
-      case 'm':
-        e.preventDefault();
-        state.currentView = 'models';
-        $$('.view-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === 'models'));
-        render();
-        break;
+      }
     }
   });
 
@@ -8356,6 +8717,7 @@
       filterDatasets: [...state.filterDatasets],
       filterUsers: [...state.filterUsers],
       quickFilter: state.quickFilter,
+      customRange: state.customRange,
       chartFirstColWidth: state.chartFirstColWidth,
     };
     sessionStorage.setItem(getDashboardStateKey(), JSON.stringify(stateToSave));
@@ -8398,6 +8760,12 @@
         if (parsed.filterVersions) state.filterVersions = new Set(parsed.filterVersions);
         if (parsed.filterDatasets) state.filterDatasets = new Set(parsed.filterDatasets);
         if (parsed.filterUsers) state.filterUsers = new Set(parsed.filterUsers);
+        if (parsed.customRange && typeof parsed.customRange === 'object') {
+          state.customRange = {
+            from: parseLocalDate(parsed.customRange.from) ? parsed.customRange.from : '',
+            to: parseLocalDate(parsed.customRange.to) ? parsed.customRange.to : '',
+          };
+        }
         if (parsed.quickFilter) {
           state.quickFilter = parsed.quickFilter;
           setQuickFilterSelection(state.quickFilter);
@@ -8434,7 +8802,15 @@
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
       saveDashboardState();
+    } else if (state._pollMissedWhileHidden && dashboardActive) {
+      state._pollMissedWhileHidden = false;
+      fetchRuns();
     }
+  });
+  // Back/forward can restore this page from the browser cache; it may predate
+  // a change made elsewhere (for example a run restored from Deleted Runs).
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted && dashboardActive) fetchRuns({ refreshAllPages: true });
   });
 
   // ═══════════════════════════════════════════════════
@@ -8446,10 +8822,22 @@
     emptyDocsLink.href = apiUrl('docs-guide#get-started/first-run');
   }
 
+  function restoreSearchFromUrl() {
+    if (state.currentView !== 'table' || !el('runs-search')) return;
+    let query = '';
+    try {
+      query = new URLSearchParams(window.location.search).get('q') || '';
+    } catch {}
+    query = query.replace(/\s+/g, ' ').trim().slice(0, 200);
+    state.searchQuery = query;
+    el('runs-search').value = query;
+  }
+
   // Check auth first before loading dashboard
   async function checkAuthAndInit() {
     try {
       restoreDashboardState();
+      restoreSearchFromUrl();
       restoreRunsDataCache();
 
       // If shell is present, wait for it to fetch the user
@@ -8510,11 +8898,20 @@
         : updating ? backoffMs
         : (state.dashboardOverview?.has_active_runs || hasActiveRuns()) ? LIVE_REFRESH_INTERVAL_MS : IDLE_REFRESH_INTERVAL_MS;
       if (window.__QYM_DASHBOARD_INTERVAL__) clearInterval(window.__QYM_DASHBOARD_INTERVAL__);
-      window.__QYM_DASHBOARD_INTERVAL__ = setInterval(fetchRuns, intervalMs);
+      window.__QYM_DASHBOARD_INTERVAL__ = setInterval(pollRuns, intervalMs);
     } catch {
       if (window.__QYM_DASHBOARD_INTERVAL__) clearInterval(window.__QYM_DASHBOARD_INTERVAL__);
-      window.__QYM_DASHBOARD_INTERVAL__ = setInterval(fetchRuns, IDLE_REFRESH_INTERVAL_MS);
+      window.__QYM_DASHBOARD_INTERVAL__ = setInterval(pollRuns, IDLE_REFRESH_INTERVAL_MS);
     }
+  }
+
+  // Hidden tabs do not poll; the first look back refreshes once.
+  function pollRuns() {
+    if (document.hidden) {
+      state._pollMissedWhileHidden = true;
+      return;
+    }
+    fetchRuns();
   }
   updateRunsRefreshCadence();
 
