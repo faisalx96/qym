@@ -24,8 +24,8 @@
 <table>
   <thead><tr><th>Role</th><th>What it adds</th></tr></thead>
   <tbody>
-    <tr><td><strong>Project member</strong></td><td>Can use the project's dashboards, runs, datasets, reviews, API keys, and LLM connections. Members may modify review data and create keys; a key creator may revoke their own key.</td></tr>
-    <tr><td><strong>Project manager</strong></td><td>Adds member and role management, run approval decisions, broader run deletion, key revocation, and project lifecycle controls.</td></tr>
+    <tr><td><strong>Project member</strong></td><td>Can use the project's dashboards, runs, datasets, reviews, API keys, and LLM connections. Members may modify review data and create keys; a key creator may revoke their own key. Members create datasets and drafts, edit draft items and publish; they delete datasets they created.</td></tr>
+    <tr><td><strong>Project manager</strong></td><td>Adds member and role management, run approval decisions, broader run deletion, key revocation, and project lifecycle controls. For datasets: moves the <code>production</code> alias, changes a dataset's slug, deletes any dataset and restores deleted datasets.</td></tr>
     <tr><td><strong>Platform admin</strong></td><td>Can access every project, manage platform users and projects, and view or restore deleted runs.</td></tr>
   </tbody>
 </table>

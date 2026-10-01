@@ -44,13 +44,18 @@ QYM_API_KEY=&lt;token-shown-once&gt;</pre>
   <li>Assign an alias such as <code>production</code> to a published version.</li>
 </ol>
 
+<p>Who can do what with a dataset: every project member creates datasets and drafts, edits draft items, publishes drafts and renames a dataset's display name. Moving the <code>production</code> alias (which decides what future evaluations run on) and changing a dataset's slug (which SDK and CI references use) need a project manager; a dataset's creator may still set production on its first publish. Deleting needs the dataset's creator or a project manager. Each delete, restore, slug change, publish and production move is recorded with who did it. Controls a member cannot use are disabled and say which role can.</p>
+<p>Deleting a dataset moves it, with every version, item and history entry, to <strong>Deleted datasets</strong> (a link in the catalog header). A project manager can restore it there under its original slug; if another dataset took that slug or name meanwhile, rename that one first. Deleted datasets are not purged automatically.</p>
+
 <p>Inside a dataset, use:</p>
 <ul>
-  <li><strong>Items</strong> for search, labels, item editing, revision history, neighboring items, and each item's linked runs;</li>
+  <li><strong>Items</strong> for search (it matches item IDs, inputs, expected outputs and metadata values), labels, item editing, revision history, neighboring items, and each item's linked runs. Each row's index is a link: Tab reaches it, Enter opens the item, and it opens in a new tab like any link;</li>
   <li><strong>Runs</strong> for evaluations that used the dataset or selected version;</li>
-  <li><strong>Lineage</strong> for version ancestry and change counts; and</li>
-  <li><strong>Compare</strong> for item-level differences between two versions.</li>
+  <li><strong>Lineage</strong> for version ancestry and change counts, with each version's creation and publish time, and a <strong>Change log</strong> listing every upload, draft, publish and alias move oldest first, with its time and who made it; and</li>
+  <li><strong>Compare</strong> for item-level differences between two versions. Changes are listed in the order they happened, oldest first, each with its time (the head version's creation time when an item has no recorded edit). Each list loads 50 rows at a time (<strong>Show more</strong> loads the next 50), the first rows open expanded, and the open list stays in the URL. Word changes are highlighted; a field too large to highlight is shown side by side with a note. <strong>Download diff</strong> saves the complete diff.</li>
 </ul>
+
+<p>The version switcher, row menus and the upload wizard work from the keyboard: arrow keys move through versions and menu items, Enter chooses, and Escape closes and returns focus. In the upload wizard each column gets an <strong>Import as</strong> choice (Input, Expected output, Metadata, Item ID or Ignore). Columns qym does not recognise start as Metadata, so nothing is dropped unless you choose Ignore. Closing the wizard after choosing a file asks before discarding it.</p>
 
 <p>Downloads are JSONL. To change published content, create a new draft from that version rather than editing it in place.</p>
 

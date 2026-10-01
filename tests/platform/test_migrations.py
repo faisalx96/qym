@@ -172,6 +172,79 @@ def test_purge_pause_migration_adds_nullable_columns_and_starts_archived_pauses(
     engine.dispose()
 
 
+def test_dataset_search_migration_adds_nullable_columns_and_queues_the_backfill(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from qym_platform.db.maintenance_models import MaintenanceJob
+    from qym_platform.services import maintenance
+
+    migration = _load_migration("0066_dataset_search_text.py")
+    engine = sa.create_engine("sqlite://")
+    metadata = sa.MetaData()
+    items = sa.Table("dataset_items", metadata, sa.Column("id", sa.Integer(), primary_key=True))
+    sa.Table("dataset_versions", metadata, sa.Column("id", sa.String(length=36), primary_key=True))
+    sa.Table("datasets", metadata, sa.Column("id", sa.String(length=36), primary_key=True))
+    metadata.create_all(engine)
+    MaintenanceJob.__table__.create(engine)
+    jobs = "SELECT kind, status FROM maintenance_jobs"
+
+    with engine.begin() as connection:
+        monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
+        migration.upgrade()
+        inspector = sa.inspect(connection)
+        assert {c["name"]: c["nullable"] for c in inspector.get_columns("dataset_items")}["search_text"] is True
+        assert {c["name"]: c["nullable"] for c in inspector.get_columns("dataset_versions")}["change_counts"] is True
+        assert {c["name"]: c["nullable"] for c in inspector.get_columns("datasets")}["deleted_by_user_id"] is True
+        # Nothing to backfill in an empty table.
+        assert connection.execute(sa.text(jobs)).all() == []
+        migration.downgrade()
+        connection.execute(items.insert(), [{"id": 1}])
+        migration.upgrade()
+        assert connection.execute(sa.text(jobs)).all() == [("backfill_dataset_search_text", "queued")]
+        migration.downgrade()
+        assert "search_text" not in {c["name"] for c in sa.inspect(connection).get_columns("dataset_items")}
+    assert "backfill_dataset_search_text" in maintenance.registry()
+    engine.dispose()
+
+
+def test_dataset_search_backfill_job_fills_text_and_published_counts() -> None:
+    from sqlalchemy.orm import sessionmaker
+
+    from qym_platform.db.base import Base
+    from qym_platform.db.models import Dataset, DatasetItem, DatasetVersion, Project, User
+    from qym_platform.services import maintenance
+
+    engine = sa.create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    with factory() as db:
+        db.add(User(id="u", email="u@x.com"))
+        db.add(Project(id="p", name="P", slug="p", created_by_user_id="u"))
+        db.add(Dataset(id="d", project_id="p", name="D", slug="d", created_by_user_id="u"))
+        db.add(DatasetVersion(id="v1", dataset_id="d", version="v1", status="published", created_by_user_id="u"))
+        db.add(DatasetVersion(id="v2", dataset_id="d", version="v2", status="published", parent_version_id="v1", created_by_user_id="u"))
+        db.flush()
+        for version_id, value in (("v1", "قديم"), ("v2", "جديد")):
+            db.add(DatasetItem(dataset_version_id=version_id, item_id="a", index=0, input=value, item_metadata={"tag": "X"}, fingerprint=value))
+        db.commit()
+        # Rows written before the column existed.
+        db.execute(sa.update(DatasetItem).values(search_text=None))
+        db.commit()
+    with factory() as db:
+        maintenance.enqueue(db, "backfill_dataset_search_text", {"window": 1})
+        db.commit()
+    assert maintenance.MaintenanceWorker(factory, engine).tick() == "succeeded"
+    with factory() as db:
+        texts = sorted(row.search_text for row in db.query(DatasetItem))
+        counts = {v.id: v.change_counts for v in db.query(DatasetVersion)}
+    assert texts == ["a\nجديد\n\n{\"tag\": \"x\"}", "a\nقديم\n\n{\"tag\": \"x\"}"]
+    assert counts == {
+        "v1": {"added": 1, "modified": 0, "deleted": 0, "unchanged": 0},
+        "v2": {"added": 0, "modified": 1, "deleted": 0, "unchanged": 0},
+    }
+    engine.dispose()
+
+
 def test_subcategory_taxonomy_migration_preserves_rows_and_defaults_json(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

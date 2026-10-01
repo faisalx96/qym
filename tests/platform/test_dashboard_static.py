@@ -2710,7 +2710,8 @@ def test_reviews_and_dataset_controls_match_the_approved_shared_components() -> 
     assert "padding-inline: var(--space-md)" in item_tabs
     assert ".dsx-item-actions > .shell-btn.qym-inline-action {" in components
     assert datasets.count("shell-btn shell-btn-primary qym-inline-action") >= 2
-    assert datasets.count("shell-btn shell-btn-secondary qym-inline-action") == 2
+    # Item Previous/Next, Deleted datasets / All datasets, Restore, compare "Show more".
+    assert datasets.count("shell-btn shell-btn-secondary qym-inline-action") == 6
     assert "shell-btn shell-btn-danger qym-inline-action" in datasets
     assert "requestAnimationFrame(() => activeTab.scrollIntoView({ block: 'nearest', inline: 'nearest' }));" in datasets
 
@@ -2928,7 +2929,7 @@ def test_datasets_runs_tab_is_flush_without_redundant_heading() -> None:
 
 def test_datasets_version_switching_preserves_lineage_tab() -> None:
     source = (DASHBOARD_DIR / "datasets.html").read_text(encoding="utf-8")
-    version_row_block = source.split("function versionPopoverRow(v, onSelect){", 1)[1].split("function buildTabs(){", 1)[0]
+    version_row_block = source.split("function versionPopoverRow(v, onSelect, id){", 1)[1].split("function buildTabs(){", 1)[0]
     lineage_block = source.split("async function renderLineageTab(host){", 1)[1].split("    // -------------------------------------------------------------\n    // SETTINGS TAB", 1)[0]
 
     assert "navigate({ tab: state.tab, v: v.version, item: null });" in version_row_block
@@ -3081,7 +3082,11 @@ def test_datasets_version_popover_uses_fast_switcher() -> None:
     assert "versionSearchText(v).includes(q)" in source
     assert "appendVersionSection" not in source
     assert "dsx-version-popover-header" not in source
-    assert "versionPopoverRow(v, closePopover)" in source
+    assert "versionPopoverRow(v, () => closePopover(false), 'dsx-version-option-' + i)" in source
+    # Keyboard: a combobox over a listbox, Escape returns focus to the version button.
+    assert "role: 'listbox'" in source and "role: 'option'" in source
+    assert "searchInput.setAttribute('aria-activedescendant', row.id);" in source
+    assert "else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePopover(true); }" in source
     assert "Changes vs production" not in source
     assert "compareSummaryCache" not in source
 

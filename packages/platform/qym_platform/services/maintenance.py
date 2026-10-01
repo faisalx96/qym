@@ -1058,3 +1058,99 @@ def _run_retention(ctx: JobContext) -> bool:
     ctx.progress["message"] = ", ".join(f"{k}={len(v)}" for k, v in result.items())
     ctx.log(ctx.progress["message"])
     return True
+
+
+@register(
+    "backfill_dataset_search_text",
+    description="Fill dataset item search text and published lineage counts (migration 0066), then build the trigram search index.",
+)
+def _backfill_dataset_search_text(ctx: JobContext) -> bool:
+    """Three phases, each resumable from ``ctx.progress``.
+
+    ``items`` walks dataset_items in id windows and writes ``search_text`` for
+    rows that predate it; ``versions`` stores the lineage counts of published
+    versions whose parent is published too; ``index`` (PostgreSQL only) enables
+    pg_trgm and builds ``ix_dataset_items_search_trgm`` CONCURRENTLY. Without the
+    extension (no privilege), search stays correct and the job logs why the
+    index was skipped.
+    """
+    from qym_platform.db.models import DatasetItem, DatasetVersion
+    from qym_platform.services.dataset_search import dataset_item_search_text
+    from qym_platform.services.dataset_versions import store_change_counts
+
+    phase = ctx.progress.get("phase") or "items"
+    window = max(1, int(ctx.params.get("window", 500)))
+    if phase == "items":
+        cursor = int(ctx.progress.get("cursor") or 0)
+        with ctx.session() as db:
+            rows = db.execute(
+                select(
+                    DatasetItem.id,
+                    DatasetItem.item_id,
+                    DatasetItem.input,
+                    DatasetItem.expected_output,
+                    DatasetItem.item_metadata,
+                )
+                .where(DatasetItem.id > cursor, DatasetItem.search_text.is_(None))
+                .order_by(DatasetItem.id)
+                .limit(window)
+            ).all()
+            for row in rows:
+                db.execute(
+                    update(DatasetItem)
+                    .where(DatasetItem.id == row.id, DatasetItem.search_text.is_(None))
+                    .values(search_text=dataset_item_search_text(row.item_id, row.input, row.expected_output, row.item_metadata))
+                )
+            db.commit()
+        ctx.progress["items_filled"] = int(ctx.progress.get("items_filled") or 0) + len(rows)
+        if len(rows) < window:
+            ctx.progress["phase"], ctx.progress["cursor"] = "versions", ""
+        else:
+            ctx.progress["cursor"] = rows[-1].id
+        ctx.progress["message"] = f"{ctx.progress['items_filled']:,} items indexed for search"
+        return False
+    if phase == "versions":
+        cursor = str(ctx.progress.get("cursor") or "")
+        with ctx.session() as db:
+            versions = list(
+                db.scalars(
+                    select(DatasetVersion)
+                    .where(DatasetVersion.id > cursor, DatasetVersion.change_counts.is_(None))
+                    .order_by(DatasetVersion.id)
+                    .limit(20)
+                )
+            )
+            stored = sum(1 for version in versions if store_change_counts(db, version) is not None)
+            db.commit()
+        ctx.progress["versions_counted"] = int(ctx.progress.get("versions_counted") or 0) + stored
+        if len(versions) < 20:
+            ctx.progress["phase"] = "index"
+        else:
+            ctx.progress["cursor"] = versions[-1].id
+        ctx.progress["message"] = f"{ctx.progress['versions_counted']:,} published versions counted"
+        return False
+    if phase == "index" and ctx.is_postgres():
+        try:
+            with ctx.autocommit() as conn:
+                conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+        except Exception as exc:  # noqa: BLE001 - a missing privilege must not fail the backfill
+            ctx.log(f"search index skipped: pg_trgm is not available ({type(exc).__name__}); search still works without it")
+        else:
+            with ctx.autocommit() as conn:
+                # An earlier interrupted build leaves an INVALID index behind; rebuild it.
+                conn.execute(text("DROP INDEX CONCURRENTLY IF EXISTS ix_dataset_items_search_trgm"))
+                started = time.perf_counter()
+                conn.execute(
+                    text(
+                        "CREATE INDEX CONCURRENTLY ix_dataset_items_search_trgm "
+                        "ON dataset_items USING gin (search_text gin_trgm_ops)"
+                    )
+                )
+            ctx.log(f"created ix_dataset_items_search_trgm in {time.perf_counter() - started:.0f}s")
+    ctx.progress["phase"] = "done"
+    ctx.progress["message"] = (
+        f"done: {int(ctx.progress.get('items_filled') or 0):,} items indexed, "
+        f"{int(ctx.progress.get('versions_counted') or 0):,} versions counted"
+    )
+    ctx.log(ctx.progress["message"])
+    return True

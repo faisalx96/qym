@@ -464,6 +464,7 @@ DATASET_WRITES = [
     ("POST", "/v1/datasets", "/v1/datasets", {"json": {"name": "n", "project_slug": "pa"}}, MGR),
     ("PATCH", "/v1/datasets/{dataset_ref}", "/v1/datasets/golden" + _Q, {"json": {}}, MGR),
     ("DELETE", "/v1/datasets/{dataset_ref}", "/v1/datasets/golden" + _Q, None, MGR),
+    ("POST", "/v1/datasets/{dataset_id}:restore", "/v1/datasets/gone:restore" + _Q, None, MGR),
     ("POST", "/v1/datasets/{dataset_ref}/versions", "/v1/datasets/golden/versions" + _Q, {"json": {}}, MGR),
     (
         "POST",
