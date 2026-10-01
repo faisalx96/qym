@@ -15,6 +15,8 @@
   <script src="/static/trace_viewer.js?v=p1-20261001"></script>
   <script src="/static/step_latency.js?v=p0-20260930"></script>
   <script src="/static/review_history.js?v=p1-20261001"></script>
+  <script src="/static/item_reasons.js?v=p1-20261001"></script>
+  <script src="/static/run_section_nav.js?v=p1-20261001"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
     .run-container {
@@ -4864,7 +4866,7 @@
     .sankey-dimmed { opacity: 0.15; }
     .sankey-highlighted { opacity: 1; }
     /* ─── Repeat runs (samples=k) ───
-       Section anatomy matches Overview (overview-header + section-title);
+       Section anatomy matches Overview (the run section header recipe);
        group-metric tiles reuse the Overview/Compare component (stats-row-flex + stat-box). */
     #samples-analysis-section:not(:empty) { margin-bottom: var(--space-xl); }
     .samples-group-tiles {
@@ -5761,9 +5763,425 @@
     .pass-cmp-vtable td.score-2 { color: var(--score-2); }
     .pass-cmp-vtable td.score-1 { color: var(--score-1); }
     .pass-cmp-actions { display: flex; gap: 6px; }
+
+    /* ─── Sticky section nav (C058) ───
+       One row under the run header: run name + status (once stuck) | section
+       links with an underline on the section in view | Filters + Clear |
+       back to top. It stays at the top of the scroll host and covers the
+       host's top padding while stuck. */
+    .run-section-nav {
+      position: sticky;
+      top: calc(-1 * var(--space-lg));
+      z-index: 30;
+      display: flex;
+      align-items: stretch;
+      margin: calc(-1 * var(--space-lg)) calc(-1 * var(--space-lg)) 0;
+      padding: var(--space-lg) var(--space-lg) 0;
+      background: color-mix(in srgb, var(--bg-void) 88%, transparent);
+      -webkit-backdrop-filter: blur(12px) saturate(140%);
+      backdrop-filter: blur(12px) saturate(140%);
+      border-bottom: 1px solid var(--border-subtle);
+      transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    .run-section-nav.is-stuck {
+      border-bottom-color: var(--border-default);
+      box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.8);
+    }
+    .run-section-nav__identity {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      flex: 0 1 auto;
+      min-width: 0;
+      max-width: 0;
+      overflow: hidden;
+      opacity: 0;
+      transition: max-width 0.25s ease, opacity 0.2s ease, margin 0.25s ease;
+    }
+    .run-section-nav.is-stuck .run-section-nav__identity {
+      max-width: 300px;
+      margin-right: var(--space-lg);
+      opacity: 1;
+    }
+    .run-section-nav__name {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: var(--font-md);
+      font-weight: 650;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .run-section-nav__status { flex: 0 0 auto; }
+    .run-section-nav__status[hidden] { display: none; }
+    .run-section-nav__links {
+      position: relative;
+      display: flex;
+      align-items: stretch;
+      gap: var(--space-lg);
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .run-section-nav__links::-webkit-scrollbar { display: none; }
+    .run-section-nav__link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex: 0 0 auto;
+      height: 44px;
+      color: var(--text-muted);
+      font-family: var(--font-sans);
+      font-size: var(--font-md);
+      font-weight: 600;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: color 0.15s ease;
+    }
+    .run-section-nav__link[hidden] { display: none; }
+    .run-section-nav__link:hover { color: var(--text-primary); }
+    .run-section-nav__link[aria-current] { color: var(--accent-primary); }
+    .run-section-nav__link:focus-visible {
+      outline: 1px solid var(--accent-primary);
+      outline-offset: -6px;
+      border-radius: var(--control-radius);
+    }
+    .run-section-nav__count[hidden] { display: none; }
+    .run-section-nav__ink {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 0;
+      height: 2px;
+      border-radius: 2px 2px 0 0;
+      background: var(--accent-primary);
+      pointer-events: none;
+      transition: transform 0.25s cubic-bezier(0.2, 0.7, 0.2, 1), width 0.25s cubic-bezier(0.2, 0.7, 0.2, 1);
+    }
+    .run-section-nav__filters {
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+      flex: 0 0 auto;
+      margin-left: var(--space-md);
+    }
+    /* The builder drops down from the bar: no connector line to draw. */
+    .run-section-nav .qym-item-filter[aria-expanded="true"]::after { display: none; }
+    .run-section-nav__top {
+      align-self: center;
+      flex: 0 0 auto;
+      margin-left: var(--space-sm);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, color 0.15s ease;
+    }
+    .run-section-nav__top svg {
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .run-section-nav.is-stuck .run-section-nav__top {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .run-section-nav > .item-filter-builder {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: var(--space-lg);
+      z-index: 40;
+      width: min(780px, calc(100% - 2 * var(--space-lg)));
+      max-height: min(60vh, 520px);
+      margin-top: 0;
+      overflow: auto;
+      background: var(--bg-surface);
+      box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.75);
+    }
+    @media (max-width: 1279px) {
+      .run-section-nav.is-stuck .run-section-nav__identity {
+        max-width: 0;
+        margin-right: 0;
+        opacity: 0;
+      }
+    }
+    @media (max-width: 640px) {
+      /* The scroll host's padding shrinks to --space-md here. */
+      .run-section-nav {
+        top: calc(-1 * var(--space-md));
+        margin: calc(-1 * var(--space-md)) calc(-1 * var(--space-md)) 0;
+        padding: var(--space-md) var(--space-md) 0;
+      }
+      .run-section-nav > .item-filter-builder {
+        right: var(--space-md);
+        width: calc(100% - 2 * var(--space-md));
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .run-section-nav,
+      .run-section-nav__identity,
+      .run-section-nav__ink { transition: none; }
+    }
+
+    /* ─── Section header recipe (C058) ───
+       Every section opens the same way: an 18px title, a one-line
+       description, the section's controls on the right, a hairline above and
+       about 48px from the section before it. */
+    .run-section-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: var(--space-lg);
+      margin: calc(var(--space-xl) * 1.5) 0 var(--space-md);
+      padding-top: var(--space-lg);
+      border-top: 1px solid var(--border-subtle);
+    }
+    .run-section-head[hidden] { display: none; }
+    #overview-primary-section > .run-section-head:first-child {
+      margin-top: var(--space-lg);
+      padding-top: 0;
+      border-top: 0;
+    }
+    .run-section-head__copy { min-width: 0; }
+    .run-section-head__title {
+      margin: 0;
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: var(--font-xl);
+      font-weight: 650;
+      line-height: 1.3;
+    }
+    .run-section-head__desc {
+      margin: var(--space-xs) 0 0;
+      overflow: hidden;
+      color: var(--text-muted);
+      font-family: var(--font-sans);
+      font-size: var(--font-base);
+      line-height: 1.5;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .run-section-head__aside {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      flex: 0 0 auto;
+    }
+    /* Sections own no spacing of their own: the header recipe sets it. */
+    #overview-deep-section > .system-metrics-section,
+    #overview-deep-section > .ri-insights,
+    #samples-analysis-section:not(:empty),
+    #error-distribution-section:not(:empty),
+    #step-latency-panel.system-trace-row {
+      margin-top: 0;
+      margin-bottom: 0;
+    }
+    /* Step latency: the run page names the section; its card keeps the
+       controls. Hidden while the panel has nothing to show. */
+    #step-latency-panel .sl-card > .ri-header :is(.section-title, .ri-header-copy) { display: none; }
+    .run-section-head[data-run-section="steps"]:has(+ #step-latency-panel:is(:empty, [style*="display: none"])) {
+      display: none;
+    }
+    @media (max-width: 900px) {
+      .run-section-head {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: var(--space-sm);
+      }
+      .run-section-head__desc { white-space: normal; }
+    }
+
+    /* No section scrolls the page sideways (C064). */
+    #overview-section,
+    #metadata-breakdown,
+    #error-distribution-section,
+    #root-cause-section,
+    .items-comparison {
+      overflow-x: clip;
+    }
+    /* Repeat-run metric switcher: its own scroll region when the metrics do
+       not fit (C064). */
+    .samples-metric-row { min-width: 0; }
+    .samples-metric-tabs {
+      max-width: 100%;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .samples-metric-tabs:hover { scrollbar-width: thin; }
+    .samples-metric-tabs::-webkit-scrollbar { height: 0; }
+    .samples-metric-tabs:hover::-webkit-scrollbar { height: 6px; }
+    .samples-metric-tabs > .samples-metric-tab { flex: 0 0 auto; white-space: nowrap; }
+
+    /* ─── Item rows (C064, C065) ───
+       Collapsed rows are fixed, aligned columns: chevron | # | status |
+       input | reason | metrics. The page's widest # and status set those
+       columns; the metrics show what fits on one line, then "+N more".
+       The list's own width picks the layout: below 1000px (a screen under
+       about 1280px with the sidebar open) rows get the two-line layout. */
+    #items-grid {
+      container-type: inline-size;
+      container-name: rdi-items;
+    }
+    #items-grid > .item-card.item-collapsed > .item-header {
+      display: grid;
+      grid-template-columns:
+        26px var(--rdi-index-w, 5ch) var(--rdi-status-w, 0px)
+        minmax(0, 1fr) var(--rdi-metrics-w, auto);
+      grid-template-areas: "chevron index status input metrics";
+      align-items: center;
+      column-gap: 8px;
+    }
+    #items-grid.rdi-has-reasons > .item-card.item-collapsed > .item-header {
+      grid-template-columns:
+        26px var(--rdi-index-w, 5ch) var(--rdi-status-w, 0px)
+        minmax(0, 1fr) clamp(180px, 22%, 320px) var(--rdi-metrics-w, auto);
+      grid-template-areas: "chevron index status input reason metrics";
+    }
+    #items-grid > .item-card.item-collapsed > .item-header > .item-chevron { grid-area: chevron; }
+    #items-grid > .item-card.item-collapsed > .item-header > .item-index { grid-area: index; }
+    #items-grid > .item-card.item-collapsed > .item-header > .item-title { grid-area: input; }
+    .rdi-status {
+      grid-area: status;
+      display: flex;
+      align-items: center;
+      min-width: 0;
+    }
+    .rdi-metrics {
+      grid-area: metrics;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .rdi-metrics > .qym-item-metric-grid { flex: 0 0 auto; }
+    .rdi-metrics .rdi-metric-hidden { display: none; }
+    .rdi-metric-more {
+      flex: 0 0 72px;
+      padding: 2px 6px;
+      overflow: hidden;
+      border-radius: var(--control-radius);
+      background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+      color: var(--text-muted);
+      font-family: var(--font-sans);
+      font-size: var(--font-sm);
+      font-weight: 600;
+      line-height: 1.6;
+      text-align: center;
+      white-space: nowrap;
+      cursor: help;
+    }
+    .rdi-metric-more[hidden] { display: none; }
+    .rdi-metric-more.rdi-metric-more--none { visibility: hidden; }
+    .rdi-metric-more.rdi-metric-more--short { flex-basis: 40px; }
+    .rdi-reason {
+      grid-area: reason;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      min-width: 0;
+      line-height: 14px;
+    }
+    .rdi-reason__text,
+    .rdi-reason__source {
+      overflow: hidden;
+      font-family: var(--font-sans);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .rdi-reason__text {
+      color: var(--text-secondary);
+      font-size: var(--font-base);
+    }
+    .rdi-reason__source {
+      color: var(--text-muted);
+      font-size: var(--font-sm);
+    }
+    .rdi-reason--task-error .rdi-reason__source { color: var(--error); }
+    .rdi-reason--scorer-error .rdi-reason__source { color: var(--metric-error); }
+    .rdi-reason--loading .rdi-reason__text { color: var(--text-muted); }
+    @container rdi-items (max-width: 999px) {
+      /* Narrow: the metric pills move to a second line under the input and
+         reason instead of being clipped. */
+      #items-grid > .item-card.item-collapsed > .item-header,
+      #items-grid.rdi-has-reasons > .item-card.item-collapsed > .item-header {
+        grid-template-columns: 26px var(--rdi-index-w, 5ch) var(--rdi-status-w, 0px) minmax(0, 1fr);
+        grid-template-areas:
+          "chevron index status input"
+          ". . . metrics";
+        row-gap: 6px;
+      }
+      #items-grid.rdi-has-reasons > .item-card.item-collapsed > .item-header {
+        grid-template-columns:
+          26px var(--rdi-index-w, 5ch) var(--rdi-status-w, 0px)
+          minmax(0, 1fr) clamp(160px, 30%, 280px);
+        grid-template-areas:
+          "chevron index status input reason"
+          ". . . metrics metrics";
+      }
+      .rdi-metrics { justify-content: flex-start; }
+    }
+    @container rdi-items (max-width: 640px) {
+      #items-grid.rdi-has-reasons > .item-card.item-collapsed > .item-header {
+        grid-template-columns: 26px var(--rdi-index-w, 5ch) var(--rdi-status-w, 0px) minmax(0, 1fr);
+        grid-template-areas:
+          "chevron index status input"
+          ". reason reason reason"
+          ". metrics metrics metrics";
+      }
+      #items-grid > .item-card.item-collapsed .qym-item-metric-grid { display: inline-grid; }
+    }
+
+    /* Bar-click banner (C065): what the item list now holds. */
+    .rdi-filter-banner {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: var(--space-sm) var(--space-md);
+      margin-bottom: var(--space-sm);
+      padding: var(--space-sm) var(--space-md);
+      border: 1px solid var(--border-subtle);
+      border-left: 3px solid var(--accent-primary);
+      border-radius: var(--radius-md);
+      background: var(--bg-surface);
+      color: var(--text-secondary);
+      font-size: var(--font-base);
+      line-height: 1.5;
+    }
+    .rdi-filter-banner[hidden] { display: none; }
+    .rdi-filter-banner__text { flex: 1 1 320px; min-width: 0; }
+    .rdi-filter-banner__text strong { color: var(--text-primary); font-weight: 600; }
+    /* "How the reason is chosen": a small popover under its trigger. */
+    .rdi-reason-help { position: relative; }
+    .rdi-reason-help__pop {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      z-index: 20;
+      width: min(420px, 80vw);
+      padding: var(--space-md);
+      border: 1px solid var(--border-default);
+      border-radius: var(--dropdown-radius);
+      background: var(--bg-surface);
+      box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.75);
+      color: var(--text-secondary);
+      font-size: var(--font-base);
+      line-height: 1.5;
+      white-space: normal;
+    }
+    .rdi-reason-help__pop[hidden] { display: none; }
+    .rdi-reason-help__pop p { margin: 0; color: var(--text-muted); font-size: var(--font-sm); }
+    .rdi-reason-help__pop ol { margin: var(--space-sm) 0; padding-left: var(--space-lg); }
+    .rdi-reason-help__pop li + li { margin-top: 2px; }
+    .rdi-reason-help__pop strong { color: var(--text-primary); font-weight: 600; }
   </style>
   <link rel="stylesheet" href="/static/ui_components.css?v=p0-20260930">
-  <script defer src="/static/ui_components.js?v=p0-20260930-2"></script>
+  <script defer src="/static/ui_components.js?v=p1-20261001"></script>
 </head>
 <body>
   <main class="run-container">
@@ -5790,6 +6208,47 @@
       <div class="run-summary" id="run-summary"></div>
       <div id="review-history-section"></div>
 
+      <!-- Sticky section nav (C058): jump links with scroll-spy, the item
+           filters (they scope every section) and back to top. -->
+      <nav class="run-section-nav" id="run-section-nav" aria-label="Run sections">
+        <div class="run-section-nav__identity" aria-hidden="true">
+          <span class="run-section-nav__name"></span>
+          <span class="run-section-nav__status qym-badge" hidden></span>
+        </div>
+        <div class="run-section-nav__links">
+          <a class="run-section-nav__link" href="#run-section-overview" data-run-section-link="overview">Overview</a>
+          <a class="run-section-nav__link" href="#run-section-latency" data-run-section-link="latency">Latency and traces</a>
+          <a class="run-section-nav__link" href="#run-section-deep" data-run-section-link="deep">Deep analysis</a>
+          <a class="run-section-nav__link" href="#run-section-categories" data-run-section-link="categories">Categories</a>
+          <a class="run-section-nav__link" href="#run-section-steps" data-run-section-link="steps">Step latency</a>
+          <a class="run-section-nav__link" href="#run-section-errors" data-run-section-link="errors">Errors <span class="run-section-nav__count qym-tag qym-tag--count" hidden></span></a>
+          <a class="run-section-nav__link" href="#run-section-items" data-run-section-link="items">Items <span class="run-section-nav__count qym-tag qym-tag--count" hidden></span></a>
+          <span class="run-section-nav__ink" aria-hidden="true"></span>
+        </div>
+        <div class="run-section-nav__filters" title="Filters apply to every section">
+          <button type="button" class="qym-item-dropdown qym-item-filter qym-control" id="btn-item-filters" aria-expanded="false" aria-controls="item-filter-builder">
+            <svg class="qym-item-control-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 2.5h13l-5 6v4.5l-3 1.5v-6l-5-6z"/></svg>
+            Filters <span class="qym-item-filter-count zero" id="active-filter-count">0</span>
+            <svg class="qym-item-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6.25 8 9.75l3.5-3.5"/></svg>
+          </button>
+          <button type="button" class="fp-clear-btn qym-clear-action qym-item-clear" id="clear-all-btn" title="Clear all active filters">
+            <svg class="fp-clear-x" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 3l6 6M9 3 3 9"/></svg>
+            <span class="fp-clear-label">Clear</span>
+            <span class="fp-clear-count" id="clear-filter-count">0</span>
+          </button>
+        </div>
+        <button type="button" class="run-section-nav__top qym-icon-action" aria-label="Back to top" title="Back to top">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+        </button>
+        <div class="item-filter-builder qym-item-builder" id="item-filter-builder" hidden>
+          <div class="fb-head">
+            <span class="fb-title">Filters</span>
+            <span class="fb-count" id="builder-rule-count"></span>
+          </div>
+          <div id="filter-builder-body"></div>
+        </div>
+      </nav>
+
       <div id="overview-section">
         <div id="overview-primary-section"></div>
         <!-- Pass-centric repeat analysis; empty for classic runs -->
@@ -5800,36 +6259,36 @@
       <div id="metadata-breakdown"></div>
 
       <!-- Step latency distributions -->
+      <header class="run-section-head" data-run-section="steps" id="run-section-steps">
+        <div class="run-section-head__copy">
+          <h2 class="run-section-head__title">Step latency</h2>
+          <p class="run-section-head__desc">Percentile latency for each agent and eval step. Errors are counted separately.</p>
+        </div>
+      </header>
       <div id="step-latency-panel" class="system-trace-row"></div>
 
       <div id="error-distribution-section"></div>
 
       <div id="root-cause-section"></div>
 
-      <div class="items-comparison qym-item-section">
-        <div class="qym-item-section-head">
-          <div>
-            <h3 class="section-title">Item-by-Item Detail</h3>
-            <p class="qym-item-section-copy">Inspect each input, outcome, and metric result.</p>
-          </div>
+      <header class="run-section-head" data-run-section="items" id="run-section-items">
+        <div class="run-section-head__copy">
+          <h2 class="run-section-head__title">Items</h2>
+          <p class="run-section-head__desc">Every input, outcome and metric result. Filters in the bar above apply to every section.</p>
+        </div>
+        <div class="run-section-head__aside">
           <button type="button" class="auto-analyze-btn" id="items-auto-analyze-btn" style="display:none;" title="AI-powered root cause analysis"><span class="ai-icon">&#129302;</span> Auto-Analyze</button>
         </div>
+      </header>
+      <div class="items-comparison qym-item-section">
         <div class="filter-panel qym-item-control-center">
+          <!-- C065: what a Pass/Fail bar click filtered to, above the toolbar. -->
+          <div class="rdi-filter-banner" id="item-filter-banner" role="status" hidden></div>
           <div class="qym-item-toolbar">
             <div class="qym-item-query">
               <label class="qym-item-search qym-search-wrap">
                 <input type="text" id="items-search" class="qym-control qym-search" placeholder="Search inputs / outputs..." aria-label="Search inputs and outputs" />
               </label>
-              <button type="button" class="qym-item-dropdown qym-item-filter qym-control" id="btn-item-filters" aria-expanded="false" aria-controls="item-filter-builder">
-                <svg class="qym-item-control-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 2.5h13l-5 6v4.5l-3 1.5v-6l-5-6z"/></svg>
-                Filters <span class="qym-item-filter-count zero" id="active-filter-count">0</span>
-                <svg class="qym-item-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6.25 8 9.75l3.5-3.5"/></svg>
-              </button>
-              <button type="button" class="fp-clear-btn qym-clear-action qym-item-clear" id="clear-all-btn" title="Clear all active filters">
-                <svg class="fp-clear-x" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 3l6 6M9 3 3 9"/></svg>
-                <span class="fp-clear-label">Clear</span>
-                <span class="fp-clear-count" id="clear-filter-count">0</span>
-              </button>
             </div>
             <div class="qym-item-actions">
               <span class="qym-item-count filter-count" id="filter-count"></span>
@@ -5892,13 +6351,6 @@
                 CSV
               </button>
             </div>
-          </div>
-          <div class="item-filter-builder qym-item-builder" id="item-filter-builder" hidden>
-            <div class="fb-head">
-              <span class="fb-title">Filters</span>
-              <span class="fb-count" id="builder-rule-count"></span>
-            </div>
-            <div id="filter-builder-body"></div>
           </div>
         </div>
         <div class="qym-item-results">
@@ -6434,6 +6886,8 @@
         return String(value);
       }
 
+      // Category values: a structured entry reads as its JSON, never as
+      // "[object Object]" (C068).
       function parseMetaList(val) {
         if (val == null || val === '') return [];
         if (Array.isArray(val)) return val.filter(v => v != null && v !== 'null' && v !== '').map(categoryValueText);
@@ -6443,6 +6897,26 @@
           try { var f = s.replace(/'/g, '"').replace(/"null"/g, 'null'); var p2 = JSON.parse(f); if (Array.isArray(p2)) return p2.filter(v => v != null).map(categoryValueText); } catch {}
         }
         return [s];
+      }
+
+      // Item metadata chips (C068): complexity and domain render as badges,
+      // scalar values only; nested objects and lists of objects are never
+      // coerced into "[object Object]".
+      const ITEM_METADATA_BADGE_KEYS = ['complexity', 'domain'];
+      function itemMetadataBadgeValues(key, value) {
+        if (value == null || value === '') return [];
+        if (Array.isArray(value)) {
+          return value.filter(v => v != null && v !== '' && typeof v !== 'object').map(String);
+        }
+        if (typeof value === 'object') return [];
+        return isListCategoryKey(key) ? parseMetaList(value) : [String(value)];
+      }
+      // A generic metadata tag shows a structured value as compact JSON.
+      function itemMetadataDisplayValue(value) {
+        if (value !== null && typeof value === 'object') {
+          try { return JSON.stringify(value); } catch (err) { return ''; }
+        }
+        return String(value);
       }
 
       function isListCategoryKey(key) {
@@ -7463,11 +7937,401 @@
 
       // ── Rendering ──
 
+      // ── Section structure (C058) ──
+      // Every section opens with the same header recipe; the sticky nav
+      // (run_section_nav.js) jumps between them, follows the one in view and
+      // keeps the reader's section still while sections above re-render.
+      const ROOT_CAUSE_SECTION_COPY = 'Diagnosed causes of failing items, by category and subcause.';
+      let sectionNav = null;
+      const pendingNavCounts = {};
+
+      function runSectionHeadHtml(key, title, description, asideHtml) {
+        return '<header class="run-section-head" data-run-section="' + escapeAttr(key) + '" id="run-section-' + escapeAttr(key) + '">' +
+          '<div class="run-section-head__copy">' +
+            '<h2 class="run-section-head__title">' + escapeHtml(title) + '</h2>' +
+            (description ? '<p class="run-section-head__desc" title="' + escapeAttr(description) + '">' + escapeHtml(description) + '</p>' : '') +
+          '</div>' +
+          (asideHtml ? '<div class="run-section-head__aside">' + asideHtml + '</div>' : '') +
+        '</header>';
+      }
+
+      function setSectionNavCount(key, value, tone) {
+        pendingNavCounts[key] = [value, tone];
+        if (sectionNav) sectionNav.setCount(key, value, tone);
+      }
+
+      function ensureSectionNav() {
+        if (sectionNav || !window.QymRunSectionNav) return;
+        sectionNav = window.QymRunSectionNav.create({
+          scrollHost: getScrollHost(),
+          content: el('run-content'),
+          nav: el('run-section-nav'),
+        });
+        if (!sectionNav) return;
+        Object.keys(pendingNavCounts).forEach(key => {
+          sectionNav.setCount(key, pendingNavCounts[key][0], pendingNavCounts[key][1]);
+        });
+      }
+
+      // ── Why an item failed (C065) ──
+      // A failing row of the displayed metric shows its reason and where it
+      // came from (item_reasons.js has the order). The index drops
+      // explanations and long reasons, so the rows on screen fetch just those
+      // fields; an opened (hydrated) row already has them.
+      const reasonCache = new Map();
+
+      function reasonCacheKey(metric, itemId) {
+        return metric + '\u0000' + (state.viewPass || 0) + '\u0000' + itemId;
+      }
+
+      function reasonMetaKeys(metric) {
+        const snap = state.snapshot || {};
+        if (state.viewPass) {
+          const byPass = snap.pass_metric_meta_keys_by_pass;
+          if (byPass) return byPass[String(state.viewPass)] || [];
+          return (snap.pass_metric_meta_keys || {})[metric] || [];
+        }
+        return (snap.metric_meta_keys || {})[metric] || [];
+      }
+
+      function reasonScoreText(metric, value) {
+        if (value === null || value === undefined) return '—';
+        const mType = state.metricTypes[metric] || 'score';
+        const reducedBoolean = mType === 'boolean' && Number(state.run?.samples || 1) > 1 && !state.viewPass;
+        return reducedBoolean
+          ? window.QymMetrics.formatMetricValue(value, 'score')
+          : window.QymMetrics.formatMetricObservation(value, mType, state.metricSpecs?.[metric]);
+      }
+
+      function reasonPassNeeds(metric) {
+        const direction = metricDirectionOf(metric);
+        if (direction !== 'maximize' && direction !== 'minimize') return '';
+        if (state.metricIsBoolean[metric]) {
+          const reducedBoolean = Number(state.run?.samples || 1) > 1 && !state.viewPass;
+          if (reducedBoolean) return direction === 'minimize' ? 'False on every pass' : 'True on every pass';
+          return direction === 'minimize' ? 'False' : 'True';
+        }
+        return window.QymMetrics.passThresholdLabel(state.metricThresholds[metric] ?? 0.8, direction);
+      }
+
+      function firstPassError(row, metric) {
+        const attempts = Array.isArray(row.pass_attempts) ? row.pass_attempts : [];
+        const metas = row.pass_metric_meta?.[metric];
+        const passes = window.QymMetrics.repeatPassOutcomes(row, metric) || [];
+        let task = '', scorer = '';
+        passes.forEach((pass, index) => {
+          const attempt = attempts[index];
+          if (pass.taskError && !task) task = (attempt && (attempt.error || attempt.__execution_error)) || 'Task execution failed';
+          const meta = Array.isArray(metas) ? metas[index] : null;
+          if (pass.scorerError && !scorer) scorer = (meta && (meta.error || meta.status)) || 'The scorer failed';
+        });
+        return { task, scorer, passes: passes.length };
+      }
+
+      // The reason a row fails ``metric``, or null when it does not fail
+      // (it passes, the metric has no pass rule and nothing errored, or the
+      // outcome never arrived).
+      function itemFailureReason(row, metric, metricIndex) {
+        if (!metric || metricIndex < 0 || !window.QymItemReasons) return null;
+        if (window.QymMetrics.isNotReceivedRow(row)) return null;
+        const outcome = rowScoreFor(row, metricIndex, metric);
+        const mType = state.metricTypes[metric] || 'score';
+        const verdict = mType === 'numeric' ? null : rowPassesFor(metric, outcome);
+        const counts = window.QymMetrics.rowMetricErrorCounts(row, metric);
+        const errored = outcome.isError || counts.task > 0 || counts.scorer > 0;
+        if (verdict !== false && !(errored && verdict === null)) return null;
+        let taskError = null, scorerError = null;
+        if (window.QymMetrics.isRepeatAggregateRow(row) && (counts.task || counts.scorer)) {
+          const first = firstPassError(row, metric);
+          const prefix = n => n + ' of ' + first.passes + ' passes';
+          if (counts.task) taskError = 'Task failed in ' + prefix(counts.task) + ': ' + first.task;
+          else scorerError = 'Scorer failed in ' + prefix(counts.scorer) + ': ' + first.scorer;
+        } else if (counts.task) {
+          taskError = row.error || row.__execution_error || true;
+        } else if (counts.scorer) {
+          scorerError = true;
+        }
+        const itemId = String(row.item_id || row.index);
+        const cached = reasonCache.get(reasonCacheKey(metric, itemId));
+        const meta = Object.assign({}, row.metric_meta?.[metric] || {}, cached && cached.fields ? cached.fields : {});
+        const picked = window.QymItemReasons.pick({
+          taskError,
+          scorerError,
+          meta,
+          score: reasonScoreText(metric, outcome.score),
+          need: reasonPassNeeds(metric),
+        });
+        const hydrated = !runDetails || runDetails.isLoaded(row);
+        picked.fetch = !IS_EXPORT && !hydrated && !cached
+          && window.QymItemReasons.needsServerReason(picked, reasonMetaKeys(metric));
+        picked.pending = !!(cached && cached.pending);
+        return picked;
+      }
+
+      function itemReasonCellHtml(itemId, reason) {
+        const attrs = ' data-reason-item="' + escapeAttr(itemId) + '"';
+        if (!reason) return '<span class="rdi-reason rdi-reason--empty"' + attrs + '></span>';
+        if (reason.pending || reason.fetch) {
+          return '<span class="rdi-reason rdi-reason--loading"' + attrs + ' aria-busy="true">' +
+            '<span class="rdi-reason__text">Loading reason…</span><span class="rdi-reason__source">&nbsp;</span></span>';
+        }
+        return '<span class="rdi-reason rdi-reason--' + escapeAttr(reason.kind) + '"' + attrs + ' title="' + escapeAttr(reason.text) + '">' +
+          '<span class="rdi-reason__text">' + escapeHtml(reason.text) + '</span>' +
+          '<span class="rdi-reason__source">' + escapeHtml(reason.source) + '</span>' +
+        '</span>';
+      }
+
+      // Fill the reason cells of rows on screen once their reasons arrive,
+      // in place: the list itself does not re-render.
+      function refreshReasonCells(metric) {
+        const container = el('items-grid');
+        if (!container || metric !== state.selectedMetric) return;
+        const mIdx = state.allMetrics.indexOf(metric);
+        const rows = new Map((state.snapshot.rows || []).map(row => [String(row.item_id || row.index), row]));
+        container.querySelectorAll('[data-reason-item]').forEach(cell => {
+          const row = rows.get(cell.dataset.reasonItem);
+          if (!row) return;
+          const reason = itemFailureReason(row, metric, mIdx);
+          if (reason) reason.fetch = false;
+          const html = itemReasonCellHtml(cell.dataset.reasonItem, reason);
+          if (cell.outerHTML !== html) cell.outerHTML = html;
+        });
+      }
+
+      function loadItemReasons(pageRows, metric, metricIndex) {
+        if (IS_EXPORT || !runDetails || !RUN_ID || !metric) return;
+        const wanted = [];
+        pageRows.forEach(row => {
+          const reason = itemFailureReason(row, metric, metricIndex);
+          if (reason && reason.fetch) wanted.push(String(row.item_id || row.index));
+        });
+        if (!wanted.length) return;
+        wanted.forEach(id => reasonCache.set(reasonCacheKey(metric, id), { pending: true }));
+        const body = { item_ids: wanted, metric };
+        if (state.viewPass) body.pass_number = state.viewPass;
+        fetch(apiUrl('api/runs/' + encodeURIComponent(RUN_ID) + '/items/reasons'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }).then(res => res.ok ? res.json() : Promise.reject(new Error('HTTP ' + res.status)))
+          .then(data => {
+            const reasons = (data && data.reasons) || {};
+            wanted.forEach(id => reasonCache.set(reasonCacheKey(metric, id), { fields: reasons[id] || {} }));
+          })
+          .catch(() => {
+            // The index fields stand; no retry loop.
+            wanted.forEach(id => reasonCache.set(reasonCacheKey(metric, id), { fields: {} }));
+          })
+          .then(() => refreshReasonCells(metric));
+      }
+
+      // A Pass/Fail/Error bar click filters the page; the banner says what
+      // the list now holds, above its toolbar (C065).
+      const ITEM_FILTER_BANNERS = {
+        failed: (n, metric) => 'Filtered to ' + n + ' item' + (n === 1 ? '' : 's') + ' that fail ' + metric + '.',
+        passed: (n, metric) => 'Filtered to ' + n + ' item' + (n === 1 ? '' : 's') + ' that pass ' + metric + '.',
+        metric_errors: (n, metric) => 'Filtered to ' + n + ' item' + (n === 1 ? '' : 's') + ' where ' + metric + ' errored.',
+      };
+
+      function reasonOrderHelpHtml() {
+        const order = (window.QymItemReasons && window.QymItemReasons.ORDER) || [];
+        return '<span class="rdi-reason-help">' +
+          '<button type="button" class="qym-inline-action qym-inline-action--neutral" data-reason-help aria-expanded="false" aria-controls="rdi-reason-order">How the reason is chosen</button>' +
+          '<span class="rdi-reason-help__pop" id="rdi-reason-order" role="dialog" aria-label="How the reason is chosen" hidden>' +
+            '<p>Each failing row shows the first of these that exists:</p>' +
+            '<ol>' + order.map(step => '<li><strong>' + escapeHtml(step.source) + '</strong>: ' + escapeHtml(step.detail) + '</li>').join('') + '</ol>' +
+            '<p>Other metadata keys are not read.</p>' +
+          '</span>' +
+        '</span>';
+      }
+
+      function setReasonHelpOpen(open, restoreFocus) {
+        const toggle = document.querySelector('#item-filter-banner [data-reason-help]');
+        const pop = el('rdi-reason-order');
+        if (!toggle || !pop || pop.hidden === !open) return;
+        pop.hidden = !open;
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (!open && restoreFocus) toggle.focus();
+      }
+      document.addEventListener('pointerdown', event => {
+        if (!event.target.closest || event.target.closest('.rdi-reason-help')) return;
+        setReasonHelpOpen(false, false);
+      }, true);
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && el('rdi-reason-order') && !el('rdi-reason-order').hidden) {
+          setReasonHelpOpen(false, true);
+        }
+      });
+
+      function renderItemFilterBanner(count) {
+        const banner = el('item-filter-banner');
+        if (!banner) return;
+        const message = ITEM_FILTER_BANNERS[state.itemFilter];
+        const metric = state.selectedMetric;
+        if (!message || !metric) {
+          if (!banner.hidden) { banner.hidden = true; banner.innerHTML = ''; }
+          return;
+        }
+        const html = '<span class="rdi-filter-banner__text"><strong>' + escapeHtml(message(count, metric)) + '</strong> The overview above is filtered too.</span>' +
+          (state.itemFilter === 'passed' ? '' : reasonOrderHelpHtml()) +
+          '<button type="button" class="qym-inline-action qym-inline-action--neutral rdi-filter-banner__clear" data-item-filter-clear>Clear filter</button>';
+        if (banner.dataset.html !== html) {
+          banner.innerHTML = html;
+          banner.dataset.html = html;
+        }
+        banner.hidden = false;
+      }
+
+      el('item-filter-banner')?.addEventListener('click', event => {
+        const help = event.target.closest('[data-reason-help]');
+        if (help) {
+          setReasonHelpOpen(help.getAttribute('aria-expanded') !== 'true', false);
+          return;
+        }
+        if (!event.target.closest('[data-item-filter-clear]')) return;
+        state.itemFilter = 'all';
+        state.page = 1;
+        renderItems();
+      });
+
+      // ── Item rows: aligned columns, metrics that never overflow (C064/C065) ──
+      // Collapsed rows are a grid: chevron | # | status | input | reason |
+      // metrics. The # and status columns take the widest cell on the page,
+      // and the metric pills show as many columns as fit on one line (the
+      // displayed metric first when some must go), the rest as "+N more".
+      const ITEM_ROW_GAP = 8;
+      const ITEM_METRIC_GAP = 6;
+      const ITEM_METRIC_MORE_WIDTH = 72;  // .rdi-metric-more
+
+      // Same width as the rdi-items container query in the page styles.
+      const ITEM_ROWS_NARROW_BELOW = 1000;
+      function itemRowsNarrow(container) {
+        return container.clientWidth < ITEM_ROWS_NARROW_BELOW;
+      }
+
+      function fitItemRows(container) {
+        if (!container || container.classList.contains('heatmap-mode')) return;
+        const headers = Array.from(container.querySelectorAll('.item-card.item-collapsed > .item-header'));
+        if (!headers.length) return;
+        container.style.removeProperty('--rdi-metrics-w');
+        // # and status: the widest on the page, so every row lines up.
+        const widest = selector => headers.reduce((max, header) => {
+          const node = header.querySelector(selector);
+          return node ? Math.max(max, Math.ceil(node.scrollWidth)) : max;
+        }, 0);
+        container.style.setProperty('--rdi-index-w', Math.max(28, widest('.item-index')) + 'px');
+        container.style.setProperty('--rdi-status-w', widest('.rdi-status > *') + 'px');
+
+        // Metric columns: natural widths first.
+        const grids = headers.map(header => header.querySelector('[data-qym-metric-grid]')).filter(Boolean);
+        const widths = [];
+        grids.forEach(grid => {
+          grid.style.removeProperty('--qym-item-metric-columns');
+          grid.querySelectorAll('[data-qym-metric-column]').forEach(cell => {
+            cell.classList.remove('rdi-metric-hidden');
+            cell.style.removeProperty('order');
+          });
+        });
+        grids.forEach(grid => {
+          grid.querySelectorAll('[data-qym-metric-column]').forEach(cell => {
+            const column = Number.parseInt(cell.getAttribute('data-qym-metric-column'), 10);
+            if (!Number.isFinite(column)) return;
+            if (cell.classList.contains('qym-item-metric-cell--empty')) {
+              widths[column] = widths[column] || 0;
+              return;
+            }
+            widths[column] = Math.max(widths[column] || 0, Math.ceil(cell.getBoundingClientRect().width));
+          });
+        });
+        const columns = [];
+        widths.forEach((width, column) => { if (width > 0) columns.push(column); });
+        const selected = state.allMetrics.indexOf(state.selectedMetric);
+        const total = list => list.reduce((sum, column) => sum + widths[column], 0) + Math.max(0, list.length - 1) * ITEM_METRIC_GAP;
+
+        // Room for the metrics: the whole second line when narrow, else what
+        // the input (at least a quarter of the row) and reason leave.
+        const header = headers[0];
+        const rowWidth = header.clientWidth;
+        const fixed = 26 + parseFloat(container.style.getPropertyValue('--rdi-index-w')) +
+          parseFloat(container.style.getPropertyValue('--rdi-status-w') || '0');
+        const reasonCell = header.querySelector('.rdi-reason');
+        const reasonWidth = reasonCell ? reasonCell.getBoundingClientRect().width + ITEM_ROW_GAP : 0;
+        const passNote = header.querySelector('.item-pass-note');
+        const noteWidth = passNote ? passNote.getBoundingClientRect().width + ITEM_ROW_GAP : 0;
+        // (Narrow rows give the metrics their own line: its cell's width.)
+        const metricsCell = header.querySelector('.rdi-metrics');
+        const available = itemRowsNarrow(container) && metricsCell
+          ? metricsCell.clientWidth - noteWidth
+          : rowWidth - fixed - 4 * ITEM_ROW_GAP - reasonWidth - Math.max(240, rowWidth * 0.25) - noteWidth;
+
+        let shown = columns;
+        let moreWidth = 0;
+        if (total(columns) > available) {
+          moreWidth = ITEM_METRIC_MORE_WIDTH + ITEM_METRIC_GAP;
+          const ordered = selected >= 0 && columns.includes(selected)
+            ? [selected].concat(columns.filter(column => column !== selected))
+            : columns;
+          shown = [];
+          for (const column of ordered) {
+            if (shown.length && total(shown.concat([column])) > available - moreWidth) break;
+            shown.push(column);
+          }
+        }
+        const shownSet = new Set(shown);
+        // Too tight even for one metric and the chip (phones): "+N" alone.
+        const shortMore = moreWidth > 0 && total(shown) + moreWidth > available;
+        const template = shown.map(column => widths[column] + 'px').join(' ');
+        const metricsWidth = shown.length ? total(shown) + moreWidth + noteWidth : 0;
+        if (!itemRowsNarrow(container)) container.style.setProperty('--rdi-metrics-w', Math.ceil(metricsWidth) + 'px');
+
+        headers.forEach(rowHeader => {
+          const grid = rowHeader.querySelector('[data-qym-metric-grid]');
+          const more = rowHeader.querySelector('.rdi-metric-more');
+          if (!grid) return;
+          grid.style.setProperty('--qym-item-metric-columns', template || 'none');
+          const hidden = [];
+          grid.querySelectorAll('[data-qym-metric-column]').forEach(cell => {
+            const column = Number.parseInt(cell.getAttribute('data-qym-metric-column'), 10);
+            if (shownSet.has(column)) {
+              cell.style.order = String(shown.indexOf(column));
+              return;
+            }
+            cell.classList.add('rdi-metric-hidden');
+            if (!cell.classList.contains('qym-item-metric-cell--empty')) hidden.push(cell.textContent.replace(/\s+/g, ' ').trim());
+          });
+          if (!more) return;
+          more.hidden = moreWidth === 0;
+          more.classList.toggle('rdi-metric-more--none', hidden.length === 0);
+          more.textContent = hidden.length ? '+' + hidden.length + (shortMore ? '' : ' more') : '';
+          more.classList.toggle('rdi-metric-more--short', shortMore);
+          more.title = hidden.join('\n');
+        });
+      }
+
+      let fitItemRowsFrame = 0;
+      function scheduleFitItemRows() {
+        if (fitItemRowsFrame) return;
+        fitItemRowsFrame = requestAnimationFrame(() => {
+          fitItemRowsFrame = 0;
+          fitItemRows(el('items-grid'));
+        });
+      }
+      if (window.ResizeObserver && el('items-grid')) {
+        let fittedItemsWidth = 0;
+        new ResizeObserver(entries => {
+          const width = Math.round(entries[0].contentRect.width);
+          if (width === fittedItemsWidth) return;
+          fittedItemsWidth = width;
+          scheduleFitItemRows();
+        }).observe(el('items-grid'));
+      }
+
       function render() {
         el('loading').style.display = 'none';
         el('empty').style.display = 'none';
         el('error-state').style.display = 'none';
         el('run-content').style.display = 'block';
+        ensureSectionNav();
         renderSummary();
         applyScoreLockMode();
         if (!IS_EXPORT && window.QymReviewHistory && RUN_ID) {
@@ -8231,10 +9095,8 @@
         const hasReport = sweepHtml || curveHtml || distBlockHtml || stabilitySectionHtml || (g.total_items !== 0 && tilesHtml);
 
         container.innerHTML =
-          (hasReport ? '<div class="overview-header">' +
-            '<div><h3 class="section-title">Repeat Run Analysis</h3>' +
-            '<div class="overview-header-hint">Every item was evaluated ' + samplesCount + 'x in this run. Select the metric summarized across all ' + samplesCount + ' passes.</div></div>' +
-          '</div>' : '') +
+          (hasReport ? runSectionHeadHtml('repeat', 'Repeat run analysis',
+            'Every item was evaluated ' + samplesCount + 'x in this run. Select the metric summarized across all ' + samplesCount + ' passes.') : '') +
           '<div class="samples-metric-row">' +
             '<div class="samples-metric-tabs qym-segmented" role="group" data-qym-segmented-key="repeat-metric" aria-label="Repeat run aggregate metric">' + metricTabsHtml + '</div>' +
             thresholdControlHtml +
@@ -8934,8 +9796,8 @@
 
         if (!panels.length) return '';
         return '<div class="ri-insights">' +
-          '<div class="ri-header"><div><h3 class="section-title">Deep Analysis</h3>' +
-          '<div class="ri-header-copy">Relationships, item-level structure, operational tradeoffs, and repeat stability—each chart answers a different diagnostic question.</div></div></div>' +
+          runSectionHeadHtml('deep', 'Deep analysis',
+            'Relationships, item-level structure, operational tradeoffs and repeat stability. Each chart answers a different diagnostic question.') +
           '<div class="ri-grid">' + panels.join('') + '</div>' +
         '</div>';
       }
@@ -9105,7 +9967,7 @@
         }
 
         const deepAnalysisHtml = relationshipPanels.length
-          ? '<div class="ri-insights"><div class="ri-header"><div><h3 class="section-title">Deep Analysis</h3><div class="ri-header-copy">Explore relationships across item-level metric results.</div></div></div>' +
+          ? '<div class="ri-insights">' + runSectionHeadHtml('deep', 'Deep analysis', 'How metric results relate to each other across items.') +
               '<div class="ri-grid deep-analysis-grid">' + relationshipPanels.join('') + '</div></div>'
           : '';
         return { deepAnalysisHtml, frontierPanel };
@@ -9602,10 +10464,8 @@
         const latencyPanels = (latencyCard || '') + (frontierPanel || '');
         const systemCards = (latencyPanels || traceCard
             ? '<div class="system-metrics-section">' +
-                '<div class="ri-header system-metrics-header"><div>' +
-                  '<h3 class="section-title">Latency and Trace Analysis</h3>' +
-                  '<div class="ri-header-copy">Inspect response latency, quality tradeoffs, and trace-level execution behavior.</div>' +
-                '</div></div>' +
+                runSectionHeadHtml('latency', 'Latency and traces',
+                  'Response latency, quality tradeoffs and trace-level execution behavior.') +
                 (latencyPanels ? '<div class="system-metrics-grid">' + latencyPanels + '</div>' : '') +
                 (traceCard ? '<div class="system-trace-row">' + traceCard + '</div>' : '') +
               '</div>'
@@ -9613,11 +10473,9 @@
 
         // ── Assemble ──
         primarySection.innerHTML = total > 0 ?
-          '<div class="overview-header">' +
-            '<div><h3 class="section-title">Overview</h3>' +
-            '<div class="overview-header-hint">Score distributions per metric and response latency. Click any bar to filter the item table.</div></div>' +
-            runSummaryHtml +
-          '</div>' +
+          runSectionHeadHtml('overview', 'Overview',
+            'Score distributions per metric and response latency. Click a bar to filter the items.',
+            runSummaryHtml) +
           (cards ? '<div class="metric-cards-grid">' + cards + '</div>' : '') : '';
         deepSection.innerHTML = systemCards + intelligenceCharts;
 
@@ -9679,6 +10537,9 @@
             if (itemFilter) itemFilter.value = state.itemFilter;
             state.page = 1;
             renderItems();
+            // Land on the filtered list, where the banner says what it holds
+            // (C065).
+            if (sectionNav) sectionNav.scrollToSection('items');
           });
         });
 
@@ -10546,7 +11407,8 @@
         const statsByKey = new Map(chipKeys.map(({ key }) => [key, getCategoryGroupStats(key, rows, filteredItemIds, metric, mIdx, threshold, supportsPassRate)]));
         chipKeys = chipKeys.filter(({ key }) => statsByKey.get(key).length > 0);
         if (!chipKeys.length) { section.innerHTML = ''; return; }
-        let html = '';
+        let html = runSectionHeadHtml('categories', 'Performance by category',
+          'Average score, item count and latency for each metadata category.');
 
         html += '<div class="category-breakdown-toolbar"><div class="category-chip-bar">';
         html += '<span class="category-chip-bar-label">Categories</span>';
@@ -10571,7 +11433,6 @@
           return;
         }
 
-        html = '<h3 class="section-title">Performance by Category</h3>' + html;
         html += '<div class="comparison-stats metadata-breakdown-content">';
         if (supportsPassRate && overallAverage !== null) {
           html += '<div class="category-baseline-note"><span class="category-baseline-marker"></span><span>Overall metric average score</span><strong class="category-baseline-score" style="--category-average-color:' + riScoreColor(overallAverage, metricDirectionOf(metric)) + '">' + window.QymMetrics.formatMetricValue(overallAverage, metricType, 0) + '</strong></div>';
@@ -10853,6 +11714,7 @@
 
         const stats = Object.values(buckets).sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
         const totalErrors = stats.reduce((sum, entry) => sum + entry.count, 0);
+        setSectionNavCount('errors', totalErrors || '', 'danger');
 
         if (totalErrors === 0) {
           section.innerHTML = '';
@@ -10903,7 +11765,8 @@
         const traceStats = stats.filter(entry => entry.kind === 'Trace error');
         const analysisStats = stats.filter(entry => entry.kind === 'Analysis error');
 
-        let html = '<h3 class="section-title">Error Distribution</h3>';
+        let html = runSectionHeadHtml('errors', 'Errors',
+          'Task, scorer, trace and analysis errors grouped by message. Click a card to filter the items.');
         html += '<div class="comparison-stats">';
         html += renderErrorGroup('Task Errors', 'task', taskStats);
         html += renderErrorGroup('Metric Errors', 'metric', metricStats);
@@ -10987,14 +11850,15 @@
             getRowRootCauseAnalyses(row, 'all').some(analysis => rootCauseIssues(analysis).some(issue => issue.category))
           );
           section.innerHTML = hasOtherMetricResults
-            ? '<div class="root-cause-title-row">' + rootCauseMetricControlHtml() + '</div>'
+            ? runSectionHeadHtml('rootcause', 'Root cause analysis', ROOT_CAUSE_SECTION_COPY, rootCauseMetricControlHtml())
             : '';
           wireRootCauseMetricControl(section);
           return;
         }
 
-        let html = '<div class="root-cause-title-row"><h3 class="section-title">Root Cause Analysis <button class="auto-analyze-btn" id="auto-analyze-btn" title="AI-powered root cause analysis" style="margin-left:12px;"><span class="ai-icon">\uD83E\uDD16</span> Auto-Analyze</button></h3>' +
-          rootCauseMetricControlHtml() + '</div>';
+        let html = runSectionHeadHtml('rootcause', 'Root cause analysis', ROOT_CAUSE_SECTION_COPY,
+          '<button class="auto-analyze-btn" id="auto-analyze-btn" title="AI-powered root cause analysis"><span class="ai-icon">\uD83E\uDD16</span> Auto-Analyze</button>' +
+          rootCauseMetricControlHtml());
         html += '<div class="comparison-stats"><div class="breakdown-section breakdown-root-cause">';
         html += '<div class="breakdown-header root-cause-breakdown-header"><span class="root-cause-breakdown-title"><span class="breakdown-icon">\u2666</span> Categories &amp; Subcauses</span>' + aggregateResultsButtonHtml() + '</div>';
         html += aggregationStatusHtml();
@@ -11562,10 +12426,13 @@
           .find(node => node.dataset.itemId === TARGET_ITEM_ID);
         if (!target) return;
         state.targetItemScrolled = true;
+        if (sectionNav) sectionNav.yieldToScroll();
         requestAnimationFrame(() => target.scrollIntoView({ behavior: 'smooth', block: 'center' }));
       }
 
       function scrollItemByItemToTop() {
+        // Below the sticky section nav, header and toolbar included.
+        if (sectionNav && sectionNav.scrollToSection('items')) return;
         const host = getScrollHost();
         const section = document.querySelector('.items-comparison');
         if (!host || !section) return;
@@ -11999,6 +12866,10 @@
         const itemsSection = container.closest('.items-comparison');
         if (itemsSection) itemsSection.style.display = totalRows > 0 ? '' : 'none';
         filterCountEl.innerHTML = '<span><span class="count-num">' + items.length + '</span> of ' + totalRows + ' items</span>';
+        setSectionNavCount('items', items.length === totalRows ? totalRows : items.length + ' / ' + totalRows);
+        const itemsHead = el('run-section-items');
+        if (itemsHead) itemsHead.hidden = totalRows === 0;
+        renderItemFilterBanner(items.length);
         const displayLabel = el('item-display-label');
         if (displayLabel) displayLabel.textContent = 'Display · ' + formatItemControlMetric(metric);
         updateClearButton();
@@ -12039,6 +12910,13 @@
         }
 
         container.classList.remove('heatmap-mode');
+        // The reason column (C065) stays while the displayed metric has a
+        // pass rule, so the layout does not jump between pages.
+        const metricHasPassRule = mIdx >= 0 && !!metricDirectionOf(metric)
+          && (state.metricTypes[metric] || 'score') !== 'numeric';
+        const showReasons = mIdx >= 0 && (metricHasPassRule
+          || pageItems.some(({ row }) => !!itemFailureReason(row, metric, mIdx)));
+        container.classList.toggle('rdi-has-reasons', showReasons);
         container.innerHTML = pageItems.map(({ row: baseRow }) => {
           const passAttempts = Array.isArray(baseRow.pass_attempts) ? baseRow.pass_attempts : null;
           // The all-passes view renders every recorded repeat attempt. A
@@ -12202,11 +13080,13 @@
           const itemMd = row.item_metadata || {};
           if (renderBody && typeof itemMd === 'object') {
             let badgesHtml = '';
-            for (const sk of SPECIAL_KEYS) {
-              if (sk.startsWith('root_cause') || sk.startsWith('solution') || sk === 'analysis_warning') continue;
+            // Only complexity and domain are badges; the other special keys
+            // (diagnoses, metric_analyses, warnings) render in their own
+            // blocks, and a structured value never becomes a chip (C068).
+            for (const sk of ITEM_METADATA_BADGE_KEYS) {
               if (itemMd[sk] != null && itemMd[sk] !== '' && state.visibleMetadataFields[sk] !== false) {
                 const icon = sk === 'complexity' ? '\u2666' : '\u25C6';
-                const vals = (sk === 'domain' || sk === 'patterns') ? parseMetaList(itemMd[sk]) : [String(itemMd[sk])];
+                const vals = itemMetadataBadgeValues(sk, itemMd[sk]);
                 for (const v of vals) {
                   let valClass = '';
                   if (sk === 'complexity') {
@@ -12221,7 +13101,7 @@
               }
             }
             const genericEntries = Object.entries(itemMd).filter(([k]) => k !== 'task_started_at_ms' && k !== 'trace_stats' && !SPECIAL_KEYS.includes(k) && state.visibleMetadataFields[k] !== false);
-            let genericHtml = genericEntries.map(([k,v]) => '<span class="item-metadata-tag"><span class="meta-key">' + escapeHtml(k) + ':</span> <span class="meta-val">' + escapeHtml(String(v)) + '</span></span>').join('');
+            let genericHtml = genericEntries.map(([k,v]) => '<span class="item-metadata-tag"><span class="meta-key">' + escapeHtml(k) + ':</span> <span class="meta-val">' + escapeHtml(itemMetadataDisplayValue(v)) + '</span></span>').join('');
             if (badgesHtml || genericHtml) {
               const sep = badgesHtml && genericHtml ? '<span class="item-meta-sep"></span>' : '';
               itemMetadataHtml = '<div class="item-metadata-row">' + (badgesHtml ? '<div class="item-meta-badges">' + badgesHtml + '</div>' : '') + sep + (genericHtml ? '<div class="item-metadata-tags">' + genericHtml + '</div>' : '') + '</div>';
@@ -12282,17 +13162,28 @@
             ? '<span class="item-pass-note">' + passAttempts.filter(Boolean).length + ' passes</span>'
             : '';
           const expandAttrs = ' data-item-expand="' + escapeAttr(itemId) + '" role="button" tabindex="0" aria-expanded="' + isExpanded + '"';
-          const headerHtml = '<div class="item-header item-header-expand"' + (isExpanded ? expandAttrs : '') + '>' +
-            '<span class="item-chevron' + (isExpanded ? ' open' : '') + '"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 3.5 5 4.5-5 4.5"/></svg></span>' +
-            '<span class="item-index" title="ID: ' + escapeHtml(itemId) + '">#' + (row.index + 1) + '</span>' +
-            (!isExpanded && (!isRepeatItem || hasAnyTaskError) ? statusIndicator : '') +
-            (isExpanded
-              ? '<span class="item-header-spacer"></span>'
-              : '<span class="item-title" title="' + escapeAttr(displayItemId) + '">' + escapeHtml(titleText) + '</span>') +
-            '<span class="item-agg-pills qym-item-metric-grid" data-qym-metric-grid>' + aggPills + '</span>' +
-            passNote +
-
-          '</div>';
+          const chevronHtml = '<span class="item-chevron' + (isExpanded ? ' open' : '') + '"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 3.5 5 4.5-5 4.5"/></svg></span>' +
+            '<span class="item-index" title="ID: ' + escapeHtml(itemId) + '">#' + (row.index + 1) + '</span>';
+          // Collapsed: fixed columns chevron | # | status | input | reason |
+          // metrics (C065); the metrics show what fits, then "+N more".
+          const headerHtml = isExpanded
+            ? '<div class="item-header item-header-expand"' + expandAttrs + '>' +
+                chevronHtml +
+                '<span class="item-header-spacer"></span>' +
+                '<span class="item-agg-pills qym-item-metric-grid" data-qym-metric-grid>' + aggPills + '</span>' +
+                passNote +
+              '</div>'
+            : '<div class="item-header item-header-expand">' +
+                chevronHtml +
+                '<span class="rdi-status">' + (!isRepeatItem || hasAnyTaskError ? statusIndicator : '') + '</span>' +
+                '<span class="item-title" title="' + escapeAttr(displayItemId) + '">' + escapeHtml(titleText) + '</span>' +
+                (showReasons ? itemReasonCellHtml(itemId, itemFailureReason(row, metric, mIdx)) : '') +
+                '<span class="rdi-metrics">' +
+                  '<span class="item-agg-pills qym-item-metric-grid" data-qym-metric-grid>' + aggPills + '</span>' +
+                  '<span class="rdi-metric-more" hidden></span>' +
+                  passNote +
+                '</span>' +
+              '</div>';
 
           if (!isExpanded) {
             // The whole collapsed card is the expand target
@@ -12314,6 +13205,8 @@
         }).join('');
 
         window.QymUIComponents?.alignMetricColumns(container);
+        fitItemRows(container);
+        loadItemReasons(pageItems.map(item => item.row), metric, mIdx);
 
         window.QymUIComponents?.renderPagination(paginationEl, {
           page: state.page,
@@ -14505,6 +15398,25 @@
       el('btn-item-filters')?.addEventListener('click', () => {
         state.filterBuilderOpen = !state.filterBuilderOpen;
         renderFilterBuilder();
+      });
+      // The builder drops down from the sticky nav (C058): Escape or a click
+      // outside it closes it.
+      function closeFilterBuilder(restoreFocus) {
+        if (!state.filterBuilderOpen) return;
+        state.filterBuilderOpen = false;
+        renderFilterBuilder();
+        if (restoreFocus) el('btn-item-filters')?.focus();
+      }
+      document.addEventListener('pointerdown', event => {
+        if (!state.filterBuilderOpen || !event.target.isConnected) return;
+        if (event.target.closest('#item-filter-builder, #btn-item-filters')) return;
+        closeFilterBuilder(false);
+      }, true);
+      document.addEventListener('keydown', event => {
+        if (event.key !== 'Escape' || event.defaultPrevented || !state.filterBuilderOpen) return;
+        // An open list inside the builder closes first.
+        if (el('item-filter-builder')?.querySelector('.qym-dropdown.is-open, .multi-select-dropdown.open')) return;
+        closeFilterBuilder(true);
       });
       {
         const dispBtn = el('btn-item-display');

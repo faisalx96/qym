@@ -5320,7 +5320,7 @@
     }
   </style>
   <link rel="stylesheet" href="./static/ui_components.css?v=p0-20260930">
-  <script defer src="./static/ui_components.js?v=p0-20260930-2"></script>
+  <script defer src="./static/ui_components.js?v=p1-20261001"></script>
 </head>
 <body>
   <main class="compare-container">
@@ -12590,17 +12590,21 @@
           // #5/#6: Build item metadata row — complexity & domain as first-class badges
           let itemMetadataHtml = '';
           {
-            const SPECIAL_KEYS = ['complexity', 'domain', 'root_cause', 'root_causes', 'root_cause_issues', 'root_cause_detail', 'root_cause_reason', 'root_cause_note', 'root_cause_source', 'root_cause_confidence', 'solution', 'solution_note', 'solution_source'];
+            const SPECIAL_KEYS = ['complexity', 'domain', 'root_cause', 'root_causes', 'root_cause_issues', 'root_cause_detail', 'root_cause_reason', 'root_cause_note', 'root_cause_source', 'root_cause_confidence', 'solution', 'solution_note', 'solution_source', 'metric_analyses'];
             const metaRow = rowData.find(r => r);
             const md = metaRow?.item_metadata || {};
             if (typeof md === 'object') {
               // Build special badges for complexity & domain
               let badgesHtml = '';
               for (const sk of SPECIAL_KEYS) {
-                if (sk.startsWith('root_cause') || sk.startsWith('solution')) continue;
+                if (sk.startsWith('root_cause') || sk.startsWith('solution') || sk === 'metric_analyses') continue;
                 if (md[sk] !== undefined && md[sk] !== null && md[sk] !== '' && state.visibleMetadataFields[sk] !== false) {
                   const icon = sk === 'complexity' ? '\u2666' : '\u25C6';
-                  const vals = (sk === 'domain' || sk === 'patterns') ? parseMetaList(md[sk]) : [String(md[sk])];
+                  // Scalars only: a structured value is never a badge (C068).
+                  const raw = md[sk];
+                  const vals = Array.isArray(raw)
+                    ? raw.filter(v => v != null && v !== '' && typeof v !== 'object').map(String)
+                    : (typeof raw === 'object' ? [] : ((sk === 'domain' || sk === 'patterns') ? parseMetaList(raw) : [String(raw)]));
                   for (const v of vals) {
                     let valClass = '';
                     if (sk === 'complexity') {
@@ -12622,7 +12626,7 @@
               let genericHtml = '';
               if (genericEntries.length > 0) {
                 genericHtml = genericEntries.map(([k, v]) =>
-                  `<span class="item-metadata-tag"><span class="meta-key">${escapeHtml(k)}:</span> <span class="meta-val">${escapeHtml(String(v))}</span></span>`
+                  `<span class="item-metadata-tag"><span class="meta-key">${escapeHtml(k)}:</span> <span class="meta-val">${escapeHtml(v !== null && typeof v === 'object' ? JSON.stringify(v) : String(v))}</span></span>`
                 ).join('');
               }
 

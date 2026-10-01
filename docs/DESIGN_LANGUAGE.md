@@ -52,7 +52,9 @@ Runs error indicators use the original ⚠ glyph: `--error` for task failures an
 
 Major analytical sections use a sentence-case `--font-lg` section title followed
 by a concise muted `--font-sm` description. Do not introduce a major section
-with an uppercase metadata-style label.
+with an uppercase metadata-style label. The run detail page is the exception:
+its top-level sections are page sections reached from the sticky section nav
+and use the run section header recipe below (`--font-xl` title).
 
 **Floor: no readable text below 11px.** 10px is reserved for badge/pill chrome.
 Off-scale values (9px, 10.5px, 11.5px, 12.5px, 13.5px, 14px, 16px, 17px, 20px…)
@@ -160,6 +162,25 @@ Dense dataset collection tabs inside chart cards are the exception: they keep
 an elevated strip, a filled active surface with green text/underline, and a
 filled count tile on every tab. Horizontally overflowing tab strips reveal
 their scrollbar thumb only on hover.
+The run detail page's **sticky section nav** (`.run-section-nav`) is the one
+jump-link variant: one row under the run header with the run name and status
+(shown once the bar sticks), one link per section (`data-run-section-link`,
+`--font-md` / 600, muted; the section in view gets `aria-current` and the
+shared sliding underline in Qym green), the page-wide Filters + Clear, and a
+back-to-top icon action. Links carry `.qym-tag--count` counts (errors use the
+danger tone). No percentages, progress bars or proportional link widths. The
+bar sticks with a frosted `--bg-void` background and gains a shadow only while
+stuck. Dropdowns opened from the bar (the filter builder) hang under it and
+close on Escape or an outside click.
+
+**Run section header.** Every top-level run-page section opens with
+`.run-section-head` (`data-run-section="<key>"`): a `--font-xl` / 650 primary
+title, one muted `--font-base` description line (ellipsis), the section's
+controls in `.run-section-head__aside` on the right, a `--border-subtle`
+hairline above and about 48px (`--space-xl` × 1.5) from the previous section.
+Sections do not add their own top or bottom margins; the header owns the
+spacing.
+
 In-place view, metric, repeat, and time switching uses `.qym-segmented` +
 `.qym-segmented__option`. The complete segmented control is 24px high so it
 aligns with adjacent selectors; options fill its inset content box, and only
@@ -278,8 +299,8 @@ action names as visible button text. Matching disabled, hover, and focus states
 apply platform-wide. Pass `pageSizeOptions` only where changing the page size is
 supported. Do not build page-local pagination markup or CSS.
 Changing pages in an item-by-item detail view returns its nested scroll host to
-the start of the complete Item-by-Item section (title and filters included), not
-merely the first card. If content above that section rerenders asynchronously,
+the start of the complete Items section (title and toolbar included, just below
+the run page's sticky section nav), not merely the first card. If content above that section rerenders asynchronously,
 perform the scroll after the layout has settled.
 
 Wide tables that cannot expose their native horizontal scrollbar without

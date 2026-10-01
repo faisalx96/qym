@@ -82,6 +82,8 @@ from qym_platform.services.run_payloads import (
     detail_item_ids,
     meta_key_schema,
     new_meta_key_index,
+    reason_fields,
+    reason_request,
     search_conditions,
 )
 from qym_platform.services.run_review import (
@@ -4086,6 +4088,19 @@ def export_run_html(
             count=1,
         )
 
+    # The run page's own helpers (failure reasons, sticky section nav) work
+    # offline, so the export keeps them.
+    for page_script in ("item_reasons.js", "run_section_nav.js"):
+        page_script_js = (dashboard_dir / page_script).read_text(encoding="utf-8")
+        run_html = re.sub(
+            r'\s*<script\s+src="/static/'
+            + re.escape(page_script)
+            + r'(?:\?[^"]*)?"></script>\s*',
+            lambda _match, source=page_script_js: f"<script>\n{source}\n</script>",
+            run_html,
+            count=1,
+        )
+
     # Remove browser/session-only scripts that are not needed in standalone export.
     run_html = re.sub(
         r'\s*<script\s+src="/static/auth\.js(?:\?[^"]*)?"></script>\s*', "\n", run_html
@@ -4854,6 +4869,31 @@ def run_item_details(
         "rows": rows,
         "missing_item_ids": [iid for iid in ids if iid not in present],
     }
+
+
+@router.post("/api/runs/{run_id}/items/reasons")
+def run_item_reasons(
+    run_id: str,
+    request: Dict[str, Any],
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Why each listed item failed one metric (C065): only the reason fields
+    of that metric's metadata (reason, error, status, explanation, label),
+    for the run or for one pass of a repeat run."""
+    run = _detail_run(db, principal, run_id)
+    ids, metric, pass_number = reason_request(request)
+    data = _build_run_data(db, run, item_ids=ids)
+    reasons: Dict[str, Dict[str, str]] = {}
+    for row in data["snapshot"]["rows"]:
+        meta = (row.get("metric_meta") or {}).get(metric)
+        metas = (row.get("pass_metric_meta") or {}).get(metric)
+        if pass_number is not None and isinstance(metas, list):
+            # As the page scopes a row to one pass; legacy repeat artifacts
+            # without pass metadata keep the run-level metadata.
+            meta = metas[pass_number - 1] if len(metas) >= pass_number else None
+        reasons[row["item_id"]] = reason_fields(meta)
+    return {"metric": metric, "pass_number": pass_number, "reasons": reasons}
 
 
 @router.post("/api/runs/{run_id}/items/search")

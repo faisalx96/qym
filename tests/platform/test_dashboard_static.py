@@ -811,8 +811,9 @@ def test_repeat_and_compare_share_grouped_output_interaction() -> None:
     assert "window.location.pathname + '?pass=' + encodeURIComponent(att.pass_number)" in repeat_outputs
     assert 'class="qym-output-card__link"' in repeat_outputs
     assert "${identityHtml}${verdictFor(row, runIdx)}" in compare_outputs
+    # Collapsed rows keep a status column even when it is empty (C065).
     assert (
-        "(!isExpanded && (!isRepeatItem || hasAnyTaskError) ? statusIndicator : '')"
+        "'<span class=\"rdi-status\">' + (!isRepeatItem || hasAnyTaskError ? statusIndicator : '') + '</span>'"
         in collapsed_run_header
     )
     assert "qym-tag--success" in repeat_outputs
@@ -1023,9 +1024,12 @@ def test_item_detail_section_has_one_defined_shared_shell() -> None:
 
     for source in (run, compare):
         assert "items-comparison qym-item-section" in source
-        assert "qym-item-section-head" in source
         assert "qym-item-result-meter" not in source
         assert "items-fmeter" not in source
+    assert "qym-item-section-head" in compare
+    # The run page names its Items section with the run section header
+    # recipe, like every other run section (C058).
+    assert '<header class="run-section-head" data-run-section="items" id="run-section-items">' in run
 
 
 def test_compare_expanded_item_shell_matches_run_detail() -> None:
@@ -1358,9 +1362,8 @@ def test_run_detail_includes_non_redundant_intelligence_charts() -> None:
     assert 'relationshipPanels.push(\'<div class="ri-panel">' in active
     assert 'frontierPanel = \'<div class="ri-panel system-frontier-panel">' in active
     assert "radar" not in source.lower()
-    assert '<h3 class="section-title">Latency and Trace Analysis</h3>' in source
-    assert "Inspect response latency, quality tradeoffs, and trace-level execution behavior." in source
-    assert 'class="ri-header system-metrics-header"' in source
+    assert "runSectionHeadHtml('latency', 'Latency and traces'," in source
+    assert "Response latency, quality tradeoffs and trace-level execution behavior." in source
     assert "const latencyPanels = (latencyCard || '') + (frontierPanel || '');" in source
     assert "'<div class=\"system-metrics-grid\">' + latencyPanels + '</div>'" in source
     assert "'<div class=\"system-trace-row\">' + traceCard + '</div>'" in source
@@ -2237,12 +2240,12 @@ def test_clear_filter_control_has_aligned_label_and_soft_count_pill() -> None:
             assert "dashboard.css?v=p1-20261001" in source
             assert "playground.js?v=p1-20261001" in source
             assert "ui_components.css?v=p0-20260930" in source
-            assert "ui_components.js?v=p0-20260930-2" in source
+            assert "ui_components.js?v=p1-20261001" in source
             continue
         if "ui_components.css?v=" in source:
             assert "ui_components.css?v=p0-20260930" in source
         if "ui_components.js?v=" in source:
-            assert "ui_components.js?v=p0-20260930-2" in source
+            assert "ui_components.js?v=p1-20261001" in source
 
 
 def test_operational_statistics_use_connected_strip_contract() -> None:

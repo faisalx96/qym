@@ -8,7 +8,8 @@ than downloaded for every item during initial navigation.
 from __future__ import annotations
 
 import hashlib
-from typing import Any, Dict, List, Optional, Set
+import json
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import HTTPException
 
@@ -175,4 +176,42 @@ def search_conditions(payload: Dict[str, Any]) -> List[Dict[str, str]]:
             )
         seen.add(ident)
         result.append({"id": ident, "field": field, "value": term.lower()})
+    return result
+
+
+# Failure reasons (C065): the run page's item list shows why a failing row
+# failed. The index drops explanations and long reasons, so the visible page
+# asks for just these fields instead of hydrating whole items.
+REASON_FIELDS = ("reason", "error", "status", "explanation", "label")
+REASON_TEXT_LIMIT = 2000
+
+
+def reason_request(payload: Dict[str, Any]) -> Tuple[List[str], str, Optional[int]]:
+    """Validate a reasons request: item IDs, one metric, an optional pass."""
+    ids = detail_item_ids(payload)
+    metric = payload.get("metric")
+    if not isinstance(metric, str) or not metric or len(metric) > 200:
+        raise HTTPException(
+            422, "metric must be a non-empty string of at most 200 characters"
+        )
+    pass_number = payload.get("pass_number")
+    if pass_number is not None and (type(pass_number) is not int or pass_number < 1):
+        raise HTTPException(422, "pass_number must be a positive integer")
+    return ids, metric, pass_number
+
+
+def reason_fields(meta: Any) -> Dict[str, str]:
+    """The reason-bearing fields of one metric's metadata, as bounded text."""
+    if not isinstance(meta, dict):
+        return {}
+    result = {}
+    for key in REASON_FIELDS:
+        value = meta.get(key)
+        if value is None or value == "":
+            continue
+        if isinstance(value, str):
+            text = value
+        else:
+            text = json.dumps(value, ensure_ascii=False, default=str)
+        result[key] = text[:REASON_TEXT_LIMIT]
     return result

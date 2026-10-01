@@ -574,6 +574,7 @@ ALLOWED = {
     ("POST", "/api/dashboard/points"): "read",
     ("POST", "/api/runs/{run_id}/items/details"): "read",
     ("POST", "/api/runs/{run_id}/items/search"): "read",
+    ("POST", "/api/runs/{run_id}/items/reasons"): "read",
     ("POST", "/api/runs/{run_id:path}/analysis-examples"): "read",
     ("POST", "/api/runs/{run_id:path}/analyze-preview"): "read (prompt preview)",
     # Dry runs that store nothing.
@@ -700,6 +701,7 @@ def test_non_members_still_get_403_not_the_archive_state(archived):
         ("GET", "/v1/projects/pa", None),
         ("GET", "/v1/projects/pa/api-keys", None),
         ("POST", "/api/runs/r1/items/details", {"json": {"item_ids": ["i1"]}}),
+        ("POST", "/api/runs/r1/items/reasons", {"json": {"item_ids": ["i1"], "metric": "m"}}),
         (
             "POST",
             "/api/runs/r1/items/search",

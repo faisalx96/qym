@@ -7,6 +7,8 @@
 
 <p>The header's <strong>Compare with previous</strong> opens Compare with the previous finished run of the same task, model and dataset as the baseline, and notes the change in the primary metric between the two run means. It is hidden when there is no earlier run.</p>
 
+<h2>Move around the page</h2>
+<p>Under the header, a section bar stays at the top while you scroll. It links to each section on the page (Overview, Latency and traces, Deep analysis, Categories, Step latency, Errors with its error count, and Items with the filtered and total item counts) and underlines the section you are reading. Once the bar sticks it also shows the run name and status, and an arrow back to the top. <strong>Filters</strong> and <strong>Clear</strong> sit on the right of the bar because they scope every section, not only the item list; the filter builder drops down under the bar, and Escape or a click outside closes it. When a filter changes, the sections above you re-render without moving the section you are reading.</p>
 <h2>Overview</h2>
 <p>The overview begins with item, completion, and error counts. A completed run whose items did not all report an outcome (the platform rejected their events) also shows <strong>Not received</strong>: those items carry that tag instead of a verdict and are left out of the metric means and of Execution success. Metric cards adapt to their type:</p>
 <ul>
@@ -16,7 +18,7 @@
   <li><strong>Latency</strong> shows distribution and percentile landmarks.</li>
 </ul>
 
-<p>Click a distribution segment to filter Item-by-Item Detail. Deep Analysis appears when the run has enough item-level evidence and can show metric relationships and quality-versus-latency behavior.</p>
+<p>Click a distribution segment to filter the items. The <strong>Pass</strong> and <strong>Fail</strong> segments of a metric that declares a pass rule, and any <strong>Error</strong> segment, also take you to the item list, where a banner says what it now holds (for example, "Filtered to 16 items that fail correctness") and offers <strong>Clear filter</strong>. The overview is filtered too. Deep analysis appears when the run has enough item-level evidence and can show metric relationships and quality-versus-latency behavior.</p>
 
 <h2>Repeat-run analysis</h2>
 <p>For <code>samples=k</code>, the repeat section adds a metric picker, pass threshold, group metrics, a pass sweep, accuracy-versus-k analysis, correct-pass distribution, and stability views.</p>
@@ -39,12 +41,24 @@
 <h3>Open one pass</h3>
 <p>Click a pass in the Runs expansion or an item's pass heading. The <strong>Pass N/k</strong> lens replaces every item's reduced values with that pass's output, metrics, latency, status, error, and trace. Use the pass pill to return to the all-pass view.</p>
 
-<h2>Item-by-Item Detail</h2>
+<h2>Items</h2>
+<p>Each collapsed item is one row of aligned columns: its number, its Pass/Fail status for the displayed metric, the input, the reason it failed, and its metric values. When the metric values do not fit on one line, the displayed metric comes first and the rest collapse into <strong>+N more</strong> (hover it for the values); on narrower screens the values move to a second line.</p>
+<h3>Why an item failed</h3>
+<p>A row that fails the displayed metric shows a one-line reason (hover it for the full text) with its source underneath. The first of these that exists is shown:</p>
+<ol>
+  <li><strong>task error</strong>: the item's task failed; its error message.</li>
+  <li><strong>scorer error</strong>: the metric raised (status error, failed or timeout).</li>
+  <li><strong>reason</strong>: the metric's <code>reason</code>, or an <code>error</code> recorded without an error status (older metrics stored verdict reasons there).</li>
+  <li><strong>explanation</strong>: the metric's <code>explanation</code>.</li>
+  <li><strong>label</strong>: the metric's <code>label</code>.</li>
+  <li><strong>no reason recorded</strong>: the score and what a pass needs, such as "Scored False, pass needs True".</li>
+</ol>
+<p>Other metadata keys are not read. To get a precise reason, have the metric return <code>reason</code> in its metadata.</p>
 <p>Search inputs and outputs, sort by index, score, or latency, and use <strong>Display</strong> to choose the analysis metric, threshold, item metadata columns, and metric-detail fields. Repeat runs also offer Cards and Heatmap layouts. Export the current filtered item set with <strong>CSV</strong>.</p>
 <p>Inputs and outputs show exactly as stored (<strong>Raw</strong>) by default. <strong>Display &rsaquo; Text &rsaquo; Rendered</strong> formats markdown in prose while code and SQL stay as stored; the choice is remembered in this browser, and Compare has the same switch.</p>
 
 <h3>Build precise filters</h3>
-<p>Open <strong>Filters</strong>, add conditions, and choose whether <strong>AND</strong> or <strong>OR</strong> joins them. Groups can be nested. Filter fields include every metric, item categories, approval state, output text, errors, edited metrics, retries, trace errors, and latency.</p>
+<p>Open <strong>Filters</strong> in the section bar, add conditions, and choose whether <strong>AND</strong> or <strong>OR</strong> joins them. Groups can be nested. Filter fields include every metric, item categories, approval state, output text, errors, edited metrics, retries, trace errors, and latency.</p>
 
 <pre data-lang="filter">AND — every rule below must match
   correctness  is  failed

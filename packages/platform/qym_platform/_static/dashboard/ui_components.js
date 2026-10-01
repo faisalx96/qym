@@ -419,6 +419,16 @@
     segmentSyncFrames.set(segmented, schedule(run));
   }
 
+  // classList.add/remove write the class attribute even when nothing
+  // changes, and the document observer re-syncs a segmented control on every
+  // class write: an unconditional toggle re-ran the sync every frame while
+  // the page sat idle (about 60 writes a second per control).
+  function setSegmentedReady(segmented, ready) {
+    if (segmented.classList.contains('qym-segmented--ready') !== ready) {
+      segmented.classList.toggle('qym-segmented--ready', ready);
+    }
+  }
+
   function syncSegmented(segmented) {
     if (!segmented || !segmented.matches('.qym-segmented')) return;
     var options = directSegmentOptions(segmented);
@@ -428,7 +438,7 @@
         || option.getAttribute('aria-pressed') === 'true';
     });
     if (!active || active.offsetWidth <= 0) {
-      segmented.classList.remove('qym-segmented--ready');
+      setSegmentedReady(segmented, false);
       return;
     }
     var nextX = active.offsetLeft + 'px';
@@ -439,7 +449,7 @@
     if (segmented.style.getPropertyValue('--qym-segment-width') !== nextWidth) {
       segmented.style.setProperty('--qym-segment-width', nextWidth);
     }
-    segmented.classList.add('qym-segmented--ready');
+    setSegmentedReady(segmented, true);
     var historyKey = segmentedHistoryKey(segmented);
     if (historyKey) {
       segmentPositions.set(historyKey, { x: nextX, width: nextWidth });
@@ -488,7 +498,7 @@
     if (previous) {
       segmented.style.setProperty('--qym-segment-x', previous.x);
       segmented.style.setProperty('--qym-segment-width', previous.width);
-      segmented.classList.add('qym-segmented--ready');
+      setSegmentedReady(segmented, true);
       scheduleSegmentedSync(segmented, 2);
     } else {
       syncSegmented(segmented);
