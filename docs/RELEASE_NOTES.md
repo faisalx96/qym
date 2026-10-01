@@ -1,3 +1,29 @@
+# Unreleased — P1 design review (Platform)
+
+Fixes the P1 issues of the September design review: a run page you can read and filter without the page moving, a Reviews queue with project approval rules, faster dataset search and comparisons, and safer admin and sign-in. The platform version for this release is still to be decided.
+
+## Before you update
+
+- **Migrations `0066`–`0068` (head `0068`).** `0066` adds `background_jobs`, `0067` the project review rules (defaults keep today's behaviour), `0068` dataset search text and stored lineage counts. All are quick DDL. `0068` queues the `backfill_dataset_search_text` job on every database: it fills search text, stores lineage counts, then builds the search indexes (the trigram index needs the privilege to create `pg_trgm`; without it search stays correct, only unindexed). See `docs/internal/OPERATIONS.md`.
+- **Scores of reviewed runs are locked.** Score edits and resets on a SUBMITTED or APPROVED run answer 403 ("Scores are locked…"); deleting passes of such a run answers 409. Reject or unapprove the run first. Scripts that override scores on reviewed runs need that step.
+- **Dataset rights.** Moving the `production` alias and changing a dataset's slug need a project manager (or admin); members create, publish and delete their own datasets.
+- **Paged dataset compare.** `GET …:compare` with `include_diffs=1&limit=N` now returns `summary`, `page` and that page's rows only; the full `added` / `removed` / `changed` / `unchanged` lists and `timestamps` come only without `limit`, as before.
+- **Proxy trust for password sign-in.** With `QYM_AUTH_LOCAL_ENABLED=true` behind an ingress, set `FORWARDED_ALLOW_IPS` (or `--forwarded-allow-ips` in `QYM_UVICORN_ARGS`) so the per-client sign-in limit sees real clients; the API warns at startup when it is missing.
+- **Optional `QYM_WEB_WORKERS`** (default 1) runs several web processes per pod; see the sizing notes in `OPERATIONS.md`.
+
+## What changed
+
+- Run page: a sticky section nav with counts and the item Filters, one header recipe for every section, filters and view changes that keep the reader's place, the reason each failing item failed, item deep links (`?item=`), collapsed step latency and live updates while a run is running.
+- Reviews: opens on the Pending queue with progress, sorting and keyboard review; bulk actions refuse a stale selection and return the decided rows.
+- Approval rules per project: who may approve corrections (all members by default, or managers) and an optional "different reviewer" rule, enforced for approve, reject, reset, delete and bulk, with Self-approved shown.
+- Submitting a run asks for confirmation with an optional comment; several runs submit in one request; managers and admins submit on behalf of the owner and can transfer a run to another active member.
+- Datasets: indexed search over IDs, inputs, outputs and metadata; stored lineage counts; compare ordered by time with timestamps and paged diffs; Deleted datasets with restore.
+- Runs list: keyed rows, stable menus, a custom date range; Deleted Runs lists every deleted run, page by page.
+- Admin: confirm-and-undo when disabling users, never zero active admins, no self-disable or self-demotion.
+- Compare and Models: a baseline with noise bands, short labels, server-side model stats.
+
+---
+
 # September 2026 — SDK 1.8.0 / Platform 0.4.0
 
 Fixes every P0 issue from the September design review: scores mean the same on every page, big runs open fast, reviews and archived projects stay as decided, and access ends when it should. The platform now requires `qym>=1.8.0`.

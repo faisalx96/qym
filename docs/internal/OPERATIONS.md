@@ -32,7 +32,7 @@ sure one process runs a given job.
 | `QYM_SPAN_RETENTION_DAYS` | `60` | Raw traces older than this are dropped by partition (0 = keep forever) |
 | `QYM_DELETED_RUN_GRACE_DAYS` | `30` | Soft-deleted runs are hard-deleted after this; time their project spends archived does not count |
 | `QYM_AUTH_LOCAL_SIGNUP` | `false` | Email/password self sign-up; off means admins add people (open only while no active admin exists) |
-| `QYM_AUTH_LOGIN_MAX_FAILURES_PER_EMAIL` / `..._PER_CLIENT` / `QYM_AUTH_LOGIN_FAILURE_WINDOW_SECONDS` | `5` / `30` / `300` | Failed password sign-ins before `429`; counted per API pod. Without uvicorn `--proxy-headers` every client shares the ingress address, so the per-client limit applies to all of them together |
+| `QYM_AUTH_LOGIN_MAX_FAILURES_PER_EMAIL` / `..._PER_CLIENT` / `QYM_AUTH_LOGIN_FAILURE_WINDOW_SECONDS` | `5` / `30` / `300` | Failed password sign-ins before `429`; counted per API process (with `QYM_WEB_WORKERS=N` each process counts on its own, so a pod allows up to N times the limit). uvicorn trusts `X-Forwarded-For` only from `FORWARDED_ALLOW_IPS` (default `127.0.0.1`): set `FORWARDED_ALLOW_IPS` (or `--forwarded-allow-ips=...` in `QYM_UVICORN_ARGS`) to the ingress/pod CIDR, otherwise every client shares the ingress address and the per-client limit applies to all of them together. The API logs a warning at startup when password sign-in is on outside dev/test and neither is set |
 | `QYM_DB_POOL_SIZE` / `QYM_DB_MAX_OVERFLOW` | `10` / `10` | API connection pool |
 | `QYM_DB_WORKER_POOL_SIZE` / `QYM_DB_WORKER_MAX_OVERFLOW` | `3` / `2` | Worker pool |
 | `QYM_DB_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement guard on API connections |
@@ -84,7 +84,7 @@ Migrations `0058`–`0068` are quick DDL or small job/queue inserts.
 | 0065 | Nullable `projects.archived_at` and `runs.purge_clock_started_at`; sets `archived_at` on projects already archived (a handful of rows) | None: Trash purging pauses for archived projects from now on |
 | 0066 | Empty `background_jobs` table (shared job state for several web processes) | None |
 | 0067 | `projects.correction_approvers` (default `members`) and `projects.correction_require_different_reviewer` (default false), constant defaults on the small projects table; nullable `run_workflow_events.on_behalf_of_user_id` | None: every project keeps today's review behaviour until a manager changes it |
-| 0068 | Nullable `dataset_items.search_text`, `dataset_versions.change_counts`, `datasets.deleted_by_user_id` | `backfill_dataset_search_text` — **queued, runs by itself** (only when dataset items exist): fills search text in id windows (about 1 s per 1,000 RAG-sized items on the perf lab), stores lineage counts of published versions, then runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` and builds `ix_dataset_items_search_trgm` CONCURRENTLY. Without the privilege to create the extension it logs that and skips the index; search stays correct, only unindexed. Until the job reaches a row, search matches it the old way, so results never depend on its progress |
+| 0068 | Nullable `dataset_items.search_text`, `dataset_versions.change_counts`, `datasets.deleted_by_user_id` | `backfill_dataset_search_text` — **queued, runs by itself** (on every database, an empty one included, since the job also builds the index): fills search text in id windows (one statement per 500-item window), stores lineage counts of published versions, builds the small partial index `ix_dataset_items_unindexed_version` CONCURRENTLY, then runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` and builds `ix_dataset_items_search_trgm` CONCURRENTLY. Without the privilege to create the extension it logs that and skips the trigram index; search stays correct, only unindexed. Until the job reaches a row, search rebuilds that row's text on read; results match except a search for a JSON fragment spanning several keys of one object, whose key order PostgreSQL's JSONB text may differ. If the job ever failed (Admin → Maintenance shows it), start `backfill_dataset_search_text` again there: it resumes and is safe to repeat |
 
 After `0060`/`0064` the dashboard worker republishes every ready summary once
 (a "republish wave"; about 45 s per 600 runs on the perf lab, in the
@@ -162,7 +162,7 @@ WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.r
 ### Deploy and run maintenance
 
 1. Deploy the new API with the default `QYM_ROLE=all`. Wait for migration head
-   `0065` and a healthy API. The API process then runs every queued job itself.
+   `0068` and a healthy API. The API process then runs every queued job itself.
    Do not restart the API while a job runs; the job resumes, but each restart
    costs time. Optional split layout: set `QYM_ROLE=api` on the API and start
    one worker with the same image and configuration, `QYM_ROLE=worker`, and
@@ -269,6 +269,8 @@ Sizing, per API pod:
   a cancel or a project archive handled by another process sees and stops the
   same job. A job whose process stopped (restart, crash, rollout) shows as failed
   within about 15 seconds instead of running forever; start it again.
+- **Sign-in failure limits** (`QYM_AUTH_LOGIN_MAX_FAILURES_*`) are counted in
+  each web process, so a pod with N processes allows up to N times the limit.
 
 ## Optional separate worker Deployment (Helm/Kubernetes sketch)
 
@@ -277,7 +279,7 @@ Use this layout to keep long maintenance jobs away from API rollouts and probes,
 or to run several API replicas with one background process. Same image as the
 API; only the command and two variables differ. One replica. Inherit maintenance
 mode and retention settings from the same configuration as the API. Start this
-deployment only after the API has migrated to `0065`.
+deployment only after the API has migrated to `0068`.
 
 ```yaml
 apiVersion: apps/v1

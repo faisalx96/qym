@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Datasets</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001-2">
   <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
   <script src="/static/qym_safe.js?v=p1-20261001"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
@@ -5148,7 +5148,8 @@
 
       const pages = {};
       let loadSeq = 0;
-      loadKind(state.cmpTab || 'changed', 0);
+      state.cmpTab = state.cmpTab || 'changed';
+      loadKind(state.cmpTab, 0);
       return root;
 
       function compareUrl(params){
@@ -5167,7 +5168,9 @@
         if (offset === 0 && !page.rows.length) listEl.innerHTML = '<div class="dsx-skel-row"><div class="dsx-skeleton" style="width:60%"></div></div>';
         try {
           const resp = await apiFetch(compareUrl({ kind, limit: String(COMPARE_PAGE_SIZE), offset: String(offset) }));
-          if (seq !== loadSeq || !listEl.isConnected) return;
+          // A response for a tab the reader has since left (including a
+          // "Show more" page) must not take the list or the tab back.
+          if (seq !== loadSeq || kind !== state.cmpTab || !listEl.isConnected) return;
           lastCompareResp = resp;
           const rows = kind === 'changed' ? (resp.field_diffs || [])
             : kind === 'added' ? (resp.added_items || [])
@@ -5215,6 +5218,8 @@
             if (k === state.cmpTab && pages[k]) return;
             // Keep the open list in the URL so a shared link opens the same list.
             navigate({ cmpTab: k }, { replace: true, silent: true });
+            // Drop any response still in flight for the tab being left.
+            ++loadSeq;
             if (pages[k] && pages[k].total != null) {
               renderTabs(s, k);
               renderList(k, true);

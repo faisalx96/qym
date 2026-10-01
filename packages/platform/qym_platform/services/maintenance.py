@@ -21,7 +21,8 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Iterator, List, Optional
 from uuid import uuid4
 
-from sqlalchemy import delete, func, select, text, update
+from sqlalchemy import Integer, Text, bindparam, column, delete, func, select, text, update
+from sqlalchemy import values as sa_values
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -1095,18 +1096,39 @@ def _backfill_dataset_search_text(ctx: JobContext) -> bool:
                 .order_by(DatasetItem.id)
                 .limit(window)
             ).all()
-            for row in rows:
-                db.execute(
-                    update(DatasetItem)
-                    .where(DatasetItem.id == row.id, DatasetItem.search_text.is_(None))
-                    .values(search_text=dataset_item_search_text(row.item_id, row.input, row.expected_output, row.item_metadata))
-                )
+            if rows:
+                # One statement per window instead of one round trip per row
+                # (PostgreSQL: UPDATE ... FROM (VALUES ...); psycopg2's
+                # executemany would still send one UPDATE per row). The IS NULL
+                # guard keeps it idempotent next to live writes.
+                items_table = DatasetItem.__table__
+                filled = [
+                    (row.id, dataset_item_search_text(row.item_id, row.input, row.expected_output, row.item_metadata))
+                    for row in rows
+                ]
+                if ctx.is_postgres():
+                    batch = sa_values(
+                        column("pk", Integer), column("st", Text), name="filled"
+                    ).data(filled)
+                    db.execute(
+                        update(items_table)
+                        .where(items_table.c.id == batch.c.pk, items_table.c.search_text.is_(None))
+                        .values(search_text=batch.c.st)
+                    )
+                else:
+                    db.connection().execute(
+                        update(items_table)
+                        .where(items_table.c.id == bindparam("pk"), items_table.c.search_text.is_(None))
+                        .values(search_text=bindparam("st")),
+                        [{"pk": pk, "st": search_text} for pk, search_text in filled],
+                    )
             db.commit()
+            last_item_id = rows[-1].id if rows else None
         ctx.progress["items_filled"] = int(ctx.progress.get("items_filled") or 0) + len(rows)
         if len(rows) < window:
             ctx.progress["phase"], ctx.progress["cursor"] = "versions", ""
         else:
-            ctx.progress["cursor"] = rows[-1].id
+            ctx.progress["cursor"] = last_item_id
         ctx.progress["message"] = f"{ctx.progress['items_filled']:,} items indexed for search"
         return False
     if phase == "versions":
@@ -1121,15 +1143,31 @@ def _backfill_dataset_search_text(ctx: JobContext) -> bool:
                 )
             )
             stored = sum(1 for version in versions if store_change_counts(db, version) is not None)
+            batch_size = len(versions)
+            # Read before the commit: committed instances expire, and the
+            # session closes when this block ends.
+            last_version_id = versions[-1].id if versions else None
             db.commit()
         ctx.progress["versions_counted"] = int(ctx.progress.get("versions_counted") or 0) + stored
-        if len(versions) < 20:
+        if batch_size < 20:
             ctx.progress["phase"] = "index"
         else:
-            ctx.progress["cursor"] = versions[-1].id
+            ctx.progress["cursor"] = last_version_id
         ctx.progress["message"] = f"{ctx.progress['versions_counted']:,} published versions counted"
         return False
     if phase == "index" and ctx.is_postgres():
+        with ctx.autocommit() as conn:
+            # The "does this version still have rows without search_text"
+            # probe runs on every search. Once the backfill is done no row
+            # qualifies, so this partial index stays empty and the probe is
+            # one index lookup instead of a walk over the whole version.
+            conn.execute(text("DROP INDEX CONCURRENTLY IF EXISTS ix_dataset_items_unindexed_version"))
+            conn.execute(
+                text(
+                    "CREATE INDEX CONCURRENTLY ix_dataset_items_unindexed_version "
+                    "ON dataset_items (dataset_version_id) WHERE search_text IS NULL"
+                )
+            )
         try:
             with ctx.autocommit() as conn:
                 conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))

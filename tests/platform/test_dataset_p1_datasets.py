@@ -191,7 +191,9 @@ def test_lineage_reads_stored_counts_of_published_versions(env, monkeypatch):
     assert {change["actor"]["email"] for change in lineage["changes"]} == {"mgr@x.com"}
 
 
-def test_editing_a_draft_parent_clears_its_childs_stored_counts(env):
+def test_counts_of_a_version_whose_parent_is_a_draft_are_computed_on_read(env):
+    # Items change only in drafts, and counts are stored only when both sides
+    # are published; a stray stored value under a draft parent is ignored.
     client, factory, _ = env
     _upload(client, MGR, "qa", [("a", "one", "x", "t")], publish="true")
     parent = client.post("/v1/datasets/qa/versions", params={"project_slug": "pa"}, json={"from_version": "v1"}, headers=MGR).json()["version"]
@@ -201,8 +203,10 @@ def test_editing_a_draft_parent_clears_its_childs_stored_counts(env):
         db.add(child)
         db.commit()
     client.patch(f"/v1/datasets/qa/versions/{parent['version']}/items/a", params={"project_slug": "pa"}, json={"input": "edited"}, headers=MGR)
-    with factory() as db:
-        assert db.get(DatasetVersion, "child").change_counts is None
+    lineage = client.get("/v1/datasets/qa/lineage", params={"project_slug": "pa"}, headers=MGR).json()
+    counts = {v["version"]: v["change_counts"] for v in lineage["versions"]}
+    # The child has no items; its draft parent has one.
+    assert counts["v9"] == {"added": 0, "modified": 0, "deleted": 1, "unchanged": 0}
 
 
 def test_version_list_uses_a_fixed_number_of_queries(env):

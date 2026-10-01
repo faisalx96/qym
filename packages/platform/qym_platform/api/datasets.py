@@ -47,7 +47,6 @@ from qym_platform.permissions import (
 from qym_platform.services.dataset_search import filter_dataset_item_search
 from qym_platform.services.dataset_versions import (
     change_counts_for,
-    invalidate_child_counts,
     store_change_counts,
 )
 
@@ -443,16 +442,37 @@ def _dataset_payloads(
             DatasetAlias.dataset_id.in_(ids), DatasetAlias.alias == "production"
         )
     }
+    # Only the newest version per dataset (and the production one) is shown:
+    # pick their ids in SQL instead of loading every version row.
+    newest_rank = (
+        func.row_number()
+        .over(
+            partition_by=DatasetVersion.dataset_id,
+            order_by=(DatasetVersion.created_at.desc(), DatasetVersion.id.desc()),
+        )
+        .label("rank")
+    )
+    ranked = (
+        db.query(DatasetVersion.id.label("id"), DatasetVersion.dataset_id.label("dataset_id"), newest_rank)
+        .filter(DatasetVersion.dataset_id.in_(ids))
+        .subquery()
+    )
+    latest_ids = {
+        dataset_id: version_id
+        for version_id, dataset_id in db.query(ranked.c.id, ranked.c.dataset_id).filter(ranked.c.rank == 1)
+    }
+    load_ids = set(latest_ids.values()) | {version_id for version_id in production_ids.values() if version_id}
     versions = (
         db.query(DatasetVersion)
-        .filter(DatasetVersion.dataset_id.in_(ids))
-        .order_by(DatasetVersion.created_at.desc())
+        .filter(DatasetVersion.dataset_id.in_(ids), DatasetVersion.id.in_(sorted(load_ids)))
         .all()
+        if load_ids
+        else []
     )
     by_id = {version.id: version for version in versions}
-    latest: Dict[str, DatasetVersion] = {}
-    for version in versions:
-        latest.setdefault(version.dataset_id, version)
+    latest: Dict[str, DatasetVersion] = {
+        dataset_id: by_id[version_id] for dataset_id, version_id in latest_ids.items() if version_id in by_id
+    }
     wanted = {version_id for version_id in production_ids.values() if version_id in by_id}
     wanted.update(version.id for version in latest.values())
     version_payloads = _version_payloads(db, [by_id[version_id] for version_id in wanted], include_aliases=False)
@@ -1998,15 +2018,19 @@ def list_items(
         rows = {item.id: item for item in db.query(DatasetItem).filter(DatasetItem.id.in_(page_ids)).all()} if page_ids else {}
         items = [rows[item_id] for item_id in page_ids if item_id in rows]
     else:
-        # The page and the total in one statement: the search predicate runs once.
+        # The page's ids and the total in one statement, so the search
+        # predicate runs once. The window runs over narrow (id) rows: over
+        # full item rows it spilled every matching body to a tuplestore.
         page = (
-            query.add_columns(func.count(DatasetItem.id).over().label("total"))
+            query.with_entities(DatasetItem.id, func.count(DatasetItem.id).over().label("total"))
             .order_by(*_plain_item_order(sort_key))
             .offset(offset)
             .limit(limit)
             .all()
         )
-        items = [row[0] for row in page]
+        page_ids = [row[0] for row in page]
+        rows = {item.id: item for item in db.query(DatasetItem).filter(DatasetItem.id.in_(page_ids)).all()} if page_ids else {}
+        items = [rows[item_id] for item_id in page_ids if item_id in rows]
         if page:
             total = int(page[0][1])
         else:
@@ -2086,7 +2110,6 @@ def create_item(
         after=_item_payload(item),
         actor_user_id=principal.user.id,
     )
-    invalidate_child_counts(db, version)
     db.commit()
     return {"item": _item_payload(item)}
 
@@ -2169,7 +2192,6 @@ def update_item(
     item.fingerprint = build_identity_fingerprint(input_value=input_value, expected_value=expected, metadata=metadata)
     item.updated_at = utc_now_naive()
     _record_item_revision(db, version, item, change_type="updated", before=before, after=_item_payload(item), actor_user_id=principal.user.id)
-    invalidate_child_counts(db, version)
     db.commit()
     return {"item": _item_payload(item)}
 
@@ -2201,7 +2223,6 @@ def delete_item(
     _detach_item_run_results(db, item)
     db.delete(item)
     version.item_count = max(0, int(version.item_count or 0) - 1)
-    invalidate_child_counts(db, version)
     db.commit()
     return {"ok": True}
 
@@ -2308,8 +2329,6 @@ def bulk_items(
             created.append(_item_payload(new_item))
             next_index += 1
 
-    if created or updated or deleted:
-        invalidate_child_counts(db, version)
     db.commit()
     return {
         "summary": {"created": len(created), "updated": len(updated), "deleted": len(deleted)},
@@ -2748,7 +2767,8 @@ def compare_versions(
     # every changed item lists its changed fields, as callers always had.
     changed_bodies = set(_window("changed")) if paged else set(changed_ids)
     need_base = changed_bodies | set(_window("removed"))
-    need_target = changed_bodies | set(_window("added")) | set(_window("unchanged"))
+    # Unchanged bodies are returned only as a page (``unchanged_items``).
+    need_target = changed_bodies | set(_window("added")) | (set(_window("unchanged")) if paged else set())
 
     def _full(version_id: str, wanted: set[str]) -> Dict[str, DatasetItem]:
         if not wanted:
@@ -2766,7 +2786,9 @@ def compare_versions(
     changed = []
     field_diffs: list[Dict[str, Any]] = []
     changed_window = set(_window("changed"))
-    for item_id_key in changed_ids:
+    # A paged response carries only its page: changed entries are built for
+    # the changed window alone, so its size follows ``limit``, not the diff.
+    for item_id_key in (_window("changed") if paged else changed_ids):
         b_row = base_rows[item_id_key]
         t_row = target_rows[item_id_key]
         entry: Dict[str, Any] = {
@@ -2817,15 +2839,18 @@ def compare_versions(
         "base": _version_payload(db, base_version),
         "target": _version_payload(db, target),
         "summary": {"added": len(added), "removed": len(removed), "changed": len(changed_ids), "unchanged": len(unchanged)},
-        "added": added,
-        "removed": removed,
-        "changed": changed,
-        "unchanged": unchanged,
-        "timestamps": {
-            item_id_key: _timing(item_id_key)
-            for item_id_key in list(added) + list(removed)
-        },
     }
+    if not paged:
+        response.update(
+            added=added,
+            removed=removed,
+            changed=changed,
+            unchanged=unchanged,
+            timestamps={
+                item_id_key: _timing(item_id_key)
+                for item_id_key in list(added) + list(removed)
+            },
+        )
     if want_diffs:
         response["added_items"] = [
             _item_payload(target_full[i]) | _timing(i) for i in _window("added") if i in target_full

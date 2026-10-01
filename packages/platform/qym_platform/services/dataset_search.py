@@ -6,8 +6,12 @@ then a plain substring match on that column, which a pg_trgm GIN index can
 serve, instead of re-serializing and normalizing every row's JSON per request.
 Rows written before migration 0068 keep ``search_text`` NULL until the
 ``backfill_dataset_search_text`` maintenance job reaches them; until then they
-are matched with the old per-row expression, so results never depend on the
-backfill's progress.
+are matched with a per-row expression that rebuilds the same text (string
+values unquoted, null as empty, metadata null as ``{}``), so results do not
+depend on the backfill's progress. One difference remains on PostgreSQL: its
+JSONB text orders object keys its own way, so a search for a fragment that
+spans several keys of one object can match differently until the row is
+backfilled.
 """
 
 from __future__ import annotations
@@ -16,7 +20,7 @@ import json
 import unicodedata
 from typing import Any, Optional
 
-from sqlalchemy import String, and_, cast, func, literal_column, or_
+from sqlalchemy import String, and_, case, cast, func, literal, literal_column, or_
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Query, Session
 
@@ -39,11 +43,13 @@ _TRANSLATION = str.maketrans(
     }
 )
 # Searched columns, in the order their text is joined in ``search_text``.
+# Kinds: "text" (a plain column), "json" (a JSON value; null reads as ''),
+# "metadata" (JSON; a missing value reads as {} as in dataset_item_search_text).
 _SEARCHED_COLUMNS = (
-    (DatasetItem.item_id, False),
-    (DatasetItem.input, True),
-    (DatasetItem.expected_output, True),
-    (DatasetItem.item_metadata, True),
+    (DatasetItem.item_id, "text"),
+    (DatasetItem.input, "json"),
+    (DatasetItem.expected_output, "json"),
+    (DatasetItem.item_metadata, "metadata"),
 )
 
 
@@ -66,12 +72,29 @@ def dataset_item_search_text(item_id: Any, input_value: Any, expected: Any, meta
     return normalize_dataset_search("\n".join(parts)).replace("\x00", "")
 
 
-def _sqlite_search_text(value: Optional[str], is_json: bool) -> Optional[str]:
-    if value is None:
-        return None
-    if is_json:
-        value = json.dumps(json.loads(value), ensure_ascii=False)
-    return normalize_dataset_search(value)
+def _sqlite_search_text(value: Optional[str], kind: str) -> Optional[str]:
+    """The text ``dataset_item_search_text`` stores for one column."""
+    if kind == "text":
+        return None if value is None else normalize_dataset_search(value)
+    decoded = json.loads(value) if value is not None else None
+    if kind == "metadata":
+        decoded = decoded or {}
+    return normalize_dataset_search(_field_text(decoded))
+
+
+def _postgres_field_text(column: Any, kind: str) -> Any:
+    """``_field_text`` in SQL: string values unquoted, JSON null as ''.
+
+    JSON preserves \\u escapes; JSONB decodes them, including nested data.
+    """
+    value = cast(column, JSONB)
+    empty = "{}" if kind == "metadata" else ""
+    rendered = case(
+        (func.jsonb_typeof(value) == "string", value.op("#>>")(literal_column("'{}'::text[]"))),
+        (func.jsonb_typeof(value) == "null", literal(empty)),
+        else_=cast(value, String),
+    )
+    return func.coalesce(rendered, literal(empty))
 
 
 def _legacy_predicate(db: Session, needle: str):
@@ -83,12 +106,11 @@ def _legacy_predicate(db: Session, needle: str):
             "qym_dataset_search_text", 2, _sqlite_search_text, deterministic=True
         )
     predicates = []
-    for column, is_json in _SEARCHED_COLUMNS:
+    for column, kind in _SEARCHED_COLUMNS:
         if sqlite:
-            normalized = func.qym_dataset_search_text(column, is_json)
+            normalized = func.qym_dataset_search_text(column, kind)
         else:
-            # JSON preserves \u escapes; JSONB decodes them, including nested data.
-            value = cast(cast(column, JSONB), String) if is_json else column
+            value = column if kind == "text" else _postgres_field_text(column, kind)
             normalized = func.lower(
                 func.translate(
                     func.normalize(value, literal_column("NFKC")),

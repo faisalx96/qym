@@ -5,7 +5,9 @@ published their items never change, so the counts are computed once and stored
 on ``dataset_versions.change_counts``; the Lineage tab then reads one column per
 version instead of loading and diffing every item of every version per request.
 Drafts (and a published version whose parent is still a draft) are computed on
-read, and editing a draft clears the stored counts of its published children.
+read. Items change only in drafts and counts are stored only when both sides
+are published, so stored counts never go stale. "Modified" follows the Compare
+view's rule: the identity fingerprint or the labels differ.
 """
 
 from __future__ import annotations
@@ -25,27 +27,21 @@ def _is_published(version: Optional[DatasetVersion]) -> bool:
 
 
 def _item_rows(db: Session, version_id: str) -> Dict[str, tuple]:
+    # Fingerprint and labels only: the same rule as the Compare view, so the
+    # two never disagree and no item body is loaded.
     rows = db.query(
         DatasetItem.item_id,
         DatasetItem.fingerprint,
         DatasetItem.labels,
-        DatasetItem.input,
-        DatasetItem.expected_output,
-        DatasetItem.item_metadata,
     ).filter(DatasetItem.dataset_version_id == version_id)
     return {row[0]: tuple(row[1:]) for row in rows}
 
 
 def _changed(a: tuple, b: tuple) -> bool:
-    fingerprint_a, labels_a, input_a, expected_a, metadata_a = a
-    fingerprint_b, labels_b, input_b, expected_b, metadata_b = b
-    return (
-        fingerprint_a != fingerprint_b
-        or (labels_a or []) != (labels_b or [])
-        or input_a != input_b
-        or expected_a != expected_b
-        or (metadata_a or {}) != (metadata_b or {})
-    )
+    """Modified when the identity fingerprint or the labels differ (as Compare)."""
+    fingerprint_a, labels_a = a
+    fingerprint_b, labels_b = b
+    return fingerprint_a != fingerprint_b or (labels_a or []) != (labels_b or [])
 
 
 def compute_change_counts(db: Session, version: DatasetVersion) -> Dict[str, int]:
@@ -99,10 +95,3 @@ def change_counts_for(db: Session, versions: Iterable[DatasetVersion]) -> Dict[s
             result[version.id] = compute_change_counts(db, version)
     return result
 
-
-def invalidate_child_counts(db: Session, version: DatasetVersion) -> None:
-    """A draft's items changed: counts of versions forked from it are stale."""
-    db.query(DatasetVersion).filter(
-        DatasetVersion.parent_version_id == version.id,
-        DatasetVersion.change_counts.isnot(None),
-    ).update({DatasetVersion.change_counts: None}, synchronize_session=False)

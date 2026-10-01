@@ -195,9 +195,11 @@ def test_dataset_search_migration_adds_nullable_columns_and_queues_the_backfill(
         assert {c["name"]: c["nullable"] for c in inspector.get_columns("dataset_items")}["search_text"] is True
         assert {c["name"]: c["nullable"] for c in inspector.get_columns("dataset_versions")}["change_counts"] is True
         assert {c["name"]: c["nullable"] for c in inspector.get_columns("datasets")}["deleted_by_user_id"] is True
-        # Nothing to backfill in an empty table.
-        assert connection.execute(sa.text(jobs)).all() == []
+        # Queued on an empty table too: the job is what builds the trigram
+        # index, so a fresh install must get it.
+        assert connection.execute(sa.text(jobs)).all() == [("backfill_dataset_search_text", "queued")]
         migration.downgrade()
+        connection.execute(sa.text("DELETE FROM maintenance_jobs"))
         connection.execute(items.insert(), [{"id": 1}])
         migration.upgrade()
         assert connection.execute(sa.text(jobs)).all() == [("backfill_dataset_search_text", "queued")]
