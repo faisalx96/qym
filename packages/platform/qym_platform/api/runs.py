@@ -1302,8 +1302,8 @@ def _project_not_found_page(request: Request, project_slug: str) -> HTMLResponse
   <title>قيِّم • Project Not Found</title>
   <link rel="icon" type="image/png" href="{static_root}/qym_icon.png">
   <link rel="stylesheet" href="{static_root}/dashboard.css?v=p1-20261001">
-  <link rel="stylesheet" href="{static_root}/shell.css?v=p1-20261001">
-  <script src="{static_root}/qym_safe.js?v=p0-20260930"></script>
+  <link rel="stylesheet" href="{static_root}/shell.css?v=p0-20260930-3">
+  <script src="{static_root}/qym_safe.js?v=p1-20261001"></script>
   <script src="{static_root}/auth.js?v=p0-20260930"></script>
   <script src="{static_root}/shell.js?v=p1-20261001"></script>
 </head>
@@ -3432,10 +3432,15 @@ def legacy_compare(
     run_ids = list(dict.fromkeys(_parse_requested_run_ids(files)))
 
     runs_data: list[dict[str, Any]] = []
+    # Requested runs the caller cannot get (deleted, never existed, or not
+    # visible): listed so the page can say so instead of "select 2 runs".
+    missing_runs: list[dict[str, str]] = []
     for run_id in run_ids:
         data = legacy_run_data(run_id=run_id, db=db, principal=principal, view=view)
         if not data.get("error"):
             runs_data.append(data)
+        else:
+            missing_runs.append({"run_id": str(run_id)})
 
     # Top-level Langfuse config from env vars
     lf_host = os.getenv("LANGFUSE_HOST") or os.getenv("LANGFUSE_BASE_URL", "")
@@ -3462,6 +3467,7 @@ def legacy_compare(
         "langfuse_project_id": lf_project_id,
         "compare_alignment_status": compare_alignment_status,
         "unalignable_runs": unalignable_runs,
+        "missing_runs": missing_runs,
     }
 
 

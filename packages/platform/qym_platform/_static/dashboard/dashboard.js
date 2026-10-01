@@ -528,7 +528,7 @@
   }
 
   function renderModelReasoningBadge() {
-    return `<span class="model-reasoning-badge" title="${escapeHtml(MODEL_REASONING_BADGE_TITLE)}" aria-label="${escapeHtml(MODEL_REASONING_BADGE_TITLE)}">${MODEL_REASONING_BADGE_ICON}</span>`;
+    return `<span class="model-reasoning-badge" role="img" title="${escapeHtml(MODEL_REASONING_BADGE_TITLE)}" aria-label="${escapeHtml(MODEL_REASONING_BADGE_TITLE)}">${MODEL_REASONING_BADGE_ICON}</span>`;
   }
 
   function renderModelLabel(displayLabel, hasReasoning) {
@@ -6230,7 +6230,7 @@
     oldConfirm.parentNode.replaceChild(confirm, oldConfirm);
     el('run-selection-model-name').innerHTML = renderModelLabelForModelName(modelName);
     el('run-selection-model-name').title = getModelFilterOptionLabel(modelName);
-    modal.style.display = 'flex';
+    showLegacyModal(modal);
 
     const updateCounter = () => {
       const counter = listEl.querySelector('#selection-count');
@@ -6312,7 +6312,7 @@
     confirm.addEventListener('click', () => {
       if (selected.size) mvs.modelRunSelections[modelName] = [...selected];
       else delete mvs.modelRunSelections[modelName];
-      modal.style.display = 'none';
+      hideLegacyModal(modal);
       modelRunSelectionToken++;
       renderModelsView();
     });
@@ -6422,7 +6422,7 @@
       });
     });
 
-    modal.style.display = 'flex';
+    showLegacyModal(modal);
 
     // Wire confirm button
     const newConfirmBtn = confirmBtn.cloneNode(true);
@@ -6440,7 +6440,7 @@
         delete mvs.modelRunSelections[modelName];
       }
 
-      modal.style.display = 'none';
+      hideLegacyModal(modal);
       renderModelsView();
     });
   }
@@ -6747,6 +6747,28 @@
       : `An admin can restore it for ${graceDays} day${graceDays === 1 ? '' : 's'}; then it is permanently removed.`;
   }
 
+  // Legacy page modals (#delete-modal, #workflow-modal, #help-modal,
+  // #run-selection-modal) use the shared modal focus contract
+  // (QymUIComponents.openDialog): focus moves in, Tab stays inside, Escape
+  // closes, and focus returns to the control that opened the modal.
+  function showLegacyModal(modal, options = {}) {
+    if (!modal) return;
+    modal.style.display = 'flex';
+    const panel = modal.querySelector('.modal-content') || modal;
+    window.QymUIComponents?.openDialog?.(panel, { onEscape: () => hideLegacyModal(modal), ...options });
+  }
+
+  function hideLegacyModal(modal) {
+    if (!modal) return;
+    const panel = modal.querySelector('.modal-content') || modal;
+    window.QymUIComponents?.releaseDialog?.(panel);
+    modal.style.display = 'none';
+  }
+
+  document.querySelectorAll('[data-modal-dismiss]').forEach(button => {
+    button.addEventListener('click', () => hideLegacyModal(el(button.getAttribute('data-modal-dismiss'))));
+  });
+
   function confirmDeleteRun(filePath, runId) {
     const modal = el('delete-modal');
     const titleEl = el('delete-modal-title');
@@ -6759,7 +6781,7 @@
     // A deleted run can be restored, so no "cannot be undone" warning.
     setDeleteWarning('');
     runNameEl.textContent = runId;
-    modal.style.display = 'flex';
+    showLegacyModal(modal, { initialFocus: '[data-modal-dismiss]:not(.modal-close)' });
 
     // Remove old listener and add new one
     const newConfirmBtn = confirmBtn.cloneNode(true);
@@ -6779,7 +6801,7 @@
         if (response.ok) {
           const result = await response.json().catch(() => ({}));
           const graceDays = Number(result.purge_after_days) || 0;
-          modal.style.display = 'none';
+          hideLegacyModal(modal);
           // Remove from selection if selected
           state.selectedRuns.delete(filePath);
           showToast('success', 'Run deleted', graceDays > 0
@@ -6841,7 +6863,7 @@
       ? `Deleted passes cannot be restored.${runRefs.length ? ' Deleted runs can.' : ''}`
       : '');
     runNameEl.textContent = `${selectionParts.join(' and ')} selected`;
-    modal.style.display = 'flex';
+    showLegacyModal(modal, { initialFocus: '[data-modal-dismiss]:not(.modal-close)' });
 
     // Remove old listener and add new one
     const newConfirmBtn = confirmBtn.cloneNode(true);
@@ -6902,7 +6924,7 @@
         }
       }
 
-      modal.style.display = 'none';
+      hideLegacyModal(modal);
       newConfirmBtn.disabled = false;
       newConfirmBtn.textContent = 'Delete';
 
@@ -6988,7 +7010,7 @@
     // The same name the runs table and the delete dialog use.
     runNameEl.textContent = runName || runId;
     commentEl.value = '';
-    modal.style.display = 'flex';
+    showLegacyModal(modal, { initialFocus: commentEl });
 
     // Update button style
     confirmBtn.className = isApprove ? 'btn btn-primary' : 'btn btn-danger';
@@ -7013,7 +7035,7 @@
         if (response.ok) {
           const result = await response.json().catch(() => ({}));
           const restored = String(result.status || 'completed').toLowerCase();
-          modal.style.display = 'none';
+          hideLegacyModal(modal);
           // Show the new status (and the actions it allows) at once.
           if (result.status) applyRunWorkflowResult(filePath, result.status);
           await fetchRuns({ refreshAllPages: true });
@@ -7037,8 +7059,6 @@
       }
     });
 
-    // Focus the comment field
-    setTimeout(() => commentEl.focus(), 100);
   }
 
   function showSubmitModal(runs, runName, modal, titleEl, descEl, runNameEl, commentEl, confirmBtn) {
@@ -7050,7 +7070,6 @@
       ? runs.slice(0, 5).map(getRunDisplayName).join(', ') + (runs.length > 5 ? `, and ${runs.length - 5} more` : '')
       : (runName || (runs[0] && getRunDisplayName(runs[0])) || '');
     commentEl.value = '';
-    modal.style.display = 'flex';
     confirmBtn.className = 'btn btn-primary';
     confirmBtn.textContent = label;
 
@@ -7062,7 +7081,7 @@
       try {
         const response = await postSubmit(runs.map(r => r.run_id || r.file_path), (commentEl.value || '').trim());
         if (response.ok) {
-          modal.style.display = 'none';
+          hideLegacyModal(modal);
           if (many) runs.forEach(r => state.selectedRuns.delete(r.file_path));
           // Show the new status (and the actions it allows) at once (C040).
           runs.forEach(r => { if (r.file_path) applyRunWorkflowResult(r.file_path, 'SUBMITTED'); });
@@ -7080,7 +7099,9 @@
         newConfirmBtn.textContent = label;
       }
     });
-    setTimeout(() => commentEl.focus(), 100);
+    // The shared dialog contract (C049): focus on the comment, Tab inside,
+    // Escape closes, focus returns to the Submit control.
+    showLegacyModal(modal, { initialFocus: commentEl });
   }
 
   async function showTransferOwnershipModal(run) {
@@ -7102,7 +7123,7 @@
     el('transfer-current-owner').textContent = ownerName ? `Current owner: ${ownerName}` : '';
     select.innerHTML = '<option value="">Loading members...</option>';
     select.disabled = true;
-    modal.style.display = 'flex';
+    showLegacyModal(modal, { initialFocus: '[data-modal-dismiss]:not(.modal-close)' });
     try {
       const res = await fetch(apiUrl(`v1/projects/${encodeURIComponent(projectId)}/members`));
       const data = await res.json();
@@ -7127,7 +7148,7 @@
         });
         const data = await response.json().catch(() => ({}));
         if (response.ok) {
-          modal.style.display = 'none';
+          hideLegacyModal(modal);
           await fetchRuns({ refreshAllPages: true });
           const name = data.owner ? (data.owner.display_name || data.owner.email) : '';
           showToast('success', 'Ownership transferred', `${getRunDisplayName(run)} now belongs to ${name}`);
@@ -7355,8 +7376,70 @@
     // render() rebuilds the filter menus; doing it here as well doubled the work.
     populateMetricVisibility();
     el('last-updated').textContent = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    state.runsEverLoaded = true;
+    clearRunsStale();
     render();
     renderDashboardFreshness(state.dashboardOverview?.freshness);
+  }
+
+  // ── Failed loads and refreshes (C038) ──────────────────────────────
+  // The first failed load shows an error with Retry instead of the table.
+  // A failed refresh keeps the last rows, dimmed, under a banner that says
+  // how old they are and whether the latest filter change is applied; the
+  // busy state always ends.
+  function runsLoadFailed(err) {
+    el('table-view')?.setAttribute('aria-busy', 'false');
+    const ui = window.QymUIComponents;
+    const info = ui ? ui.classifyError(err) : { kind: 'unknown', message: 'Something went wrong while loading. Try again.' };
+    const retry = () => {
+      clearRunsStale();
+      const loading = el('loading');
+      if (loading && !state.runsEverLoaded) {
+        loading.innerHTML = '<div class="loading-spinner"></div><span>Loading runs...</span>';
+      }
+      fetchRuns({ refreshAllPages: true });
+    };
+    if (!state.runsEverLoaded) {
+      const loading = el('loading');
+      if (loading) {
+        loading.style.display = '';
+        if (ui) ui.renderErrorState(loading, { title: 'Couldn\u2019t load runs', error: err, onRetry: retry });
+        else loading.textContent = 'Couldn\u2019t load runs. ' + info.message;
+      }
+      if (el('status-filter')) el('status-filter').textContent = 'Runs not loaded';
+      return;
+    }
+    const tableView = el('table-view');
+    if (!tableView) {
+      if (!state.runsStale) showToast('error', 'Couldn’t refresh runs', info.message);
+      state.runsStale = true;
+      return;
+    }
+    let banner = el('runs-stale-banner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'runs-stale-banner';
+      banner.className = 'qym-stale-banner';
+      banner.setAttribute('role', 'alert');
+      tableView.parentNode.insertBefore(banner, tableView);
+    }
+    const shownAt = el('last-updated')?.textContent || '';
+    const notApplied = state.dashboardRequestKey && state.dashboardRequestKey !== dashboardPageRequestKey();
+    banner.innerHTML = '<span class="qym-stale-banner__text"></span>'
+      + '<button type="button" class="qym-inline-action qym-inline-action--neutral" data-runs-retry>Retry</button>';
+    banner.querySelector('.qym-stale-banner__text').textContent = 'Couldn\u2019t refresh runs. ' + info.message
+      + (shownAt && shownAt !== '\u2014' ? ' Showing runs from ' + shownAt + '.' : '')
+      + (notApplied ? ' Your latest filter, sort or page change is not applied.' : '');
+    banner.querySelector('[data-runs-retry]').addEventListener('click', retry);
+    tableView.classList.add('qym-is-stale');
+    if (!state.runsStale) showToast('error', 'Couldn\u2019t refresh runs', info.message);
+    state.runsStale = true;
+  }
+
+  function clearRunsStale() {
+    state.runsStale = false;
+    el('runs-stale-banner')?.remove();
+    el('table-view')?.classList.remove('qym-is-stale');
   }
 
   async function _fetchRemainingPages(data, totalCount) {
@@ -7763,7 +7846,11 @@
         throw error;
       }
       if (response.status === 404) throw new Error('Project not found');
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        const error = new Error(`HTTP ${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
       return await response.json();
     } finally {
       if (controller) dashboardRequests.delete(controller);
@@ -7984,7 +8071,9 @@
       }
 
       if (!runsResponse.ok) {
-        throw new Error(`HTTP ${runsResponse.status}`);
+        const error = new Error(`HTTP ${runsResponse.status}`);
+        error.status = runsResponse.status;
+        throw error;
       }
 
       const data = await runsResponse.json();
@@ -8027,10 +8116,7 @@
         showProjectNotFound();
         return;
       }
-      el('loading').innerHTML = `
-        <span style="color:var(--error);">Failed to load runs</span>
-        <span>Is the server running?</span>
-      `;
+      runsLoadFailed(err);
     } finally {
       state.runsFetchMeta.inFlight = false;
       if (dashboardActive && state.runsFetchMeta.pendingOptions) {
@@ -8497,7 +8583,7 @@
   // Close run selection modal when clicking outside
   el('run-selection-modal')?.addEventListener('click', (e) => {
     if (e.target.id === 'run-selection-modal') {
-      el('run-selection-modal').style.display = 'none';
+      hideLegacyModal(el('run-selection-modal'));
     }
   });
 
@@ -8579,6 +8665,8 @@
     // the link's own activation and Escape leaves it.
     const runLink = e.target.closest?.('#runs-tbody a.run-id');
     if (runLink && e.key === 'Enter') return;
+    // An open dialog owns the keyboard: no table shortcut acts behind it.
+    if (e.target.closest('[role="dialog"], [role="alertdialog"], .modal')) return;
     // Keyboard shortcuts must not take over native interactive controls.
     if ((!runLink || e.key === 'Escape') && e.target.closest('input, select, textarea, button, a, [contenteditable="true"]')) {
       if (e.key === 'Escape') {
@@ -8653,7 +8741,7 @@
         // Charts and Models have no shortcut list.
         if (!el('help-modal')) break;
         e.preventDefault();
-        el('help-modal').style.display = 'flex';
+        showLegacyModal(el('help-modal'));
         break;
       case '1':
       case '2':
@@ -8670,13 +8758,13 @@
   // Close modal on click outside
   el('help-modal')?.addEventListener('click', (e) => {
     if (e.target === el('help-modal')) {
-      el('help-modal').style.display = 'none';
+      hideLegacyModal(el('help-modal'));
     }
   });
 
   // Header help shortcut
   $('.help-trigger')?.addEventListener('click', () => {
-    el('help-modal').style.display = 'flex';
+    showLegacyModal(el('help-modal'));
   });
 
   // ═══════════════════════════════════════════════════

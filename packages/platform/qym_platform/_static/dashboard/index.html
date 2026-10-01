@@ -6,12 +6,12 @@
   <title>قيِّم • Runs</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001">
-  <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
-  <script src="/static/qym_safe.js?v=p0-20260930"></script>
+  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
+  <script src="/static/qym_safe.js?v=p1-20261001"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
   <script src="/static/shell.js?v=p1-20261001"></script>
   <script src="/static/kpis.js?v=p0-20260930"></script>
-  <link rel="stylesheet" href="/static/ui_components.css?v=p0-20260930">
+  <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261001">
   <script defer src="/static/ui_components.js?v=p1-20261001"></script>
 </head>
 <body>
@@ -143,7 +143,7 @@
   <!-- Status Bar -->
   <footer class="status-bar">
     <div class="status-left">
-      <span id="status-filter">0 runs</span>
+      <span id="status-filter">Loading runs…</span>
       <span class="sep" id="selection-status-separator" style="display:none;">·</span>
       <div class="selection-actions" id="compare-panel" style="display:none;" role="group" aria-label="Selected run actions" aria-describedby="selection-guidance">
         <span class="selection-count" id="compare-count">0 selected</span>
@@ -167,10 +167,10 @@
 
   <!-- Delete Confirmation Modal -->
   <div class="modal" id="delete-modal" style="display:none;">
-    <div class="modal-content modal-small">
+    <div class="modal-content modal-small" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
       <div class="modal-header">
         <h2 id="delete-modal-title">Delete run</h2>
-        <button class="modal-close qym-icon-action" aria-label="Close" onclick="document.getElementById('delete-modal').style.display='none'">×</button>
+        <button class="modal-close qym-icon-action" type="button" aria-label="Close" data-modal-dismiss="delete-modal">×</button>
       </div>
       <div class="modal-body">
         <p id="delete-modal-description">Are you sure you want to delete this run?</p>
@@ -178,7 +178,7 @@
         <p class="warning-text" id="delete-modal-warning" style="display:none;"></p>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="document.getElementById('delete-modal').style.display='none'">Cancel</button>
+        <button class="btn btn-secondary" type="button" data-modal-dismiss="delete-modal">Cancel</button>
         <button class="btn btn-danger" id="confirm-delete-btn">Delete</button>
       </div>
     </div>
@@ -186,10 +186,10 @@
 
   <!-- Approval/Rejection Modal -->
   <div class="modal" id="workflow-modal" style="display:none;">
-    <div class="modal-content modal-small">
+    <div class="modal-content modal-small" role="dialog" aria-modal="true" aria-labelledby="workflow-modal-title">
       <div class="modal-header">
         <h2 id="workflow-modal-title">Approve Run</h2>
-        <button class="modal-close qym-icon-action" aria-label="Close" onclick="document.getElementById('workflow-modal').style.display='none'">×</button>
+        <button class="modal-close qym-icon-action" type="button" aria-label="Close" data-modal-dismiss="workflow-modal">×</button>
       </div>
       <div class="modal-body">
         <p id="workflow-modal-description">Add an optional comment for this action.</p>
@@ -200,7 +200,7 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="document.getElementById('workflow-modal').style.display='none'">Cancel</button>
+        <button class="btn btn-secondary" type="button" data-modal-dismiss="workflow-modal">Cancel</button>
         <button class="btn btn-primary" id="confirm-workflow-btn">Confirm</button>
       </div>
     </div>
@@ -208,10 +208,10 @@
 
   <!-- Transfer ownership (project managers and admins) -->
   <div class="modal" id="transfer-modal" style="display:none;">
-    <div class="modal-content modal-small">
+    <div class="modal-content modal-small" role="dialog" aria-modal="true" aria-labelledby="transfer-modal-title">
       <div class="modal-header">
-        <h2>Transfer ownership</h2>
-        <button class="modal-close qym-icon-action" aria-label="Close" onclick="document.getElementById('transfer-modal').style.display='none'">×</button>
+        <h2 id="transfer-modal-title">Transfer ownership</h2>
+        <button class="modal-close qym-icon-action" type="button" aria-label="Close" data-modal-dismiss="transfer-modal">×</button>
       </div>
       <div class="modal-body">
         <p>The new owner can submit and delete this run. Its results and review history stay as they are.</p>
@@ -223,7 +223,7 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="document.getElementById('transfer-modal').style.display='none'">Cancel</button>
+        <button class="btn btn-secondary" type="button" data-modal-dismiss="transfer-modal">Cancel</button>
         <button class="btn btn-primary" id="confirm-transfer-btn">Transfer</button>
       </div>
     </div>
@@ -233,10 +233,10 @@
 
   <!-- Help Modal -->
   <div class="modal" id="help-modal" style="display:none;">
-    <div class="modal-content">
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="help-modal-title">
       <div class="modal-header">
-        <h2>Keyboard Shortcuts</h2>
-        <button class="modal-close qym-icon-action" aria-label="Close" onclick="document.getElementById('help-modal').style.display='none'">×</button>
+        <h2 id="help-modal-title">Keyboard Shortcuts</h2>
+        <button class="modal-close qym-icon-action" type="button" aria-label="Close" data-modal-dismiss="help-modal">×</button>
       </div>
       <div class="modal-body">
         <div class="shortcut-group">

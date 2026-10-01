@@ -495,7 +495,7 @@ def test_a_failed_load_says_so_and_retries(app):
     page.locator("#list-error").wait_for()
     assert page.locator("#correction-list").is_hidden()
     assert page.locator("#empty-state").is_hidden()
-    page.click("#list-retry")
+    page.click("#list-error [data-qym-retry]")
     page.locator("#empty-state").wait_for()
     assert page.locator("#list-error").is_hidden()
     assert (

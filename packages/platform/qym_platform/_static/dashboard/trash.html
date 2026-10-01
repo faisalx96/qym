@@ -6,8 +6,8 @@
   <title>قيِّم • Deleted Runs</title>
   <link rel="icon" type="image/png" href="./static/qym_icon.png">
   <link rel="stylesheet" href="./static/dashboard.css?v=p1-20261001">
-  <link rel="stylesheet" href="./static/shell.css?v=p1-20261001">
-  <script src="./static/qym_safe.js?v=p0-20260930"></script>
+  <link rel="stylesheet" href="./static/shell.css?v=p0-20260930-3">
+  <script src="./static/qym_safe.js?v=p1-20261001"></script>
   <script src="./static/auth.js?v=p0-20260930"></script>
   <script src="./static/shell.js?v=p1-20261001"></script>
   <script src="./static/qym_table.js"></script>
@@ -109,7 +109,7 @@
       .trash-toolbar .qym-select { width: 100%; }
     }
   </style>
-  <link rel="stylesheet" href="./static/ui_components.css?v=p0-20260930">
+  <link rel="stylesheet" href="./static/ui_components.css?v=p1-20261001">
   <script defer src="./static/ui_components.js?v=p1-20261001"></script>
 </head>
 <body>
@@ -197,7 +197,7 @@
       }
 
       function renderModelLabel(modelName, hasReasoning) {
-        return '<span class="model-label" title="' + escapeHtml(modelName || '') + '"><span class="model-label-text">' + escapeHtml(modelName || '—') + '</span>' + (hasReasoning ? '<span class="model-reasoning-badge" title="' + escapeHtml(MODEL_REASONING_BADGE_TITLE) + '" aria-label="' + escapeHtml(MODEL_REASONING_BADGE_TITLE) + '">' + MODEL_REASONING_BADGE_ICON + '</span>' : '') + '</span>';
+        return '<span class="model-label" title="' + escapeHtml(modelName || '') + '"><span class="model-label-text">' + escapeHtml(modelName || '—') + '</span>' + (hasReasoning ? '<span class="model-reasoning-badge" role="img" title="' + escapeHtml(MODEL_REASONING_BADGE_TITLE) + '" aria-label="' + escapeHtml(MODEL_REASONING_BADGE_TITLE) + '">' + MODEL_REASONING_BADGE_ICON + '</span>' : '') + '</span>';
       }
 
       function formatDateTime(isoStr) {
@@ -473,6 +473,11 @@
           : view.total.toLocaleString();
       }
 
+      function setTotalUnknown() {
+        const total = el('trash-stat-total');
+        if (total) total.textContent = '\u2014';
+      }
+
       async function loadMe() {
         const res = await fetch(apiUrl('v1/me'));
         if (window.QymAuth && window.QymAuth.handle401(res)) return;
@@ -515,6 +520,8 @@
           if (res.status === 403) {
             view.total = 0;
             updateTotal();
+            // Unknown, not zero: the list was not loaded (C038).
+            setTotalUnknown();
             renderEmptyState('Admin access required', 'Only admins can view and restore deleted runs.');
             return;
           }
@@ -539,6 +546,8 @@
           renderPager();
         } catch (err) {
           if (seq !== view.loadSeq) return;
+          // Unknown, not zero: the list was not loaded (C038).
+          setTotalUnknown();
           renderEmptyState('Could not load deleted runs', err.message || 'Could not load deleted runs.');
         }
       }

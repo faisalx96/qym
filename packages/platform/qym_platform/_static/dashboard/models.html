@@ -6,12 +6,12 @@
   <title>قيِّم • Models</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001">
-  <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
-  <script src="/static/qym_safe.js?v=p0-20260930"></script>
+  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
+  <script src="/static/qym_safe.js?v=p1-20261001"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
   <script src="/static/shell.js?v=p1-20261001"></script>
   <script src="/static/kpis.js?v=p0-20260930"></script>
-  <link rel="stylesheet" href="/static/ui_components.css?v=p0-20260930">
+  <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261001">
   <script defer src="/static/ui_components.js?v=p1-20261001"></script>
 </head>
 <body>
@@ -119,7 +119,7 @@
 
   <footer class="status-bar">
     <div class="status-left">
-      <span id="status-filter">0 runs</span>
+      <span id="status-filter">Loading runs…</span>
     </div>
     <div class="status-right">
       <span>Last Updated: <span id="last-updated" style="font-family:var(--font-mono)">—</span></span>
@@ -128,17 +128,17 @@
 
   <!-- Run Selection Modal (Models view) -->
   <div class="modal" id="run-selection-modal" style="display:none;">
-    <div class="modal-content modal-medium">
+    <div class="modal-content modal-medium" role="dialog" aria-modal="true" aria-labelledby="run-selection-modal-title">
       <div class="modal-header">
-        <h2>Select Runs for <span id="run-selection-model-name"></span></h2>
-        <button class="modal-close qym-icon-action" aria-label="Close" onclick="document.getElementById('run-selection-modal').style.display='none'">×</button>
+        <h2 id="run-selection-modal-title">Select Runs for <span id="run-selection-model-name"></span></h2>
+        <button class="modal-close qym-icon-action" type="button" aria-label="Close" data-modal-dismiss="run-selection-modal">×</button>
       </div>
       <div class="modal-body">
         <p class="modal-description">Choose which runs to include in the comparison. Runs are ordered by most recent first.</p>
         <div class="run-selection-list" id="run-selection-list"></div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="document.getElementById('run-selection-modal').style.display='none'">Cancel</button>
+        <button class="btn btn-secondary" type="button" data-modal-dismiss="run-selection-modal">Cancel</button>
         <button class="btn btn-primary" id="confirm-run-selection-btn">Apply Selection</button>
       </div>
     </div>

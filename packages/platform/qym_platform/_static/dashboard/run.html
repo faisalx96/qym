@@ -6,8 +6,8 @@
   <title>قيِّم • Run Detail</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001">
-  <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
-  <script src="/static/qym_safe.js?v=p0-20260930"></script>
+  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
+  <script src="/static/qym_safe.js?v=p1-20261001"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
   <script src="/static/shell.js?v=p1-20261001"></script>
   <script src="/static/metrics.js?v=p0-20260930-3"></script>
@@ -4350,9 +4350,17 @@
       border-collapse: separate;
       border-spacing: 0;
       margin: 0;
-      font-size: var(--font-xs);
+      font-size: var(--font-sm);
       white-space: nowrap;
       background: var(--bg-surface);
+    }
+    /* Text values wrap (and keep their own direction) instead of running off
+       in one 10px line. */
+    .metric-detail-value .meta-table td,
+    .formatted-table-cell .meta-table td {
+      max-width: 420px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
     }
     .metric-detail-value .meta-table th,
     .metric-detail-value .meta-table td,
@@ -6235,7 +6243,7 @@
     .rdi-reason-help__pop li + li { margin-top: 2px; }
     .rdi-reason-help__pop strong { color: var(--text-primary); font-weight: 600; }
   </style>
-  <link rel="stylesheet" href="/static/ui_components.css?v=p0-20260930">
+  <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261001">
   <script defer src="/static/ui_components.js?v=p1-20261001"></script>
 </head>
 <body>
@@ -6249,6 +6257,7 @@
       <div style="font-size:48px;margin-bottom:var(--space-md);">!</div>
       <h2 id="error-title">Error</h2>
       <p id="error-message">Could not load run data.</p>
+      <button type="button" class="qym-inline-action qym-inline-action--neutral" id="error-retry" hidden style="margin-top:var(--space-md);">Retry</button>
       <a href="" class="back-link" id="back-link-error" style="margin-top:var(--space-md);">&larr; Back to Dashboard</a>
     </div>
 
@@ -7057,7 +7066,7 @@
       }
 
       function renderModelReasoningBadge() {
-        return '<span class="model-reasoning-badge" title="' + escapeAttr(MODEL_REASONING_BADGE_TITLE) + '" aria-label="' + escapeAttr(MODEL_REASONING_BADGE_TITLE) + '">' + MODEL_REASONING_BADGE_ICON + '</span>';
+        return '<span class="model-reasoning-badge" role="img" title="' + escapeAttr(MODEL_REASONING_BADGE_TITLE) + '" aria-label="' + escapeAttr(MODEL_REASONING_BADGE_TITLE) + '">' + MODEL_REASONING_BADGE_ICON + '</span>';
       }
 
       function renderModelLabel(modelName, hasReasoning) {
@@ -7248,10 +7257,9 @@
         });
       }
 
+      // One direction policy for every page (qym_safe.js).
       function isRTL(text) {
-        var rtlChars = (text.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/g) || []).length;
-        var latinChars = (text.match(/[A-Za-z]/g) || []).length;
-        return rtlChars > latinChars;
+        return QymSafe.isRTL(text);
       }
 
       function _fmtTraceNum(v) {
@@ -7341,7 +7349,7 @@
 
       function fmtStr(s) {
         var escaped = escapeHtml(s);
-        return isRTL(s) ? '<span class="formatted-string" dir="rtl" style="text-align:right;display:block;">' + escaped + '</span>' : '<span class="formatted-string">' + escaped + '</span>';
+        return isRTL(s) ? '<span class="formatted-string" dir="rtl" lang="ar" style="text-align:right;display:block;">' + escaped + '</span>' : '<span class="formatted-string" dir="auto">' + escaped + '</span>';
       }
 
       function isPrimitiveArrayValue(value) {
@@ -7470,7 +7478,7 @@
         var bodyRows = visibleRows.map(function(r) {
           var cells = table.columns.map(function(_, i) {
             var text = metaCellText(i < r.length ? r[i] : '');
-            return '<td data-sort-value="' + escapeAttr(text) + '">' + escapeHtml(text) + '</td>';
+            return '<td data-sort-value="' + escapeAttr(text) + '"' + QymSafe.textDirAttrs(text) + '>' + escapeHtml(text) + '</td>';
           }).join('');
           return '<tr>' + cells + '</tr>';
         }).join('');
@@ -7556,10 +7564,15 @@
               : Promise.resolve(null),
           ]);
           if (pageGone()) return;
-          if (!res.ok) { showError('HTTP ' + res.status, 'Could not load run data.'); return; }
+          if (!res.ok) { showLoadError({ status: res.status, message: 'HTTP ' + res.status }); return; }
           const data = await res.json();
           if (pageGone()) return;
-          if (data.error) { showError('Error', data.error); return; }
+          if (data.error) {
+            // The run API answers a missing or hidden run with 200 + {error}.
+            const kind = /not found/i.test(data.error) ? 'not_found' : (/denied/i.test(data.error) ? 'forbidden' : '');
+            showLoadError({ kind, message: data.error });
+            return;
+          }
           if (!data.run || !data.snapshot) { showEmpty(); return; }
           // A live run is followed (C039): remember each row as served, so a
           // refresh keeps the rows that did not change (and their loaded
@@ -7591,7 +7604,43 @@
           if (pageGone() || (err && err.name === 'AbortError')) return;
           console.error('Failed to load run:', err);
           if (loaded) showError('Could not show this run', 'The run loaded but the page failed to display it. Reload the page; if it keeps failing, report it with the browser console output.');
-          else showError('Network Error', 'Could not connect to the server.');
+          else showLoadError(err);
+        }
+      }
+
+      // Name the failure (C038): a 404 is "not found", a 401 an ended
+      // session, a dropped connection a network error, and anything else
+      // says what went wrong instead of blaming the network.
+      function showLoadError(error) {
+        const titles = {
+          not_found: 'Run not found',
+          forbidden: 'No access to this run',
+          auth: 'Signed out',
+          server: 'Server error',
+          network: 'Network error',
+        };
+        const ui = window.QymUIComponents;
+        if (!ui && document.readyState === 'loading') {
+          // ui_components.js is deferred; a fast failure waits for it.
+          window.addEventListener('DOMContentLoaded', () => showLoadError(error), pageListen({ once: true }));
+          return;
+        }
+        const info = ui ? ui.classifyError(error) : { kind: 'unknown', status: error && error.status, message: '' };
+        const title = titles[info.kind] || 'Couldn\u2019t show this run';
+        const message = (error && error.message) || '';
+        const detail = info.status ? 'HTTP ' + info.status : (message.toLowerCase() !== title.toLowerCase() ? message : '');
+        showError(title, [info.message, detail].filter(Boolean).join(' '));
+        // A server or network failure can pass; offer Retry. A missing run,
+        // no access or an ended session cannot be retried away.
+        const retry = el('error-retry');
+        if (retry) {
+          retry.hidden = ['not_found', 'forbidden', 'auth'].includes(info.kind);
+          retry.onclick = () => {
+            retry.hidden = true;
+            el('error-state').style.display = 'none';
+            el('loading').style.display = '';
+            loadRunData();
+          };
         }
       }
 
@@ -13828,7 +13877,7 @@
             : '<div class="item-header item-header-expand">' +
                 chevronHtml +
                 '<span class="rdi-status">' + (!isRepeatItem || hasAnyTaskError ? statusIndicator : '') + '</span>' +
-                '<span class="item-title" title="' + escapeAttr(displayItemId) + '">' + escapeHtml(titleText) + '</span>' +
+                '<span class="item-title" title="' + escapeAttr(displayItemId) + '"' + QymSafe.textDirAttrs(titleText) + '>' + escapeHtml(titleText) + '</span>' +
                 (showReasons ? itemReasonCellHtml(itemId, itemFailureReason(row, metric, mIdx)) : '') +
                 '<span class="rdi-metrics">' +
                   '<span class="item-agg-pills qym-item-metric-grid" data-qym-metric-grid>' + aggPills + '</span>' +
@@ -15196,6 +15245,7 @@
         const cleanup = () => {
           if (closed) return;
           closed = true;
+          window.QymUIComponents?.releaseDialog(panel);
           picker.remove();
           document.removeEventListener('keydown', keyHandler);
           saveChain.finally(() => {
@@ -15205,7 +15255,10 @@
         renderOptions();
         document.body.appendChild(picker);
         document.addEventListener('keydown', keyHandler, pageListen());
-        setTimeout(() => searchInput.focus(), 0);
+        // Shared modal focus contract: focus moves in, Tab stays inside, and
+        // focus returns to the control that opened the picker.
+        if (window.QymUIComponents) window.QymUIComponents.openDialog(panel, { initialFocus: searchInput });
+        else setTimeout(() => searchInput.focus(), 0);
       }
 
       function positionRootCauseDropdown(dropdown, anchorEl) {
@@ -16308,7 +16361,7 @@
           overlay.className = 'export-modal-overlay';
           document.body.appendChild(overlay);
         }
-        var html = '<div class="export-modal"><div class="export-modal-header"><h3>Select Export Columns</h3><div class="export-modal-actions-top"><button id="export-select-all">Select All</button><button id="export-deselect-all">Deselect All</button></div></div><div class="export-modal-body">';
+        var html = '<div class="export-modal" role="dialog" aria-modal="true" aria-labelledby="export-modal-title"><div class="export-modal-header"><h3 id="export-modal-title">Select Export Columns</h3><div class="export-modal-actions-top"><button id="export-select-all">Select All</button><button id="export-deselect-all">Deselect All</button></div></div><div class="export-modal-body">';
         for (var gi = 0; gi < groups.length; gi++) {
           var g = groups[gi];
           html += '<div class="export-group"><div class="export-group-header" data-group="' + gi + '"><span class="group-toggle">\u25BC</span><span class="group-name">' + escapeHtml(g.group) + '</span><input type="checkbox" class="group-check" data-group="' + gi + '" checked /></div><div class="export-group-items" data-group="' + gi + '">';
@@ -16352,6 +16405,7 @@
         });
 
         function closeExportModal() {
+          window.QymUIComponents?.releaseDialog(overlay.querySelector('.export-modal'));
           overlay.classList.remove('open');
           if (runDetails && !runNeedsFullText()) runDetails.releaseExcept(visibleDetailRows);
           _exportItems = null;
@@ -16374,6 +16428,8 @@
         });
 
         overlay.classList.add('open');
+        // Shared modal focus contract (ui_components.js).
+        if (window.QymUIComponents) window.QymUIComponents.openDialog(overlay.querySelector('.export-modal'), { onEscape: closeExportModal });
       }
 
       function getExportCellValue(row, colKey) {

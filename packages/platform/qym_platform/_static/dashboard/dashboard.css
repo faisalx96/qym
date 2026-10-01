@@ -121,8 +121,12 @@
   /* Mono font for data. 'Qym Arabic' leads both stacks: its unicode-range
      limits it to Arabic glyphs, so Latin falls through untouched while any
      Arabic — prose, code blocks, metric details, table cells — renders in a
-     real Arabic face at a corrected optical size (see @font-face below). */
-  --font-mono: 'Qym Arabic', 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace;
+     real Arabic face at a corrected optical size (see @font-face below).
+     Latin resolves to a real system mono on every OS: ui-monospace and
+     SFMono-Regular reach SF Mono in Safari, Menlo is the face Chrome on
+     macOS can actually see (without it the generic 'monospace' falls back to
+     Courier), Consolas covers Windows and Liberation Mono covers Linux. */
+  --font-mono: 'Qym Arabic', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, 'JetBrains Mono', 'Fira Code', Consolas, 'Liberation Mono', monospace;
   --font-sans: 'Qym Arabic', -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
 }
 
@@ -136,9 +140,13 @@
   unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
 }
 
-/* RTL blocks (the renderers stamp dir="rtl" on detected Arabic text) get
-   the taller leading the script needs. */
-[dir="rtl"] {
+/* RTL blocks (the renderers stamp dir="rtl" lang="ar" on detected Arabic
+   text, QymSafe.textDirAttrs) get the taller leading the script needs. The
+   :not(#…) adds ID weight so page rules such as `.formatted-string` or
+   `.item-title` (line-height 1.45–1.5) cannot win over it. Blocks that
+   start in Arabic under dir="auto" align to the right on their own. */
+[dir="rtl"],
+[dir="rtl"][lang="ar"]:not(#qym-rtl-leading) {
   line-height: 1.7;
 }
 

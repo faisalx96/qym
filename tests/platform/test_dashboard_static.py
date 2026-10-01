@@ -1041,7 +1041,7 @@ def test_compare_expanded_item_shell_matches_run_detail() -> None:
     # selected-metric pills that are visible directly below.
     assert "const compactItemLabel = Number.isFinite(sourceRowIndex)" in compare
     assert '${isExpanded\n                  ? `<span class="item-header-spacer"></span><span class="item-pass-note">${visibleRunCount} run' in compare
-    assert ': `<span class="item-title">${escapeHtml(titleText)}</span><span class="item-agg-pills qym-item-metric-grid" data-qym-metric-grid>${headerPills}</span>`}' in compare
+    assert ': `<span class="item-title"${QymSafe.textDirAttrs(titleText)}>${escapeHtml(titleText)}</span><span class="item-agg-pills qym-item-metric-grid" data-qym-metric-grid>${headerPills}</span>`}' in compare
     assert '<div class="input-label">INPUT ' in compare
     assert '<div class="expected-label">EXPECTED OUTPUT ' in compare
 
@@ -1767,7 +1767,7 @@ def test_changed_route_assets_are_cache_versioned() -> None:
     # The project-not-found page loads the same shared shell assets as the
     # dashboard pages, every one of them versioned.
     assert '{static_root}/auth.js?v=p0-20260930"' in runs_api
-    assert '{static_root}/shell.css?v=p1-20261001"' in runs_api
+    assert '{static_root}/shell.css?v=p0-20260930-3"' in runs_api
     assert '{static_root}/dashboard.css?v=p1-20261001"' in runs_api
     assert '{static_root}/shell.js?v=p1-20261001"' in runs_api
 
@@ -2248,11 +2248,11 @@ def test_clear_filter_control_has_aligned_label_and_soft_count_pill() -> None:
         if page.name == "analyzer.html":
             assert "dashboard.css?v=p1-20261001" in source
             assert "playground.js?v=p1-20261001" in source
-            assert "ui_components.css?v=p0-20260930" in source
+            assert "ui_components.css?v=p1-20261001" in source
             assert "ui_components.js?v=p1-20261001" in source
             continue
         if "ui_components.css?v=" in source:
-            assert "ui_components.css?v=p0-20260930" in source
+            assert "ui_components.css?v=p1-20261001" in source
         if "ui_components.js?v=" in source:
             assert "ui_components.js?v=p1-20261001" in source
 

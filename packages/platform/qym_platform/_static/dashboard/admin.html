@@ -6,8 +6,8 @@
   <title>قيِّم • Admin</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001">
-  <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
-  <script src="/static/qym_safe.js?v=p0-20260930"></script>
+  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
+  <script src="/static/qym_safe.js?v=p1-20261001"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
   <script src="/static/shell.js?v=p1-20261001"></script>
   <style>
@@ -122,7 +122,7 @@
     .maint-status--succeeded { color: var(--success); }
     .self-warning { background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 6px; padding: var(--space-sm) var(--space-md); font-size: var(--font-sm); color: var(--text-muted); }
   </style>
-  <link rel="stylesheet" href="/static/ui_components.css?v=p0-20260930">
+  <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261001">
   <script defer src="/static/ui_components.js?v=p1-20261001"></script>
 </head>
 <body>
@@ -244,9 +244,9 @@
   </main>
 
   <div class="modal" id="edit-user-modal" style="display:none">
-    <div class="modal-content" style="max-width:440px">
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="edit-user-title" style="max-width:440px">
       <div class="modal-header">
-        <h2>Edit User</h2>
+        <h2 id="edit-user-title">Edit User</h2>
         <button class="modal-close qym-icon-action" type="button" id="edit-user-close" aria-label="Close">×</button>
       </div>
       <div class="modal-body edit-user-body">
@@ -763,10 +763,13 @@
         document.getElementById('edit-user-temp-value').value = '';
         document.getElementById('edit-user-error').textContent = '';
         document.getElementById('edit-user-modal').style.display = 'flex';
+        // Shared modal focus contract (focus in, Tab kept inside, focus back).
+        window.QymUIComponents?.openDialog(document.querySelector('#edit-user-modal .modal-content'), { initialFocus: '#edit-user-name' });
       }
 
       function closeEditUserModal() {
         if (state.editUserBusy) return;
+        window.QymUIComponents?.releaseDialog(document.querySelector('#edit-user-modal .modal-content'));
         document.getElementById('edit-user-modal').style.display = 'none';
         document.getElementById('edit-user-temp-value').value = '';
         state.editingUserId = null;

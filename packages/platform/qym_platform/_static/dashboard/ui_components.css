@@ -3846,3 +3846,85 @@ button:is(.qym-select, .multi-select-btn)[aria-expanded="true"] {
     overflow-x: auto;
   }
 }
+
+/* Request failure in place of the region that failed (C038). Same scale as
+   the empty state, but it never offers a create action: a failed load says
+   so, names the cause, and offers Retry (or Sign in). */
+.qym-error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  max-width: var(--empty-state-width, 460px);
+  margin: var(--space-xl) auto;
+  padding: var(--space-lg);
+  text-align: center;
+}
+
+.qym-error-state__title {
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-xl);
+  font-weight: 650;
+}
+
+.qym-error-state__body {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-md);
+  line-height: 1.5;
+}
+
+.qym-error-state__detail {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  overflow-wrap: anywhere;
+}
+
+.qym-error-state__actions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-xs);
+}
+
+.qym-error-state--compact {
+  margin: var(--space-md) auto;
+  padding: var(--space-md);
+}
+
+.qym-error-state--compact .qym-error-state__title {
+  font-size: var(--font-md);
+}
+
+/* A refresh that failed after data was shown keeps the last rows, dimmed,
+   under a banner that says how old they are. */
+.qym-stale-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-md);
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--control-radius);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.qym-stale-banner__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.qym-is-stale {
+  opacity: 0.55;
+  transition: opacity var(--motion-fast, 0.14s);
+}
+
+/* A dialog container takes focus only so the next Tab starts inside it; it is
+   not a control, so it draws no focus ring (its controls do). */
+[aria-modal="true"][tabindex="-1"]:focus {
+  outline: none;
+  box-shadow: none;
+}

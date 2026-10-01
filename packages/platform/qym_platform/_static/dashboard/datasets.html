@@ -6,8 +6,8 @@
   <title>قيِّم • Datasets</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001">
-  <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
-  <script src="/static/qym_safe.js?v=p0-20260930"></script>
+  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
+  <script src="/static/qym_safe.js?v=p1-20261001"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
   <script src="/static/shell.js?v=p1-20261001"></script>
   <script src="/static/qym_table.js"></script>
@@ -194,6 +194,7 @@
       font-size: var(--font-sm);
     }
     .dsx-grid { display: grid; gap: var(--space-md); grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); padding: var(--space-lg) var(--space-xl); }
+    .dsx-grid > .dsx-load-error { grid-column: 1 / -1; }
     .dsx-card {
       background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 10px;
       padding: 16px 16px 12px; display: flex; flex-direction: column; gap: 11px; cursor: pointer;
@@ -393,6 +394,14 @@
       min-height: 92px; max-height: 55vh;
     }
     .dsx-code.expanded .dsx-code-input { max-height: none; }
+    /* Arabic and mixed text (C053): every line takes its own direction and
+       aligns to its start. The editor's textarea and highlight layer share
+       the rule, so the caret stays over its glyph. */
+    .dsx-code-hl, .dsx-code-input, .dsx-json-view, .dsx-diff-pane, .dsx-hist-diff-pane,
+    .dsx-preview, .dsx-preview-popover, .dsx-item-run-output {
+      unicode-bidi: plaintext;
+      text-align: start;
+    }
     .dsx-code-input::selection { background: rgba(0,168,255,0.28); }
     .dsx-jtok-key { color: #00a8ff; }
     .dsx-jtok-str { color: #00d4aa; }
@@ -676,7 +685,7 @@
       .dsx-diff-field { grid-template-columns: 1fr; }
     }
   </style>
-  <link rel="stylesheet" href="/static/ui_components.css?v=p0-20260930">
+  <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261001">
   <script defer src="/static/ui_components.js?v=p1-20261001"></script>
 </head>
 <body>
@@ -779,6 +788,33 @@
       return e;
     }
     function escapeHtml(s){ return QymSafe.escapeHtml(s == null ? '' : String(s)); }
+    // A failed load: "not found" only for a real 404, otherwise the shared error
+    // state (what failed, why, Retry / Sign in) in place of the region (C038).
+    function renderDatasetLoadError(host, title, error, onRetry, opts){
+      opts = opts || {};
+      if (!window.QymUIComponents && document.readyState === 'loading') {
+        // ui_components.js is deferred; a fast failure waits for it.
+        window.addEventListener('DOMContentLoaded', () => renderDatasetLoadError(host, title, error, onRetry, opts), { once: true });
+        return;
+      }
+      const kind = window.QymUIComponents ? window.QymUIComponents.classifyError(error).kind : '';
+      if (kind === 'not_found') {
+        title = opts.notFoundTitle || 'Dataset not found';
+      }
+      host.replaceChildren();
+      const panel = el('div', { className: 'dsx-load-error' });
+      host.appendChild(panel);
+      if (window.QymUIComponents) {
+        window.QymUIComponents.renderErrorState(panel, {
+          title,
+          error,
+          onRetry,
+          notFoundMessage: opts.notFoundMessage || 'It may have been deleted, or the link is wrong.',
+        });
+      } else {
+        panel.appendChild(el('div', { className: 'dsx-empty' }, [el('h3', null, title), el('p', null, (error && error.message) || '')]));
+      }
+    }
     function dsxSearchControl(input){
       const wrap = el('div', { className: 'dsx-search-wrap qym-search-wrap' });
       wrap.appendChild(input);
@@ -1055,6 +1091,7 @@
       if (!text) return;
       const pop = el('div', { className: 'dsx-preview-popover' });
       pop.textContent = text;
+      QymSafe.applyTextDir(pop, text);
       document.body.appendChild(pop);
       const rect = anchor.getBoundingClientRect();
       const margin = 10;
@@ -1366,9 +1403,11 @@
       try {
         const r = await apiFetch('/v1/datasets/' + encodeURIComponent(state.datasetRef) + '?project_slug=' + encodeURIComponent(state.slug));
         state.dataset = r.dataset || r;
+        state.detailError = null;
       } catch(e){
         state.detailCacheKey = null;
-        Shell.toast(e.message || 'Failed to load dataset', 'error');
+        // Shown in place of the page (renderDatasetLoadError); a toast would repeat it.
+        state.detailError = e;
         return false;
       }
       try {
@@ -1395,7 +1434,7 @@
       applyRouteState(p);
       if (opts.forceReload) {
         const ok = await ensureDatasetDetailLoaded({ force: true });
-        if (!ok) return;
+        if (!ok) { Shell.toast((state.detailError && state.detailError.message) || 'Failed to load dataset', 'error'); return; }
       } else {
         state.activeVersion = resolveActiveVersion();
       }
@@ -1418,7 +1457,7 @@
     async function refreshDetailView(opts){
       opts = opts || {};
       const ok = await ensureDatasetDetailLoaded({ force: !!opts.force });
-      if (!ok) return;
+      if (!ok) { Shell.toast((state.detailError && state.detailError.message) || 'Failed to load dataset', 'error'); return; }
       normalizeActiveVersionUrl();
       refreshDetailChrome();
       const host = document.getElementById('dsx-tab-content');
@@ -1442,7 +1481,7 @@
       if (!root.children.length) root.innerHTML = '';
       const ok = await ensureDatasetDetailLoaded();
       if (!ok) {
-        root.innerHTML = '<div class="dsx-empty"><h3>Dataset not found</h3></div>';
+        renderDatasetLoadError(root, 'Couldn\u2019t load this dataset', state.detailError, () => renderDetail());
         return;
       }
       normalizeActiveVersionUrl();
@@ -1467,7 +1506,10 @@
         state.dataset = dr.dataset || dr;
         const vresp = await apiFetch('/v1/datasets/' + encodeURIComponent(state.datasetRef) + '/versions?project_slug=' + encodeURIComponent(state.slug));
         state.versions = vresp.versions || [];
-      } catch(e){ Shell.toast(e.message || 'Failed to load dataset', 'error'); return; }
+      } catch(e){
+        renderDatasetLoadError(root, 'Couldn\u2019t load this comparison', e, () => renderCompare());
+        return;
+      }
       setDatasetBreadcrumbs([
         { label: 'Datasets', href: appPath('/projects/' + state.slug + '/datasets') },
         { label: state.dataset.name, href: appPath('/projects/' + state.slug + '/datasets/' + encodeURIComponent(state.datasetRef)) },
@@ -1538,12 +1580,26 @@
       }
       container.appendChild(grid);
 
-      // Load + render
-      (async () => {
+      // Load + render. A failed load is an error with Retry, never "No datasets yet"
+      // (and never the create-your-first-dataset CTA).
+      const loadCatalog = async () => {
         try {
           const resp = await apiFetch('/v1/datasets?project_slug=' + encodeURIComponent(state.slug));
           state.datasets = resp.datasets || [];
-        } catch(e){ state.datasets = []; Shell.toast(e.message || 'Failed to load datasets', 'error'); }
+          state.datasetsError = null;
+        } catch(e){
+          state.datasets = [];
+          state.datasetsError = e;
+        }
+        if (state.datasetsError) {
+          controls.style.display = 'none';
+          sub.textContent = 'Curated examples you version, compare, and run against any model.';
+          renderDatasetLoadError(grid, 'Couldn\u2019t load datasets', state.datasetsError, () => {
+            grid.replaceChildren();
+            loadCatalog();
+          });
+          return;
+        }
         renderCatalogGrid();
         const totalCount = state.datasets.length;
         // First-run: let the empty-state CTA be the single focal point — the hero buttons
@@ -1553,7 +1609,8 @@
         sub.textContent = isEmpty
           ? 'Curated examples you version, compare, and run against any model.'
           : pluralize(totalCount, 'dataset') + ' · ' + pluralize(state.datasets.reduce((s, d) => s + (d.run_count || 0), 0), 'run');
-      })();
+      };
+      loadCatalog();
 
       const debouncedRender = debounce(() => { state.q = search.value; renderCatalogGrid(); history.replaceState(history.state, '', buildUrl({})); }, 180);
       search.addEventListener('input', debouncedRender);
@@ -2021,6 +2078,9 @@
         if (closed) return;
         closed = true;
         document.removeEventListener('keydown', onWizardKey, true);
+        // Focus goes to the opener below (the menu trigger), not the
+        // contract's remembered element.
+        if (window.QymUIComponents) window.QymUIComponents.releaseDialog(modal, { restoreFocus: false });
         backdrop.classList.remove('shell-modal-open');
         setTimeout(() => backdrop.remove(), 200);
         if (opener && opener.isConnected && typeof opener.focus === 'function') opener.focus();
@@ -2052,10 +2112,14 @@
       }
       function focusFirst(){
         requestAnimationFrame(() => {
+          // Closed before this frame (a quick Escape): focus stays on the opener.
+          if (closed) return;
           const preferred = body.querySelector('[data-autofocus]') || focusables().find(node => body.contains(node));
           (preferred || nextBtn).focus();
         });
       }
+      // The wizard keeps its own Escape (ask first) and Tab trap, so it holds
+      // even where the shared contract (ui_components.js) is not loaded.
       function onWizardKey(e){
         if (closed || confirmingClose) return;
         if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); requestClose(); return; }
@@ -2604,7 +2668,7 @@
             let v;
             if (wstate.format === 'csv') { const idx = wstate.csvHeaders.indexOf(h); v = idx >= 0 ? r[idx] : ''; }
             else { v = r[h]; if (v != null && typeof v === 'object') v = JSON.stringify(v); }
-            tr.appendChild(el('td', null, v == null ? '' : String(v).slice(0, 120)));
+            tr.appendChild(QymSafe.applyTextDir(el('td', null, v == null ? '' : String(v).slice(0, 120)), v == null ? '' : String(v)));
           });
           tbody.appendChild(tr);
         });
@@ -2723,6 +2787,12 @@
       render();
       backdrop.addEventListener('click', e => { if (e.target === backdrop) requestClose(); });
       document.addEventListener('keydown', onWizardKey, true);
+      // Registered with the shared modal focus contract too (C049), so a
+      // dialog opened over it (the discard confirm) stacks correctly.
+      if (window.QymUIComponents) window.QymUIComponents.openDialog(modal, {
+        onEscape: requestClose,
+        initialFocus: () => body.querySelector('[data-autofocus]') || focusables().find(node => body.contains(node)) || nextBtn,
+      });
     }
 
     // ============================================================
@@ -3396,6 +3466,7 @@
         const preview = el('div', { className: 'dsx-preview' + ((val == null || val === '') ? ' muted' : '') });
         if (val == null || val === '') preview.textContent = '—';
         else preview.textContent = (field === 'input' || field === 'metadata') ? rawItemPreview(val) : compactItemPreview(val);
+        QymSafe.applyTextDir(preview, preview.textContent);
         const fullText = fullPreview(val);
         if (fullText) {
           // Hover preview only: cells are not tab stops (the row link is), so
@@ -3494,7 +3565,7 @@
       const ok = await ensureDatasetDetailLoaded();
       if (renderSeq !== itemPageRenderSeq) return;
       if (!ok) {
-        root.innerHTML = '<div class="dsx-empty"><h3>Dataset not found</h3></div>';
+        renderDatasetLoadError(root, 'Couldn\u2019t load this dataset', state.detailError, () => renderItemPage());
         return;
       }
       normalizeActiveVersionUrl();
@@ -3512,8 +3583,10 @@
         item = resp.item;
       } catch(e) {
         if (renderSeq !== itemPageRenderSeq) return;
-        Shell.toast(e.message || 'Failed to load item', 'error');
-        root.innerHTML = '<div class="dsx-empty"><h3>Item not found</h3></div>';
+        renderDatasetLoadError(root, 'Couldn\u2019t load this item', e, () => renderItemPage(), {
+          notFoundTitle: 'Item not found',
+          notFoundMessage: 'This item is not in version ' + v.version + '. It may have been removed or the link is wrong.',
+        });
         return;
       }
 
@@ -3868,6 +3941,7 @@
           const outputText = r.error ? ('ERROR: ' + r.error) : fullPreview(r.output);
           const outputWrap = el('div', { className: 'dsx-run-output-body' });
           const output = el('div', { className: 'dsx-item-run-output' }, outputText || '—');
+          QymSafe.applyTextDir(output, outputText || '');
           if (state.itemRunOutputsExpanded && outputText) {
             output.classList.add('expanded');
             row.classList.add('output-expanded');

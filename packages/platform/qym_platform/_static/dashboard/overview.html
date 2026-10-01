@@ -6,8 +6,8 @@
   <title>قيِّم • Dashboard</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001">
-  <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
-  <script src="/static/qym_safe.js?v=p0-20260930"></script>
+  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
+  <script src="/static/qym_safe.js?v=p1-20261001"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
   <script src="/static/shell.js?v=p1-20261001"></script>
   <script src="/static/kpis.js?v=p0-20260930"></script>
@@ -89,7 +89,7 @@
     .row-meta { color: var(--text-muted); font-size: var(--font-sm); margin-top: 2px; }
     .overview-status { font-size: var(--font-xs); padding: 2px 6px; }
   </style>
-  <link rel="stylesheet" href="/static/ui_components.css?v=p0-20260930">
+  <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261001">
   <script defer src="/static/ui_components.js?v=p1-20261001"></script>
   <script src="/static/metrics.js?v=p0-20260930-3"></script>
 </head>
@@ -210,7 +210,7 @@
       }
 
       function renderModelLabel(modelName, hasReasoning) {
-        return '<span class="model-label"><span class="model-label-text">' + esc(modelName || '—') + '</span>' + (hasReasoning ? '<span class="model-reasoning-badge" title="' + esc(MODEL_REASONING_BADGE_TITLE) + '" aria-label="' + esc(MODEL_REASONING_BADGE_TITLE) + '">' + MODEL_REASONING_BADGE_ICON + '</span>' : '') + '</span>';
+        return '<span class="model-label"><span class="model-label-text">' + esc(modelName || '—') + '</span>' + (hasReasoning ? '<span class="model-reasoning-badge" role="img" title="' + esc(MODEL_REASONING_BADGE_TITLE) + '" aria-label="' + esc(MODEL_REASONING_BADGE_TITLE) + '">' + MODEL_REASONING_BADGE_ICON + '</span>' : '') + '</span>';
       }
 
       function projectUrl(slug, sub) {

@@ -772,6 +772,19 @@
     }
   }
 
+  // Every shell dialog uses the shared modal focus contract
+  // (QymUIComponents.openDialog): focus moves in, Tab stays inside, Escape
+  // closes, and focus returns to the control that opened it.
+  function manageDialog(modal, options) {
+    var ui = window.QymUIComponents;
+    return ui && ui.openDialog ? ui.openDialog(modal, options) : null;
+  }
+
+  function releaseManagedDialog(modal) {
+    var ui = window.QymUIComponents;
+    if (ui && ui.releaseDialog) ui.releaseDialog(modal);
+  }
+
   function openCreateProjectDialog() {
     // Remove any existing dialog
     var existing = document.getElementById('shell-create-project-dialog');
@@ -781,18 +794,18 @@
     dialog.id = 'shell-create-project-dialog';
     dialog.className = 'shell-modal-backdrop';
     dialog.innerHTML = ''
-      + '<div class="shell-modal">'
+      + '<div class="shell-modal" role="dialog" aria-modal="true" aria-labelledby="shell-create-project-title">'
       +   '<div class="shell-modal-header">'
-      +     '<div class="shell-modal-title">Create Project</div>'
+      +     '<div class="shell-modal-title" id="shell-create-project-title">Create Project</div>'
       +     '<button class="shell-modal-close qym-icon-action" type="button" aria-label="Close">&times;</button>'
       +   '</div>'
       +   '<div class="shell-modal-body">'
       +     '<div class="shell-form-group">'
-      +       '<label class="shell-form-label">Project Name</label>'
+      +       '<label class="shell-form-label" for="shell-new-project-name">Project Name</label>'
       +       '<input class="shell-form-input" id="shell-new-project-name" type="text" placeholder="My Project" autofocus />'
       +     '</div>'
       +     '<div class="shell-form-group">'
-      +       '<label class="shell-form-label">Slug</label>'
+      +       '<label class="shell-form-label" for="shell-new-project-slug">Slug</label>'
       +       '<input class="shell-form-input" id="shell-new-project-slug" type="text" placeholder="my-project" style="font-family:var(--font-mono);font-size:var(--font-base)" />'
       +     '</div>'
       +     '<div class="shell-form-error" id="shell-new-project-error"></div>'
@@ -822,21 +835,15 @@
       }
     });
 
-    setTimeout(function () { nameInput.focus(); }, 50);
-
-    function closeDialog() { dialog.remove(); }
+    var modal = dialog.querySelector('.shell-modal');
+    function closeDialog() { releaseManagedDialog(modal); dialog.remove(); }
+    manageDialog(modal, { initialFocus: nameInput, onEscape: closeDialog });
 
     cancelBtn.addEventListener('click', closeDialog);
     var closeBtn = dialog.querySelector('.shell-modal-close');
     if (closeBtn) closeBtn.addEventListener('click', closeDialog);
     dialog.addEventListener('click', function (e) {
       if (e.target === dialog) closeDialog();
-    });
-    document.addEventListener('keydown', function escHandler(e) {
-      if (e.key === 'Escape') {
-        closeDialog();
-        document.removeEventListener('keydown', escHandler);
-      }
     });
 
     async function submit() {
@@ -901,7 +908,7 @@
         +     (options.note ? '<div class="shell-modal-note">' + esc(options.note) + '</div>' : '')
         +     (needsInput
                 ? '<div class="shell-form-group" style="margin-top:var(--space-md)">'
-                  + '<label class="shell-form-label">' + esc(options.inputLabel || 'Type to Confirm') + '</label>'
+                  + '<label class="shell-form-label" for="shell-confirm-input">' + esc(options.inputLabel || 'Type to Confirm') + '</label>'
                   + '<input class="shell-form-input" id="shell-confirm-input" type="text" placeholder="' + esc(options.inputPlaceholder || '') + '" autocomplete="off" />'
                   + '</div>'
                 : '')
@@ -912,7 +919,7 @@
         +     (options.altLabel
                 ? '<button class="shell-btn shell-btn-secondary" id="shell-confirm-alt" type="button">' + esc(options.altLabel) + '</button>'
                 : '')
-        +     '<button class="shell-btn ' + (options.confirmClass || 'shell-btn-primary') + '" id="shell-confirm-submit" type="button">' + esc(options.confirmLabel || 'Confirm') + '</button>'
+        +     '<button class="shell-btn ' + (options.confirmClass || (options.danger === true ? 'shell-btn-danger' : 'shell-btn-primary')) + '" id="shell-confirm-submit" type="button">' + esc(options.confirmLabel || 'Confirm') + '</button>'
         +   '</div>'
         + '</div>';
       var mount = options.mount && options.mount.appendChild
@@ -940,26 +947,12 @@
         if (errorEl && isValid()) errorEl.textContent = '';
       }
 
-      function cleanup() {
-        document.removeEventListener('keydown', onKeyDown);
-      }
+      var modal = dialog.querySelector('.shell-modal');
 
       function close(result) {
-        cleanup();
+        releaseManagedDialog(modal);
         dialog.remove();
         resolve(result);
-      }
-
-      function onKeyDown(e) {
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          close({ confirmed: false, value: null });
-          return;
-        }
-        if (e.key === 'Enter' && (!input || document.activeElement === input)) {
-          e.preventDefault();
-          submit();
-        }
       }
 
       function submit() {
@@ -979,15 +972,25 @@
       if (confirmBtn) confirmBtn.addEventListener('click', submit);
       if (input) {
         input.addEventListener('input', refreshState);
-        setTimeout(function () { input.focus(); }, 50);
-      } else {
-        setTimeout(function () { confirmBtn && confirmBtn.focus(); }, 50);
+        // Enter submits only from the confirmation field; on a button, Enter
+        // activates that button (Enter on Cancel cancels).
+        input.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            submit();
+          }
+        });
       }
       dialog.addEventListener('click', function (e) {
         if (e.target === dialog) close({ confirmed: false, value: null });
       });
-      document.addEventListener('keydown', onKeyDown);
       refreshState();
+      // Destructive confirms start on Cancel, so a stray Enter never confirms.
+      var destructive = /danger/.test(options.confirmClass || '') || options.danger === true;
+      manageDialog(modal, {
+        initialFocus: input || (destructive ? cancelBtn : confirmBtn),
+        onEscape: function () { close({ confirmed: false, value: null }); },
+      });
     });
   }
 
@@ -1207,9 +1210,9 @@
       }
 
       dialog.innerHTML = ''
-        + '<div class="shell-modal" role="dialog" aria-modal="true" style="width:' + (options.width || 480) + 'px;">'
+        + '<div class="shell-modal" role="dialog" aria-modal="true" aria-labelledby="shell-form-title" style="width:' + (options.width || 480) + 'px;">'
         +   '<div class="shell-modal-header">'
-        +     '<div class="shell-modal-title">' + esc(options.title || 'Form') + '</div>'
+        +     '<div class="shell-modal-title" id="shell-form-title">' + esc(options.title || 'Form') + '</div>'
         +     '<button class="shell-modal-close qym-icon-action" type="button" aria-label="Close">&times;</button>'
         +   '</div>'
         +   '<div class="shell-modal-body">'
@@ -1251,11 +1254,13 @@
         return values;
       }
 
-      function cleanup() { document.removeEventListener('keydown', onKey); }
-      function close(result) { cleanup(); dialog.remove(); resolve(result); }
+      var modal = dialog.querySelector('.shell-modal');
+      function close(result) { releaseManagedDialog(modal); dialog.remove(); resolve(result); }
+      // Enter submits from a single-line field; on a button it activates that
+      // button, so Enter on Cancel cancels.
       function onKey(e) {
-        if (e.key === 'Escape') { e.preventDefault(); close({ confirmed: false, values: null }); return; }
-        if (e.key === 'Enter' && !(e.target && e.target.tagName === 'TEXTAREA')) { e.preventDefault(); submit(); }
+        if (e.key !== 'Enter' || !e.target || !e.target.matches) return;
+        if (e.target.matches('input:not([type="checkbox"]):not([type="radio"]), select')) { e.preventDefault(); submit(); }
       }
       function submit() {
         var values = readValues();
@@ -1299,12 +1304,11 @@
       if (cancelBtn) cancelBtn.addEventListener('click', function () { close({ confirmed: false, values: null }); });
       if (submitBtn) submitBtn.addEventListener('click', submit);
       dialog.addEventListener('click', function (e) { if (e.target === dialog) close({ confirmed: false, values: null }); });
-      document.addEventListener('keydown', onKey);
-
-      setTimeout(function () {
-        var firstInput = dialog.querySelector('input,textarea,select');
-        if (firstInput) firstInput.focus();
-      }, 50);
+      modal.addEventListener('keydown', onKey);
+      manageDialog(modal, {
+        initialFocus: dialog.querySelector('input,textarea,select') || cancelBtn,
+        onEscape: function () { close({ confirmed: false, values: null }); },
+      });
     });
   }
 
@@ -1322,7 +1326,7 @@
     drawer.id = 'shell-drawer';
     drawer.className = 'shell-drawer-backdrop';
     drawer.innerHTML = ''
-      + '<div class="shell-drawer" role="dialog" aria-modal="true" style="width:' + width + 'px;">'
+      + '<div class="shell-drawer" role="dialog" aria-modal="true" aria-labelledby="shell-drawer-title" tabindex="-1" style="width:' + width + 'px;">'
       +   '<div class="shell-drawer-header">'
       +     '<div class="shell-drawer-title-wrap">'
       +       '<div class="shell-drawer-title" id="shell-drawer-title">' + esc(options.title || '') + '</div>'
@@ -1340,6 +1344,7 @@
     var footer = document.getElementById('shell-drawer-footer');
     var actions = document.getElementById('shell-drawer-actions');
     var closeBtn = drawer.querySelector('.shell-drawer-close');
+    var panel = drawer.querySelector('.shell-drawer');
 
     function setTitle(t) { var el = document.getElementById('shell-drawer-title'); if (el) el.textContent = t || ''; }
     function setSubtitle(t) { var el = document.getElementById('shell-drawer-subtitle'); if (el) el.textContent = t || ''; }
@@ -1392,7 +1397,7 @@
       setBody: setBody,
       setFooter: setFooter,
       setActions: setActions,
-      close: function () { cleanup(); drawer.remove(); document.dispatchEvent(new CustomEvent('qym:drawer-close')); if (typeof options.onClose === 'function') options.onClose(); },
+      close: function () { cleanup(); releaseManagedDialog(panel); drawer.remove(); document.dispatchEvent(new CustomEvent('qym:drawer-close')); if (typeof options.onClose === 'function') options.onClose(); },
     };
 
     function onKey(e) {
@@ -1408,6 +1413,7 @@
     document.addEventListener('keydown', onKey);
 
     if (typeof options.render === 'function') options.render(api);
+    manageDialog(panel, { initialFocus: panel });
     document.dispatchEvent(new CustomEvent('qym:drawer-open'));
 
     return api;
@@ -2003,7 +2009,8 @@
     options = options || {};
     var el = document.createElement('div');
     el.className = 'shell-toast' + (type ? ' ' + type : '');
-    el.setAttribute('role', 'status');
+    // Errors are announced at once; other toasts politely (C038).
+    el.setAttribute('role', type === 'error' ? 'alert' : 'status');
     var dismissed = false;
     function dismiss() {
       if (dismissed) return;
@@ -2107,6 +2114,9 @@
     var toastContainer = document.createElement('div');
     toastContainer.className = 'shell-toast-container';
     toastContainer.id = 'shell-toast-container';
+    // Screen readers announce toasts; errors interrupt (role=alert per toast).
+    toastContainer.setAttribute('role', 'status');
+    toastContainer.setAttribute('aria-live', 'polite');
     document.body.appendChild(toastContainer);
 
     // Restore collapse state

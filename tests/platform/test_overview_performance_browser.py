@@ -406,7 +406,15 @@ def test_overview_narrow_layout_matches_baseline_limitation(browser):
     )
     # Existing clipping is documented explicitly; this is a regression comparison,
     # not a claim that narrow viewports are fully supported.
-    assert geometry["current"] == geometry["baseline"]
+    # Content-sized widths may drift by a sub-pixel when the font stack
+    # resolves a different face (C046 put real system monos before the
+    # generic fallback); the frame must not move at all.
+    current, baseline = geometry["current"], geometry["baseline"]
+    assert current.keys() == baseline.keys()
+    for key in ("viewport", "mainWidth", "sidebarWidth"):
+        assert current[key] == baseline[key], key
+    for key in ("recentTableWidth", "recentCardWidth"):
+        assert abs(current[key] - baseline[key]) <= 1, key
     assert (
         geometry["current"]["recentTableWidth"] > geometry["current"]["recentCardWidth"]
     )

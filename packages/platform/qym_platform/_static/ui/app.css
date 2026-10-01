@@ -43,7 +43,7 @@ body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Sego
 .header h1 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: 0.2px; }
 .sub { color: var(--muted); margin-bottom: 12px; }
 .chips { display:flex; gap:8px; flex-wrap: wrap; margin-bottom: 10px; }
-.chip { background: var(--panel); border:1px solid var(--border); color: var(--text); padding:4px 8px; border-radius:4px; font-size: 11px; font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; }
+.chip { background: var(--panel); border:1px solid var(--border); color: var(--text); padding:4px 8px; border-radius:4px; font-size: 11px; font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, 'JetBrains Mono', 'Fira Code', Consolas, 'Liberation Mono', monospace; }
 .chip .label { color: var(--muted); margin-right: 4px; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; }
 body[data-theme="light"] .chip { background: #f8f9fb; }
 
@@ -57,7 +57,7 @@ body[data-theme="light"] .chip { background: #f8f9fb; }
 .stat-icon.warn { background: rgba(245,158,11,0.12); color: var(--warn); }
 .stat-content { display:flex; flex-direction: column; flex: 1; min-width: 0; }
 .stat-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
-.stat-value { font-size: 13px; font-weight: 600; font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; }
+.stat-value { font-size: 13px; font-weight: 600; font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, 'JetBrains Mono', 'Fira Code', Consolas, 'Liberation Mono', monospace; }
 
 /* Completion donut */
 .donut { --pct: 0; --ring: var(--brand); width: 44px; height: 44px; border-radius: 50%; background:

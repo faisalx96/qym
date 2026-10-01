@@ -44,6 +44,8 @@ def dataset_page(browser):
       window.QymAuth = {requireAuth: () => new Promise(() => {})};
       window.fetch = url => new Promise((resolve, reject) => pendingSearches.push({url, resolve, reject}));
     }""")
+    # Pages load the shared safety/text layer before any other script.
+    page.add_script_tag(path=str(STATIC / "qym_safe.js"))
     page.add_script_tag(path=str(STATIC / "metrics.js"))
     page.add_script_tag(path=str(STATIC / "qym_table.js"))
     source = re.findall(

@@ -6,8 +6,8 @@
   <title>قيِّم • Reviews</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001">
-  <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
-  <script src="/static/qym_safe.js?v=p0-20260930"></script>
+  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
+  <script src="/static/qym_safe.js?v=p1-20261001"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
   <script src="/static/shell.js?v=p1-20261001"></script>
   <style>
@@ -1400,6 +1400,11 @@
       cursor: pointer;
     }
 
+    .conf-slider:focus-visible {
+      outline: 1px solid var(--accent-primary);
+      outline-offset: 4px;
+    }
+
     .conf-slider::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
@@ -1441,7 +1446,7 @@
       text-align: right;
     }
   </style>
-  <link rel="stylesheet" href="/static/ui_components.css?v=p0-20260930">
+  <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261001">
   <script defer src="/static/ui_components.js?v=p1-20261001"></script>
 </head>
 <body>
@@ -1539,12 +1544,12 @@
         <span class="filter-group-label">Confidence</span>
         <div class="conf-slider-wrap">
           <span class="conf-label">Min</span>
-          <input type="range" class="conf-slider" id="conf-min" min="0" max="100" step="5" value="0">
+          <input type="range" class="conf-slider" id="conf-min" min="0" max="100" step="5" value="0" aria-label="Minimum confidence">
           <span class="conf-value" id="conf-min-val">0%</span>
         </div>
         <div class="conf-slider-wrap">
           <span class="conf-label">Max</span>
-          <input type="range" class="conf-slider" id="conf-max" min="0" max="100" step="5" value="100">
+          <input type="range" class="conf-slider" id="conf-max" min="0" max="100" step="5" value="100" aria-label="Maximum confidence">
           <span class="conf-value" id="conf-max-val">100%</span>
         </div>
       </div>
@@ -1576,8 +1581,7 @@
       </div>
       <div class="correction-list" id="correction-list" style="display:none;" aria-busy="false" aria-label="Corrections"></div>
       <div class="list-error" id="list-error" hidden>
-        <span>Could not load corrections.</span>
-        <button type="button" class="btn-sm btn-reset" id="list-retry">Retry</button>
+        <div id="reviews-load-error"></div>
       </div>
       <div class="reviews-more" id="reviews-more" hidden>
         <button type="button" class="btn-sm btn-reset" id="load-more">Load more</button>
@@ -1595,19 +1599,19 @@
   </div>
 
   <!-- Action Modal (approve/reject with comment) -->
-  <div class="reviews-modal" id="action-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-    <div class="reviews-modal-content">
+  <div class="reviews-modal" id="action-modal">
+    <div class="reviews-modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-desc">
       <div class="reviews-modal-header">
         <h3 id="modal-title">Approve Correction</h3>
-        <button class="modal-close qym-icon-action" id="modal-close" aria-label="Close">&times;</button>
+        <button class="modal-close qym-icon-action" id="modal-close" type="button" aria-label="Close">&times;</button>
       </div>
       <div class="reviews-modal-body">
         <p id="modal-desc">This correction will be available as evidence when generating project analysis rules.</p>
-        <textarea id="modal-comment" placeholder="Optional review comment..." rows="3"></textarea>
+        <textarea id="modal-comment" dir="auto" aria-label="Review comment (optional)" placeholder="Optional review comment..." rows="3"></textarea>
       </div>
       <div class="reviews-modal-footer">
-        <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
-        <button class="btn btn-primary" id="modal-confirm">Confirm</button>
+        <button class="btn btn-secondary" id="modal-cancel" type="button">Cancel</button>
+        <button class="btn btn-primary" id="modal-confirm" type="button">Confirm</button>
       </div>
     </div>
   </div>
@@ -1759,7 +1763,7 @@
     const MODEL_REASONING_BADGE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6" /><path d="M10 21h4" /><path d="M12 2a7 7 0 0 0-4.2 12.6c.7.5 1.2 1.4 1.2 2.3V18h6v-1.1c0-.9.5-1.8 1.2-2.3A7 7 0 0 0 12 2Z" /></svg>';
 
     function renderModelLabel(modelName, hasReasoning) {
-      return '<span class="model-label"><span class="model-label-text">' + escapeHtml(modelName || '—') + '</span>' + (hasReasoning ? '<span class="model-reasoning-badge" title="' + escapeHtml(MODEL_REASONING_BADGE_TITLE) + '" aria-label="' + escapeHtml(MODEL_REASONING_BADGE_TITLE) + '">' + MODEL_REASONING_BADGE_ICON + '</span>' : '') + '</span>';
+      return '<span class="model-label"><span class="model-label-text">' + escapeHtml(modelName || '—') + '</span>' + (hasReasoning ? '<span class="model-reasoning-badge" role="img" title="' + escapeHtml(MODEL_REASONING_BADGE_TITLE) + '" aria-label="' + escapeHtml(MODEL_REASONING_BADGE_TITLE) + '">' + MODEL_REASONING_BADGE_ICON + '</span>' : '') + '</span>';
     }
 
     function parseStructuredString(val) {
@@ -1825,13 +1829,14 @@
           return `
             <div class="snapshot-row">
               <div class="snapshot-key">${escapeHtml(keyLabel)}</div>
-              <div class="${cssClass}" tabindex="0" role="region" aria-label="${escapeHtml(`${label}: ${keyLabel}`)}">${escapeHtml(display)}</div>
+              <div class="${cssClass}" tabindex="0" role="region" aria-label="${escapeHtml(`${label}: ${keyLabel}`)}"${QymSafe.textDirAttrs(display)}>${escapeHtml(display)}</div>
             </div>
           `;
         }).join('');
         return `<div class="snapshot-structured">${rows}</div>`;
       }
-      return `<div class="detail-snapshot" tabindex="0" role="region" aria-label="${escapeHtml(label)}">${escapeHtml(stringify(parsed))}</div>`;
+      const text = stringify(parsed);
+      return `<div class="detail-snapshot" tabindex="0" role="region" aria-label="${escapeHtml(label)}"${QymSafe.textDirAttrs(text)}>${escapeHtml(text)}</div>`;
     }
 
     function truncate(str, max) {
@@ -1927,6 +1932,8 @@
         container = document.createElement('div');
         container.id = 'toast-container';
         container.className = 'toast-container';
+        container.setAttribute('role', 'status');
+        container.setAttribute('aria-live', 'polite');
         document.body.appendChild(container);
       }
       return container;
@@ -1938,15 +1945,25 @@
       return '&#10007;';
     }
 
+    let toastSeq = 0;
+
     function showToast(type, title, message, options = {}) {
       const container = getToastContainer();
       const toast = document.createElement('div');
       toast.className = `toast toast-${type}`;
       const actions = Array.isArray(options.actions) ? options.actions : [];
+      const titleId = `toast-title-${++toastSeq}`;
+      if (options.alertDialog) {
+        // A confirmation prompt: announced and focused like a small dialog.
+        toast.setAttribute('role', 'alertdialog');
+        toast.setAttribute('aria-labelledby', titleId);
+      } else if (type === 'error') {
+        toast.setAttribute('role', 'alert');
+      }
       toast.innerHTML = `
         <div class="toast-icon">${toastIcon(type)}</div>
         <div class="toast-content">
-          <div class="toast-title">${escapeHtml(title)}</div>
+          <div class="toast-title" id="${titleId}">${escapeHtml(title)}</div>
           ${message ? `<div class="toast-message">${escapeHtml(message)}</div>` : ''}
         </div>
         ${actions.length ? `<div class="toast-actions">${actions.map((action, idx) => `<button type="button" class="toast-action ${action.className || ''}" data-toast-action="${idx}">${escapeHtml(action.label || 'OK')}</button>`).join('')}</div>` : ''}
@@ -1955,9 +1972,20 @@
       container.appendChild(toast);
       const closeToast = () => {
         if (!toast.parentNode) return;
+        if (options.alertDialog && window.QymUIComponents) window.QymUIComponents.releaseDialog(toast);
         toast.classList.add('toast-exit');
         setTimeout(() => toast.remove(), 300);
       };
+      if (options.alertDialog && window.QymUIComponents) {
+        window.QymUIComponents.openDialog(toast, {
+          role: 'alertdialog',
+          initialFocus: '[data-toast-action="0"]',
+          onEscape: () => {
+            if (typeof options.onClose === 'function') options.onClose();
+            closeToast();
+          },
+        });
+      }
       toast.querySelector('.toast-close').addEventListener('click', () => {
         if (typeof options.onClose === 'function') options.onClose();
         closeToast();
@@ -1985,6 +2013,7 @@
         };
         showToast('warning', title, message, {
           persist: true,
+          alertDialog: true,
           onClose: () => settle(false),
           actions: [
             { label: 'Cancel', onClick: () => settle(false) },
@@ -2069,7 +2098,10 @@
         if (window.QymAuth && window.QymAuth.handle401(resp)) return;
         if (!resp.ok) {
           const detail = await resp.json().catch(() => ({}));
-          throw new Error(detail.detail || 'Failed to fetch');
+          // The status lets the error state name the failure (C038).
+          const failure = new Error(detail.detail || `HTTP ${resp.status}`);
+          failure.status = resp.status;
+          throw failure;
         }
         const data = await resp.json();
         if (seq !== listRequestSeq) return;
@@ -2098,12 +2130,8 @@
       } catch (err) {
         if (err && err.name === 'AbortError') return;
         if (seq !== listRequestSeq) return;
-        if (!append) {
-          el('correction-list').style.display = 'none';
-          el('empty-state').style.display = 'none';
-          el('list-error').hidden = false;
-        }
-        showToast('error', 'Load failed', err.message);
+        if (append) showToast('error', 'Load failed', err.message);
+        else showReviewsLoadError(err);
       } finally {
         if (seq === listRequestSeq) {
           listAbort = null;
@@ -2138,6 +2166,29 @@
       } finally {
         if (seq === countsRequestSeq) countsAbort = null;
       }
+    }
+
+    // A failed load is an error with Retry in place of the list, never
+    // "No corrections found" (C038). Rows already shown stay, dimmed.
+    // A failed list load names the failure (signed out, no access, server,
+    // network) with Retry, never "no corrections" (C038, C042).
+    function showReviewsLoadError(err) {
+      el('correction-list').style.display = 'none';
+      el('empty-state').style.display = 'none';
+      el('list-error').hidden = false;
+      const ui = window.QymUIComponents;
+      if (!ui && document.readyState === 'loading') {
+        // ui_components.js is deferred; a fast failure waits for it.
+        window.addEventListener('DOMContentLoaded', () => showReviewsLoadError(err), pageListen({ once: true }));
+        return;
+      }
+      const host = el('reviews-load-error');
+      if (!ui || !host) { showToast('error', 'Load failed', err.message); return; }
+      ui.renderErrorState(host, {
+        title: 'Could not load corrections',
+        error: err,
+        onRetry: () => fetchCorrections(),
+      });
     }
 
     async function apiAction(method, path, body) {
@@ -2292,7 +2343,16 @@
       el('modal-confirm').textContent = confirmLabel;
       el('modal-confirm').className = `btn ${btnClass || 'btn-primary'}`;
       el('action-modal').classList.add('open');
-      el('modal-comment').focus();
+      // Shared modal focus contract: Tab stays inside, Escape cancels, and
+      // focus returns to the approve/reject control that opened it.
+      if (window.QymUIComponents) {
+        window.QymUIComponents.openDialog(el('action-modal').querySelector('.reviews-modal-content'), {
+          initialFocus: el('modal-comment'),
+          onEscape: () => closeModal(null),
+        });
+      } else {
+        el('modal-comment').focus();
+      }
 
       return new Promise((resolve) => {
         modalResolve = resolve;
@@ -2300,6 +2360,7 @@
     }
 
     function closeModal(result) {
+      if (window.QymUIComponents) window.QymUIComponents.releaseDialog(el('action-modal').querySelector('.reviews-modal-content'));
       el('action-modal').classList.remove('open');
       if (modalResolve) {
         modalResolve(result);
@@ -2748,7 +2809,7 @@
       return `<div class="card-previews">${cells.map(([label, text]) => `
         <div class="preview-cell">
           <div class="preview-label">${label}</div>
-          <div class="preview-text" title="${escapeHtml(text)}">${escapeHtml(text)}</div>
+          <div class="preview-text" title="${escapeHtml(text)}"${QymSafe.textDirAttrs(text)}>${escapeHtml(text)}</div>
         </div>`).join('')}</div>`;
     }
 
@@ -2876,7 +2937,7 @@
           ${c.review_comment || reviewer ? `
             <div class="card-footer">
               ${reviewer ? `<span class="review-info">Reviewed by <strong>${escapeHtml(reviewer)}</strong> ${c.reviewed_at ? formatDate(c.reviewed_at) : ''}</span>` : ''}
-              ${c.review_comment ? `<span class="review-comment" title="${escapeHtml(c.review_comment)}">"${escapeHtml(truncate(c.review_comment, 80))}"</span>` : ''}
+              ${c.review_comment ? `<span class="review-comment" title="${escapeHtml(c.review_comment)}">"<bdi>${escapeHtml(truncate(c.review_comment, 80))}</bdi>"</span>` : ''}
             </div>
           ` : ''}
 
@@ -3038,8 +3099,8 @@
           <div class="review-issue-head"><span class="review-issue-number">Issue ${index + 1}</span>${issue.confidence != null ? `<span class="diff-confidence">${Math.round(issue.confidence * 100)}%</span>` : ''}</div>
           <div class="review-issue-category">${escapeHtml(issue.category || 'Uncategorized')}</div>
           ${issue.subcategory ? `<div class="review-issue-subcategory">${escapeHtml(issue.subcategory)}</div>` : ''}
-          ${issue.finding ? `<div class="review-issue-finding">${escapeHtml(truncate(issue.finding, 300))}</div>` : ''}
-          ${issue.category_reason ? `<details class="review-issue-reason"><summary>Why this category</summary><div>${escapeHtml(issue.category_reason)}</div></details>` : ''}
+          ${issue.finding ? `<div class="review-issue-finding"${QymSafe.textDirAttrs(issue.finding)}>${escapeHtml(truncate(issue.finding, 300))}</div>` : ''}
+          ${issue.category_reason ? `<details class="review-issue-reason"><summary>Why this category</summary><div${QymSafe.textDirAttrs(issue.category_reason)}>${escapeHtml(issue.category_reason)}</div></details>` : ''}
         </article>
       `).join('') + '</div>';
     }
@@ -3067,7 +3128,7 @@
                 <span class="history-review-status ${escapeHtml(review.status)}">${escapeHtml(review.status)}</span>
               ` : '<span class="history-review-status">No review candidate</span>';
               const reviewComment = review && review.review_comment
-                ? `<div class="history-review-comment">${escapeHtml(review.review_comment)}</div>`
+                ? `<div class="history-review-comment"${QymSafe.textDirAttrs(review.review_comment)}>${escapeHtml(review.review_comment)}</div>`
                 : '';
               return `
                 <div class="history-entry">
@@ -3109,7 +3170,7 @@
         <div class="review-issue-edit-head"><span class="review-issue-number">Issue ${index + 1}</span><button class="qym-icon-action" type="button" data-remove-review-issue title="Remove issue" aria-label="Remove issue">×</button></div>
         <div class="edit-field"><label>Category</label><input class="qym-control qym-input" type="text" data-issue-field="category" value="${escapeHtml(issue.category || '')}" placeholder="Root-cause category" /></div>
         <div class="edit-field"><label>Subcategory</label><input class="qym-control qym-input" type="text" data-issue-field="subcategory" value="${escapeHtml(issue.subcategory || '')}" placeholder="Reusable failure mechanism" /></div>
-        <div class="edit-field"><label>Finding</label><textarea data-issue-field="finding" placeholder="Item-specific diagnosis">${escapeHtml(issue.finding || '')}</textarea></div>
+        <div class="edit-field"><label>Finding</label><textarea data-issue-field="finding" dir="auto" placeholder="Item-specific diagnosis">${escapeHtml(issue.finding || '')}</textarea></div>
       </article>`;
     }
 
@@ -3593,7 +3654,6 @@
     /* ── Load more (and on scroll) ───────────────── */
 
     el('load-more').addEventListener('click', () => fetchCorrections({ append: true }));
-    el('list-retry').addEventListener('click', () => fetchCorrections());
 
     let moreObserver = null;
     if ('IntersectionObserver' in window) {

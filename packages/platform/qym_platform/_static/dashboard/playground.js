@@ -859,6 +859,16 @@ window.QymPlayground = (function () {
     return issues;
   }
 
+  // Shared direction policy (qym_safe.js): Arabic examples read right to left.
+  function _dirAttrs(value) {
+    return window.QymSafe && window.QymSafe.textDirAttrs ? window.QymSafe.textDirAttrs(value == null ? '' : String(value)) : '';
+  }
+
+  function _categoryExampleBlock(label, value) {
+    var text = _formatCategoryExampleValue(value);
+    return '<div><span>' + label + '</span><pre' + _dirAttrs(text) + '>' + _esc(text) + '</pre></div>';
+  }
+
   function _buildCategoryExamples(examples) {
     var rows = Array.isArray(examples) ? examples : [];
     if (!rows.length) {
@@ -872,16 +882,16 @@ window.QymPlayground = (function () {
           '<span class="pg-category-example-meta">' + _esc(meta || 'Approved example') + '</span>' +
         '</summary>' +
         '<div class="pg-category-example-body">' +
-          (example.detail ? '<div class="pg-category-example-field"><span>Detail</span><strong>' + _esc(example.detail) + '</strong></div>' : '') +
-          (example.note ? '<div class="pg-category-example-field"><span>Reviewer reasoning</span><p>' + _esc(example.note) + '</p></div>' : '') +
+          (example.detail ? '<div class="pg-category-example-field"><span>Detail</span><strong' + _dirAttrs(example.detail) + '>' + _esc(example.detail) + '</strong></div>' : '') +
+          (example.note ? '<div class="pg-category-example-field"><span>Reviewer reasoning</span><p' + _dirAttrs(example.note) + '>' + _esc(example.note) + '</p></div>' : '') +
           '<div class="pg-category-example-data">' +
-            '<div><span>Input</span><pre>' + _esc(_formatCategoryExampleValue(example.input)) + '</pre></div>' +
-            '<div><span>Expected</span><pre>' + _esc(_formatCategoryExampleValue(example.expected)) + '</pre></div>' +
-            '<div><span>Output</span><pre>' + _esc(_formatCategoryExampleValue(example.output)) + '</pre></div>' +
+            _categoryExampleBlock('Input', example.input) +
+            _categoryExampleBlock('Expected', example.expected) +
+            _categoryExampleBlock('Output', example.output) +
           '</div>' +
           (example.solution || example.solution_note
-            ? '<div class="pg-category-example-field"><span>Approved solution</span><strong>' + _esc(example.solution || '\u2014') + '</strong>' +
-                (example.solution_note ? '<p>' + _esc(example.solution_note) + '</p>' : '') + '</div>'
+            ? '<div class="pg-category-example-field"><span>Approved solution</span><strong' + _dirAttrs(example.solution) + '>' + _esc(example.solution || '\u2014') + '</strong>' +
+                (example.solution_note ? '<p' + _dirAttrs(example.solution_note) + '>' + _esc(example.solution_note) + '</p>' : '') + '</div>'
             : '') +
         '</div>' +
       '</details>';

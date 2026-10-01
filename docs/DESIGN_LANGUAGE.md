@@ -75,6 +75,19 @@ updating the test's allowlist deliberately.
   doubt: if it could contain a sentence, it's sans.
 - No other families. No webfonts (DM Sans and Georgia were removed; the CI test
   bans them).
+- The mono stack is system faces only: `ui-monospace, SFMono-Regular, 'SF Mono',
+  Menlo, …, Consolas, 'Liberation Mono', monospace`. **Menlo must stay**: it is
+  the only mono face Chrome on macOS can see by name; without it the generic
+  `monospace` resolves to Courier. Any hardcoded mono stack (e.g. the SDK-local
+  `_static/ui`) names Menlo too; CI checks both.
+- **Text direction.** Every block that shows user or model text takes
+  `QymSafe.textDirAttrs(text)` (or `QymSafe.applyTextDir(el, text)` for DOM
+  nodes): mostly-Arabic text gets `dir="rtl" lang="ar"`, anything else
+  `dir="auto"`. Put it on the block element, never an inline span inside a
+  left-to-right block; use `text-align: start`, never `left`. Code and JSON
+  editors whose lines mix scripts use `unicode-bidi: plaintext` on every layer
+  (CodeMirror: `EditorView.perLineTextDirection`). Arabic blocks get the 1.7
+  leading from `dashboard.css`, which page line-heights cannot override.
 
 ### Shell chrome scale
 
@@ -345,6 +358,25 @@ strings.
 ### Modal
 Title `var(--font-xl)` (page-level modals) or reuse `.shell-modal` (body-mounted,
 root-token sizes). Body text `var(--font-sm)`–`var(--font-base)` secondary.
+
+Every modal surface (shell dialogs, page modals, drawers, the trace viewer)
+goes through `QymUIComponents.openDialog(panel, { initialFocus, onEscape })`
+and `releaseDialog(panel)`: `role="dialog"`, `aria-modal`, a label from its
+title, focus moved in on open, Tab kept inside, Escape closing when the caller
+passes `onEscape`, and focus returned to the trigger on close. Destructive
+confirms start on Cancel, and Enter acts on the focused button (only a text
+field submits on Enter). A closed drawer that stays in the DOM is `inert`
+and `aria-hidden`, and carries `aria-modal` only while open. Never close a
+modal by toggling `display` inline.
+
+### Failed requests
+A failed load is never an empty or "not found" state. Use
+`QymUIComponents.renderErrorState(host, { title, error, onRetry })` in place
+of the region that failed: it names the cause (session ended → Sign in, no
+access, not found only for a real 404, server error, network) and offers
+Retry; it never shows a create action. A refresh that fails after data was
+shown keeps the rows dimmed (`.qym-is-stale`) under a `.qym-stale-banner`
+that says how old they are and whether the latest filter change is applied.
 
 ### Empty state
 Icon: hardcoded 32–48px glyph, `--text-dim`, low opacity. Title:
