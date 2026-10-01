@@ -646,6 +646,9 @@ def test_project_descriptor_preserves_action_permissions(dataset, role, expected
         "role",
         "created_at",
         "updated_at",
+        # Correction review rules (C074) are part of every project payload.
+        "correction_approvers",
+        "correction_require_different_reviewer",
     }
 
 
