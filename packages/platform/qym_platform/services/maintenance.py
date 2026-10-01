@@ -1062,7 +1062,7 @@ def _run_retention(ctx: JobContext) -> bool:
 
 @register(
     "backfill_dataset_search_text",
-    description="Fill dataset item search text and published lineage counts (migration 0066), then build the trigram search index.",
+    description="Fill dataset item search text and published lineage counts (migration 0068), then build the trigram search index.",
 )
 def _backfill_dataset_search_text(ctx: JobContext) -> bool:
     """Three phases, each resumable from ``ctx.progress``.

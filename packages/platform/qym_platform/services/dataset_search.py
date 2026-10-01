@@ -4,7 +4,7 @@ Every item stores ``search_text``: its item ID, input, expected output and
 metadata, decoded and normalized once when the item is written. A search is
 then a plain substring match on that column, which a pg_trgm GIN index can
 serve, instead of re-serializing and normalizing every row's JSON per request.
-Rows written before migration 0066 keep ``search_text`` NULL until the
+Rows written before migration 0068 keep ``search_text`` NULL until the
 ``backfill_dataset_search_text`` maintenance job reaches them; until then they
 are matched with the old per-row expression, so results never depend on the
 backfill's progress.

@@ -711,7 +711,7 @@ class DatasetItem(Base):
     fingerprint: Mapped[str] = mapped_column(String(64), index=True)
     # Normalized text of item_id, input, expected output and metadata, written on
     # every insert/update (see the listeners below) so search is a plain LIKE that
-    # a trigram index can serve. NULL only on rows written before migration 0066
+    # a trigram index can serve. NULL only on rows written before migration 0068
     # until the backfill_dataset_search_text maintenance job reaches them.
     search_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

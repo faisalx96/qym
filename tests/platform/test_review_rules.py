@@ -821,11 +821,11 @@ def test_review_rules_migration_is_quick_ddl_and_reversible(monkeypatch):
     from alembic.migration import MigrationContext
     from alembic.operations import Operations
 
-    path = ROOT / "packages/platform/qym_platform/migrations/versions/0066_review_rules.py"
-    spec = importlib.util.spec_from_file_location("migration_0066", path)
+    path = ROOT / "packages/platform/qym_platform/migrations/versions/0067_review_rules.py"
+    spec = importlib.util.spec_from_file_location("migration_0067", path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
-    assert (migration.revision, migration.down_revision) == ("0066", "0065")
+    assert (migration.revision, migration.down_revision) == ("0067", "0066")
 
     engine = sa.create_engine("sqlite://")
     metadata = sa.MetaData()

@@ -42,7 +42,7 @@ def test_alembic_has_one_upgrade_head() -> None:
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["0066"]
+    assert heads == ["0068"]
 
 
 def test_migrations_name_their_own_revision_in_job_logs() -> None:
@@ -178,7 +178,7 @@ def test_dataset_search_migration_adds_nullable_columns_and_queues_the_backfill(
     from qym_platform.db.maintenance_models import MaintenanceJob
     from qym_platform.services import maintenance
 
-    migration = _load_migration("0066_dataset_search_text.py")
+    migration = _load_migration("0068_dataset_search_text.py")
     engine = sa.create_engine("sqlite://")
     metadata = sa.MetaData()
     items = sa.Table("dataset_items", metadata, sa.Column("id", sa.Integer(), primary_key=True))

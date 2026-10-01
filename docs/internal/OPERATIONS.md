@@ -58,12 +58,12 @@ sure one process runs a given job.
 
 ## Migrations and large tables
 
-The combined migration chain has one head, `0066`, following `0050` through
-`0051`–`0065`. Migrations run before API readiness. Large storage rewrites and index
+The combined migration chain has one head, `0068`, following `0050` through
+`0051`–`0067`. Migrations run before API readiness. Large storage rewrites and index
 builds are deferred to maintenance jobs. Migration `0057` also backfills existing
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
-Migrations `0058`–`0066` are quick DDL or small job/queue inserts.
+Migrations `0058`–`0068` are quick DDL or small job/queue inserts.
 
 | Migration | Work during startup | Deferred job (if table is large) |
 |---|---|---|
@@ -82,8 +82,9 @@ Migrations `0058`–`0066` are quick DDL or small job/queue inserts.
 | 0063 | `run_metric_specs.direction` nullable, `run_metric_specs.is_primary` | `reclassify_metric_errors` — **queued, runs by itself**: rebuilds runs whose verdict reasons were counted as scorer errors, and marks repeat passes whose task failed after a metric was scored |
 | 0064 | — | `project_item_failure_events` — **queued, runs by itself**: rebuilds repeat runs with a pass that failed only through an `item_failed` event |
 | 0065 | Nullable `projects.archived_at` and `runs.purge_clock_started_at`; sets `archived_at` on projects already archived (a handful of rows) | None: Trash purging pauses for archived projects from now on |
-| 0066 | `projects.correction_approvers` (default `members`) and `projects.correction_require_different_reviewer` (default false), constant defaults on the small projects table; nullable `run_workflow_events.on_behalf_of_user_id` | None: every project keeps today's review behaviour until a manager changes it |
-| 0066 | Nullable `dataset_items.search_text`, `dataset_versions.change_counts`, `datasets.deleted_by_user_id` | `backfill_dataset_search_text` — **queued, runs by itself** (only when dataset items exist): fills search text in id windows (about 1 s per 1,000 RAG-sized items on the perf lab), stores lineage counts of published versions, then runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` and builds `ix_dataset_items_search_trgm` CONCURRENTLY. Without the privilege to create the extension it logs that and skips the index; search stays correct, only unindexed. Until the job reaches a row, search matches it the old way, so results never depend on its progress |
+| 0066 | Empty `background_jobs` table (shared job state for several web processes) | None |
+| 0067 | `projects.correction_approvers` (default `members`) and `projects.correction_require_different_reviewer` (default false), constant defaults on the small projects table; nullable `run_workflow_events.on_behalf_of_user_id` | None: every project keeps today's review behaviour until a manager changes it |
+| 0068 | Nullable `dataset_items.search_text`, `dataset_versions.change_counts`, `datasets.deleted_by_user_id` | `backfill_dataset_search_text` — **queued, runs by itself** (only when dataset items exist): fills search text in id windows (about 1 s per 1,000 RAG-sized items on the perf lab), stores lineage counts of published versions, then runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` and builds `ix_dataset_items_search_trgm` CONCURRENTLY. Without the privilege to create the extension it logs that and skips the index; search stays correct, only unindexed. Until the job reaches a row, search matches it the old way, so results never depend on its progress |
 
 After `0060`/`0064` the dashboard worker republishes every ready summary once
 (a "republish wave"; about 45 s per 600 runs on the perf lab, in the

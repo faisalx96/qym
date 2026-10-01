@@ -21,8 +21,8 @@ from uuid import uuid4
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0066"
-down_revision = "0065"
+revision = "0068"
+down_revision = "0067"
 branch_labels = None
 depends_on = None
 
@@ -42,7 +42,7 @@ def upgrade():
             ).bindparams(
                 id=str(uuid4()),
                 params=json.dumps({}),
-                log="queued by migration 0066: fill dataset item search text and lineage counts, then index search",
+                log="queued by migration 0068: fill dataset item search text and lineage counts, then index search",
                 now=now,
             )
         )

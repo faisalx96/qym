@@ -2,7 +2,7 @@
 
 Every case runs twice: on the stored ``search_text`` written at insert time
 (C031) and on legacy rows whose ``search_text`` is still NULL (written before
-migration 0066, not yet reached by the backfill), which must match the same.
+migration 0068, not yet reached by the backfill), which must match the same.
 """
 
 import os

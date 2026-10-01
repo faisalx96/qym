@@ -117,7 +117,7 @@ def test_search_uses_stored_text_including_metadata_and_legacy_rows(env):
     # Metadata values are found (they used to answer "No items match").
     found = client.get("/v1/datasets/qa/versions/v1/items", params={"project_slug": "pa", "search": "SHIPPING"}, headers=MGR).json()
     assert [item["item_id"] for item in found["items"]] == ["b"] and found["total"] == 1
-    # A row written before migration 0066 (search_text NULL) still matches.
+    # A row written before migration 0068 (search_text NULL) still matches.
     with factory() as db:
         db.execute(update(DatasetItem).where(DatasetItem.item_id == "a").values(search_text=None))
         db.commit()
