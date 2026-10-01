@@ -301,6 +301,8 @@
       isLoaded: row => row?.__details_loaded !== false,
       matches: (condition, row) => searches.get(searchKey(condition))?.has(itemId(row)) || false,
       releaseExcept(rows) { trim(new Set(rows.map(itemId)), rows.length); },
+      // A live run gained items: earlier text-search answers may miss them.
+      forgetSearches() { searches.clear(); },
       stop() {
         stopped = true;
         self.stopped = true;

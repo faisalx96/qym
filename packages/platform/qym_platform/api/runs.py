@@ -84,6 +84,7 @@ from qym_platform.services.run_payloads import (
     new_meta_key_index,
     reason_fields,
     reason_request,
+    scope_row_to_pass,
     search_conditions,
 )
 from qym_platform.services.run_review import (
@@ -5033,6 +5034,7 @@ def legacy_run_data(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
     view: Optional[str] = None,
+    pass_number: Optional[int] = None,
 ) -> Dict[str, Any]:
     run = Run.active(db).filter(Run.id == run_id).first()
     if not run:
@@ -5041,9 +5043,87 @@ def legacy_run_data(
         return {"error": "Access denied"}
     _reconcile_run_liveness(db, [run])
 
-    if view not in (None, "full", "compact"):
-        raise HTTPException(422, "view must be full or compact")
-    return _build_run_data(db, run, compact=view == "compact")
+    if view not in (None, "full", "compact", "summary"):
+        raise HTTPException(422, "view must be full, compact or summary")
+    if pass_number is not None and (view != "compact" or pass_number < 1):
+        raise HTTPException(422, "pass_number (1 or more) needs view=compact")
+    if view == "summary":
+        # The run header (names, metrics, samples) without any item rows:
+        # what a page needs before it chooses the rows it loads (C027).
+        return _build_run_data(db, run, item_ids=[], compact=True)
+    # Read before the rows are built: a page that follows a live run starts
+    # from this revision (at worst one reload too many, never one missed).
+    live_revision = (
+        _live_revision(db, run) if run.status in _LIVE_RUN_STATUSES else None
+    )
+    data = _build_run_data(db, run, compact=view == "compact")
+    if live_revision is not None and isinstance(data.get("run"), dict):
+        data["run"]["live_revision"] = live_revision
+    if pass_number is not None:
+        # One sample of a repeat run: the other passes' series are dropped.
+        data["snapshot"]["rows"] = [
+            scope_row_to_pass(row, pass_number) for row in data["snapshot"]["rows"]
+        ]
+        data["snapshot"]["pass_number"] = pass_number
+    return data
+
+
+def _live_revision(db: Session, run: Run) -> str:
+    """What a page following a live run compares to know it has news (C039).
+
+    The highest event sequence moves with every stored event, also one that
+    arrives late and so leaves ``last_event_at`` alone; it is read from the
+    unique (run_id, sequence) index. Status and ``updated_at`` cover state
+    changes; ``last_event_at`` covers heartbeats.
+    """
+    status = run.status.value if hasattr(run.status, "value") else str(run.status or "")
+    sequence = (
+        db.query(func.max(RunEvent.sequence)).filter(RunEvent.run_id == run.id).scalar()
+    )
+    return "|".join(
+        [
+            status,
+            _iso(run.last_event_at) if run.last_event_at else "",
+            _iso(run.updated_at) if run.updated_at else "",
+            str(sequence if sequence is not None else ""),
+        ]
+    )
+
+
+@router.get("/api/runs/{run_id}/live-status")
+def run_live_status(
+    run_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """A small status probe for pages that follow a run while it runs (C039).
+
+    ``revision`` changes whenever the run records an event or changes state,
+    so a page reloads the run's rows only when there is something new.
+    """
+    run = Run.active(db).filter(Run.id == run_id).first()
+    if not run:
+        raise HTTPException(404, "Run not found")
+    if not can_view_run(db, principal, run):
+        raise HTTPException(403, "Access denied")
+    _reconcile_run_liveness(db, [run])
+    status = run.status.value if hasattr(run.status, "value") else str(run.status or "")
+    last_event_at = _iso(run.last_event_at) if run.last_event_at else None
+    return {
+        "run_id": run.id,
+        "status": status,
+        "status_reason": run.status_reason,
+        "live": run.status in _LIVE_RUN_STATUSES,
+        "started_at": (
+            _iso(run.started_at or run.created_at)
+            if (run.started_at or run.created_at)
+            else None
+        ),
+        "ended_at": _iso(run.ended_at) if run.ended_at else None,
+        "last_event_at": last_event_at,
+        "revision": _live_revision(db, run),
+        "server_time": to_api_timestamp(utc_now_naive()),
+    }
 
 
 # Review states in which a run's scores are locked (C041): the numbers a

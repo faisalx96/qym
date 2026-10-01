@@ -215,3 +215,42 @@ def reason_fields(meta: Any) -> Dict[str, str]:
             text = json.dumps(value, ensure_ascii=False, default=str)
         result[key] = text[:REASON_TEXT_LIMIT]
     return result
+
+
+# Per-pass series of a row: one entry per pass, by position.
+_PASS_SERIES_FIELDS = ("pass_scores", "pass_metric_meta", "pass_metric_analyses")
+
+
+def scope_row_to_pass(row: Dict[str, Any], pass_number: int) -> Dict[str, Any]:
+    """Keep only one pass of a row's per-pass series.
+
+    Positions stay (the other passes become null), so a reader that picks
+    ``values[pass_number - 1]`` reads the same value as from the full row.
+    The analyzer of one sample needs nothing from the other passes.
+    """
+    keep = pass_number - 1
+
+    def one_pass(values: Any) -> Any:
+        if not isinstance(values, list):
+            return values
+        return [value if index == keep else None for index, value in enumerate(values)]
+
+    for field in _PASS_SERIES_FIELDS:
+        series = row.get(field)
+        if isinstance(series, dict):
+            row[field] = {metric: one_pass(values) for metric, values in series.items()}
+    attempts = row.get("pass_attempts")
+    if isinstance(attempts, list):
+        row["pass_attempts"] = [
+            (
+                attempt
+                if isinstance(attempt, dict)
+                and (
+                    attempt.get("pass_number") == pass_number
+                    or (attempt.get("pass_number") is None and index == keep)
+                )
+                else None
+            )
+            for index, attempt in enumerate(attempts)
+        ]
+    return row

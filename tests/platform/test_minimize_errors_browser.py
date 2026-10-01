@@ -151,8 +151,11 @@ def test_run_page_histogram_keeps_errors_out_of_the_best_bucket(browser):
             .endswith("3 errors · not counted in the mean")
         )
         # The 0% bucket (the best for this metric) holds no errored item.
-        best = card.locator('.dist-chart-col[data-bucket-min="0"]')
+        # It is empty, so it is no filter control (C028).
+        best = card.locator(".dist-chart-col").first
+        assert best.locator(".bar-label").inner_text() == "0%"
         assert best.locator(".bar-count").inner_text() == ""
+        assert "is-empty" in best.get_attribute("class")
         assert card.locator(".bar-fill-errors").count() == 0
         assert "7 scored · 3 err" in card.locator(".metric-card-badge").inner_text()
         assert fixture.errors == []
@@ -254,7 +257,10 @@ def test_run_page_pass_distribution_filter_counts_errored_passes_as_fails(browse
             # h passes at <= 30%: a 1 of 3 (its scorer error fails), b 2 of 3
             # (its task error fails), c none, d 2 of 3 (/group-metrics).
             assert [
-                bars.nth(index).get_attribute("aria-label").split(".")[0]
+                (
+                    bars.nth(index).get_attribute("aria-label")
+                    or bars.nth(index).get_attribute("title")
+                ).split(".")[0]
                 for index in range(bars.count())
             ] == [
                 "0 of 3 attempts passed: 1 items",
@@ -272,7 +278,10 @@ def test_run_page_pass_distribution_filter_counts_errored_passes_as_fails(browse
                         ".map(item => item.itemId || item.row.item_id)"
                     )
                 )
-            assert filtered == {0: ["c"], 1: ["a"], 2: ["b", "d"], 3: []}
+            # The empty "3 of 3" bar is no control: clicking it keeps the
+            # previous filter instead of emptying the page (C028).
+            assert bars.nth(3).get_attribute("role") is None
+            assert filtered == {0: ["c"], 1: ["a"], 2: ["b", "d"], 3: ["b", "d"]}
         finally:
             fixture.close()
 

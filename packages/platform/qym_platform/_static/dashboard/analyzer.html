@@ -3753,12 +3753,8 @@
       }
 
       function navigateToPass(passNumber) {
-        const nextParams = new URLSearchParams(window.location.search);
-        if (projectSlug) nextParams.set('run', runId);
-        nextParams.set('pass', String(passNumber));
-        if (requestedMetric) nextParams.set('metric', requestedMetric);
-        nextParams.set('scope', 'run');
-        window.location.href = window.location.pathname + '?' + nextParams.toString();
+        // In place: no page reload and no second download of the run (C027).
+        switchToPass(passNumber).catch(showAnalyzerLoadError);
       }
 
       function analysisViewUrl(view) {
@@ -3999,7 +3995,8 @@
           return {
             item_id: row.item_id,
             index: row.index,
-            input: row.input,
+            // Compact rows carry a one-line preview instead of the body.
+            input: row.input != null ? row.input : row.input_preview,
             input_full: row.input_full,
             output: passNumber && passAttemptValue ? passAttemptValue.output : row.output,
             output_full: passNumber && passAttemptValue ? passAttemptValue.output : row.output_full,
@@ -5969,7 +5966,13 @@
           await initializePlayground(true);
           return;
         }
-        const response = await fetch(apiUrl('api/runs/' + encodeURIComponent(runId)));
+        // The run header (no item rows) and its sample list load together: a
+        // repeat run shows its sample picker without downloading the run. The
+        // rows load afterwards, compact and for the chosen sample only (C027).
+        const [response, passesResponse] = await Promise.all([
+          fetch(apiUrl('api/runs/' + encodeURIComponent(runId) + '?view=summary')),
+          fetch(apiUrl('api/runs/' + encodeURIComponent(runId) + '/passes')).catch(() => null),
+        ]);
         if (!response.ok) throw new Error('Could not load this run (HTTP ' + response.status + ').');
         const data = await response.json();
         if (data && data.error) {
@@ -5983,8 +5986,9 @@
         state.metric = state.selectedMetrics[0] || '';
         const sampleCount = Number(data.run.samples || 1);
         if (sampleCount > 1 || data.run.metadata?.has_repeat_pass_context) {
-          const passesResponse = await fetch(apiUrl('api/runs/' + encodeURIComponent(runId) + '/passes'));
-          if (!passesResponse.ok) throw new Error('Could not load the run samples (HTTP ' + passesResponse.status + ').');
+          if (!passesResponse || !passesResponse.ok) {
+            throw new Error('Could not load the run samples (HTTP ' + (passesResponse ? passesResponse.status : 'network error') + ').');
+          }
           const passData = await passesResponse.json();
           if (passData && passData.error) throw new Error(String(passData.error));
           state.passSummaries = Array.isArray(passData && passData.passes) && passData.passes.length
@@ -6004,11 +6008,113 @@
           state.passSummaries = [];
           state.passNumber = null;
         }
+        await openWorkspace();
+      }
+
+      // The analysis workspace for the current sample: its rows, then the
+      // playground (C027).
+      async function openWorkspace() {
+        const data = state.data;
+        data.snapshot.rows = await fetchAnalyzerRows(state.passNumber);
         document.title = 'قيِّم • Auto-analysis • ' + (data.run.run_name || runId);
         document.getElementById('analysis-loading').hidden = true;
         document.getElementById('analyzer-host').hidden = false;
         await initializePlayground(false);
         wirePassSelector();
+      }
+
+      // Compact rows (scores, flags, metadata; no text bodies), scoped to
+      // one sample of a repeat run. Field pickers read the JSON shape of the
+      // first rows, so those load their bodies.
+      async function fetchAnalyzerRows(passNumber) {
+        const query = '?view=compact' + (passNumber ? '&pass_number=' + encodeURIComponent(passNumber) : '');
+        const response = await fetch(apiUrl('api/runs/' + encodeURIComponent(runId) + query));
+        if (!response.ok) throw new Error('Could not load this run (HTTP ' + response.status + ').');
+        const data = await response.json();
+        if (data && data.error) {
+          throw new Error(typeof data.error === 'string' ? data.error : 'Could not load this run.');
+        }
+        const rows = (data && data.snapshot && Array.isArray(data.snapshot.rows)) ? data.snapshot.rows : [];
+        const sample = rows.slice(0, 20);
+        if (sample.length) {
+          try {
+            const details = await fetch(apiUrl('api/runs/' + encodeURIComponent(runId) + '/items/details'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ item_ids: sample.map(row => String(row.item_id ?? row.index)) }),
+            });
+            const detailData = details.ok ? await details.json() : null;
+            const byId = new Map(((detailData && detailData.rows) || []).map(row => [String(row.item_id ?? row.index), row]));
+            sample.forEach(row => {
+              const full = byId.get(String(row.item_id ?? row.index));
+              if (!full) return;
+              ['input', 'input_full', 'expected', 'expected_full', 'output', 'output_full',
+                'metric_meta', 'pass_metric_meta', 'pass_attempts'].forEach(key => {
+                if (full[key] !== undefined) row[key] = full[key];
+              });
+            });
+          } catch (error) {
+            // The pickers still offer the full value of each field.
+            console.warn('Could not load sample item bodies', error);
+          }
+        }
+        return rows;
+      }
+
+      // Switching samples stays on the page: only that sample's rows load.
+      function rememberPassInUrl(passNumber) {
+        const nextParams = new URLSearchParams(window.location.search);
+        if (projectSlug) nextParams.set('run', runId);
+        nextParams.set('pass', String(passNumber));
+        if (requestedMetric) nextParams.set('metric', requestedMetric);
+        nextParams.set('scope', 'run');
+        history.replaceState(history.state, '', window.location.pathname + '?' + nextParams.toString());
+      }
+
+      async function switchToPass(passNumber) {
+        if (!state.data || passNumber === state.passNumber) return;
+        const select = document.getElementById('analysis-pass-select');
+        if (!select) {
+          // From the sample picker: open the workspace for the chosen sample.
+          state.passNumber = passNumber;
+          rememberPassInUrl(passNumber);
+          const host = document.getElementById('analyzer-host');
+          host.innerHTML = '';
+          host.hidden = true;
+          document.getElementById('analysis-loading').hidden = false;
+          await openWorkspace();
+          return;
+        }
+        const previousPass = state.passNumber;
+        const playground = window.QymPlayground || {};
+        const cancel = document.getElementById('pg-cancel-btn');
+        const busy = playground.isBusy ? playground.isBusy() : (cancel && !cancel.hidden);
+        if (busy) {
+          // An analysis is starting or running: its results belong to the
+          // sample it started on.
+          select.value = String(previousPass);
+          showStatus('warning', 'Analysis running', 'Wait for it to finish, or cancel it, before switching samples.');
+          return;
+        }
+        const runCard = document.querySelector('.analysis-run-card');
+        select.disabled = true;
+        if (runCard) runCard.setAttribute('aria-busy', 'true');
+        try {
+          const rows = await fetchAnalyzerRows(passNumber);
+          state.passNumber = passNumber;
+          state.data.snapshot.rows = rows;
+          rememberPassInUrl(passNumber);
+          const runLink = document.querySelector('.analysis-run-header > .analysis-secondary-link');
+          if (runLink) runLink.setAttribute('href', selectedRunUrl(runId));
+          if (playground.clearResults) playground.clearResults();
+          if (playground.refreshFilters) playground.refreshFilters();
+        } catch (error) {
+          select.value = String(previousPass);
+          showStatus('error', 'Could not load the sample', error.message || String(error));
+        } finally {
+          select.disabled = false;
+          if (runCard) runCard.removeAttribute('aria-busy');
+        }
       }
 
       document.getElementById('analysis-error-retry').addEventListener('click', () => {

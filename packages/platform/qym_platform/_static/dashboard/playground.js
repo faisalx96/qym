@@ -6289,5 +6289,21 @@ window.QymPlayground = (function () {
     refreshFilters: function () {
       if (_overlay) _onFilterChange();
     },
+    // An analysis or a test is starting or running: its results belong to
+    // the sample it started on, so the analyzer must not switch samples.
+    isBusy: function () {
+      return _running || !!_analysisJobId;
+    },
+    // The analyzer switched samples in place: results shown for the
+    // previous sample no longer apply.
+    clearResults: function () {
+      _testResults = [];
+      ['pg-runall-results', 'pg-test-results'].forEach(function (id) {
+        var node = document.getElementById(id);
+        if (node) node.innerHTML = '';
+      });
+      var divider = document.getElementById('pg-results-divider');
+      if (divider) divider.style.display = 'none';
+    },
   };
 })();

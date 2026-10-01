@@ -152,6 +152,8 @@ def test_section_nav_links_counts_jump_and_follow_the_reader(browser):
     try:
         fixture.goto()
         nav = page.locator("#run-section-nav")
+        # The breakdowns (Categories, Errors) render just after the items.
+        nav.locator('[data-run-section-link="errors"]:not([hidden])').wait_for()
         visible = nav.locator("[data-run-section-link]:not([hidden])")
         labels = [label.split("\n")[0].strip() for label in visible.all_inner_texts()]
         # Today's section order; sections without content have no link.

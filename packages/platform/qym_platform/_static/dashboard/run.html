@@ -11,9 +11,10 @@
   <script src="/static/auth.js?v=p0-20260930"></script>
   <script src="/static/shell.js?v=p1-20261001"></script>
   <script src="/static/metrics.js?v=p0-20260930-3"></script>
-  <script src="/static/run_details.js?v=p0-20260930"></script>
+  <script src="/static/run_details.js?v=p1-20261001"></script>
+  <script src="/static/qym_live.js?v=p1-20261001"></script>
   <script src="/static/trace_viewer.js?v=p1-20261001"></script>
-  <script src="/static/step_latency.js?v=p0-20260930"></script>
+  <script src="/static/step_latency.js?v=p1-20261001"></script>
   <script src="/static/review_history.js?v=p1-20261001"></script>
   <script src="/static/item_reasons.js?v=p1-20261001"></script>
   <script src="/static/run_section_nav.js?v=p1-20261001"></script>
@@ -202,6 +203,14 @@
     @keyframes hero-pulse {
       0%, 100% { opacity: 1; transform: scale(1); }
       50% { opacity: 0.4; transform: scale(0.6); }
+    }
+    /* A running run's page follows it (C039): when it last checked. */
+    .run-live-indicator {
+      align-self: center;
+      font-size: var(--font-sm);
+      color: var(--text-muted);
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
     }
 
     /* Incomplete-ingest warning: shown when the run completed but fewer
@@ -546,15 +555,6 @@
       gap: 6px;
       min-width: 0;
     }
-    .context-cell-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 2px;
-      flex-shrink: 0;
-      margin-top: 5px;
-      opacity: 0.7;
-      background: var(--accent-primary);
-    }
     .context-cell-text {
       min-width: 0;
       display: flex;
@@ -728,6 +728,8 @@
       transition: opacity 0.15s;
     }
     .dist-chart-col:hover { opacity: 0.8; }
+    .dist-chart-col.is-empty { cursor: default; }
+    .dist-chart-col.is-empty:hover { opacity: 1; }
     .dist-chart-col .bar-count {
       font-family: var(--font-mono);
       font-size: var(--font-xs);
@@ -1013,6 +1015,8 @@
     .trace-pill:hover {
       background: var(--bg-hover);
     }
+    /* One monochrome line-icon family, muted; colour stays for meaning
+       (pass/fail) elsewhere on the page (C143). */
     .trace-pill-icon {
       width: 28px;
       height: 28px;
@@ -1020,17 +1024,22 @@
       align-items: center;
       justify-content: center;
       border-radius: 6px;
-      font-size: 14px;
       flex-shrink: 0;
+      color: var(--text-muted);
+      background: var(--bg-hover);
     }
-    .trace-pill-icon.tokens { background: rgba(0, 212, 170, 0.1); }
-    .trace-pill-icon.llm    { background: rgba(0, 168, 255, 0.1); }
-    .trace-pill-icon.tool   { background: rgba(245, 158, 11, 0.1); }
-    .trace-pill-icon.success { background: rgba(16, 185, 129, 0.1); }
-    .trace-pill-icon.retriever { background: rgba(56, 189, 248, 0.12); }
-    .trace-pill-icon.evaluator { background: rgba(167, 139, 250, 0.14); }
-    .trace-pill-icon.chain { background: rgba(148, 163, 184, 0.12); }
-    .trace-pill-icon.agent { background: rgba(52, 211, 153, 0.14); color: #34d399; }
+    .metric-card-name.trace-card-title {
+      margin-top: 0;
+      font-size: var(--font-md);
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .trace-not-captured {
+      margin: 0;
+      font-size: var(--font-base);
+      color: var(--text-muted);
+    }
+    .trace-not-captured a { color: var(--accent-primary); }
     .trace-pill-icon svg {
       width: 16px;
       height: 16px;
@@ -1057,6 +1066,7 @@
       font-size: var(--font-xl);
       font-weight: 700;
       line-height: 1;
+      color: var(--text-primary);
     }
     .overview-summary-pills {
       display: flex;
@@ -1110,6 +1120,16 @@
       gap: var(--space-lg);
       transition: border-color 0.2s, box-shadow 0.2s;
       animation: card-enter 0.35s cubic-bezier(0.4, 0, 0.2, 1) both;
+    }
+    /* Cards enter once, on load; later redraws (filters, live refresh)
+       update in place without replaying it (C028). */
+    #run-content.is-settled .metric-card { animation: none; }
+    /* A refresh keeps the current rows, dimmed, until the new ones replace
+       them: the list never collapses to a loading line (C028). */
+    .items-grid.is-refreshing {
+      opacity: 0.55;
+      pointer-events: none;
+      transition: opacity 0.12s ease 0.08s;
     }
     .metric-card > *:last-child:not(.metric-card-header) {
       margin-top: auto;
@@ -5277,6 +5297,8 @@
       transition: opacity 0.15s, transform 0.15s;
     }
     .samples-correct-col:hover { opacity: 0.8; }
+    .samples-correct-col.is-empty { cursor: default; }
+    .samples-correct-col.is-empty:hover { opacity: 1; }
     .samples-correct-col:focus-visible {
       outline: 2px solid var(--accent-primary);
       outline-offset: 4px;
@@ -5983,6 +6005,8 @@
     /* Step latency: the run page names the section; its card keeps the
        controls. Hidden while the panel has nothing to show. */
     #step-latency-panel .sl-card > .ri-header :is(.section-title, .ri-header-copy) { display: none; }
+    /* Collapsed by default (C143): the card keeps its disclosure row. */
+    #step-latency-panel .sl-card.sl-collapsible > .ri-header .sl-title { display: block; }
     .run-section-head[data-run-section="steps"]:has(+ #step-latency-panel:is(:empty, [style*="display: none"])) {
       display: none;
     }
@@ -7488,6 +7512,10 @@
           const data = await res.json();
           if (data.error) { showError('Error', data.error); return; }
           if (!data.run || !data.snapshot) { showEmpty(); return; }
+          // A live run is followed (C039): remember each row as served, so a
+          // refresh keeps the rows that did not change (and their loaded
+          // bodies) and swaps in only the new or changed ones.
+          liveRowSignatures = isLiveStatus(data.run.status) ? rowSignatures(data.snapshot.rows) : null;
           state.run = data.run;
           state.snapshot = data.snapshot;
           seedCategoryCatalogFromRun(state.run);
@@ -7506,9 +7534,206 @@
           initializeRunDetails();
           render();
           applyReadOnlyMode();
+          startLiveRefresh();
         } catch (err) {
           console.error('Failed to load run:', err);
           showError('Network Error', 'Could not connect to the server.');
+        }
+      }
+
+      // ── Live refresh (C039) ──
+      // While the run is RUNNING or PENDING the page follows it: a small
+      // status probe every 3 s (paused in a hidden tab), the run's rows again
+      // when it changed (at most every 3/10/30 s by run size and passes, and
+      // never sooner than ten times the last reload took), and a ticking
+      // Runtime. Filters, page, opened items and scroll stay where they are.
+      // When the run ends it loads once more, with step latency, and stops.
+      let liveRun = null;
+      let liveRowSignatures = null;
+      function isLiveStatus(status) {
+        const value = String(status || '').toUpperCase();
+        return value === 'RUNNING' || value === 'PENDING';
+      }
+      // A short hash of each served row (FNV-1a over its JSON): enough to
+      // tell a changed row, without keeping a copy of every row.
+      function rowSignatures(rows) {
+        const signatures = new Map();
+        (rows || []).forEach(row => {
+          const text = JSON.stringify(row);
+          let hash = 0x811c9dc5;
+          for (let index = 0; index < text.length; index++) {
+            hash = Math.imul(hash ^ text.charCodeAt(index), 16777619);
+          }
+          signatures.set(rowItemKey(row), (hash >>> 0) + ':' + text.length);
+        });
+        return signatures;
+      }
+      // A reload rebuilds the whole run on the server, and a repeat run's rows
+      // carry every pass: size counts rows times passes. A reload that took
+      // long (a large run, a busy server) waits ten times as long before the
+      // next, so one open page never keeps the server busy.
+      function liveReloadIntervalMs(live) {
+        const passes = Math.max(1, parseInt(state.run?.samples, 10) || 1);
+        const count = (state.snapshot?.rows || []).length * passes;
+        const bySize = count < 500 ? 3000 : count < 5000 ? 10000 : 30000;
+        return Math.min(120000, Math.max(bySize, 10 * ((live && live.lastLoadMs) || 0)));
+      }
+
+      function startLiveRefresh() {
+        if (IS_EXPORT || window.__QYM_EXPORT_DATA__ || !RUN_ID || !window.QymLive || liveRun) return;
+        if (!isLiveStatus(state.run?.status)) return;
+        // Start from the revision the rows were served at: no reload until
+        // something changes.
+        const live = { revision: state.run.live_revision || null, loadedAt: Date.now(), checkedAt: Date.now(), clockOffset: 0, ticker: null, poller: null };
+        liveRun = live;
+        live.poller = QymLive.poll(async () => {
+          const res = await fetch(apiUrl('api/runs/' + encodeURIComponent(RUN_ID) + '/live-status'), { cache: 'no-store' });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const info = await res.json();
+          if (liveRun !== live) return false;
+          const serverNow = Date.parse(info.server_time || '');
+          if (Number.isFinite(serverNow)) live.clockOffset = serverNow - Date.now();
+          const ended = !info.live;
+          const changed = info.revision !== live.revision;
+          if (ended || (changed && Date.now() - live.loadedAt >= liveReloadIntervalMs(live))) {
+            const loadStarted = performance.now();
+            await refreshRunData({ ended });
+            if (liveRun !== live) return false;
+            live.lastLoadMs = performance.now() - loadStarted;
+            live.revision = info.revision;
+            live.loadedAt = Date.now();
+          }
+          live.checkedAt = Date.now();
+          if (ended) {
+            stopLiveRefresh();
+            return false;
+          }
+          updateLiveIndicator();
+          return undefined;
+        }, { intervalMs: 3000, maxIntervalMs: 30000 });
+        live.ticker = setInterval(tickLiveClock, 1000);
+        updateLiveIndicator();
+      }
+
+      function stopLiveRefresh() {
+        const live = liveRun;
+        liveRun = null;
+        if (!live) return;
+        if (live.poller) live.poller.stop();
+        clearInterval(live.ticker);
+        el('run-live-indicator')?.remove();
+      }
+      document.addEventListener('qym:before-navigate', stopLiveRefresh, { once: true });
+
+      // "Live · updated 2s ago" beside the status, so a quiet run does not
+      // look stuck.
+      function updateLiveIndicator() {
+        const live = liveRun;
+        const status = document.querySelector('#run-summary .hero-status');
+        if (!live || !status) return;
+        let node = el('run-live-indicator');
+        if (!node || node.previousElementSibling !== status) {
+          node?.remove();
+          node = document.createElement('span');
+          node.id = 'run-live-indicator';
+          node.className = 'run-live-indicator';
+          // Not a live region: its seconds change every second, and a screen
+          // reader would announce each one.
+          node.title = 'This page follows the run while it runs';
+          status.insertAdjacentElement('afterend', node);
+        }
+        const seconds = Math.max(0, Math.round((Date.now() - live.checkedAt) / 1000));
+        node.textContent = 'Live · updated ' + (seconds < 2 ? 'just now' : seconds + 's ago');
+      }
+
+      // Runtime counts up while the run (or the viewed pass) runs.
+      function tickLiveClock() {
+        const live = liveRun;
+        if (!live || !state.run) return;
+        updateLiveIndicator();
+        const pass = state.viewPass ? state.passSummary : null;
+        const status = String(pass?.status || state.run.status || '').toLowerCase();
+        const startedAt = pass ? pass.started_at : (state.run.started_at || state.run.created_at);
+        const endedAt = pass ? pass.ended_at : state.run.ended_at;
+        const node = el('hero-runtime');
+        if (!node || !startedAt || endedAt || (status !== 'running' && status !== 'pending')) return;
+        const started = new Date(startedAt).getTime();
+        if (Number.isNaN(started)) return;
+        const text = formatDurationMs(Math.max(0, Date.now() + live.clockOffset - started));
+        if (node.textContent !== text) {
+          node.textContent = text;
+          node.title = text;
+        }
+      }
+
+      async function refreshRunData({ ended = false } = {}) {
+        const [res, passRes] = await Promise.all([
+          fetch(apiUrl('api/runs/' + RUN_ID + '?view=compact'), { cache: 'no-store' }),
+          VIEW_PASS
+            ? fetch(apiUrl('api/runs/' + RUN_ID + '/passes'), { cache: 'no-store' }).catch(() => null)
+            : Promise.resolve(null),
+        ]);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (data.error || !data.run || !data.snapshot) throw new Error(data.error || 'Incomplete run data');
+        if (!liveRun) return;
+        const previousRun = JSON.stringify([state.run, state.passSummary]);
+        const previousRows = new Map((state.snapshot?.rows || []).map(row => [rowItemKey(row), row]));
+        const previousSignatures = liveRowSignatures;
+        const previousMetadataKeys = JSON.stringify([state.allMetadataKeys, state.allMetricMetaKeys, state.rootCauseValues]);
+        const previousPass = state.run?.last_completed_pass;
+        liveRowSignatures = rowSignatures(data.snapshot.rows);
+        if (VIEW_PASS) {
+          // As on load: the served pass summary, else one inferred from rows.
+          const passData = passRes && passRes.ok ? await passRes.json().catch(() => null) : null;
+          state.passSummary = passData && Array.isArray(passData.passes)
+            ? passData.passes.find(pass => Number(pass.pass_number) === VIEW_PASS) || null
+            : null;
+        }
+        state.run = data.run;
+        state.snapshot = data.snapshot;
+        processRun();
+        // Unchanged rows keep their objects: loaded bodies, open cards and
+        // the overview's memo stay; only new or changed rows are redrawn.
+        state.snapshot.rows = (state.snapshot.rows || []).map(row => {
+          const id = rowItemKey(row);
+          const previous = previousRows.get(id);
+          return previous && previousSignatures && previousSignatures.get(id) === liveRowSignatures.get(id)
+            ? previous
+            : row;
+        });
+        // New or changed rows may match a text search the page already ran;
+        // unchanged rows keep its answers (and the list needs no new search).
+        const keptRows = new Set(previousRows.values());
+        const rowsChanged = state.snapshot.rows.length !== previousRows.size
+          || state.snapshot.rows.some(row => !keptRows.has(row));
+        if (rowsChanged && runDetails && runDetails.forgetSearches) runDetails.forgetSearches();
+        const runChanged = JSON.stringify([state.run, state.passSummary]) !== previousRun;
+        if (runChanged) {
+          renderSummary();
+          wireTopActions();
+          applyReadOnlyMode();
+          updateLiveIndicator();
+          tickLiveClock();
+        }
+        if (JSON.stringify([state.allMetadataKeys, state.allMetricMetaKeys, state.rootCauseValues]) !== previousMetadataKeys) {
+          buildCategoryDropdowns();
+          populateMetadataFieldsDropdown();
+          populateMetricMetaFieldsDropdown();
+        }
+        if (ended || state.run.last_completed_pass !== previousPass) renderSamplesAnalysis();
+        // Changed rows are new objects, so the overview's key sees them; a
+        // changed run (trace stats, counts) redraws it regardless.
+        renderItems(false, { viewOnly: !runChanged, live: true });
+        if (ended) {
+          mountStepLatency();
+          if (window.QymReviewHistory && RUN_ID) {
+            window.QymReviewHistory.load(
+              el('review-history-section'),
+              apiUrl('api/runs/' + encodeURIComponent(RUN_ID) + '/review-history'),
+              state.run && state.run.status,
+            );
+          }
         }
       }
 
@@ -7868,22 +8093,32 @@
         return runDetails.ensureSearch(requiredTextSearches());
       }
 
-      function deferItemsUntil(promise, version, scrollToTop) {
+      function deferItemsUntil(promise, version, scrollToTop, options) {
         if (!promise) return false;
         const container = el('items-grid');
         container.setAttribute('aria-busy', 'true');
-        container.textContent = 'Loading items…';
+        // Rows already on screen stay, dimmed, until the new ones replace
+        // them: the list never collapses to a line and the page never jumps
+        // (C028). Only the very first load has nothing to keep.
+        // A live refresh changes nothing the reader asked for, so its list
+        // is not even dimmed: it stays usable while the search runs.
+        if (state.hasRenderedItems && container.childNodes.length) {
+          if (!(options && options.live)) container.classList.add('is-refreshing');
+        } else {
+          container.textContent = 'Loading items…';
+        }
         promise.then(() => {
-          if (version === itemRenderVersion) renderItems(scrollToTop);
+          if (version === itemRenderVersion) renderItems(scrollToTop, options);
         }).catch(error => {
           if (version !== itemRenderVersion || error.name === 'AbortError') return;
           container.removeAttribute('aria-busy');
+          container.classList.remove('is-refreshing');
           container.textContent = 'Items could not be loaded. ';
           const retry = document.createElement('button');
           retry.type = 'button';
           retry.className = 'qym-inline-action qym-inline-action--accent';
           retry.textContent = 'Retry';
-          retry.onclick = () => renderItems(scrollToTop);
+          retry.onclick = () => renderItems(scrollToTop, options);
           container.appendChild(retry);
           showToast('error', 'Could not load items', error.message);
         });
@@ -7900,18 +8135,54 @@
         const wanted = rows.filter(row => !openedItemErrors.has(rowItemKey(row)));
         const promise = wanted.length ? runDetails.ensureRows(wanted, { retainAll: runNeedsFullText() }) : null;
         if (!promise) return;
+        // Only the opened cards change: patch them in place (C028).
+        const ids = wanted.map(rowItemKey);
         promise.then(() => {
-          if (version === itemRenderVersion) renderItems(false, { itemsOnly: true });
+          if (version === itemRenderVersion) patchItemCards(ids);
         }).catch(error => {
           if (error.name === 'AbortError' || !runDetails) return;
           wanted.forEach(row => {
             if (!runDetails.isLoaded(row)) openedItemErrors.set(rowItemKey(row), error.message);
           });
           if (version === itemRenderVersion) {
-            renderItems(false, { itemsOnly: true });
+            patchItemCards(ids);
             showToast('error', 'Could not load item', error.message);
           }
         });
+      }
+
+      // The page of cards renderItems drew last: its card renderer and wiring,
+      // so one card can be redrawn alone (expand, collapse, details loaded)
+      // without rebuilding the page, the overview or step latency (C028).
+      let itemCardPage = null;
+      function patchItemCards(ids) {
+        const page = itemCardPage;
+        const container = el('items-grid');
+        if (!page || page.version !== itemRenderVersion || !container) {
+          renderItems(false, { itemsOnly: true });
+          return;
+        }
+        const wanted = new Set(ids.map(String));
+        const cards = Array.from(container.children).filter(node =>
+          node.classList && node.classList.contains('item-card') && wanted.has(node.dataset.itemId));
+        let patched = 0;
+        cards.forEach(card => {
+          const item = page.items.find(entry => rowItemKey(entry.row) === card.dataset.itemId);
+          if (!item) return;
+          const hadFocus = card.contains(document.activeElement);
+          const template = document.createElement('template');
+          template.innerHTML = page.render(item);
+          const next = template.content.firstElementChild;
+          if (!next) return;
+          card.replaceWith(next);
+          page.wire(next);
+          patched++;
+          if (hadFocus) {
+            const target = next.matches('[data-item-expand]') ? next : next.querySelector('[data-item-expand]');
+            if (target) target.focus({ preventScroll: true });
+          }
+        });
+        if (patched) window.QymUIComponents?.alignMetricColumns(container);
       }
       function renderOpenedItemStatus(itemId) {
         const style = ' style="padding: var(--space-md); color: var(--text-muted); font-size: var(--font-base);"';
@@ -8349,8 +8620,25 @@
         populateMetadataFieldsDropdown();
         populateMetricMetaFieldsDropdown();
         renderItems();
+        mountStepLatency();
+        // Cards play their entrance once; later redraws stay still.
+        setTimeout(() => el('run-content')?.classList.add('is-settled'), 1000);
         // Auto-open trace if ?trace=itemId is in the URL
         if (window.QymTraceViewer) window.QymTraceViewer.restoreFromUrl();
+      }
+
+      // Step latency loads once per page load (and again when a live run
+      // ends), never on a filter, sort, page or expand (C028). On the run
+      // page it starts collapsed (C143).
+      function mountStepLatency() {
+        try {
+          const slPanel = el('step-latency-panel');
+          if (window.QymStepLatency && slPanel) {
+            QymStepLatency.mount(slPanel, [RUN_ID], { collapsible: true });
+          }
+        } catch (err) {
+          console.error('[step-latency] mount failed:', err);
+        }
       }
 
       function renderSummary() {
@@ -8390,7 +8678,7 @@
           const contentHtml = opts.html || escapeHtml(text);
           return '<div class="hero-meta-item">' +
             '<div class="hero-meta-label">' + escapeHtml(label) + '</div>' +
-            '<div class="' + classes.join(' ') + '" title="' + escapeAttr(text) + '">' + contentHtml + '</div>' +
+            '<div class="' + classes.join(' ') + '"' + (opts.id ? ' id="' + escapeAttr(opts.id) + '"' : '') + ' title="' + escapeAttr(text) + '">' + contentHtml + '</div>' +
           '</div>';
         }
 
@@ -8471,7 +8759,7 @@
           metaItem('Owner', ownerLabel === '—' ? '' : ownerLabel),
           metaItem('Project', projectName === '—' ? '' : projectName),
           metaItem('Started', formatIsoDateTime(startedAt), { nowrap: true }),
-          metaItem('Runtime', runtimeText, { nowrap: true }),
+          metaItem('Runtime', runtimeText, { nowrap: true, id: 'hero-runtime' }),
           metaItem('Version', versionText, { mono: true, nowrap: true }),
         ].filter(Boolean).join('');
         const executionContextHtml = buildExecutionContextSectionHtml();
@@ -9068,7 +9356,11 @@
             const title = samplesCount <= 10
               ? bucket.correct + ' of ' + samplesCount + ' attempts passed: ' + bucket.count + ' items'
               : bucket.label + ' passing attempts: ' + bucket.count + ' items';
-            return '<div class="samples-correct-col" role="button" tabindex="0" aria-label="' + escapeAttr(title + '. Click to filter the item table.') + '" data-repeat-distribution-metric="' + escapeAttr(groupMetric) + '" data-repeat-distribution-bucket="' + index + '" data-repeat-distribution-samples="' + samplesCount + '" data-repeat-distribution-threshold="' + distributionThreshold + '" title="' + escapeAttr(title + ' — Click to filter') + '"><div class="samples-correct-bar' + edgeClass + '" style="--samples-correct-height:' + height + '%"><span class="samples-correct-count">' + bucket.count + '</span><span class="samples-correct-label">' + bucket.label + '</span></div></div>';
+            // An empty column has nothing to filter to, so it is no control (C028).
+            const control = bucket.count > 0
+              ? ' role="button" tabindex="0" aria-label="' + escapeAttr(title + '. Click to filter the item table.') + '" data-repeat-distribution-metric="' + escapeAttr(groupMetric) + '" data-repeat-distribution-bucket="' + index + '" data-repeat-distribution-samples="' + samplesCount + '" data-repeat-distribution-threshold="' + distributionThreshold + '" title="' + escapeAttr(title + ' — Click to filter') + '"'
+              : ' title="' + escapeAttr(title) + '"';
+            return '<div class="samples-correct-col' + (bucket.count > 0 ? '' : ' is-empty') + '"' + control + '><div class="samples-correct-bar' + edgeClass + '" style="--samples-correct-height:' + height + '%"><span class="samples-correct-count">' + bucket.count + '</span><span class="samples-correct-label">' + bucket.label + '</span></div></div>';
           }).join('') + '</div>';
         }
         const distributionTitle = isBool ? 'Correct Distribution' : 'Pass Distribution';
@@ -9129,10 +9421,14 @@
             if (!nextMetric || nextMetric === groupMetric) return;
             state.samplesMetric = nextMetric;
             state.repeatDistFilter = null;
-            await renderSamplesAnalysis();
+            await keepSectionInPlace(container, async () => {
+              await renderSamplesAnalysis();
+              // A later click superseded this one; its own render owns the section.
+              if (state.samplesMetric !== nextMetric) return;
+              renderMetadataBreakdown();
+            });
             // A later click superseded this one; its own render owns focus.
             if (state.samplesMetric !== nextMetric) return;
-            renderMetadataBreakdown();
             const replacement = Array.from(document.querySelectorAll('.samples-metric-tab')).find(candidate =>
               candidate.dataset.samplesMetric === nextMetric
             );
@@ -9154,7 +9450,7 @@
           state.scoreDistFilter = null;
           state.repeatDistFilter = { metric, bucket, samples, threshold };
           state.page = 1;
-          renderItems();
+          renderItems(false, { viewOnly: true });
         };
         container.querySelectorAll('.samples-correct-col[data-repeat-distribution-bucket]').forEach(col => {
           col.addEventListener('click', () => applyRepeatDistributionFilter(col));
@@ -9179,7 +9475,7 @@
             if (state.selectedMetric === groupMetric) {
               updateThresholdControl();
               state.page = 1;
-              renderItems();
+              renderItems(false, { viewOnly: true });
             }
             renderSamplesAnalysis();
           });
@@ -9200,22 +9496,26 @@
               const statistic = button.dataset.samplesStatistic;
               if (!statisticKeys.has(statistic) || statistic === state.samplesStatistic) return;
               state.samplesStatistic = statistic;
-              blockEl.innerHTML = curveBlock();
-              const performanceCopy = container.querySelector('.samples-performance-section > .ri-subhead span');
-              if (performanceCopy) performanceCopy.textContent = selectedStatistic().copy;
-              wireCurveToggle();
-              blockEl.querySelector(`[data-samples-statistic="${statistic}"]`)?.focus({ preventScroll: true });
-              requestAnimationFrame(fitCurveChart);
+              keepSectionInPlace(blockEl, () => {
+                blockEl.innerHTML = curveBlock();
+                const performanceCopy = container.querySelector('.samples-performance-section > .ri-subhead span');
+                if (performanceCopy) performanceCopy.textContent = selectedStatistic().copy;
+                wireCurveToggle();
+                blockEl.querySelector(`[data-samples-statistic="${statistic}"]`)?.focus({ preventScroll: true });
+                fitCurveChart();
+              });
             });
           });
           blockEl.querySelectorAll('.samples-view-btn').forEach(btn => {
             btn.addEventListener('click', () => {
               const nextView = btn.dataset.view;
               state.samplesCurveView = nextView;
-              blockEl.innerHTML = curveBlock();
-              wireCurveToggle();
-              blockEl.querySelector(`.samples-view-btn[data-view="${nextView}"]`)?.focus({ preventScroll: true });
-              requestAnimationFrame(fitCurveChart);
+              keepSectionInPlace(blockEl, () => {
+                blockEl.innerHTML = curveBlock();
+                wireCurveToggle();
+                blockEl.querySelector(`.samples-view-btn[data-view="${nextView}"]`)?.focus({ preventScroll: true });
+                fitCurveChart();
+              });
             });
           });
         }
@@ -9275,7 +9575,6 @@
           'last_completed_pass',
           'git_branch', 'git_commit', 'ingest_incomplete', 'ingest_rejected'
         ]);
-        const colors = ['var(--accent-primary)', 'var(--accent-secondary)', 'var(--accent-tertiary)', 'var(--chart-4)', 'var(--chart-5)'];
         const entries = [];
         const seenKeys = new Set();
 
@@ -9295,12 +9594,11 @@
           return '';
         }
 
-        const cellsHtml = entries.map((entry, index) => {
-          const color = colors[index % colors.length];
+        // No decorative dots: colour cycled by position meant nothing (C143).
+        const cellsHtml = entries.map((entry) => {
           const keyLabel = formatFieldLabel(entry.key);
           const sourceLabel = entry.group === 'Metadata' ? 'Metadata' : 'Config';
           return '<div class="context-cell">' +
-            '<span class="context-cell-dot" style="background:' + color + '"></span>' +
             '<div class="context-cell-text">' +
               '<div class="context-cell-key">' + escapeHtml(keyLabel + ' • ' + sourceLabel) + '</div>' +
               '<div class="context-cell-val" title="' + escapeAttr(entry.value) + '">' + escapeHtml(entry.value) + '</div>' +
@@ -9329,9 +9627,8 @@
             if (!isNaN(v) && v >= 0 && v <= 100) {
               state.metricThresholds[state.selectedMetric] = v / 100;
               state.repeatDistFilter = null;
-              renderOverview();
               state.page = 1;
-              renderItems();
+              renderItems(false, { viewOnly: true });
               const samplesMetric = state.samplesMetric || state.selectedMetric || state.allMetrics[0] || '';
               if (samplesMetric === state.selectedMetric) renderSamplesAnalysis();
             }
@@ -9360,7 +9657,7 @@
               state.repeatDistFilter = null;
               state.page = 1;
               updateThresholdControl();
-              renderItems();
+              renderItems(false, { viewOnly: true });
             });
           }
         }
@@ -10282,7 +10579,11 @@
                     : ' (' + taskInBucket + ' task error' + (taskInBucket === 1 ? '' : 's') + ', counted as ' + label + ')')
                 : '');
               const errH = errInBucket + taskInBucket > 0 ? Math.max(2, Math.round(barH * (errInBucket + taskInBucket) / count)) : 0;
-              barsHtml += '<div class="dist-chart-col" data-metric="' + escapeAttr(metric) + '" data-bucket-min="' + rangeMin + '" data-bucket-max="' + rangeMax + '" title="' + label + ': ' + count + ' items (' + pct + '%)' + errNote + ' — Click to filter">' +
+              // An empty bar has nothing to filter to: it is not a control,
+              // so a click never empties the page under the reader (C028).
+              barsHtml += (count > 0
+                ? '<div class="dist-chart-col" data-metric="' + escapeAttr(metric) + '" data-bucket-min="' + rangeMin + '" data-bucket-max="' + rangeMax + '" title="' + label + ': ' + count + ' items (' + pct + '%)' + errNote + ' — Click to filter">'
+                : '<div class="dist-chart-col is-empty" title="' + label + ': no items">') +
                 '<span class="bar-count">' + (count > 0 ? count : '') + '</span>' +
                 '<div class="bar-fill' + (errH ? ' has-errors' : '') + '" style="height:' + barH + 'px;background:' + color + ';">' +
                   (errH ? '<div class="bar-fill-errors" style="height:' + errH + 'px"></div>' : '') +
@@ -10426,36 +10727,58 @@
           (Array.isArray(ts.outer_scope_parent_spans) && ts.outer_scope_parent_spans.some(span => span?.name && Number.isFinite(span.avg_ms)))
         );
         if (total > 0 && ts && ts.has_spans && hasTraceValues) {
-          const fmtV = (v) => v != null ? _fmtTraceNum(v) : '\u2014';
-          const fmtD = (v) => v != null ? v.toFixed(1) : '\u2014';
-          const fmtLatency = (v) => v != null ? formatLatency(v) : '\u2014';
-          const outerScopeParentPills = Array.isArray(ts.outer_scope_parent_spans)
-            ? ts.outer_scope_parent_spans
-                .filter(s => s && s.name && s.avg_ms != null)
-                .map(s => '<div class="trace-pill qym-stat-strip__item" title="' + escapeAttr('Avg ' + s.name + ' latency') + '"><div class="trace-pill-icon agent"><svg viewBox="0 0 16 16"><circle cx="8" cy="4" r="3" fill="currentColor"/><path d="M2.5 14.5c0-3 2.5-5.5 5.5-5.5s5.5 2.5 5.5 5.5z" fill="currentColor" opacity=".75"/></svg></div><div class="trace-pill-text"><span class="trace-pill-label qym-stat-strip__label">Avg ' + escapeHtml(s.name) + ' latency</span><span class="trace-pill-val qym-stat-strip__value" style="color:#34d399;">' + fmtLatency(s.avg_ms) + '</span></div></div>')
-                .join('')
+          // Only what was captured gets a tile (C143): a run without LLM or
+          // tool spans says so once instead of showing 0, 0.0 and dashes.
+          // Icons are one monochrome line set; values stay --text-primary.
+          const finite = v => v != null && Number.isFinite(Number(v));
+          const positive = v => finite(v) && Number(v) > 0;
+          const hasLlm = positive(ts.avg_llm_calls) || positive(ts.avg_tokens);
+          const hasTool = positive(ts.avg_tool_calls);
+          const icon = paths => '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>';
+          const ICONS = {
+            tokens: icon('<path d="M3.5 4.5h9M3.5 8h9M3.5 11.5h5.5"/>'),
+            llm: icon('<path d="M2.75 3.75h10.5v7h-6l-3 2.5v-2.5h-1.5z"/>'),
+            tool: icon('<path d="M9.6 6.4 4.1 11.9a1.4 1.4 0 0 1-2-2L7.6 4.4a3 3 0 0 1 4-3.4L9.8 2.8l.4 1.6 1.6.4 1.8-1.8a3 3 0 0 1-3.4 4z"/>'),
+            success: icon('<circle cx="8" cy="8" r="5.75"/><path d="m5.5 8.2 1.7 1.7 3.3-3.4"/>'),
+            clock: icon('<circle cx="8" cy="8" r="5.75"/><path d="M8 5v3.2l2 1.3"/>'),
+            retriever: icon('<ellipse cx="8" cy="3.75" rx="4.5" ry="1.75"/><path d="M3.5 3.75v8.5c0 1 2 1.75 4.5 1.75s4.5-.75 4.5-1.75v-8.5M3.5 8c0 1 2 1.75 4.5 1.75S12.5 9 12.5 8"/>'),
+            trace: icon('<path d="M4 2.5v11M4 5.5h4.5M4 10.5h6.5"/><circle cx="10" cy="5.5" r="1.25"/><circle cx="12" cy="10.5" r="1.25"/>'),
+            agent: icon('<circle cx="8" cy="5" r="2.5"/><path d="M3 13.5c.4-2.6 2.5-4.25 5-4.25s4.6 1.65 5 4.25"/>'),
+            evaluator: icon('<path d="m8 2 1.8 3.7 4 .6-2.9 2.8.7 4L8 11.2l-3.6 1.9.7-4-2.9-2.8 4-.6z"/>'),
+          };
+          const tile = (iconKey, label, value, title) =>
+            '<div class="trace-pill qym-stat-strip__item"' + (title ? ' title="' + escapeAttr(title) + '"' : '') + '>' +
+              '<div class="trace-pill-icon">' + ICONS[iconKey] + '</div>' +
+              '<div class="trace-pill-text"><span class="trace-pill-label qym-stat-strip__label">' + escapeHtml(label) + '</span>' +
+              '<span class="trace-pill-val qym-stat-strip__value">' + value + '</span></div></div>';
+          const tiles = [];
+          if (positive(ts.avg_tokens)) tiles.push(tile('tokens', 'Avg Tokens', _fmtTraceNum(ts.avg_tokens)));
+          if (hasLlm && finite(ts.avg_llm_calls)) tiles.push(tile('llm', 'Avg LLM Calls', Number(ts.avg_llm_calls).toFixed(1)));
+          if (hasTool) tiles.push(tile('tool', 'Avg Tool Calls', Number(ts.avg_tool_calls).toFixed(1)));
+          if (hasTool && finite(ts.tool_success_rate)) tiles.push(tile('success', 'Tool Success', (ts.tool_success_rate * 100).toFixed(1) + '%'));
+          if (hasLlm && finite(ts.avg_llm_ms)) tiles.push(tile('clock', 'Avg LLM Latency', formatLatency(ts.avg_llm_ms)));
+          if (hasTool && finite(ts.avg_tool_ms)) tiles.push(tile('clock', 'Avg Tool Latency', formatLatency(ts.avg_tool_ms)));
+          if (finite(ts.avg_retriever_ms)) tiles.push(tile('retriever', 'Avg Retriever Latency', formatLatency(ts.avg_retriever_ms)));
+          if (finite(ts.avg_top_level_chain_ms)) tiles.push(tile('trace', 'Avg Trace Latency', formatLatency(ts.avg_top_level_chain_ms)));
+          (Array.isArray(ts.outer_scope_parent_spans) ? ts.outer_scope_parent_spans : [])
+            .filter(s => s && s.name && finite(s.avg_ms))
+            .forEach(s => tiles.push(tile('agent', 'Avg ' + s.name + ' latency', formatLatency(s.avg_ms), 'Avg ' + s.name + ' latency')));
+          if (finite(ts.avg_evaluator_ms)) tiles.push(tile('evaluator', 'Avg Evaluator Latency', formatLatency(ts.avg_evaluator_ms)));
+          const docsRoot = (window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '');
+          const notCapturedHtml = !hasLlm && !hasTool
+            ? '<p class="trace-not-captured">LLM and tool spans were not captured for this run. ' +
+                '<a href="' + escapeAttr(docsRoot + '/docs-guide#sdk-guide/results') + '">How tracing works</a></p>'
             : '';
           traceCard = '<div class="metric-card system-trace-card" style="animation-delay:' + (cardIdx * 50) + 'ms;">' +
             '<div class="metric-card-header">' +
               '<div class="metric-card-gauge">' +
-                '<div class="metric-card-info" style="display:flex;flex-direction:row;align-items:center;gap:8px;">' +
-                  '<span style="font-size:16px;line-height:1;">\u26A1</span>' +
-                  '<span class="metric-card-name" style="margin-top:0;font-size:var(--font-md);font-weight:600;color:var(--text-primary);">Trace Stats</span>' +
+                '<div class="metric-card-info">' +
+                  '<span class="metric-card-name trace-card-title">Trace stats</span>' +
                 '</div>' +
               '</div>' +
             '</div>' +
-            '<div class="trace-pills-row qym-stat-strip">' +
-              '<div class="trace-pill qym-stat-strip__item"><div class="trace-pill-icon tokens">\uD83D\uDCDD</div><div class="trace-pill-text"><span class="trace-pill-label qym-stat-strip__label">Avg Tokens</span><span class="trace-pill-val qym-stat-strip__value" style="color:var(--accent-primary);">' + fmtV(ts.avg_tokens) + '</span></div></div>' +
-              '<div class="trace-pill qym-stat-strip__item"><div class="trace-pill-icon llm">\uD83E\uDDE0</div><div class="trace-pill-text"><span class="trace-pill-label qym-stat-strip__label">Avg LLM Calls</span><span class="trace-pill-val qym-stat-strip__value" style="color:var(--accent-secondary);">' + fmtD(ts.avg_llm_calls) + '</span></div></div>' +
-              '<div class="trace-pill qym-stat-strip__item"><div class="trace-pill-icon tool">\uD83D\uDD27</div><div class="trace-pill-text"><span class="trace-pill-label qym-stat-strip__label">Avg Tool Calls</span><span class="trace-pill-val qym-stat-strip__value" style="color:var(--warning);">' + fmtD(ts.avg_tool_calls) + '</span></div></div>' +
-              '<div class="trace-pill qym-stat-strip__item"><div class="trace-pill-icon success">\u2713</div><div class="trace-pill-text"><span class="trace-pill-label qym-stat-strip__label">Tool Success</span><span class="trace-pill-val qym-stat-strip__value" style="color:var(--success);">' + (ts.tool_success_rate != null ? (ts.tool_success_rate * 100).toFixed(1) + '%' : '\u2014') + '</span></div></div>' +
-              '<div class="trace-pill qym-stat-strip__item"><div class="trace-pill-icon llm">\u23F1</div><div class="trace-pill-text"><span class="trace-pill-label qym-stat-strip__label">Avg LLM Latency</span><span class="trace-pill-val qym-stat-strip__value" style="color:var(--accent-secondary);">' + fmtLatency(ts.avg_llm_ms) + '</span></div></div>' +
-              '<div class="trace-pill qym-stat-strip__item"><div class="trace-pill-icon tool">\u23F1</div><div class="trace-pill-text"><span class="trace-pill-label qym-stat-strip__label">Avg Tool Latency</span><span class="trace-pill-val qym-stat-strip__value" style="color:var(--warning);">' + fmtLatency(ts.avg_tool_ms) + '</span></div></div>' +
-              '<div class="trace-pill qym-stat-strip__item"><div class="trace-pill-icon retriever">\uD83D\uDD0E</div><div class="trace-pill-text"><span class="trace-pill-label qym-stat-strip__label">Avg Retriever Latency</span><span class="trace-pill-val qym-stat-strip__value" style="color:#38bdf8;">' + fmtLatency(ts.avg_retriever_ms) + '</span></div></div>' +
-              '<div class="trace-pill qym-stat-strip__item"><div class="trace-pill-icon chain">\u26D3</div><div class="trace-pill-text"><span class="trace-pill-label qym-stat-strip__label">Avg Trace Latency</span><span class="trace-pill-val qym-stat-strip__value" style="color:var(--text-primary);">' + fmtLatency(ts.avg_top_level_chain_ms) + '</span></div></div>' +
-              outerScopeParentPills +
-              '<div class="trace-pill qym-stat-strip__item"><div class="trace-pill-icon evaluator">\u2605</div><div class="trace-pill-text"><span class="trace-pill-label qym-stat-strip__label">Avg Evaluator Latency</span><span class="trace-pill-val qym-stat-strip__value" style="color:#a78bfa;">' + fmtLatency(ts.avg_evaluator_ms) + '</span></div></div>' +
-            '</div>' +
+            (tiles.length ? '<div class="trace-pills-row qym-stat-strip">' + tiles.join('') + '</div>' : '') +
+            notCapturedHtml +
           '</div>';
           cardIdx++;
         }
@@ -10479,13 +10802,12 @@
           (cards ? '<div class="metric-cards-grid">' + cards + '</div>' : '') : '';
         deepSection.innerHTML = systemCards + intelligenceCharts;
 
+        // Step latency is mounted once per load (mountStepLatency); a new
+        // Trace Stats strip only needs its breakdowns re-attached (C028).
         try {
-          if (window.QymStepLatency) {
-            const slPanel = el('step-latency-panel');
-            if (slPanel) QymStepLatency.mount(slPanel, [RUN_ID]);
-          }
+          if (window.QymStepLatency && QymStepLatency.refreshTraceStats) QymStepLatency.refreshTraceStats();
         } catch (err) {
-          console.error('[step-latency] mount failed:', err);
+          console.error('[step-latency] trace stats refresh failed:', err);
         }
 
         // ── Wire click handlers ──
@@ -10506,7 +10828,7 @@
             state.repeatDistFilter = null;
             state.scoreDistFilter = { min, max };
             state.page = 1;
-            renderItems();
+            renderItems(false, { viewOnly: true });
           });
         });
 
@@ -10516,7 +10838,7 @@
             const max = col.dataset.latMax === 'Infinity' ? Infinity : parseFloat(col.dataset.latMax);
             state.latencyDistFilter = { min, max };
             state.page = 1;
-            renderItems();
+            renderItems(false, { viewOnly: true });
           });
         });
 
@@ -10536,7 +10858,7 @@
             const itemFilter = el('item-filter');
             if (itemFilter) itemFilter.value = state.itemFilter;
             state.page = 1;
-            renderItems();
+            renderItems(false, { viewOnly: true });
             // Land on the filtered list, where the banner says what it holds
             // (C065).
             if (sectionNav) sectionNav.scrollToSection('items');
@@ -10884,7 +11206,7 @@
         if (!select) return;
         select.addEventListener('change', event => {
           state.rootCauseMetric = event.target.value || 'all';
-          renderRootCauseSection();
+          keepSectionInPlace(section, renderRootCauseSection);
         });
       }
 
@@ -11501,7 +11823,7 @@
           button.addEventListener('click', () => {
             const nextView = button.dataset.categoryView;
             state.categoryBreakdownView = nextView;
-            renderMetadataBreakdown();
+            keepSectionInPlace(section, renderMetadataBreakdown);
             window.setTimeout(() => {
               document.querySelector(`.category-breakdown-view-btn[data-category-view="${nextView}"]`)?.focus({ preventScroll: true });
             }, 0);
@@ -11511,7 +11833,7 @@
           button.addEventListener('click', () => {
             const nextKey = button.dataset.categoryCompareKey;
             state.categoryCompareKey = nextKey;
-            renderMetadataBreakdown();
+            keepSectionInPlace(section, renderMetadataBreakdown);
             window.setTimeout(() => {
               const replacement = Array.from(document.querySelectorAll('.category-compare-tab[data-category-compare-key]')).find(candidate =>
                 candidate.dataset.categoryCompareKey === nextKey
@@ -11546,7 +11868,7 @@
             }
             syncMultiselectUI(cat);
             state.page = 1;
-            renderItems();
+            renderItems(false, { viewOnly: true });
           });
         });
       }
@@ -11562,10 +11884,11 @@
             } else {
               state.selectedCategories.add(key);
             }
-            renderMetadataBreakdown();
+            // The section settles before the list measures the reader's place.
+            keepSectionInPlace(container, renderMetadataBreakdown);
             // Re-render items in case a filter was cleared
             state.page = 1;
-            renderItems();
+            renderItems(false, { viewOnly: true });
           });
         });
       }
@@ -11782,7 +12105,7 @@
             const current = state[slot];
             state[slot] = current && current.kind === nextFilter.kind && current.label === nextFilter.label ? null : nextFilter;
             state.page = 1;
-            renderItems();
+            renderItems(false, { viewOnly: true });
           };
           card.addEventListener('click', (e) => {
             if (e.target.closest('.error-detail-toggle')) return;
@@ -11849,9 +12172,14 @@
           const hasOtherMetricResults = filteredItems.some(({ row }) =>
             getRowRootCauseAnalyses(row, 'all').some(analysis => rootCauseIssues(analysis).some(issue => issue.category))
           );
+          // The header's controls keep the height they had with Auto-Analyze,
+          // so switching the metric never moves the select under the pointer (C028).
+          const titleRowHeight = section.querySelector('.run-section-head__aside')?.offsetHeight || 0;
           section.innerHTML = hasOtherMetricResults
             ? runSectionHeadHtml('rootcause', 'Root cause analysis', ROOT_CAUSE_SECTION_COPY, rootCauseMetricControlHtml())
             : '';
+          const controlRow = section.querySelector('.run-section-head__aside');
+          if (controlRow && titleRowHeight) controlRow.style.minHeight = titleRowHeight + 'px';
           wireRootCauseMetricControl(section);
           return;
         }
@@ -11944,7 +12272,7 @@
             }
             syncMultiselectUI('root_cause');
             state.page = 1;
-            renderItems();
+            renderItems(false, { viewOnly: true });
           });
           card.addEventListener('mouseenter', function () {
             highlightSankey(card.dataset.bdValue);
@@ -12207,7 +12535,7 @@
             }
             state.page = 1;
             renderFilterBuilder();
-            renderItems();
+            renderItems(false, { viewOnly: true });
           };
         });
         body.querySelectorAll('[data-fb-vt]').forEach(b => b.onclick = () => {
@@ -12217,20 +12545,20 @@
           node.value = arr.includes(v) ? arr.filter(x => x !== v) : arr.concat([v]);
           state.page = 1;
           renderFilterBuilder();
-          renderItems();
+          renderItems(false, { viewOnly: true });
         });
         body.querySelectorAll('[data-fb-rm]').forEach(b => b.onclick = () => {
           const loc = _filterParentOf(b.dataset.fbRm);
           loc.parent.children.splice(loc.idx, 1);
           state.page = 1;
           renderFilterBuilder();
-          renderItems();
+          renderItems(false, { viewOnly: true });
         });
         body.querySelectorAll('[data-fb-conj]').forEach(b => b.onclick = () => {
           _filterNodeAt(b.dataset.fbConj).op = b.dataset.fbOp;
           state.page = 1;
           renderFilterBuilder();
-          renderItems();
+          renderItems(false, { viewOnly: true });
         });
         body.querySelectorAll('[data-fb-addc]').forEach(b => b.onclick = () => {
           const cond = _newFilterCondition();
@@ -12407,17 +12735,121 @@
         return document.querySelector('.run-container');
       }
 
-      function getItemsGridTop() {
-        const grid = el('items-grid');
-        return grid ? grid.getBoundingClientRect().top : null;
+      // The reader's place while sections re-render: the block holding the
+      // control they used last (a chart bar, a breakdown chip, a step
+      // latency toggle), else the item list. Its top stays where it was on
+      // screen, so no filter or view change moves the page (C028).
+      const SCROLL_ANCHOR_IDS = new Set([
+        'overview-primary-section', 'samples-analysis-section', 'overview-deep-section',
+        'metadata-breakdown', 'step-latency-panel', 'error-distribution-section', 'root-cause-section',
+      ]);
+      // Found when the control is used: a control that redraws its section
+      // is gone from the page by the time a later render looks for its block.
+      let lastInteractionAnchor = null;
+      function anchorNodeOf(target) {
+        for (let node = target; node && node.nodeType === 1; node = node.parentElement) {
+          if (node.id === 'items-grid' || node.classList.contains('items-comparison')) break;
+          if (SCROLL_ANCHOR_IDS.has(node.id)) return node;
+        }
+        return null;
+      }
+      {
+        const content = el('run-content');
+        const remember = event => { lastInteractionAnchor = anchorNodeOf(event.target); };
+        if (content) {
+          content.addEventListener('pointerdown', remember, true);
+          content.addEventListener('keydown', remember, true);
+        }
+      }
+      function scrollAnchorNode() {
+        return lastInteractionAnchor && lastInteractionAnchor.isConnected
+          ? lastInteractionAnchor
+          : el('items-grid');
       }
 
-      function restoreItemsGridTop(anchorTop) {
+      function getItemsGridTop() {
+        const node = scrollAnchorNode();
+        return node && node.isConnected ? { node, top: node.getBoundingClientRect().top } : null;
+      }
+
+      function restoreItemsGridTop(anchor) {
         const host = getScrollHost();
-        const grid = el('items-grid');
-        if (!host || !grid || anchorTop == null) return;
-        const currentTop = grid.getBoundingClientRect().top;
-        host.scrollTop += currentTop - anchorTop;
+        if (!host || !anchor || !anchor.node || !anchor.node.isConnected) return;
+        trimScrollReserve();
+        const delta = anchor.node.getBoundingClientRect().top - anchor.top;
+        if (Math.abs(delta) < 1) return;
+        reserveScrollRoom(host, host.scrollTop + delta);
+        host.scrollTop += delta;
+      }
+
+      // Content under the reader got shorter near the end of the page (a
+      // filter, the heatmap, fewer columns): the browser clamps the scroll
+      // and the reader's block would slide down. A spacer at the end gives
+      // that room back and shrinks away as the reader scrolls up (C028).
+      let scrollReserve = null;
+      function reserveScrollRoom(host, top) {
+        const missing = Math.ceil(top - (host.scrollHeight - host.clientHeight));
+        if (missing <= 0) return;
+        if (!scrollReserve || !scrollReserve.isConnected) {
+          scrollReserve = document.createElement('div');
+          scrollReserve.className = 'run-scroll-reserve';
+          scrollReserve.setAttribute('aria-hidden', 'true');
+          host.appendChild(scrollReserve);
+          host.addEventListener('scroll', trimScrollReserve, { passive: true });
+        }
+        scrollReserve.style.height = (scrollReserve.offsetHeight + missing) + 'px';
+      }
+      function trimScrollReserve() {
+        const host = getScrollHost();
+        const current = scrollReserve && scrollReserve.isConnected ? scrollReserve.offsetHeight : 0;
+        if (!host || !current) return;
+        // Only the part of the spacer the viewport reaches is still needed.
+        const contentEnd = host.scrollHeight - current;
+        const needed = Math.max(0, Math.ceil(host.scrollTop + host.clientHeight - contentEnd));
+        if (needed < current) scrollReserve.style.height = needed + 'px';
+      }
+
+      // A control that redraws its own section (a category chip, a view
+      // toggle, the root-cause metric) keeps that section where it is on
+      // screen. Near the page end a shorter section used to clamp the scroll
+      // and slide the control down under the pointer (C028). Settles again
+      // on the next frame, after charts fit themselves to their new size.
+      function keepSectionInPlace(section, redraw) {
+        const anchor = section && section.isConnected
+          ? { node: section, top: section.getBoundingClientRect().top }
+          : null;
+        const settle = value => {
+          if (anchor) {
+            restoreItemsGridTop(anchor);
+            requestAnimationFrame(() => restoreItemsGridTop(anchor));
+          }
+          return value;
+        };
+        const result = redraw();
+        return result && typeof result.then === 'function' ? result.then(settle) : settle(result);
+      }
+
+      // Step latency redraws itself (its disclosure, and its toggles once
+      // their data arrives): the panel keeps its place while the reader is
+      // using it, also when it shrinks near the page end (C028).
+      {
+        const panel = el('step-latency-panel');
+        if (panel && typeof ResizeObserver === 'function') {
+          let anchor = null;
+          const remember = event => {
+            anchor = { node: panel, top: panel.getBoundingClientRect().top, until: Date.now() + 4000 };
+          };
+          panel.addEventListener('pointerdown', remember, true);
+          panel.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') remember(event);
+          }, true);
+          // The reader scrolling on their own ends it.
+          ['wheel', 'touchmove'].forEach(type => window.addEventListener(type, () => { anchor = null; }, { passive: true }));
+          new ResizeObserver(() => {
+            if (!anchor || Date.now() > anchor.until) { anchor = null; return; }
+            restoreItemsGridTop(anchor);
+          }).observe(panel);
+        }
       }
 
       function scrollToTargetItem() {
@@ -12438,6 +12870,8 @@
         if (!host || !section) return;
         const hostRect = host.getBoundingClientRect();
         const sectionRect = section.getBoundingClientRect();
+        // Already in view from its start: the reader stays where they are.
+        if (sectionRect.top >= hostRect.top && sectionRect.top < hostRect.bottom) return;
         const top = host.scrollTop + sectionRect.top - hostRect.top;
         host.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
       }
@@ -12841,17 +13275,40 @@
           + rows.map(r => r.body).join('') + '</div>';
       }
 
+      // What the overview and the breakdown sections draw: the filtered rows
+      // (by identity: an edited row is a new object) and the settings they
+      // read. Order-free, so a sort or a page change keeps the same key.
+      const overviewRowIds = new WeakMap();
+      let overviewRowSeq = 0;
+      let lastOverviewKey = null;
+      function overviewSignature(items) {
+        let sum = 0, mix = 0;
+        for (const item of items) {
+          const row = item.row;
+          let id = overviewRowIds.get(row);
+          if (!id) { id = ++overviewRowSeq; overviewRowIds.set(row, id); }
+          const hashed = Math.imul(id, 2654435761) >>> 0;
+          sum = (sum + hashed) >>> 0;
+          mix = (mix ^ Math.imul(hashed ^ (hashed >>> 15), 2246822519)) >>> 0;
+        }
+        // Filter controls highlight their active choice in these sections.
+        const filters = JSON.stringify([
+          state.itemFilter, state.filterRoot, state.approvalFilter, state.searchQuery,
+          state.complexityFilter, state.domainFilter, state.domainFilterMode,
+          Array.from(state.domainExclusive || []), state.rootCauseFilter, state.taskErrorFilter,
+          state.metricErrorFilter, state.traceErrorFilter, state.analysisErrorFilter,
+          state.scoreDistFilter, state.repeatDistFilter, state.latencyDistFilter,
+          state.categoryFilters, Array.from(state.selectedCategories || []),
+        ]);
+        return [items.length, sum, mix, state.selectedMetric, JSON.stringify(state.metricThresholds),
+          state.relationshipX, state.relationshipY, filters].join('|');
+      }
+
       function renderItems(scrollToTop, options = {}) {
         const version = ++itemRenderVersion;
-        if (runDetails && deferItemsUntil(ensureRunSearch(), version, scrollToTop)) return;
+        if (runDetails && deferItemsUntil(ensureRunSearch(), version, scrollToTop, options)) return;
         const preserveAnchor = state.hasRenderedItems && !scrollToTop;
         const anchorTop = preserveAnchor ? getItemsGridTop() : null;
-        // Opening an item or loading its details changes no aggregate, so the
-        // overview, breakdown and step latency panels keep their render.
-        const itemsOnly = !!options.itemsOnly;
-        // Keep Performance by Category in sync with the current filters (debounced)
-        if (!itemsOnly) scheduleBreakdownRender(preserveAnchor, scrollToTop ? scrollItemByItemToTop : null);
-
         const container = el('items-grid');
         const paginationEl = el('pagination');
         const filterCountEl = el('filter-count');
@@ -12860,7 +13317,18 @@
         const mIdx = metric ? state.allMetrics.indexOf(metric) : -1;
         const isBoolean = metric ? state.metricIsBoolean[metric] : false;
         const threshold = isBoolean ? 0.9999 : (state.metricThresholds[metric] || 0.8);
-        if (!itemsOnly) renderOverview(items);
+        // Opening an item or loading its details changes no aggregate, so the
+        // overview, breakdown and step latency panels keep their render. A
+        // view change (page, sort, display, a filter that keeps the same
+        // items) redraws them only when what they show changed (C028).
+        const itemsOnly = !!options.itemsOnly;
+        const overviewKey = itemsOnly ? null : overviewSignature(items);
+        const overviewChanged = !itemsOnly && (!options.viewOnly || overviewKey !== lastOverviewKey);
+        if (!itemsOnly) lastOverviewKey = overviewKey;
+        // Keep Performance by Category in sync with the current filters (debounced)
+        if (overviewChanged) scheduleBreakdownRender(preserveAnchor, scrollToTop ? scrollItemByItemToTop : null);
+        else if (scrollToTop && !itemsOnly) requestAnimationFrame(scrollItemByItemToTop);
+        if (overviewChanged) renderOverview(items);
 
         const totalRows = (state.snapshot.rows || []).length;
         const itemsSection = container.closest('.items-comparison');
@@ -12892,6 +13360,9 @@
           }
         }
         container.removeAttribute('aria-busy');
+        container.classList.remove('is-refreshing');
+        const previousPage = itemCardPage;
+        itemCardPage = null;
 
         if (items.length === 0) {
           container.classList.remove('heatmap-mode');
@@ -12917,7 +13388,7 @@
         const showReasons = mIdx >= 0 && (metricHasPassRule
           || pageItems.some(({ row }) => !!itemFailureReason(row, metric, mIdx)));
         container.classList.toggle('rdi-has-reasons', showReasons);
-        container.innerHTML = pageItems.map(({ row: baseRow }) => {
+        const renderCard = ({ row: baseRow }) => {
           const passAttempts = Array.isArray(baseRow.pass_attempts) ? baseRow.pass_attempts : null;
           // The all-passes view renders every recorded repeat attempt. A
           // ?pass=N view stays scoped to that one exact attempt.
@@ -13202,11 +13673,20 @@
             outputBlockHtml +
             perMetricAnalysisHtml +
           '</div>';
-        }).join('');
-
-        window.QymUIComponents?.alignMetricColumns(container);
-        fitItemRows(container);
-        loadItemReasons(pageItems.map(item => item.row), metric, mIdx);
+        };
+        // A live refresh leaves the cards on screen alone when their rows did
+        // not change, or while the reader types in one of them (C039).
+        const active = document.activeElement;
+        const keepCards = !!options.live && !!previousPage && !!container.querySelector(':scope > .item-card') && (
+          (previousPage.items.length === pageItems.length
+            && previousPage.items.every((entry, index) => entry.row === pageItems[index].row))
+          || (!!active && container.contains(active) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)));
+        if (!keepCards) {
+          container.innerHTML = pageItems.map(renderCard).join('');
+          window.QymUIComponents?.alignMetricColumns(container);
+          fitItemRows(container);
+          loadItemReasons(pageItems.map(item => item.row), metric, mIdx);
+        }
 
         window.QymUIComponents?.renderPagination(paginationEl, {
           page: state.page,
@@ -13218,7 +13698,7 @@
           noun: 'items',
           onPageChange: page => {
             state.page = page;
-            renderItems(true);
+            renderItems(true, { viewOnly: true });
           },
         });
 
@@ -13229,41 +13709,76 @@
         state.hasRenderedItems = true;
         scrollToTargetItem();
 
-        wireOutputGroupHandlers(container);
-        wireMetricEditHandlers();
-        wireRootCauseHandlers();
-        wireSolutionHandlers();
-        wireMetricAnalysisHandlers();
-        wireCopyHandlers();
-        initExpectedToggles();
+        // Kept cards are already wired; a later patch draws from the new rows.
+        itemCardPage = { version, items: pageItems, render: renderCard, wire: wireItemScope };
+        if (!keepCards) wireItemScope(container);
+        bindItemExpanders(container);
+      }
 
-        // Item expander: the header toggles the card open or closed.
-        container.querySelectorAll('[data-item-expand]').forEach(header => {
-          const toggle = () => {
-            const id = header.dataset.itemExpand;
-            state.itemExpanded = state.itemExpanded || {};
-            if (state.itemExpanded[id]) delete state.itemExpanded[id];
-            else state.itemExpanded[id] = true;
-            openedItemErrors.delete(id);
-            renderItems(false, { itemsOnly: true });
-          };
-          header.addEventListener('click', (e) => {
-            if (e.target.closest('.copy-btn') || e.target.closest('.metric-edit-open')) return;
-            toggle();
-          });
-          header.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
-          });
+      // Opening or closing an item redraws that one card (C028).
+      function toggleItemCard(id) {
+        state.itemExpanded = state.itemExpanded || {};
+        if (state.itemExpanded[id]) delete state.itemExpanded[id];
+        else state.itemExpanded[id] = true;
+        openedItemErrors.delete(id);
+        // The toggled card keeps its place on screen, even when closing it
+        // near the end of the page leaves less to scroll.
+        const cardOf = () => Array.from(el('items-grid')?.children || [])
+          .find(node => node.classList.contains('item-card') && node.dataset.itemId === String(id));
+        const before = cardOf();
+        const top = before ? before.getBoundingClientRect().top : null;
+        patchItemCards([id]);
+        if (itemCardPage) visibleDetailRows = itemCardPage.items.map(entry => entry.row).filter(isItemRowExpanded);
+        const after = cardOf();
+        if (after && top != null) restoreItemsGridTop({ node: after, top });
+        const page = itemCardPage;
+        const item = page && page.items.find(entry => rowItemKey(entry.row) === id);
+        if (item && runDetails && state.itemExpanded[id] && !runDetails.isLoaded(item.row)) {
+          loadOpenedItems([item.row], itemRenderVersion);
+        }
+      }
+
+      // One delegated listener per list: cards come and go, it stays.
+      function bindItemExpanders(container) {
+        if (container.dataset.itemExpandBound) return;
+        container.dataset.itemExpandBound = '1';
+        container.addEventListener('click', (e) => {
+          const retry = e.target.closest('[data-item-retry]');
+          if (retry && container.contains(retry)) {
+            openedItemErrors.delete(retry.dataset.itemRetry);
+            const id = retry.dataset.itemRetry;
+            patchItemCards([id]);
+            const item = itemCardPage && itemCardPage.items.find(entry => rowItemKey(entry.row) === id);
+            if (item && runDetails) loadOpenedItems([item.row], itemRenderVersion);
+            return;
+          }
+          const header = e.target.closest('[data-item-expand]');
+          if (!header || !container.contains(header)) return;
+          if (e.target.closest('.copy-btn') || e.target.closest('.metric-edit-open')) return;
+          toggleItemCard(header.dataset.itemExpand);
         });
-        container.querySelectorAll('[data-item-retry]').forEach(button => {
-          button.addEventListener('click', () => {
-            openedItemErrors.delete(button.dataset.itemRetry);
-            renderItems(false, { itemsOnly: true });
-          });
+        container.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          const header = e.target.closest('[data-item-expand]');
+          if (!header || e.target !== header) return;
+          e.preventDefault();
+          toggleItemCard(header.dataset.itemExpand);
         });
+      }
+
+      // Handlers of everything inside the cards of `scope` (the list, or one
+      // redrawn card).
+      function wireItemScope(scope) {
+        wireOutputGroupHandlers(scope);
+        wireMetricEditHandlers(scope);
+        wireRootCauseHandlers(scope);
+        wireSolutionHandlers(scope);
+        wireMetricAnalysisHandlers(scope);
+        wireCopyHandlers(scope);
+        initExpectedToggles(scope);
 
         // Metric detail toggles: pure DOM show/hide, no re-render.
-        container.querySelectorAll('[data-det-target]').forEach(control => {
+        scope.querySelectorAll('[data-det-target]').forEach(control => {
           const row = control.closest('.det-toggle') || control;
           const toggle = () => {
             const body = document.getElementById(control.dataset.detTarget);
@@ -13427,8 +13942,8 @@
         } catch {}
       }
 
-      function wireMetricEditHandlers() {
-        document.querySelectorAll('.metric-edit-open').forEach(btn => {
+      function wireMetricEditHandlers(scope) {
+        (scope || document).querySelectorAll('.metric-edit-open').forEach(btn => {
           btn.onclick = (event) => {
             event.stopPropagation();
             const chip = btn.closest('.det-toggle, .qym-metric-compare__cell');
@@ -13442,14 +13957,14 @@
             input.select();
           };
         });
-        document.querySelectorAll('.metric-edit-controls .metric-edit-input').forEach(input => {
+        (scope || document).querySelectorAll('.metric-edit-controls .metric-edit-input').forEach(input => {
           input.onkeydown = (e) => {
             if (e.key === 'Enter') input.parentElement.querySelector('.metric-edit-save')?.click();
             else if (e.key === 'Escape') input.parentElement.querySelector('.metric-edit-cancel')?.click();
           };
           input.oninput = () => setScoreEditError(input, input.parentElement.querySelector('.metric-edit-status'), '');
         });
-        document.querySelectorAll('.metric-edit-cancel').forEach(btn => {
+        (scope || document).querySelectorAll('.metric-edit-cancel').forEach(btn => {
           btn.onclick = (event) => {
             event.stopPropagation();
             const controls = btn.closest('.metric-edit-controls');
@@ -13461,7 +13976,7 @@
             chip?.classList.remove('editing');
           };
         });
-        document.querySelectorAll('.metric-reset-btn').forEach(btn => {
+        (scope || document).querySelectorAll('.metric-reset-btn').forEach(btn => {
           btn.onclick = async (event) => {
             event.stopPropagation();
             const rowIndex = Number(btn.dataset.rowIndex);
@@ -13485,7 +14000,7 @@
             }
           };
         });
-        document.querySelectorAll('.metric-edit-save').forEach(btn => {
+        (scope || document).querySelectorAll('.metric-edit-save').forEach(btn => {
           btn.onclick = async (event) => {
             event.stopPropagation();
             const rowIndex = Number(btn.dataset.rowIndex);
@@ -13527,20 +14042,20 @@
 
       // ── Root cause + feedback handlers ──
 
-      function wireRootCauseHandlers() {
-        document.querySelectorAll('[data-rc-item]:not([data-feedback-item])').forEach(trigger => {
+      function wireRootCauseHandlers(scope) {
+        (scope || document).querySelectorAll('[data-rc-item]:not([data-feedback-item])').forEach(trigger => {
           trigger.addEventListener('click', (e) => {
             e.stopPropagation();
             showRootCauseCategoryPicker(trigger.dataset.rcItem, trigger);
           });
         });
-        document.querySelectorAll('[data-rcdetail-item]').forEach(trigger => {
+        (scope || document).querySelectorAll('[data-rcdetail-item]').forEach(trigger => {
           trigger.addEventListener('click', (e) => {
             e.stopPropagation();
             showRcDetailDropdown(trigger.dataset.rcdetailItem, trigger);
           });
         });
-        document.querySelectorAll('[data-feedback-item]').forEach(trigger => {
+        (scope || document).querySelectorAll('[data-feedback-item]').forEach(trigger => {
           trigger.addEventListener('click', function(e) {
             e.stopPropagation();
             var itemId = trigger.dataset.feedbackItem;
@@ -13570,7 +14085,7 @@
             });
           });
         });
-        document.querySelectorAll('.rc-approve-btn[data-approve-metric]').forEach(btn => {
+        (scope || document).querySelectorAll('.rc-approve-btn[data-approve-metric]').forEach(btn => {
           btn.addEventListener('click', async (e) => {
             e.stopPropagation();
             const correctionId = btn.dataset.approveCorrection;
@@ -13620,8 +14135,8 @@
         });
       }
 
-      function wireSolutionHandlers() {
-        document.querySelectorAll('[data-sol-item]').forEach(trigger => {
+      function wireSolutionHandlers(scope) {
+        (scope || document).querySelectorAll('[data-sol-item]').forEach(trigger => {
           trigger.addEventListener('click', (e) => {
             e.stopPropagation();
             showSolutionDropdown(trigger.dataset.solItem, trigger);
@@ -13629,8 +14144,8 @@
         });
       }
 
-      function wireMetricAnalysisHandlers() {
-        document.querySelectorAll('[data-approve-issue]').forEach(button => {
+      function wireMetricAnalysisHandlers(scope) {
+        (scope || document).querySelectorAll('[data-approve-issue]').forEach(button => {
           button.addEventListener('click', async event => {
             event.stopPropagation();
             if (button.disabled) return;
@@ -13651,18 +14166,18 @@
             }
           });
         });
-        document.querySelectorAll('[data-metric-add-issue]').forEach(button => {
+        (scope || document).querySelectorAll('[data-metric-add-issue]').forEach(button => {
           button.addEventListener('click', () => {
             showMetricIssueDialog(button.dataset.metricAddIssue, button.dataset.metricName);
           });
         });
-        document.querySelectorAll('[data-metric-issues-item]').forEach(trigger => {
+        (scope || document).querySelectorAll('[data-metric-issues-item]').forEach(trigger => {
           trigger.addEventListener('click', (e) => {
             e.stopPropagation();
             showMetricIssueDialog(trigger.dataset.metricIssuesItem, trigger.dataset.metricName, { mode: 'edit', issueIndex: Number(trigger.dataset.issueIndex) });
           });
         });
-        document.querySelectorAll('[data-metric-rcdetail-item]').forEach(trigger => {
+        (scope || document).querySelectorAll('[data-metric-rcdetail-item]').forEach(trigger => {
           trigger.addEventListener('click', (e) => {
             e.stopPropagation();
             showRcDetailDropdown(
@@ -13672,13 +14187,13 @@
             );
           });
         });
-        document.querySelectorAll('[data-metric-sol-item]').forEach(trigger => {
+        (scope || document).querySelectorAll('[data-metric-sol-item]').forEach(trigger => {
           trigger.addEventListener('click', (e) => {
             e.stopPropagation();
             showRootCauseIssuesEditor(trigger.dataset.metricSolItem, trigger.dataset.metricName, 'solution');
           });
         });
-        document.querySelectorAll('[data-metric-feedback-item]').forEach(trigger => {
+        (scope || document).querySelectorAll('[data-metric-feedback-item]').forEach(trigger => {
           trigger.addEventListener('click', function(e) {
             e.stopPropagation();
             const itemId = trigger.dataset.metricFeedbackItem;
@@ -14884,8 +15399,8 @@
         }
       }
 
-      function initExpectedToggles() {
-        document.querySelectorAll('.item-expected-row').forEach(function(row) {
+      function initExpectedToggles(scope) {
+        (scope || document).querySelectorAll('.item-expected-row').forEach(function(row) {
           var text = row.querySelector('.expected-text');
           var btn = row.querySelector('.expected-toggle');
           if (!text || !btn) return;
@@ -14900,8 +15415,8 @@
 
       // ── Copy handlers ──
 
-      function wireCopyHandlers() {
-        const container = el('items-grid');
+      function wireCopyHandlers(scope) {
+        const container = scope || el('items-grid');
         container.querySelectorAll('.copy-btn[data-item-id]').forEach(btn => {
           btn.addEventListener('click', () => {
             const id = btn.dataset.itemId;
@@ -15077,7 +15592,7 @@
             }
             syncMultiselectUI(category);
             state.page = 1;
-            renderItems();
+            renderItems(false, { viewOnly: true });
           });
         });
         dropdown.querySelectorAll('.ms-only-btn').forEach(btn => {
@@ -15090,7 +15605,7 @@
             setCatFilter(category, [option.dataset.value], 'include');
             syncMultiselectUI(category);
             state.page = 1;
-            renderItems();
+            renderItems(false, { viewOnly: true });
           });
         });
         dropdown.querySelectorAll('.ms-action-btn').forEach(btn => {
@@ -15100,7 +15615,7 @@
             else setCatFilter(category, [], category === 'domain' ? 'include' : undefined);
             syncMultiselectUI(category);
             state.page = 1;
-            renderItems();
+            renderItems(false, { viewOnly: true });
           });
         });
         syncMultiselectUI(category);
@@ -15281,7 +15796,7 @@
           input.addEventListener('change', () => {
             const option = input.closest('[data-field-key]');
             visibility[option.dataset.fieldKey] = input.checked;
-            renderItems();
+            renderItems(false, { viewOnly: true });
           });
         });
         dropdown.querySelectorAll('[data-fields-action]').forEach(button => {
@@ -15290,7 +15805,7 @@
             const visible = button.dataset.fieldsAction === 'all';
             keys.forEach(key => { visibility[key] = visible; });
             syncChecks();
-            renderItems();
+            renderItems(false, { viewOnly: true });
           });
         });
         dropdown.querySelectorAll('.ms-only-btn').forEach(button => {
@@ -15300,7 +15815,7 @@
             const selected = button.closest('[data-field-key]')?.dataset.fieldKey;
             keys.forEach(key => { visibility[key] = key === selected; });
             syncChecks();
-            renderItems();
+            renderItems(false, { viewOnly: true });
           });
         });
       }
@@ -15387,7 +15902,7 @@
         syncMultiselectUI('complexity');
         syncMultiselectUI('domain');
         syncMultiselectUI('root_cause');
-        renderItems();
+        renderItems(false, { viewOnly: true });
       }
 
       el('clear-all-btn').addEventListener('click', clearAllFilters);
@@ -15452,7 +15967,7 @@
       el('sort-select')?.addEventListener('change', (e) => {
         state.sortBy = e.target.value;
         state.page = 1;
-        renderItems();
+        renderItems(false, { viewOnly: true });
       });
 
       document.querySelectorAll('.items-view-toggle [data-items-view]').forEach(button => {
@@ -15464,17 +15979,17 @@
             option.classList.toggle('active', active);
             option.setAttribute('aria-pressed', active ? 'true' : 'false');
           });
-          renderItems();
+          renderItems(false, { viewOnly: true });
         });
       });
 
       // Inputs, expected and outputs show as stored text by default (C013).
-      QymSafe.bindTextModeToggle(el('item-text-mode'), () => renderItems());
+      QymSafe.bindTextModeToggle(el('item-text-mode'), () => renderItems(false, { viewOnly: true }));
 
       el('filter-approval')?.addEventListener('change', (e) => {
         state.approvalFilter = e.target.value || null;
         state.page = 1;
-        renderItems();
+        renderItems(false, { viewOnly: true });
       });
 
       {
@@ -15484,7 +15999,7 @@
           searchTimer = setTimeout(() => {
             state.searchQuery = e.target.value.trim();
             state.page = 1;
-            renderItems();
+            renderItems(false, { viewOnly: true });
           }, 250);
         });
       }

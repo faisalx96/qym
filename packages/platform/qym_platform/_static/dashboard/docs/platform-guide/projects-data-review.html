@@ -35,6 +35,8 @@ QYM_API_KEY=&lt;token-shown-once&gt;</pre>
 
 <p>The analyzer uses the project's default connection, or the first available connection when no default is set. Approved corrections from Reviews provide reusable examples for later analysis.</p>
 
+<p>For a repeat run the analyzer first asks which sample (pass) to analyze, and loads only that sample's items. Switching samples with the <strong>Sample</strong> selector stays on the page; it waits while a background analysis is still running.</p>
+
 <h2>Datasets</h2>
 <p>The dataset catalog is project-scoped. Import CSV or JSONL to create a dataset, then work through its version lifecycle:</p>
 <ol>

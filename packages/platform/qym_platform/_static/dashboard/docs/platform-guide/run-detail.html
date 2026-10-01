@@ -4,6 +4,7 @@
 
 <h2>Start with the run header</h2>
 <p>The header identifies the run, status, owner, task, model, dataset, version, timing, configuration, and execution context. A repeat run also shows its pass count. Available submit, approve, reject, export, and delete actions follow ownership and project-role rules.</p>
+<p>While the run is <strong>RUNNING</strong> or <strong>PENDING</strong> the page follows it: new items and scores appear in place, Runtime counts up, and <strong>Live &middot; updated Ns ago</strong> beside the status says when it last checked. Filters, the page, opened items and your scroll position stay as they are. Checking pauses while the browser tab is hidden. When the run ends, the page loads it once more and stops.</p>
 
 <p>The header's <strong>Compare with previous</strong> opens Compare with the previous finished run of the same task, model and dataset as the baseline, and notes the change in the primary metric between the two run means. It is hidden when there is no earlier run.</p>
 
@@ -18,7 +19,8 @@
   <li><strong>Latency</strong> shows distribution and percentile landmarks.</li>
 </ul>
 
-<p>Click a distribution segment to filter the items. The <strong>Pass</strong> and <strong>Fail</strong> segments of a metric that declares a pass rule, and any <strong>Error</strong> segment, also take you to the item list, where a banner says what it now holds (for example, "Filtered to 16 items that fail correctness") and offers <strong>Clear filter</strong>. The overview is filtered too. Deep analysis appears when the run has enough item-level evidence and can show metric relationships and quality-versus-latency behavior.</p>
+<p>Click a distribution segment to filter the items; an empty bar holds no items and does nothing. The <strong>Pass</strong> and <strong>Fail</strong> segments of a metric that declares a pass rule, and any <strong>Error</strong> segment, also take you to the item list, where a banner says what it now holds (for example, "Filtered to 16 items that fail correctness") and offers <strong>Clear filter</strong>. The overview is filtered too. Deep analysis appears when the run has enough item-level evidence and can show metric relationships and quality-versus-latency behavior. Filtering, sorting and paging keep you where you are: the sections update in place, and the rows on screen stay (dimmed) until the new ones arrive.</p>
+<p><strong>Trace stats</strong> shows only what the run captured. A run without LLM or tool spans says so instead of showing empty tiles. <strong>Step latency distributions</strong> start collapsed; open them from their header (this browser remembers the choice). Its <strong>Export</strong> menu downloads the CSV summary, the raw spans CSV, or the plot as SVG.</p>
 
 <h2>Repeat-run analysis</h2>
 <p>For <code>samples=k</code>, the repeat section adds a metric picker, pass threshold, group metrics, a pass sweep, accuracy-versus-k analysis, correct-pass distribution, and stability views.</p>
