@@ -11,12 +11,41 @@ import os
 from typing import Any, Optional
 from urllib import request as urlrequest
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 from ..platform.defaults import DEFAULT_PLATFORM_URL
 from ..platform.tls import urlopen
 from ..utils.env import get_platform_url_env
 from ._exit_codes import ExitCode
+
+
+#: Accepted values for the run-listing ``origin`` filter (plan §11).
+RUN_ORIGIN_CHOICES = ("official", "local", "all")
+
+
+def normalize_run_origin(origin: Optional[str]) -> Optional[str]:
+    """Validate an ``origin`` filter; returns ``official``/``local``/``all`` or None.
+
+    ``None`` or an empty string means no filter. Raises ``ValueError`` for any
+    other value so callers fail before making a request.
+    """
+    if origin is None:
+        return None
+    value = str(origin).strip().lower()
+    if not value:
+        return None
+    if value not in RUN_ORIGIN_CHOICES:
+        raise ValueError(
+            f"Invalid origin: {origin!r} (expected one of: "
+            + ", ".join(RUN_ORIGIN_CHOICES)
+            + ")"
+        )
+    return value
+
+
+def run_origin_of(run: dict) -> str:
+    """A run row's origin; rows from platforms predating origin count as local."""
+    return str(run.get("origin") or "local").lower()
 
 
 class PlatformAPIError(Exception):
@@ -122,9 +151,32 @@ class PlatformAPIClient:
 
     # ── Run operations ──────────────────────────────────────────
 
-    def list_runs(self) -> dict:
-        """GET /api/runs -> tasks grouped by task name and model."""
-        return self._get("/api/runs")
+    def list_runs(self, origin: Optional[str] = None) -> dict:
+        """GET /api/runs -> tasks grouped by task name and model.
+
+        ``origin`` filters by run origin: ``official`` (dispatched by the
+        platform and verified at ingest), ``local``, or ``all`` (default).
+        Each run row carries ``origin`` and ``experiment`` (``{id, name,
+        job_id}`` for official runs, ``None`` for local ones). Raises
+        ``ValueError`` for any other ``origin`` value.
+        """
+        value = normalize_run_origin(origin)
+        path = "/api/runs"
+        if value:
+            path += "?" + urlencode({"origin": value})
+        data = self._get(path)
+        if value in ("official", "local") and isinstance(data, dict):
+            # Older platforms ignore the query parameter; filter here as well.
+            tasks = data.get("tasks")
+            if isinstance(tasks, dict):
+                filtered: dict = {}
+                for task, models in tasks.items():
+                    for model, runs in (models or {}).items():
+                        kept = [r for r in runs if run_origin_of(r) == value]
+                        if kept:
+                            filtered.setdefault(task, {})[model] = kept
+                data["tasks"] = filtered
+        return data
 
     def get_run(self, run_id: str) -> dict:
         """GET /api/runs/{run_id} -> full run data with snapshot."""

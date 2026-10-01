@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import func, insert, inspect
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -49,6 +49,7 @@ from qym_platform.db.models import (
     RunItem,
     RunItemScore,
     RunMetricSpec,
+    RunOrigin,
     RunTraceAggregate,
     RunWorkflowStatus,
     Span,
@@ -81,6 +82,15 @@ from qym_platform.services.run_lifecycle import (
     touch_run_event,
 )
 from qym_platform.settings import PlatformSettings
+from qym_platform.services.eval_run_linking import (
+    link_official_run,
+    merge_run_metadata,
+    strip_launch_token,
+)
+from qym_platform.services.eval_run_scores import (
+    SCORABLE_RUN_STATUSES,
+    sync_run_scores,
+)
 from qym_platform.services.event_storage import (
     ingest_settings,
     oversized_span_attributes,
@@ -737,6 +747,17 @@ def _store_metric_specs(
         )
 
 
+# Event types whose stored payload may carry client run metadata.
+_METADATA_EVENT_TYPES = frozenset({"run_started", "run_completed", "metadata_update"})
+
+
+def _event_log_payload(event_type: str, payload: Any) -> Any:
+    """The event-log copy of a payload, never holding a launch token."""
+    if event_type in _METADATA_EVENT_TYPES:
+        return strip_launch_token(payload)
+    return payload
+
+
 def require_ingest_open() -> None:
     """During a maintenance window SDK clients buffer and retry; tell them to."""
     if ingest_settings().maintenance_mode:
@@ -794,8 +815,9 @@ def create_run(
         dataset_version_id=dataset_version_id,
         model=req.model,
         metrics=req.metrics,
-        run_metadata=req.run_metadata,
-        run_config=req.run_config,
+        # The launch token is read once (below) and never stored.
+        run_metadata=strip_launch_token(req.run_metadata),
+        run_config=strip_launch_token(req.run_config),
         samples=_samples_from_config(req.run_config),
         status=RunWorkflowStatus.RUNNING,
         started_at=utc_now_naive(),
@@ -803,6 +825,8 @@ def create_run(
     )
     db.add(run)
     db.flush()
+    # Plan §11: official only when the launch token verifies; same transaction.
+    link_official_run(db, run, req.run_metadata)
     _store_metric_specs(db, run, req.metric_specs)
     db.commit()
     db.refresh(run)
@@ -876,7 +900,14 @@ def _ingest_events_sync(
     )
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
-    if run.owner_user_id != principal.user.id:
+    # An official run is owned by the experiment creator. It is normally streamed
+    # with the creator's own per-experiment ``qym_api_key`` (owner == creator); a
+    # worker that uploads with the environment's own ingest key is its
+    # ``created_by_user_id`` and may stream it too.
+    if run.owner_user_id != principal.user.id and not (
+        run.origin == RunOrigin.OFFICIAL
+        and run.created_by_user_id == principal.user.id
+    ):
         raise HTTPException(status_code=403, detail="Forbidden")
     if principal.project_id and run.project_id != principal.project_id:
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -906,7 +937,11 @@ def _ingest_events_sync(
             raw = json.loads(line)
             evt = RunEventV1.model_validate(raw)
         except Exception as exc:
-            logger.warning("Skipping malformed event for run %s: %s", run_id, exc)
+            # Never log the exception text: validation errors echo input values,
+            # which may include the launch token.
+            logger.warning(
+                "Skipping malformed event for run %s: %s", run_id, type(exc).__name__
+            )
             continue
         if str(evt.run_id) != run_id:
             logger.warning("Skipping event with run_id mismatch for run %s", run_id)
@@ -937,11 +972,22 @@ def _ingest_events_sync(
             continue
         known_events.add(event_id)
         payload_cls = _PAYLOAD_TYPE.get(evt.type)
-        payload = (
-            payload_cls.model_validate(raw.get("payload") or {})
-            if payload_cls
-            else evt.payload
-        )
+        try:
+            payload = (
+                payload_cls.model_validate(raw.get("payload") or {})
+                if payload_cls
+                else evt.payload
+            )
+        except ValidationError as exc:
+            # Report locations only: the error text echoes input values, which
+            # may include the launch token, and must not reach logs or tracebacks.
+            locations = sorted(
+                {".".join(str(p) for p in err.get("loc", ())) for err in exc.errors()}
+            )
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid {evt.type} payload: {', '.join(locations)}",
+            ) from None
         accepted.append((raw, evt, payload))
 
     # Spans are stored once, in ``spans``; ``run_events`` keeps the run's
@@ -985,9 +1031,12 @@ def _ingest_events_sync(
             type=evt.type,
             sent_at=evt.sent_at,
             payload=_sanitize_for_json(
-                structural_event_payload(evt.type, raw.get("payload") or {})
-                if storage.event_log_mode == "structural"
-                else (raw.get("payload") or {})
+                _event_log_payload(
+                    evt.type,
+                    structural_event_payload(evt.type, raw.get("payload") or {})
+                    if storage.event_log_mode == "structural"
+                    else (raw.get("payload") or {}),
+                )
             ),
         )
         for raw, evt, _ in accepted
@@ -1266,11 +1315,17 @@ def _ingest_events_sync(
             run.model = payload.model
             run.metrics = payload.metrics
             _store_metric_specs(db, run, payload.metric_specs)
-            md = _sanitize_for_json(dict(payload.run_metadata or {}))
+            # Replaces client metadata, but the qym_* keys fixed at create_run stay
+            # and the launch token is never re-introduced.
+            md = _sanitize_for_json(
+                merge_run_metadata(
+                    run.run_metadata, payload.run_metadata or {}, replace=True
+                )
+            )
             if payload.total_items is not None:
                 md["total_items"] = int(payload.total_items)
             run.run_metadata = md
-            run.run_config = _sanitize_for_json(payload.run_config)
+            run.run_config = _sanitize_for_json(strip_launch_token(payload.run_config))
             run.samples = _samples_from_config(payload.run_config)
             run.started_at = to_storage_utc(payload.started_at)
             mark_run_running(run)
@@ -1668,10 +1723,10 @@ def _ingest_events_sync(
                     else None
                 )
                 if isinstance(md, dict) and md:
-                    current = (
-                        run.run_metadata if isinstance(run.run_metadata, dict) else {}
+                    # Never re-adds the launch token or changes qym_* (plan §11.6).
+                    run.run_metadata = _sanitize_for_json(
+                        merge_run_metadata(run.run_metadata, md)
                     )
-                    run.run_metadata = _sanitize_for_json({**current, **md})
             except Exception:
                 pass
 
@@ -1749,7 +1804,9 @@ def _ingest_events_sync(
             if payload.extra:
                 updates.update(payload.extra)
             if updates:
-                run.run_metadata = _sanitize_for_json({**current, **updates})
+                run.run_metadata = _sanitize_for_json(
+                    merge_run_metadata(current, updates)
+                )
 
         elif isinstance(payload, SpanCompletedPayload):
             mark_run_running(run)
@@ -1835,6 +1892,16 @@ def _ingest_events_sync(
             logger.warning("Live trace aggregation failed for run %s: %s", run_id, e)
             _invalidate_trace_summary()
 
+    # Best-run index (plan §4.7): run_completed, or scores arriving after it, on an
+    # official run. Writes only once the job is terminal too; the dispatcher's hook
+    # covers the other order.
+    if (
+        applied
+        and run.origin == RunOrigin.OFFICIAL
+        and run.status in SCORABLE_RUN_STATUSES
+    ):
+        sync_run_scores(db, run)
+
     db.commit()
     return JSONResponse({"ok": True, "applied": applied, "skipped": skipped})
 
@@ -1904,8 +1971,13 @@ async def upload_run(
             run.dataset = str(source_run.get("dataset_name") or dataset)
             run.model = source_run.get("model_name") or model
             run.metrics = metrics
-            run.run_metadata = _sanitize_for_json(source_run.get("metadata") or {})
-            run.run_config = _sanitize_for_json(source_run.get("config") or {})
+            # Uploaded runs are always local; never store a copied launch token.
+            run.run_metadata = _sanitize_for_json(
+                strip_launch_token(source_run.get("metadata") or {})
+            )
+            run.run_config = _sanitize_for_json(
+                strip_launch_token(source_run.get("config") or {})
+            )
             try:
                 run.samples = max(1, int(source_run.get("samples") or 1))
             except (TypeError, ValueError):
@@ -2157,7 +2229,7 @@ async def upload_run(
             if first.get("run_metadata"):
                 try:
                     run.run_metadata = _sanitize_for_json(
-                        json.loads(first["run_metadata"])
+                        strip_launch_token(json.loads(first["run_metadata"]))
                     )
                 except (json.JSONDecodeError, TypeError):
                     pass

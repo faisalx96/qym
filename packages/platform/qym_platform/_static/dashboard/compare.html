@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="./static/dashboard.css?v=approved-subcategories-20260917-1">
   <link rel="stylesheet" href="./static/shell.css">
   <script src="./static/auth.js"></script>
-  <script src="./static/shell.js?v=ui-consistency-20260730-15"></script>
+  <script src="./static/shell.js?v=ui-consistency-20260730-16"></script>
   <script src="./static/metrics.js?v=metric-errors-20260914-1"></script>
   <script src="./static/run_details.js"></script>
   <script src="./static/trace_viewer.js?v=trace-retries-20260917-1"></script>
@@ -1003,6 +1003,21 @@
     .compare-run-title-line .compare-run-status {
       margin-left: var(--space-sm);
       vertical-align: middle;
+    }
+
+    .compare-run-title-line .origin-badge {
+      margin-left: var(--space-xs);
+      vertical-align: middle;
+    }
+
+    .compare-experiment-link {
+      color: var(--accent-primary);
+      text-decoration: none;
+    }
+
+    .compare-experiment-link:hover,
+    .compare-experiment-link:focus-visible {
+      text-decoration: underline;
     }
 
     .compare-run-remove.compare-run-remove {
@@ -9289,6 +9304,17 @@
         }, { total: 0, completed: 0, failed: 0 });
       }
 
+      // Official runs link to their experiment detail (plan §11).
+      function compareExperimentLink(info) {
+        const experiment = info && info.experiment;
+        if (!experiment || !experiment.id) return '';
+        const name = escapeHtml(experiment.name || experiment.id);
+        const slug = info.project && info.project.slug;
+        if (!slug) return name;
+        const href = apiUrl('projects/' + encodeURIComponent(slug) + '/experiments?experiment=' + encodeURIComponent(experiment.id));
+        return `<a class="compare-experiment-link" href="${escapeAttr(href)}">${name}</a>`;
+      }
+
       function renderSummaries() {
         const container = el('run-summaries');
         const visibleContextRows = getVisibleCompareContextEntries();
@@ -9356,6 +9382,9 @@
             metaItem('Started', formatIsoDateTime(startedAt), { nowrap: true }),
             metaItem('Runtime', runtimeText, { nowrap: true }),
             metaItem('Version', versionText, { mono: true, nowrap: true }),
+            info.experiment && info.experiment.id
+              ? metaItem('Experiment', info.experiment.name || info.experiment.id, { nowrap: true, html: compareExperimentLink(info) })
+              : '',
           ].filter(Boolean).join('');
           const summaryHtml =
             '<div class="compare-run-summary-strip qym-stat-strip">' +
@@ -9392,6 +9421,7 @@
                       <span class="compare-run-status qym-badge ${statusClass} ${statusToneClass}">
                         <span class="compare-run-status-dot"></span>${statusText}
                       </span>
+                      ${info.origin === 'official' ? '<span class="qym-tag qym-tag--accent origin-badge" title="Dispatched by the platform and verified at ingest">Official run</span>' : ''}
                     </div>
                   </div>
                 </div>

@@ -79,6 +79,10 @@ class PlatformSettings(BaseSettings):
 
     # Secrets
     llm_config_encryption_key: str = Field(default="")
+    # Rotation: comma-separated Fernet keys that were current before. Values
+    # encrypted with them still decrypt (MultiFernet); new values always use
+    # ``llm_config_encryption_key``. Drop once ``tools.reencrypt_llm_keys`` ran.
+    llm_config_encryption_keys_previous: str = Field(default="")
     allow_private_llm_base_urls: bool = Field(
         default=False,
         description=(
@@ -129,6 +133,13 @@ class PlatformSettings(BaseSettings):
     analysis_job_max_workers: int = Field(default=2, ge=1)
     analysis_max_concurrency: int = Field(default=20, ge=1, le=20)
     analysis_max_retries: int = Field(default=1, ge=0, le=5)
+
+    # Evaluation Service experiments: launches per user per window (0 disables).
+    # Dry-run previews are not counted.
+    eval_experiment_create_rate_limit: int = Field(default=30, ge=0)
+    eval_experiment_create_rate_window_seconds: int = Field(default=3600, ge=1)
+    # Jobs one experiment launch may create (combinations × environments).
+    eval_sweep_max_jobs: int = Field(default=64, ge=1)
 
     # Product eval API
     product_eval_max_workers: int = Field(default=3, ge=1)

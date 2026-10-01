@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
@@ -12,8 +13,14 @@ from starlette.middleware.sessions import SessionMiddleware
 from qym_platform.auth_oidc import origin_matches_base, session_auth_enabled
 from qym_platform.api.auth import router as auth_router
 from qym_platform.settings import PlatformSettings
+from qym_platform.validation_errors import validation_exception_handler
 from qym_platform.api.web import router as web_router
 from qym_platform.api.projects import router as projects_router
+from qym_platform.api.eval_environments import router as eval_environments_router
+from qym_platform.api.eval_queue import router as eval_queue_router
+from qym_platform.api.eval_presets import router as eval_presets_router
+from qym_platform.api.eval_best_runs import router as eval_best_runs_router
+from qym_platform.api.experiments import router as experiments_router
 from qym_platform.api.runs import router as runs_router
 from qym_platform.api.step_latency import router as step_latency_router
 from qym_platform.api.ingest import router as ingest_router
@@ -43,9 +50,13 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
         redoc_url=None,
         openapi_url="/openapi.json",
     )
+    # 422 responses must never echo a submitted key (security checklist §15).
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
     from qym_platform.db.session import SessionLocal, build_engine
     from qym_platform.deps import get_db
+    from qym_platform.services.eval_dispatcher import EvalDispatcher
+    from qym_platform.services.eval_remote_queue import RemoteQueueSnapshotter
     from qym_platform.services.maintenance import MaintenanceWorker
     from sqlalchemy.orm import sessionmaker
 
@@ -56,6 +67,10 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     app.state.dashboard_summary_worker = dashboard_worker
     maintenance_worker = MaintenanceWorker(worker_sessions, worker_engine if worker_engine is not None else SessionLocal.kw["bind"])
     app.state.maintenance_worker = maintenance_worker
+    eval_dispatcher = EvalDispatcher(worker_sessions)
+    app.state.eval_dispatcher = eval_dispatcher
+    remote_queue_snapshotter = RemoteQueueSnapshotter(worker_sessions)
+    app.state.remote_queue_snapshotter = remote_queue_snapshotter
 
     @app.on_event("startup")
     def start_dashboard_summary_worker() -> None:
@@ -71,9 +86,15 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
             logging.getLogger("uvicorn.error").info("Dashboard summary worker started")
             maintenance_worker.start()
             logging.getLogger("uvicorn.error").info("Maintenance worker started")
+            eval_dispatcher.start()
+            logging.getLogger("uvicorn.error").info("Eval dispatcher started")
+            remote_queue_snapshotter.start()
+            logging.getLogger("uvicorn.error").info("Remote queue snapshotter started")
 
     @app.on_event("shutdown")
     def stop_dashboard_summary_worker() -> None:
+        remote_queue_snapshotter.stop()
+        eval_dispatcher.stop()
         maintenance_worker.stop()
         if dashboard_worker.stop():
             logging.getLogger("uvicorn.error").info("Dashboard summary worker stopped")
@@ -141,6 +162,11 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     app.include_router(auth_router)
     app.include_router(web_router)
     app.include_router(projects_router)
+    app.include_router(eval_environments_router)
+    app.include_router(eval_presets_router)
+    app.include_router(eval_best_runs_router)
+    app.include_router(experiments_router)
+    app.include_router(eval_queue_router)
     app.include_router(analysis_router)  # before runs_router (its {run_id:path} is a catch-all)
     # Keep the dashboard route family registered so the feature can be restored
     # without rebuilding the application; its handlers are feature-gated.

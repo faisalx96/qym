@@ -60,6 +60,17 @@ def hash_api_key(token: str) -> bytes:
     return _encode_pbkdf2(token, _PBKDF2_PREFIX)
 
 
+def generate_api_key() -> tuple[str, str, bytes]:
+    """A new platform API key: ``(token, prefix, key_hash)``.
+
+    The one generator for every ``ApiKey`` row (project keys and the per-experiment
+    Evaluation Service keys), so the token, prefix and hash formats never drift.
+    The token is returned once and must never be stored or logged.
+    """
+    token = secrets.token_urlsafe(32)
+    return token, api_key_prefix(token), hash_api_key(token)
+
+
 def verify_api_key(token: str, stored_hash: bytes) -> bool:
     if _verify_pbkdf2(token, stored_hash, _PBKDF2_PREFIX):
         return True

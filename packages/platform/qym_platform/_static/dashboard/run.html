@@ -8,9 +8,10 @@
   <link rel="stylesheet" href="/static/dashboard.css?v=runs-analysis-c1-20260804-16">
   <link rel="stylesheet" href="/static/shell.css">
   <script src="/static/auth.js"></script>
-  <script src="/static/shell.js?v=ui-consistency-20260730-15"></script>
+  <script src="/static/shell.js?v=ui-consistency-20260730-16"></script>
   <script src="/static/metrics.js?v=metric-errors-20260914-1"></script>
   <script src="/static/run_details.js"></script>
+  <script src="/static/run_experiment_panel.js?v=run-experiment-20260930-2"></script>
   <script src="/static/trace_viewer.js?v=trace-retries-20260917-1"></script>
   <script src="/static/step_latency.js?v=empty-sections-20260911-2"></script>
   <style>
@@ -5666,6 +5667,93 @@
     .pass-cmp-vtable td.score-2 { color: var(--score-2); }
     .pass-cmp-vtable td.score-1 { color: var(--score-1); }
     .pass-cmp-actions { display: flex; gap: 6px; }
+
+    /* ─── Experiment panel (official runs, #26; run_experiment_panel.js) ─── */
+    #run-experiment-panel:empty { display: none; }
+    .rxp-panel {
+      margin-bottom: var(--space-xl);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: 8px;
+      padding: var(--space-lg);
+    }
+    .rxp-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: var(--space-md);
+      margin-bottom: var(--space-md);
+      flex-wrap: wrap;
+    }
+    .rxp-heading { min-width: 0; }
+    .rxp-title-row { display: flex; align-items: center; gap: var(--space-sm); }
+    .rxp-title { margin-bottom: 0; }
+    .rxp-desc,
+    .rxp-note {
+      margin: 2px 0 0;
+      font-size: var(--font-sm);
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .rxp-note { margin: 0 0 var(--space-md); color: var(--warning); }
+    .rxp-actions { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
+    .rxp-actions a.qym-inline-action { text-decoration: none; }
+    .rxp-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: var(--space-md) var(--space-lg);
+      margin: 0;
+    }
+    .rxp-field { min-width: 0; }
+    .rxp-field--wide { grid-column: 1 / -1; }
+    .rxp-label {
+      font-size: var(--font-sm);
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+    .rxp-value {
+      margin: 0;
+      font-size: var(--font-base);
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      overflow-wrap: anywhere;
+    }
+    .rxp-mono {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+    .rxp-link { color: var(--accent-primary); text-decoration: none; }
+    .rxp-link:hover { text-decoration: underline; }
+    .rxp-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .rxp-tag-value { color: var(--text-primary); }
+    .rxp-result {
+      margin-top: var(--space-md);
+      border-top: 1px solid var(--border-subtle);
+      padding-top: var(--space-md);
+    }
+    .rxp-result-summary {
+      cursor: pointer;
+      font-size: var(--font-md);
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .rxp-json {
+      margin: var(--space-sm) 0 0;
+      max-height: 320px;
+      overflow: auto;
+      padding: var(--space-sm) var(--space-md);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: var(--font-base);
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
   </style>
   <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60">
   <script defer src="/static/ui_components.js?v=ui-consistency-20260803-28"></script>
@@ -5693,6 +5781,9 @@
 
     <div id="run-content" style="display:none;">
       <div class="run-summary" id="run-summary"></div>
+
+      <!-- Experiment panel: official runs only (#26) -->
+      <div id="run-experiment-panel"></div>
 
       <div id="overview-section">
         <div id="overview-primary-section"></div>
@@ -7161,6 +7252,7 @@
         el('error-state').style.display = 'none';
         el('run-content').style.display = 'block';
         renderSummary();
+        renderExperimentPanel();
         wireTopActions();
         populateMetricSelectors();
         renderOverview();
@@ -7171,6 +7263,19 @@
         renderItems();
         // Auto-open trace if ?trace=itemId is in the URL
         if (window.QymTraceViewer) window.QymTraceViewer.restoreFromUrl();
+      }
+
+      // Official runs (#26): environment, base source, sweep, remote job, result,
+      // versioning and "Rerun with this config". Empty for local runs.
+      function renderExperimentPanel() {
+        const container = el('run-experiment-panel');
+        if (!container) return;
+        if (!window.QymRunExperimentPanel) { container.innerHTML = ''; return; }
+        const run = state.run || {};
+        window.QymRunExperimentPanel.render(container, run, {
+          projectSlug: (run.project && run.project.slug) || CURRENT_PROJECT_SLUG,
+          isExport: IS_EXPORT,
+        });
       }
 
       function renderSummary() {
@@ -7954,6 +8059,8 @@
           'last_completed_pass',
           'git_branch', 'git_commit', 'ingest_incomplete'
         ]);
+        // The Experiment panel shows the reserved launch keys of official runs.
+        if (run.experiment) { hiddenMetadataKeys.add('qym_config'); hiddenMetadataKeys.add('qym_launch'); }
         const colors = ['var(--accent-primary)', 'var(--accent-secondary)', 'var(--accent-tertiary)', 'var(--chart-4)', 'var(--chart-5)'];
         const entries = [];
         const seenKeys = new Set();

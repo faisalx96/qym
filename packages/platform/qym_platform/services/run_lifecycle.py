@@ -8,6 +8,8 @@ from qym_platform.db.models import Run, RunWorkflowStatus
 
 RUN_STATUS_REASON_LEASE_TIMEOUT = "lease_timeout"
 RUN_STATUS_REASON_ADMIN_FORCE_STOP = "admin_force_stopped"
+# The run's evaluation job was cancelled from the queue (eval_experiments.cancel_jobs).
+RUN_STATUS_REASON_CANCELLED_FROM_QUEUE = "cancelled_from_queue"
 TERMINAL_RUN_STATUSES = frozenset(
     {
         RunWorkflowStatus.COMPLETED,

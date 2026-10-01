@@ -4,6 +4,7 @@ from copy import deepcopy
 from datetime import datetime
 
 from alembic import command
+from alembic.script import ScriptDirectory
 from qym_platform.api import runs as runs_api
 from qym_platform.auth import Principal
 from qym_platform.db.models import (
@@ -23,7 +24,7 @@ from qym_platform.services.root_cause_changes import PASS_ANALYSIS_META_KEY
 from sqlalchemy import inspect, select, text
 from sqlalchemy.orm import Session
 from test_migrations import _load_migration
-from test_p1_migrations_lifecycle import postgres
+from test_p1_migrations_lifecycle import insert_legacy_run, postgres
 
 
 def test_populated_0050_upgrade_recovers_approvals_and_retains_tombstones(postgres):
@@ -37,20 +38,20 @@ def test_populated_0050_upgrade_recovers_approvals_and_retains_tombstones(postgr
         db.flush()
         db.add(Project(id="p", name="Project", slug="p", created_by_user_id="u"))
         db.flush()
-        db.add(
-            Run(
-                id="r",
-                project_id="p",
-                owner_user_id="u",
-                created_by_user_id="u",
-                task="task",
-                dataset="dataset",
-                metrics=["accuracy"],
-                samples=2,
-                status=RunWorkflowStatus.COMPLETED,
-            )
+        insert_legacy_run(
+            db,
+            id="r",
+            project_id="p",
+            owner_user_id="u",
+            created_by_user_id="u",
+            task="task",
+            dataset="dataset",
+            metrics=["accuracy"],
+            run_metadata={},
+            run_config={},
+            samples=2,
+            status=RunWorkflowStatus.COMPLETED,
         )
-        db.flush()
         db.add(
             RunItem(
                 run_id="r", item_id="i", index=0, input="question", output="pass two"
@@ -113,21 +114,20 @@ def test_populated_0050_upgrade_recovers_approvals_and_retains_tombstones(postgr
             )
         )
         for run_id in ("collapsed", "unreviewed", "classic"):
-            db.add(
-                Run(
-                    id=run_id,
-                    project_id="p",
-                    owner_user_id="u",
-                    created_by_user_id="u",
-                    task="task",
-                    dataset="dataset",
-                    metrics=["accuracy"],
-                    samples=1,
-                    run_metadata={"preserve": {"run_id": run_id}},
-                    status=RunWorkflowStatus.COMPLETED,
-                )
+            insert_legacy_run(
+                db,
+                id=run_id,
+                project_id="p",
+                owner_user_id="u",
+                created_by_user_id="u",
+                task="task",
+                dataset="dataset",
+                metrics=["accuracy"],
+                samples=1,
+                run_metadata={"preserve": {"run_id": run_id}},
+                run_config={},
+                status=RunWorkflowStatus.COMPLETED,
             )
-            db.flush()
             db.add(
                 RunItem(
                     run_id=run_id, item_id="i", index=0, input="question", output=run_id
@@ -287,9 +287,10 @@ def test_populated_0050_upgrade_recovers_approvals_and_retains_tombstones(postgr
 
     command.upgrade(config, "head")
     migration = _load_migration("0057_pass_review_records.py")
+    head = ScriptDirectory.from_config(config).get_current_head()
     with engine.begin() as conn:
         migration._backfill(conn)
-        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0059"
+        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == head
     with Session(engine) as db:
         assert [
             (

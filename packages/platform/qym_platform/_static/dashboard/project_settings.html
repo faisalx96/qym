@@ -8,12 +8,14 @@
   <link rel="stylesheet" href="/static/dashboard.css?v=runs-analysis-c1-20260804-16">
   <link rel="stylesheet" href="/static/shell.css">
   <script src="/static/auth.js"></script>
-  <script src="/static/shell.js?v=ui-consistency-20260730-15"></script>
+  <script src="/static/shell.js?v=ui-consistency-20260730-16"></script>
   <style>
     .settings-page { }
     .settings-header { margin-bottom: var(--space-xl); }
     .settings-header h1 { font-size: var(--font-title); font-weight: 600; margin: 0; letter-spacing: -0.3px; }
     .settings-header p { font-size: var(--font-sm); color: var(--text-muted); margin-top: 6px; }
+    /* The official-defaults editor (#30) replaces the page while it is open. */
+    .settings-header[hidden], .settings-tabs[hidden], .settings-panel[hidden], .ps-editor-host[hidden] { display: none; }
 
     .settings-tabs { margin-bottom: var(--space-lg); overflow-x: auto; }
 
@@ -71,7 +73,7 @@
 
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); }
     .form-group { display: flex; flex-direction: column; gap: 6px; }
-    .form-group.full-width { grid-column: 1 / -1; }
+    .form-group.full-width, .shell-form-checkbox.full-width { grid-column: 1 / -1; }
     .form-label { font-size: var(--font-sm); font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; }
     .form-group .form-input { width: 100%; box-sizing: border-box; background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 6px; color: var(--text-primary); padding: var(--space-sm) var(--space-md); font-size: var(--font-sm); font-family: var(--font-sans); }
 
@@ -185,8 +187,16 @@
       animation: spin 0.7s linear infinite;
     }
   </style>
+  <link rel="stylesheet" href="/static/eval_environments.css?v=eval-environments-20260929-1">
+  <link rel="stylesheet" href="/static/eval_official_defaults.css?v=eval-official-defaults-20260930-2">
   <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60">
   <script defer src="/static/ui_components.js?v=ui-consistency-20260803-28"></script>
+  <script src="/static/eval_environments.js?v=eval-environments-20260930-3"></script>
+  <!-- Official defaults editor (#30): the launch form in editor mode; its stylesheets are added on mount. -->
+  <script src="/static/eval_temporary_model.js?v=eval-temporary-model-20260930-1"></script>
+  <script src="/static/experiment_launch_advanced.js?v=experiment-launch-advanced-20260930-3"></script>
+  <script src="/static/experiment_launch.js?v=experiment-launch-20260930-7"></script>
+  <script src="/static/eval_official_defaults.js?v=eval-official-defaults-20260930-2"></script>
 </head>
 <body>
   <main class="settings-page">
@@ -200,6 +210,7 @@
       <button type="button" role="tab" id="settings-tab-members" class="settings-tab qym-tabs__tab" data-tab="members" aria-selected="false" aria-controls="panel-members">Members</button>
       <button type="button" role="tab" id="settings-tab-apikeys" class="settings-tab qym-tabs__tab" data-tab="apikeys" aria-selected="false" aria-controls="panel-apikeys">API Keys</button>
       <button type="button" role="tab" id="settings-tab-llm" class="settings-tab qym-tabs__tab" data-tab="llm" aria-selected="false" aria-controls="panel-llm">LLM Connections</button>
+      <button type="button" role="tab" id="settings-tab-environments" class="settings-tab qym-tabs__tab" data-tab="environments" aria-selected="false" aria-controls="panel-environments">Environments</button>
       <button type="button" role="tab" id="settings-tab-prompts" class="settings-tab qym-tabs__tab" data-tab="prompts" aria-selected="false" aria-controls="panel-prompts" hidden disabled>AI Prompts</button>
       <button type="button" role="tab" id="settings-tab-danger" class="settings-tab qym-tabs__tab" data-tab="danger" aria-selected="false" aria-controls="panel-danger">Danger Zone</button>
     </div>
@@ -268,7 +279,7 @@
     <!-- LLM Connections -->
     <div class="settings-panel" id="panel-llm" role="tabpanel" aria-labelledby="settings-tab-llm" hidden>
       <div class="card">
-        <div class="card-header"><div><div class="card-title">LLM Connections</div><div class="card-subtitle">Providers for AI-assisted root cause analysis</div></div></div>
+        <div class="card-header"><div><div class="card-title">LLM Connections</div><div class="card-subtitle">Providers for root cause analysis and experiments</div></div></div>
         <div class="card-body flush">
           <table class="data-table">
             <thead><tr><th>Connection</th><th>Model</th><th>Endpoint</th><th>Key</th><th style="text-align:right">Actions</th></tr></thead>
@@ -283,6 +294,13 @@
             <div class="form-group full-width"><label class="form-label">Base URL</label><input class="form-input" id="llm-base-url" type="text" placeholder="https://api.openai.com/v1" /></div>
             <div class="form-group"><label class="form-label">Model</label><input class="form-input" id="llm-model" type="text" placeholder="gpt-4o" /></div>
             <div class="form-group"><label class="form-label">API Key</label><input class="form-input" id="llm-api-key" type="password" placeholder="sk-..." /></div>
+            <label class="shell-form-checkbox full-width" for="llm-available-for-experiments">
+              <input type="checkbox" id="llm-available-for-experiments" checked />
+              <span class="shell-form-checkbox-copy">
+                <span class="shell-form-checkbox-label">Available for experiments</span>
+                <span class="shell-form-checkbox-help">Offer this connection in the experiments model picker (needs an https:// base URL). Turn off to keep it for root cause analysis only.</span>
+              </span>
+            </label>
           </div>
           <div class="note" id="llm-note"></div>
           <div class="llm-message" id="llm-message"></div>
@@ -291,6 +309,22 @@
           <button class="btn btn-secondary" id="cancel-llm-btn" type="button" style="display:none;">Cancel</button>
           <button class="btn btn-secondary" id="test-llm-btn" type="button" style="display:none;">Test</button>
           <button class="btn btn-primary" id="save-llm-btn" type="button">Add connection</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Evaluation Service environments (plan §12.1); behaviour in eval_environments.js -->
+    <div class="settings-panel" id="panel-environments" role="tabpanel" aria-labelledby="settings-tab-environments" hidden>
+      <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">Environments</div><div class="card-subtitle" id="env-panel-note">Evaluation Service deployments that experiments run on</div></div>
+          <button class="btn btn-primary" id="add-environment-btn" type="button" style="padding:0 var(--space-md);font-size:var(--font-sm);" hidden>Add environment</button>
+        </div>
+        <div class="card-body flush env-table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Environment</th><th>URL</th><th>Health</th><th>Schema</th><th>LLM slots</th><th>Official preset</th><th>Priority cap</th><th style="text-align:right">In-flight cap</th><th style="text-align:right">Actions</th></tr></thead>
+            <tbody id="environments-tbody"><tr><td colspan="9"><div class="env-loading"><span class="env-spinner" aria-hidden="true"></span>Loading…</div></td></tr></tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -393,6 +427,8 @@
         </div>
       </div>
     </div>
+    <!-- Official defaults editor (#30); mounted by eval_official_defaults.js. -->
+    <div class="ps-editor-host" id="env-editor-host" hidden></div>
   </main>
 
   <script>
@@ -480,6 +516,78 @@
 
         await loadConnections();
         render();
+        mountEnvironments();
+        openFromUrl();
+      }
+
+      // Deep links: ?tab=environments selects the tab; with &env=<id>&promote=
+      // saved|run|job&id=<source id> ("Promote to official" on the run page and the
+      // experiment matrix, #39) it opens the official defaults editor prefilled from
+      // that source. Only ids travel in the URL; the editor never publishes by itself.
+      let urlHandled = false; // load() runs again after edits; the link is read once
+      async function openFromUrl() {
+        if (urlHandled) return;
+        urlHandled = true;
+        const params = new URLSearchParams(window.location.search);
+        const tab = document.getElementById('settings-tab-' + (params.get('tab') || ''));
+        if (tab) tab.click();
+        const kind = params.get('promote');
+        const sourceId = params.get('id');
+        const envId = params.get('env');
+        if (!kind && !sourceId) return;
+        // One-shot: a reload must not reopen the editor.
+        ['promote', 'id', 'env'].forEach((key) => params.delete(key));
+        const query = params.toString();
+        window.history.replaceState(null, '', window.location.pathname + (query ? '?' + query : ''));
+        if (!['saved', 'run', 'job'].includes(kind) || !sourceId || !envId) return;
+        let env = null;
+        try {
+          const data = await fetchJson(`v1/projects/${encodeURIComponent(state.project.id)}/eval-environments/${encodeURIComponent(envId)}`);
+          env = data && (data.environment || data);
+        } catch (err) {
+          toast(err.message || 'Environment not found', 'error');
+          return;
+        }
+        if (env && env.id) openOfficialDefaultsEditor({ env, promote: { kind, id: sourceId } });
+      }
+
+      // ── Evaluation Service environments (members read, managers write) ──
+      let envPanel = null;
+      function mountEnvironments() {
+        const tbody = document.getElementById('environments-tbody');
+        if (!window.QymEvalEnvironments) {
+          tbody.innerHTML = '<tr><td colspan="9"><div class="note" style="margin:0">Environments UI failed to load.</div></td></tr>';
+          return;
+        }
+        envPanel = window.QymEvalEnvironments.mountEnvironmentsPanel({
+          projectId: state.project.id,
+          projectSlug: state.project.slug,
+          canManage: canManageMembers(),
+          tbody,
+          addButton: document.getElementById('add-environment-btn'),
+          note: document.getElementById('env-panel-note'),
+          onGotoApiKeys: () => document.getElementById('settings-tab-apikeys').click(),
+          onEditOfficial: openOfficialDefaultsEditor,
+        });
+      }
+
+      // Environments → env → Official defaults (#30): the launch form without sweeps.
+      function openOfficialDefaultsEditor({ env, fromVersion, promote }) {
+        if (!window.QymOfficialDefaults) return;
+        window.QymOfficialDefaults.openEditor({
+          host: document.getElementById('env-editor-host'),
+          hide: [
+            document.querySelector('.settings-header'),
+            document.querySelector('.settings-tabs'),
+            document.getElementById('panel-environments'),
+          ],
+          project: state.project,
+          me: state.me,
+          env,
+          fromVersion,
+          promote,
+          onPublished: () => { if (envPanel) envPanel.reload(); },
+        });
       }
 
       async function loadConnections() {
@@ -508,6 +616,7 @@
             <td>
               <span style="font-weight:600;color:var(--text-primary)">${escapeHtml(c.name)}</span>
               ${c.is_default ? '<span class="role-badge qym-tag qym-tag--role default" style="margin-left:10px">Default</span>' : ''}
+              ${c.available_for_experiments === false ? '<span class="qym-tag" style="margin-left:6px" title="Not offered in the experiments model picker">Analysis only</span>' : ''}
             </td>
             <td><span style="font-family:var(--font-mono);color:var(--text-secondary)">${escapeHtml(c.llm_model || '—')}</span></td>
             <td><span style="font-family:var(--font-mono);display:inline-block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle" title="${escapeHtml(c.llm_base_url || '')}">${escapeHtml(c.llm_base_url || '—')}</span></td>
@@ -969,6 +1078,7 @@
         baseUrl: () => document.getElementById('llm-base-url'),
         model: () => document.getElementById('llm-model'),
         apiKey: () => document.getElementById('llm-api-key'),
+        forExperiments: () => document.getElementById('llm-available-for-experiments'),
         note: () => document.getElementById('llm-note'),
         msg: () => document.getElementById('llm-message'),
         title: () => document.getElementById('llm-form-title'),
@@ -984,6 +1094,7 @@
         llmEls.model().value = '';
         llmEls.apiKey().value = '';
         llmEls.apiKey().placeholder = 'sk-...';
+        llmEls.forExperiments().checked = true;
         llmEls.note().textContent = '';
         llmEls.msg().textContent = '';
         llmEls.title().textContent = 'Add a connection';
@@ -1001,6 +1112,7 @@
         llmEls.model().value = c.llm_model || '';
         llmEls.apiKey().value = '';
         llmEls.apiKey().placeholder = c.llm_api_key_set ? 'Leave blank to keep current key' : 'sk-...';
+        llmEls.forExperiments().checked = c.available_for_experiments !== false;
         llmEls.note().textContent = c.llm_api_key_set ? `Stored key: ${c.llm_api_key_hint || 'configured'}` : '';
         llmEls.msg().textContent = '';
         llmEls.title().textContent = `Edit “${c.name}”`;
@@ -1019,6 +1131,7 @@
           llm_base_url: llmEls.baseUrl().value.trim() || 'https://api.openai.com/v1',
           llm_model: llmEls.model().value.trim() || 'gpt-4o-mini',
           llm_api_key: apiKey || (isEdit ? '__KEEP__' : ''),
+          available_for_experiments: llmEls.forExperiments().checked,
         };
         if (!payload.name) { llmEls.msg().textContent = 'Name is required'; return; }
         llmEls.msg().textContent = 'Saving…';

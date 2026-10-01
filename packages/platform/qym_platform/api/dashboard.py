@@ -35,7 +35,10 @@ _FILTER_COLUMNS = {
     "statuses": Dimension.status,
     "versions": Dimension.version,
     "users": Dimension.owner,
+    # Descriptors published before origin existed are local runs.
+    "origins": func.coalesce(Dimension.descriptor["origin"].as_string(), "local"),
 }
+_ORIGIN_FILTER_VALUES = {"official", "local", "__none__"}
 
 
 def _parse_filters(raw: Optional[str]) -> dict:
@@ -55,6 +58,8 @@ def _parse_filters(raw: Optional[str]) -> dict:
             or any(not isinstance(item, str) or len(item) > 1000 for item in values)
         ):
             raise HTTPException(400, f"Invalid {key} filter")
+    if set(value.get("origins", [])) - _ORIGIN_FILTER_VALUES:
+        raise HTTPException(400, "Invalid origins filter")
     for key in ("since", "until"):
         if value.get(key) is not None:
             try:
