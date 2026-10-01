@@ -201,6 +201,8 @@ _FILE = {"files": {"file": ("notes.md", b"text", "text/markdown")}}
 REFUSED = [
     # Runs: review workflow, score and diagnosis edits, delete/restore.
     ("POST", "/v1/runs/{run_id}/submit", "/v1/runs/r1/submit", None, MGR),
+    ("POST", "/v1/runs/submit", "/v1/runs/submit", {"json": {"run_ids": ["r1"]}}, MGR),
+    ("POST", "/v1/runs/{run_id}/owner", "/v1/runs/r1/owner", {"json": {"user_id": "member"}}, MGR),
     ("POST", "/v1/runs/{run_id}/approve", "/v1/runs/r-review/approve", {"json": {}}, MGR),
     ("POST", "/v1/runs/{run_id}/reject", "/v1/runs/r-review/reject", {"json": {}}, MGR),
     ("POST", "/v1/runs/{run_id}/unapprove", "/v1/runs/r-review/unapprove", None, MGR),
@@ -332,6 +334,13 @@ REFUSED = [
         "/v1/projects/{project_id}/members/{user_id}",
         "/v1/projects/pa/members/member",
         {"json": {"role": "MANAGER"}},
+        MGR,
+    ),
+    (
+        "PATCH",
+        "/v1/projects/{project_id}/review-rules",
+        "/v1/projects/pa/review-rules",
+        {"json": {"correction_approvers": "managers"}},
         MGR,
     ),
     ("POST", "/v1/projects/{project_id}/llm-connections", "/v1/projects/pa/llm-connections", {"json": {"name": "b"}}, MGR),

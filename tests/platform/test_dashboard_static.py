@@ -362,7 +362,7 @@ def test_runs_badges_separate_error_types_without_changing_item_math() -> None:
     assert "run.samples > 1 ? ' across all passes' : ''" in source
     assert "const retryScope = run.samples > 1 ? ' across all passes' : ' across all items';" in source
     assert "${retryScope}" in source
-    assert "dashboard.js?v=p0-20260930-3" in index
+    assert "dashboard.js?v=p1-20261001" in index
 
 
 def test_repeat_run_rows_show_each_pass_retry_count() -> None:
@@ -450,7 +450,7 @@ def test_repeat_parent_checkbox_selects_its_current_scope() -> None:
     assert "isPartiallySelected" not in source
     assert "state.selectedRuns.delete(filePath);" in source
     assert "if (!allSelected) refs.forEach(ref => state.selectedRuns.add(ref));" in source
-    assert "dashboard.js?v=p0-20260930-3" in index
+    assert "dashboard.js?v=p1-20261001" in index
 
 
 def test_repeat_comparison_selection_expands_to_exact_passes() -> None:
@@ -2420,7 +2420,8 @@ def test_run_selection_uses_explicit_mode_and_reclaims_checkbox_column() -> None
     assert "panel.closest('.status-bar')?.classList.toggle('selection-active', showActions)" in panel
     assert "separator.style.display = showActions ? '' : 'none';" in panel
     assert "allDeletable" in panel
-    assert "isOwner && (status === 'COMPLETED'" in panel
+    # Owners, and project managers or admins for the owner (C072).
+    assert "(isOwner || managesProject) && (status === 'COMPLETED'" in panel
     assert "const selectionAvailable = !!state.runs && (usesDashboardSummary() ? state.dashboardOverview.total_count > 0 : state.flatRuns.length > 0);" in source
     assert "selectMode: false" in source
     assert "function setSelectMode(enabled)" in source

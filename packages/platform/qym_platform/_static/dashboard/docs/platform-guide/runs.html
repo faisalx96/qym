@@ -39,7 +39,7 @@
   <tbody>
     <tr><td><strong>Compare</strong></td><td>Select at least two references.</td></tr>
     <tr><td><strong>Cohort</strong></td><td>Lock the current selection as Cohort A, then build an execution-balanced Cohort B.</td></tr>
-    <tr><td><strong>Submit</strong></td><td>Every selected run must be yours and in COMPLETED, FAILED, or REJECTED.</td></tr>
+    <tr><td><strong>Submit</strong></td><td>Every selected run must be in COMPLETED, FAILED, or REJECTED, and yours unless you are a project manager or admin. A confirmation lists the runs and takes an optional comment; the runs are submitted together in one request, so either all of them are submitted or none is.</td></tr>
     <tr><td><strong>Delete</strong></td><td>Every selected run must be deletable by you: owner, project manager, or platform admin.</td></tr>
     <tr><td><strong>Clear</strong></td><td>Leave selection or cancel cohort mode. <code>Esc</code> does the same.</td></tr>
   </tbody>
@@ -49,7 +49,7 @@
 <p>Expand a repeat row and check a completed pass to create a <strong>pass reference</strong>. It addresses one execution rather than the whole run and can join a normal comparison or a cohort. The parent checkbox follows the visible scope: collapsed, it selects the repeat run; expanded, it selects all available passes. Selecting the whole run removes its selected pass references, and selecting a pass removes its whole-run reference.</p>
 
 <h2>Review workflow</h2>
-<p>An owner submits a finished run; a project manager or admin approves or rejects it and can later withdraw that decision. While a run is submitted, approved, or rejected its results are frozen: late events from the evaluation client cannot change its scores or move it back to running. Withdrawing a decision returns the run to its execution result, so a failed run stays failed. The run page lists every submission, decision, and withdrawal with who made it, when, and the comment.</p>
+<p>An owner submits a finished run (a project manager or admin can submit it on the owner's behalf); a project manager or admin approves or rejects it and can later withdraw that decision. Submitting always asks for confirmation first, with an optional comment kept in the review history. Managers and admins can also transfer a run to another project member from its row actions. While a run is submitted or approved its scores cannot be edited or reset on the run or Compare page, and its passes cannot be deleted. While a run is submitted, approved, or rejected its results are frozen: late events from the evaluation client cannot change its scores or move it back to running. Withdrawing a decision returns the run to its execution result, so a failed run stays failed. The run page lists every submission, decision, and withdrawal with who made it, when, and the comment.</p>
 
 <h2>How cohort accounting works</h2>
 <p>Cohorts compare equal numbers of executions, not equal numbers of rows:</p>

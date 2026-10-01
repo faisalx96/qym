@@ -745,7 +745,7 @@ def test_deleting_metric_review_preserves_independent_human_item_summary(
     assert item.item_metadata["root_cause_source"] == "human"
 
 
-def test_editing_approved_human_only_candidate_stays_approved_and_does_not_fake_ai(
+def test_editing_approved_human_only_candidate_returns_it_to_pending_and_does_not_fake_ai(
     db_session: Session,
 ) -> None:
     actor, reviewer, run, item = _seed_run(db_session)
@@ -793,10 +793,18 @@ def test_editing_approved_human_only_candidate_stays_approved_and_does_not_fake_
     db_session.refresh(first_candidate)
     db_session.refresh(second_candidate)
 
-    assert first_candidate.status == CorrectionStatus.SUPERSEDED
+    # C070: the edited text was never reviewed. It goes back to PENDING and
+    # does not inherit the previous reviewer, comment or approval; the old
+    # approval stays on record as history.
+    assert first_candidate.status == CorrectionStatus.APPROVED
     assert first_candidate.is_active is False
-    assert second_candidate.status == CorrectionStatus.APPROVED
+    assert first_candidate.reviewed_by_user_id == reviewer.id
+    assert first_candidate.review_comment == "Approved human-only example"
+    assert second_candidate.status == CorrectionStatus.PENDING
     assert second_candidate.is_active is True
+    assert second_candidate.reviewed_by_user_id is None
+    assert second_candidate.reviewed_at is None
+    assert second_candidate.review_comment == ""
     assert second_candidate.ai_root_cause == ""
     assert second_candidate.ai_root_cause_detail == ""
     assert second_candidate.ai_root_cause_note == ""
@@ -805,8 +813,9 @@ def test_editing_approved_human_only_candidate_stays_approved_and_does_not_fake_
         second_candidate.human_root_cause_detail == "Missing schema and business rules"
     )
 
+    # Unreviewed text never reaches the analyzer as an approved example.
     approved = get_few_shot_examples(db_session, run.task, run.project_id, limit=10)
-    assert [c.id for c in approved] == [second_candidate.id]
+    assert [c.id for c in approved] == []
 
 
 def test_follow_up_human_edit_preserves_original_ai_snapshot(

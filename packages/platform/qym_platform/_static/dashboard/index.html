@@ -187,6 +187,29 @@
     </div>
   </div>
 
+  <!-- Transfer ownership (project managers and admins) -->
+  <div class="modal" id="transfer-modal" style="display:none;">
+    <div class="modal-content modal-small">
+      <div class="modal-header">
+        <h2>Transfer ownership</h2>
+        <button class="modal-close qym-icon-action" aria-label="Close" onclick="document.getElementById('transfer-modal').style.display='none'">×</button>
+      </div>
+      <div class="modal-body">
+        <p>The new owner can submit and delete this run. Its results and review history stay as they are.</p>
+        <p class="workflow-run-name" id="transfer-run-name"></p>
+        <p id="transfer-current-owner"></p>
+        <div style="margin-top: 12px;">
+          <label for="transfer-owner-select" style="display: block; font-size: var(--font-base); color: var(--text-muted); margin-bottom: 4px;">New owner</label>
+          <select id="transfer-owner-select" class="form-select" style="width: 100%;"></select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="document.getElementById('transfer-modal').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" id="confirm-transfer-btn">Transfer</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast-container" class="toast-container"></div>
 
   <!-- Help Modal -->
@@ -218,6 +241,6 @@
   <script>window.__QYM_INITIAL_VIEW__ = 'table';</script>
   <script src="/static/metrics.js?v=p0-20260930-3"></script>
   <script src="/static/qym_table.js"></script>
-  <script src="/static/dashboard.js?v=p0-20260930-3"></script>
+  <script src="/static/dashboard.js?v=p1-20261001"></script>
 </body>
 </html>

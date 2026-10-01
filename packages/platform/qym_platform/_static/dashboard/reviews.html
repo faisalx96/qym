@@ -472,6 +472,28 @@
       gap: 4px;
       flex-shrink: 0;
     }
+    /* Approve, reject and reset are one square size with one icon size. */
+    .card-actions .review-decision {
+      width: var(--control-height);
+      min-width: var(--control-height);
+      height: var(--control-height);
+      padding: 0;
+    }
+    .card-actions .review-decision svg {
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .card-actions .review-decision:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    /* A disabled button shows no tooltip; its wrapper names the rule. */
+    .review-decision-rule { display: inline-flex; }
 
     /* Card Body — Row-aligned Diff View */
     .card-body {
@@ -2103,6 +2125,42 @@
       el('select-all').checked = allChecked;
     }
 
+    const DECISION_ICONS = {
+      approve: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8.5 3.5 3.5 6.5-7"/></svg>',
+      reject: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg>',
+      reset: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3v3.5h3.5"/><path d="M3.4 9.5A5 5 0 1 0 4.6 4.6L3 6.5"/></svg>',
+    };
+
+    function decisionButton(kind, c, label, tone, block) {
+      const button = `<button class="btn-sm ${tone} qym-icon-action review-decision" data-${kind}="${c.id}" ${block ? 'disabled aria-disabled="true"' : `title="${label}"`} aria-label="${label}">${DECISION_ICONS[kind]}</button>`;
+      return block ? `<span class="review-decision-rule" title="${escapeHtml(block)}">${button}</span>` : button;
+    }
+
+    function renderDecisionActions(c, st, block) {
+      if (st === 'pending') {
+        return decisionButton('approve', c, 'Approve', 'btn-approve', block)
+          + decisionButton('reject', c, 'Reject', 'btn-reject', block);
+      }
+      if (st === 'approved' || st === 'rejected') {
+        return decisionButton('reset', c, 'Reset to pending', 'btn-reset', block);
+      }
+      return '';
+    }
+
+    // Selected corrections this viewer may not decide, with the first reason.
+    function blockedSelection(ids) {
+      const byId = new Map(state.corrections.map(c => [c.id, c]));
+      const blocked = ids.map(id => byId.get(id)).filter(c => c && c.review_block);
+      return blocked.length ? { count: blocked.length, reason: blocked[0].review_block } : null;
+    }
+
+    function refuseBlockedSelection(ids) {
+      const blocked = blockedSelection(ids);
+      if (!blocked) return false;
+      showToast('error', 'Not allowed', `${blocked.count} selected correction${blocked.count > 1 ? 's' : ''}: ${blocked.reason}`);
+      return true;
+    }
+
     function renderCard(c) {
       const st = c.status || 'pending';
       const isSelected = state.selected.has(c.id);
@@ -2113,6 +2171,10 @@
 
       const corrector = c.corrected_by ? (c.corrected_by.display_name || c.corrected_by.email) : '';
       const reviewer = c.reviewed_by ? (c.reviewed_by.display_name || c.reviewed_by.email) : '';
+      // The project's review rules (C074): a reason when this viewer may not
+      // approve, reject or reset; the author decided their own correction.
+      const reviewBlock = c.review_block || '';
+      const selfReviewed = !!c.self_reviewed && (st === 'approved' || st === 'rejected');
 
       return `
         <div class="correction-card status-${escapeHtml(st)} ${isSelected ? 'selected' : ''}" data-id="${c.id}">
@@ -2125,18 +2187,12 @@
               <span class="card-id">#${c.id}</span>
               <span class="card-item-id" title="${escapeHtml(c.item_id)}">${escapeHtml(truncate(c.item_id, 24))}</span>
               <span class="card-status-badge qym-badge ${escapeHtml(st)}"><span class="dot"></span> ${escapeHtml(st)}</span>
+              ${selfReviewed ? `<span class="qym-tag qym-tag--warning" title="${escapeHtml((reviewer || 'The author') + ' wrote this correction and also ' + st + ' it')}">${st === 'approved' ? 'Self-approved' : 'Self-rejected'}</span>` : ''}
               ${c.ai_confidence != null ? `<span class="card-confidence" title="AI confidence">${(c.ai_confidence * 100).toFixed(0)}%</span>` : ''}
             </div>
             <span class="card-provenance">${corrector ? `by ${escapeHtml(corrector)}` : ''} ${c.created_at ? formatDate(c.created_at) : ''}</span>
             <div class="card-actions">
-              ${st === 'pending' ? `
-                <button class="btn-sm btn-approve qym-icon-action" data-approve="${c.id}" title="Approve" aria-label="Approve">&#10003;</button>
-                <button class="btn-sm btn-reject qym-icon-action" data-reject="${c.id}" title="Reject" aria-label="Reject">&#10007;</button>
-              ` : st === 'approved' ? `
-                <button class="btn-sm btn-reset qym-icon-action" data-reset="${c.id}" title="Reset to pending" aria-label="Reset to pending">&#8634;</button>
-              ` : st === 'rejected' ? `
-                <button class="btn-sm btn-reset qym-icon-action" data-reset="${c.id}" title="Reset to pending" aria-label="Reset to pending">&#8634;</button>
-              ` : ''}
+              ${renderDecisionActions(c, st, reviewBlock)}
               <button class="btn-ghost qym-icon-action" data-edit="${c.id}" title="Edit correction" aria-label="Edit correction">&#9998;</button>
               <button class="btn-sm btn-reject" data-delete="${c.id}" title="Remove from the review queue and mark rejected">Delete</button>
               <button class="expand-btn qym-icon-action" data-expand="${c.id}" title="Show metadata" aria-label="Show metadata">
@@ -2702,6 +2758,7 @@
         showToast('warning', 'Nothing selected', 'Select one or more corrections first.');
         return;
       }
+      if (refuseBlockedSelection(ids)) return;
       const comment = await openModal(
         `Approve ${ids.length} Correction${ids.length > 1 ? 's' : ''}`,
         `${ids.length} correction${ids.length > 1 ? 's' : ''} will be approved as rule-generation evidence.`,
@@ -2725,6 +2782,7 @@
         showToast('warning', 'Nothing selected', 'Select one or more corrections first.');
         return;
       }
+      if (refuseBlockedSelection(ids)) return;
       const comment = await openModal(
         `Reject ${ids.length} Correction${ids.length > 1 ? 's' : ''}`,
         `${ids.length} correction${ids.length > 1 ? 's' : ''} will be rejected.`,
@@ -2748,6 +2806,7 @@
         showToast('warning', 'Nothing selected', 'Select one or more corrections first.');
         return;
       }
+      if (refuseBlockedSelection(ids)) return;
       try {
         await apiAction('POST', 'api/corrections/bulk', { ids, action: 'reset' });
         applyBulkStatusUpdate(ids, 'pending');

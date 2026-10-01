@@ -132,8 +132,13 @@ def record_transition(
     comment: str = "",
     approval: Optional[Approval] = None,
     at: Optional[datetime] = None,
+    on_behalf_of_user_id: Optional[str] = None,
 ) -> RunWorkflowEvent:
-    """Append one transition to the run's history and to the audit log."""
+    """Append one transition to the run's history and to the audit log.
+
+    ``on_behalf_of_user_id`` names the run owner when a project manager or
+    admin submitted the run for them.
+    """
     at = at or utc_now_naive()
     to_status = run.status
     event = RunWorkflowEvent(
@@ -144,9 +149,12 @@ def record_transition(
         actor_user_id=actor_user_id,
         comment=comment or "",
         created_at=at,
+        on_behalf_of_user_id=on_behalf_of_user_id,
     )
     db.add(event)
     after: Dict[str, Any] = {"status": to_status.value, "comment": comment or ""}
+    if on_behalf_of_user_id:
+        after["on_behalf_of_user_id"] = on_behalf_of_user_id
     if approval is not None:
         after["decision"] = approval.decision.value if approval.decision else None
         after["decision_by_user_id"] = approval.decision_by_user_id
@@ -302,6 +310,7 @@ def review_history(db: Session, run: Run) -> List[Dict[str, Any]]:
             "comment": e.comment or "",
             "at": e.created_at,
             "recorded": not e.reconstructed,
+            "on_behalf_of_user_id": e.on_behalf_of_user_id,
         }
         for e in events
     ]
@@ -313,7 +322,9 @@ def review_history(db: Session, run: Run) -> List[Dict[str, Any]]:
         first_at = entries[0]["at"] if entries else None
         approval = db.query(Approval).filter(Approval.run_id == run.id).first()
         entries = _reconstructed_entries(approval, before=first_at) + entries
-    user_ids = {e["actor_user_id"] for e in entries if e["actor_user_id"]}
+    user_ids = {e["actor_user_id"] for e in entries if e["actor_user_id"]} | {
+        e["on_behalf_of_user_id"] for e in entries if e.get("on_behalf_of_user_id")
+    }
     users = (
         {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()}
         if user_ids
@@ -325,6 +336,8 @@ def review_history(db: Session, run: Run) -> List[Dict[str, Any]]:
             "from_status": e["from_status"],
             "to_status": e["to_status"],
             "actor": _user_payload(users.get(e["actor_user_id"])),
+            # A manager or admin submitted the run for its owner (C072).
+            "on_behalf_of": _user_payload(users.get(e.get("on_behalf_of_user_id") or "")),
             "comment": e["comment"],
             "at": to_api_timestamp(e["at"]) if e["at"] else None,
             "recorded": e["recorded"],

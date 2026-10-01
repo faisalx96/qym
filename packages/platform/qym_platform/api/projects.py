@@ -57,6 +57,7 @@ from qym_platform.secrets import (
 )
 from qym_platform.security import api_key_prefix, hash_api_key
 from qym_platform.settings import PlatformSettings
+from qym_platform.services.correction_rules import CORRECTION_APPROVERS, correction_rules
 from qym_platform.services.analysis_prompts import (
     DEFAULT_ANALYSIS_PROMPTS,
     serialize_analysis_prompt_settings,
@@ -263,6 +264,8 @@ def _project_payload(
         ),
         "created_at": to_api_timestamp(project.created_at),
         "updated_at": to_api_timestamp(project.updated_at),
+        # Who may decide diagnosis corrections (C074).
+        **correction_rules(project),
     }
 
 
@@ -941,6 +944,56 @@ def add_project_member(
     db.commit()
     db.refresh(member)
     return _serialize_member(member, user)
+
+
+class ReviewRulesRequest(BaseModel):
+    correction_approvers: Optional[str] = None
+    correction_require_different_reviewer: Optional[bool] = None
+
+
+@router.patch("/v1/projects/{project_id}/review-rules")
+def update_project_review_rules(
+    project_id: str,
+    req: ReviewRulesRequest,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Set who may approve, reject or reset corrections, and whether the
+    author of a correction may decide it (project managers and admins)."""
+    _require_project_access(db, principal, project_id)
+    if not can_manage_project_members(db, principal, project_id):
+        raise HTTPException(status_code=403, detail="Manager only")
+    require_project_writable(db, project_id)
+    project = _get_project(db, project_id)
+    if (
+        req.correction_approvers is not None
+        and req.correction_approvers not in CORRECTION_APPROVERS
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="correction_approvers must be one of: " + ", ".join(CORRECTION_APPROVERS),
+        )
+    before = correction_rules(project)
+    if req.correction_approvers is not None:
+        project.correction_approvers = req.correction_approvers
+    if req.correction_require_different_reviewer is not None:
+        project.correction_require_different_reviewer = bool(
+            req.correction_require_different_reviewer
+        )
+    after = correction_rules(project)
+    if after != before:
+        db.add(
+            AuditLog(
+                actor_user_id=principal.user.id,
+                action="project.review_rules_updated",
+                entity_type="project",
+                entity_id=project.id,
+                before=before,
+                after=after,
+            )
+        )
+    db.commit()
+    return {"project_id": project.id, **after}
 
 
 @router.patch("/v1/projects/{project_id}/members/{user_id}")

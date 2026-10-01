@@ -3714,7 +3714,11 @@
       const canApprove = writable && isProjectManager && status === 'SUBMITTED';
       const canUnapprove = writable && isProjectManager && status === 'APPROVED';
       const canUnreject = writable && isProjectManager && status === 'REJECTED';
-      const canSubmit = writable && isOwner && (status === 'COMPLETED' || status === 'FAILED' || status === 'REJECTED');
+      // The owner submits; a project manager or admin may submit for them (C072).
+      const canSubmit = writable && (isOwner || isProjectManager) && (status === 'COMPLETED' || status === 'FAILED' || status === 'REJECTED');
+      const ownerName = run.owner ? (run.owner.display_name || run.owner.email || '') : '';
+      const submitTitle = isOwner || !ownerName ? 'Submit for approval' : `Submit for approval on behalf of ${ownerName}`;
+      const canTransfer = writable && isProjectManager;
       const canDelete = writable && (globalRole === 'ADMIN' || isProjectManager || isOwner);
       const progressText = (status === 'RUNNING' && run.progress_total)
         ? `${run.progress_completed || 0}/${run.progress_total}`
@@ -3742,7 +3746,7 @@
 
       return `
         <tr data-idx="${idx}" data-file="${encodeURIComponent(run.file_path)}"
-            data-can-delete-pass="${canDelete && status !== 'RUNNING' && status !== 'PENDING' ? 'true' : 'false'}"
+            data-can-delete-pass="${canDelete && !['RUNNING', 'PENDING', 'SUBMITTED', 'APPROVED'].includes(status) ? 'true' : 'false'}"
             class="${rowClasses}">
           <td class="col-run">
             <div class="run-cell-content">
@@ -3817,9 +3821,9 @@
             <span class="duration-value">${durationText}</span>
           </td>
           <td class="col-actions">
-            ${(canApprove || canUnapprove || canUnreject) ? `
+            ${(canApprove || canUnapprove || canUnreject || canTransfer) ? `
               <div class="actions-dropdown" onclick="event.stopPropagation()">
-                <button class="actions-trigger qym-icon-action workflow-trigger" title="${(canUnapprove || canUnreject) ? 'Review decision actions' : 'Review'}" aria-label="${(canUnapprove || canUnreject) ? 'Review decision actions' : 'Review run'}">
+                <button class="actions-trigger qym-icon-action workflow-trigger" title="${(canApprove || canUnapprove || canUnreject) ? ((canUnapprove || canUnreject) ? 'Review decision actions' : 'Review') : 'Run actions'}" aria-label="${(canApprove || canUnapprove || canUnreject) ? ((canUnapprove || canUnreject) ? 'Review decision actions' : 'Review run') : 'Run actions'}">
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                     <polyline points="14 2 14 8 20 8"></polyline>
@@ -3855,11 +3859,20 @@
                     </svg>
                     <span>Unreject</span>
                   </a>` : ''}
+                  ${canTransfer ? `<a href="#" class="actions-item transfer-run">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M16 3h5v5"></path>
+                      <path d="M21 3l-7 7"></path>
+                      <path d="M8 21H3v-5"></path>
+                      <path d="M3 21l7-7"></path>
+                    </svg>
+                    <span>Transfer ownership</span>
+                  </a>` : ''}
                 </div>
               </div>
             ` : ''}
             ${canSubmit ? `
-              <a href="#" class="action-icon qym-icon-action submit-run" title="Submit for Approval" aria-label="Submit for approval" onclick="event.stopPropagation()">
+              <a href="#" class="action-icon qym-icon-action submit-run" title="${escapeHtml(submitTitle)}" aria-label="${escapeHtml(submitTitle)}" onclick="event.stopPropagation()">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="22" y1="2" x2="11" y2="13"></line>
                   <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
@@ -3935,22 +3948,20 @@
       };
 
       const submitBtn = tr.querySelector('.submit-run');
-      if (submitBtn) submitBtn.addEventListener('click', async (e) => {
+      if (submitBtn) submitBtn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
         closeDropdown();
-        try {
-          const resp = await fetch(apiUrl(`v1/runs/${encodeURIComponent(run.run_id)}/submit`), { method: 'POST' });
-          if (resp.ok) {
-            showToast('success', 'Submitted', 'Run submitted for approval');
-          } else {
-            showToast('error', 'Submit Failed', 'Could not submit run');
-          }
-          await fetchRuns({ refreshAllPages: true });
-        } catch (err) {
-          console.error('Submit failed', err);
-          showToast('error', 'Submit Failed', err.message || 'Could not submit run');
-        }
+        // Confirm first, with an optional comment (C061).
+        showWorkflowModal('submit', run.run_id, getRunDisplayName(run), { runs: [run] });
+      });
+
+      const transferBtn = tr.querySelector('.transfer-run');
+      if (transferBtn) transferBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeDropdown();
+        showTransferOwnershipModal(run);
       });
 
       const approveBtn = tr.querySelector('.approve-run');
@@ -4964,7 +4975,8 @@
           const passIsDeletable = !isPassRef(ref)
             || (Number(run.samples) > 1
               && (selectedPassCounts.get(run.file_path) || 0) < Number(run.samples)
-              && !['RUNNING', 'PENDING'].includes(run.status || ''));
+              // A run in review or signed off keeps its passes (C041).
+              && !['RUNNING', 'PENDING', 'SUBMITTED', 'APPROVED'].includes(run.status || ''));
           return (canManageProject || ownsRun) && passIsDeletable;
         });
       const hasSelectedPasses = selectedRefs.some(isPassRef);
@@ -4972,17 +4984,20 @@
       deleteBtn.disabled = !allDeletable;
       deleteBtn.title = allDeletable
         ? (hasSelectedPasses ? 'Delete selected runs and passes' : 'Delete selected runs')
-        : 'Only owned, inactive runs and passes can be deleted';
+        : 'Only owned, inactive runs can be deleted, and passes only while the run is not submitted or approved';
     }
 
     // Bulk actions must follow the same ownership and status rules as row actions.
     const publishBtn = el('publish-selected');
     if (publishBtn) {
       const currentUserId = state.currentUser && state.currentUser.id;
+      // Managers and admins submit any run of the project for its owner (C072).
+      const managesProject = ((state.currentUser && state.currentUser.role) || '') === 'ADMIN'
+        || ((state.currentProject && state.currentProject.role) || '') === 'MANAGER';
       const allSubmittable = selectedRuns.length > 0 && selectedRuns.every(r => {
         const status = r.status || '';
         const isOwner = !!(currentUserId && r.owner && r.owner.id === currentUserId);
-        return isOwner && (status === 'COMPLETED' || status === 'FAILED' || status === 'REJECTED');
+        return (isOwner || managesProject) && (status === 'COMPLETED' || status === 'FAILED' || status === 'REJECTED');
       });
       publishBtn.style.display = (allSubmittable && !isCohortMode && !isProjectReadOnly()) ? 'inline-flex' : 'none';
       publishBtn.textContent = 'Submit';
@@ -6616,13 +6631,56 @@
     });
   }
 
-  function showWorkflowModal(action, runId, runName) {
+  function submitModalDescription(runs) {
+    const me = state.currentUser && state.currentUser.id;
+    const many = runs.length > 1;
+    const parts = [many
+      ? `Send these ${runs.length} runs to the project's managers for approval. Their scores are locked while they are in review.`
+      : "Send this run to the project's managers for approval. Its scores are locked while it is in review."];
+    const rejected = runs.filter(r => String(r.status || '').toUpperCase() === 'REJECTED').length;
+    if (rejected) {
+      parts.push(many
+        ? `${rejected} of them were rejected: submitting starts a new review round, and each rejection stays in its run's review history.`
+        : 'It was rejected: submitting starts a new review round, and the rejection stays in its review history.');
+    }
+    const others = runs.filter(r => r.owner && r.owner.id && r.owner.id !== me);
+    if (others.length) {
+      const names = [...new Set(others.map(r => r.owner.display_name || r.owner.email || ''))].filter(Boolean);
+      parts.push(many
+        ? `${others.length} of them belong to someone else (${names.join(', ')}); you submit them on their behalf, and the review history records it.`
+        : `It belongs to ${names[0] || 'someone else'}; you submit it on their behalf, and the review history records it.`);
+    }
+    return parts.join(' ');
+  }
+
+  async function postSubmit(runIds, comment) {
+    if (runIds.length === 1) {
+      return fetch(apiUrl(`v1/runs/${encodeURIComponent(runIds[0])}/submit`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comment }),
+      });
+    }
+    // One request, one transaction: every run is submitted or none is.
+    return fetch(apiUrl('v1/runs/submit'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ run_ids: runIds, comment }),
+    });
+  }
+
+  function showWorkflowModal(action, runId, runName, options) {
     const modal = el('workflow-modal');
     const titleEl = el('workflow-modal-title');
     const descEl = el('workflow-modal-description');
     const runNameEl = el('workflow-run-name');
     const commentEl = el('workflow-comment');
     const confirmBtn = el('confirm-workflow-btn');
+
+    if (action === 'submit') {
+      showSubmitModal(options && options.runs ? options.runs : [], runName, modal, titleEl, descEl, runNameEl, commentEl, confirmBtn);
+      return;
+    }
 
     const isApprove = action === 'approve';
     const isUnapprove = action === 'unapprove';
@@ -6689,6 +6747,105 @@
 
     // Focus the comment field
     setTimeout(() => commentEl.focus(), 100);
+  }
+
+  function showSubmitModal(runs, runName, modal, titleEl, descEl, runNameEl, commentEl, confirmBtn) {
+    const many = runs.length > 1;
+    const label = many ? `Submit ${runs.length} runs` : 'Submit';
+    titleEl.textContent = many ? `Submit ${runs.length} runs for approval` : 'Submit for approval';
+    descEl.textContent = submitModalDescription(runs);
+    runNameEl.textContent = many
+      ? runs.slice(0, 5).map(getRunDisplayName).join(', ') + (runs.length > 5 ? `, and ${runs.length - 5} more` : '')
+      : (runName || (runs[0] && getRunDisplayName(runs[0])) || '');
+    commentEl.value = '';
+    modal.style.display = 'flex';
+    confirmBtn.className = 'btn btn-primary';
+    confirmBtn.textContent = label;
+
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+    newConfirmBtn.addEventListener('click', async () => {
+      newConfirmBtn.disabled = true;
+      newConfirmBtn.textContent = 'Submitting...';
+      try {
+        const response = await postSubmit(runs.map(r => r.run_id || r.file_path), (commentEl.value || '').trim());
+        if (response.ok) {
+          modal.style.display = 'none';
+          if (many) runs.forEach(r => state.selectedRuns.delete(r.file_path));
+          await fetchRuns({ refreshAllPages: true });
+          showToast('success', 'Submitted', many ? `Submitted ${runs.length} runs for approval` : 'Run submitted for approval');
+        } else {
+          const data = await response.json().catch(() => ({}));
+          showToast('error', 'Submit failed', data.detail || 'Could not submit');
+          if (response.status === 409) fetchRuns({ refreshAllPages: true }).catch(() => {});
+        }
+      } catch (err) {
+        showToast('error', 'Submit failed', err.message || 'Could not submit');
+      } finally {
+        newConfirmBtn.disabled = false;
+        newConfirmBtn.textContent = label;
+      }
+    });
+    setTimeout(() => commentEl.focus(), 100);
+  }
+
+  async function showTransferOwnershipModal(run) {
+    const modal = el('transfer-modal');
+    const select = el('transfer-owner-select');
+    const confirmBtn = el('confirm-transfer-btn');
+    let projectId = state.currentProject && state.currentProject.id;
+    if (!projectId && state.currentProject && state.currentProject.slug) {
+      try {
+        const res = await fetch(apiUrl(`v1/projects/by-slug/${encodeURIComponent(state.currentProject.slug)}`));
+        projectId = res.ok ? (await res.json()).id : null;
+      } catch (err) {
+        projectId = null;
+      }
+    }
+    if (!modal || !select || !confirmBtn || !projectId) return;
+    el('transfer-run-name').textContent = getRunDisplayName(run);
+    const ownerName = run.owner ? (run.owner.display_name || run.owner.email || '') : '';
+    el('transfer-current-owner').textContent = ownerName ? `Current owner: ${ownerName}` : '';
+    select.innerHTML = '<option value="">Loading members...</option>';
+    select.disabled = true;
+    modal.style.display = 'flex';
+    try {
+      const res = await fetch(apiUrl(`v1/projects/${encodeURIComponent(projectId)}/members`));
+      const data = await res.json();
+      const members = (data.members || []).filter(m => !run.owner || m.user_id !== run.owner.id);
+      select.innerHTML = members.length
+        ? members.map(m => `<option value="${escapeHtml(m.user_id)}">${escapeHtml(m.display_name || m.email)}${m.display_name ? ` (${escapeHtml(m.email)})` : ''}</option>`).join('')
+        : '<option value="">No other members</option>';
+      select.disabled = members.length === 0;
+    } catch (err) {
+      select.innerHTML = '<option value="">Could not load members</option>';
+    }
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+    newConfirmBtn.addEventListener('click', async () => {
+      if (!select.value) return;
+      newConfirmBtn.disabled = true;
+      try {
+        const response = await fetch(apiUrl(`v1/runs/${encodeURIComponent(run.run_id)}/owner`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: select.value }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (response.ok) {
+          modal.style.display = 'none';
+          await fetchRuns({ refreshAllPages: true });
+          const name = data.owner ? (data.owner.display_name || data.owner.email) : '';
+          showToast('success', 'Ownership transferred', `${getRunDisplayName(run)} now belongs to ${name}`);
+        } else {
+          showToast('error', 'Transfer failed', data.detail || 'Could not transfer the run');
+        }
+      } catch (err) {
+        showToast('error', 'Transfer failed', err.message || 'Could not transfer the run');
+      } finally {
+        newConfirmBtn.disabled = false;
+      }
+    });
   }
 
   function moveFocus(delta) {
@@ -8143,57 +8300,30 @@
   // WORKFLOW SUBMIT
   // ═══════════════════════════════════════════════════
 
-  async function submitSelectedRuns() {
+  function submitSelectedRuns() {
     if (state.selectedRuns.size === 0) return;
     const selectedRuns = state.flatRuns.filter(r => state.selectedRuns.has(r.file_path));
 
     // Pre-validate: check which runs can be submitted
     const submittableStatuses = ['COMPLETED', 'FAILED', 'REJECTED'];
-    const submittable = [];
-    const notSubmittable = [];
-
-    for (const run of selectedRuns) {
-      const status = run.status || '';
-      if (submittableStatuses.includes(status)) {
-        submittable.push(run);
-      } else {
-        notSubmittable.push(run);
-      }
-    }
-
-    // If some runs can't be submitted, show a single clear error
+    const notSubmittable = selectedRuns.filter(r => !submittableStatuses.includes(r.status || ''));
     if (notSubmittable.length > 0) {
       const statuses = [...new Set(notSubmittable.map(r => r.status))].join(', ');
-      showToast('error', 'Cannot Submit', `${notSubmittable.length} run(s) already have status: ${statuses}`);
+      showToast('error', 'Cannot submit', `${notSubmittable.length} run(s) already have status: ${statuses}`);
       return;
     }
-
-    // Submit only the valid runs
-    let ok = 0;
-    let failed = 0;
-
-    for (const run of submittable) {
-      const runId = run.run_id || run.file_path;
-      try {
-        const res = await fetch(apiUrl(`v1/runs/${encodeURIComponent(runId)}/submit`), { method: 'POST' });
-        if (res.ok) ok++;
-        else failed++;
-      } catch (e) {
-        failed++;
-      }
+    const globalRole = (state.currentUser && state.currentUser.role) || '';
+    const projectRole = (state.currentProject && state.currentProject.role) || '';
+    const isProjectManager = globalRole === 'ADMIN' || projectRole === 'MANAGER';
+    const me = state.currentUser && state.currentUser.id;
+    const notMine = selectedRuns.filter(r => !(r.owner && r.owner.id === me));
+    if (!isProjectManager && notMine.length > 0) {
+      showToast('error', 'Cannot submit', `${notMine.length} selected run(s) belong to someone else. Only their owner, a project manager or an admin can submit them.`);
+      return;
     }
-
-    try {
-      await fetchRuns({ refreshAllPages: true });
-    } catch {}
-
-    try {
-      if (failed === 0) showToast('success', 'Submitted', `Submitted ${ok} run(s)`);
-      else showToast('error', 'Partial Submit', `Submitted ${ok}, failed ${failed}`);
-    } catch {
-      if (failed === 0) alert(`Submitted ${ok} run(s)`);
-      else alert(`Submitted ${ok}, failed ${failed}`);
-    }
+    if (!selectedRuns.length) return;
+    // Confirm with an optional comment, then submit all in one request (C061).
+    showWorkflowModal('submit', null, '', { runs: selectedRuns });
   }
 
   // Compare panel: submit selected runs

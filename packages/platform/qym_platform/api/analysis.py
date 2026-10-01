@@ -101,6 +101,14 @@ from qym_platform.services.llm_analyzer import (
 from qym_platform.services.approved_categories import (
     category_catalog_hash as _category_catalog_hash, publish_approved_categories,
 )
+from qym_platform.services.correction_rules import (
+    correction_decision_block,
+    correction_rules,
+    is_self_reviewed,
+    require_correction_decision,
+    require_correction_delete,
+    self_review_block,
+)
 from qym_platform.services.issue_reviews import (
     change_metric_issue, correction_issue_id, correction_issues, issue_content,
     filter_explicitly_approved_issue_corrections,
@@ -8337,6 +8345,8 @@ def _serialize_review_fields(
         "reviewed_by": _serialize_user(users_by_id.get(c.reviewed_by_user_id)),
         "reviewed_at": to_api_timestamp(c.reviewed_at),
         "review_comment": c.review_comment or "",
+        # The author decided their own correction ("Self-approved").
+        "self_reviewed": is_self_reviewed(c),
     }
 
 
@@ -8501,21 +8511,40 @@ def _serialize_correction(
 def _serialize_corrections_with_history(
     db: Session,
     corrections: List[ReviewCorrection],
+    principal: Optional[Principal] = None,
 ) -> List[Dict[str, Any]]:
     history_map, users_by_id = _build_history_map(db, corrections)
     runs_by_id = _load_runs_map(db, {correction.run_id for correction in corrections})
+    projects_by_id: Dict[str, Optional[Project]] = {}
+    role_blocks: Dict[str, Optional[str]] = {}
     serialized: List[Dict[str, Any]] = []
     for correction in corrections:
-        serialized.append(
-            _serialize_correction(
-                correction,
-                users_by_id=users_by_id,
-                runs_by_id=runs_by_id,
-                history=history_map.get(
-                    (correction.run_id, correction.item_id, correction.metric_name), []
-                ),
-            )
+        payload = _serialize_correction(
+            correction,
+            users_by_id=users_by_id,
+            runs_by_id=runs_by_id,
+            history=history_map.get(
+                (correction.run_id, correction.item_id, correction.metric_name), []
+            ),
         )
+        run = runs_by_id.get(correction.run_id)
+        if principal is not None and run is not None:
+            # Why this viewer may not approve, reject or reset it (C074);
+            # None when they may. The Reviews page disables those buttons.
+            if run.project_id not in projects_by_id:
+                project = db.get(Project, run.project_id)
+                projects_by_id[run.project_id] = project
+                role_blocks[run.project_id] = (
+                    correction_decision_block(db, principal, project)
+                    if project is not None
+                    else None
+                )
+            project = projects_by_id[run.project_id]
+            payload["review_rules"] = correction_rules(project)
+            payload["review_block"] = role_blocks[run.project_id] or self_review_block(
+                principal, project, correction
+            )
+        serialized.append(payload)
     return serialized
 
 
@@ -9109,7 +9138,7 @@ def list_corrections(
     )
 
     return {
-        "corrections": _serialize_corrections_with_history(db, corrections),
+        "corrections": _serialize_corrections_with_history(db, corrections, principal),
         "total": filtered_total,
         "stats": stats,
         "tasks": tasks,
@@ -9138,7 +9167,7 @@ def get_correction(
     run = Run.active(db).filter(Run.id == c.run_id).first()
     if not run or not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
-    return _serialize_corrections_with_history(db, [c])[0]
+    return _serialize_corrections_with_history(db, [c], principal)[0]
 
 
 @router.put("/api/corrections/{correction_id}")
@@ -9229,7 +9258,7 @@ def update_correction(
             ReviewCorrection.pass_number == c.pass_number,
         ).all()
         target = next((row for row in targets if correction_issue_id(row) == correction_issue_id(c)), c)
-        return _serialize_corrections_with_history(db, [target])[0]
+        return _serialize_corrections_with_history(db, [target], principal)[0]
 
     if c.metric_name:
         from qym_platform.api.runs import _apply_metric_analysis_patch
@@ -9268,8 +9297,8 @@ def update_correction(
         )
         db.commit()
         if target is None:
-            return _serialize_corrections_with_history(db, [c])[0]
-        return _serialize_corrections_with_history(db, [target])[0]
+            return _serialize_corrections_with_history(db, [c], principal)[0]
+        return _serialize_corrections_with_history(db, [target], principal)[0]
 
     result = apply_root_cause_change(
         db,
@@ -9294,7 +9323,7 @@ def update_correction(
         )
         or c
     )
-    return _serialize_corrections_with_history(db, [target])[0]
+    return _serialize_corrections_with_history(db, [target], principal)[0]
 
 
 @router.post("/api/corrections/{correction_id}/approve")
@@ -9355,6 +9384,7 @@ def approve_correction(
                 raise HTTPException(409, "This diagnosis now has issue-level reviews. Reload and approve an issue.")
             target = active_candidate
 
+    require_correction_decision(db, principal, run.project_id, target)
     _approve_candidate(
         db,
         correction=target,
@@ -9364,7 +9394,7 @@ def approve_correction(
     )
 
     db.commit()
-    return _serialize_corrections_with_history(db, [target])[0]
+    return _serialize_corrections_with_history(db, [target], principal)[0]
 
 
 @router.post("/api/corrections/approve-metric-analysis")
@@ -9387,6 +9417,7 @@ def approve_metric_analysis(
     if not run or not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
     require_project_writable(db, run.project_id)
+    require_correction_decision(db, principal, run.project_id)
     _check_pass_version(db, run, request.get("pass_number"),
                         request.get("expected_pass_version"), lock=True)
 
@@ -9439,6 +9470,20 @@ def approve_metric_analysis(
 
         analysis = dict(analysis)
         reviewer_id = principal.user.id if principal.auth_type != "none" else None
+        # Judge the reviews as their authors left them: the split below
+        # records the approver as the writer of every new row (C074).
+        for existing in (
+            db.query(ReviewCorrection)
+            .filter(
+                ReviewCorrection.run_id == run.id,
+                ReviewCorrection.item_id == item.item_id,
+                ReviewCorrection.metric_name == metric_name,
+                ReviewCorrection.pass_number == pass_number,
+                ReviewCorrection.is_active.is_(True),
+            )
+            .all()
+        ):
+            require_correction_decision(db, principal, run.project_id, existing)
         candidates = sync_issue_candidates(
             db, run=run, item=item, metric_name=metric_name, analysis=analysis,
             actor_user_id=reviewer_id, actor_source=str(analysis.get("source") or "ai"),
@@ -9505,7 +9550,10 @@ def approve_metric_analysis(
                 status_code=409, detail="Metric analysis is not reviewable"
             )
         db.flush()
-
+    else:
+        # A row created just above names the approver as its writer; only a
+        # review someone already wrote has an author to keep apart (C074).
+        require_correction_decision(db, principal, run.project_id, candidate)
     _approve_candidate(
         db,
         correction=candidate,
@@ -9514,7 +9562,7 @@ def approve_metric_analysis(
         reviewed_at=utc_now_naive(),
     )
     db.commit()
-    return _serialize_corrections_with_history(db, [candidate])[0]
+    return _serialize_corrections_with_history(db, [candidate], principal)[0]
 
 
 @router.post("/api/corrections/{correction_id}/reject")
@@ -9533,6 +9581,7 @@ def reject_correction(
     if not run or not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
     require_project_writable(db, run.project_id)
+    require_correction_decision(db, principal, run.project_id, c)
 
     _reject_candidate(
         db,
@@ -9543,7 +9592,7 @@ def reject_correction(
     )
 
     db.commit()
-    return _serialize_corrections_with_history(db, [c])[0]
+    return _serialize_corrections_with_history(db, [c], principal)[0]
 
 
 @router.post("/api/corrections/{correction_id}/reset")
@@ -9561,6 +9610,7 @@ def reset_correction(
     if not run or not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
     require_project_writable(db, run.project_id)
+    require_correction_decision(db, principal, run.project_id, c)
 
     lock_issue_correction(db, c)
     _reset_candidate(
@@ -9570,7 +9620,7 @@ def reset_correction(
     )
 
     db.commit()
-    return _serialize_corrections_with_history(db, [c])[0]
+    return _serialize_corrections_with_history(db, [c], principal)[0]
 
 
 class BulkActionRequest(BaseModel):
@@ -9612,6 +9662,13 @@ def bulk_correction_action(
         if not run or not can_review_run(db, principal, run):
             raise HTTPException(status_code=403, detail="Access denied")
         require_project_writable(db, run.project_id)
+    # The project's review rules hold for every correction before any changes.
+    for correction in corrections:
+        project_id = runs_by_id[correction.run_id].project_id
+        if request.action == "delete":
+            require_correction_delete(db, principal, project_id, correction)
+        elif request.action in ("approve", "reject", "reset"):
+            require_correction_decision(db, principal, project_id, correction)
 
     now = utc_now_naive()
     reviewer_id = principal.user.id if principal.auth_type != "none" else None
@@ -9680,6 +9737,7 @@ def delete_correction(
     if not run or not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
     require_project_writable(db, run.project_id)
+    require_correction_delete(db, principal, run.project_id, c)
     _delete_active_candidate(
         db,
         correction=c,

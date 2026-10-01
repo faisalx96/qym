@@ -19,8 +19,9 @@ MAX_SEARCH_CONDITIONS = 32
 # run_details.js applies the same rule when it releases a hydrated row.
 COMPACT_META_TEXT_LIMIT = 200
 # Error flags drive task/metric error filters and buckets for every item, so
-# they stay in the index at full length.
-_COMPACT_META_ALWAYS_KEPT = frozenset({"error", "status"})
+# they stay in the index at full length; so does a score's edit record
+# (``last_edit``, a small dict) that the Edited badge explains.
+_COMPACT_META_ALWAYS_KEPT = frozenset({"error", "status", "last_edit"})
 INPUT_PREVIEW_CHARS = 300
 
 MetaKeyIndex = Dict[str, Dict[str, Set[str]]]

@@ -27,6 +27,12 @@
     .card-subtitle { font-size: var(--font-sm); color: var(--text-muted); margin-top: 2px; }
     .card-body { padding: var(--space-lg); }
     .card-body.flush { padding: 0; }
+    .ps-review-rule { display: flex; flex-direction: column; gap: 6px; }
+    .ps-review-rule + .ps-review-rule { margin-top: var(--space-md); }
+    .ps-review-rule .form-select { max-width: 320px; }
+    .ps-review-help { font-size: var(--font-sm); color: var(--text-muted); line-height: 1.5; }
+    .ps-review-toggle { display: inline-flex; align-items: center; gap: var(--space-sm); font-size: var(--font-base); color: var(--text-primary); cursor: pointer; }
+    .ps-review-toggle input:disabled + span { color: var(--text-muted); }
     .card-footer { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-sm); padding: var(--space-md) var(--space-lg); border-top: 1px solid var(--border-subtle); }
 
     .add-bar { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--border-subtle); }
@@ -233,6 +239,28 @@
           </div>
         </div>
         <div class="card-footer"><button class="btn btn-primary" id="save-general-btn" type="button" disabled>Save Changes</button></div>
+      </div>
+      <div class="card" id="review-rules-card">
+        <div class="card-header"><div><div class="card-title">Correction reviews</div><div class="card-subtitle">Who decides which diagnosis corrections become evidence for auto-analysis</div></div></div>
+        <div class="card-body">
+          <div class="ps-review-rule">
+            <label class="form-label" for="review-approvers">Who can approve corrections</label>
+            <select class="form-select" id="review-approvers">
+              <option value="members">All project members</option>
+              <option value="managers">Project managers and admins</option>
+            </select>
+            <div class="ps-review-help">Applies to approving, rejecting and resetting corrections, one at a time or in bulk, on the Reviews page and the run page.</div>
+          </div>
+          <div class="ps-review-rule">
+            <label class="ps-review-toggle" for="review-different-reviewer">
+              <input type="checkbox" id="review-different-reviewer" />
+              <span>Require a different reviewer</span>
+            </label>
+            <div class="ps-review-help">When on, the person who wrote a correction cannot approve, reject or reset it. AI diagnoses taken as they are have no human author.</div>
+          </div>
+          <div class="ps-review-help" id="review-rules-note" hidden></div>
+        </div>
+        <div class="card-footer" id="review-rules-footer"><button class="btn btn-primary" id="save-review-rules-btn" type="button">Save review rules</button></div>
       </div>
       <div class="card">
         <div class="card-header"><div><div class="card-title">Overview</div></div></div>
@@ -779,6 +807,7 @@
           ['Slug', p.slug], ['Role', p.role || 'MEMBER'], ['Members', String(state.members.length)], ['Status', p.is_active ? 'ACTIVE' : 'ARCHIVED'],
         ].map(([label, value]) => `<div class="form-group"><div class="form-label">${escapeHtml(label)}</div><div style="font-size:var(--font-sm);color:var(--text-primary);font-family:var(--font-mono)">${escapeHtml(value)}</div></div>`).join('');
 
+        renderReviewRules();
         renderPrompts();
 
         // Archive, Unarchive and Delete are admin-only on the server too.
@@ -1290,6 +1319,52 @@
         resetLlmForm();
         await loadConnections();
       }
+
+      // Correction review rules (C074): managers and admins set them; others
+      // see the project's rules read-only.
+      function renderReviewRules() {
+        const p = state.project;
+        const editable = canManageMembers() && !isReadOnly();
+        const approvers = document.getElementById('review-approvers');
+        const different = document.getElementById('review-different-reviewer');
+        approvers.value = p.correction_approvers || 'members';
+        different.checked = !!p.correction_require_different_reviewer;
+        approvers.disabled = !editable;
+        different.disabled = !editable;
+        document.getElementById('review-rules-footer').style.display = editable ? '' : 'none';
+        const note = document.getElementById('review-rules-note');
+        note.hidden = editable;
+        note.textContent = editable ? '' : (isReadOnly()
+          ? 'Read-only while the project is archived.'
+          : 'Only project managers and admins can change these rules.');
+      }
+
+      async function saveReviewRules() {
+        const btn = document.getElementById('save-review-rules-btn');
+        btn.disabled = true;
+        try {
+          const rules = await fetchJson(`v1/projects/${state.project.id}/review-rules`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              correction_approvers: document.getElementById('review-approvers').value,
+              correction_require_different_reviewer: document.getElementById('review-different-reviewer').checked,
+            }),
+          });
+          if (rules) {
+            state.project.correction_approvers = rules.correction_approvers;
+            state.project.correction_require_different_reviewer = rules.correction_require_different_reviewer;
+          }
+          renderReviewRules();
+          toast('Review rules saved', 'success');
+        } catch (err) {
+          toast(err.message || 'Could not save the review rules', 'error');
+        } finally {
+          btn.disabled = false;
+        }
+      }
+
+      document.getElementById('save-review-rules-btn').addEventListener('click', saveReviewRules);
 
       function toast(message, type) {
         if (window.QymShell && window.QymShell.toast) window.QymShell.toast(message, type);

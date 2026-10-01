@@ -11,10 +11,10 @@
   <script src="/static/auth.js?v=p0-20260930"></script>
   <script src="/static/shell.js?v=p1-20261001"></script>
   <script src="/static/metrics.js?v=p0-20260930-3"></script>
-  <script src="/static/run_details.js?v=p0-20260930"></script>
+  <script src="/static/run_details.js?v=p1-20261001"></script>
   <script src="/static/trace_viewer.js?v=p0-20260930"></script>
   <script src="/static/step_latency.js?v=p0-20260930"></script>
-  <script src="/static/review_history.js?v=p0-20260930"></script>
+  <script src="/static/review_history.js?v=p1-20261001"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
     .run-container {
@@ -37,6 +37,10 @@
     .run-read-only-notice strong { color: var(--text-primary); font-weight: 600; }
     body.run-read-only .metric-edit-open,
     body.run-read-only .metric-edit-controls,
+    body.run-read-only .metric-reset-btn,
+    body.run-scores-locked .metric-edit-open,
+    body.run-scores-locked .metric-edit-controls,
+    body.run-scores-locked .metric-reset-btn,
     body.run-read-only .auto-analyze-btn,
     body.run-read-only .aggregate-results-btn,
     body.run-read-only .rc-approve-btn,
@@ -2823,28 +2827,11 @@
       box-shadow: none;
       border-color: var(--accent-primary);
     }
-    .chip-edit .metric-edit-save {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 20px;
-      height: 20px;
-      border: none;
-      border-radius: 4px;
-      background: transparent;
-      color: var(--score-5);
-      cursor: pointer;
-    }
-    .chip-edit .metric-edit-save:hover { background: var(--bg-hover); }
-    .chip-edit .metric-edit-save svg {
-      width: 12px;
-      height: 12px;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 2.2;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
+    /* Save and cancel share the shared .qym-metric-edit-action recipe:
+       the same square size, one green, one red. */
+    .metric-reset-btn { flex: 0 0 auto; }
+    /* The reset glyph matches the edit pencil beside it. */
+    .metric-reset-btn svg { width: 14px; height: 14px; }
     .chip-edit .metric-edit-status { font-size: var(--font-xs); color: var(--text-muted); }
     .det-metric {
       font-size: var(--font-sm);
@@ -6264,6 +6251,7 @@
       const EDIT_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 11.5-.5 2 2-.5 7.8-7.8-1.5-1.5L3 11.5Z"/><path d="m9.8 4.7 1.5 1.5"/></svg>';
       const SAVE_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8.5 3.5 3.5 6.5-7"/></svg>';
       const CLOSE_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg>';
+      const RESET_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v3.5h3.5"/><path d="M3.4 9.5A5 5 0 1 0 4.6 4.6L3 6.5"/></svg>';
       const CLOCK_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M8 4.5V8l2.5 1.5"/></svg>';
       const FAILURE_ICON = '<svg class="item-failure-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="m5.75 5.75 4.5 4.5m0-4.5-4.5 4.5"/></svg>';
       const FILTER_TRASH_ICON = '<svg class="qym-filter-trash-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
@@ -6454,6 +6442,42 @@
       // One shared escaping rule (qym_safe.js): & < > " ' in text and attributes.
       function escapeHtml(text) {
         return QymSafe.escapeHtml(text || '');
+      }
+
+      // An edited score (C041): the badge says who changed it, when, and
+      // from what; the reset action gives the scorer's value back.
+      function formatEditValue(value) {
+        if (value === null || value === undefined || value === '') return 'no score';
+        return String(typeof value === 'number' ? Number(value.toFixed(4)) : value);
+      }
+
+      function scoreEditTitle(meta) {
+        const record = meta && typeof meta.last_edit === 'object' && meta.last_edit ? meta.last_edit : null;
+        const lines = [];
+        if (record) {
+          const when = record.at ? new Date(record.at) : null;
+          const whenText = when && !Number.isNaN(when.getTime())
+            ? when.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+            : '';
+          lines.push((record.action === 'reset' ? 'Reset by ' : 'Edited by ') + (record.by || 'a reviewer') + (whenText ? ' on ' + whenText : ''));
+          lines.push(formatEditValue(record.from) + ' \u2192 ' + formatEditValue(record.to));
+        } else {
+          lines.push('Edited by a reviewer');
+        }
+        if (meta && meta.original_score !== undefined) lines.push('Original score: ' + formatEditValue(meta.original_score));
+        return lines.join('\n');
+      }
+
+      function scoreEditBadge(meta, rowIndex, metricName, passNumber) {
+        const badge = '<span class="metric-edit-badge" title="' + escapeAttr(scoreEditTitle(meta)) + '">Edited</span>';
+        if (IS_EXPORT) return badge;
+        const original = meta && meta.original_score !== undefined
+          ? ' (' + formatEditValue(meta.original_score) + ')'
+          : '';
+        const label = 'Reset ' + metricName + (passNumber ? ' pass ' + passNumber : '') + ' to its original score' + original;
+        return badge + '<button type="button" class="metric-reset-btn qym-icon-action" data-row-index="' + escapeAttr(String(rowIndex ?? 0)) + '" data-metric="' + escapeAttr(metricName) + '"'
+          + (passNumber ? ' data-pass-number="' + escapeAttr(String(passNumber)) + '"' : '')
+          + ' title="' + escapeAttr('Reset to original' + original) + '" aria-label="' + escapeAttr(label) + '">' + RESET_ICON + '</button>';
       }
 
       function escapeAttr(text) {
@@ -7280,7 +7304,7 @@
         ];
         for (const keys of schemaKeys) {
           for (const k of keys || []) {
-            if (!['modified', 'original_score'].includes(k)) mmKeySet.add(k);
+            if (!['modified', 'original_score', 'original_score_numeric', 'last_edit'].includes(k)) mmKeySet.add(k);
           }
         }
         for (const row of (snap.rows || [])) {
@@ -7288,7 +7312,7 @@
           for (const metricName of Object.keys(mm)) {
             const meta = mm[metricName] || {};
             for (const k of Object.keys(meta)) {
-              if (!['modified', 'original_score'].includes(k)) mmKeySet.add(k);
+              if (!['modified', 'original_score', 'original_score_numeric', 'last_edit'].includes(k)) mmKeySet.add(k);
             }
           }
         }
@@ -7324,7 +7348,7 @@
         itemRenderVersion++;
         if (runDetails) runDetails.stop();
         // The body outlives in-app navigation: the next run may be editable.
-        document.body.classList.remove('run-read-only');
+        document.body.classList.remove('run-read-only', 'run-scores-locked');
       }, { once: true });
 
       function requiredTextSearches() {
@@ -7428,6 +7452,7 @@
         el('error-state').style.display = 'none';
         el('run-content').style.display = 'block';
         renderSummary();
+        applyScoreLockMode();
         if (!IS_EXPORT && window.QymReviewHistory && RUN_ID) {
           window.QymReviewHistory.load(
             el('review-history-section'),
@@ -11648,7 +11673,7 @@
             const passMetricMeta = metaFor(name, att.pass_number);
             const hasMetricExecutionError = window.QymMetrics.isMetricErrorMeta(passMetricMeta);
             const hasMeta = Object.keys(passMetricMeta).some(key =>
-              !['modified', 'original_score'].includes(key)
+              !['modified', 'original_score', 'original_score_numeric', 'last_edit'].includes(key)
               && state.visibleMetricMetaFields[key] !== false
               && passMetricMeta[key] !== undefined
               && passMetricMeta[key] !== null
@@ -11663,7 +11688,7 @@
               '<button type="button" class="metric-compare-trigger' + (isActive ? ' active' : '') + '" data-output-metric="' + escapeAttr(name) + '" aria-expanded="' + isActive + '"><span class="det-caret"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 3.5 5 4.5-5 4.5"/></svg></span><span class="det-metric">' + escapeHtml(name) + '</span><span class="metric-score-value ' + value.cls + '">' + value.display + '</span>' + metricErrorIndicator + '</button>' +
               '<span class="metric-edit-controls qym-metric-edit-controls hidden"><input class="metric-edit-input" type="text" value="' + escapeAttr(raw == null || passErrored(name, att) ? '' : String(raw)) + '"' + (passErrored(name, att) ? ' placeholder="Enter a score"' : '') + ' data-row-index="' + escapeAttr(String(baseRow.index ?? 0)) + '" data-metric="' + escapeAttr(name) + '" data-pass-number="' + att.pass_number + '" aria-label="New Pass ' + att.pass_number + ' ' + escapeAttr(name) + ' score"><button class="metric-edit-save qym-metric-edit-action" data-row-index="' + escapeAttr(String(baseRow.index ?? 0)) + '" data-metric="' + escapeAttr(name) + '" data-pass-number="' + att.pass_number + '" title="Save" aria-label="Save Pass ' + att.pass_number + ' ' + escapeAttr(name) + '">' + SAVE_ICON + '</button><button class="metric-edit-cancel qym-metric-edit-action" type="button" title="Cancel" aria-label="Cancel editing">' + CLOSE_ICON + '</button><span class="metric-edit-status" aria-live="polite"></span></span>' +
               '<button class="metric-edit-open qym-icon-action" type="button" aria-label="Edit Pass ' + att.pass_number + ' ' + escapeAttr(name) + '" title="Edit">' + EDIT_ICON + '</button>' +
-              (edited ? '<span class="metric-edit-badge">Edited</span>' : '') + '</div>';
+              (edited ? scoreEditBadge(passMetricMeta, baseRow.index, name, att.pass_number) : '') + '</div>';
           }).filter(Boolean).join('');
           return buttons ? '<div class="metric-det-zone"><div class="metric-det-chips">' + buttons + '</div></div>' : '';
         };
@@ -11699,7 +11724,7 @@
           const detailForMeta = (meta) => {
             const detail = {};
             Object.keys(meta || {}).forEach(key => {
-              if (!['modified', 'original_score'].includes(key)
+              if (!['modified', 'original_score', 'original_score_numeric', 'last_edit'].includes(key)
                   && state.visibleMetricMetaFields[key] !== false
                   && meta[key] !== undefined && meta[key] !== null && meta[key] !== '') {
                 detail[window.QymMetrics.metricMetaDisplayKey(key, meta)] = _parseMetaDeep(meta[key]);
@@ -11752,7 +11777,7 @@
         const blocks = state.allMetrics.map((name, i) => {
           const meta = metricMeta[name] || {};
           const metaKeys = Object.keys(meta).filter(k =>
-            !['modified', 'original_score'].includes(k)
+            !['modified', 'original_score', 'original_score_numeric', 'last_edit'].includes(k)
             && state.visibleMetricMetaFields[k] !== false
             && meta[k] !== undefined && meta[k] !== null && meta[k] !== '');
           if (!metaKeys.length) return '';
@@ -11794,7 +11819,7 @@
           const fullMetricMeta = (fullMeta || {})[name] || {};
           const hasMetricExecutionError = window.QymMetrics.isMetricErrorMeta(fullMetricMeta);
           const metaKeys = Object.keys(meta).filter(k =>
-            !['modified', 'original_score'].includes(k)
+            !['modified', 'original_score', 'original_score_numeric', 'last_edit'].includes(k)
             && state.visibleMetricMetaFields[k] !== false
             && meta[k] !== undefined && meta[k] !== null && meta[k] !== '');
           const rawValue = ((metricVals || [])[i] == null || (metricVals || [])[i] === '') ? '' : String((metricVals || [])[i]);
@@ -11832,7 +11857,7 @@
             + '<button class="metric-edit-save qym-metric-edit-action" data-row-index="' + escapeAttr(String(rowIndex ?? 0)) + '" data-metric="' + escapeAttr(name) + '" title="Save" aria-label="Save ' + escapeAttr(name) + '">' + SAVE_ICON + '</button>'
             + '<button class="metric-edit-cancel qym-metric-edit-action" type="button" title="Cancel" aria-label="Cancel editing">' + CLOSE_ICON + '</button>'
             + '<span class="metric-edit-status" aria-live="polite"></span></span>';
-          const editedBadge = modified ? '<span class="metric-edit-badge">Edited</span>' : '';
+          const editedBadge = modified ? scoreEditBadge(fullMetricMeta, rowIndex, name, null) : '';
           const metricErrorClass = hasMetricExecutionError ? ' metric-execution-error' : '';
           const metricErrorIndicator = hasMetricExecutionError ? renderMetricErrorIndicator(name) : '';
           const bid = 'det_' + safeId + '_' + i;
@@ -12372,6 +12397,20 @@
         return data;
       }
 
+      async function resetMetricScore(filePath, rowIndex, metricName, passNumber) {
+        const res = await fetch(apiUrl('api/runs/update_metric'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            file_path: filePath, row_index: rowIndex, metric_name: metricName, reset: true,
+            ...(passNumber ? { pass_number: passNumber, expected_pass_version: currentPassVersion() } : {}),
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.error) throw new Error(data.detail || data.error || 'Failed to reset the score');
+        return data;
+      }
+
       // A rejected score edit keeps the editor open with the reason beside
       // the input (C009); typing again clears it.
       function setScoreEditError(input, statusEl, message) {
@@ -12439,6 +12478,30 @@
             setScoreEditError(input, controls?.querySelector('.metric-edit-status'), '');
             controls?.classList.add('hidden');
             chip?.classList.remove('editing');
+          };
+        });
+        document.querySelectorAll('.metric-reset-btn').forEach(btn => {
+          btn.onclick = async (event) => {
+            event.stopPropagation();
+            const rowIndex = Number(btn.dataset.rowIndex);
+            const metricName = btn.dataset.metric || '';
+            const passNumber = Number(btn.dataset.passNumber) || state.viewPass || null;
+            const filePath = state.run?.file_path || '';
+            if (!filePath || !metricName) return;
+            btn.disabled = true;
+            try {
+              const result = await resetMetricScore(filePath, rowIndex, metricName, passNumber);
+              if (result && result.row) {
+                applyUpdatedRow(result.row);
+                renderOverview();
+                renderItems();
+              }
+              showToast('success', 'Score reset', metricName + ' is back to its original score.');
+            } catch (err) {
+              showToast('error', 'Could not reset score', err.message || 'The score was not reset.');
+            } finally {
+              btn.disabled = false;
+            }
           };
         });
         document.querySelectorAll('.metric-edit-save').forEach(btn => {
@@ -14506,7 +14569,7 @@
           for (var m of state.allMetrics) {
             var meta = mm[m] || {};
             for (var k of Object.keys(meta)) {
-              if (!['modified', 'original_score'].includes(k)) metricMetaKeys[m].add(k);
+              if (!['modified', 'original_score', 'original_score_numeric', 'last_edit'].includes(k)) metricMetaKeys[m].add(k);
             }
           }
         }
@@ -14707,6 +14770,36 @@
       // that would change the run (the server answers 409 to any write).
       function isProjectReadOnly() {
         return !IS_EXPORT && !!(state.run && state.run.project && state.run.project.archived);
+      }
+
+      // A submitted or approved run keeps its scores as reviewed (C041): the
+      // editors and reset actions go away and a note says how to reopen them.
+      // The server refuses score edits on these runs with 403 as well.
+      const SCORE_LOCK_COPY = {
+        SUBMITTED: '<strong>Scores are locked.</strong> This run is submitted for approval, so its scores cannot be edited or reset. A project manager can reject it to reopen score edits.',
+        APPROVED: '<strong>Scores are locked.</strong> This run is approved, so its scores cannot be edited or reset. A project manager can unapprove it to reopen score edits.',
+      };
+
+      function applyScoreLockMode() {
+        const status = String((state.run && state.run.status) || '').toUpperCase();
+        const copy = IS_EXPORT ? '' : (SCORE_LOCK_COPY[status] || '');
+        document.body.classList.toggle('run-scores-locked', Boolean(copy));
+        let notice = el('run-scores-locked-notice');
+        // An archived project's notice already says nothing can change.
+        if (!copy || isProjectReadOnly()) {
+          if (notice) notice.remove();
+          return;
+        }
+        const content = el('run-content');
+        if (!content) return;
+        if (!notice) {
+          notice = document.createElement('div');
+          notice.id = 'run-scores-locked-notice';
+          notice.className = 'run-read-only-notice';
+          notice.setAttribute('role', 'note');
+          content.insertBefore(notice, content.firstChild);
+        }
+        notice.innerHTML = copy;
       }
 
       function applyReadOnlyMode() {

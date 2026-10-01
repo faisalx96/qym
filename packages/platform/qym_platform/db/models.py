@@ -22,6 +22,7 @@ from sqlalchemy import (
     UniqueConstraint,
     delete,
     event,
+    false,
 )
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.dialects.postgresql import JSONB
@@ -153,6 +154,15 @@ class Project(Base):
     # its deleted runs is paused meanwhile; unarchiving moves their purge
     # clocks forward by the time since (Run.purge_clock_started_at).
     archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Review rules for diagnosis corrections (services/correction_rules.py):
+    # who may approve, reject or reset them ("members" or "managers"), and
+    # whether the author of a correction is kept from deciding it.
+    correction_approvers: Mapped[str] = mapped_column(
+        String(20), default="members", server_default="members", nullable=False
+    )
+    correction_require_different_reviewer: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
     created_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -901,6 +911,8 @@ class RunWorkflowEvent(Base):
     # Copied from the approval row of a review that started before history
     # was kept, just before its first recorded transition overwrote the row.
     reconstructed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # The run owner, when a project manager or admin submitted the run for them.
+    on_behalf_of_user_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
 
     __table_args__ = (Index("ix_run_workflow_events_run", "run_id", "id"),)
 
