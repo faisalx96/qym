@@ -847,7 +847,10 @@
         document.getElementById('maint-settings').textContent =
           `${dbSize} total · role ${st.role} · maintenance mode ${st.maintenance_mode ? 'ON' : 'off'} · event log ${st.event_log_mode} · ` +
           `span retention ${st.span_retention_days} d · deleted-run grace ${st.deleted_run_grace_days} d · ` +
-          `workers: summary ${w.summary_worker_alive ? 'running' : 'stopped'}, maintenance ${w.maintenance_worker_alive ? 'running' : 'stopped'} · refreshed ${Math.round(data.db_stats_age_seconds)} s ago`;
+          (w.loops === 'separate'
+            ? 'workers: in a separate worker process'
+            : `workers: summary ${w.summary_worker_alive ? 'running' : 'stopped'}, maintenance ${w.maintenance_worker_alive ? 'running' : 'stopped'}`) +
+          ` · refreshed ${Math.round(data.db_stats_age_seconds)} s ago`;
         const stats = data.db_stats || {};
         const tb = document.querySelector('#maint-tables tbody');
         tb.innerHTML = (stats.tables || []).slice(0, 12).map(t => `<tr><td>${escapeHtml(t.table)}</td><td>${fmtBytes(t.total_bytes)}</td><td>${fmtBytes(t.heap_bytes)}</td><td>${fmtBytes(t.toast_bytes)}</td><td>${fmtBytes(t.index_bytes)}</td><td>${Number(t.live_rows).toLocaleString()}</td><td>${Number(t.dead_rows).toLocaleString()}</td></tr>`).join('')

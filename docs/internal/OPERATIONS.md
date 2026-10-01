@@ -10,6 +10,7 @@ shell on the database host, so every operation below is driven from **values.yam
 |---|---|---|
 | API pod(s) | Serve HTTP; apply Alembic migrations on start; run the dashboard summary backfill, maintenance jobs, and hourly retention | `QYM_ROLE=all` (default) |
 | Worker pod (optional) | Runs the background loops in a separate process | `QYM_ROLE=worker`, `QYM_SKIP_MIGRATIONS=1`, command `python -m qym_platform.worker`; set `QYM_ROLE=api` on the API |
+| Web processes (optional) | Several uvicorn processes serve HTTP in one API pod; with `QYM_ROLE=all` one extra process in the same pod runs the background loops | `QYM_WEB_WORKERS=N` (default `1`) |
 | Maintenance jobs | Reclaim, index builds, span copy, and purges. Progress is saved between steps. Final legacy verification and DROP share one transaction | `Admin → Maintenance`, `GET/POST /api/admin/maintenance/jobs` |
 | Maintenance mode | Ingest answers `503 Retry-After: 60`; SDKs buffer (16 MiB RAM + 256 MiB disk) and retry; UI stays readable | `QYM_MAINTENANCE_MODE=1` |
 
@@ -24,6 +25,7 @@ sure one process runs a given job.
 | Variable | Default | Meaning |
 |---|---|---|
 | `QYM_ROLE` | `all` | `api`, `worker`, or `all` |
+| `QYM_WEB_WORKERS` | `1` | HTTP processes per API pod. Above 1, see "Several web processes in one pod" |
 | `QYM_MAINTENANCE_MODE` | `false` | Reject ingest with 503 during a window |
 | `QYM_EVENT_LOG_MODE` | `full` | `structural` drops item/metric bodies from `run_events` (bodies live in `run_items`/attempts/scores). Enable after the new image is live |
 | `QYM_SPAN_MAX_BYTES` | `1048576` | Safety ceiling per span; larger spans keep scalar attributes only and are flagged |
@@ -224,6 +226,44 @@ A deployment recovery backup must include all table data. A dump that excludes
 after destructive maintenance. Use a full `pg_dump` or a consistent storage
 snapshot, keep it off the database volume, and test the restore in isolation.
 Smaller exports of derived data can supplement that backup but do not replace it.
+
+## Several web processes in one pod (`QYM_WEB_WORKERS`)
+
+One Python process serves every request on one interpreter lock, so a few
+people opening large runs or comparisons at once make every other request wait
+(perf lab, 4 heavy readers: about 0.25 s for one alone, 0.7 s with 4, 2.3 s with
+10, while `/healthz` slowed to 0.8 s at p95). `QYM_WEB_WORKERS=N` (N above 1)
+makes the entrypoint start `python -m qym_platform.serve` instead of a single
+uvicorn:
+
+- N uvicorn worker processes serve HTTP (`QYM_ROLE=api` inside them);
+- with `QYM_ROLE=all` (the default), **one** more process in the same pod runs
+  the dashboard summary and maintenance loops, restarted if it exits; with
+  `QYM_ROLE=api` (separate worker Deployment) no loop process starts;
+- the launcher forwards SIGTERM to all of them and exits when uvicorn exits.
+
+Leaving `QYM_WEB_WORKERS` unset keeps the exact single-process command. Use
+`QYM_WEB_WORKERS` rather than `--workers` in `QYM_UVICORN_ARGS`: plain uvicorn
+workers would each run the loops (safe through database leases, but redundant
+CPU in every HTTP process).
+
+Sizing, per API pod:
+
+- **CPU/memory**: each process holds its own copy of the app (260-340 MB
+  resident each in the perf lab after a load test; the loop process about
+  75 MB). Start with N = 2-4 and at least N CPU cores' worth of limit.
+- **Database connections**: each web process has its own pool
+  (`QYM_DB_POOL_SIZE` + `QYM_DB_MAX_OVERFLOW`, 20 by default) and the loop
+  process uses the worker pool (5). With N = 4 lower the API pool, e.g.
+  `QYM_DB_POOL_SIZE=5`, `QYM_DB_MAX_OVERFLOW=5`, so pods x (N x 10 + 5) stays
+  under the server's `max_connections`.
+- **Background analyses, rule inference and product evals** run in the web
+  process that accepted them; their concurrency limits
+  (`QYM_ANALYSIS_JOB_MAX_WORKERS`, product eval workers) apply per process. Their
+  state is published to the `background_jobs` table (migration 0066), so a poll,
+  a cancel or a project archive handled by another process sees and stops the
+  same job. A job whose process stopped (restart, crash, rollout) shows as failed
+  within about 15 seconds instead of running forever; start it again.
 
 ## Optional separate worker Deployment (Helm/Kubernetes sketch)
 

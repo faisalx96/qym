@@ -1389,14 +1389,15 @@ def _stop_project_jobs(db: Session, project: Project) -> None:
     stop_project_product_evals(db, project.id)
     project_scope = _project_analysis_scope_key(project.slug)
     for manager in (analysis_job_manager, rule_inference_job_manager):
-        run_ids = sorted(scope for scope in manager.active_scope_ids() if scope != project_scope)
+        # db: jobs of the other web worker processes are stopped too.
+        run_ids = sorted(scope for scope in manager.active_scope_ids(db) if scope != project_scope)
         scopes = {project_scope}
         if run_ids:
             scopes.update(
                 row[0]
                 for row in db.query(Run.id).filter(Run.id.in_(run_ids), Run.project_id == project.id)
             )
-        manager.cancel_scopes(scopes)
+        manager.cancel_scopes(scopes, db=db)
 
 
 @router.post("/v1/admin/projects/{project_id}/unarchive")

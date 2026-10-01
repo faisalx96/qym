@@ -455,7 +455,7 @@ def stop_project_product_evals(db: Session, project_id: str) -> int:
     product and judge calls would go on.
     """
     run_ids = set()
-    for job in job_manager.stop_project(project_id):
+    for job in job_manager.stop_project(project_id, db=db):
         snapshot = job.to_dict()
         run_ids.update(str(row["qym_run_id"]) for row in snapshot["runs"] if row.get("qym_run_id"))
         if snapshot.get("run_id"):
@@ -721,6 +721,7 @@ def submit_product_eval(
             owner_user_id=principal.user.id,
             project_id=principal.project_id,
             run_count=request.run_count,
+            store_bind=db.get_bind(),
         )
     except ProductEvalError as exc:
         return _error_response(400, "invalid_request", str(exc))
@@ -743,10 +744,11 @@ def submit_product_eval(
 @router.get("/jobs/{job_id}")
 def get_product_eval_job(
     job_id: str,
+    db: Session = Depends(get_db),
     principal: Principal = Depends(require_api_key_principal),
 ) -> JSONResponse:
     require_api_key_scope(principal, "runs:read")
-    job_or_response = _require_job_access(job_manager.get(job_id), principal)
+    job_or_response = _require_job_access(job_manager.get(job_id, db=db), principal)
     if isinstance(job_or_response, JSONResponse):
         return job_or_response
     return JSONResponse(_ok(_job_payload(job_or_response)))
@@ -759,7 +761,7 @@ def stop_product_eval_job(
     principal: Principal = Depends(require_api_key_principal),
 ) -> JSONResponse:
     require_api_key_scope(principal, "runs:write")
-    job_or_response = _require_job_access(job_manager.get(job_id), principal)
+    job_or_response = _require_job_access(job_manager.get(job_id, db=db), principal)
     if isinstance(job_or_response, JSONResponse):
         return job_or_response
     job = job_or_response
@@ -779,7 +781,7 @@ def stop_product_eval(
     require_api_key_scope(principal, "runs:write")
 
     if _is_eval_id(identifier):
-        job = job_manager.get(identifier)
+        job = job_manager.get(identifier, db=db)
         if job is not None:
             job_or_response = _require_job_access(job, principal)
             if isinstance(job_or_response, JSONResponse):
@@ -800,7 +802,9 @@ def stop_product_eval(
 
     run = _require_run_access(db, principal, identifier)
 
-    job = job_manager.get_by_qym_run_id(identifier)
+    job = job_manager.get_by_qym_run_id(
+        identifier, db=db, eval_id=_product_eval_metadata(run).get("eval_id")
+    )
     if job is not None:
         job_or_response = _require_job_access(job, principal)
         if isinstance(job_or_response, JSONResponse):
@@ -830,7 +834,7 @@ def get_product_eval(
 ) -> Dict[str, Any]:
     require_api_key_scope(principal, "runs:read")
     if _is_eval_id(identifier):
-        job = job_manager.get(identifier)
+        job = job_manager.get(identifier, db=db)
         if job is not None:
             job_or_response = _require_job_access(job, principal)
             if isinstance(job_or_response, JSONResponse):

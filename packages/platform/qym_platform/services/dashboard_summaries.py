@@ -578,7 +578,7 @@ def _move_numeric_records(
     """Move visibility/time buckets with bounded numeric memory and SQL batches."""
     query = (
         select(Record)
-        .where(Record.run_key == run_id, Record.present.is_(True))
+        .where(Record.run_key == run_id, Record.present)
         .order_by(Record.id)
     )
     cursor = 0
@@ -663,7 +663,7 @@ def _execution_error_counts(db, run_id, samples):
         select(Record.record_key, pass_number.label("pass_number"))
         .where(
             Record.run_key == run_id,
-            Record.present.is_(True),
+            Record.present,
             Record.error > 0,
             error_scope,
         )
@@ -696,7 +696,7 @@ def _execution_error_breakdown(db, run_id, samples):
         select(Record.record_key, number.label("pass_number"))
         .where(
             Record.run_key == run_id,
-            Record.present.is_(True),
+            Record.present,
             Record.error > 0,
             task_scope,
         )
@@ -724,7 +724,7 @@ def _execution_error_breakdown(db, run_id, samples):
         )
         .where(
             Record.run_key == run_id,
-            Record.present.is_(True),
+            Record.present,
             Record.error > 0,
             metric_scope,
             tasks.c.record_key.is_(None),
@@ -766,7 +766,7 @@ def _repeat_execution_counts(db, run_id):
         .where(
             Record.run_key == run_id,
             Record.record_kind == "attempt",
-            Record.present.is_(True),
+            Record.present,
         )
         .group_by(Record.record_key, number)
         .subquery()
@@ -790,7 +790,7 @@ def _repeat_retry_counts(db, run_id):
         .where(
             Record.run_key == run_id,
             Record.record_kind == "attempt",
-            Record.present.is_(True),
+            Record.present,
         )
         .group_by(Record.record_key, Record.pass_number)
         .subquery()
@@ -848,7 +848,7 @@ def repair_extrema(db, project_key, bucket_key, granularity="hour"):
                     Record.project_key == project_key,
                     Record.bucket_key >= bucket_key,
                     Record.bucket_key < bucket_key + 3600,
-                    Record.present.is_(True),
+                    Record.present,
                     Record.record_kind == kind,
                     column.isnot(None),
                 )
@@ -1082,7 +1082,7 @@ def _task_failed_passes(run_id):
         )
         .where(
             Record.run_key == run_id,
-            Record.present.is_(True),
+            Record.present,
             Record.error > 0,
             Record.record_kind == "attempt",
             or_(
@@ -1123,7 +1123,7 @@ def _repeat_pass_errors(db, run_id, left_out=()):
         item_alias.run_key == run_id,
         item_alias.record_key == Record.record_key,
         item_alias.record_kind == "item",
-        item_alias.present.is_(True),
+        item_alias.present,
     )
     affected = set(
         db.execute(
@@ -1132,7 +1132,7 @@ def _repeat_pass_errors(db, run_id, left_out=()):
             .where(
                 Record.run_key == run_id,
                 Record.record_kind == "pass_score",
-                Record.present.is_(True),
+                Record.present,
                 Record.error > 0,
             )
             .distinct()
@@ -1158,7 +1158,7 @@ def _repeat_pass_errors(db, run_id, left_out=()):
                 .where(
                     Record.run_key == run_id,
                     Record.record_kind == "pass_score",
-                    Record.present.is_(True),
+                    Record.present,
                     Record.metric_key.in_(sorted(left_out)),
                 )
                 .distinct()
@@ -1182,7 +1182,7 @@ def _repeat_pass_errors(db, run_id, left_out=()):
                 Record.terminal,
             ).where(
                 Record.run_key == run_id,
-                Record.present.is_(True),
+                Record.present,
                 Record.record_kind.in_(("score", "pass_score")),
                 Record.record_key.in_(keys[start : start + 400]),
             )
@@ -1213,6 +1213,49 @@ def _repeat_pass_errors(db, run_id, left_out=()):
     ]
 
 
+def _metric_totals_statement(run_id, run, *, exclude_not_received=False):
+    """Per-metric score sums of one run's counted items.
+
+    Bounded by the run, never by project history: the item lookup is a
+    semi-join on the same ``run_key`` (ix_dashboard_record_latency), so a live
+    refresh costs O(run) however many records other runs hold. ``present`` is
+    tested as a plain column, since ``present IS true`` does not match the
+    partial indexes' ``WHERE present AND ...`` predicate.
+    """
+    item = aliased(Record)
+    errored = Record.error > 0
+    counted_item = [
+        item.run_key == Record.run_key,
+        item.record_key == Record.record_key,
+        item.record_kind == "item",
+        item.present,
+    ]
+    if int(run.samples or 1) <= 1:
+        # A classic item's task error counts through task_errors; a repeat
+        # item's value already holds its failed passes (its item record only
+        # carries the pass that arrived last).
+        counted_item.append(item.error == 0)
+    if exclude_not_received:
+        counted_item.append(~_item_not_received(item, run))
+    return (
+        select(
+            Record.metric_key,
+            func.sum(Record.score),
+            func.count(Record.score),
+            func.sum(case((errored, Record.score))),
+            func.count(case((and_(errored, Record.score.isnot(None)), 1))),
+            func.count(case((and_(errored, Record.score.is_(None)), 1))),
+        )
+        .where(
+            Record.run_key == run_id,
+            Record.record_kind == "score",
+            Record.present,
+            select(item.id).where(*counted_item).exists(),
+        )
+        .group_by(Record.metric_key)
+    )
+
+
 def refresh_run_summary(db, run_id, version):
     """Build display numbers from numeric state and current small dimensions."""
     dimension, run = _sync_dimension(db, run_id, version)
@@ -1227,7 +1270,7 @@ def refresh_run_summary(db, run_id, version):
     db.flush()
     db.refresh(summary)
     items = select(Record).where(
-        Record.run_key == run_id, Record.record_kind == "item", Record.present.is_(True)
+        Record.run_key == run_id, Record.record_kind == "item", Record.present
     )
     latency = items.with_only_columns(Record.latency_ms).where(
         Record.latency_ms.isnot(None)
@@ -1236,7 +1279,6 @@ def refresh_run_summary(db, run_id, version):
         summary.latency_sum / summary.latency_count if summary.latency_count else 0.0
     )
     median_latency = _median(db, latency, Record.latency_ms)
-    item_alias = aliased(Record)
     errored = Record.error > 0
     repeat = int(run.samples or 1) > 1
     # Items never received are counted apart: neither successes nor executions,
@@ -1247,7 +1289,7 @@ def refresh_run_summary(db, run_id, version):
             db.scalar(
                 select(func.count()).where(
                     Record.run_key == run_id,
-                    Record.present.is_(True),
+                    Record.present,
                     not_received_rule,
                 )
             )
@@ -1256,35 +1298,8 @@ def refresh_run_summary(db, run_id, version):
         if not_received_rule is not None
         else 0
     )
-    counted_items = [
-        item_alias.run_key == run_id,
-        item_alias.record_key == Record.record_key,
-        item_alias.record_kind == "item",
-        item_alias.present.is_(True),
-    ]
-    if not repeat:
-        # A classic item's task error counts through task_errors; a repeat
-        # item's value already holds its failed passes (its item record only
-        # carries the pass that arrived last).
-        counted_items.append(item_alias.error == 0)
-    if not_received:
-        counted_items.append(~_item_not_received(item_alias, run))
     metric_rows = db.execute(
-        select(
-            Record.metric_key,
-            func.sum(Record.score),
-            func.count(Record.score),
-            func.sum(case((errored, Record.score))),
-            func.count(case((and_(errored, Record.score.isnot(None)), 1))),
-            func.count(case((and_(errored, Record.score.is_(None)), 1))),
-        )
-        .join(item_alias, and_(*counted_items))
-        .where(
-            Record.run_key == run_id,
-            Record.record_kind == "score",
-            Record.present.is_(True),
-        )
-        .group_by(Record.metric_key)
+        _metric_totals_statement(run_id, run, exclude_not_received=bool(not_received))
     ).all()
     metric_specs = (dimension.descriptor or {}).get("metric_specs") or {}
     directions = {
@@ -1346,7 +1361,7 @@ def refresh_run_summary(db, run_id, version):
         attempts = select(Record).where(
             Record.run_key == run_id,
             Record.record_kind == "attempt",
-            Record.present.is_(True),
+            Record.present,
             Record.is_last.is_(True),
         )
         attempt_latencies = attempts.with_only_columns(Record.latency_ms).where(
@@ -1404,7 +1419,7 @@ def refresh_run_summary(db, run_id, version):
                     Record.run_key == run_id,
                     Record.record_kind == "pass_score",
                     Record.metric_key == primary,
-                    Record.present.is_(True),
+                    Record.present,
                     or_(Record.score.isnot(None), errored),
                 )
                 .group_by(Record.pass_number)
@@ -1427,7 +1442,7 @@ def refresh_run_summary(db, run_id, version):
                     Record.run_key == run_id,
                     Record.record_kind == "pass_score",
                     Record.metric_key == primary,
-                    Record.present.is_(True),
+                    Record.present,
                     Record.error == 0,
                     Record.success == 0,
                 )
@@ -1535,7 +1550,7 @@ def refresh_run_summary(db, run_id, version):
     scores = select(Record.score).where(
         Record.run_key == run_id,
         Record.record_kind == "score",
-        Record.present.is_(True),
+        Record.present,
         Record.score.isnot(None),
     )
     summary.score_min = db.scalar(scores.order_by(Record.score).limit(1))

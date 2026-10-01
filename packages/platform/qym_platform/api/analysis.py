@@ -4552,6 +4552,7 @@ async def start_analysis_job(
             "retries": 0,
         },
         runner=run_job,
+        store_bind=db.get_bind(),
     )
     payload = _analysis_job_payload(job) or {}
     payload["created"] = created
@@ -4573,7 +4574,7 @@ def get_active_analysis_job(
         raise HTTPException(status_code=403, detail="Access denied")
     return {
         "job": _analysis_job_payload(
-            analysis_job_manager.active_for_run(run.id, pass_number)
+            analysis_job_manager.active_for_run(run.id, pass_number, db=db)
         )
     }
 
@@ -4591,7 +4592,7 @@ def get_analysis_job(
         raise HTTPException(status_code=404, detail="Run not found")
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
-    job = analysis_job_manager.get(job_id)
+    job = analysis_job_manager.get(job_id, db=db)
     if job is None or job.run_id != run.id:
         raise HTTPException(status_code=404, detail="Analysis job not found")
     return _analysis_job_payload(job) or {}
@@ -4610,10 +4611,10 @@ def cancel_analysis_job(
         raise HTTPException(status_code=404, detail="Run not found")
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
-    job = analysis_job_manager.get(job_id)
+    job = analysis_job_manager.get(job_id, db=db)
     if job is None or job.run_id != run.id:
         raise HTTPException(status_code=404, detail="Analysis job not found")
-    cancelled = analysis_job_manager.cancel(job_id)
+    cancelled = analysis_job_manager.cancel(job_id, db=db)
     return _analysis_job_payload(cancelled) or {}
 
 
@@ -6303,6 +6304,7 @@ async def _start_rule_inference_job(
         request_payload=request.model_dump(mode="json", exclude_none=True),
         progress={"phase": "queued", "completed": 0, "total": 0},
         runner=run_job,
+        store_bind=db.get_bind(),
     )
     payload = _rule_inference_job_payload(job) or {}
     payload["created"] = created
@@ -6329,7 +6331,7 @@ def get_active_rule_inference_job(
     _require_rule_inference_scope(db, principal, run_id)
     return {
         "job": _rule_inference_job_payload(
-            rule_inference_job_manager.active_for_run(run_id)
+            rule_inference_job_manager.active_for_run(run_id, db=db)
         )
     }
 
@@ -6342,7 +6344,7 @@ def get_rule_inference_job(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_rule_inference_scope(db, principal, run_id)
-    job = rule_inference_job_manager.get(job_id)
+    job = rule_inference_job_manager.get(job_id, db=db)
     if job is None or job.run_id != run_id:
         raise HTTPException(status_code=404, detail="Rule-inference job not found")
     return _rule_inference_job_payload(job) or {}
@@ -6356,10 +6358,10 @@ def cancel_rule_inference_job(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_rule_inference_scope(db, principal, run_id)
-    job = rule_inference_job_manager.get(job_id)
+    job = rule_inference_job_manager.get(job_id, db=db)
     if job is None or job.run_id != run_id:
         raise HTTPException(status_code=404, detail="Rule-inference job not found")
-    return _rule_inference_job_payload(rule_inference_job_manager.cancel(job_id)) or {}
+    return _rule_inference_job_payload(rule_inference_job_manager.cancel(job_id, db=db)) or {}
 
 
 @router.get("/api/runs/{run_id:path}/analysis-rule-versions")
