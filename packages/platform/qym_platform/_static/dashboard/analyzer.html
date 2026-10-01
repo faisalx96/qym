@@ -6,7 +6,7 @@
   <title>قيِّم • Auto-analysis</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001">
-  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
+  <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
   <script src="/static/qym_safe.js?v=p0-20260930"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
   <script src="/static/shell.js?v=p1-20261001"></script>
@@ -3642,6 +3642,12 @@
     (() => {
       'use strict';
 
+      // document/window listeners end when the shell unmounts this page.
+      const pageSignal = window.QymShell && typeof window.QymShell.pageSignal === 'function'
+        ? window.QymShell.pageSignal()
+        : undefined;
+      const pageListen = (options = {}) => (pageSignal ? { ...options, signal: pageSignal } : options);
+
       const rootPath = (window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '');
       const path = window.location.pathname.replace(/\/+$/, '');
       const params = new URLSearchParams(window.location.search);
@@ -3927,13 +3933,13 @@
       document.querySelectorAll('[data-analysis-view]').forEach(tab => {
         tab.addEventListener('click', () => setAnalyzerView(tab.dataset.analysisView));
       });
-      window.addEventListener('focus', () => { refreshProjectApprovals(); });
+      window.addEventListener('focus', () => { refreshProjectApprovals(); }, pageListen());
       document.addEventListener('visibilitychange', () => {
         if (!document.hidden) refreshProjectApprovals();
-      });
+      }, pageListen());
       window.addEventListener('pageshow', event => {
         if (event.persisted) refreshProjectApprovals({ force: true });
-      });
+      }, pageListen());
 
       function analyzerRows() {
         const snapshot = (state.data && state.data.snapshot) || {};
@@ -4948,7 +4954,7 @@
       });
       document.addEventListener('click', event => {
         if (!event.target.closest('.analysis-dashboard-filter')) state.dashboard.openFilterKey = '';
-      });
+      }, pageListen());
       document.getElementById('analysis-dashboard-compare')?.addEventListener('click', () => {
         state.dashboard.compareRequested = true;
         loadDashboardCompare().catch(error => showDashboardError(error));
@@ -5138,7 +5144,7 @@
             event.preventDefault();
             closeInputMapping();
           };
-          document.addEventListener('keydown', inputMappingEscapeHandler);
+          document.addEventListener('keydown', inputMappingEscapeHandler, pageListen());
         }
         document.getElementById('analysis-mapping-close').focus();
       }
@@ -5338,10 +5344,10 @@
         historyButton.addEventListener('click', openVersionHistory);
         document.addEventListener('qym:rule-version-history-rendered', () => {
           if (versionHistoryDrawer) requestAnimationFrame(renderRuleGraph);
-        });
+        }, pageListen());
         window.addEventListener('resize', () => {
           if (versionHistoryDrawer) requestAnimationFrame(renderRuleGraph);
-        });
+        }, pageListen());
         const documentsPanel = document.createElement('section');
         documentsPanel.className = 'analysis-project-panel';
         documentsPanel.dataset.projectPanel = 'documents';
@@ -5745,13 +5751,13 @@
             if (!contextSettings.hidden && !contextSettings.contains(event.target) && !settingsToggle.contains(event.target)) {
               closeContextSettings();
             }
-          });
+          }, pageListen());
           document.addEventListener('keydown', event => {
             if (event.key === 'Escape' && !contextSettings.hidden) {
               event.preventDefault();
               closeContextSettings(true);
             }
-          });
+          }, pageListen());
           previewCard.append(preview);
           runPanel.append(previewCard);
         }

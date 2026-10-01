@@ -508,7 +508,8 @@ def test_overview_pending_items_open_that_correction_in_the_queue(app):
     page = app.goto("/projects/pa/overview")
     link = page.locator("#pending-reviews-body a.review-item").first
     link.wait_for()
-    assert link.get_attribute("href").startswith("/projects/pa/reviews?id=")
+    href = link.get_attribute("href")
+    assert href.startswith("/projects/pa/reviews?") and "id=" in href
     # #30 is pending but beyond the first page (oldest first): it is added on top.
     page = app.goto("/projects/pa/reviews?id=30")
     page.wait_for_function(

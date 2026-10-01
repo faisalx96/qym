@@ -900,6 +900,34 @@
       freshPlot.forEach((node, index) => node.replaceWith(stalePlot[index]));
     }
 
+    // An open Export menu closes on an outside click or Escape. The document
+    // listeners live only while the menu is open, so none outlive the page
+    // (C069).
+    container.querySelectorAll("details.sl-export").forEach((menu) => {
+      let closer = null;
+      const stopWatching = () => { if (closer) { closer.abort(); closer = null; } };
+      menu.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape" || !menu.open) return;
+        menu.open = false;
+        const summary = menu.querySelector("summary");
+        if (summary) summary.focus();
+      });
+      const summary = menu.querySelector("summary");
+      if (summary) summary.addEventListener("click", () => {
+        // About to open: watch for an outside click until it closes.
+        if (menu.open) return;
+        stopWatching();
+        closer = new AbortController();
+        document.addEventListener("click", (event) => {
+          if (!menu.isConnected || !menu.contains(event.target)) {
+            menu.open = false;
+            stopWatching();
+          }
+        }, { signal: closer.signal });
+      });
+      menu.addEventListener("toggle", () => { if (!menu.open) stopWatching(); });
+    });
+
     const disclosure = container.querySelector("[data-sl-disclosure]");
     if (disclosure) {
       disclosure.addEventListener("click", () => {
@@ -1471,21 +1499,4 @@
     resizeObserver.observe(container);
   }
 
-  // An open Export menu closes on an outside click or Escape.
-  if (!window.__qymStepLatencyMenus) {
-    window.__qymStepLatencyMenus = true;
-    document.addEventListener("click", (event) => {
-      document.querySelectorAll("details.sl-export[open]").forEach((menu) => {
-        if (!menu.contains(event.target)) menu.open = false;
-      });
-    });
-    document.addEventListener("keydown", (event) => {
-      if (event.key !== "Escape") return;
-      document.querySelectorAll("details.sl-export[open]").forEach((menu) => {
-        menu.open = false;
-        const summary = menu.querySelector("summary");
-        if (summary && menu.contains(document.activeElement)) summary.focus();
-      });
-    });
-  }
 })();

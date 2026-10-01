@@ -6,7 +6,7 @@
   <title>قيِّم • Deleted Runs</title>
   <link rel="icon" type="image/png" href="./static/qym_icon.png">
   <link rel="stylesheet" href="./static/dashboard.css?v=p1-20261001">
-  <link rel="stylesheet" href="./static/shell.css?v=p0-20260930-3">
+  <link rel="stylesheet" href="./static/shell.css?v=p1-20261001">
   <script src="./static/qym_safe.js?v=p0-20260930"></script>
   <script src="./static/auth.js?v=p0-20260930"></script>
   <script src="./static/shell.js?v=p1-20261001"></script>
@@ -144,6 +144,12 @@
   <script>
     (() => {
       'use strict';
+
+      // document/window listeners end when the shell unmounts this page.
+      const pageSignal = window.QymShell && typeof window.QymShell.pageSignal === 'function'
+        ? window.QymShell.pageSignal()
+        : undefined;
+      const pageListen = (options = {}) => (pageSignal ? { ...options, signal: pageSignal } : options);
 
       const BASE_URL = (() => {
         const loc = window.location;

@@ -6,7 +6,7 @@
   <title>قيِّم • Run Detail</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001">
-  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
+  <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
   <script src="/static/qym_safe.js?v=p0-20260930"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
   <script src="/static/shell.js?v=p1-20261001"></script>
@@ -476,6 +476,37 @@
     .hero-meta-value .model-label {
       display: flex;
       max-width: 100%;
+    }
+    /* Entity references in the header are links (dataset, model, task,
+       owner): same text, accent underline on hover and focus. */
+    .hero-meta-link {
+      color: inherit;
+      text-decoration: none;
+      border-radius: 3px;
+    }
+    .hero-meta-link:hover,
+    .hero-meta-link:focus-visible {
+      color: var(--accent-primary);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .hero-meta-link:focus-visible {
+      outline: 2px solid var(--accent-primary);
+      outline-offset: 2px;
+    }
+    /* A shared item link (?item=) lands on the opened item with a ring. */
+    .item-card.item-card--target {
+      box-shadow: 0 0 0 2px var(--accent-primary);
+      transition: box-shadow 0.6s ease;
+    }
+    .input-label-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-xs);
+    }
+    .item-link-btn {
+      text-transform: none;
+      letter-spacing: normal;
     }
     .hero-meta-value.mono {
       font-family: var(--font-mono);
@@ -6389,6 +6420,14 @@
     (() => {
       'use strict';
 
+      // document/window listeners and in-flight loads end when the shell
+      // unmounts this page (in-app navigation); see QymShell.pageSignal.
+      const pageSignal = window.QymShell && typeof window.QymShell.pageSignal === 'function'
+        ? window.QymShell.pageSignal()
+        : undefined;
+      const pageListen = (options = {}) => (pageSignal ? { ...options, signal: pageSignal } : options);
+      const pageGone = () => !!(pageSignal && pageSignal.aborted);
+
       const API_ROOT = `${window.location.origin}${(window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '')}/`;
       const CURRENT_PROJECT_SLUG = (() => {
         const match = window.location.pathname.match(/\/projects\/([^/]+)/);
@@ -6412,6 +6451,11 @@
         const n = parseInt(raw || '', 10);
         return Number.isFinite(n) && n > 0 ? n : null;
       })();
+
+      // Back, Forward or a reload of this entry: the shell puts the saved
+      // scroll position back (even the top, saved as no offsets), so an
+      // ?item= in the URL must not jump to it. Read before anything scrolls.
+      const RESTORING_VIEW = !!(history.state && Array.isArray(history.state.qymScroll));
 
       // Optional deep link supplied by the diagnosis occurrence map.
       const TARGET_ITEM_ID = (() => {
@@ -6876,10 +6920,10 @@
         });
         document.addEventListener('click', (e) => {
           if (!dropdown.contains(e.target)) dropdown.classList.remove('open');
-        });
+        }, pageListen());
         document.addEventListener('keydown', (e) => {
           if (e.key === 'Escape') dropdown.classList.remove('open');
-        });
+        }, pageListen());
       }
 
       async function loadHeaderUser() {
@@ -7501,15 +7545,20 @@
           return;
         }
         if (!RUN_ID) { showEmpty(); return; }
+        // Only a failed request is a network error; a failure while showing
+        // the loaded run is reported as such. Leaving the page cancels both.
+        let loaded = false;
         try {
           const [res, passRes] = await Promise.all([
-            fetch(apiUrl('api/runs/' + RUN_ID + '?view=compact')),
+            fetch(apiUrl('api/runs/' + RUN_ID + '?view=compact'), { signal: pageSignal }),
             VIEW_PASS
-              ? fetch(apiUrl('api/runs/' + RUN_ID + '/passes')).catch(() => null)
+              ? fetch(apiUrl('api/runs/' + RUN_ID + '/passes'), { signal: pageSignal }).catch(() => null)
               : Promise.resolve(null),
           ]);
+          if (pageGone()) return;
           if (!res.ok) { showError('HTTP ' + res.status, 'Could not load run data.'); return; }
           const data = await res.json();
+          if (pageGone()) return;
           if (data.error) { showError('Error', data.error); return; }
           if (!data.run || !data.snapshot) { showEmpty(); return; }
           // A live run is followed (C039): remember each row as served, so a
@@ -7520,6 +7569,7 @@
           state.snapshot = data.snapshot;
           seedCategoryCatalogFromRun(state.run);
           await loadProjectCategoryCatalog();
+          if (pageGone()) return;
           state.passSummary = null;
           if (passRes && passRes.ok) {
             const passData = await passRes.json();
@@ -7527,6 +7577,8 @@
               state.passSummary = passData.passes.find(pass => Number(pass.pass_number) === VIEW_PASS) || null;
             }
           }
+          if (pageGone()) return;
+          loaded = true;
           state.langfuseHost = data.run.langfuse_host || '';
           state.langfuseProjectId = data.run.langfuse_project_id || '';
           syncProjectLinks(data.run.project);
@@ -7536,8 +7588,10 @@
           applyReadOnlyMode();
           startLiveRefresh();
         } catch (err) {
+          if (pageGone() || (err && err.name === 'AbortError')) return;
           console.error('Failed to load run:', err);
-          showError('Network Error', 'Could not connect to the server.');
+          if (loaded) showError('Could not show this run', 'The run loaded but the page failed to display it. Reload the page; if it keeps failing, report it with the browser console output.');
+          else showError('Network Error', 'Could not connect to the server.');
         }
       }
 
@@ -7623,7 +7677,7 @@
         clearInterval(live.ticker);
         el('run-live-indicator')?.remove();
       }
-      document.addEventListener('qym:before-navigate', stopLiveRefresh, { once: true });
+      document.addEventListener('qym:before-navigate', stopLiveRefresh, pageListen({ once: true }));
 
       // "Live · updated 2s ago" beside the status, so a quiet run does not
       // look stuck.
@@ -8065,7 +8119,7 @@
         if (runDetails) runDetails.stop();
         // The body outlives in-app navigation: the next run may be editable.
         document.body.classList.remove('run-read-only', 'run-scores-locked');
-      }, { once: true });
+      }, pageListen({ once: true }));
 
       function requiredTextSearches() {
         const conditions = [];
@@ -8237,6 +8291,7 @@
           scrollHost: getScrollHost(),
           content: el('run-content'),
           nav: el('run-section-nav'),
+          signal: pageSignal,
         });
         if (!sectionNav) return;
         Object.keys(pendingNavCounts).forEach(key => {
@@ -8427,12 +8482,12 @@
       document.addEventListener('pointerdown', event => {
         if (!event.target.closest || event.target.closest('.rdi-reason-help')) return;
         setReasonHelpOpen(false, false);
-      }, true);
+      }, pageListen({ capture: true }));
       document.addEventListener('keydown', event => {
         if (event.key === 'Escape' && el('rdi-reason-order') && !el('rdi-reason-order').hidden) {
           setReasonHelpOpen(false, true);
         }
-      });
+      }, pageListen());
 
       function renderItemFilterBanner(count) {
         const banner = el('item-filter-banner');
@@ -8641,6 +8696,57 @@
         }
       }
 
+      // Header entity links: a managed dataset opens its page (Runs tab); a
+      // dataset label, the model, task and owner open the Runs list filtered
+      // to them (the list reads its filters from the URL).
+      function runEntityLinks(run, values) {
+        const slug = (run.project && run.project.slug) || CURRENT_PROJECT_SLUG;
+        if (IS_EXPORT || !slug) return {};
+        const runs = projectUrl(slug);
+        const filtered = (param, value) => value ? runs + '?' + new URLSearchParams([[param, value]]).toString() : null;
+        const datasetName = run.dataset_name || '';
+        // Runs list dataset facet: "<name>\u241f<version>" for a versioned run.
+        const datasetValue = datasetName && run.dataset_version ? datasetName + '\u241f' + run.dataset_version : datasetName;
+        let dataset = null;
+        let datasetTitle = '';
+        if (run.dataset_slug) {
+          const params = new URLSearchParams([['tab', 'runs']]);
+          if (run.dataset_version) params.set('v', run.dataset_version);
+          dataset = projectUrl(slug, 'datasets/' + encodeURIComponent(run.dataset_slug)) + '?' + params.toString();
+          datasetTitle = 'Open dataset ' + datasetName + ' (runs on it)';
+        } else if (datasetValue) {
+          dataset = filtered('dataset', datasetValue);
+          datasetTitle = 'Runs on dataset ' + datasetName;
+        }
+        return {
+          task: values.taskName && values.taskName !== '—' ? filtered('task', values.taskName) : null,
+          dataset,
+          datasetTitle,
+          model: filtered('model', values.modelName),
+          owner: values.owner && values.owner.id ? filtered('owner', values.owner.id) : null,
+          project: runs,
+        };
+      }
+
+      // The link a teammate can open: this run (and pass), optionally one item.
+      function runShareUrl(itemId) {
+        const url = new URL(window.location.pathname, window.location.origin);
+        if (VIEW_PASS) url.searchParams.set('pass', String(VIEW_PASS));
+        if (itemId) url.searchParams.set('item', itemId);
+        return url.toString();
+      }
+
+      function copyLinkWithFeedback(url, message) {
+        const copy = window.QymShell && window.QymShell.copyText
+          ? window.QymShell.copyText(url)
+          : (navigator.clipboard ? navigator.clipboard.writeText(url).then(() => true, () => false) : Promise.resolve(false));
+        return copy.then(ok => {
+          if (ok) showToast('success', 'Link copied', message);
+          else showToast('error', 'Could not copy', url);
+          return ok;
+        });
+      }
+
       function renderSummary() {
         const run = state.run;
         const pass = state.viewPass ? state.passSummary : null;
@@ -8675,13 +8781,18 @@
           const classes = ['hero-meta-value'];
           if (opts.mono) classes.push('mono');
           if (opts.nowrap) classes.push('nowrap');
-          const contentHtml = opts.html || escapeHtml(text);
+          let contentHtml = opts.html || escapeHtml(text);
+          if (opts.href) {
+            contentHtml = '<a class="hero-meta-link" href="' + escapeAttr(opts.href) + '" title="' + escapeAttr(opts.linkTitle || text) + '">' + contentHtml + '</a>';
+          }
           return '<div class="hero-meta-item">' +
             '<div class="hero-meta-label">' + escapeHtml(label) + '</div>' +
             '<div class="' + classes.join(' ') + '"' + (opts.id ? ' id="' + escapeAttr(opts.id) + '"' : '') + ' title="' + escapeAttr(text) + '">' + contentHtml + '</div>' +
           '</div>';
         }
 
+        // Share = a link to this run (the URL); the standalone HTML file is
+        // an export, named as one.
         let actionsHtml =
           '<button class="qym-inline-action qym-inline-action--neutral" id="export-download-btn" style="display:none;" title="Download a new file with your edits baked in">' +
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' +
@@ -8689,9 +8800,14 @@
           '</button>' +
           // Filled in by syncComparePrevious() once the previous run is known (C057).
           '<a class="qym-inline-action qym-inline-action--neutral" id="compare-previous-btn" href="#" hidden></a>' +
-          '<button class="qym-inline-action qym-inline-action--accent" id="export-share-btn" title="Download as a shareable HTML file">' +
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>' +
-            'Share' +
+          (IS_EXPORT ? '' :
+          '<button class="qym-inline-action qym-inline-action--accent" id="copy-run-link-btn" type="button" title="Copy a link to this run">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>' +
+            'Copy link' +
+          '</button>') +
+          '<button class="qym-inline-action qym-inline-action--neutral" id="export-share-btn" type="button" title="Download this run as a standalone HTML file">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' +
+            'Export HTML' +
           '</button>';
         let ingestWarningHtml = '';
         const ingestIncomplete = metadata.ingest_incomplete;
@@ -8752,12 +8868,13 @@
         const samplesPillHtml = samplesCount > 1 && !state.viewPass
           ? '<div class="hero-samples-pill" title="' + samplesCount + ' passes per item"><strong>x' + samplesCount + '</strong> PASSES</div>'
           : '';
+        const links = runEntityLinks(run, { taskName, modelName, owner });
         const metaHtml = [
-          metaItem('Task', taskName),
-          metaItem('Dataset', run.dataset_name || '—', { html: (window.QymShell && run.dataset_name ? QymShell.identiconHTML(run.dataset_name, { cell: 2, gap: 1, showEmpty: false, chip: true }) : '') + escapeHtml(run.dataset_name || '—') + (window.QymShell ? QymShell.datasetVersionInline(run.dataset_version) + QymShell.datasetAliasTags(run.dataset_aliases) : '') }),
-          metaItem('Model', modelName || '—', { html: renderModelLabel(modelName || '—', hasReasoningTraceStats(pass ? pass.trace_stats : run.trace_stats)), nowrap: true }),
-          metaItem('Owner', ownerLabel === '—' ? '' : ownerLabel),
-          metaItem('Project', projectName === '—' ? '' : projectName),
+          metaItem('Task', taskName, { href: links.task, linkTitle: 'Runs of task ' + taskName }),
+          metaItem('Dataset', run.dataset_name || '—', { html: (window.QymShell && run.dataset_name ? QymShell.identiconHTML(run.dataset_name, { cell: 2, gap: 1, showEmpty: false, chip: true }) : '') + escapeHtml(run.dataset_name || '—') + (window.QymShell ? QymShell.datasetVersionInline(run.dataset_version) + QymShell.datasetAliasTags(run.dataset_aliases) : ''), href: links.dataset, linkTitle: links.datasetTitle }),
+          metaItem('Model', modelName || '—', { html: renderModelLabel(modelName || '—', hasReasoningTraceStats(pass ? pass.trace_stats : run.trace_stats)), nowrap: true, href: links.model, linkTitle: 'Runs of model ' + modelName }),
+          metaItem('Owner', ownerLabel === '—' ? '' : ownerLabel, { href: links.owner, linkTitle: 'Runs owned by ' + ownerLabel }),
+          metaItem('Project', projectName === '—' ? '' : projectName, { href: links.project, linkTitle: 'Runs in ' + projectName }),
           metaItem('Started', formatIsoDateTime(startedAt), { nowrap: true }),
           metaItem('Runtime', runtimeText, { nowrap: true, id: 'hero-runtime' }),
           metaItem('Version', versionText, { mono: true, nowrap: true }),
@@ -9530,7 +9647,7 @@
               state._samplesCurveResizeTimer = setTimeout(() => {
                 if (state._samplesCurveRefit) state._samplesCurveRefit();
               }, 150);
-            });
+            }, pageListen());
           }
         }
       }
@@ -9540,6 +9657,13 @@
         if (analyzeBtn && !analyzeBtn.dataset.boundAnalyze) {
           analyzeBtn.dataset.boundAnalyze = '1';
           analyzeBtn.addEventListener('click', openAnalyzerPage);
+        }
+        const copyLinkBtn = el('copy-run-link-btn');
+        if (copyLinkBtn && !copyLinkBtn.dataset.boundCopy) {
+          copyLinkBtn.dataset.boundCopy = '1';
+          copyLinkBtn.addEventListener('click', () => {
+            copyLinkWithFeedback(runShareUrl(''), 'A link to this run is on your clipboard.');
+          });
         }
         const shareBtn = el('export-share-btn');
         if (shareBtn && !shareBtn.dataset.boundShare && !IS_EXPORT) {
@@ -12844,7 +12968,7 @@
             if (event.key === 'Enter' || event.key === ' ') remember(event);
           }, true);
           // The reader scrolling on their own ends it.
-          ['wheel', 'touchmove'].forEach(type => window.addEventListener(type, () => { anchor = null; }, { passive: true }));
+          ['wheel', 'touchmove'].forEach(type => window.addEventListener(type, () => { anchor = null; }, pageListen({ passive: true })));
           new ResizeObserver(() => {
             if (!anchor || Date.now() > anchor.until) { anchor = null; return; }
             restoreItemsGridTop(anchor);
@@ -12852,14 +12976,64 @@
         }
       }
 
+      // Land on a deep-linked item (?item=). Sections above the item list
+      // (charts, breakdowns, root causes) render after it, so one scroll
+      // lands far off: keep the card at the top of the view until the layout
+      // holds still, stop on any user input, then ring the card briefly.
       function scrollToTargetItem() {
         if (!TARGET_ITEM_ID || state.targetItemScrolled || state.itemDetailView === 'heatmap') return;
-        const target = Array.from(document.querySelectorAll('#items-grid .item-card[data-item-id]'))
+        if (RESTORING_VIEW) { state.targetItemScrolled = true; return; }
+        const findTarget = () => Array.from(document.querySelectorAll('#items-grid .item-card[data-item-id]'))
           .find(node => node.dataset.itemId === TARGET_ITEM_ID);
-        if (!target) return;
+        if (!findTarget()) return;
         state.targetItemScrolled = true;
         if (sectionNav) sectionNav.yieldToScroll();
-        requestAnimationFrame(() => target.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+        const host = getScrollHost();
+        const started = Date.now();
+        let stableSince = 0;
+        let frame = 0;
+        let done = false;
+        const inputs = ['wheel', 'touchstart', 'keydown', 'mousedown'];
+        const finish = () => {
+          if (done) return;
+          done = true;
+          if (frame) cancelAnimationFrame(frame);
+          inputs.forEach(type => window.removeEventListener(type, finish, true));
+          const card = findTarget();
+          if (!card) return;
+          card.classList.add('item-card--target');
+          setTimeout(() => card.classList.remove('item-card--target'), 2600);
+        };
+        inputs.forEach(type => window.addEventListener(type, finish, pageListen({ capture: true })));
+        const tick = () => {
+          frame = 0;
+          if (done || pageGone()) return;
+          const card = findTarget();
+          if (!card) { finish(); return; }
+          const offset = card.getBoundingClientRect().top - (host ? host.getBoundingClientRect().top : 0) - 16;
+          const before = host ? host.scrollTop : 0;
+          if (host && Math.abs(offset) > 2) host.scrollTop += offset;
+          else if (!host && Math.abs(offset) > 2) card.scrollIntoView({ block: 'start' });
+          // Moved: wait for it to hold. Not moved (in place, or the list end
+          // cannot scroll further): it holds.
+          if (host && Math.abs(host.scrollTop - before) > 1) {
+            stableSince = 0;
+          } else if (!stableSince) {
+            stableSince = Date.now();
+          }
+          if ((stableSince && Date.now() - stableSince > 500) || Date.now() - started > 6000) { finish(); return; }
+          frame = requestAnimationFrame(tick);
+        };
+        frame = requestAnimationFrame(tick);
+      }
+
+      // The address bar names the last opened item, so it can be copied or
+      // shared as is; closing that item removes it again.
+      function syncItemUrl(itemId, opened) {
+        if (IS_EXPORT || pageGone() || !window.QymShell || typeof window.QymShell.replaceUrlQuery !== 'function') return;
+        const current = new URLSearchParams(window.location.search).get('item');
+        if (opened) window.QymShell.replaceUrlQuery({ item: itemId, item_id: null });
+        else if (current === itemId) window.QymShell.replaceUrlQuery({ item: null, item_id: null });
       }
 
       function scrollItemByItemToTop() {
@@ -13345,7 +13519,14 @@
         const totalPages = Math.max(1, Math.ceil(items.length / state.pageSize));
         if (!state.hasRenderedItems && TARGET_ITEM_ID) {
           const targetIndex = items.findIndex(({ row }) => String(row.item_id || row.index) === TARGET_ITEM_ID);
-          if (targetIndex >= 0) state.page = Math.floor(targetIndex / state.pageSize) + 1;
+          if (targetIndex >= 0) {
+            state.page = Math.floor(targetIndex / state.pageSize) + 1;
+            // A shared item link opens that item.
+            if (state.itemDetailView !== 'heatmap') {
+              state.itemExpanded = state.itemExpanded || {};
+              state.itemExpanded[TARGET_ITEM_ID] = true;
+            }
+          }
         }
         if (state.page > totalPages) state.page = totalPages;
         const start = (state.page - 1) * state.pageSize;
@@ -13666,7 +13847,9 @@
 
           return '<div class="item-card" data-item-id="' + escapeAttr(itemId) + '">' +
             headerHtml +
-            '<div class="item-input-row"><div class="input-label">INPUT <button class="copy-btn qym-icon-action" data-copy-text="' + escapeAttr(typeof input === 'object' ? JSON.stringify(input,null,2) : String(input)) + '" title="Copy input">' + COPY_ICON + '</button></div><div class="input-text">' + renderMarkdownSafe(input) + '</div></div>' +
+            '<div class="item-input-row"><div class="input-label">INPUT <span class="input-label-actions">' +
+              (IS_EXPORT ? '' : '<button type="button" class="item-link-btn qym-inline-action qym-inline-action--neutral" data-copy-item-link="' + escapeAttr(itemId) + '" title="Copy a link that opens this item">Copy link</button>') +
+              '<button class="copy-btn qym-icon-action" data-copy-text="' + escapeAttr(typeof input === 'object' ? JSON.stringify(input,null,2) : String(input)) + '" title="Copy input">' + COPY_ICON + '</button></span></div><div class="input-text">' + renderMarkdownSafe(input) + '</div></div>' +
             (expected ? '<div class="item-expected-row"><div class="expected-label">EXPECTED OUTPUT <button class="copy-btn qym-icon-action" data-copy-text="' + escapeAttr(typeof expected === 'object' ? JSON.stringify(expected,null,2) : String(expected)) + '" title="Copy expected">' + COPY_ICON + '</button></div><div class="expected-text collapsed">' + renderMarkdownSafe(expected) + '</div><button class="expected-toggle" onclick="this.previousElementSibling.classList.toggle(\'collapsed\'); this.textContent = this.previousElementSibling.classList.contains(\'collapsed\') ? \'Show more \u25BC\' : \'Show less \u25B2\';">Show more \u25BC</button></div>' : '') +
             itemMetadataHtml +
             itemAnalysisWarningHtml +
@@ -13721,6 +13904,8 @@
         if (state.itemExpanded[id]) delete state.itemExpanded[id];
         else state.itemExpanded[id] = true;
         openedItemErrors.delete(id);
+        // The address names the last opened item (C059).
+        syncItemUrl(id, !!state.itemExpanded[id]);
         // The toggled card keeps its place on screen, even when closing it
         // near the end of the page leaves less to scroll.
         const cardOf = () => Array.from(el('items-grid')?.children || [])
@@ -15019,7 +15204,7 @@
         };
         renderOptions();
         document.body.appendChild(picker);
-        document.addEventListener('keydown', keyHandler);
+        document.addEventListener('keydown', keyHandler, pageListen());
         setTimeout(() => searchInput.focus(), 0);
       }
 
@@ -15143,8 +15328,8 @@
           if (!dropdown.contains(e.target)) cleanup();
         };
         setTimeout(() => {
-          document.addEventListener('click', closeHandler);
-          window.addEventListener('scroll', scrollHandler, true);
+          document.addEventListener('click', closeHandler, pageListen());
+          window.addEventListener('scroll', scrollHandler, pageListen({ capture: true }));
         }, 0);
       }
 
@@ -15344,8 +15529,8 @@
           if (!dropdown.contains(e.target)) cleanup();
         };
         setTimeout(() => {
-          document.addEventListener('click', closeHandler);
-          window.addEventListener('scroll', scrollHandler, true);
+          document.addEventListener('click', closeHandler, pageListen());
+          window.addEventListener('scroll', scrollHandler, pageListen({ capture: true }));
         }, 0);
       }
 
@@ -15417,6 +15602,12 @@
 
       function wireCopyHandlers(scope) {
         const container = scope || el('items-grid');
+        container.querySelectorAll('[data-copy-item-link]').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            copyLinkWithFeedback(runShareUrl(btn.dataset.copyItemLink), 'The link opens this item.');
+          });
+        });
         container.querySelectorAll('.copy-btn[data-item-id]').forEach(btn => {
           btn.addEventListener('click', () => {
             const id = btn.dataset.itemId;
@@ -15724,7 +15915,7 @@
       setupCatDropdownToggle('root_cause');
       document.addEventListener('click', () => {
         document.querySelectorAll('.fp-cat-group .multi-select-dropdown.open').forEach(d => d.classList.remove('open'));
-      });
+      }, pageListen());
 
       // ── Metadata fields selector ──
 
@@ -15757,7 +15948,7 @@
           mmDd.classList.remove('open');
           mmBtn.setAttribute('aria-expanded', 'false');
         }
-      });
+      }, pageListen());
 
       function populateFieldVisibilityDropdown({ dropdownId, keys, visibility, labelFor, defaultVisible, emptyMessage }) {
         const dropdown = el(dropdownId);
@@ -15926,13 +16117,13 @@
         if (!state.filterBuilderOpen || !event.target.isConnected) return;
         if (event.target.closest('#item-filter-builder, #btn-item-filters')) return;
         closeFilterBuilder(false);
-      }, true);
+      }, pageListen({ capture: true }));
       document.addEventListener('keydown', event => {
         if (event.key !== 'Escape' || event.defaultPrevented || !state.filterBuilderOpen) return;
         // An open list inside the builder closes first.
         if (el('item-filter-builder')?.querySelector('.qym-dropdown.is-open, .multi-select-dropdown.open')) return;
         closeFilterBuilder(true);
-      });
+      }, pageListen());
       {
         const dispBtn = el('btn-item-display');
         const dispPop = el('item-display-pop');
@@ -15949,7 +16140,7 @@
             dispPop.classList.remove('show');
             dispBtn.classList.remove('on');
             dispBtn.setAttribute('aria-expanded', 'false');
-          });
+          }, pageListen());
           // Escape closes it (as on Compare), after any open list inside it,
           // and returns focus to the trigger when focus was in the popover.
           document.addEventListener('keydown', (e) => {
@@ -15960,7 +16151,7 @@
             dispBtn.classList.remove('on');
             dispBtn.setAttribute('aria-expanded', 'false');
             if (hadFocus) dispBtn.focus();
-          });
+          }, pageListen());
         }
       }
 

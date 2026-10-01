@@ -280,15 +280,31 @@
       event.preventDefault();
     });
 
+    var resizeObserver = null;
+    var mutationObserver = null;
     if (window.ResizeObserver) {
-      var resizeObserver = new ResizeObserver(update);
+      resizeObserver = new ResizeObserver(update);
       resizeObserver.observe(target);
       if (target.firstElementChild) resizeObserver.observe(target.firstElementChild);
     }
     if (window.MutationObserver) {
-      new MutationObserver(update).observe(target, { childList: true, subtree: true });
+      mutationObserver = new MutationObserver(update);
+      mutationObserver.observe(target, { childList: true, subtree: true });
     }
-    window.addEventListener('resize', update);
+    // This script loads once, but the mirror belongs to the current page:
+    // let the shell's page unmount release the window listener and observers.
+    var pageSignal = window.QymShell && typeof window.QymShell.pageSignal === 'function'
+      ? window.QymShell.pageSignal()
+      : undefined;
+    window.addEventListener('resize', update, pageSignal ? { signal: pageSignal } : false);
+    if (pageSignal) {
+      var release = function () {
+        if (resizeObserver) resizeObserver.disconnect();
+        if (mutationObserver) mutationObserver.disconnect();
+      };
+      if (pageSignal.aborted) release();
+      else pageSignal.addEventListener('abort', release, { once: true });
+    }
     window.requestAnimationFrame(update);
   }
 

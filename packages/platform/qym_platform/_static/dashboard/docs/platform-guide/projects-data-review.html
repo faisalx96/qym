@@ -63,7 +63,7 @@ QYM_API_KEY=&lt;token-shown-once&gt;</pre>
 
 <h2>Reviews and corrections</h2>
 <p>Reviews collects root-cause and solution corrections from manual work and AI analysis. It opens on the queue: the <strong>To review</strong> tab with the pending corrections, how many are left, and how many of the corrections in view are already reviewed. Switch to Approved, Rejected, or All with the status tabs. Sort the list oldest first, lowest AI confidence first, or most recent first, and filter by source, task, dataset, model, run, confidence, and text. Pending corrections carry a priority tag: <strong>High</strong> when the AI was under 50% confident, or a reviewer changed a diagnosis it was under 75% sure of; <strong>Medium</strong> for one weaker signal (under 75% confidence, a changed diagnosis, or a wait of 14 days or more). Hover the tag for its reasons.</p>
-<p>The list loads 25 corrections at a time and adds more as you scroll. Each card shows a short preview of the input, expected, and output; open it to load the full text and its revision and review history.</p>
+<p>The list loads 25 corrections at a time and adds more as you scroll. Each card shows a short preview of the input, expected, and output; open it to load the full text and its revision and review history. The <strong>Run</strong> chip on a card opens the item it is about in that run; on the all-projects Reviews page a <strong>Project</strong> chip names the project. Filters live in the address (<code>?status=pending&amp;model=&hellip;&amp;q=&hellip;</code>), so a filtered queue can be shared or bookmarked, and <code>?id=&lt;review&gt;</code> highlights one review.</p>
 
 <table>
   <thead><tr><th>Status</th><th>Meaning</th></tr></thead>

@@ -316,20 +316,36 @@
       attributeFilter: ['style', 'hidden'],
     });
 
-    host.addEventListener('scroll', onScroll, { passive: true });
-    host.addEventListener('wheel', onUserIntent, { passive: true });
-    host.addEventListener('touchstart', onUserIntent, { passive: true });
-    host.addEventListener('keydown', onUserIntent);
+    // Every listener ends with the page (options.signal, the shell's page
+    // lifetime, C069): the scroll host and window outlive this page.
+    var signal = options.signal;
+    function listen(extra) {
+      var opts = extra || {};
+      if (signal) opts.signal = signal;
+      return opts;
+    }
+    host.addEventListener('scroll', onScroll, listen({ passive: true }));
+    host.addEventListener('wheel', onUserIntent, listen({ passive: true }));
+    host.addEventListener('touchstart', onUserIntent, listen({ passive: true }));
+    host.addEventListener('keydown', onUserIntent, listen());
     host.addEventListener('pointerdown', function (event) {
       // Dragging the scrollbar: a pointerdown on the host itself.
       if (event.target === host) onUserIntent();
-    });
-    if ('onscrollend' in window) host.addEventListener('scrollend', endProgrammatic);
-    nav.addEventListener('click', onNavClick);
+    }, listen());
+    if ('onscrollend' in window) host.addEventListener('scrollend', endProgrammatic, listen());
+    nav.addEventListener('click', onNavClick, listen());
+    var resizeObserver = null;
     if (window.ResizeObserver) {
-      new ResizeObserver(function () { moveInk(); }).observe(nav);
+      resizeObserver = new ResizeObserver(function () { moveInk(); });
+      resizeObserver.observe(nav);
     }
-    window.addEventListener('resize', scheduleRefresh);
+    window.addEventListener('resize', scheduleRefresh, listen());
+    if (signal) {
+      signal.addEventListener('abort', function () {
+        observer.disconnect();
+        if (resizeObserver) resizeObserver.disconnect();
+      }, { once: true });
+    }
 
     refresh();
 

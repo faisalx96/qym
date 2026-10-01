@@ -536,7 +536,7 @@ def test_repeat_drawer_follows_mock_option_c() -> None:
     # leading disclosure chevron before the run name (mock C's toggle), the
     # pass-count chip after it, and a spacer aligning chevron-less rows
     toggle_at = source.index('class="samples-toggle qym-icon-action"')
-    run_id_at = source.index('<span class="run-id"', toggle_at)
+    run_id_at = source.index('<a class="run-id"', toggle_at)
     assert toggle_at < run_id_at < source.index('class="run-pass-count"', toggle_at)
     assert 'class="samples-toggle-spacer"' in source
     assert "headerRow.classList.toggle('has-repeat-rows', anyRepeatRows)" in source
@@ -714,7 +714,7 @@ def test_run_page_supports_single_pass_scope() -> None:
     # Missing attempts become pending instead of inheriting the latest
     # run-level output/status. Header and trace summary use the pass endpoint.
     assert "output: att ? (att.output ?? null) : null" in source
-    assert "fetch(apiUrl('api/runs/' + RUN_ID + '/passes'))" in source
+    assert "fetch(apiUrl('api/runs/' + RUN_ID + '/passes')" in source
     assert "const pass = state.viewPass ? state.passSummary : null;" in source
     assert "let runtimeMs = pass ? pass.duration_ms : run.duration_ms;" in source
     assert "? state.passSummary?.trace_stats" in source
@@ -1752,7 +1752,7 @@ def test_dashboard_stops_polling_before_shell_navigation() -> None:
     assert "dashboardActive = false;" in source
     assert "window.__QYM_DASHBOARD_INTERVAL__ = null;" in source
     assert (
-        "document.addEventListener('qym:before-navigate', teardownDashboard, { once: true });"
+        "document.addEventListener('qym:before-navigate', teardownDashboard, pageListen({ once: true }));"
         in source
     )
     assert "if (!dashboardActive) return;" in source
@@ -1767,7 +1767,7 @@ def test_changed_route_assets_are_cache_versioned() -> None:
     # The project-not-found page loads the same shared shell assets as the
     # dashboard pages, every one of them versioned.
     assert '{static_root}/auth.js?v=p0-20260930"' in runs_api
-    assert '{static_root}/shell.css?v=p0-20260930-3"' in runs_api
+    assert '{static_root}/shell.css?v=p1-20261001"' in runs_api
     assert '{static_root}/dashboard.css?v=p1-20261001"' in runs_api
     assert '{static_root}/shell.js?v=p1-20261001"' in runs_api
 
@@ -1874,8 +1874,13 @@ def test_run_header_status_and_actions_share_one_height() -> None:
         'class="qym-inline-action qym-inline-action--neutral" '
         'id="export-download-btn"'
     ) in run
+    # Copy link is the primary action; the HTML file is an export (C059).
     assert (
         'class="qym-inline-action qym-inline-action--accent" '
+        'id="copy-run-link-btn"'
+    ) in run
+    assert (
+        'class="qym-inline-action qym-inline-action--neutral" '
         'id="export-share-btn"'
     ) in run
     assert "qym-inline-action--langfuse" not in run
@@ -2098,7 +2103,11 @@ def test_compare_view_uses_current_run_detail_component_contracts() -> None:
     assert compare.count('class="compare-section-copy"') >= 3
     assert "container.hidden = tabs.length < 2;" in compare
     assert (
-        'class="export-html-btn qym-inline-action qym-inline-action--accent" '
+        'class="qym-inline-action qym-inline-action--accent" '
+        'id="copy-compare-link-btn"'
+    ) in compare
+    assert (
+        'class="export-html-btn qym-inline-action qym-inline-action--neutral" '
         'id="export-share-btn"'
     ) in compare
 
@@ -2936,7 +2945,8 @@ def test_datasets_version_switching_preserves_lineage_tab() -> None:
     version_row_block = source.split("function versionPopoverRow(v, onSelect, id){", 1)[1].split("function buildTabs(){", 1)[0]
     lineage_block = source.split("async function renderLineageTab(host){", 1)[1].split("    // -------------------------------------------------------------\n    // SETTINGS TAB", 1)[0]
 
-    assert "navigate({ tab: state.tab, v: v.version, item: null });" in version_row_block
+    assert "const target = { tab: state.tab, v: v.version, item: null };" in version_row_block
+    assert "navigate(target);" in version_row_block
     assert "navigate({ tab: 'lineage', v: v.version, item: null })" in lineage_block
     assert "navigate({ tab: 'items', v: v.version })" not in lineage_block
     assert "const childrenByParent = {};" in lineage_block

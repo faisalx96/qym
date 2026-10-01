@@ -8527,8 +8527,38 @@ def _serialize_corrections_with_history(
             ),
         )
         serialized.append(payload)
+    _attach_project_fields(db, corrections, serialized, runs_by_id)
     _attach_review_decision_fields(db, corrections, serialized, runs_by_id, principal)
     return serialized
+
+
+def _attach_project_fields(
+    db: Session,
+    corrections: List[ReviewCorrection],
+    payloads: List[Dict[str, Any]],
+    runs_by_id: Dict[str, Any],
+) -> None:
+    """Add ``project_slug`` and ``project_name`` (C044).
+
+    A review card links to its run item, and the cross-project queue says
+    which project a review belongs to.
+    """
+    project_ids = {run.project_id for run in runs_by_id.values() if run.project_id}
+    projects_by_id = (
+        {
+            project_id: (slug, name)
+            for project_id, slug, name in db.query(
+                Project.id, Project.slug, Project.name
+            ).filter(Project.id.in_(sorted(project_ids)))
+        }
+        if project_ids
+        else {}
+    )
+    for correction, payload in zip(corrections, payloads):
+        run = runs_by_id.get(correction.run_id)
+        slug, name = projects_by_id.get(run.project_id if run else "", ("", ""))
+        payload["project_slug"] = slug
+        payload["project_name"] = name
 
 
 def _attach_review_decision_fields(
@@ -9005,6 +9035,7 @@ def _serialize_correction_list_rows(
                 getattr(correction, f"{field}_snapshot")
             )
         rows.append(payload)
+    _attach_project_fields(db, corrections, rows, runs_by_id)
     _attach_review_decision_fields(db, corrections, rows, runs_by_id, principal)
     return rows
 

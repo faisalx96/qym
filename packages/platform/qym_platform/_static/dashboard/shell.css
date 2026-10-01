@@ -428,6 +428,32 @@ body {
   min-width: 0;
 }
 
+/* In-app navigation in flight: a thin bar at the top of the content after
+   150ms, so a click on a slow server never feels dead. */
+.shell-content.is-navigating { cursor: progress; }
+.shell-content.is-navigating::before {
+  content: '';
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  flex: 0 0 2px;
+  height: 2px;
+  margin-bottom: -2px;
+  background-image: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
+  background-size: 50% 100%;
+  background-repeat: no-repeat;
+  background-position: -100% 0;
+  animation: shell-nav-progress 1.1s linear 150ms infinite backwards;
+  pointer-events: none;
+}
+@keyframes shell-nav-progress {
+  from { background-position: -100% 0; }
+  to { background-position: 200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shell-content.is-navigating::before { animation: none; background-position: 50% 0; }
+}
+
 /* Constrained-width pages (settings, admin, profile, projects, overview) */
 .shell-content > .settings-page,
 .shell-content > .admin-page,

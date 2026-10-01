@@ -1510,36 +1510,278 @@
   // AJAX NAVIGATION (SPA-like content swap)
   // ══════════════════════════════════════════════════
 
-  var _navigating = false;
+  // ── Page lifecycle ────────────────────────────────
+  // Page scripts are re-executed on every in-app navigation, so anything a
+  // page adds to document/window outlives its DOM unless it is removed.
+  // Each mounted page gets one AbortController: pages pass
+  // { signal: QymShell.pageSignal() } to document/window listeners (and may
+  // register cleanups with QymShell.onPageUnmount); the shell aborts it right
+  // after 'qym:before-navigate', before the next page's scripts run. Between
+  // unmount and the next mount the signal is already aborted, so a late
+  // registration by the outgoing page is dropped instead of leaking.
+  var _pageController = typeof AbortController === 'function' ? new AbortController() : null;
+
+  function pageSignal() {
+    return _pageController ? _pageController.signal : undefined;
+  }
+
+  function onPageUnmount(fn) {
+    var signal = pageSignal();
+    if (!signal || typeof fn !== 'function') return;
+    var run = function () {
+      try { fn(); } catch (err) { console.error('[QymShell] page cleanup failed:', err); }
+    };
+    if (signal.aborted) { run(); return; }
+    signal.addEventListener('abort', run, { once: true });
+  }
+
+  function unmountPage() {
+    if (_pageController && !_pageController.signal.aborted) _pageController.abort();
+  }
+
+  function mountPage() {
+    unmountPage();
+    _pageController = typeof AbortController === 'function' ? new AbortController() : null;
+  }
+
+  // ── Per-history-entry view state ──────────────────
+  // The scroll offsets of the page's scroll containers are kept in
+  // history.state, so Back/Forward (and a reload) put the reader back where
+  // they were once the page has rendered tall enough. View state (filters,
+  // sort, page, tab, open item) lives in the query string, written by the
+  // pages through replaceUrlQuery().
+  var SCROLL_SCAN_DEPTH = 4;
+
+  function scrollKey(el, content) {
+    if (el === content) return { id: 'shell-content' };
+    if (el.id) return { id: el.id };
+    var cls = Array.prototype.slice.call(el.classList || []).filter(function (name) {
+      return /^[A-Za-z_][-\w]*$/.test(name);
+    });
+    var selector = el.tagName.toLowerCase() + (cls.length ? '.' + cls.join('.') : '');
+    var matches = content.querySelectorAll(selector);
+    return { sel: selector, nth: Array.prototype.indexOf.call(matches, el) };
+  }
+
+  function findScrollTarget(entry, content) {
+    if (!content) return null;
+    if (entry.id === 'shell-content') return content;
+    if (entry.id) return document.getElementById(entry.id);
+    if (!entry.sel) return null;
+    try {
+      return content.querySelectorAll(entry.sel)[entry.nth || 0] || null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function captureScrollPositions() {
+    var content = document.getElementById('shell-content');
+    if (!content) return [];
+    var out = [];
+    (function walk(el, depth) {
+      if (el.scrollTop > 0) {
+        var key = scrollKey(el, content);
+        key.top = Math.round(el.scrollTop);
+        out.push(key);
+      }
+      if (depth >= SCROLL_SCAN_DEPTH) return;
+      for (var child = el.firstElementChild; child; child = child.nextElementSibling) walk(child, depth + 1);
+    })(content, 0);
+    return out;
+  }
+
+  function saveHistoryViewState() {
+    if (_scrollRestore) return; // still restoring: keep the saved target
+    try {
+      var current = history.state && typeof history.state === 'object' ? history.state : {};
+      var next = Object.assign({}, current, { qym: true, qymScroll: captureScrollPositions() });
+      history.replaceState(next, '', window.location.href);
+    } catch (err) { /* history unavailable */ }
+  }
+
+  var _scrollSaveTimer = 0;
+  function clearScheduledViewStateSave() {
+    if (_scrollSaveTimer) clearTimeout(_scrollSaveTimer);
+    _scrollSaveTimer = 0;
+  }
+
+  function scheduleHistoryViewStateSave() {
+    clearScheduledViewStateSave();
+    _scrollSaveTimer = setTimeout(function () {
+      _scrollSaveTimer = 0;
+      // While a navigation is in flight the current entry may already be the
+      // target (popstate): never write the outgoing page's offsets into it.
+      if (_navFetch || _navSwapping) return;
+      saveHistoryViewState();
+    }, 250);
+  }
+
+  var _scrollRestore = null;
+
+  function cancelScrollRestore() {
+    if (_scrollRestore) _scrollRestore.cancel();
+  }
+
+  // Apply the saved offsets until they hold: data renders after the scripts
+  // run, so the page may be too short at first. Any user input stops it.
+  function restoreScrollPositions(entries) {
+    cancelScrollRestore();
+    if (!Array.isArray(entries) || !entries.length) return;
+    var content = document.getElementById('shell-content');
+    var started = Date.now();
+    var settledSince = 0;
+    var cancelled = false;
+    var frame = 0;
+    var inputs = ['wheel', 'touchstart', 'keydown', 'mousedown'];
+    var handle = { cancel: cancel };
+    function cancel() {
+      if (cancelled) return;
+      cancelled = true;
+      if (frame) cancelAnimationFrame(frame);
+      inputs.forEach(function (type) { window.removeEventListener(type, cancel, true); });
+      if (_scrollRestore === handle) _scrollRestore = null;
+    }
+    _scrollRestore = handle;
+    inputs.forEach(function (type) { window.addEventListener(type, cancel, true); });
+    function tick() {
+      frame = 0;
+      if (cancelled) return;
+      var allHeld = true;
+      entries.forEach(function (entry) {
+        var el = findScrollTarget(entry, content);
+        if (!el) { allHeld = false; return; }
+        if (Math.abs(el.scrollTop - entry.top) > 1) {
+          el.scrollTop = entry.top;
+          if (Math.abs(el.scrollTop - entry.top) > 1) allHeld = false;
+        }
+      });
+      var now = Date.now();
+      if (allHeld) {
+        if (!settledSince) settledSince = now;
+      } else {
+        settledSince = 0;
+      }
+      // Hold the position briefly after it first sticks: late sections above
+      // the target (charts, KPIs) can still change height.
+      if ((settledSince && now - settledSince > 600) || now - started > 6000) { cancel(); return; }
+      frame = requestAnimationFrame(tick);
+    }
+    frame = requestAnimationFrame(tick);
+  }
+
+  // Replace query parameters of the current entry without adding history or
+  // losing its saved view state. updates: { key: string | string[] | null };
+  // an empty value removes the key. Returns the new relative URL.
+  function replaceUrlQuery(updates) {
+    var url = new URL(window.location.href);
+    Object.keys(updates || {}).forEach(function (key) {
+      var value = updates[key];
+      url.searchParams.delete(key);
+      if (value === null || value === undefined || value === '') return;
+      (Array.isArray(value) ? value : [value]).forEach(function (item) {
+        if (item !== null && item !== undefined && item !== '') url.searchParams.append(key, String(item));
+      });
+    });
+    var next = url.pathname + url.search + url.hash;
+    if (next !== window.location.pathname + window.location.search + window.location.hash) {
+      try { history.replaceState(history.state, '', next); } catch (err) { /* ignore */ }
+    }
+    return next;
+  }
+
+  // Copy text to the clipboard; resolves true on success.
+  function copyText(text) {
+    var value = String(text == null ? '' : text);
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(value).then(function () { return true; }, function () { return fallbackCopy(value); });
+    }
+    return Promise.resolve(fallbackCopy(value));
+  }
+
+  function fallbackCopy(value) {
+    var area = document.createElement('textarea');
+    area.value = value;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+    area.remove();
+    return ok;
+  }
+
+  // ── Navigation ────────────────────────────────────
+  // The latest click wins: a navigation that is still fetching is abandoned
+  // when another starts. While a page is being swapped in, a new request
+  // waits for the swap to finish and then runs.
+  var _navSeq = 0;
+  var _navFetch = null;
+  var _navSwapping = false;
+  var _queuedNav = null;
 
   function navigateTo(url, opts) {
     opts = opts || {};
-    if (_navigating) return;
-    _navigating = true;
-
+    if (_navSwapping) {
+      _queuedNav = { url: url, opts: opts };
+      return;
+    }
     var content = document.getElementById('shell-content');
+    var seq = ++_navSeq;
+    if (_navFetch) _navFetch.abort();
+    var fetchController = typeof AbortController === 'function' ? new AbortController() : null;
+    _navFetch = fetchController;
+
+    clearScheduledViewStateSave();
+    if (opts.historyMode !== 'none') saveHistoryViewState();
+    cancelScrollRestore();
     document.dispatchEvent(new CustomEvent('qym:before-navigate', { detail: { url: url, opts: opts } }));
+    unmountPage();
     if (!content) { window.location.href = url; return; }
 
     closeShellPopovers();
     setNavigationPending(true);
 
-    fetchAndSwap(url, opts).then(function () {
-      _navigating = false;
+    fetchAndSwap(url, opts, { seq: seq, signal: fetchController ? fetchController.signal : undefined }).then(function (swapped) {
+      if (seq !== _navSeq) return;
+      _navFetch = null;
       setNavigationPending(false);
-    }).catch(function (err) {
-      _navigating = false;
+      if (swapped && opts.historyMode === 'none') {
+        restoreScrollPositions(history.state && history.state.qymScroll);
+      }
+    }, function (err) {
+      if (seq !== _navSeq) return;
+      _navFetch = null;
       setNavigationPending(false);
       console.error('[QymShell] Navigation failed, falling back:', err);
       window.location.href = url;
+    }).then(function () {
+      if (_navSwapping || !_queuedNav) return;
+      var queued = _queuedNav;
+      _queuedNav = null;
+      navigateTo(queued.url, queued.opts);
     });
   }
 
-  async function fetchAndSwap(url, opts) {
+  async function fetchAndSwap(url, opts, nav) {
     opts = opts || {};
-    var res = await fetch(url, { credentials: 'same-origin' });
+    nav = nav || {};
+    var res = await fetch(url, { credentials: 'same-origin', signal: nav.signal });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     var html = await res.text();
+    // A later navigation started while this one was fetching: drop this one.
+    if (nav.seq !== undefined && nav.seq !== _navSeq) return false;
+    _navSwapping = true;
+    try {
+      return await swapPage(url, opts, html);
+    } finally {
+      _navSwapping = false;
+    }
+  }
+
+  async function swapPage(url, opts, html) {
 
     // Parse the fetched HTML
     var parser = new DOMParser();
@@ -1616,6 +1858,8 @@
     while (newBody.firstChild) {
       fragment.appendChild(newBody.firstChild);
     }
+    // The incoming page owns everything registered from here on.
+    mountPage();
     content.replaceChildren(fragment);
 
     if (opts.historyMode !== 'none') {
@@ -1634,11 +1878,13 @@
 
     if (_routeCtx.projectSlug && _user && !projectExists(_routeCtx.projectSlug)) {
       renderProjectNotFound(_routeCtx.projectSlug);
-      return;
+      return false;
     }
 
     renderBreadcrumbs(computeBreadcrumbs(_routeCtx));
     setTopbarStats([]);
+    // A new page starts at the top; Back/Forward put the saved offsets back
+    // once the page has rendered (restoreScrollPositions in navigateTo).
     content.scrollTop = 0;
 
     // Expose the shell user before page scripts run so route scripts can
@@ -1650,6 +1896,7 @@
     }
 
     document.dispatchEvent(new CustomEvent('qym:shell-ready'));
+    return true;
   }
 
   function executeScript(info) {
@@ -1696,6 +1943,9 @@
 
   function interceptNavClicks() {
     document.addEventListener('click', function (e) {
+      // A page that handled the click itself (its own in-app navigation)
+      // already called preventDefault: do not navigate a second time.
+      if (e.defaultPrevented) return;
       var link = e.target.closest('#qym-app a[href]');
       if (!canInterceptLink(link, e)) return;
       e.preventDefault();
@@ -1703,6 +1953,7 @@
     });
 
     window.addEventListener('popstate', function () {
+      clearScheduledViewStateSave();
       var event = new CustomEvent('qym:popstate', {
         cancelable: true,
         detail: { url: window.location.pathname + window.location.search },
@@ -1867,7 +2118,19 @@
     // Render initial breadcrumbs
     renderBreadcrumbs(computeBreadcrumbs(_routeCtx));
 
-    history.replaceState({ qym: true }, '', window.location.href);
+    // Keep the entry's saved view state across a reload, and keep saving the
+    // scroll offsets while the reader scrolls (Back from the next page can
+    // no longer read them).
+    var initialState = history.state && typeof history.state === 'object' ? history.state : {};
+    history.replaceState(Object.assign({}, initialState, { qym: true }), '', window.location.href);
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+    if (Array.isArray(initialState.qymScroll) && initialState.qymScroll.length) {
+      document.addEventListener('qym:shell-ready', function () {
+        restoreScrollPositions(initialState.qymScroll);
+      }, { once: true });
+    }
+    document.addEventListener('scroll', scheduleHistoryViewStateSave, { capture: true, passive: true });
+    window.addEventListener('pagehide', saveHistoryViewState);
 
     // Bind events
     bindEvents();
@@ -2014,6 +2277,10 @@
     toast: toast,
     apiUrl: apiUrl,
     navigateTo: navigateTo,
+    pageSignal: pageSignal,
+    onPageUnmount: onPageUnmount,
+    replaceUrlQuery: replaceUrlQuery,
+    copyText: copyText,
     openCreateProjectDialog: openCreateProjectDialog,
     openConfirmDialog: openConfirmDialog,
     confirmArchiveProject: confirmArchiveProject,

@@ -7,6 +7,13 @@
   'use strict';
 
   let dashboardActive = true;
+  // Listeners on document/window are removed when the shell unmounts this
+  // page (QymShell.pageSignal); without it every visit left a live copy of
+  // the shortcuts behind, acting on later pages.
+  const pageSignal = window.QymShell && typeof window.QymShell.pageSignal === 'function'
+    ? window.QymShell.pageSignal()
+    : undefined;
+  const pageListen = (options = {}) => (pageSignal ? { ...options, signal: pageSignal } : options);
 
   // ═══════════════════════════════════════════════════
   // BASE URL HANDLING (for proxy/subpath compatibility)
@@ -2196,10 +2203,10 @@
     legendEl.innerHTML = state.allModels.map((model, idx) => {
       const isActive = state.filterModels.size === 0 || state.filterModels.has(model);
       return `
-        <div class="legend-item ${isActive ? '' : 'inactive'}" data-model="${escapeHtml(model)}" title="${escapeHtml(getModelFilterOptionLabel(model))}">
+        <button type="button" class="legend-item ${isActive ? '' : 'inactive'}" data-model="${escapeHtml(model)}" aria-pressed="${isActive ? 'true' : 'false'}" title="${escapeHtml(getModelFilterOptionLabel(model))} (click to show or hide; double-click to show only this model)">
           <span class="legend-color" style="background:${CHART_COLORS[idx % CHART_COLORS.length]}"></span>
           ${renderModelLabelForModelName(model)}
-        </div>
+        </button>
       `;
     }).join('');
 
@@ -2609,9 +2616,10 @@
         }).join('');
         return `
           <div class="chart-table-row">
-            <span class="chart-bar-label clickable-run ${isMultiRun ? 'multi-run' : ''}"
+            <a class="chart-bar-label clickable-run ${isMultiRun ? 'multi-run' : ''}"
+                  href="${escapeHtml(runOpenHref(runData))}"
                   data-file="${escapeHtml(file_path)}"
-                  title="${escapeHtml(tooltipText)}">${displayHtml}${versionTag}</span>
+                  title="${escapeHtml(tooltipText)}">${displayHtml}${versionTag}</a>
             ${dataCells}
           </div>
         `;
@@ -3044,14 +3052,7 @@
     // Wire up click events for run labels
     gridEl.querySelectorAll('.chart-bar-label.clickable-run').forEach(label => {
       label.addEventListener('click', (e) => {
-        const target = e.target.closest('.chart-bar-label');
-        const filePath = target?.dataset.file;
-        if (filePath) {
-          openRun(filePath, e);
-        }
-      });
-      label.addEventListener('auxclick', (e) => {
-        if (e.button !== 1) return;
+        if (isModifiedEvent(e)) return; // native new tab / window
         const target = e.target.closest('.chart-bar-label');
         const filePath = target?.dataset.file;
         if (filePath) {
@@ -3063,6 +3064,15 @@
 
     // Wire up sortable column headers
     gridEl.querySelectorAll('.sortable-col').forEach(header => {
+      if (header.tagName !== 'BUTTON') {
+        header.setAttribute('role', 'button');
+        header.tabIndex = 0;
+        header.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          header.click();
+        });
+      }
       header.addEventListener('click', (e) => {
         const target = e.currentTarget;
         const cardId = target.dataset.card;
@@ -3276,8 +3286,24 @@
 
     // Wire up sorting for all sortable columns
     headerRow.querySelectorAll('.sortable').forEach(th => {
+      enhanceSortableHeader(th);
       th.onclick = () => handleColumnSort(th.dataset.sort);
     });
+    updateSortIndicators();
+  }
+
+  // Keyboard and screen-reader access to sorting: the header label becomes a
+  // <button> (Tab reaches it, Enter/Space sort) and the th carries aria-sort.
+  function enhanceSortableHeader(th) {
+    if (th.querySelector('.th-sort-button')) return;
+    const labelHost = th.querySelector('.run-header-label') || th;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'th-sort-button';
+    while (labelHost.firstChild) button.appendChild(labelHost.firstChild);
+    labelHost.appendChild(button);
+    const label = button.textContent.replace(/\s+/g, ' ').trim();
+    if (label) button.setAttribute('aria-label', `Sort by ${label}`);
   }
 
   function handleColumnSort(sortField) {
@@ -3307,10 +3333,12 @@
 
     headerRow.querySelectorAll('.sortable').forEach(th => {
       th.classList.remove('sorted', 'asc');
+      th.setAttribute('aria-sort', 'none');
       const sortField = th.dataset.sort;
       if (state.sortKey.startsWith(sortField + '-') ||
           (sortField.startsWith('metric-') && state.sortKey.startsWith(sortField))) {
         th.classList.add('sorted');
+        th.setAttribute('aria-sort', state.sortKey.endsWith('-asc') ? 'ascending' : 'descending');
         if (state.sortKey.endsWith('-asc')) {
           th.classList.add('asc');
         }
@@ -3835,6 +3863,10 @@
         return;
       }
       if (control.matches('.run-id')) {
+        // The run name is a real link: modified clicks, "Open in new tab"
+        // and "Copy link" stay native; a plain click navigates in-app (C051).
+        if (isModifiedEvent(event)) return;
+        event.preventDefault();
         openRun(run.file_path, event);
         return;
       }
@@ -3864,14 +3896,9 @@
       else if (control.matches('.delete-run')) confirmDeleteRun(run.file_path, run.run_id);
     }, true);
 
+    // Middle-click on the run name is the link's own (C051).
     tbody.addEventListener('auxclick', event => {
-      if (event.button !== 1) return;
-      const row = rowFor(event.target);
-      if (!row || !event.target.closest('.run-id')) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const run = runFor(row);
-      if (run) openRun(run.file_path, event);
+      if (event.button === 1 && event.target.closest('#runs-tbody a.run-id')) event.stopPropagation();
     }, true);
 
     tbody.addEventListener('change', event => {
@@ -4088,7 +4115,7 @@
                 data-live="${status === 'RUNNING' || status === 'PENDING' ? 'true' : 'false'}"
                 aria-controls="${samplesPanelId}"><svg class="samples-toggle-chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m4 6 4 4 4-4"></path></svg></button>`
                 : (anyRepeatRows ? '<span class="samples-toggle-spacer" aria-hidden="true"></span>' : '')}
-              <span class="run-id" title="${escapeHtml(run.run_id)}">${run.external_run_id ? truncateText(run.external_run_id, 30) : escapeHtml(run.run_id.substring(0, 8))}</span>
+              <a class="run-id" href="${escapeHtml(runOpenHref(run))}" title="${escapeHtml(run.run_id)}">${run.external_run_id ? truncateText(run.external_run_id, 30) : escapeHtml(run.run_id.substring(0, 8))}</a>
               ${run.samples > 1 ? `<span class="run-pass-count">x${run.samples}</span>` : ''}
             </div>
           </td>
@@ -5241,6 +5268,7 @@
   // ═══════════════════════════════════════════════════
 
   function render() {
+    if (!dashboardActive) return;
     if (state.dashboardRequestKey !== null) {
       const filterKey = getTableFilterKey();
       if (filterKey !== state.tableFilterKey) {
@@ -5248,6 +5276,9 @@
         state.tablePage = 1;
         state.focusedIndex = -1;
       }
+    }
+    syncDashboardUrl();
+    if (state.dashboardRequestKey !== null) {
       if (dashboardPageRequestKey() !== state.dashboardRequestKey) {
         el('table-view')?.setAttribute('aria-busy', 'true');
         fetchRuns();
@@ -6542,6 +6573,18 @@
     return `${labels[0]}, ${labels[1]} +${labels.length - 2}`;
   }
 
+  function runDetailUrl(filePath) {
+    return state.currentProject && state.currentProject.slug
+      ? projectUrl(state.currentProject.slug, `runs/${encodeURIComponent(filePath)}`)
+      : apiUrl(`run/${encodeURIComponent(filePath)}`);
+  }
+
+  // Where a run's name link points (the analyzer while it picks a run).
+  function runOpenHref(run) {
+    if (analysisRunPickerContext && run) return analyzerUrlForRun(run);
+    return runDetailUrl(run.file_path);
+  }
+
   function openRun(filePath, e) {
     const run = state.flatRuns.find(candidate => candidate.file_path === filePath);
     if (analysisRunPickerContext && run) {
@@ -6552,10 +6595,7 @@
     sessionStorage.removeItem('compareRuns');
     sessionStorage.removeItem('compareCohorts');
     sessionStorage.setItem('dashboardRunFile', filePath);
-    const url = state.currentProject && state.currentProject.slug
-      ? projectUrl(state.currentProject.slug, `runs/${encodeURIComponent(filePath)}`)
-      : apiUrl(`run/${encodeURIComponent(filePath)}`);
-    openUrl(url, e);
+    openUrl(runDetailUrl(filePath), e);
   }
 
   function openComparison(e) {
@@ -7116,7 +7156,13 @@
       setTablePage(page);
       render();
     }
-    syncRunsRowFocus()?.scrollIntoView({ block: 'nearest' });
+    const focusedRow = syncRunsRowFocus();
+    if (focusedRow) {
+      focusedRow.scrollIntoView({ block: 'nearest' });
+      // Move real focus to the run's link, so assistive tech follows the
+      // highlighted row (C051).
+      focusedRow.querySelector('a.run-id')?.focus({ preventScroll: true });
+    }
   }
 
   function moveFocus(delta) {
@@ -7824,6 +7870,13 @@
       queueRunsFetch({});
       return;
     }
+    rememberDashboardPage(key, { filterKey, offset, page, overview, pinnedRows: [] });
+    applyDashboardPageResult({ key, filterKey, offset, page, overview, pinnedRows, retained });
+  }
+
+  function applyDashboardPageResult({ key, filterKey, offset, page, overview, pinnedRows, retained }) {
+    const total = Number(page.total_runs || 0);
+    const retainedIds = new Set();
     const pageData = { tasks: page.tasks || {}, project: page.project || state.currentProject, total_count: overview.total_count };
     const normalizedRows = new Map(flattenRuns(pageData).runs.map(run => [run.file_path, run]));
     // Task/model groups lose cross-group order. Keep the API's sorted rows,
@@ -8144,14 +8197,14 @@
       if (!dropdown.contains(e.target)) {
         dropdown.classList.remove('open');
       }
-    });
+    }, pageListen());
 
     // Close on escape key
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         dropdown.classList.remove('open');
       }
-    });
+    }, pageListen());
   }
 
   function populateFilterDropdowns() {
@@ -8205,6 +8258,7 @@
 
     state.allModels = usesDashboardSummary() ? (state.dashboardOverview.all_models || []).slice().sort(compareModelVariantKeys)
       : [...new Set(state.flatRuns.map(r => getRunModelKey(r)).filter(m => !isEmptyFilterValue(m)))].sort(compareModelVariantKeys);
+    pruneUrlModelVariants();
 
     // Task multi-select
     buildMultiSelect({
@@ -8296,7 +8350,7 @@
         dd.classList.remove('open');
       }
     });
-  });
+  }, pageListen());
 
   // Close actions dropdowns when clicking outside
   document.addEventListener('click', (e) => {
@@ -8305,7 +8359,7 @@
         d.classList.remove('open');
       });
     }
-  });
+  }, pageListen());
 
   // Clear all filters button
   el('clear-all-filters')?.addEventListener('click', clearAllFilters);
@@ -8454,9 +8508,10 @@
   el('select-all')?.addEventListener('change', selectAll);
   // Pass checkboxes live inside re-rendered expansion rows; delegate once.
   document.addEventListener('change', (e) => {
+    if (!dashboardActive) return;
     const cb = e.target.closest?.('.pass-checkbox');
     if (cb) togglePassSelection(cb.dataset.passRef);
-  });
+  }, pageListen());
   el('runs-tbody')?.addEventListener('click', event => {
     const button = event.target.closest('[data-execution-errors]');
     if (!button) return;
@@ -8518,8 +8573,14 @@
       el('help-modal').style.display = 'none';
       return;
     }
+    // Browser and OS shortcuts (copy, open in new tab...) stay native.
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    // A focused run-name link keeps the row shortcuts (j/k/x...); Enter is
+    // the link's own activation and Escape leaves it.
+    const runLink = e.target.closest?.('#runs-tbody a.run-id');
+    if (runLink && e.key === 'Enter') return;
     // Keyboard shortcuts must not take over native interactive controls.
-    if (e.target.closest('input, select, textarea, button, a, [contenteditable="true"]')) {
+    if ((!runLink || e.key === 'Escape') && e.target.closest('input, select, textarea, button, a, [contenteditable="true"]')) {
       if (e.key === 'Escape') {
         const isSelectionControl = !!e.target.closest('#compare-panel, .run-select-control');
         if (isSelectionControl && state.selectMode) {
@@ -8589,6 +8650,8 @@
         }
         break;
       case '?':
+        // Charts and Models have no shortcut list.
+        if (!el('help-modal')) break;
         e.preventDefault();
         el('help-modal').style.display = 'flex';
         break;
@@ -8602,7 +8665,7 @@
         break;
       }
     }
-  });
+  }, pageListen());
 
   // Close modal on click outside
   el('help-modal')?.addEventListener('click', (e) => {
@@ -8699,7 +8762,158 @@
   // STATE PERSISTENCE (for back/forward navigation)
   // ═══════════════════════════════════════════════════
 
+  // ── View state in the URL ─────────────────────────
+  // Filters, time range, sort and page live in the query string, so a view
+  // can be shared, bookmarked, reloaded in a new tab and restored by Back.
+  // The URL wins over the per-tab sessionStorage copy; a bare URL (sidebar
+  // link) still restores the tab's last filters.
+  const DASHBOARD_URL_FILTERS = {
+    task: 'filterTasks', model: 'filterModels', dataset: 'filterDatasets',
+    status: 'filterStatuses', version: 'filterVersions', owner: 'filterUsers',
+  };
+  const DEFAULT_SORT_KEY = 'time-desc';
+
+  // A plain model name in the URL means every variant of it ("|||plain" and
+  // "|||reasoning"); variants missing from the facets are dropped once the
+  // facets arrive. Written back as the plain name when that is equivalent.
+  function modelUrlValues() {
+    const values = [];
+    for (const key of state.filterModels) {
+      const parsed = parseModelVariantKey(key);
+      if (!parsed.isVariantKey) { values.push(key); continue; }
+      const plain = getModelVariantKey(parsed.rawModelName, false);
+      const reasoning = getModelVariantKey(parsed.rawModelName, true);
+      const reasoningKnown = state.allModels.includes(reasoning);
+      const plainKnown = state.allModels.includes(plain);
+      if (key === plain) {
+        values.push(state.filterModels.has(reasoning) || !reasoningKnown ? parsed.rawModelName : key);
+      } else if (!state.filterModels.has(plain)) {
+        values.push(plainKnown ? key : parsed.rawModelName);
+      }
+    }
+    return [...new Set(values)];
+  }
+
+  function dashboardUrlParams() {
+    const table = state.currentView === 'table';
+    const params = { range: state.quickFilter && state.quickFilter !== 'all' ? state.quickFilter : null };
+    // The Range dates (C060) travel with range=custom.
+    const custom = state.quickFilter === 'custom';
+    params.from = custom && state.customRange.from ? state.customRange.from : null;
+    params.to = custom && state.customRange.to ? state.customRange.to : null;
+    for (const [param, field] of Object.entries(DASHBOARD_URL_FILTERS)) {
+      params[param] = field === 'filterModels' ? modelUrlValues() : [...state[field]];
+    }
+    params.sort = table && state.sortKey !== DEFAULT_SORT_KEY ? state.sortKey : null;
+    params.page = table && state.tablePage > 1 ? String(state.tablePage) : null;
+    return params;
+  }
+
+  function syncDashboardUrl() {
+    if (!dashboardActive || !window.QymShell || typeof window.QymShell.replaceUrlQuery !== 'function') return;
+    window.QymShell.replaceUrlQuery(dashboardUrlParams());
+  }
+
+  function applyDashboardUrlState() {
+    const params = new URLSearchParams(window.location.search);
+    // Any view parameter makes the URL the whole view: a link that carries
+    // only a sort or a page was written with no filters, so the tab's saved
+    // filters must not narrow it.
+    const urlHasView = Object.keys(DASHBOARD_URL_FILTERS).some(key => params.has(key))
+      || ['range', 'from', 'to', 'sort', 'page', 'q'].some(key => params.has(key));
+    if (urlHasView) {
+      for (const [param, field] of Object.entries(DASHBOARD_URL_FILTERS)) {
+        const values = params.getAll(param).filter(Boolean);
+        if (field !== 'filterModels') { state[field] = new Set(values); continue; }
+        const models = new Set();
+        const expanded = new Set();
+        for (const value of values) {
+          if (value === '__none__' || parseModelVariantKey(value).isVariantKey) { models.add(value); continue; }
+          for (const key of [getModelVariantKey(value, false), getModelVariantKey(value, true)]) {
+            models.add(key);
+            expanded.add(key);
+          }
+        }
+        state.filterModels = models;
+        state._urlModelExpansion = expanded.size ? expanded : null;
+      }
+      const range = params.get('range');
+      const from = params.get('from') || '';
+      const to = params.get('to') || '';
+      if (range === 'custom' && parseLocalDate(from) && parseLocalDate(to)) {
+        state.customRange = { from, to };
+        state.quickFilter = 'custom';
+      } else {
+        state.quickFilter = ['today', 'week', 'month'].includes(range) ? range : 'all';
+      }
+      setQuickFilterSelection(state.quickFilter);
+    }
+    const sort = params.get('sort');
+    if (sort && /^[^\s].*-(asc|desc)$/.test(sort)) state.sortKey = sort;
+    const page = parseInt(params.get('page') || '', 10);
+    if (Number.isFinite(page) && page > 1) state.tablePage = page;
+  }
+
+  function pruneUrlModelVariants() {
+    const expanded = state._urlModelExpansion;
+    if (!expanded || !state.allModels.length) return;
+    state._urlModelExpansion = null;
+    const known = new Set(state.allModels);
+    const removable = [...expanded].filter(key => !known.has(key));
+    if (!removable.length) return;
+    const raws = new Set(removable.map(key => parseModelVariantKey(key).rawModelName));
+    for (const raw of raws) {
+      const variants = [getModelVariantKey(raw, false), getModelVariantKey(raw, true)];
+      // A model that is not in this project at all keeps one key, so the
+      // filter still says "no runs" instead of silently showing everything.
+      if (!variants.some(key => known.has(key))) {
+        state.filterModels.delete(variants[1]);
+        continue;
+      }
+      variants.filter(key => !known.has(key)).forEach(key => state.filterModels.delete(key));
+    }
+    // Dropping a variant with no runs does not change the result: keep the
+    // page the URL asked for.
+    const filterKey = getTableFilterKey();
+    if (state.tableFilterKey !== filterKey && state.dashboardOverviewFilterKey === state.tableFilterKey) {
+      state.dashboardOverviewFilterKey = filterKey;
+    }
+    state.tableFilterKey = filterKey;
+  }
+
+  // ── Back to the list: cached page first, then revalidate ──
+  const DASHBOARD_PAGE_CACHE_MAX_AGE_MS = 5 * 60 * 1000;
+  function dashboardPageCache() {
+    if (!(window.__QYM_RUNS_PAGE_CACHE__ instanceof Map)) window.__QYM_RUNS_PAGE_CACHE__ = new Map();
+    return window.__QYM_RUNS_PAGE_CACHE__;
+  }
+
+  function rememberDashboardPage(key, entry) {
+    const cache = dashboardPageCache();
+    cache.delete(key);
+    // Stored as JSON: rendering normalizes rows in place.
+    try { cache.set(key, { json: JSON.stringify(entry), savedAt: Date.now() }); } catch { return; }
+    while (cache.size > 4) cache.delete(cache.keys().next().value);
+  }
+
+  function restoreDashboardPageCache() {
+    if (state.currentView !== 'table') return false;
+    const key = dashboardPageRequestKey();
+    const cached = dashboardPageCache().get(key);
+    if (!cached || Date.now() - cached.savedAt > DASHBOARD_PAGE_CACHE_MAX_AGE_MS) return false;
+    try {
+      applyDashboardPageResult({ ...JSON.parse(cached.json), key, retained: [] });
+      // Stale until the background fetch lands.
+      el('table-view')?.setAttribute('aria-busy', 'true');
+      return true;
+    } catch (err) {
+      console.warn('Cached runs page could not be shown:', err);
+      return false;
+    }
+  }
+
   function saveDashboardState() {
+    if (!dashboardActive && !state._savingOnTeardown) return;
     const {
       inFlightRequestPromise,
       inFlightRequestKey,
@@ -8777,11 +8991,12 @@
     } else {
       applyChartFirstColWidth(CHART_FIRST_COL_DEFAULT_WIDTH);
     }
+    applyDashboardUrlState();
   }
 
   // Save state before navigating away
-  window.addEventListener('beforeunload', saveDashboardState);
-  window.addEventListener('pagehide', saveDashboardState);
+  window.addEventListener('beforeunload', saveDashboardState, pageListen());
+  window.addEventListener('pagehide', saveDashboardState, pageListen());
   function teardownDashboard() {
     document.getElementById('execution-error-modal')?.remove();
     dashboardActive = false;
@@ -8789,29 +9004,31 @@
     state.chartHistoryObserver?.disconnect();
     for (const entry of state.chartHistory.values()) entry.controller?.abort();
     state.chartHistoryQueue.length = 0;
+    state._savingOnTeardown = true;
     saveDashboardState();
+    state._savingOnTeardown = false;
     state.runsFetchMeta.pendingOptions = null;
     if (window.__QYM_DASHBOARD_INTERVAL__) {
       clearInterval(window.__QYM_DASHBOARD_INTERVAL__);
       window.__QYM_DASHBOARD_INTERVAL__ = null;
     }
   }
-  document.addEventListener('qym:before-navigate', teardownDashboard, { once: true });
+  document.addEventListener('qym:before-navigate', teardownDashboard, pageListen({ once: true }));
 
   // Also save on visibility change (for mobile)
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') {
+    if (dashboardActive && document.visibilityState === 'hidden') {
       saveDashboardState();
     } else if (state._pollMissedWhileHidden && dashboardActive) {
       state._pollMissedWhileHidden = false;
       fetchRuns();
     }
-  });
+  }, pageListen());
   // Back/forward can restore this page from the browser cache; it may predate
   // a change made elsewhere (for example a run restored from Deleted Runs).
   window.addEventListener('pageshow', (event) => {
     if (event.persisted && dashboardActive) fetchRuns({ refreshAllPages: true });
-  });
+  }, pageListen());
 
   // ═══════════════════════════════════════════════════
   // INIT
@@ -8842,10 +9059,14 @@
 
       // If shell is present, wait for it to fetch the user
       if (window.QymShell && !window.__QYM_USER__) {
-        await new Promise(r => document.addEventListener('qym:shell-ready', r, { once: true }));
+        await new Promise(r => document.addEventListener('qym:shell-ready', r, pageListen({ once: true })));
       }
+      if (!dashboardActive) return;
       if (window.__QYM_USER__) {
         state.currentUser = window.__QYM_USER__;
+        // Back to a list seen moments ago: show those rows at once and
+        // revalidate in the background.
+        restoreDashboardPageCache();
         startHeartbeat();
         fetchRuns({ refreshAllPages: true });
         return;

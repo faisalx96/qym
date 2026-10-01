@@ -4,7 +4,10 @@
 
 <h2>Read and narrow the table</h2>
 <p><strong>Search runs</strong> (press <code>/</code>) finds a run by the name the table shows, its run name, or the start of its run ID. The search is part of the page address, so a reload, the Back button, or a shared link keeps it. The time control limits runs to today, the last 7 or 30 days, or a <strong>Range</strong> of two dates (both included).</p>
-<p>Use the toolbar to filter by task, dataset and version, model, status, or owner. <strong>Columns</strong> controls visible metrics and system fields. Its <strong>Frozen columns</strong> section chooses which of run name, status, task, model, dataset, owner, and date stay in place while the table scrolls sideways: all of them by default. Unfreeze some to see more scores on a narrower screen; the choice is remembered in this browser, and <strong>Reset to default</strong> freezes them all again. Click a column heading to sort; click the run name to open its detail page.</p>
+<p>Use the toolbar to filter by task, dataset and version, model, status, or owner. <strong>Columns</strong> controls visible metrics and system fields. Its <strong>Frozen columns</strong> section chooses which of run name, status, task, model, dataset, owner, and date stay in place while the table scrolls sideways: all of them by default. Unfreeze some to see more scores on a narrower screen; the choice is remembered in this browser, and <strong>Reset to default</strong> freezes them all again. Click a column heading to sort (or Tab to it and press Enter); the run name is a link to its detail page, so middle-click, <strong>Open in new tab</strong>, and <strong>Copy link</strong> work as anywhere else.</p>
+
+<h3>Share or bookmark a view</h3>
+<p>The search, filters, the time range, the sort, and the page are part of the address: <code>?q=&hellip;&amp;task=&hellip;&amp;model=&hellip;&amp;dataset=&hellip;&amp;status=&hellip;&amp;owner=&hellip;&amp;range=week&amp;sort=model-asc&amp;page=2</code> (<code>range</code> is <code>today</code>, <code>week</code>, <code>month</code> for 30 days, or <code>custom</code> with <code>from</code> and <code>to</code> dates). Copy the URL to send a teammate the same view, bookmark it, or open it in a new tab. A model name alone covers its standard and reasoning variants. Browser <strong>Back</strong> from a run returns to the same page, sort, and scroll position, and shows the rows you left at once while it refreshes them. Charts and Models keep their filters in the address the same way.</p>
 
 <p>Each row shows workflow status, run identity, task, model, dataset, code version, metric means, latency, owner, date, duration, and available actions. Running repeat evaluations also show current pass progress. A finished run tagged <strong>Incomplete</strong> completed without all of its data: some items never arrived, or the platform rejected some of its events. Hover the tag for the reason; the run page lists what is missing. An item whose failure event was rejected still counts as a task error when its final attempt failed; an item with no outcome at all shows as <strong>Not received</strong> and is left out of Execution success and of the means.</p>
 
@@ -38,7 +41,7 @@
 <table>
   <thead><tr><th>Action</th><th>Rule</th></tr></thead>
   <tbody>
-    <tr><td><strong>Compare</strong></td><td>Select at least two references.</td></tr>
+    <tr><td><strong>Compare</strong></td><td>Select at least two references. On the Compare page, <strong>Copy link</strong> copies the comparison with its metric, item filter, winner, search, sort, page, tab, and open item; <strong>Export HTML</strong> downloads it as a standalone file. Each output's run name opens that item in its run.</td></tr>
     <tr><td><strong>Cohort</strong></td><td>Lock the current selection as Cohort A, then build an execution-balanced Cohort B.</td></tr>
     <tr><td><strong>Submit</strong></td><td>Every selected run must be in COMPLETED, FAILED, or REJECTED, and yours unless you are a project manager or admin. A confirmation lists the runs and takes an optional comment; the runs are submitted together in one request, so either all of them are submitted or none is.</td></tr>
     <tr><td><strong>Delete</strong></td><td>Every selected run must be deletable by you: owner, project manager, or platform admin.</td></tr>
@@ -91,7 +94,7 @@
 <table>
   <thead><tr><th>Key</th><th>Action</th></tr></thead>
   <tbody>
-    <tr><td><code>j</code> / <code>k</code></td><td>Move row focus down / up, across pages.</td></tr>
+    <tr><td><code>j</code> / <code>k</code></td><td>Move row focus down / up, across pages (focus moves to the run's link).</td></tr>
     <tr><td><code>g</code> / <code>G</code></td><td>Focus the first run / the last run of the whole list.</td></tr>
     <tr><td><code>Enter</code></td><td>Open the focused run.</td></tr>
     <tr><td><code>x</code></td><td>Toggle the focused row's selection.</td></tr>

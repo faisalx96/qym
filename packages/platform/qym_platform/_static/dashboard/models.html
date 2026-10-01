@@ -6,7 +6,7 @@
   <title>قيِّم • Models</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001">
-  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
+  <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
   <script src="/static/qym_safe.js?v=p0-20260930"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
   <script src="/static/shell.js?v=p1-20261001"></script>
@@ -88,14 +88,14 @@
         </div>
         <div class="models-controls">
           <div class="models-filter-row">
-            <label class="filter-label">Metric:</label>
+            <label class="filter-label" for="models-metric-select">Metric:</label>
             <select id="models-metric-select" class="filter-select">
               <option value="">Select a metric...</option>
             </select>
-            <label class="filter-label">Runs per model:</label>
+            <label class="filter-label" for="models-k-input">Runs per model:</label>
             <input type="number" id="models-k-input" class="filter-input-k" min="1" max="100" value="5" placeholder="5">
             <span class="models-threshold-inline" id="models-threshold-row" style="display:none;">
-              <label class="filter-label">Pass ≥</label>
+              <label class="filter-label" for="models-threshold-slider">Pass ≥</label>
               <input type="range" id="models-threshold-slider" class="threshold-slider-inline" min="0" max="100" step="5" value="80">
               <span class="threshold-value" id="models-threshold-value">80%</span>
               <button type="button" class="stat-info-icon qym-help-marker threshold-info" aria-label="Explain the pass threshold" aria-expanded="false">i<span class="stat-info-tooltip qym-help-tooltip" role="tooltip">Score threshold for Pass@K and Pass^K metrics. Items scoring at or above this threshold (at or below it for a lower-is-better metric) are considered "correct".</span></button>

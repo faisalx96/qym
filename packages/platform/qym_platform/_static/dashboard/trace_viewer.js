@@ -2398,7 +2398,7 @@
       // Use itemId extracted from endpoint: .../items/{itemId}/trace
       const m = (meta.endpoint || "").match(/\/items\/([^/]+)\/trace/);
       if (m) url.searchParams.set("trace", m[1]);
-      history.replaceState(null, "", url);
+      history.replaceState(history.state, "", url);
     } catch (_) {}
   }
 
@@ -2406,7 +2406,7 @@
     try {
       const url = new URL(window.location);
       url.searchParams.delete("trace");
-      history.replaceState(null, "", url);
+      history.replaceState(history.state, "", url);
     } catch (_) {}
   }
 
@@ -2615,8 +2615,14 @@
     S.exportMode = !!(opts && opts.exportMode);
     ensureShell();
     if (S.ready) return;
-    document.addEventListener("click", handleClick);
-    document.addEventListener("keydown", handleKey);
+    // The page re-runs this script on every in-app visit: end the listeners
+    // with the page that called init (QymShell.pageSignal).
+    const pageSignal = window.QymShell && typeof window.QymShell.pageSignal === "function"
+      ? window.QymShell.pageSignal()
+      : undefined;
+    const options = pageSignal ? { signal: pageSignal } : false;
+    document.addEventListener("click", handleClick, options);
+    document.addEventListener("keydown", handleKey, options);
     S.ready = true;
   }
 

@@ -6,7 +6,7 @@
   <title>قيِّم • Dashboard</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001">
-  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
+  <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
   <script src="/static/qym_safe.js?v=p0-20260930"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
   <script src="/static/shell.js?v=p1-20261001"></script>
@@ -41,6 +41,7 @@
     .review-item:last-child { border-bottom: none; }
     .review-item:hover { background: var(--bg-hover); }
     a.review-item { color: inherit; text-decoration: none; }
+    a.review-item:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
     .review-id { font-size: var(--font-sm); font-family: var(--font-mono); color: var(--text-muted); }
     .review-cause { font-size: var(--font-sm); margin-left: var(--space-sm); }
     .review-badge { font-size: var(--font-xs); font-weight: 600; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; background: rgba(245,158,11,0.12); color: var(--warning); font-family: var(--font-mono); }
@@ -523,6 +524,9 @@
       });
 
       let overviewActive = true;
+      // document listeners end when the shell unmounts this page.
+      const overviewSignal = window.QymShell && typeof window.QymShell.pageSignal === 'function' ? window.QymShell.pageSignal() : undefined;
+      const overviewListen = (options = {}) => (overviewSignal ? { ...options, signal: overviewSignal } : options);
       let summaryRefreshTimer = null;
       let liveRefreshTimer = null;
       let liveRequestGeneration = 0;
@@ -632,7 +636,7 @@
         if (!overviewActive) return;
         // Wait for shell
         if (window.QymShell && !window.__QYM_USER__) {
-          await new Promise(r => document.addEventListener('qym:shell-ready', r, { once: true }));
+          await new Promise(r => document.addEventListener('qym:shell-ready', r, overviewListen({ once: true })));
         }
         if (!overviewActive) return;
 
@@ -709,13 +713,14 @@
             if (!items.length) {
               body.innerHTML = '<div class="empty-state">No pending reviews</div>';
             } else {
+              // Each pending review opens itself in the review queue.
+              const reviewsHref = id => (slug ? projectUrl(slug, 'reviews') : '/reviews') + '?status=pending&id=' + encodeURIComponent(String(id || ''));
               body.innerHTML = items.map(c => {
                 // Each pending item opens on Reviews with that correction in focus.
-                const reviewHref = slug ? projectUrl(slug, 'reviews') + '?id=' + encodeURIComponent(String(c.id || '')) : '';
-                return (reviewHref ? '<a class="review-item" href="' + esc(reviewHref) + '">' : '<div class="review-item">')
+                return '<a class="review-item" href="' + esc(reviewsHref(c.id)) + '" title="Open review #' + esc(String(c.id || '')) + '">'
                   + '<div><span class="review-id">#' + esc(String(c.id || '')) + '</span><span class="review-cause">' + esc(c.ai_root_cause || c.human_root_cause || '—') + '</span></div>'
                   + '<span class="review-badge qym-badge qym-badge--warning">Pending</span>'
-                  + (reviewHref ? '</a>' : '</div>');
+                  + '</a>';
               }).join('')
               + (total > reviewLimit ? '<div class="review-item" style="justify-content:center;color:var(--text-muted);font-size:var(--font-base);">+ ' + (total - reviewLimit) + ' more pending</div>' : '');
             }
@@ -736,7 +741,7 @@
         const project = window.QymShell ? window.QymShell.getProject() : null;
         loadLiveRuns(ctx.projectSlug || (project && project.slug) || '');
       }, 10000);
-      document.addEventListener('qym:before-navigate', stopOverview, { once: true });
+      document.addEventListener('qym:before-navigate', stopOverview, overviewListen({ once: true }));
     })();
   </script>
 </body>

@@ -2118,7 +2118,9 @@ window.QymPlayground = (function () {
 
     // Wire all events
     _wireEvents();
-    document.addEventListener('keydown', _onKeyDown);
+    // Ends with the page that opened the playground (in-app navigation).
+    var _pageSignal = window.QymShell && typeof window.QymShell.pageSignal === 'function' ? window.QymShell.pageSignal() : undefined;
+    document.addEventListener('keydown', _onKeyDown, _pageSignal ? { signal: _pageSignal } : false);
     // Initialize once the controls are mounted so target matching reads their
     // real values instead of the pre-mount empty DOM.
     _onFilterChange();

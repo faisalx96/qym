@@ -3097,6 +3097,40 @@ body.chart-col-resize-active {
   text-decoration: underline;
 }
 
+/* Run names, chart run labels and sort headers are real links/buttons
+   (keyboard, middle-click, "Copy link"); they keep their text styling. */
+a.run-id,
+a.chart-bar-label.clickable-run {
+  text-decoration: none;
+}
+a.run-id:focus-visible,
+a.chart-bar-label.clickable-run:focus-visible,
+.sortable-col:focus-visible,
+.th-sort-button:focus-visible,
+button.legend-item:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.th-sort-button {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+button.legend-item {
+  appearance: none;
+  background: none;
+  border: 0;
+  font-family: var(--font-sans);
+}
+
 .run-name {
   display: block;
   font-size: var(--font-sm);
@@ -4066,6 +4100,22 @@ body.chart-col-resize-active {
 
 .status-right {
   justify-content: flex-end;
+}
+
+.status-right button.help-trigger {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.status-right button.help-trigger:hover { color: var(--text-secondary); }
+.status-right button.help-trigger:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 
 .sep {

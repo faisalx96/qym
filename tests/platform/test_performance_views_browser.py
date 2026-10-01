@@ -649,7 +649,9 @@ def test_source_api_preserves_repeated_offpage_details_search_edit_and_csv(
             # then keep its body and logical identity after the response patch.
             # accuracy is a boolean spec, so 0.25 is edited on the numeric
             # count metric; score edits are validated by type (C009).
-            page.locator("#items-grid .item-header-expand").first.click()
+            # The run page's ?item= link already opened the item (C059).
+            if kind != "run":
+                page.locator("#items-grid .item-header-expand").first.click()
             chip = page.locator("#items-grid .metric-compare-row").filter(
                 has_text="count"
             ).first
@@ -878,8 +880,9 @@ def test_repeat_pass_search_hydration_and_deep_link(browser):
         )
         fixture.settled()
         assert fixture.state_result()["ids"] == ["item-259"]
-        # Opening the item loads its pass-scoped bodies and judge output.
-        fixture.page.locator("#items-grid .item-card.item-collapsed").click()
+        # The ?item= link opened the item (C059), which loads its pass-scoped
+        # bodies and judge output.
+        assert fixture.page.locator("#items-grid .item-card.item-collapsed").count() == 0
         fixture.page.locator("#items-grid .item-card .item-input-row").wait_for()
         row = fixture.page.evaluate("__viewTest.getFilteredItems()[0].row")
         assert row["output"] == "pass-2 output 259"

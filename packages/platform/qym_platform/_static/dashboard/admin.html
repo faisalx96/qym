@@ -6,7 +6,7 @@
   <title>قيِّم • Admin</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001">
-  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
+  <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
   <script src="/static/qym_safe.js?v=p0-20260930"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
   <script src="/static/shell.js?v=p1-20261001"></script>
@@ -296,6 +296,12 @@
   <script>
     (() => {
       'use strict';
+
+      // document/window listeners end when the shell unmounts this page.
+      const pageSignal = window.QymShell && typeof window.QymShell.pageSignal === 'function'
+        ? window.QymShell.pageSignal()
+        : undefined;
+      const pageListen = (options = {}) => (pageSignal ? { ...options, signal: pageSignal } : options);
 
       function apiUrl(path) {
         const root = (window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '');
@@ -975,7 +981,7 @@
         if (e.key === 'Escape' && !document.getElementById('shell-confirm-dialog') && document.getElementById('edit-user-modal').style.display === 'flex') {
           closeEditUserModal();
         }
-      });
+      }, pageListen());
 
       document.getElementById('create-user-btn').addEventListener('click', async () => {
         await fetchJson('v1/admin/users', {
@@ -1011,8 +1017,8 @@
         liveRequest++;
         recentRequest++;
       }
-      document.addEventListener('qym:before-navigate', closeAdmin, { once: true });
-      window.addEventListener('pagehide', closeAdmin, { once: true });
+      document.addEventListener('qym:before-navigate', closeAdmin, pageListen({ once: true }));
+      window.addEventListener('pagehide', closeAdmin, pageListen({ once: true }));
     })();
   </script>
 </body>

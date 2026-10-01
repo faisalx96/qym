@@ -6,7 +6,7 @@
   <title>قيِّم • Reviews</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001">
-  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
+  <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
   <script src="/static/qym_safe.js?v=p0-20260930"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
   <script src="/static/shell.js?v=p1-20261001"></script>
@@ -787,6 +787,23 @@
       color: var(--text-secondary);
       font-size: var(--font-xs);
       max-width: 280px;
+    }
+
+    a.context-chip--link {
+      text-decoration: none;
+    }
+    a.context-chip--link:hover,
+    a.context-chip--link:focus-visible {
+      color: var(--accent-primary);
+      border-color: var(--accent-primary);
+    }
+    a.context-chip--link:focus-visible {
+      outline: 2px solid var(--accent-primary);
+      outline-offset: 2px;
+    }
+    .correction-card.correction-card--target {
+      box-shadow: 0 0 0 2px var(--accent-primary);
+      transition: box-shadow 0.6s ease;
     }
 
     .context-chip strong {
@@ -1623,6 +1640,24 @@
   (() => {
     'use strict';
 
+    // Listeners on document/window outlive this page when the shell swaps in
+    // another one; tie them to this page's lifetime, which ends when the
+    // shell unmounts it (C069) or on qym:before-navigate (C050).
+    const pageLifetime = new AbortController();
+    const shellPageSignal = window.QymShell && typeof window.QymShell.pageSignal === 'function'
+      ? window.QymShell.pageSignal()
+      : undefined;
+    if (shellPageSignal) {
+      if (shellPageSignal.aborted) pageLifetime.abort();
+      else shellPageSignal.addEventListener('abort', () => pageLifetime.abort(), { once: true });
+    }
+    const pageSignal = pageLifetime.signal;
+    const pageListen = (options = {}) => ({ ...options, signal: pageSignal });
+    // Back, Forward or a reload of this entry: the shell puts the saved
+    // scroll position back (even the top, saved as no offsets). Read now,
+    // before the shell saves the new entry's offsets.
+    const RESTORING_REVIEWS_VIEW = !!(history.state && Array.isArray(history.state.qymScroll));
+
     /* ── Helpers ─────────────────────────────────── */
 
     const API_ROOT = `${window.location.origin}${(window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '')}/`;
@@ -1696,10 +1731,10 @@
       });
       document.addEventListener('click', (e) => {
         if (!dropdown.contains(e.target)) dropdown.classList.remove('open');
-      });
+      }, pageListen());
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') dropdown.classList.remove('open');
-      });
+      }, pageListen());
     }
 
     async function loadHeaderUser() {
@@ -1869,16 +1904,14 @@
       currentId: null,
       expanded: new Set(),
       details: new Map(),
+      ringId: null,
       focusId: (() => {
         const raw = new URLSearchParams(window.location.search).get('id');
         return raw && /^\d+$/.test(raw) ? Number(raw) : null;
       })(),
     };
 
-    // Listeners on document/window outlive this page when the shell swaps in
-    // another one; tie them to this controller and drop them on navigation.
-    const pageLifetime = new AbortController();
-    const pageSignal = pageLifetime.signal;
+    // Leaving the page also cancels its requests and the infinite scroll.
     document.addEventListener('qym:before-navigate', () => {
       pageLifetime.abort();
       if (listAbort) listAbort.abort();
@@ -2536,7 +2569,80 @@
       return el('correction-list').querySelector(`.correction-card[data-id="${Number(id)}"]`);
     }
 
+    /* ── View state in the URL ────────────────────── */
+    // Filters live in the query string, so a reviewer can share or bookmark
+    // "the low-confidence sql-eval reviews"; ?id=<review> opens one review.
+    const REVIEW_MULTI_PARAMS = { task: 'taskFilter', dataset: 'datasetFilter', model: 'modelFilter', run: 'runNameFilter' };
+    const REVIEW_NONE = '__none__';
+
+    function applyReviewsUrlState() {
+      const params = new URLSearchParams(window.location.search);
+      const status = params.get('status') || '';
+      if (['pending', 'approved', 'rejected'].includes(status)) {
+        state.statusFilter = status;
+        $$('.stat-card').forEach(card => card.classList.toggle('active', card.dataset.filter === status));
+      }
+      for (const [param, field] of Object.entries(REVIEW_MULTI_PARAMS)) {
+        if (!params.has(param)) continue;
+        const values = params.getAll(param).filter(Boolean);
+        state[field] = values.includes(REVIEW_NONE) ? [] : values;
+      }
+      const source = params.get('source') || '';
+      if (['ai_only', 'human_only', 'corrected'].includes(source)) {
+        state.sourceFilter = source;
+        $$('[data-source]').forEach(chip => {
+          const active = chip.dataset.source === source;
+          chip.classList.toggle('active', active);
+          chip.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+      }
+      const clampPct = value => Math.max(0, Math.min(100, Math.round(Number(value))));
+      if (params.has('conf_min') && Number.isFinite(Number(params.get('conf_min')))) state.confMin = clampPct(params.get('conf_min'));
+      if (params.has('conf_max') && Number.isFinite(Number(params.get('conf_max')))) state.confMax = clampPct(params.get('conf_max'));
+      if (state.confMin > state.confMax) state.confMin = state.confMax;
+      if (el('conf-min')) { el('conf-min').value = state.confMin; el('conf-min-val').textContent = state.confMin + '%'; }
+      if (el('conf-max')) { el('conf-max').value = state.confMax; el('conf-max-val').textContent = state.confMax + '%'; }
+      const query = params.get('q') || '';
+      if (query) {
+        state.searchQuery = query;
+        if (el('search-input')) el('search-input').value = query;
+      }
+    }
+
+    function syncReviewsUrl() {
+      if (!window.QymShell || typeof window.QymShell.replaceUrlQuery !== 'function') return;
+      // A load that lands after leaving the page must not edit the next URL.
+      if (pageSignal && pageSignal.aborted) return;
+      const updates = {
+        status: state.statusFilter || null,
+        source: state.sourceFilter || null,
+        conf_min: state.confMin > 0 ? String(state.confMin) : null,
+        conf_max: state.confMax < 100 ? String(state.confMax) : null,
+        q: state.searchQuery || null,
+      };
+      for (const [param, field] of Object.entries(REVIEW_MULTI_PARAMS)) {
+        const value = state[field];
+        updates[param] = value === null ? null : (value.length ? value : [REVIEW_NONE]);
+      }
+      window.QymShell.replaceUrlQuery(updates);
+    }
+
+    // The run item a review is about, opened on the run page.
+    function reviewRunItemUrl(c) {
+      const slug = c.project_slug || CURRENT_PROJECT_SLUG;
+      if (!c.run_id) return '';
+      const base = slug
+        ? projectUrl(slug, 'runs/' + encodeURIComponent(c.run_id))
+        : `${(window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '')}/run/${encodeURIComponent(c.run_id)}`;
+      const params = new URLSearchParams();
+      if (c.pass_number != null && !c.pass_deleted_at) params.set('pass', String(c.pass_number));
+      if (c.item_id) params.set('item', String(c.item_id));
+      const query = params.toString();
+      return query ? `${base}?${query}` : base;
+    }
+
     function render() {
+      syncReviewsUrl();
       const list = el('correction-list');
       const empty = el('empty-state');
 
@@ -2703,7 +2809,7 @@
       const id = Number(c.id);
 
       return `
-        <article class="correction-card status-${escapeHtml(st)} ${isSelected ? 'selected' : ''} ${isCurrent ? 'is-current' : ''}" data-id="${id}" tabindex="-1" aria-label="Correction #${id}, ${escapeHtml(st)}${priority ? ', ' + escapeHtml(priority.label.toLowerCase()) : ''}">
+        <article class="correction-card status-${escapeHtml(st)} ${isSelected ? 'selected' : ''} ${isCurrent ? 'is-current' : ''} ${state.ringId === id ? 'correction-card--target' : ''}" data-id="${id}" tabindex="-1" aria-label="Correction #${id}, ${escapeHtml(st)}${priority ? ', ' + escapeHtml(priority.label.toLowerCase()) : ''}">
           <div class="card-header">
             <label class="custom-checkbox card-check">
             <input type="checkbox" data-check="${id}" ${isSelected ? 'checked' : ''} aria-label="Select correction #${id}">
@@ -2731,7 +2837,10 @@
           <div class="card-context">
             ${c.task ? `<span class="context-chip" title="${escapeHtml(c.task)}"><strong>Task</strong><span>${escapeHtml(c.task)}</span></span>` : ''}
             ${c.metric_name ? `<span class="context-chip" title="${escapeHtml(c.metric_name)}"><strong>Metric</strong><span>${escapeHtml(c.metric_name)}</span></span>` : ''}
-            ${c.run_name ? `<span class="context-chip" title="${escapeHtml(c.run_name)}"><strong>Run</strong><span>${escapeHtml(c.run_name)}</span></span>` : ''}
+            ${!CURRENT_PROJECT_SLUG && c.project_name ? `<a class="context-chip context-chip--link" href="${escapeHtml(projectUrl(c.project_slug, 'reviews'))}" title="Reviews in ${escapeHtml(c.project_name)}"><strong>Project</strong><span>${escapeHtml(c.project_name)}</span></a>` : ''}
+            ${c.run_name ? (reviewRunItemUrl(c)
+              ? `<a class="context-chip context-chip--link" href="${escapeHtml(reviewRunItemUrl(c))}" title="Open this item in ${escapeHtml(c.run_name)}"><strong>Run</strong><span>${escapeHtml(c.run_name)}</span></a>`
+              : `<span class="context-chip" title="${escapeHtml(c.run_name)}"><strong>Run</strong><span>${escapeHtml(c.run_name)}</span></span>`) : ''}
             ${c.pass_number != null ? `<span class="context-chip"><strong>Pass</strong><span>${escapeHtml(String(c.pass_number))}</span></span>` : ''}
             ${c.dataset ? `<span class="context-chip" title="${escapeHtml(c.dataset)}"><strong>Dataset</strong><span>${escapeHtml(c.dataset)}</span></span>` : ''}
             ${c.model ? `<span class="context-chip" title="${escapeHtml(c.model)}"><strong>Model</strong><span>${renderModelLabel(c.model, !!c.has_reasoning)}</span></span>` : ''}
@@ -3056,7 +3165,10 @@
       if (!cardElement(id)) {
         try {
           const resp = await fetch(apiUrl(`api/corrections/${id}`), { signal: pageSignal });
-          if (!resp.ok) return;
+          if (!resp.ok) {
+            showToast('warning', 'Review not shown', `Review #${id} is not in this list. Clear the filters to find it.`);
+            return;
+          }
           const detail = await resp.json();
           if (!detail || !detail.id) return;
           if (state.statusFilter && detail.status !== state.statusFilter) {
@@ -3074,8 +3186,23 @@
           return;
         }
       }
-      setCurrent(id, { focus: true, scroll: true });
+      // Back, Forward or a reload of this entry: the shell puts the saved
+      // scroll position back, so ?id= must not pull the reader to the card.
+      setCurrent(id, { focus: true, scroll: !RESTORING_REVIEWS_VIEW });
       toggleExpanded(id, true);
+      if (RESTORING_REVIEWS_VIEW) return;
+      // Ring the linked review briefly (C044); a card re-rendered meanwhile
+      // keeps the ring (renderCard reads ringId).
+      state.ringId = Number(id);
+      const card = cardElement(id);
+      if (card) {
+        card.classList.add('correction-card--target');
+        requestAnimationFrame(() => card.scrollIntoView({ block: 'center' }));
+      }
+      setTimeout(() => {
+        if (state.ringId === Number(id)) state.ringId = null;
+        cardElement(id)?.classList.remove('correction-card--target');
+      }, 2600);
     }
 
     /* ── Actions ─────────────────────────────────── */
@@ -3690,8 +3817,10 @@
 
     async function init() {
       if (window.QymShell && !window.__QYM_USER__) {
-        await new Promise((resolve) => document.addEventListener('qym:shell-ready', resolve, { once: true }));
+        await new Promise((resolve) => document.addEventListener('qym:shell-ready', resolve, pageListen({ once: true })));
       }
+      if (pageSignal && pageSignal.aborted) return;
+      applyReviewsUrlState();
       await loadHeaderUser();
       fetchCorrections();
     }

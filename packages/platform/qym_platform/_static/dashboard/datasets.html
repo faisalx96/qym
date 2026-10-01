@@ -6,7 +6,7 @@
   <title>قيِّم • Datasets</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
   <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001">
-  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
+  <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
   <script src="/static/qym_safe.js?v=p0-20260930"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
   <script src="/static/shell.js?v=p1-20261001"></script>
@@ -200,6 +200,16 @@
       transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease;
     }
     .dsx-card:hover { border-color: var(--border-strong); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,0.20); }
+    /* Cards and run names are real links (Tab, middle-click, "Copy link"). */
+    a.dsx-card { color: inherit; text-decoration: none; }
+    a.dsx-version-row { color: inherit; text-decoration: none; }
+    a.dsx-version-row:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
+    a.dsx-card:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+    .dsx-table a.run-name,
+    .dsx-table a.run-link,
+    .dsx-item-runs-table a.run-name,
+    .runs-compact .dsx-run-result-table a.run-link { display: inline-block; vertical-align: bottom; }
+    .dsx-runs-pagination { margin-top: var(--space-sm); }
     .dsx-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
     .dsx-card-top .owner-name { min-width: 0; }
     .dsx-card-title { font-size: var(--font-lg); font-weight: 650; color: var(--text-primary); margin: 0; }
@@ -927,6 +937,23 @@
     function runDetailUrl(runId){
       return apiUrl('/projects/' + encodeURIComponent(state.slug) + '/runs/' + encodeURIComponent(runId));
     }
+    // A run name as a real link: modified/middle clicks open a tab natively,
+    // a plain click stays in the app. With itemId it opens that run item.
+    function runLinkEl(className, runId, label, opts){
+      opts = opts || {};
+      const href = runDetailUrl(runId) + (opts.itemId ? '?item=' + encodeURIComponent(opts.itemId) : '');
+      return el('a', {
+        className,
+        href,
+        title: opts.title || null,
+        onclick: e => {
+          e.stopPropagation();
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+          e.preventDefault();
+          navigateToApp(href);
+        },
+      }, label);
+    }
     function userDisplay(user){
       if (!user) return '';
       return user.display_name || user.email || user.id || '';
@@ -1226,7 +1253,7 @@
     function navigate(overrides, opts){
       opts = opts || {};
       const url = buildUrl(overrides);
-      if (opts.replace) history.replaceState({}, '', url);
+      if (opts.replace) history.replaceState(history.state, '', url);
       else history.pushState({}, '', url);
       const p = parsePath();
       // silent: push/replace URL but don't rebuild the page (caller updates the affected DOM region).
@@ -1528,7 +1555,7 @@
           : pluralize(totalCount, 'dataset') + ' · ' + pluralize(state.datasets.reduce((s, d) => s + (d.run_count || 0), 0), 'run');
       })();
 
-      const debouncedRender = debounce(() => { state.q = search.value; renderCatalogGrid(); history.replaceState({}, '', buildUrl({})); }, 180);
+      const debouncedRender = debounce(() => { state.q = search.value; renderCatalogGrid(); history.replaceState(history.state, '', buildUrl({})); }, 180);
       search.addEventListener('input', debouncedRender);
       sortSel.addEventListener('change', () => { state._catalogSort = sortSel.value; renderCatalogGrid(); });
 
@@ -1576,7 +1603,17 @@
       }
 
       function catalogCard(d){
-        const card = el('div', { className: 'dsx-card', onclick: () => navigate({ mode: 'detail', ref: d.slug, tab: 'items', v: null, item: null }) });
+        const cardTarget = { mode: 'detail', ref: d.slug, tab: 'items', v: null, item: null };
+        const card = el('a', {
+          className: 'dsx-card',
+          href: buildUrl(cardTarget),
+          'aria-label': 'Open dataset ' + (d.name || d.slug),
+          onclick: e => {
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+            e.preventDefault();
+            navigate(cardTarget);
+          },
+        });
         const top = el('div', { className: 'dsx-card-top' });
         top.appendChild(datasetFingerprint(d.slug || d.name));
         const creatorPill = userPill(d.created_by, 'Created by');
@@ -2720,7 +2757,11 @@
         const parent = av.parent_version_id && (state.versions || []).find(x => x.id === av.parent_version_id);
         if (parent) {
           meta.appendChild(el('span', { className: 'dot' }));
-          const link = el('span', { style: { cursor: 'pointer', color: 'var(--accent-secondary)' }, title: 'View lineage', onclick: () => navigate({ tab: 'lineage' }) }, 'forked from ' + parent.version);
+          const link = el('a', { href: buildUrl({ tab: 'lineage' }), style: { color: 'var(--accent-secondary)', textDecoration: 'none' }, title: 'View lineage', onclick: e => {
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+            e.preventDefault();
+            navigate({ tab: 'lineage' });
+          } }, 'forked from ' + parent.version);
           meta.appendChild(link);
         }
         if (av.source_type) {
@@ -3025,13 +3066,23 @@
 
     function versionPopoverRow(v, onSelect, id){
       const isActive = state.activeVersion && state.activeVersion.id === v.id;
-      const row = el('div', {
+      // A listbox option that is also a real link (C048 + C051): the
+      // combobox moves through options; middle-click or Copy link work.
+      const target = { tab: state.tab, v: v.version, item: null };
+      const row = el('a', {
         className: 'dsx-version-row' + (isActive ? ' active' : ''),
         role: 'option',
         id: id || null,
+        href: buildUrl(target),
+        tabindex: '-1',
         'aria-selected': isActive ? 'true' : 'false',
       });
-      row.addEventListener('click', () => { if (onSelect) onSelect(); navigate({ tab: state.tab, v: v.version, item: null }); });
+      row.addEventListener('click', e => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        e.preventDefault();
+        if (onSelect) onSelect();
+        navigate(target);
+      });
       row.appendChild(el('span', { className: 'vver' }, v.version));
       row.appendChild(el('span', {
         className: 'vname' + (v.name ? '' : ' unnamed'),
@@ -3810,7 +3861,7 @@
         function renderRunRow(r){
           const row = el('tr');
           const runName = r.run_name || r.external_run_id || r.run_id;
-          const runBtn = el('button', { className: 'run-name', type: 'button', onclick: e => { e.stopPropagation(); navigateToApp(runDetailUrl(r.run_id)); } }, runName);
+          const runBtn = runLinkEl('run-name', r.run_id, runName, { itemId: r.item_id, title: 'Open this item in ' + runName });
           row.appendChild(el('td', { className: 'col-run-name' }, runBtn));
           row.appendChild(el('td', { className: 'col-run-date' }, fullDateTime(r.created_at || r.started_at)));
           row.appendChild(el('td', { className: 'col-run-model' }, r.model || '—'));
@@ -3948,7 +3999,7 @@
       const isDraft = v.status === 'draft';
       const editable = canEditVersion(v);
       // Update URL
-      if (state.itemId !== itemId) { history.replaceState({}, '', buildUrl({ item: itemId })); state.itemId = itemId; }
+      if (state.itemId !== itemId) { history.replaceState(history.state, '', buildUrl({ item: itemId })); state.itemId = itemId; }
 
       let item;
       try { const resp = await apiFetch('/v1/datasets/' + encodeURIComponent(state.datasetRef) + '/versions/' + encodeURIComponent(v.version) + '/items/' + encodeURIComponent(itemId) + '?project_slug=' + encodeURIComponent(state.slug)); item = resp.item; }
@@ -3964,7 +4015,7 @@
           { label: '→', title: 'Next', onClick: () => navigateItem(1) },
           { label: '⧉', title: 'Copy ID', onClick: () => copyToClipboard(item.item_id) },
         ],
-        onClose: () => { history.replaceState({}, '', buildUrl({ item: null })); state.itemId = null; },
+        onClose: () => { history.replaceState(history.state, '', buildUrl({ item: null })); state.itemId = null; },
         onKey: (e) => {
           if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
           const ae = document.activeElement;
@@ -4177,7 +4228,7 @@
           runs.forEach(r => {
             const row = el('tr');
             const runName = r.run_name || r.external_run_id || r.run_id;
-            const runLink = el('button', { className: 'id run-link', type: 'button', onclick: e => { e.stopPropagation(); navigateToApp(runDetailUrl(r.run_id)); } }, runName);
+            const runLink = runLinkEl('id run-link', r.run_id, runName, { itemId: r.item_id });
             runLink.addEventListener('mouseenter', () => schedulePreviewPopover(runLink, runName));
             runLink.addEventListener('mouseleave', hidePreviewPopover);
             runLink.addEventListener('focus', () => showPreviewPopover(runLink, runName));
@@ -4318,6 +4369,9 @@
 
       const listHost = el('div');
       host.appendChild(listHost);
+      // Every run on the dataset is reachable: 100 per page, newest first.
+      const RUNS_PAGE_SIZE = 100;
+      let runsPage = 1;
 
       async function load(){
         listHost.innerHTML = '';
@@ -4325,7 +4379,8 @@
         try {
           const params = new URLSearchParams();
           params.set('project_slug', state.slug);
-          params.set('limit', 100);
+          params.set('limit', RUNS_PAGE_SIZE);
+          params.set('offset', (runsPage - 1) * RUNS_PAGE_SIZE);
           if (activeLabel) params.set('version', activeLabel);
           const resp = await apiFetch('/v1/datasets/' + encodeURIComponent(state.datasetRef) + '/runs?' + params.toString());
           listHost.innerHTML = '';
@@ -4426,12 +4481,7 @@
             const status = String(r.status || '—').toUpperCase();
             const runName = r.run_name || r.external_run_id || r.id;
             const tr = el('tr', { onclick: () => navigateToApp(runDetailUrl(r.id)) });
-            tr.appendChild(el('td', { className: 'col-run-name' }, spaLink(
-              runDetailUrl(r.id),
-              () => navigateToApp(runDetailUrl(r.id)),
-              { className: 'run-name', title: runName },
-              runName,
-            )));
+            tr.appendChild(el('td', { className: 'col-run-name' }, runLinkEl('run-name', r.id, runName, { title: runName })));
             tr.appendChild(el('td', { className: 'col-run-status' }, [el('span', { className: 'status-badge qym-badge status-' + status, title: status }, status)]));
             tr.appendChild(el('td', { className: 'col-run-date' }, fullDateTime(r.started_at || r.completed_at)));
             tr.appendChild(el('td', { className: 'col-run-model' }, r.model || '—'));
@@ -4446,6 +4496,21 @@
           }
           listHost.appendChild(tableWrap);
           renderRunsTable();
+          const total = Number(resp.total || 0);
+          if (total > RUNS_PAGE_SIZE && window.QymUIComponents && window.QymUIComponents.renderPagination) {
+            const pager = el('div', { className: 'dsx-runs-pagination' });
+            listHost.appendChild(pager);
+            const start = (runsPage - 1) * RUNS_PAGE_SIZE;
+            window.QymUIComponents.renderPagination(pager, {
+              page: runsPage,
+              pageSize: RUNS_PAGE_SIZE,
+              total,
+              start: start + 1,
+              end: Math.min(total, start + (resp.runs || []).length),
+              noun: 'runs',
+              onPageChange: page => { runsPage = page; load(); },
+            });
+          }
         } catch(e) { listHost.innerHTML = ''; listHost.appendChild(el('div', { className: 'dsx-empty' }, [el('p', null, e.message || 'Failed to load runs')])); }
       }
       load();
@@ -5328,8 +5393,8 @@
     if (window.QymAuth && typeof window.QymAuth.requireAuth === 'function') {
       window.QymAuth.requireAuth().then(() => route()).catch(() => {});
     } else {
-      document.addEventListener('DOMContentLoaded', route);
-      if (document.readyState !== 'loading') route();
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', route, { once: true });
+      else route();
     }
   })();
   </script>

@@ -28,6 +28,7 @@ from qym_platform.db.models import (
     Approval,
     ApprovalDecision,
     AuditLog,
+    Dataset,
     DatasetAlias,
     DatasetVersion,
     Project,
@@ -1301,7 +1302,7 @@ def _project_not_found_page(request: Request, project_slug: str) -> HTMLResponse
   <title>قيِّم • Project Not Found</title>
   <link rel="icon" type="image/png" href="{static_root}/qym_icon.png">
   <link rel="stylesheet" href="{static_root}/dashboard.css?v=p1-20261001">
-  <link rel="stylesheet" href="{static_root}/shell.css?v=p0-20260930-3">
+  <link rel="stylesheet" href="{static_root}/shell.css?v=p1-20261001">
   <script src="{static_root}/qym_safe.js?v=p0-20260930"></script>
   <script src="{static_root}/auth.js?v=p0-20260930"></script>
   <script src="{static_root}/shell.js?v=p1-20261001"></script>
@@ -1716,9 +1717,11 @@ def _dataset_version_info_map(
     """Resolve the dataset version label and aliases for a batch of runs.
 
     Keyed by ``dataset_version_id``; returns ``{"dataset_version": "v4",
-    "dataset_aliases": ["production"]}``. Aliases reflect what currently points at that
-    version, so a run shows ``production`` when its version is the live production one.
-    Runs with no ``dataset_version_id`` simply aren't in the map.
+    "dataset_aliases": ["production"], "dataset_slug": "ragbench"}``. Aliases reflect
+    what currently points at that version, so a run shows ``production`` when its
+    version is the live production one. ``dataset_slug`` is set while the managed
+    dataset exists, so the run page can link to it. Runs with no
+    ``dataset_version_id`` simply aren't in the map.
     """
     version_ids = {run.dataset_version_id for run in runs if run.dataset_version_id}
     if not version_ids:
@@ -1729,6 +1732,17 @@ def _dataset_version_info_map(
         .filter(DatasetVersion.id.in_(version_ids))
         .all()
     }
+    dataset_ids = {v.dataset_id for v in versions.values() if v.dataset_id}
+    dataset_slugs = (
+        {
+            dataset_id: slug
+            for dataset_id, slug in db.query(Dataset.id, Dataset.slug)
+            .filter(Dataset.id.in_(dataset_ids), Dataset.deleted_at.is_(None))
+            .all()
+        }
+        if dataset_ids
+        else {}
+    )
     aliases_by_version: Dict[str, List[str]] = defaultdict(list)
     for alias in (
         db.query(DatasetAlias)
@@ -1742,6 +1756,7 @@ def _dataset_version_info_map(
         info[vid] = {
             "dataset_version": v.version if v else None,
             "dataset_aliases": sorted(aliases_by_version.get(vid, [])),
+            "dataset_slug": dataset_slugs.get(v.dataset_id) if v else None,
         }
     return info
 
@@ -1754,6 +1769,7 @@ def _dataset_version_fields(
     return {
         "dataset_version": entry["dataset_version"] if entry else None,
         "dataset_aliases": entry["dataset_aliases"] if entry else [],
+        "dataset_slug": entry.get("dataset_slug") if entry else None,
     }
 
 
@@ -3957,6 +3973,8 @@ def _build_run_data(
                 "dataset_name": run.dataset,
                 "dataset_version": _dsv["dataset_version"],
                 "dataset_aliases": _dsv["dataset_aliases"],
+                # Managed dataset behind the run (None for a label-only run).
+                "dataset_slug": _dsv["dataset_slug"],
                 "model_name": _strip_model_provider(run.model or ""),
                 "run_name": run_name,
                 "external_run_id": run.external_run_id or "",
