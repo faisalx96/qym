@@ -1546,7 +1546,7 @@ def test_charts_grouped_view_uses_presets_for_version_model_splits() -> None:
     assert "function renderEmptyGroupStatCells()" in charts_block
     assert "function renderGroupStatBar(value, label, title, modelIdx)" in charts_block
     assert "scheduleChartGroupMetricStats(runs, groupMetricName, threshold, isBoolean)" in charts_block
-    assert "calculateModelStatsFromItems(detailedRuns, metricName, threshold, isBoolean, runsMetricDirection(runs, metricName))" in charts_block
+    assert "fetchChartGroupStats(cacheKey, paths, metricName, threshold, isBoolean, runsMetricDirection(runs, metricName))" in charts_block
     assert "const GROUP_DISPLAY_COLUMNS = [" in source
     assert "Grouped Run Columns" in source
     assert "...GROUP_DISPLAY_COLUMNS.map(col => col.key)" in source

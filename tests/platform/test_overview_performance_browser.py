@@ -44,6 +44,51 @@ def browser():
         browser.close()
 
 
+def trend_payload(days=7, task="Question answering", runs_by_day=None):
+    """A /api/dashboard/trend answer: one task's primary metric per day."""
+    from datetime import date, timedelta
+
+    today = date.today()
+    runs_by_day = runs_by_day if runs_by_day is not None else {0: 2, 3: 1}
+    means = {0: 0.82, 3: 0.74}
+    points = []
+    for offset in range(days - 1, -1, -1):
+        runs = runs_by_day.get(offset, 0)
+        points.append(
+            {
+                "date": (today - timedelta(days=offset)).isoformat(),
+                "runs": runs,
+                "metric_runs": runs,
+                "metric_mean": means.get(offset, 0.8) if runs else None,
+                "execution_success": 0.99 if runs else None,
+            }
+        )
+    total = sum(runs_by_day.values())
+    return {
+        "days": days,
+        "tasks": [
+            {"task": task, "dataset": "golden", "runs": total},
+            {"task": task, "dataset": "golden-v2", "runs": 1},
+        ]
+        if total
+        else [],
+        "task": task,
+        "dataset": "golden",
+        "metric": "accuracy",
+        "direction": "maximize",
+        "latest_run_at": "2026-09-08T10:00:00+00:00",
+        "points": points,
+        "summary": {
+            "runs": total,
+            "metric_mean": 0.793 if total else None,
+            "previous_runs": 2,
+            "previous_metric_mean": 0.81,
+            "delta": 0.793 - 0.81 if total else None,
+            "execution_success": 0.99 if total else None,
+        },
+    }
+
+
 class OverviewFixture:
     def __init__(self, browser, baseline=False):
         self.baseline = baseline
@@ -51,6 +96,9 @@ class OverviewFixture:
         self.empty = False
         self.denied = False
         self.live_label = "Evaluation in progress"
+        self.trend = None
+        self.trend_status = 200
+        self.trend_requests = []
         self.requests = []
         self.kpi_requests = []
         self.errors = []
@@ -194,6 +242,14 @@ class OverviewFixture:
                     "freshness": {"updating": self.pending},
                 }
             )
+            return
+        if path == "/api/dashboard/trend":
+            body = route.request.post_data_json
+            self.trend_requests.append(body)
+            if self.trend_status != 200:
+                route.fulfill(status=self.trend_status, json={"detail": "unavailable"})
+                return
+            route.fulfill(json=self.trend or trend_payload(body.get("days", 7)))
             return
         if path == "/api/corrections":
             route.fulfill(
@@ -450,5 +506,80 @@ def test_overview_late_unauthorized_reply_preserves_next_page(browser):
         }""")
         assert page.locator("#next-page").inner_text() == "Next page"
         assert page.get_by_role("link", name="Sign in", exact=True).count() == 0
+    finally:
+        fixture.close()
+
+
+def test_overview_trend_replaces_the_placeholder(browser):
+    """C056: no "7-day trend chart" box; a real trend of the primary metric."""
+    fixture = OverviewFixture(browser)
+    try:
+        fixture.open()
+        page = fixture.page
+        page.wait_for_function("document.querySelectorAll('#trend-chart .ovt-dot').length === 2")
+        assert page.get_by_text("7-day trend chart").count() == 0
+        assert page.locator(".trend-placeholder").count() == 0
+        request = fixture.trend_requests[0]
+        assert request["project_slug"] == "demo" and request["days"] == 7
+        assert isinstance(request["tz_offset_minutes"], int)
+        summary = page.locator("#trend-body .ovt-summary").inner_text()
+        assert "accuracy" in summary and "79.3%" in summary
+        # A lower mean than the 7 days before, on a higher-is-better metric.
+        delta = page.locator("#trend-body .ovt-delta")
+        assert "−1.7 pts" in delta.inner_text()
+        assert "regressed" in delta.get_attribute("class")
+        assert "3 finished runs" in summary
+        assert page.locator("#trend-chart .ovt-bar").count() == 2
+        # Hover a day for its numbers.
+        page.locator("#trend-chart .ovt-hit").last.hover()
+        tooltip = page.locator("#trend-tooltip")
+        assert tooltip.is_visible() and "82.0%" in tooltip.inner_text()
+        # Two tasks in range: a task picker; a range switch asks again.
+        assert page.locator("#trend-task").is_visible()
+        page.locator('#trend-range [data-days="30"]').click()
+        page.wait_for_function("document.querySelectorAll('#trend-chart .ovt-hit').length === 30")
+        assert fixture.trend_requests[-1]["days"] == 30
+        assert fixture.trend_requests[-1]["task"] == "Question answering"
+        assert fixture.trend_requests[-1]["dataset"] == "golden"
+        # One option per task and dataset: a trend never mixes datasets.
+        options = page.locator("#trend-task option").all_text_contents()
+        assert options == ["Question answering · golden (3)", "Question answering · golden-v2 (1)"]
+        count = len(fixture.trend_requests)
+        page.locator("#trend-task").select_option(index=1)
+        for _ in range(50):
+            if len(fixture.trend_requests) > count:
+                break
+            page.wait_for_timeout(50)
+        assert len(fixture.trend_requests) == count + 1
+        assert fixture.trend_requests[-1]["dataset"] == "golden-v2"
+        assert fixture.trend_requests[-1]["task"] == "Question answering"
+    finally:
+        fixture.close()
+
+
+def test_overview_trend_empty_and_error_states(browser):
+    fixture = OverviewFixture(browser)
+    fixture.trend = trend_payload(7, runs_by_day={})
+    try:
+        fixture.open()
+        page = fixture.page
+        page.wait_for_function("document.querySelector('#trend-body .ovt-empty strong')")
+        text = page.locator("#trend-body").inner_text()
+        assert "No finished runs in the last 7 days" in text
+        assert "latest finished run is from" in text
+        assert page.locator("#trend-chart").count() == 0
+    finally:
+        fixture.close()
+    fixture = OverviewFixture(browser)
+    fixture.trend_status = 503
+    try:
+        fixture.open()
+        page = fixture.page
+        page.locator("#trend-retry").wait_for()
+        assert "Could not load the trend" in page.locator("#trend-body").inner_text()
+        fixture.trend_status = 200
+        page.locator("#trend-retry").click()
+        page.wait_for_function("document.querySelectorAll('#trend-chart .ovt-dot').length === 2")
+        fixture.errors.clear()  # the 503 is the expected failure
     finally:
         fixture.close()

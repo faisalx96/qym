@@ -36,6 +36,7 @@
       line-height: 1.5;
     }
     .compare-read-only-notice strong { color: var(--text-primary); font-weight: 600; }
+    .compare-dataset-notice { border-left-color: var(--info); }
     /* Auto-Analyze works on the first run; it cannot save to a read-only one. */
     body.compare-first-run-read-only .auto-analyze-btn { display: none !important; }
 
@@ -5112,6 +5113,188 @@
       box-shadow: inset 0 0 0 1px var(--success);
     }
 
+    /* Per-Run Averages scrolls inside its card: the metric column stays
+       pinned and the headers stay on top, so many runs or passes never
+       squeeze the columns (C055). */
+    .metrics-table-controls {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      gap: var(--space-sm);
+    }
+
+    .metrics-baseline-control {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-sm);
+      color: var(--text-muted);
+      font-size: var(--font-sm);
+      font-weight: 600;
+    }
+
+    .metrics-baseline-control .qym-select {
+      max-width: 280px;
+    }
+
+    .metrics-table-scroll {
+      --metrics-head-row: 38px;
+      max-height: min(70vh, 720px);
+      overflow: auto;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: 8px;
+    }
+
+    .metrics-table-scroll .metrics-table.qdt-table {
+      width: max-content;
+      min-width: 100%;
+      table-layout: auto;
+      border: 0;
+      border-radius: 0;
+      overflow: visible;
+    }
+
+    .metrics-table-scroll .metrics-table.qdt-table th,
+    .metrics-table-scroll .metrics-table.qdt-table td {
+      width: auto;
+      min-width: 132px;
+      max-width: 240px;
+    }
+
+    .metrics-table-scroll .metrics-table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      height: var(--metrics-head-row);
+      box-sizing: border-box;
+    }
+
+    .metrics-table-scroll .metrics-table .metric-pass-row th {
+      top: var(--metrics-head-row);
+    }
+
+    .metrics-table-scroll .metrics-table .metric-name-head,
+    .metrics-table-scroll .metrics-table td.metric-name {
+      position: sticky;
+      left: 0;
+      min-width: 180px;
+      max-width: 260px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      box-shadow: 1px 0 0 var(--border-subtle);
+    }
+
+    .metrics-table-scroll .metrics-table td.metric-name {
+      z-index: 1;
+      background: var(--bg-surface);
+    }
+
+    .metrics-table-scroll .metrics-table thead .metric-name-head {
+      z-index: 3;
+      background: var(--bg-elevated);
+    }
+
+    .metrics-table .metric-run-group {
+      border-bottom: 1px solid var(--border-default);
+    }
+
+    /* A run heading over its pass columns starts at its first pass, so it
+       stays readable when the group is wider than the card. */
+    .metrics-table.qdt-table th.metric-run-group {
+      text-align: left;
+    }
+
+    .metrics-table .metric-run-group .metric-run-heading {
+      justify-content: flex-start;
+    }
+
+    .metrics-table .metric-run-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .metrics-table .metric-run-baseline {
+      flex: 0 0 auto;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    /* Change against the baseline (C057). */
+    .metric-delta-line {
+      margin-top: 2px;
+      font-size: var(--font-sm);
+    }
+
+    .metric-delta {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .metric-delta--improved { color: var(--success); }
+    .metric-delta--regressed { color: var(--error); }
+
+    .metric-delta-band {
+      margin-left: var(--space-xs);
+      color: var(--text-muted);
+    }
+
+    .metric-delta-counts {
+      display: flex;
+      justify-content: center;
+      gap: var(--space-xs);
+      margin-top: 2px;
+    }
+
+    .metric-delta-count {
+      min-height: 20px;
+      padding: 0 var(--space-xs);
+      background: transparent;
+      border: 0;
+      border-radius: var(--control-radius);
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: var(--font-sm);
+      font-variant-numeric: tabular-nums;
+      cursor: pointer;
+    }
+
+    .metric-delta-count:hover:not(:disabled),
+    .metric-delta-count.active {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .metric-delta-count:disabled {
+      color: var(--text-dim);
+      cursor: default;
+    }
+
+    .baseline-delta-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-md);
+      margin-bottom: var(--space-md);
+      padding: var(--space-sm) var(--space-md);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-left: 3px solid var(--accent-primary);
+      border-radius: var(--radius-md);
+      color: var(--text-secondary);
+      font-size: var(--font-base);
+      line-height: 1.5;
+    }
+
+    .baseline-delta-banner[hidden] { display: none; }
+    .baseline-delta-banner strong { color: var(--text-primary); font-weight: 600; }
+
     .fp-status .filter-count {
       margin: 0;
     }
@@ -5180,13 +5363,16 @@
           <div class="compare-section-head">
             <div>
               <h3 class="section-title">Per-Run Averages</h3>
-              <p class="compare-section-copy">Compare metric, latency, and trace averages across the selected runs.</p>
+              <p class="compare-section-copy">Compare metric, latency, and trace averages across the selected runs. Each run is compared with the baseline: the change, its 95% noise band, and how many items improved or regressed.</p>
             </div>
+            <div class="metrics-table-controls" id="metrics-table-controls"></div>
           </div>
-          <table class="metrics-table qdt-table" id="metrics-table">
-            <thead id="metrics-thead"></thead>
-            <tbody id="metrics-tbody"></tbody>
-          </table>
+          <div class="metrics-table-scroll" id="metrics-table-scroll">
+            <table class="metrics-table qdt-table" id="metrics-table">
+              <thead id="metrics-thead"></thead>
+              <tbody id="metrics-tbody"></tbody>
+            </table>
+          </div>
         </div>
 
         <!-- Comparison Statistics -->
@@ -5227,6 +5413,7 @@
             <button type="button" class="auto-analyze-btn" id="compare-auto-analyze-btn" title="AI-powered root cause analysis" style="display:none;"><span class="ai-icon">&#x1F916;</span> Auto-Analyze</button>
           </div>
           <div class="compare-empty" id="alignment-warning" style="display:none;margin-bottom:var(--space-lg);"></div>
+          <div class="baseline-delta-banner" id="baseline-delta-banner" role="status" hidden></div>
 
           <div class="filter-panel qym-item-control-center">
             <div class="qym-item-toolbar">
@@ -5519,6 +5706,10 @@
         rcCountMode: 'total',         // 'total' or 'unique' for root cause breakdown cards
         sortBy: 'index',              // index, score_asc, score_desc, latency_asc, latency_desc
         activeCompareTab: 'compare',
+        baselineKey: null,            // Per-Run Averages baseline column (URL "baseline"); null = first
+        passColumns: 'each',          // repeat runs: 'each' pass column, or one 'run' average column
+        baselineDeltaFilter: null,    // {metric, columnKey, baselineKey, kind} from a delta count
+        columnScoreCache: {},
         compareAlignmentStatus: 'aligned',
         compareAlignmentIssues: [],
         compareItemIds: [],
@@ -6069,6 +6260,49 @@
           ? `"${names[0]}" belongs to an archived project, so its scores and diagnoses cannot be changed until an admin unarchives the project.`
           : `${names.length} of these runs belong to archived projects (${names.map(name => `"${name}"`).join(', ')}), so their scores and diagnoses cannot be changed until those projects are unarchived.`;
         notice.innerHTML = '<strong>Read-only.</strong> ' + escapeHtml(message);
+      }
+
+      // Runs on different datasets or dataset versions differ in their data,
+      // not only in the run: say so above the diff (C057).
+      function renderDatasetVersionNotice() {
+        const content = el('compare-content');
+        if (!content) return;
+        let notice = content.querySelector('.compare-dataset-notice');
+        const groups = new Map();
+        const seen = new Set();
+        const labels = compareRunLabels();
+        state.runs.forEach((run) => {
+          const base = passRefBase(getCompareRunDataId(run));
+          if (seen.has(base)) return;
+          seen.add(base);
+          const info = run.run || {};
+          const dataset = String(info.dataset_name || '').trim();
+          const version = String(info.dataset_version || '').trim();
+          const key = dataset + '\u241f' + version;
+          if (!groups.has(key)) groups.set(key, { dataset, version, runs: [] });
+          groups.get(key).runs.push(labels[base]?.label || info.run_name || base);
+        });
+        const entries = Array.from(groups.values());
+        const datasets = new Set(entries.map(entry => entry.dataset));
+        const versioned = entries.filter(entry => entry.version);
+        const mismatch = datasets.size > 1 || (versioned.length > 1 && new Set(versioned.map(entry => entry.version)).size > 1);
+        if (!mismatch) {
+          if (notice) notice.remove();
+          return;
+        }
+        if (!notice) {
+          notice = document.createElement('div');
+          notice.className = 'compare-read-only-notice compare-dataset-notice';
+          notice.setAttribute('role', 'note');
+          const header = content.querySelector('.compare-header-bar');
+          content.insertBefore(notice, header ? header.nextSibling : content.firstChild);
+        }
+        const what = datasets.size > 1 ? 'different datasets' : 'different versions of ' + entries[0].dataset;
+        const parts = entries.map(entry => {
+          const name = datasets.size > 1 ? entry.dataset + (entry.version ? ' ' + entry.version : '') : (entry.version || 'no version');
+          return `<strong>${escapeHtml(name)}</strong> (${escapeHtml(entry.runs.join(', '))})`;
+        });
+        notice.innerHTML = `<strong>Different data.</strong> These runs used ${escapeHtml(what)}: ${parts.join('; ')}. Score changes can come from the data as well as from the runs, and only items present in both runs are paired.`;
       }
 
       function renderCompareCohortBanner() {
@@ -7918,6 +8152,8 @@
         } else {
           files.forEach(f => params.append('runs', f));
         }
+        if (state.baselineKey) params.set('baseline', state.baselineKey);
+        if (state.passColumns === 'run') params.set('columns', 'runs');
         const newUrl = window.location.pathname + '?' + params.toString();
         window.history.replaceState(null, '', newUrl);
       }
@@ -7951,6 +8187,8 @@
           rightLabel: urlParams.get('cohortBLabel'),
         });
         const runsFromUrl = urlParams.getAll('runs');
+        state.baselineKey = urlParams.get('baseline') || null;
+        state.passColumns = urlParams.get('columns') === 'runs' ? 'run' : 'each';
         if (explicitCohortsFromUrl) {
           files = [...explicitCohortsFromUrl.left, ...explicitCohortsFromUrl.right];
           sessionStorage.setItem('compareCohorts', JSON.stringify(explicitCohortsFromUrl));
@@ -8725,16 +8963,14 @@
         options += '<option value="tie">Ties Only</option>';
 
         state.runs.forEach((run, idx) => {
-          const info = run.run || {};
-          const name = info.run_name || `Run ${idx + 1}`;
+          const name = compareRunShortLabel(idx);
           options += `<option value="win_${idx}">${escapeHtml(name)} Won</option>`;
         });
 
         // Add "Only X Solved" options for unique insights
         options += '<optgroup label="Uniquely Solved By">';
         state.runs.forEach((run, idx) => {
-          const info = run.run || {};
-          const name = info.run_name || `Run ${idx + 1}`;
+          const name = compareRunShortLabel(idx);
           options += `<option value="only_${idx}">Only ${escapeHtml(name)}</option>`;
         });
         options += '</optgroup>';
@@ -8793,6 +9029,7 @@
 
         // Reset filters that might reference removed run
         state.winnerFilter = 'any';
+        state.baselineDeltaFilter = null;
         state.page = 1;
 
         // Reprocess and re-render
@@ -8846,6 +9083,7 @@
         renderCompareModeTabs();
         renderCompareCohortBanner();
         renderReadOnlyNotice();
+        renderDatasetVersionNotice();
         renderSummaries();
         renderComparisonStats();
         renderMetricsTable();
@@ -9011,7 +9249,7 @@
             const rawValue = metadata[categoryKey] ?? '';
             const isListKey = isListCategoryKey(categoryKey);
             const parsedValues = getMetadataCategoryValues(metadata, categoryKey);
-            const groupValues = parsedValues.length ? parsedValues : [String(rawValue)];
+            const groupValues = parsedValues.length ? parsedValues : [categoryValueText(rawValue)];
             if (groupValues.length === 0) groupValues.push('');
             const domainIsSole = isListKey && groupValues.length === 1;
 
@@ -9681,157 +9919,561 @@
         });
       }
 
+      // ── Run labels (C055) ──
+      // Columns tell runs apart by model and start date; the full run name is
+      // in the tooltip. When every run uses the same model, the label is the
+      // part of the run name the runs do not share (the shared prefix is
+      // stripped), else the model and date again.
+      function compareRunModelName(info) {
+        const raw = String(info?.model_name || info?.config?.model || info?.config?.model_name || '').trim();
+        return raw ? raw.split('/').filter(Boolean).pop() : '';
+      }
+
+      function compareRunStartedAt(info) {
+        return info?.started_at || info?.created_at || info?.timestamp || '';
+      }
+
+      function compareRunDateLabel(value, withTime = false) {
+        const d = new Date(value);
+        if (!value || Number.isNaN(d.getTime())) return '';
+        const sameYear = d.getFullYear() === new Date().getFullYear();
+        const date = d.toLocaleDateString([], sameYear
+          ? { month: 'short', day: 'numeric' }
+          : { month: 'short', day: 'numeric', year: 'numeric' });
+        return withTime
+          ? date + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          : date;
+      }
+
+      // The distinct part of each name after the prefix they all share, cut at
+      // a separator so "…_20260928" never loses half a token. Null when the
+      // names share no prefix worth stripping or a name has nothing left.
+      function stripSharedRunPrefix(names) {
+        if (names.length < 2) return null;
+        let prefix = names[0];
+        for (const name of names.slice(1)) {
+          let i = 0;
+          while (i < prefix.length && i < name.length && prefix[i] === name[i]) i += 1;
+          prefix = prefix.slice(0, i);
+        }
+        const boundary = Math.max(...['-', '_', ' ', '.', '/', ':'].map(sep => prefix.lastIndexOf(sep)));
+        const cut = boundary + 1;
+        if (cut < 3) return null;
+        const rests = names.map(name => name.slice(cut).replace(/^[-_\s.,/:]+/, ''));
+        return rests.every(Boolean) ? rests : null;
+      }
+
+      // Labels for the distinct runs (pass columns share their run's label),
+      // keyed by base run id: { label, title }.
+      let compareRunLabelCache = { key: null, value: null };
+      function compareRunLabels() {
+        const cacheKey = state.runs.map(getCompareRunDataId).join('\n');
+        if (compareRunLabelCache.key === cacheKey) return compareRunLabelCache.value;
+        const bases = [];
+        const seen = new Set();
+        state.runs.forEach((run) => {
+          const base = passRefBase(getCompareRunDataId(run));
+          if (seen.has(base)) return;
+          seen.add(base);
+          const info = run.run || {};
+          bases.push({
+            base,
+            name: String(info.base_run_name || info.run_name || info.run_id || base).trim(),
+            model: compareRunModelName(info),
+            started: compareRunStartedAt(info),
+          });
+        });
+        const models = new Set(bases.map(entry => entry.model));
+        let labels = null;
+        if (models.size === 1) labels = stripSharedRunPrefix(bases.map(entry => entry.name));
+        if (labels && new Set(labels).size !== labels.length) labels = null;
+        if (!labels) {
+          const byDate = bases.map(entry => [entry.model || entry.name, compareRunDateLabel(entry.started)].filter(Boolean).join(' · '));
+          const duplicated = label => byDate.filter(other => other === label).length > 1;
+          labels = bases.map((entry, index) => (duplicated(byDate[index])
+            ? [entry.model || entry.name, compareRunDateLabel(entry.started, true)].filter(Boolean).join(' · ')
+            : byDate[index]));
+          const counts = {};
+          labels = labels.map(label => {
+            if (labels.filter(other => other === label).length < 2) return label;
+            counts[label] = (counts[label] || 0) + 1;
+            return label + ' #' + counts[label];
+          });
+        }
+        const out = {};
+        bases.forEach((entry, index) => {
+          out[entry.base] = {
+            label: labels[index] || entry.name,
+            title: [entry.name, entry.model, formatIsoDateTime(entry.started)].filter(value => value && value !== '—').join(' · '),
+          };
+        });
+        compareRunLabelCache = { key: cacheKey, value: out };
+        return out;
+      }
+
+      // One run's (or pass column's) short label, for item cards and filters.
+      function compareRunShortLabel(runIdx) {
+        const run = state.runs[runIdx];
+        if (!run) return `Run ${runIdx + 1}`;
+        const entry = compareRunLabels()[passRefBase(getCompareRunDataId(run))];
+        const label = entry ? entry.label : (run.run?.run_name || `Run ${runIdx + 1}`);
+        return run.run?.pass_number ? `${label} · pass ${Number(run.run.pass_number)}` : label;
+      }
+
+      // ── Per-Run Averages columns and baseline (C055, C057) ──
+      // A repeat run shows one column per pass ("Each pass"), or one column
+      // with the mean over its passes ("Run average", Avg@k).
+      function hasPassColumns() {
+        return state.runs.some(run => run.run?.pass_number);
+      }
+
+      function compareMetricColumns() {
+        const columns = [];
+        const byBase = new Map();
+        const perRun = state.passColumns === 'run';
+        state.runs.forEach((run, idx) => {
+          const info = run.run || {};
+          const id = getCompareRunDataId(run);
+          const base = passRefBase(id);
+          if (info.pass_number && perRun) {
+            let column = byBase.get(base);
+            if (!column) {
+              column = { key: base, base, runIdxs: [], passNumber: null };
+              byBase.set(base, column);
+              columns.push(column);
+            }
+            column.runIdxs.push(idx);
+            return;
+          }
+          columns.push({ key: id, base, runIdxs: [idx], passNumber: info.pass_number ? Number(info.pass_number) : null });
+        });
+        return columns;
+      }
+
+      // The baseline column: the chosen run (or, across the two column modes,
+      // its first pass / its run), else the first column (cohort A first).
+      function resolveBaselineColumn(columns) {
+        const key = state.baselineKey;
+        if (key) {
+          const exact = columns.find(column => column.key === key);
+          if (exact) return exact;
+          const sameRun = columns.find(column => column.base === passRefBase(key));
+          if (sameRun) return sameRun;
+        }
+        return columns[0] || null;
+      }
+
+      // Mean score of each item in a column (a run-average column averages
+      // the item's passes), keyed by compare item id. Cached per render.
+      function compareColumnItemScores(column, metric) {
+        const cacheKey = column.runIdxs.join(',') + '|' + metric;
+        state.columnScoreCache = state.columnScoreCache || {};
+        if (state.columnScoreCache[cacheKey]) return state.columnScoreCache[cacheKey];
+        const sums = new Map();
+        column.runIdxs.forEach((runIdx) => {
+          const run = state.runs[runIdx];
+          const names = run?.snapshot?.metric_names || run?.run?.metric_names || [];
+          const metricIdx = names.indexOf(metric);
+          if (metricIdx < 0) return;
+          for (const row of run.snapshot?.rows || []) {
+            const itemId = getRowCompareId(row);
+            if (!itemId) continue;
+            const { score } = rowScoreFor(row, metricIdx, metric);
+            if (score === null) continue;
+            const entry = sums.get(itemId) || { sum: 0, count: 0 };
+            entry.sum += score;
+            entry.count += 1;
+            sums.set(itemId, entry);
+          }
+        });
+        const scores = new Map();
+        sums.forEach((entry, itemId) => scores.set(itemId, entry.sum / entry.count));
+        state.columnScoreCache[cacheKey] = scores;
+        return scores;
+      }
+
+      const BASELINE_DELTA_EPSILON = 1e-9;
+
+      // 'improved' / 'regressed' / 'same' for one item's change; without a
+      // declared direction, 'improved' means higher and 'regressed' lower.
+      function baselineDeltaKind(delta, direction) {
+        if (Math.abs(delta) <= BASELINE_DELTA_EPSILON) return 'same';
+        const better = direction === 'minimize' ? delta < 0 : delta > 0;
+        return better ? 'improved' : 'regressed';
+      }
+
+      // Paired comparison of a column with the baseline on one metric: the
+      // per-item differences give the noise band (95%, normal approximation
+      // of their mean) and the improved / regressed / unchanged counts.
+      function compareWithBaseline(column, baseline, metric) {
+        const scores = compareColumnItemScores(column, metric);
+        const base = compareColumnItemScores(baseline, metric);
+        const diffs = [];
+        const counts = { improved: 0, regressed: 0, same: 0 };
+        const direction = metricDirectionFor(metric);
+        scores.forEach((score, itemId) => {
+          if (!base.has(itemId)) return;
+          const delta = score - base.get(itemId);
+          diffs.push(delta);
+          counts[baselineDeltaKind(delta, direction)] += 1;
+        });
+        const n = diffs.length;
+        let halfWidth = null;
+        let pValue = null;
+        // The change over the items both columns scored: the same items as
+        // the band and the counts (a partial run or another dataset version
+        // must not compare two averages over different items).
+        const mean = n ? diffs.reduce((sum, value) => sum + value, 0) / n : null;
+        if (n >= 2) {
+          const variance = diffs.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (n - 1);
+          const se = Math.sqrt(variance / n);
+          halfWidth = SWEEP_Z_95 * se;
+          pValue = se > 0 ? 2 * (1 - normalCdf(Math.abs(mean) / se)) : (mean === 0 ? 1 : 0);
+        }
+        return { paired: n, counts, halfWidth, pValue, mean };
+      }
+
+      function formatBaselineDelta(delta, metric) {
+        const type = state.metricTypes?.[metric] || 'score';
+        const sign = delta > 0 ? '+' : delta < 0 ? '−' : '';
+        const abs = Math.abs(delta);
+        if (type === 'numeric') return sign + window.QymMetrics.formatNumericValue(abs, abs < 1 ? 3 : 1);
+        return sign + (abs * 100).toFixed(1) + ' pts';
+      }
+
+      function formatBaselineBand(halfWidth, metric) {
+        const type = state.metricTypes?.[metric] || 'score';
+        if (type === 'numeric') return '±' + window.QymMetrics.formatNumericValue(halfWidth, halfWidth < 1 ? 3 : 1);
+        return '±' + (halfWidth * 100).toFixed(1);
+      }
+
+      function baselineKindLabel(kind, direction) {
+        if (!direction) return { improved: 'higher', regressed: 'lower', same: 'unchanged' }[kind];
+        return kind;
+      }
+
+      // Item filter from a delta count: items of one column that improved,
+      // regressed or did not change against the baseline on one metric.
+      function baselineDeltaMatches(itemId) {
+        const filter = state.baselineDeltaFilter;
+        if (!filter) return true;
+        const columns = compareMetricColumns();
+        const column = columns.find(entry => entry.key === filter.columnKey);
+        const baseline = columns.find(entry => entry.key === filter.baselineKey);
+        if (!column || !baseline) return true;
+        const score = compareColumnItemScores(column, filter.metric).get(itemId);
+        const base = compareColumnItemScores(baseline, filter.metric).get(itemId);
+        if (score === undefined || base === undefined) return false;
+        return baselineDeltaKind(score - base, metricDirectionFor(filter.metric)) === filter.kind;
+      }
+
+      // A column's label: its run's, plus the pass for a pass column.
+      function compareColumnLabel(key) {
+        const entry = compareRunLabels()[passRefBase(key)];
+        const label = entry ? entry.label : key;
+        const pass = String(key).indexOf(PASS_REF_SEP) >= 0 ? parseInt(String(key).slice(passRefBase(key).length + PASS_REF_SEP.length), 10) : null;
+        return Number.isFinite(pass) ? `${label} · pass ${pass}` : label;
+      }
+
+      // Baseline and pass-column choices live in the URL, so a shared link
+      // opens the same diff.
+      function syncCompareUrlState() {
+        if (IS_COMPARE_EXPORT) return;
+        const params = new URLSearchParams(window.location.search);
+        params.delete('baseline');
+        params.delete('columns');
+        if (state.baselineKey) params.set('baseline', state.baselineKey);
+        if (state.passColumns === 'run') params.set('columns', 'runs');
+        window.history.replaceState(null, '', window.location.pathname + '?' + params.toString());
+      }
+
+      function renderBaselineDeltaBanner() {
+        const banner = el('baseline-delta-banner');
+        if (!banner) return;
+        const filter = state.baselineDeltaFilter;
+        if (!filter) {
+          banner.hidden = true;
+          banner.innerHTML = '';
+          return;
+        }
+        const kind = baselineKindLabel(filter.kind, metricDirectionFor(filter.metric));
+        const verb = {
+          improved: 'improved', regressed: 'regressed', higher: 'scored higher',
+          lower: 'scored lower', unchanged: 'did not change',
+        }[kind];
+        banner.hidden = false;
+        banner.innerHTML = `<span>Showing items where <strong>${escapeHtml(compareColumnLabel(filter.columnKey))}</strong> ${verb} on <strong>${escapeHtml(filter.metric)}</strong> against the baseline <strong>${escapeHtml(compareColumnLabel(filter.baselineKey))}</strong>.</span>`
+          + '<button type="button" class="qym-inline-action qym-inline-action--neutral" id="baseline-delta-clear">Clear</button>';
+        el('baseline-delta-clear').addEventListener('click', () => {
+          state.baselineDeltaFilter = null;
+          state.page = 1;
+          renderMetricsTable();
+          renderItems(true);
+        });
+      }
+
+      function setBaselineDeltaFilter(next) {
+        state.baselineDeltaFilter = next;
+        state.page = 1;
+        // The item list shows the metric the filter is about.
+        if (next && state.selectedItemsMetric !== next.metric) {
+          state.selectedItemsMetric = next.metric;
+          const itemsMetricSelect = el('items-metric-select');
+          if (itemsMetricSelect) itemsMetricSelect.value = next.metric;
+          populateWinnerFilter();
+          renderFilterBuilder();
+        }
+        renderMetricsTable();
+        renderItems(true);
+        scrollItemByItemToTop();
+      }
+
       function renderMetricsTable() {
         const thead = el('metrics-thead');
         const tbody = el('metrics-tbody');
+        state.columnScoreCache = {};
+        const columns = compareMetricColumns();
+        const baseline = resolveBaselineColumn(columns);
+        const labels = compareRunLabels();
+        const columnLabel = column => labels[column.base]?.label || column.key;
+        const columnColor = column => COLORS[column.runIdxs[0] % COLORS.length];
+        const isBaseline = column => baseline && column.key === baseline.key && columns.length > 1;
 
-        // Header row
-        thead.innerHTML = `
-          <tr>
-            <th>Metric</th>
-            ${state.runs.map((run, idx) => {
-              const info = run.run || {};
-              const color = COLORS[idx % COLORS.length];
-              const name = info.run_name || 'Run ' + (idx + 1);
-              // A pass column names its pass first, so the ellipsis cuts the
-              // run name, not the pass; the full name is the title.
-              const passLabel = info.pass_number ? `<span class="metric-run-pass">Pass ${Number(info.pass_number)}</span>` : '';
-              const label = info.pass_number ? (info.base_run_name || name) : name;
-              return `<th title="${escapeAttr(name)}"><span class="metric-run-heading"><span class="metric-run-marker" style="background:${color}"></span>${passLabel}<span>${escapeHtml(label)}</span></span></th>`;
-            }).join('')}
-          </tr>
-        `;
+        // Controls: baseline run, and pass columns for repeat runs.
+        const controls = el('metrics-table-controls');
+        if (controls) {
+          const passControl = hasPassColumns()
+            ? `<div class="qym-segmented metrics-pass-mode" role="group" aria-label="Repeat run columns" data-qym-segmented-key="compare-pass-columns">
+                <button type="button" class="qym-segmented__option${state.passColumns !== 'run' ? ' active' : ''}" data-pass-columns="each" aria-pressed="${state.passColumns !== 'run'}" title="One column per pass of a repeat run">Each pass</button>
+                <button type="button" class="qym-segmented__option${state.passColumns === 'run' ? ' active' : ''}" data-pass-columns="run" aria-pressed="${state.passColumns === 'run'}" title="One column per repeat run: the mean over its passes (Avg@k)">Run average</button>
+              </div>`
+            : '';
+          const options = columns.map(column => {
+            const label = columnLabel(column) + (column.passNumber ? ` · pass ${column.passNumber}` : (column.runIdxs.length > 1 ? ` · ${column.runIdxs.length} passes` : ''));
+            return `<option value="${escapeAttr(column.key)}"${baseline && column.key === baseline.key ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+          }).join('');
+          controls.innerHTML = passControl + (columns.length > 1
+            ? `<label class="metrics-baseline-control"><span>Baseline</span><select id="metrics-baseline-select" class="qym-control qym-select" aria-label="Baseline run">${options}</select></label>`
+            : '');
+          const select = el('metrics-baseline-select');
+          if (select) {
+            select.addEventListener('change', () => {
+              state.baselineKey = select.value;
+              state.baselineDeltaFilter = null;
+              syncCompareUrlState();
+              renderMetricsTable();
+              renderItems();
+            });
+          }
+          controls.querySelectorAll('[data-pass-columns]').forEach(button => {
+            button.addEventListener('click', () => {
+              if (state.passColumns === button.dataset.passColumns) return;
+              state.passColumns = button.dataset.passColumns;
+              state.baselineDeltaFilter = null;
+              syncCompareUrlState();
+              renderMetricsTable();
+              renderItems();
+            });
+          });
+        }
 
-        // Calculate metric averages and latency for each run. A
-        // lower-is-better metric leaves errors out of its mean; count them
-        // so the cell can say so, like the runs list and run page.
-        const runMetricErrors = state.runs.map(() => ({}));
-        const runMetricAvgs = state.runs.map((run, runIndex) => {
-          const snap = run.snapshot || {};
-          const rows = snap.rows || [];
-          const metricNames = snap.metric_names || run.run?.metric_names || [];
+        // Header: a repeat run's pass columns sit under one run heading.
+        const grouped = columns.some(column => column.passNumber);
+        const headingHtml = (column, text, title) => {
+          const tag = isBaseline(column) ? '<span class="metric-run-baseline qym-tag">Baseline</span>' : '';
+          return `<span class="metric-run-heading"><span class="metric-run-marker" style="background:${columnColor(column)}"></span><span class="metric-run-label">${escapeHtml(text)}</span>${tag}</span>`;
+        };
+        let topRow = '<th class="metric-name-head"' + (grouped ? ' rowspan="2"' : '') + '>Metric</th>';
+        let passRow = '';
+        for (let i = 0; i < columns.length; i += 1) {
+          const column = columns[i];
+          const entry = labels[column.base] || {};
+          if (column.passNumber) {
+            let span = 1;
+            while (i + span < columns.length && columns[i + span].passNumber && columns[i + span].base === column.base) span += 1;
+            topRow += `<th class="metric-run-group" colspan="${span}" title="${escapeAttr(entry.title || column.base)}"><span class="metric-run-heading"><span class="metric-run-label">${escapeHtml(columnLabel(column))}</span></span></th>`;
+            for (let j = i; j < i + span; j += 1) {
+              const passColumn = columns[j];
+              const name = state.runs[passColumn.runIdxs[0]]?.run?.run_name || passColumn.key;
+              const tag = isBaseline(passColumn) ? '<span class="metric-run-baseline qym-tag">Baseline</span>' : '';
+              passRow += `<th title="${escapeAttr(name)}"><span class="metric-run-heading"><span class="metric-run-marker" style="background:${columnColor(passColumn)}"></span><span class="metric-run-pass">Pass ${passColumn.passNumber}</span>${tag}</span></th>`;
+            }
+            i += span - 1;
+            continue;
+          }
+          const passes = column.runIdxs.length > 1 ? ` · mean over ${column.runIdxs.length} passes` : '';
+          topRow += `<th${grouped ? ' rowspan="2"' : ''} title="${escapeAttr((entry.title || column.key) + passes)}">${headingHtml(column, columnLabel(column) + (column.runIdxs.length > 1 ? ` ×${column.runIdxs.length}` : ''))}</th>`;
+        }
+        thead.innerHTML = `<tr>${topRow}</tr>` + (passRow ? `<tr class="metric-pass-row">${passRow}</tr>` : '');
+
+        // Calculate metric averages for each column. A lower-is-better metric
+        // leaves errors out of its mean; count them so the cell can say so,
+        // like the runs list and run page. A run-average column pools its
+        // passes (Avg@k).
+        const columnMetricErrors = columns.map(() => ({}));
+        const columnMetricAvgs = columns.map((column, columnIndex) => {
           const avgs = {};
-
           for (const metric of state.allMetrics) {
-            const idx = metricNames.indexOf(metric);
-            if (idx === -1) {
-              avgs[metric] = null;
-              continue;
-            }
-
             const leftOut = errorsLeftOutFor(metric);
-            let sum = 0, count = 0, errors = 0;
-            for (const row of rows) {
-              // Centralized error rule: 0, or left out when lower is better.
-              const { score, isError } = rowScoreFor(row, idx, metric);
-              if (score !== null) {
-                sum += score;
-                count++;
-              }
-              if (leftOut && isError) {
-                const counts = window.QymMetrics.rowMetricErrorCounts(row, metric);
-                errors += counts.task + counts.scorer;
+            let sum = 0, count = 0, errors = 0, present = false;
+            for (const runIdx of column.runIdxs) {
+              const run = state.runs[runIdx];
+              const snap = run.snapshot || {};
+              const metricNames = snap.metric_names || run.run?.metric_names || [];
+              const idx = metricNames.indexOf(metric);
+              if (idx === -1) continue;
+              present = true;
+              for (const row of snap.rows || []) {
+                // Centralized error rule: 0, or left out when lower is better.
+                const { score, isError } = rowScoreFor(row, idx, metric);
+                if (score !== null) {
+                  sum += score;
+                  count++;
+                }
+                if (leftOut && isError) {
+                  const counts = window.QymMetrics.rowMetricErrorCounts(row, metric);
+                  errors += counts.task + counts.scorer;
+                }
               }
             }
-            avgs[metric] = count > 0 ? sum / count : null;
-            runMetricErrors[runIndex][metric] = errors;
+            avgs[metric] = present && count > 0 ? sum / count : null;
+            // A run-average column is the run mean (services/run_means.py):
+            // each item is the mean over its passes, then the mean over the
+            // items, so an item with fewer scored passes weighs the same.
+            if (avgs[metric] !== null && column.runIdxs.length > 1) {
+              const itemMeans = Array.from(compareColumnItemScores(column, metric).values());
+              avgs[metric] = itemMeans.length ? itemMeans.reduce((total, value) => total + value, 0) / itemMeans.length : null;
+            }
+            columnMetricErrors[columnIndex][metric] = errors;
           }
           return avgs;
         });
 
-        // Calculate average latency for each run
-        const runLatencyAvgs = state.runs.map(run => {
-          const snap = run.snapshot || {};
-          const rows = snap.rows || [];
+        // Average latency of each column
+        const columnLatencyAvgs = columns.map(column => {
           let sum = 0, count = 0;
-          for (const row of rows) {
-            if (Number.isFinite(row.latency_ms) && row.latency_ms >= 0 && row.status === 'completed') {
-              sum += row.latency_ms;
-              count++;
+          for (const runIdx of column.runIdxs) {
+            for (const row of state.runs[runIdx].snapshot?.rows || []) {
+              if (Number.isFinite(row.latency_ms) && row.latency_ms >= 0 && row.status === 'completed') {
+                sum += row.latency_ms;
+                count++;
+              }
             }
           }
           return count > 0 ? sum / count : null;
         });
 
         // Find best (lowest) latency
-        const bestLatency = Math.min(...runLatencyAvgs.filter(v => v !== null));
+        const bestLatency = Math.min(...columnLatencyAvgs.filter(v => v !== null));
 
         // Best value for each metric follows its declared direction; a
         // metric without one has no "best" (C008).
         const bestValues = {};
         for (const metric of state.allMetrics) {
-          const values = runMetricAvgs.map(avgs => avgs[metric]);
+          const values = columnMetricAvgs.map(avgs => avgs[metric]);
           const best = window.QymMetrics.bestMetricIndexes(values, metricDirectionFor(metric));
           bestValues[metric] = best.length ? values[best[0]] : null;
         }
 
+        const baselineIndex = baseline ? columns.indexOf(baseline) : -1;
+        const deltaFilter = state.baselineDeltaFilter;
+
         // Render rows - metrics first, then latency
         // A lower-is-better metric every run errored on has no mean in any
         // column; keep its row so the error counts still show.
-        const metricRows = state.allMetrics.filter(metric => runMetricAvgs.some((avgs, runIndex) =>
+        const metricRows = state.allMetrics.filter(metric => columnMetricAvgs.some((avgs, columnIndex) =>
           (avgs[metric] !== null && Number.isFinite(avgs[metric]))
-          || Number(runMetricErrors[runIndex]?.[metric] || 0) > 0
+          || Number(columnMetricErrors[columnIndex]?.[metric] || 0) > 0
         )).map(metric => {
           const mType = state.metricTypes?.[metric] || 'score';
-          const peerValues = runMetricAvgs
+          const direction = metricDirectionFor(metric);
+          const peerValues = columnMetricAvgs
             .map(avgs => avgs[metric])
             .filter(val => val !== null && val !== undefined && !isNaN(val));
-          const cells = runMetricAvgs.map((avgs, runIndex) => {
+          const baseValue = baselineIndex >= 0 ? columnMetricAvgs[baselineIndex][metric] : null;
+          const cells = columnMetricAvgs.map((avgs, columnIndex) => {
+            const column = columns[columnIndex];
             const val = avgs[metric];
-            const errors = runMetricErrors[runIndex][metric] || 0;
-            const errorLabel = `${errors} error${errors === 1 ? '' : 's'}${Number(state.runs[runIndex]?.run?.samples) > 1 ? ' across passes' : ''} not counted in the ${metric} mean (lower is better)`;
+            const errors = columnMetricErrors[columnIndex][metric] || 0;
+            const repeat = column.runIdxs.some(runIdx => Number(state.runs[runIdx]?.run?.samples) > 1) || column.runIdxs.length > 1;
+            const errorLabel = `${errors} error${errors === 1 ? '' : 's'}${repeat ? ' across passes' : ''} not counted in the ${metric} mean (lower is better)`;
             const errorHtml = errors
               ? `<span class="status-errors status-metric-errors metric-error-indicator" title="${escapeAttr(errorLabel)}" aria-label="${escapeAttr(errorLabel)}">⚠ ${errors}</span>`
               : '';
             if (val === null) return `<td class="metric-value-cell"><span class="metric-val">—</span>${errorHtml}</td>`;
-            const isBest = bestValues[metric] !== null && val === bestValues[metric] && state.runs.length > 1;
+            const isBest = bestValues[metric] !== null && val === bestValues[metric] && columns.length > 1;
             const cls = metricColorClassFor(metric, val, mType);
             const display = window.QymMetrics.formatMetricValueSmart(val, mType, peerValues);
-            return `<td class="metric-value-cell"><span class="metric-val qym-score-value ${cls} ${isBest ? 'best' : ''}"${isBest ? ' title="Best across runs"' : ''}>${display}</span>${errorHtml}</td>`;
+            let deltaHtml = '';
+            if (baselineIndex >= 0 && columnIndex !== baselineIndex && baseValue !== null && columns.length > 1) {
+              const averagesDelta = val - baseValue;
+              const paired = compareWithBaseline(column, baseline, metric);
+              // Paired items decide the change; with none, the averages do.
+              const delta = paired.mean !== null ? paired.mean : averagesDelta;
+              const pairedNote = paired.mean !== null && Math.abs(averagesDelta - paired.mean) > BASELINE_DELTA_EPSILON
+                ? `. The averages above differ by ${formatBaselineDelta(averagesDelta, metric)}: they also cover items the two runs did not both score; the change compares the ${paired.paired} items both scored`
+                : '';
+              const verdict = window.QymMetrics.metricDeltaVerdict(delta, paired.halfWidth ?? 0, direction);
+              const band = paired.halfWidth !== null ? formatBaselineBand(paired.halfWidth, metric) : '';
+              const verdictText = verdict === 'within_noise'
+                ? 'within noise'
+                : verdict === 'changed' ? 'changed (the metric declares no direction)' : verdict + ' beyond noise';
+              const pText = paired.pValue === null ? '' : (paired.pValue < 0.001 ? ', p < 0.001' : `, p = ${paired.pValue.toFixed(3)}`);
+              const deltaTitle = paired.halfWidth !== null
+                ? `vs baseline ${columnLabel(baseline)}: ${formatBaselineDelta(delta, metric)}, ${verdictText} (95% noise band ${band}${pText}, ${paired.paired} paired items)${pairedNote}`
+                : `vs baseline ${columnLabel(baseline)}: ${formatBaselineDelta(delta, metric)} (too few paired items for a noise band)${pairedNote}`;
+              const countButton = (kind, glyph) => {
+                const n = paired.counts[kind];
+                const active = deltaFilter && deltaFilter.metric === metric && deltaFilter.columnKey === column.key && deltaFilter.kind === kind;
+                const label = `${n} item${n === 1 ? '' : 's'} ${baselineKindLabel(kind, direction)} vs baseline`;
+                return `<button type="button" class="metric-delta-count metric-delta-count--${kind}${active ? ' active' : ''}" data-delta-metric="${escapeAttr(metric)}" data-delta-column="${escapeAttr(column.key)}" data-delta-kind="${kind}" title="${escapeAttr(label + ': show them in the item list')}" aria-label="${escapeAttr(label)}" aria-pressed="${active ? 'true' : 'false'}"${n ? '' : ' disabled'}>${glyph}${n}</button>`;
+              };
+              deltaHtml = `<div class="metric-delta-line"><span class="metric-delta metric-delta--${verdict}" title="${escapeAttr(deltaTitle)}">${formatBaselineDelta(delta, metric)}${band ? `<span class="metric-delta-band">${band}</span>` : ''}</span></div>`
+                + `<div class="metric-delta-counts">${countButton('improved', '↑')}${countButton('regressed', '↓')}</div>`;
+            }
+            return `<td class="metric-value-cell"><span class="metric-val qym-score-value ${cls} ${isBest ? 'best' : ''}"${isBest ? ' title="Best across runs"' : ''}>${display}</span>${errorHtml}${deltaHtml}</td>`;
           }).join('');
 
           return `
             <tr>
-              <td class="metric-name" title="${escapeAttr(window.QymMetrics.metricDirectionLabel(metricDirectionFor(metric)))}">${escapeHtml(metric)}</td>
+              <td class="metric-name" title="${escapeAttr(window.QymMetrics.metricDirectionLabel(direction))}">${escapeHtml(metric)}</td>
               ${cells}
             </tr>
           `;
         }).join('');
 
         // Latency row
-        const latencyCells = runLatencyAvgs.map(val => {
+        const latencyCells = columnLatencyAvgs.map(val => {
           if (val === null) return '<td class="metric-value-cell"><span class="metric-val">—</span></td>';
-          const isBest = val === bestLatency && state.runs.length > 1;
+          const isBest = val === bestLatency && columns.length > 1;
           return `<td class="metric-value-cell"><span class="metric-val ${isBest ? 'best' : ''}"${isBest ? ' title="Best across runs"' : ''}>${val === 0 ? '0ms' : formatLatency(val)}</span></td>`;
         }).join('');
 
-        const latencyRow = runLatencyAvgs.some(value => value !== null) ? `
+        const latencyRow = columnLatencyAvgs.some(value => value !== null) ? `
           <tr>
             <td class="metric-name">⚡ Avg Latency</td>
             ${latencyCells}
           </tr>
         ` : '';
 
-        // ⚡ Trace stats rows
-        const hasAnyTrace = state.runs.some(r => r.run?.trace_stats?.has_spans);
+        // ⚡ Trace stats rows (a run's passes share its trace statistics)
+        const columnTraceStats = columns.map(column => state.runs[column.runIdxs[0]]?.run?.trace_stats);
+        const hasAnyTrace = columnTraceStats.some(stats => stats?.has_spans);
         let traceRows = '';
         if (hasAnyTrace) {
           const traceDefs = [
-            { key: 'avg_tokens',     label: '\u26A1 Avg Tokens', fmt: v => v != null ? Math.round(v).toLocaleString() : '\u2014', best: 'low' },
-            { key: 'avg_llm_calls',  label: '\u26A1 LLM Calls',  fmt: v => v != null ? v.toFixed(1) : '\u2014', best: 'low' },
-            { key: 'avg_tool_calls', label: '\u26A1 Tool Calls',  fmt: v => v != null ? v.toFixed(1) : '\u2014', best: 'low' },
-            { key: 'tool_success_rate', label: '\u26A1 Tool Success Rate', fmt: v => v != null ? (v * 100).toFixed(1) + '%' : '\u2014', best: 'high' },
-            { key: 'avg_llm_ms', label: '\u26A1 Avg LLM Latency', fmt: v => v != null ? formatLatency(v) : '\u2014', best: 'low' },
-            { key: 'avg_tool_ms', label: '\u26A1 Avg Tool Latency', fmt: v => v != null ? formatLatency(v) : '\u2014', best: 'low' },
-            { key: 'avg_retriever_ms', label: '\u26A1 Avg Retriever Latency', fmt: v => v != null ? formatLatency(v) : '\u2014', best: 'low' },
-            { key: 'avg_evaluator_ms', label: '\u26A1 Avg Evaluator Latency', fmt: v => v != null ? formatLatency(v) : '\u2014', best: 'low' },
-            { key: 'avg_top_level_chain_ms', label: '\u26A1 Avg Trace Latency', fmt: v => v != null ? formatLatency(v) : '\u2014', best: 'low' },
+            { key: 'avg_tokens',     label: '⚡ Avg Tokens', fmt: v => v != null ? Math.round(v).toLocaleString() : '—', best: 'low' },
+            { key: 'avg_llm_calls',  label: '⚡ LLM Calls',  fmt: v => v != null ? v.toFixed(1) : '—', best: 'low' },
+            { key: 'avg_tool_calls', label: '⚡ Tool Calls',  fmt: v => v != null ? v.toFixed(1) : '—', best: 'low' },
+            { key: 'tool_success_rate', label: '⚡ Tool Success Rate', fmt: v => v != null ? (v * 100).toFixed(1) + '%' : '—', best: 'high' },
+            { key: 'avg_llm_ms', label: '⚡ Avg LLM Latency', fmt: v => v != null ? formatLatency(v) : '—', best: 'low' },
+            { key: 'avg_tool_ms', label: '⚡ Avg Tool Latency', fmt: v => v != null ? formatLatency(v) : '—', best: 'low' },
+            { key: 'avg_retriever_ms', label: '⚡ Avg Retriever Latency', fmt: v => v != null ? formatLatency(v) : '—', best: 'low' },
+            { key: 'avg_evaluator_ms', label: '⚡ Avg Evaluator Latency', fmt: v => v != null ? formatLatency(v) : '—', best: 'low' },
+            { key: 'avg_top_level_chain_ms', label: '⚡ Avg Trace Latency', fmt: v => v != null ? formatLatency(v) : '—', best: 'low' },
           ];
           for (const td of traceDefs) {
-            const vals = state.runs.map(r => {
-              const ts = r.run?.trace_stats;
-              return ts ? ts[td.key] : null;
-            });
+            const vals = columnTraceStats.map(ts => (ts ? ts[td.key] : null));
             const validVals = vals.filter(v => v != null && v >= 0);
             if (!validVals.length) continue;
             const bestVal = validVals.length > 0 ? (td.best === 'high' ? Math.max(...validVals) : Math.min(...validVals)) : null;
@@ -9844,6 +10486,20 @@
         }
 
         tbody.innerHTML = metricRows + latencyRow + traceRows;
+        tbody.querySelectorAll('.metric-delta-count[data-delta-kind]').forEach(button => {
+          button.addEventListener('click', () => {
+            const next = {
+              metric: button.dataset.deltaMetric,
+              columnKey: button.dataset.deltaColumn,
+              baselineKey: baseline.key,
+              kind: button.dataset.deltaKind,
+            };
+            const current = state.baselineDeltaFilter;
+            const same = current && current.metric === next.metric && current.columnKey === next.columnKey
+              && current.baselineKey === next.baselineKey && current.kind === next.kind;
+            setBaselineDeltaFilter(same ? null : next);
+          });
+        });
         const section = document.querySelector('.metrics-comparison');
         if (section) section.style.display = tbody.innerHTML ? '' : 'none';
       }
@@ -10699,7 +11355,7 @@
 
         const winnerChoices = [{ value: 'tie', label: 'Tie' }];
         state.runs.forEach((run, index) => {
-          const name = run?.run?.run_name || `Run ${index + 1}`;
+          const name = compareRunShortLabel(index);
           winnerChoices.push({ value: `win_${index}`, label: `${name} won` });
           winnerChoices.push({ value: `only_${index}`, label: `Only ${name} solved` });
         });
@@ -10713,7 +11369,7 @@
         });
 
         state.runs.forEach((run, index) => {
-          const name = run?.run?.run_name || `Run ${index + 1}`;
+          const name = compareRunShortLabel(index);
           defs.push({
             id: `score:${index}`,
             label: `${name} · ${state.selectedItemsMetric || 'score'}`,
@@ -11204,6 +11860,8 @@
               if (correctRuns.length !== 1 || correctRuns[0] !== runIdx) continue;
             }
           }
+
+          if (state.baselineDeltaFilter && !baselineDeltaMatches(itemId)) continue;
 
           const filterContext = compareFilterContext(itemId, rowData, scores, stats, verdicts);
           if (!evalFilterNode(state.filterRoot, filterContext)) continue;
@@ -11725,7 +12383,7 @@
                 <div class="item-run-output" style="border-left-color: ${color}">
                   <div class="compare-run-caption">
                     <span class="compare-run-dot" style="background:${color}"></span>
-                    <span class="compare-run-name">${escapeHtml(runInfo.run_name || ('Run ' + (runIdx + 1)))}</span>
+                    <span class="compare-run-name" title="${escapeAttr(runInfo.run_name || ('Run ' + (runIdx + 1)))}">${escapeHtml(compareRunShortLabel(runIdx))}</span>
                   </div>
                   <div class="output-header">
                     <span class="output-status-cluster"><span class="run-label">OUTPUT</span></span>
@@ -11901,7 +12559,7 @@
               <div class="item-run-output" style="border-left-color: ${color}">
                 <div class="compare-run-caption">
                   <span class="compare-run-dot" style="background:${color}"></span>
-                  <span class="compare-run-name">${escapeHtml(runInfo.run_name || ('Run ' + (runIdx + 1)))}</span>
+                  <span class="compare-run-name" title="${escapeAttr(runInfo.run_name || ('Run ' + (runIdx + 1)))}">${escapeHtml(compareRunShortLabel(runIdx))}</span>
                   ${winnerBadge}
                 </div>
                 <div class="output-header">
@@ -12201,6 +12859,9 @@
       }
 
       function renderItems(scrollToTop = false, options = {}) {
+        // Item scores behind the baseline filter are read fresh (score edits).
+        state.columnScoreCache = {};
+        renderBaselineDeltaBanner();
         const version = ++comparisonRenderVersion;
         if (hasComparisonDetails() && deferComparisonItems(ensureComparisonSearch(), version, scrollToTop)) return;
         const preserveAnchor = state.hasRenderedItems && !scrollToTop;
@@ -12357,19 +13018,28 @@
         return QymSafe.textBlock(str, { dir: isRTL(str) ? 'rtl' : '' });
       }
 
+      // A category value as text: objects and arrays read as their JSON,
+      // never "[object Object]".
+      function categoryValueText(value) {
+        if (value !== null && typeof value === 'object') {
+          try { return JSON.stringify(value); } catch { return String(value); }
+        }
+        return String(value);
+      }
+
       function parseMetaList(val) {
         if (val == null || val === '') return [];
-        if (Array.isArray(val)) return val.filter(v => v != null && v !== 'null' && v !== '').map(String);
-        const s = String(val).trim();
+        if (Array.isArray(val)) return val.filter(v => v != null && v !== 'null' && v !== '').map(categoryValueText);
+        const s = categoryValueText(val).trim();
         if (s.startsWith('[') && s.endsWith(']')) {
           try {
             const parsed = JSON.parse(s);
-            if (Array.isArray(parsed)) return parsed.filter(v => v != null).map(String);
+            if (Array.isArray(parsed)) return parsed.filter(v => v != null).map(categoryValueText);
           } catch {}
           try {
             const fixed = s.replace(/'/g, '"').replace(/"null"/g, 'null');
             const parsed = JSON.parse(fixed);
-            if (Array.isArray(parsed)) return parsed.filter(v => v != null).map(String);
+            if (Array.isArray(parsed)) return parsed.filter(v => v != null).map(categoryValueText);
           } catch {}
         }
         return [s];
@@ -12383,7 +13053,7 @@
         const raw = (md && typeof md === 'object') ? md[key] : null;
         if (raw == null || raw === '') return [];
         if (isListCategoryKey(key) || Array.isArray(raw)) return parseMetaList(raw);
-        return [String(raw)];
+        return [categoryValueText(raw)];
       }
 
       // One shared escaping rule (qym_safe.js): & < > " ' in text and attributes.
@@ -13862,6 +14532,7 @@
         n += filterRuleCount(state.filterRoot);
         if (state.itemFilter !== 'all') n++;
         if (state.winnerFilter !== 'any') n++;
+        if (state.baselineDeltaFilter) n++;
         if (state.approvalFilter !== null) n++;
         if (state.searchQuery) n++;
         if (state.complexityFilter !== null) n++;
@@ -13882,6 +14553,7 @@
         n += filterRuleCount(state.filterRoot);
         if (state.itemFilter !== 'all') n++;
         if (state.winnerFilter !== 'any') n++;
+        if (state.baselineDeltaFilter) n++;
         if (state.approvalFilter !== null) n++;
         if (state.complexityFilter !== null) n++;
         if (state.domainFilter !== null) n++;
@@ -13913,6 +14585,8 @@
         state.filterRoot = { op: 'and', children: [] };
         state.itemFilter = 'all';
         state.winnerFilter = 'any';
+        const hadBaselineDeltaFilter = !!state.baselineDeltaFilter;
+        state.baselineDeltaFilter = null;
         state.approvalFilter = null;
         state.searchQuery = '';
         state.complexityFilter = null;
@@ -13944,6 +14618,7 @@
         syncMultiselectUI('root_cause');
 
         renderFilterBuilder();
+        if (hadBaselineDeltaFilter) renderMetricsTable();
         renderItems();
       }
 

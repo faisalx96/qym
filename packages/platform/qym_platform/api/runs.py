@@ -3087,7 +3087,7 @@ def _run_display_name(run: Run) -> str:
 
 
 def _models_errored_passes(
-    db: Session, samples_by_run: Dict[str, int]
+    db: Session, samples_by_run: Dict[str, int], metrics: Optional[List[str]] = None
 ) -> Dict[tuple[str, str], Dict[str, Dict[str, list]]]:
     """Pass scores of repeat items with a scorer- or task-error pass.
 
@@ -3100,7 +3100,7 @@ def _models_errored_passes(
 
     if not samples_by_run:
         return {}
-    affected = errored_pass_items(db, list(samples_by_run))
+    affected = errored_pass_items(db, list(samples_by_run), metrics)
     result: Dict[tuple[str, str], Dict[str, Dict[str, list]]] = {}
     items = sorted({(run_id, item_id) for run_id, item_id, _ in affected})
     for start in range(0, len(items), 400):
@@ -3138,7 +3138,11 @@ def _models_errored_passes(
     return result
 
 
-def _build_models_runs_data(db: Session, runs: list[Run]) -> list[dict[str, Any]]:
+def _build_models_runs_data(
+    db: Session, runs: list[Run], metric: Optional[str] = None
+) -> list[dict[str, Any]]:
+    """Item-level rows of the Models view; ``metric`` reads that metric's
+    scores only (server-side K-run statistics, services/model_stats.py)."""
     if not runs:
         return []
 
@@ -3197,7 +3201,10 @@ def _build_models_runs_data(db: Session, runs: list[Run]) -> list[dict[str, Any]
             RunItemScore.score_raw,
             RunItemScore.meta["status"].as_string(),
         )
-        .filter(RunItemScore.run_id.in_(run_ids))
+        .filter(
+            RunItemScore.run_id.in_(run_ids),
+            *([RunItemScore.metric_name == metric] if metric is not None else []),
+        )
         .all()
     )
     score_by_run_item: dict[tuple[str, str], dict[str, Any]] = {}
@@ -3216,6 +3223,7 @@ def _build_models_runs_data(db: Session, runs: list[Run]) -> list[dict[str, Any]
             for run in runs
             if int(getattr(run, "samples", 1) or 1) > 1
         },
+        [metric] if metric is not None else None,
     )
 
     item_rows = (

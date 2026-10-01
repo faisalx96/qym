@@ -1706,6 +1706,10 @@
         file_path: run.file_path,
         timestamp: run.timestamp,
         metric_averages: run.metric_averages || {},
+        // Grouped Pass@K, consistency and reliability need the declared
+        // direction and the primary metric (C008, C035).
+        metric_specs: run.metric_specs || {},
+        metrics: run.metrics || [],
         trace_stats: run.trace_stats || null,
         avg_latency_ms: run.avg_latency_ms,
         median_latency_ms: run.median_latency_ms,
@@ -2592,9 +2596,8 @@
 
         state.chartGroupMetricStats[cacheKey] = { status: 'loading', K: runs.length };
         const paths = Array.from(new Set(runs.map(run => run.file_path).filter(Boolean)));
-        fetchModelRunsData(paths).then((payload) => {
-          const detailedRuns = payload && Array.isArray(payload.runs) ? payload.runs : [];
-          const stats = calculateModelStatsFromItems(detailedRuns, metricName, threshold, isBoolean, runsMetricDirection(runs, metricName));
+        fetchChartGroupStats(cacheKey, paths, metricName, threshold, isBoolean, runsMetricDirection(runs, metricName)).then((stats) => {
+          stats = stats || emptyModelStats();
           state.chartGroupMetricStats[cacheKey] = { status: 'ready', K: stats.K || runs.length, stats };
           if (state.currentView === 'charts') renderChartsView();
         }).catch(() => {
@@ -3234,6 +3237,8 @@
   // Repeat runs: expand each ×k run into k per-pass pseudo-runs so group
   // analysis pools attempts (the attempt is the atomic unit). Runs without
   // pass data flow through unchanged (each = 1 attempt, today's semantics).
+  // The Models view and Charts groups apply the same rule on the server
+  // (services/model_stats.py expand_sampled_runs); keep the two in step.
   function expandSampledRunsData(runsData) {
     const out = [];
     (runsData || []).forEach(rd => {
@@ -3242,7 +3247,7 @@
       // A snapshot whose errored items alone carry passes (the Models
       // payload) stays one entry per item.
       const hasPassData = samples > 1 && rd?.snapshot?.pass_scores_scope !== 'errored'
-        && rows.some(r => r && r.pass_scores);
+        && rows.some(r => r && r.pass_scores && Object.keys(r.pass_scores).length > 0);
       if (!hasPassData) { out.push(rd); return; }
       const metricNames = rd.snapshot.metric_names || rd.run.metric_names || [];
       for (let p = 0; p < samples; p++) {
@@ -5369,12 +5374,16 @@
     if (mvs.inFlightRequestKey === requestKey && mvs.inFlightRequestPromise) {
       combinedRunsPromise = mvs.inFlightRequestPromise;
     } else {
-      const allSelectedPaths = Array.from(new Set(modelSelections.flatMap(({ selectedPaths }) => selectedPaths)));
       const selectedRows = modelSelections.flatMap(({ selectedRuns }) => selectedRuns);
       const selectedRevision = selectedRows.every(run => run._revision !== undefined)
         ? JSON.stringify(selectedRows.map(run => [run.file_path, run._revision]).sort((a, b) => a[0].localeCompare(b[0])))
         : candidates?.selected_revision ?? candidates?.revision;
-      combinedRunsPromise = fetchModelRunsData(allSelectedPaths, selectedRevision);
+      // K-run statistics come from the server, a few hundred bytes per
+      // model, never the selected runs' item rows (C035).
+      combinedRunsPromise = fetchModelStats(
+        modelSelections.map(({ model, selectedPaths }) => ({ key: model, runs: selectedPaths })),
+        mvs.selectedMetric, mvs.threshold, mvs.metricIsBoolean, mvs.metricDirection, selectedRevision,
+      );
       mvs.inFlightRequestKey = requestKey;
       mvs.inFlightRequestPromise = combinedRunsPromise;
     }
@@ -5396,17 +5405,11 @@
       mvs.inFlightRequestPromise = null;
     }
 
-    const combinedRunsData = comparePayload && Array.isArray(comparePayload.runs) ? comparePayload.runs : [];
-    const runsDataById = new Map((combinedRunsData || []).map((runData) => {
-      const runInfo = runData && runData.run ? runData.run : {};
-      const runId = runInfo.file_path || runInfo.run_id || '';
-      return [runId, runData];
-    }));
+    const groupStats = (comparePayload && comparePayload.groups) || {};
 
     mvs.modelStats = {};
     modelSelections.forEach(({ model, selectedPaths, selectedRuns }) => {
-      const detailedData = selectedPaths.map((path) => runsDataById.get(path)).filter(Boolean);
-      mvs.modelStats[model] = calculateModelStatsFromItems(detailedData, mvs.selectedMetric, mvs.threshold, mvs.metricIsBoolean, mvs.metricDirection);
+      mvs.modelStats[model] = { ...(groupStats[model] || emptyModelStats()) };
       mvs.modelStats[model].traceAverages = calculateModelTraceStats(selectedRuns);
       mvs.modelStats[model].totalRetries = selectedRuns.reduce((sum, run) => sum + Number(run.total_retries || 0), 0);
       mvs.modelStats[model].totalAvailable = candidates?.totals?.[model] ?? runsByModel[model].length;
@@ -5534,90 +5537,92 @@
     return entry.promise;
   }
 
-  // Cache for fetched Models run data to avoid re-fetching
-  let modelsRunDataCache = null;
+  function emptyModelStats() {
+    return {
+      passAtK: 0, passHatK: 0, maxAtK: 0, consistency: 0, reliability: 0, avgScore: 0, avgLatency: 0, medianLatency: 0,
+      totalItems: 0, failedCount: 0, K: 0, correctDistribution: [0], runNames: [],
+      minScore: 0, stddevScore: 0
+    };
+  }
 
-  async function fetchModelRunsData(filePaths, revision = (state.dashboardOverview?.catalog_revision ?? state.dashboardOverview?.revision)) {
-    if (filePaths.length === 0) return { runs: [], cacheHit: true };
+  // The last K-run statistics request per view, reused while nothing it
+  // depends on changed (the same groups, metric, threshold and revision).
+  let modelStatsCache = null;
 
-    // Check cache first
-    const paths = [...new Set(filePaths)].sort();
-    const cacheKey = [getProjectSlugFromPath(), revision, ...paths].join('|');
-    if (modelsRunDataCache?.key === cacheKey) return modelsRunDataCache.promise;
+  // Pass@K, Pass^K, Max@K, consistency, reliability, averages, latency, error
+  // counts and the correct-count histogram per group, computed on the server
+  // with the metrics.js rules (services/model_stats.py). groups: [{key, runs}].
+  async function fetchModelStats(groups, metric, threshold, isBoolean, direction, revision = (state.dashboardOverview?.catalog_revision ?? state.dashboardOverview?.revision)) {
+    const payload = {
+      metric,
+      threshold: Number(threshold),
+      is_boolean: !!isBoolean,
+      direction: direction === 'maximize' || direction === 'minimize' ? direction : null,
+      groups: (groups || []).map(group => ({ key: String(group.key), runs: [...new Set(group.runs || [])] })),
+    };
+    if (!metric || payload.groups.length === 0) return { groups: {}, cacheHit: true };
+    const cacheKey = [getProjectSlugFromPath(), revision, JSON.stringify(payload)].join('|');
+    if (modelStatsCache?.key === cacheKey) return modelStatsCache.promise;
     const entry = { key: cacheKey, promise: null };
     entry.promise = (async () => {
-      const runs = [];
-      for (let offset = 0; offset < paths.length; offset += 100) {
-        const batch = paths.slice(offset, offset + 100);
-        const params = batch.map(f => `files=${encodeURIComponent(f)}`).join('&');
-        const response = await fetch(apiUrl(`api/models/runs?${params}`));
-        if (!response.ok) throw new Error(`Could not load selected runs (HTTP ${response.status})`);
-        const data = await response.json();
-        if (!Array.isArray(data.runs) || data.runs.length !== batch.length) throw new Error('Some selected runs are no longer available. Refresh the model selection.');
-        runs.push(...data.runs);
+      let data;
+      try {
+        data = await dashboardQuery('models/stats', payload);
+      } catch (error) {
+        throw new Error(`Could not load model statistics (${error.message || 'request failed'})`);
       }
-      return { runs, cacheHit: false };
+      if (!data || typeof data.groups !== 'object') throw new Error('Incomplete model statistics response');
+      if (Array.isArray(data.missing) && data.missing.length) throw new Error('Some selected runs are no longer available. Refresh the model selection.');
+      return { groups: data.groups, cacheHit: false };
     })();
-    modelsRunDataCache = entry;
-    entry.promise.catch(() => { if (modelsRunDataCache === entry) modelsRunDataCache = null; });
+    modelStatsCache = entry;
+    entry.promise.catch(() => { if (modelStatsCache === entry) modelStatsCache = null; });
     return entry.promise;
   }
 
-  function calculateModelStatsFromItems(runsData, metricName, threshold, isBoolean, direction = null) {
-    // Get run names before delegating to shared function
-    const runNames = (runsData || []).map((r, i) => r?.run?.run_name || `Run ${i + 1}`);
-    const K = runsData?.length || 0;
-
-    if (!runsData || runsData.length === 0) {
-      return {
-        passAtK: 0, passHatK: 0, maxAtK: 0, consistency: 0, reliability: 0, avgScore: 0, avgLatency: 0, medianLatency: 0,
-        totalItems: 0, failedCount: 0, K: 0, correctDistribution: [0], runNames: [],
-        minScore: 0, stddevScore: 0
-      };
-    }
-
-    const effectiveThreshold = isBoolean ? 0.9999 : threshold;
-    // Pass/fail and the best score follow the declared direction (C008).
-
-    // Use shared metrics calculation. Repeat runs pool their ATTEMPTS: a ×k
-    // run contributes k per-pass entries, so Pass@K math runs over the pooled
-    // attempt set — never pass@k of pass@k.
-    const metrics = window.QymMetrics.calculateItemLevelMetrics({
-      runsData: expandSampledRunsData(runsData),
-      metricName,
-      threshold: effectiveThreshold,
-      direction,
-      isBoolean: !!isBoolean,
-      getMetricIndex: (runData) => {
-        const metricNames = runData?.snapshot?.metric_names || runData?.run?.metric_names || [];
-        return metricNames.indexOf(metricName);
-      },
-      getItemId: (row) => row.item_id || String(row.index),
-      trackDistribution: true
-    });
-
-    // A lower-is-better metric leaves errors out: a model with no score left
-    // has no average (its 0 would read as the best value and rank first).
-    const noScore = metrics.totalScoreCount === 0 && window.QymMetrics.errorsLeftOut(direction);
-    return {
-      passAtK: metrics.passAtK,
-      passHatK: metrics.passHatK,
-      maxAtK: noScore ? null : metrics.maxAtK,
-      consistency: metrics.consistency,
-      reliability: metrics.reliability,
-      avgScore: noScore ? null : metrics.avgScore,
-      avgLatency: metrics.avgLatency,
-      medianLatency: metrics.medianLatency,
-      totalItems: metrics.totalItems,
-      failedCount: metrics.failedCount,
-      totalScoreSum: metrics.totalScoreSum,
-      totalScoreCount: metrics.totalScoreCount,
-      minScore: noScore ? null : metrics.minScore,
-      stddevScore: metrics.stddevScore,
-      K: metrics.K,
-      correctDistribution: metrics.correctDistribution || new Array(K + 1).fill(0),
-      runNames
+  // Charts "Grouped" asks for every group's statistics in one render: the
+  // requests of one tick that share a metric rule go out as one batch (at
+  // most 100 groups or 2000 runs each), not one request per group (C035).
+  let chartGroupStatsBatches = new Map();
+  function fetchChartGroupStats(key, paths, metric, threshold, isBoolean, direction) {
+    const rule = {
+      metric,
+      threshold: Number(threshold),
+      is_boolean: !!isBoolean,
+      direction: direction === 'maximize' || direction === 'minimize' ? direction : null,
     };
+    const signature = JSON.stringify(rule);
+    let batch = chartGroupStatsBatches.get(signature);
+    const runCount = batch ? batch.groups.reduce((sum, group) => sum + group.runs.length, 0) : 0;
+    if (!batch || batch.groups.length >= 100 || runCount + paths.length > 2000) {
+      if (batch) chartGroupStatsBatches.delete(signature);
+      batch = { rule, groups: [], waiters: new Map() };
+      chartGroupStatsBatches.set(signature, batch);
+      const pending = batch;
+      setTimeout(() => {
+        if (chartGroupStatsBatches.get(signature) === pending) chartGroupStatsBatches.delete(signature);
+        dashboardQuery('models/stats', { ...pending.rule, groups: pending.groups }).then((data) => {
+          const missing = new Set(Array.isArray(data?.missing) ? data.missing : []);
+          pending.groups.forEach((group) => {
+            const waiter = pending.waiters.get(group.key);
+            if (group.runs.some(run => missing.has(run)) || !data?.groups?.[group.key]) {
+              waiter.reject(new Error('Some runs of this group are no longer available.'));
+            } else {
+              waiter.resolve(data.groups[group.key]);
+            }
+          });
+        }).catch((error) => {
+          pending.waiters.forEach(waiter => waiter.reject(error));
+        });
+      }, 0);
+    }
+    const existing = batch.waiters.get(key);
+    if (existing) return existing.promise;
+    const waiter = {};
+    waiter.promise = new Promise((resolve, reject) => { waiter.resolve = resolve; waiter.reject = reject; });
+    batch.waiters.set(key, waiter);
+    batch.groups.push({ key, runs: [...new Set(paths)] });
+    return waiter.promise;
   }
 
   function calculateModelTraceStats(runs) {

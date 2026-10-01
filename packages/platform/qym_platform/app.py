@@ -22,6 +22,7 @@ from qym_platform.api.product_evals import router as product_evals_router
 from qym_platform.api.datasets import router as datasets_router
 from qym_platform.api.insights import router as insights_router
 from qym_platform.api.dashboard import router as dashboard_router
+from qym_platform.api.dashboard_stats import router as dashboard_stats_router
 from qym_platform.api.admin import router as admin_router
 from qym_platform.services.analysis_jobs import (
     analysis_job_manager,
@@ -158,6 +159,7 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     app.include_router(datasets_router)
     app.include_router(insights_router)
     app.include_router(dashboard_router)
+    app.include_router(dashboard_stats_router)
     app.include_router(admin_router)
     app.include_router(step_latency_router)
     app.include_router(runs_router)

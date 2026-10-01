@@ -374,6 +374,15 @@
       min-width: 0;
       flex-shrink: 0;
     }
+    .hero-previous-delta {
+      margin-left: 6px;
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      color: var(--text-muted);
+    }
+    .hero-previous-delta--improved { color: var(--success); }
+    .hero-previous-delta--regressed { color: var(--error); }
+    .hero-actions > a.qym-inline-action { text-decoration: none; }
     .hero-actions {
       display: flex;
       flex-wrap: wrap;
@@ -6417,13 +6426,21 @@
 
       // ── Utility functions ──
 
+      // A category value as text: objects read as JSON, never "[object Object]".
+      function categoryValueText(value) {
+        if (value !== null && typeof value === 'object') {
+          try { return JSON.stringify(value); } catch { return String(value); }
+        }
+        return String(value);
+      }
+
       function parseMetaList(val) {
         if (val == null || val === '') return [];
-        if (Array.isArray(val)) return val.filter(v => v != null && v !== 'null' && v !== '').map(String);
-        var s = String(val).trim();
+        if (Array.isArray(val)) return val.filter(v => v != null && v !== 'null' && v !== '').map(categoryValueText);
+        var s = categoryValueText(val).trim();
         if (s.startsWith('[') && s.endsWith(']')) {
-          try { var p = JSON.parse(s); if (Array.isArray(p)) return p.filter(v => v != null).map(String); } catch {}
-          try { var f = s.replace(/'/g, '"').replace(/"null"/g, 'null'); var p2 = JSON.parse(f); if (Array.isArray(p2)) return p2.filter(v => v != null).map(String); } catch {}
+          try { var p = JSON.parse(s); if (Array.isArray(p)) return p.filter(v => v != null).map(categoryValueText); } catch {}
+          try { var f = s.replace(/'/g, '"').replace(/"null"/g, 'null'); var p2 = JSON.parse(f); if (Array.isArray(p2)) return p2.filter(v => v != null).map(categoryValueText); } catch {}
         }
         return [s];
       }
@@ -6436,7 +6453,7 @@
         const raw = (md && typeof md === 'object') ? md[key] : null;
         if (raw == null || raw === '') return [];
         if (isListCategoryKey(key) || Array.isArray(raw)) return parseMetaList(raw);
-        return [String(raw)];
+        return [categoryValueText(raw)];
       }
 
       // One shared escaping rule (qym_safe.js): & < > " ' in text and attributes.
@@ -7518,6 +7535,8 @@
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' +
             'Download with Changes' +
           '</button>' +
+          // Filled in by syncComparePrevious() once the previous run is known (C057).
+          '<a class="qym-inline-action qym-inline-action--neutral" id="compare-previous-btn" href="#" hidden></a>' +
           '<button class="qym-inline-action qym-inline-action--accent" id="export-share-btn" title="Download as a shareable HTML file">' +
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>' +
             'Share' +
@@ -7622,6 +7641,50 @@
           '<div class="hero-meta-grid">' + metaHtml + '</div>' +
           executionContextHtml +
         '</div>';
+        syncComparePrevious();
+      }
+
+      // ── Compare with the previous run (C057) ──
+      // The previous finished run of the same task, model and dataset, opened
+      // on Compare as the baseline. The button notes the change in this run's
+      // primary metric (published run means; Compare adds the noise band).
+      let previousRunRequest = null;
+      function syncComparePrevious() {
+        if (IS_EXPORT || !RUN_ID || !el('compare-previous-btn')) return;
+        if (!previousRunRequest) {
+          previousRunRequest = fetch(apiUrl('api/dashboard/previous-run?run_id=' + encodeURIComponent(RUN_ID)))
+            .then(response => (response.ok ? response.json() : null))
+            .catch(() => null);
+        }
+        previousRunRequest.then(data => {
+          const button = el('compare-previous-btn');
+          const previous = data && data.previous;
+          if (!button || !previous) return;
+          const params = new URLSearchParams();
+          params.append('runs', previous.run_id);
+          params.append('runs', RUN_ID);
+          params.set('baseline', previous.run_id);
+          params.set('columns', 'runs');
+          button.href = apiUrl('compare?' + params.toString());
+          const primary = data.primary;
+          let deltaHtml = '';
+          if (primary && primary.delta != null && Number.isFinite(primary.delta)) {
+            const verdict = window.QymMetrics ? window.QymMetrics.metricDeltaVerdict(primary.delta, 0, primary.direction) : 'changed';
+            const abs = Math.abs(primary.delta);
+            const sign = primary.delta > 0 ? '+' : primary.delta < 0 ? '−' : '';
+            const pct = primary.value != null && primary.previous_value != null
+              && primary.value >= 0 && primary.value <= 1 && primary.previous_value >= 0 && primary.previous_value <= 1;
+            const text = escapeHtml(primary.metric) + ' ' + sign + (pct ? (abs * 100).toFixed(1) + ' pts' : String(Math.round(abs * 1000) / 1000));
+            deltaHtml = '<span class="hero-previous-delta hero-previous-delta--' + escapeAttr(verdict) + '">' + text + '</span>';
+          }
+          const started = previous.started_at ? new Date(previous.started_at).toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+          button.title = 'Compare with ' + (previous.run_name || previous.run_id) + (started ? ' (' + started + ')' : '')
+            + ', the previous finished run of this task, model and dataset, as the baseline.'
+            + (data.dataset_version_mismatch ? ' It used another dataset version (' + (previous.dataset_version || '?') + ').' : '')
+            + (deltaHtml ? ' The change is between the two run means, not tested for noise.' : '');
+          button.innerHTML = 'Compare with previous' + deltaHtml;
+          button.hidden = false;
+        });
       }
 
       // ── Repeat runs: pass-centric analysis section (only when samples > 1).
@@ -10386,7 +10449,7 @@
           const rawValue = metadata[categoryKey] ?? '';
           const isListKey = isListCategoryKey(categoryKey);
           const parsedValues = getMetadataCategoryValues(metadata, categoryKey);
-          const groupValues = parsedValues.length ? parsedValues : [String(rawValue)];
+          const groupValues = parsedValues.length ? parsedValues : [categoryValueText(rawValue)];
           if (groupValues.length === 0) groupValues.push('');
           const domainIsSole = isListKey && groupValues.length === 1;
           const metricScores = getCategoryMetricScores(row, metric, metricIndex);
