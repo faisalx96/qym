@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Run Detail</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001-2">
   <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
   <script src="/static/qym_safe.js?v=p1-20261001"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
@@ -14,10 +14,10 @@
   <script src="/static/run_details.js?v=p1-20261001"></script>
   <script src="/static/qym_live.js?v=p1-20261001"></script>
   <script src="/static/trace_viewer.js?v=p1-20261001"></script>
-  <script src="/static/step_latency.js?v=p1-20261001"></script>
+  <script src="/static/step_latency.js?v=p1-20261001-2"></script>
   <script src="/static/review_history.js?v=p1-20261001"></script>
   <script src="/static/item_reasons.js?v=p1-20261001"></script>
-  <script src="/static/run_section_nav.js?v=p1-20261001"></script>
+  <script src="/static/run_section_nav.js?v=p1-20261001-2"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
     .run-container {
@@ -7829,7 +7829,9 @@
         // changed run (trace stats, counts) redraws it regardless.
         renderItems(false, { viewOnly: !runChanged, live: true });
         if (ended) {
-          mountStepLatency();
+          // Quiet: the panel keeps its current state (hidden for a run with
+          // no spans) until the new data arrives, so nothing below it moves.
+          mountStepLatency({ quietReload: true });
           if (window.QymReviewHistory && RUN_ID) {
             window.QymReviewHistory.load(
               el('review-history-section'),
@@ -8734,11 +8736,11 @@
       // Step latency loads once per page load (and again when a live run
       // ends), never on a filter, sort, page or expand (C028). On the run
       // page it starts collapsed (C143).
-      function mountStepLatency() {
+      function mountStepLatency(extra = {}) {
         try {
           const slPanel = el('step-latency-panel');
           if (window.QymStepLatency && slPanel) {
-            QymStepLatency.mount(slPanel, [RUN_ID], { collapsible: true });
+            QymStepLatency.mount(slPanel, [RUN_ID], { collapsible: true, ...extra });
           }
         } catch (err) {
           console.error('[step-latency] mount failed:', err);
@@ -12942,7 +12944,12 @@
 
       function getItemsGridTop() {
         const node = scrollAnchorNode();
-        return node && node.isConnected ? { node, top: node.getBoundingClientRect().top } : null;
+        // ``used``: the block of a control the reader used. The item-list
+        // fallback is not one: then the section nav keeps the section being
+        // read still, as for any other re-render.
+        return node && node.isConnected
+          ? { node, top: node.getBoundingClientRect().top, used: node === lastInteractionAnchor }
+          : null;
       }
 
       function restoreItemsGridTop(anchor) {
@@ -12950,9 +12957,18 @@
         if (!host || !anchor || !anchor.node || !anchor.node.isConnected) return;
         trimScrollReserve();
         const delta = anchor.node.getBoundingClientRect().top - anchor.top;
-        if (Math.abs(delta) < 1) return;
-        reserveScrollRoom(host, host.scrollTop + delta);
-        host.scrollTop += delta;
+        if (Math.abs(delta) >= 1) {
+          reserveScrollRoom(host, host.scrollTop + delta);
+          host.scrollTop += delta;
+        }
+        // The section nav re-pins after every DOM change; it must keep this
+        // block where it now is, not the section header it saw before the
+        // click, or it undoes this correction (C028).
+        if (anchor.used !== false) holdInNav(anchor.node);
+      }
+
+      function holdInNav(node) {
+        if (sectionNav && typeof sectionNav.hold === 'function') sectionNav.hold(node);
       }
 
       // Content under the reader got shorter near the end of the page (a
@@ -12991,6 +13007,7 @@
         const anchor = section && section.isConnected
           ? { node: section, top: section.getBoundingClientRect().top }
           : null;
+        if (anchor) holdInNav(anchor.node);
         const settle = value => {
           if (anchor) {
             restoreItemsGridTop(anchor);
@@ -13059,7 +13076,10 @@
           if (done || pageGone()) return;
           const card = findTarget();
           if (!card) { finish(); return; }
-          const offset = card.getBoundingClientRect().top - (host ? host.getBoundingClientRect().top : 0) - 16;
+          // Below the sticky section nav, so the card's header (number,
+          // status, title) is what the reader sees first (C059).
+          const navCover = sectionNav && typeof sectionNav.coveredHeight === 'function' ? sectionNav.coveredHeight() : 0;
+          const offset = card.getBoundingClientRect().top - (host ? host.getBoundingClientRect().top : 0) - navCover - 16;
           const before = host ? host.scrollTop : 0;
           if (host && Math.abs(offset) > 2) host.scrollTop += offset;
           else if (!host && Math.abs(offset) > 2) card.scrollIntoView({ block: 'start' });
@@ -13101,6 +13121,8 @@
 
       function scheduleBreakdownRender(preserveAnchor = false, afterRender = null) {
         const anchorTop = preserveAnchor ? getItemsGridTop() : null;
+        // One owner for the scroll from now on: the block the reader used.
+        if (anchorTop && anchorTop.used) holdInNav(anchorTop.node);
         clearTimeout(_breakdownTimer);
         _breakdownTimer = setTimeout(function () {
           renderMetadataBreakdown();

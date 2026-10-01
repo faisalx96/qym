@@ -12,7 +12,9 @@
  * The page re-renders sections above the reader when a filter changes. The
  * nav keeps the section the reader is in still: it remembers where that
  * section's header sat and restores it after every DOM change, until the
- * reader scrolls again.
+ * reader scrolls again. When the reader used a control, the page hands the
+ * nav that control's block (``hold``), so one anchor owns the scroll: the
+ * nav and the page never correct the scroll against each other.
  *
  * shell.js re-runs page scripts on in-app navigation: no top-level
  * const/let/class, and every listener is bound to this page's elements.
@@ -93,6 +95,9 @@
 
     function resolveAnchorHead() {
       if (!anchor) return null;
+      // A block the page asked to hold (the one whose control the reader
+      // used): keep exactly that block still while it is on the page.
+      if (anchor.node) return isShown(anchor.node) ? anchor.node : null;
       var head = headFor(anchor.key);
       if (head) return head;
       // The section went away (no errors left, say): keep the next one still.
@@ -355,6 +360,16 @@
       // The page is about to scroll somewhere itself (a deep-linked item):
       // hold nothing until that scroll is over.
       yieldToScroll: function () { anchor = null; startProgrammatic(); },
+      // Keep ``node`` where it is on screen now, through every re-render,
+      // until the reader scrolls on their own (C028).
+      hold: function (node) {
+        if (!node || !node.isConnected || host.scrollTop <= 0) return;
+        anchor = { node: node, offset: contentTop(node) - host.scrollTop };
+      },
+      // Height the stuck nav covers at the top of the scroll host.
+      coveredHeight: function () {
+        return nav.classList.contains('is-stuck') || host.scrollTop > 0 ? stuckHeight() : 0;
+      },
     };
   }
 

@@ -268,7 +268,11 @@
       container.classList.add("sl-refreshing");
     } else {
       state.data = null;
-      render();
+      // A quiet remount (the run page when a live run ends) keeps what is on
+      // screen, nothing or the closed summary, until the data arrives: a
+      // "Loading" card must not flash in and push the sections below down
+      // and back (C039, C028).
+      if (!state.quietReload) render();
     }
     try {
       const [payload] = await Promise.all([
@@ -276,11 +280,13 @@
         state.pooled ? ensureRunData(seq) : ensureNameGroups(seq),
       ]);
       if (seq !== state.seq || !payload) return;
+      state.quietReload = false;
       state.refreshing = false;
       state.data = payload.groups || [];
       if (state.passNum == null) state.hasUnscopedGroups = state.data.length > 0;
     } catch (err) {
       if (seq !== state.seq) return;
+      state.quietReload = false;
       state.refreshing = false;
       state.error = String((err && err.message) || err);
     }
@@ -1423,6 +1429,7 @@
       state.passes = [];
       state.traceCount = 0;
       state.hasUnscopedGroups = false;
+      state.quietReload = !!(opts && opts.quietReload);
       state.runIds = runIds.map(String);
       state.pooled = (opts && typeof opts.pooled === "boolean")
         ? opts.pooled
