@@ -329,6 +329,7 @@ def _serialize_member(member: ProjectMembership, user: User) -> Dict[str, Any]:
         "email": user.email,
         "display_name": user.display_name,
         "role": member.role.value,
+        "is_active": bool(user.is_active),
         "created_at": to_api_timestamp(member.created_at),
         "updated_at": to_api_timestamp(member.updated_at),
     }

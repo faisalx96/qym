@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Auto-analysis</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001-2">
   <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
   <script src="/static/qym_safe.js?v=p1-20261001"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
   <script src="/static/shell.js?v=p1-20261001"></script>
   <script src="/static/metrics.js?v=p0-20260930-3"></script>
   <script src="/static/qym_table.js"></script>
-  <script src="/static/playground.js?v=p1-20261001"></script>
+  <script src="/static/playground.js?v=p1-20261001-2"></script>
   <style>
     /* Typography and color roles follow docs/DESIGN_LANGUAGE.md. */
     .analysis-page {
@@ -5972,13 +5972,11 @@
           await initializePlayground(true);
           return;
         }
-        // The run header (no item rows) and its sample list load together: a
-        // repeat run shows its sample picker without downloading the run. The
-        // rows load afterwards, compact and for the chosen sample only (C027).
-        const [response, passesResponse] = await Promise.all([
-          fetch(apiUrl('api/runs/' + encodeURIComponent(runId) + '?view=summary')),
-          fetch(apiUrl('api/runs/' + encodeURIComponent(runId) + '/passes')).catch(() => null),
-        ]);
+        // The run header (no item rows) loads first; only a repeat run then
+        // asks for its sample list, so a single-sample run never pays for the
+        // /passes work. The rows load afterwards, compact and for the chosen
+        // sample only (C027).
+        const response = await fetch(apiUrl('api/runs/' + encodeURIComponent(runId) + '?view=summary'));
         if (!response.ok) throw new Error('Could not load this run (HTTP ' + response.status + ').');
         const data = await response.json();
         if (data && data.error) {
@@ -5992,6 +5990,7 @@
         state.metric = state.selectedMetrics[0] || '';
         const sampleCount = Number(data.run.samples || 1);
         if (sampleCount > 1 || data.run.metadata?.has_repeat_pass_context) {
+          const passesResponse = await fetch(apiUrl('api/runs/' + encodeURIComponent(runId) + '/passes')).catch(() => null);
           if (!passesResponse || !passesResponse.ok) {
             throw new Error('Could not load the run samples (HTTP ' + (passesResponse ? passesResponse.status : 'network error') + ').');
           }

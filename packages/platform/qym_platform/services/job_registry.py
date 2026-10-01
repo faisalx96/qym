@@ -33,7 +33,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional
 from uuid import uuid4
 
-from sqlalchemy import delete, insert, select, update
+from sqlalchemy import DateTime, delete, func, insert, select, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
@@ -145,13 +145,41 @@ class _Handle:
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
 
+def _uses_db_clock(conn: Any) -> bool:
+    return getattr(getattr(conn, "dialect", None), "name", "") == "postgresql"
+
+
+def _heartbeat_now(conn: Any) -> Any:
+    """The value written to ``heartbeat_at``: the database's UTC clock.
+
+    Owner and reader may run on different nodes; taking both the heartbeat and
+    the staleness check from the one database clock keeps a skew between the
+    nodes' clocks from making a live job look lost. SQLite (one host) keeps the
+    process clock.
+    """
+    if _uses_db_clock(conn):
+        return func.timezone("utc", func.now(), type_=DateTime)
+    return utc_now_naive()
+
+
+def _job_select(conn: Any) -> Any:
+    """``select(background_jobs)`` plus the database clock for ``_row_dict``."""
+    stmt = select(_TABLE)
+    if _uses_db_clock(conn):
+        stmt = stmt.add_columns(
+            func.timezone("utc", func.now(), type_=DateTime).label("_db_now")
+        )
+    return stmt
+
+
 def _row_dict(row: Any) -> Dict[str, Any]:
     data = dict(row._mapping)
+    now = data.pop("_db_now", None) or utc_now_naive()
     heartbeat = data.get("heartbeat_at")
     data["lost"] = bool(
         data.get("active")
         and heartbeat is not None
-        and heartbeat < utc_now_naive() - timedelta(seconds=STALE_AFTER_SECONDS)
+        and heartbeat < now - timedelta(seconds=STALE_AFTER_SECONDS)
     )
     data["snapshot"] = dict(data.get("snapshot") or {})
     return data
@@ -229,7 +257,7 @@ class JobRegistry:
             desc = handle.describe()
             with handle.engine.begin() as conn:
                 row = conn.execute(
-                    select(_TABLE).where(
+                    _job_select(conn).where(
                         _TABLE.c.kind == handle.kind,
                         _TABLE.c.scope_id == desc.scope_id,
                         _TABLE.c.pass_key == int(desc.pass_number or 0),
@@ -271,7 +299,7 @@ class JobRegistry:
                 snapshot=desc.snapshot,
                 error=desc.error,
                 process_id=process_id(),
-                heartbeat_at=now,
+                heartbeat_at=_heartbeat_now(conn),
                 updated_at=desc.updated_at or now,
                 completed_at=desc.completed_at,
             )
@@ -310,12 +338,12 @@ class JobRegistry:
                 "snapshot": desc.snapshot,
                 "error": desc.error,
                 "process_id": process_id(),
-                "heartbeat_at": now,
                 "updated_at": desc.updated_at or now,
                 "completed_at": desc.completed_at,
             }
             cancel_requested = False
             with handle.engine.begin() as conn:
+                values["heartbeat_at"] = _heartbeat_now(conn)
                 result = conn.execute(
                     update(_TABLE)
                     .where(
@@ -411,7 +439,7 @@ class JobRegistry:
             return None
         with _read_connection(db, engine) as conn:
             row = conn.execute(
-                select(_TABLE).where(_TABLE.c.id == job_id, _TABLE.c.kind == kind)
+                _job_select(conn).where(_TABLE.c.id == job_id, _TABLE.c.kind == kind)
             ).first()
         return _row_dict(row) if row is not None else None
 
@@ -444,6 +472,10 @@ class JobRegistry:
             )
         stmt = stmt.order_by(_TABLE.c.created_at.desc()).limit(200)
         with _read_connection(db, engine) as conn:
+            if _uses_db_clock(conn):
+                stmt = stmt.add_columns(
+                    func.timezone("utc", func.now(), type_=DateTime).label("_db_now")
+                )
             rows = [_row_dict(row) for row in conn.execute(stmt)]
         return [row for row in rows if not row["lost"]]
 
@@ -467,7 +499,7 @@ class JobRegistry:
         now = utc_now_naive()
         with engine.begin() as conn:
             row = conn.execute(
-                select(_TABLE)
+                _job_select(conn)
                 .where(_TABLE.c.id == job_id, _TABLE.c.kind == kind)
                 .with_for_update()
             ).first()

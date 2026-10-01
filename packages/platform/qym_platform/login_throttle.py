@@ -15,10 +15,11 @@ per-process cost of guessing bounded.
 from __future__ import annotations
 
 import math
+import os
 import threading
 import time
 from collections import deque
-from typing import Callable, Deque, Dict, Optional
+from typing import Callable, Deque, Dict, Mapping, Optional
 
 from fastapi import HTTPException, Request
 
@@ -124,3 +125,35 @@ def login_throttle(request: Request) -> LoginThrottle:
 
 def client_key(request: Request) -> str:
     return request.client.host if request.client else "unknown"
+
+
+_DEV_ENVIRONMENTS = {"dev", "development", "local", "test", "testing"}
+
+
+def proxy_trust_warning(
+    settings: PlatformSettings, environ: Optional[Mapping[str, str]] = None
+) -> Optional[str]:
+    """A startup warning when the per-client limit will see one shared address.
+
+    uvicorn reads X-Forwarded-For only from FORWARDED_ALLOW_IPS (default
+    127.0.0.1). Behind an ingress without that setting every browser has the
+    ingress address, so one client's failures lock every password sign-in.
+    """
+    from qym_platform.auth_oidc import local_auth_enabled
+
+    environ = os.environ if environ is None else environ
+    if not local_auth_enabled(settings):
+        return None
+    if str(settings.environment or "").strip().lower() in _DEV_ENVIRONMENTS:
+        return None
+    if str(environ.get("FORWARDED_ALLOW_IPS") or "").strip():
+        return None
+    if "--forwarded-allow-ips" in str(environ.get("QYM_UVICORN_ARGS") or ""):
+        return None
+    return (
+        "Password sign-in is enabled but no proxy is trusted (FORWARDED_ALLOW_IPS "
+        "or --forwarded-allow-ips in QYM_UVICORN_ARGS is unset). Behind an ingress "
+        "every client shares the ingress address, so the per-client failure limit "
+        "applies to all of them together. Set FORWARDED_ALLOW_IPS to the ingress "
+        "or pod CIDR."
+    )

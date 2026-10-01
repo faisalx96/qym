@@ -9954,7 +9954,14 @@ def bulk_correction_action(
         db.flush()
 
     db.commit()
-    return {"ok": True, "affected": affected}
+    result: Dict[str, Any] = {"ok": True, "affected": affected}
+    if request.action in ("approve", "reject", "reset"):
+        # The decided rows as the single-card routes return them (reviewer,
+        # Self-approved, review_block), so the cards need no reload.
+        result["corrections"] = _serialize_corrections_with_history(
+            db, corrections, principal
+        )
+    return result
 
 
 @router.delete("/api/corrections/{correction_id}")

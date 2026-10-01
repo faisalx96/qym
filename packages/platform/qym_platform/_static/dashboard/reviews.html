@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Reviews</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001-2">
   <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
   <script src="/static/qym_safe.js?v=p1-20261001"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
@@ -2273,12 +2273,23 @@
       patchCard(originalId, row);
     }
 
-    function applyBulkStatusUpdate(ids, status, comment = '') {
+    function applyBulkStatusUpdate(ids, status, comment = '', serverRows = null) {
       const idSet = new Set(ids.map(Number));
       const leaving = [];
+      // The server's decided rows carry the reviewer, Self-approved and the
+      // viewer's review_block; the local patch is only a fallback.
+      const updatedById = new Map((Array.isArray(serverRows) ? serverRows : [])
+        .filter(row => row && row.id != null)
+        .map(row => [Number(row.id), row]));
       state.corrections = state.corrections.map(c => {
         if (!idSet.has(c.id)) return c;
         if (c.status !== status) shiftStatusCounts(c.status, status);
+        const updated = updatedById.get(c.id);
+        if (updated) {
+          if (state.statusFilter && status !== state.statusFilter) leaving.push(c.id);
+          state.details.delete(c.id);
+          return summaryRow(c, { ...updated, status });
+        }
         const next = { ...c, status };
         if (status === 'pending') {
           next.reviewed_by = null;
@@ -3693,8 +3704,8 @@
       );
       if (comment === null) return;
       try {
-        await apiAction('POST', 'api/corrections/bulk', { ids, action: 'approve', comment, expected_count: ids.length, ...expectedStatus() });
-        applyBulkStatusUpdate(ids, 'approved', comment);
+        const result = await apiAction('POST', 'api/corrections/bulk', { ids, action: 'approve', comment, expected_count: ids.length, ...expectedStatus() });
+        applyBulkStatusUpdate(ids, 'approved', comment, result && result.corrections);
         showToast('success', 'Bulk Approved', `${ids.length} corrections approved`);
         refreshCounts();
       } catch (err) {
@@ -3720,8 +3731,8 @@
       );
       if (comment === null) return;
       try {
-        await apiAction('POST', 'api/corrections/bulk', { ids, action: 'reject', comment, expected_count: ids.length, ...expectedStatus() });
-        applyBulkStatusUpdate(ids, 'rejected', comment);
+        const result = await apiAction('POST', 'api/corrections/bulk', { ids, action: 'reject', comment, expected_count: ids.length, ...expectedStatus() });
+        applyBulkStatusUpdate(ids, 'rejected', comment, result && result.corrections);
         showToast('success', 'Bulk Rejected', `${ids.length} corrections rejected`);
         refreshCounts();
       } catch (err) {
@@ -3738,8 +3749,8 @@
       if (refuseBlockedSelection(ids)) return;
       if (state.loading) return;
       try {
-        await apiAction('POST', 'api/corrections/bulk', { ids, action: 'reset', expected_count: ids.length, ...expectedStatus() });
-        applyBulkStatusUpdate(ids, 'pending');
+        const result = await apiAction('POST', 'api/corrections/bulk', { ids, action: 'reset', expected_count: ids.length, ...expectedStatus() });
+        applyBulkStatusUpdate(ids, 'pending', '', result && result.corrections);
         showToast('success', 'Bulk Reset', `${ids.length} corrections reset to pending`);
         refreshCounts();
       } catch (err) {

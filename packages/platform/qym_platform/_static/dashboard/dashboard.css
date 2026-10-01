@@ -875,12 +875,14 @@ html {
   display: none;
 }
 
-/* Custom date range popover under the time segment. */
+/* Custom date range popover under the time segment. The two-class selector
+   outranks the shared dropdown anatomy rule in ui_components.css, which loads
+   later with the same single-class weight. */
 .time-range-control {
   flex-shrink: 0;
 }
 
-.time-range-dropdown {
+.multi-select-dropdown.time-range-dropdown {
   min-width: 260px;
   max-height: none;
   overflow: visible;

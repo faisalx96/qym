@@ -7127,7 +7127,8 @@
     try {
       const res = await fetch(apiUrl(`v1/projects/${encodeURIComponent(projectId)}/members`));
       const data = await res.json();
-      const members = (data.members || []).filter(m => !run.owner || m.user_id !== run.owner.id);
+      // A disabled account keeps its membership but cannot own runs.
+      const members = (data.members || []).filter(m => m.is_active !== false && (!run.owner || m.user_id !== run.owner.id));
       select.innerHTML = members.length
         ? members.map(m => `<option value="${escapeHtml(m.user_id)}">${escapeHtml(m.display_name || m.email)}${m.display_name ? ` (${escapeHtml(m.email)})` : ''}</option>`).join('')
         : '<option value="">No other members</option>';
@@ -8654,9 +8655,12 @@
   document.addEventListener('keydown', (e) => {
     // A page left through in-app navigation keeps no say over the next page.
     if (!dashboardActive) return;
+    // Escape inside the help panel is handled by the dialog contract; this
+    // covers focus that fell outside it (e.g. to body) and still releases the
+    // dialog so focus returns to the trigger.
     if (e.key === 'Escape' && el('help-modal')?.style.display === 'flex') {
       e.preventDefault();
-      el('help-modal').style.display = 'none';
+      hideLegacyModal(el('help-modal'));
       return;
     }
     // Browser and OS shortcuts (copy, open in new tab...) stay native.

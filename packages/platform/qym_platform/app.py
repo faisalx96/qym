@@ -77,6 +77,14 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
             maintenance_worker.start()
             logging.getLogger("uvicorn.error").info("Maintenance worker started")
 
+    @app.on_event("startup")
+    def warn_untrusted_proxy() -> None:
+        from qym_platform.login_throttle import proxy_trust_warning
+
+        warning = proxy_trust_warning(settings)
+        if warning:
+            logging.getLogger("uvicorn.error").warning(warning)
+
     @app.on_event("shutdown")
     def stop_dashboard_summary_worker() -> None:
         maintenance_worker.stop()

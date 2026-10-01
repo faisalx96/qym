@@ -21,7 +21,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from qym_platform.auth import Principal
-from qym_platform.db.models import Project, ReviewCorrection
+from qym_platform.db.models import CorrectionStatus, Project, ReviewCorrection
 from qym_platform.permissions import is_project_manager
 from qym_platform.services.root_cause_categories import normalize_root_cause_issues
 
@@ -166,11 +166,26 @@ def require_correction_decision(
 def require_correction_delete(
     db: Session, principal: Principal, project_or_id: Any, correction: ReviewCorrection
 ) -> None:
-    """Deleting marks a correction rejected: its author may withdraw their own,
-    anyone else needs the right to decide it."""
+    """Deleting marks a correction rejected.
+
+    Its author may withdraw their own while it is still PENDING. Once a
+    reviewer has approved or rejected it, deleting undoes that decision, so it
+    needs the same right as Reset, author or not.
+    """
     if principal.auth_type == "none":
         return
-    if correction.corrected_by_user_id and correction.corrected_by_user_id == principal.user.id:
+    is_author = bool(
+        correction.corrected_by_user_id
+        and correction.corrected_by_user_id == principal.user.id
+    )
+    if correction.status == CorrectionStatus.PENDING:
+        if is_author:
+            return
+        if correction_decision_block(db, principal, project_or_id) is not None:
+            raise HTTPException(status_code=403, detail=DELETE_DETAIL)
         return
-    if correction_decision_block(db, principal, project_or_id) is not None:
-        raise HTTPException(status_code=403, detail=DELETE_DETAIL)
+    reason = correction_decision_block(db, principal, project_or_id, correction)
+    if reason is not None:
+        raise HTTPException(
+            status_code=403, detail=reason if is_author else DELETE_DETAIL
+        )

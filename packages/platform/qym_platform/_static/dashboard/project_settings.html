@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Project Settings</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261001-2">
   <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
   <script src="/static/qym_safe.js?v=p1-20261001"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
@@ -982,7 +982,9 @@
 
       function closeMemberResults() {
         const input = document.getElementById('member-search');
-        document.getElementById('member-results').hidden = true;
+        const results = document.getElementById('member-results');
+        if (!input || !results) return;
+        results.hidden = true;
         input.setAttribute('aria-expanded', 'false');
         input.removeAttribute('aria-activedescendant');
         memberPicker.active = -1;
@@ -1066,7 +1068,7 @@
       });
       document.addEventListener('click', event => {
         if (!event.target.closest('.member-picker')) closeMemberResults();
-      });
+      }, pageListen());
 
       document.getElementById('add-member-btn').addEventListener('click', async () => {
         const user = memberPicker.selected;

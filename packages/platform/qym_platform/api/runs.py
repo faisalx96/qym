@@ -12,7 +12,7 @@ from urllib.parse import parse_qsl, quote, urlencode
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
-from sqlalchemy import Text, case, cast, func, or_
+from sqlalchemy import Text, case, cast, func, null, or_, type_coerce
 from sqlalchemy.orm import Session, load_only
 
 from qym_platform.auth import Principal, require_ui_principal
@@ -835,14 +835,26 @@ def _lock_pass_mutation_run(db: Session, run_id: str, expected_version: Any) -> 
 
 
 def _repeat_pass_event_state(
-    db: Session, run_id: str, *, item_ids: Optional[List[str]] = None
+    db: Session,
+    run_id: str,
+    *,
+    item_ids: Optional[List[str]] = None,
+    output_pass: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Per-pass lifecycle state from ``run_item_attempts`` (no event replay).
 
     Every finished attempt is a row; since ingest also records a RUNNING row at
     attempt start, in-flight work is visible without reading ``run_events``.
     Runs ingested before attempt rows existed fall back to the event log.
+    ``output_pass`` loads attempt outputs of that pass only (a one-sample view
+    drops the others); every pass's state is still read.
     """
+    output_column: Any = RunItemAttempt.output
+    if output_pass is not None:
+        output_column = type_coerce(
+            case((RunItemAttempt.pass_number == int(output_pass), RunItemAttempt.output), else_=null()),
+            RunItemAttempt.output.type,
+        )
     query = db.query(
         RunItemAttempt.item_id,
         RunItemAttempt.pass_number,
@@ -854,7 +866,7 @@ def _repeat_pass_event_state(
         RunItemAttempt.trace_url,
         RunItemAttempt.error,
         RunItemAttempt.is_last_attempt,
-        RunItemAttempt.output,
+        output_column,
     ).filter(RunItemAttempt.run_id == run_id)
     if item_ids is not None:
         query = query.filter(RunItemAttempt.item_id.in_(list(item_ids)))
@@ -1301,7 +1313,7 @@ def _project_not_found_page(request: Request, project_slug: str) -> HTMLResponse
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Project Not Found</title>
   <link rel="icon" type="image/png" href="{static_root}/qym_icon.png">
-  <link rel="stylesheet" href="{static_root}/dashboard.css?v=p1-20261001">
+  <link rel="stylesheet" href="{static_root}/dashboard.css?v=p1-20261001-2">
   <link rel="stylesheet" href="{static_root}/shell.css?v=p1-20261001">
   <script src="{static_root}/qym_safe.js?v=p1-20261001"></script>
   <script src="{static_root}/auth.js?v=p0-20260930"></script>
@@ -3482,8 +3494,17 @@ def _build_run_data(
     *,
     item_ids: Optional[List[str]] = None,
     compact: bool = False,
+    pass_number: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Build the run + snapshot data dict used by the UI."""
+    """Build the run + snapshot data dict used by the UI.
+
+    ``pass_number`` (a one-sample view of a repeat run) loads the attempts,
+    outputs and trace aggregates of that pass only; the caller still scopes
+    the rows with ``scope_row_to_pass``. Per-pass scores and judge metadata
+    of every pass are kept: the row's aggregate metadata is computed from
+    them, and whether a metric has per-pass metadata at all decides which
+    metadata a pass shows.
+    """
     item_query = db.query(RunItem).filter(RunItem.run_id == run.id)
     if item_ids is not None:
         item_query = item_query.filter(RunItem.item_id.in_(item_ids))
@@ -3595,12 +3616,17 @@ def _build_run_data(
         # show each attempt, not just the item's last one.  Event state fills
         # the two gaps in this table: an attempt that is currently running and
         # legacy item outcomes that arrived without a final-attempt event.
-        pass_event_state = _repeat_pass_event_state(db, run.id, item_ids=item_ids)
+        pass_event_state = _repeat_pass_event_state(
+            db, run.id, item_ids=item_ids, output_pass=pass_number
+        )
         all_attempts = (
             db.query(RunItemAttempt)
             .filter(RunItemAttempt.run_id == run.id)
             .filter(
                 RunItemAttempt.item_id.in_(item_ids) if item_ids is not None else True
+            )
+            .filter(
+                RunItemAttempt.pass_number == pass_number if pass_number is not None else True
             )
             .all()
         )
@@ -3639,6 +3665,12 @@ def _build_run_data(
             **active_event_attempts,
             **pass_event_state["outcomes"],
         }
+        if pass_number is not None:
+            # The other passes' attempts are dropped by the caller's scoping:
+            # do not load their trace aggregates.
+            event_attempts = {
+                key: value for key, value in event_attempts.items() if key[1] == pass_number
+            }
         trace_ids = {
             str(trace_id)
             for trace_id in [
@@ -4908,17 +4940,99 @@ def run_item_reasons(
     for the run or for one pass of a repeat run."""
     run = _detail_run(db, principal, run_id)
     ids, metric, pass_number = reason_request(request)
-    data = _build_run_data(db, run, item_ids=ids)
-    reasons: Dict[str, Dict[str, str]] = {}
-    for row in data["snapshot"]["rows"]:
-        meta = (row.get("metric_meta") or {}).get(metric)
-        metas = (row.get("pass_metric_meta") or {}).get(metric)
-        if pass_number is not None and isinstance(metas, list):
+    metas = _item_reason_metas(db, run, ids, metric, pass_number)
+    reasons = {item_id: reason_fields(meta) for item_id, meta in metas.items()}
+    return {"metric": metric, "pass_number": pass_number, "reasons": reasons}
+
+
+def _item_reason_metas(
+    db: Session, run: Run, ids: List[str], metric: str, pass_number: Optional[int]
+) -> Dict[str, Optional[Dict[str, Any]]]:
+    """One metric's metadata per item, as ``_build_run_data`` shows it.
+
+    Reads only the score metadata of that metric (and of that pass), not the
+    items' bodies, attempts or traces. ``metric_meta`` and, with a pass,
+    ``pass_metric_meta`` follow the same rules as the run page's rows.
+    """
+    present = [
+        item_id
+        for (item_id,) in db.query(RunItem.item_id)
+        .filter(RunItem.run_id == run.id, RunItem.item_id.in_(ids))
+        .order_by(RunItem.index.asc())
+    ]
+    if not present:
+        return {}
+    run_scores = {
+        row.item_id: row
+        for row in db.query(
+            RunItemScore.item_id,
+            RunItemScore.meta,
+            RunItemScore.label,
+            RunItemScore.explanation,
+        ).filter(
+            RunItemScore.run_id == run.id,
+            RunItemScore.metric_name == metric,
+            RunItemScore.item_id.in_(present),
+        )
+    }
+    run_metrics = {str(name) for name in (run.metrics or [])}
+    run_samples = int(getattr(run, "samples", 1) or 1)
+    repeat_context = has_repeat_pass_context(run)
+    pass_values: Dict[str, Dict[int, Optional[float]]] = {}
+    pass_metas: Dict[str, Dict[int, Dict[str, Any]]] = {}
+    if repeat_context:
+        for ps in db.query(
+            RunItemPassScore.item_id,
+            RunItemPassScore.pass_number,
+            RunItemPassScore.score_numeric,
+            RunItemPassScore.meta,
+            RunItemPassScore.label,
+            RunItemPassScore.explanation,
+        ).filter(
+            RunItemPassScore.run_id == run.id,
+            RunItemPassScore.metric_name == metric,
+            RunItemPassScore.item_id.in_(present),
+        ):
+            pass_values.setdefault(ps.item_id, {})[int(ps.pass_number)] = ps.score_numeric
+            if pass_number is None:
+                continue
+            ps_meta: Dict[str, Any] = dict(ps.meta) if ps.meta else {}
+            ps_meta.pop(TASK_ERROR_PASS_MARKER, None)
+            ps_meta.pop(PASS_ANALYSIS_META_KEY, None)
+            if ps.label:
+                ps_meta.setdefault("label", ps.label)
+            if ps.explanation:
+                ps_meta.setdefault("explanation", ps.explanation)
+            if ps_meta:
+                pass_metas.setdefault(ps.item_id, {})[int(ps.pass_number)] = ps_meta
+    result: Dict[str, Optional[Dict[str, Any]]] = {}
+    for item_id in present:
+        if pass_number is not None and item_id in pass_metas:
             # As the page scopes a row to one pass; legacy repeat artifacts
             # without pass metadata keep the run-level metadata.
-            meta = metas[pass_number - 1] if len(metas) >= pass_number else None
-        reasons[row["item_id"]] = reason_fields(meta)
-    return {"metric": metric, "pass_number": pass_number, "reasons": reasons}
+            result[item_id] = (
+                pass_metas[item_id].get(pass_number) if pass_number <= run_samples else None
+            )
+            continue
+        # Run-level metadata exists only for the run's own metrics.
+        score = run_scores.get(item_id) if metric in run_metrics else None
+        meta: Optional[Dict[str, Any]] = None
+        if score is not None:
+            values = pass_values.get(item_id)
+            if repeat_context and values:
+                meta = _repeat_aggregate_metric_meta(
+                    values, dict(score.meta) if isinstance(score.meta, dict) else None
+                )
+            elif score.meta:
+                meta = dict(score.meta)
+            if not repeat_context and (score.label or score.explanation):
+                meta = meta if meta is not None else {}
+                if score.label:
+                    meta["label"] = score.label
+                if score.explanation:
+                    meta["explanation"] = score.explanation
+        result[item_id] = meta
+    return result
 
 
 @router.post("/api/runs/{run_id}/items/search")
@@ -5080,7 +5194,7 @@ def legacy_run_data(
     live_revision = (
         _live_revision(db, run) if run.status in _LIVE_RUN_STATUSES else None
     )
-    data = _build_run_data(db, run, compact=view == "compact")
+    data = _build_run_data(db, run, compact=view == "compact", pass_number=pass_number)
     if live_revision is not None and isinstance(data.get("run"), dict):
         data["run"]["live_revision"] = live_revision
     if pass_number is not None:
@@ -5810,8 +5924,19 @@ def _require_issue_decision(
     metric_name: str,
     pass_number: Optional[int],
     issue_id: Any,
+    issue_index: Any = None,
+    analysis: Optional[Dict[str, Any]] = None,
 ) -> None:
-    """Approving an issue from the run page follows the project's review rules (C074)."""
+    """Approving an issue from the run page follows the project's review rules (C074).
+
+    The issue is resolved the way ``change_metric_issue`` resolves it: by
+    ``issue_id``, else by ``issue_index`` into the analysis, so a request that
+    names the issue only by position is judged against the same correction.
+    """
+    if not issue_id and analysis is not None and type(issue_index) is int:
+        issues = analysis_root_cause_issues(analysis)
+        if 0 <= issue_index < len(issues):
+            issue_id = issues[issue_index].get("issue_id")
     rows = db.query(ReviewCorrection).filter(
         ReviewCorrection.run_id == run.id,
         ReviewCorrection.item_id == item_id,
@@ -5886,7 +6011,8 @@ def update_root_cause_issue(
         analysis = metric_analyses.get(metric_name) or {}
     if request.get("action") == "approve":
         _require_issue_decision(
-            db, principal, run, item_id, metric_name, pass_number, request.get("issue_id")
+            db, principal, run, item_id, metric_name, pass_number, request.get("issue_id"),
+            issue_index=request.get("issue_index"), analysis=analysis,
         )
     analysis = change_metric_issue(
         db, run=run, item=item, metric_name=metric_name, analysis=analysis,
@@ -6498,9 +6624,16 @@ def submit_runs(
             if PROJECT_STATE_HEADER in (exc.headers or {}):
                 # The archived-project refusal reads the same for every write.
                 raise
+            # Name the run only to someone who may see it; anyone else learns
+            # nothing beyond the id they sent.
+            label = (
+                _run_display_name(run)
+                if has_project_access(db, principal, run.project_id)
+                else f"Run {run.id}"
+            )
             raise HTTPException(
                 status_code=exc.status_code,
-                detail=f"{_run_display_name(run)}: {exc.detail}. No runs were submitted.",
+                detail=f"{label}: {exc.detail}. No runs were submitted.",
                 headers=exc.headers,
             ) from exc
     db.commit()
