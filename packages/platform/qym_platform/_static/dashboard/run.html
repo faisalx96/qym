@@ -7628,9 +7628,23 @@
       // Header/boxes follow the standard section anatomy; group-metric tiles
       // reuse the Models/Compare view component (model-stat-item + shared
       // tooltips from QymMetrics.getMetricTooltips) so the three views match.
+      // Only the newest call may paint: switching metric aborts the previous
+      // request, and a response that is not the latest is dropped, so a slow
+      // earlier metric can never replace the one the user chose.
+      let samplesAnalysisSeq = 0;
+      let samplesAnalysisAbort = null;
+      function renderSamplesAnalysisError(container) {
+        container.innerHTML = '<div class="overview-header"><div><h3 class="section-title">Repeat Run Analysis</h3></div></div>'
+          + '<div class="item-detail-status" role="alert">Could not load sample analysis. '
+          + '<button type="button" class="qym-inline-action qym-inline-action--accent" data-samples-retry>Retry</button></div>';
+        container.querySelector('[data-samples-retry]').addEventListener('click', () => renderSamplesAnalysis());
+      }
       async function renderSamplesAnalysis() {
         const container = el('samples-analysis-section');
         if (!container) return;
+        const seq = ++samplesAnalysisSeq;
+        if (samplesAnalysisAbort) samplesAnalysisAbort.abort();
+        samplesAnalysisAbort = null;
         const run = state.run || {};
         const samplesCount = parseInt(run.samples, 10) || 1;
         // Pass-scoped pages read as a single run: no cross-pass group section.
@@ -7648,20 +7662,29 @@
           : (state.metricThresholds[metricName] ?? 0.8);
 
         let group, passes;
+        const controller = new AbortController();
+        samplesAnalysisAbort = controller;
         try {
           const [groupRes, passesRes] = await Promise.all([
             fetch(apiUrl('api/runs/' + RUN_ID + '/group-metrics' + (metricName
               ? '?metric=' + encodeURIComponent(metricName) + '&threshold=' + encodeURIComponent(requestedThreshold)
-              : ''))),
-            fetch(apiUrl('api/runs/' + RUN_ID + '/passes')),
+              : '')), { signal: controller.signal }),
+            fetch(apiUrl('api/runs/' + RUN_ID + '/passes'), { signal: controller.signal }),
           ]);
+          if (!groupRes.ok || !passesRes.ok) throw new Error('Sample analysis request failed');
           group = await groupRes.json();
           passes = await passesRes.json();
         } catch (err) {
-          container.innerHTML = '';
+          if (seq !== samplesAnalysisSeq || (err && err.name === 'AbortError')) return;
+          renderSamplesAnalysisError(container);
           return;
         }
-        if (!group || group.error || !group.group) { container.innerHTML = ''; return; }
+        if (seq !== samplesAnalysisSeq) return;
+        samplesAnalysisAbort = null;
+        // A run without metrics has no repeat analysis; any other error is a
+        // failed load and says so instead of removing the section.
+        if (group && group.error === 'Run has no metrics') { container.innerHTML = ''; return; }
+        if (!group || group.error || !group.group) { renderSamplesAnalysisError(container); return; }
 
         const g = group.group;
         const groupMetric = group.metric || metricName;
@@ -8182,6 +8205,8 @@
             state.samplesMetric = nextMetric;
             state.repeatDistFilter = null;
             await renderSamplesAnalysis();
+            // A later click superseded this one; its own render owns focus.
+            if (state.samplesMetric !== nextMetric) return;
             renderMetadataBreakdown();
             const replacement = Array.from(document.querySelectorAll('.samples-metric-tab')).find(candidate =>
               candidate.dataset.samplesMetric === nextMetric

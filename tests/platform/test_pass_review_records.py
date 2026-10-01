@@ -134,7 +134,10 @@ def test_pass_approval_reaches_reviews_dataset_and_catalog(db_session, repeat):
     assert listed["facet_counts"]["dataset"] == {run.dataset: 1}
     review = listed["corrections"][0]
     assert review["pass_number"] == 2
-    assert review["output_snapshot"] == {"answer": "Pass 2"}
+    # List rows carry a preview; the full snapshot comes with the detail (C030).
+    assert review["output_preview"] == "answer: Pass 2"
+    detail = api.get_correction(review["id"], db=db_session, principal=principal)
+    assert detail["output_snapshot"] == {"answer": "Pass 2"}
     assert review["scores_snapshot"] == {"accuracy": 0.2}
     assert score(db_session, run, 1).meta == other_pass
     assert item.item_metadata == original

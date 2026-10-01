@@ -40,6 +40,7 @@
     .review-item { display: flex; align-items: center; justify-content: space-between; padding: var(--space-sm) var(--space-lg); border-bottom: 1px solid var(--border-subtle); }
     .review-item:last-child { border-bottom: none; }
     .review-item:hover { background: var(--bg-hover); }
+    a.review-item { color: inherit; text-decoration: none; }
     .review-id { font-size: var(--font-sm); font-family: var(--font-mono); color: var(--text-muted); }
     .review-cause { font-size: var(--font-sm); margin-left: var(--space-sm); }
     .review-badge { font-size: var(--font-xs); font-weight: 600; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; background: rgba(245,158,11,0.12); color: var(--warning); font-family: var(--font-mono); }
@@ -420,10 +421,12 @@
               body.innerHTML = '<div class="empty-state">No pending reviews</div>';
             } else {
               body.innerHTML = items.map(c => {
-                return '<div class="review-item">'
+                // Each pending item opens on Reviews with that correction in focus.
+                const reviewHref = slug ? projectUrl(slug, 'reviews') + '?id=' + encodeURIComponent(String(c.id || '')) : '';
+                return (reviewHref ? '<a class="review-item" href="' + esc(reviewHref) + '">' : '<div class="review-item">')
                   + '<div><span class="review-id">#' + esc(String(c.id || '')) + '</span><span class="review-cause">' + esc(c.ai_root_cause || c.human_root_cause || '—') + '</span></div>'
                   + '<span class="review-badge qym-badge qym-badge--warning">Pending</span>'
-                  + '</div>';
+                  + (reviewHref ? '</a>' : '</div>');
               }).join('')
               + (total > reviewLimit ? '<div class="review-item" style="justify-content:center;color:var(--text-muted);font-size:var(--font-base);">+ ' + (total - reviewLimit) + ' more pending</div>' : '');
             }

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import base64
 import copy
 import hashlib
 import inspect
@@ -8515,8 +8516,6 @@ def _serialize_corrections_with_history(
 ) -> List[Dict[str, Any]]:
     history_map, users_by_id = _build_history_map(db, corrections)
     runs_by_id = _load_runs_map(db, {correction.run_id for correction in corrections})
-    projects_by_id: Dict[str, Optional[Project]] = {}
-    role_blocks: Dict[str, Optional[str]] = {}
     serialized: List[Dict[str, Any]] = []
     for correction in corrections:
         payload = _serialize_correction(
@@ -8527,25 +8526,44 @@ def _serialize_corrections_with_history(
                 (correction.run_id, correction.item_id, correction.metric_name), []
             ),
         )
-        run = runs_by_id.get(correction.run_id)
-        if principal is not None and run is not None:
-            # Why this viewer may not approve, reject or reset it (C074);
-            # None when they may. The Reviews page disables those buttons.
-            if run.project_id not in projects_by_id:
-                project = db.get(Project, run.project_id)
-                projects_by_id[run.project_id] = project
-                role_blocks[run.project_id] = (
-                    correction_decision_block(db, principal, project)
-                    if project is not None
-                    else None
-                )
-            project = projects_by_id[run.project_id]
-            payload["review_rules"] = correction_rules(project)
-            payload["review_block"] = role_blocks[run.project_id] or self_review_block(
-                principal, project, correction
-            )
         serialized.append(payload)
+    _attach_review_decision_fields(db, corrections, serialized, runs_by_id, principal)
     return serialized
+
+
+def _attach_review_decision_fields(
+    db: Session,
+    corrections: List[ReviewCorrection],
+    payloads: List[Dict[str, Any]],
+    runs_by_id: Dict[str, Any],
+    principal: Optional[Principal],
+) -> None:
+    """Add ``review_rules`` and ``review_block`` for this viewer (C074).
+
+    ``review_block`` says why the viewer may not approve, reject or reset the
+    correction (None when they may); the Reviews page disables those buttons.
+    """
+    if principal is None:
+        return
+    projects_by_id: Dict[str, Optional[Project]] = {}
+    role_blocks: Dict[str, Optional[str]] = {}
+    for correction, payload in zip(corrections, payloads):
+        run = runs_by_id.get(correction.run_id)
+        if run is None:
+            continue
+        if run.project_id not in projects_by_id:
+            project = db.get(Project, run.project_id)
+            projects_by_id[run.project_id] = project
+            role_blocks[run.project_id] = (
+                correction_decision_block(db, principal, project)
+                if project is not None
+                else None
+            )
+        project = projects_by_id[run.project_id]
+        payload["review_rules"] = correction_rules(project)
+        payload["review_block"] = role_blocks[run.project_id] or self_review_block(
+            principal, project, correction
+        )
 
 
 def _require_active_candidate(correction: ReviewCorrection) -> None:
@@ -8837,6 +8855,160 @@ def _remove_active_candidate(
     correction.review_comment = comment
 
 
+_CORRECTIONS_DEFAULT_LIMIT = 50
+_CORRECTIONS_MAX_LIMIT = 500
+_CORRECTION_FACET_KEYS = frozenset({"task", "dataset", "model", "run_name"})
+_CORRECTION_SORTS = ("newest", "oldest", "confidence")
+_CORRECTION_PREVIEW_CHARS = 280
+
+
+def _escape_like(value: str) -> str:
+    """Escape LIKE wildcards so a filter value only matches itself."""
+    return (
+        str(value).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    )
+
+
+def _correction_status_filter(status: Optional[str]) -> Optional[str]:
+    if not status:
+        return None
+    try:
+        return CorrectionStatus(status).value
+    except ValueError:
+        return None
+
+
+def _correction_sort_key(sort: Optional[str]) -> str:
+    if not sort:
+        return "newest"
+    if sort not in _CORRECTION_SORTS:
+        raise HTTPException(
+            status_code=400,
+            detail="sort must be one of: " + ", ".join(_CORRECTION_SORTS),
+        )
+    return sort
+
+
+def _correction_order_columns(sort_key: str) -> List[tuple[Any, bool]]:
+    """Return (column, ascending) pairs; the last pair is the unique tiebreak."""
+    if sort_key == "oldest":
+        return [(ReviewCorrection.created_at, True), (ReviewCorrection.id, True)]
+    if sort_key == "confidence":
+        # Lowest AI confidence first; rows without a confidence go last.
+        return [
+            (func.coalesce(ReviewCorrection.ai_confidence, 2.0), True),
+            (ReviewCorrection.created_at, True),
+            (ReviewCorrection.id, True),
+        ]
+    return [(ReviewCorrection.created_at, False), (ReviewCorrection.id, False)]
+
+
+def _correction_cursor_values(sort_key: str, row: ReviewCorrection) -> List[Any]:
+    created = row.created_at.isoformat() if row.created_at else None
+    if sort_key == "confidence":
+        confidence = row.ai_confidence if row.ai_confidence is not None else 2.0
+        return [float(confidence), created, row.id]
+    return [created, row.id]
+
+
+def _encode_correction_cursor(sort_key: str, row: ReviewCorrection) -> str:
+    raw = json.dumps([sort_key, *_correction_cursor_values(sort_key, row)])
+    return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii").rstrip("=")
+
+
+def _correction_cursor_filter(
+    sort_key: str, order_columns: List[tuple[Any, bool]], cursor: str
+) -> Any:
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        decoded = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")))
+        if not isinstance(decoded, list) or decoded[0] != sort_key:
+            raise ValueError("cursor belongs to another sort")
+        values = decoded[1:]
+        if len(values) != len(order_columns):
+            raise ValueError("cursor shape")
+        parsed: List[Any] = []
+        for (column, _), value in zip(order_columns, values):
+            if column is ReviewCorrection.created_at:
+                parsed.append(datetime.fromisoformat(str(value)))
+            elif column is ReviewCorrection.id:
+                parsed.append(int(value))
+            else:
+                parsed.append(float(value))
+    except (ValueError, TypeError, IndexError, UnicodeError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid cursor") from exc
+
+    clauses = []
+    for index, (column, ascending) in enumerate(order_columns):
+        equal_prefix = [
+            order_columns[prior][0] == parsed[prior] for prior in range(index)
+        ]
+        step = column > parsed[index] if ascending else column < parsed[index]
+        clauses.append(and_(*equal_prefix, step) if equal_prefix else step)
+    return or_(*clauses)
+
+
+def _snapshot_preview(value: Any) -> Optional[str]:
+    """Short one-line text of a snapshot for list rows."""
+    value = _normalize_snapshot_value(value)
+    if value is None or value == "" or value == {} or value == []:
+        return None
+    # Only the head of each value can show; never collapse a megabyte string.
+    window = _CORRECTION_PREVIEW_CHARS * 2
+    if isinstance(value, dict):
+        parts = []
+        for key, entry in value.items():
+            text = entry if isinstance(entry, str) else json.dumps(
+                entry, ensure_ascii=False, default=str
+            )
+            parts.append(f"{key}: {text[:window]}")
+            if sum(len(part) for part in parts) > _CORRECTION_PREVIEW_CHARS:
+                break
+        text = " \u00b7 ".join(parts)
+    elif isinstance(value, str):
+        text = value
+    else:
+        text = json.dumps(value, ensure_ascii=False, default=str)
+    text = " ".join(text[:window].split())
+    if len(text) > _CORRECTION_PREVIEW_CHARS:
+        text = text[: _CORRECTION_PREVIEW_CHARS - 1].rstrip() + "\u2026"
+    return text
+
+
+def _serialize_correction_list_rows(
+    db: Session,
+    corrections: List[ReviewCorrection],
+    principal: Optional[Principal] = None,
+) -> List[Dict[str, Any]]:
+    """Summary rows for the corrections list.
+
+    The list leaves out the revision history and the full input/expected/output
+    snapshots (``GET /api/corrections/{id}`` returns them) and carries short
+    previews instead, so a page stays small at any review volume.
+    """
+    user_ids = {
+        user_id
+        for correction in corrections
+        for user_id in (correction.corrected_by_user_id, correction.reviewed_by_user_id)
+        if user_id
+    }
+    users_by_id = _load_users_map(db, user_ids)
+    runs_by_id = _load_runs_map(db, {correction.run_id for correction in corrections})
+    rows: List[Dict[str, Any]] = []
+    for correction in corrections:
+        payload = _serialize_review_fields(
+            correction, users_by_id=users_by_id, runs_by_id=runs_by_id
+        )
+        for field in ("input", "expected", "output"):
+            payload.pop(f"{field}_snapshot", None)
+            payload[f"{field}_preview"] = _snapshot_preview(
+                getattr(correction, f"{field}_snapshot")
+            )
+        rows.append(payload)
+    _attach_review_decision_fields(db, corrections, rows, runs_by_id, principal)
+    return rows
+
+
 @router.get("/api/corrections")
 def list_corrections(
     project_slug: Optional[str] = Query(None),
@@ -8849,11 +9021,23 @@ def list_corrections(
     conf_max: int = Query(100, ge=0, le=100),
     status: Optional[str] = Query(None, alias="status"),
     search: Optional[str] = Query(None),
-    limit: Optional[int] = Query(None, ge=1, le=500),
+    limit: Optional[int] = Query(None, ge=1, le=_CORRECTIONS_MAX_LIMIT),
+    sort: Optional[str] = Query(None),
+    cursor: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
-    """List all corrections with optional filtering."""
+    """List one page of corrections with filters, counts and facets.
+
+    Rows are summaries: no revision history and short text previews in place
+    of the input/expected/output snapshots. ``GET /api/corrections/{id}``
+    returns the full record. Pages hold ``limit`` rows (default 50); pass the
+    returned ``next_cursor`` as ``cursor`` for the next page.
+    """
+    if not isinstance(sort, str):
+        sort = None
+    if not isinstance(cursor, str):
+        cursor = None
     run_name_expr = func.coalesce(
         cast(Run.run_config.op("->>")("run_name"), String), ""
     )
@@ -8937,22 +9121,28 @@ def list_corrections(
             raise HTTPException(status_code=404, detail="Project not found")
         active_query = active_query.filter(Run.project_id == project.id)
 
-    def apply_filter_set(base_query, *, exclude: Optional[str] = None):
+    def apply_filter_set(base_query, *, exclude: Any = None):
         query_obj = base_query
-        if task and exclude != "task":
+        excluded = {exclude} if isinstance(exclude, str) else set(exclude or ())
+        if task and "task" not in excluded:
             query_obj = query_obj.filter(ReviewCorrection.task.in_(task))
-        if dataset and exclude != "dataset":
+        if dataset and "dataset" not in excluded:
             query_obj = query_obj.filter(Run.dataset.in_(dataset))
-        if model and exclude != "model":
+        if model and "model" not in excluded:
             query_obj = query_obj.filter(
                 or_(
                     *(
                         [Run.model == value for value in model]
-                        + [Run.model.ilike(f"%/{value}") for value in model]
+                        + [
+                            Run.model.ilike(
+                                "%/" + _escape_like(value), escape="\\"
+                            )
+                            for value in model
+                        ]
                     )
                 )
             )
-        if run_name and exclude != "run_name":
+        if run_name and "run_name" not in excluded:
             query_obj = query_obj.filter(
                 or_(
                     Run.external_run_id.in_(run_name),
@@ -8977,7 +9167,7 @@ def list_corrections(
                 ReviewCorrection.ai_confidence >= lo,
                 ReviewCorrection.ai_confidence <= hi,
             )
-        if status and exclude != "status":
+        if status and "status" not in excluded:
             try:
                 cs = CorrectionStatus(status)
                 query_obj = query_obj.filter(ReviewCorrection.status == cs)
@@ -9001,156 +9191,137 @@ def list_corrections(
             )
         return query_obj
 
-    def facet_value_expr(key: str):
-        if key == "task":
-            return ReviewCorrection.task
-        if key == "dataset":
-            return Run.dataset
-        if key == "model":
-            return Run.model
-        if key == "run_name":
-            return run_name_expr
-        raise ValueError(f"Unsupported facet key: {key}")
-
-    def build_facet_counts(key: str) -> Dict[str, int]:
-        facet_query = apply_filter_set(active_query, exclude=key)
-        if key == "model":
-            rows = (
-                facet_query.with_entities(Run.model, func.count(ReviewCorrection.id))
-                .group_by(Run.model)
-                .all()
-            )
-            counts: Dict[str, int] = {}
-            for raw_model, count in rows:
-                if not raw_model:
-                    continue
-                display = _strip_model_provider(raw_model or "")
-                counts[display] = counts.get(display, 0) + int(count or 0)
-            return counts
-        if key == "run_name":
-            rows = (
-                facet_query.with_entities(
-                    Run.id,
-                    Run.external_run_id,
-                    run_name_expr,
-                    func.count(ReviewCorrection.id),
-                )
-                .group_by(Run.id, Run.external_run_id, run_name_expr)
-                .all()
-            )
-            counts: Dict[str, int] = {}
-            for run_id_value, external_run_id, configured_name, count in rows:
-                display = _run_name_value(
-                    run_id_value, external_run_id, configured_name
-                )
-                if not display:
-                    continue
-                counts[display] = counts.get(display, 0) + int(count or 0)
-            return counts
-        value_expr = facet_value_expr(key)
-        rows = (
-            facet_query.with_entities(value_expr, func.count(ReviewCorrection.id))
-            .group_by(value_expr)
-            .all()
+    # One grouped read answers the status strip, the filtered total and all
+    # four facets: each group row carries every facet dimension, and the
+    # facet/status filters are applied to those rows in Python (each facet
+    # leaves out its own filter, the status strip leaves out the status).
+    grouped_rows = (
+        apply_filter_set(active_query, exclude=_CORRECTION_FACET_KEYS | {"status"})
+        .with_entities(
+            ReviewCorrection.status,
+            ReviewCorrection.task,
+            Run.dataset,
+            Run.model,
+            Run.id,
+            Run.external_run_id,
+            run_name_expr,
+            func.count(ReviewCorrection.id),
         )
-        return {
-            str(value): int(count or 0)
-            for value, count in rows
-            if str(value or "").strip()
-        }
-
-    filtered_query = apply_filter_set(active_query)
-    filtered_total = (
-        filtered_query.with_entities(func.count(ReviewCorrection.id)).scalar() or 0
+        .group_by(
+            ReviewCorrection.status,
+            ReviewCorrection.task,
+            Run.dataset,
+            Run.model,
+            Run.id,
+            Run.external_run_id,
+            run_name_expr,
+        )
+        .all()
     )
+    status_value = _correction_status_filter(status)
+    model_filters = [str(value).lower() for value in (model or [])]
 
-    query = filtered_query.order_by(ReviewCorrection.created_at.desc())
-    if limit is not None:
-        query = query.limit(limit)
-    corrections = query.all()
+    def row_matches(row: Any, key: str) -> bool:
+        row_status, row_task, row_dataset, row_model, row_run_id, row_external, row_run_name, _ = row
+        if key == "status":
+            row_status_value = getattr(row_status, "value", row_status)
+            return status_value is None or row_status_value == status_value
+        if key == "task":
+            return not task or row_task in task
+        if key == "dataset":
+            return not dataset or row_dataset in dataset
+        if key == "model":
+            if not model:
+                return True
+            raw_model = row_model or ""
+            lowered = raw_model.lower()
+            return raw_model in model or any(
+                lowered.endswith("/" + value) for value in model_filters
+            )
+        if key == "run_name":
+            return not run_name or (
+                row_external in run_name
+                or row_run_name in run_name
+                or row_run_id in run_name
+            )
+        raise ValueError(f"Unsupported filter key: {key}")
 
-    # Compute stats excluding status filter so stat cards show the breakdown
-    stats_query = apply_filter_set(active_query, exclude="status")
-    total = stats_query.with_entities(func.count(ReviewCorrection.id)).scalar() or 0
-    pending = (
-        stats_query.filter(ReviewCorrection.status == CorrectionStatus.PENDING)
-        .with_entities(func.count(ReviewCorrection.id))
-        .scalar()
-        or 0
-    )
-    approved = (
-        stats_query.filter(ReviewCorrection.status == CorrectionStatus.APPROVED)
-        .with_entities(func.count(ReviewCorrection.id))
-        .scalar()
-        or 0
-    )
-    rejected = (
-        stats_query.filter(ReviewCorrection.status == CorrectionStatus.REJECTED)
-        .with_entities(func.count(ReviewCorrection.id))
-        .scalar()
-        or 0
-    )
+    def matches_all(row: Any, *, skip: str) -> bool:
+        return all(
+            row_matches(row, key)
+            for key in ("status", *sorted(_CORRECTION_FACET_KEYS))
+            if key != skip
+        )
 
-    stats = {
-        "total": total,
-        "pending": pending,
-        "approved": approved,
-        "rejected": rejected,
+    stats = {"total": 0, "pending": 0, "approved": 0, "rejected": 0}
+    filtered_total = 0
+    facet_counts: Dict[str, Dict[str, int]] = {
+        "task": {},
+        "dataset": {},
+        "model": {},
+        "run_name": {},
     }
+    for row in grouped_rows:
+        count = int(row[-1] or 0)
+        if matches_all(row, skip="status"):
+            stats["total"] += count
+            row_status_value = getattr(row[0], "value", row[0])
+            if row_status_value in stats:
+                stats[row_status_value] += count
+            if row_matches(row, "status"):
+                filtered_total += count
+        for key in _CORRECTION_FACET_KEYS:
+            if not matches_all(row, skip=key):
+                continue
+            if key == "task":
+                display = str(row[1] or "").strip() and str(row[1])
+            elif key == "dataset":
+                display = str(row[2] or "").strip() and str(row[2])
+            elif key == "model":
+                display = _strip_model_provider(row[3] or "") if row[3] else ""
+            else:
+                display = _run_name_value(row[4], row[5], row[6])
+            if not display:
+                continue
+            facet_counts[key][display] = facet_counts[key].get(display, 0) + count
 
-    # Get distinct tasks for filter dropdown
-    task_rows = (
-        apply_filter_set(active_query, exclude="task")
-        .with_entities(ReviewCorrection.task)
-        .distinct()
-        .order_by(ReviewCorrection.task)
-        .all()
+    # Page of rows: keyset pagination over the chosen order.
+    page_size = limit if isinstance(limit, int) else _CORRECTIONS_DEFAULT_LIMIT
+    sort_key = _correction_sort_key(sort)
+    order_columns = _correction_order_columns(sort_key)
+    page_query = apply_filter_set(active_query)
+    if isinstance(cursor, str) and cursor:
+        page_query = page_query.filter(
+            _correction_cursor_filter(sort_key, order_columns, cursor)
+        )
+    page_query = page_query.order_by(
+        *[
+            column.asc() if ascending else column.desc()
+            for column, ascending in order_columns
+        ]
     )
-    tasks = [r[0] for r in task_rows]
-    dataset_rows = (
-        apply_filter_set(active_query, exclude="dataset")
-        .with_entities(Run.dataset)
-        .distinct()
-        .order_by(Run.dataset)
-        .all()
-    )
-    datasets = [r[0] for r in dataset_rows if r[0]]
-    model_rows = (
-        apply_filter_set(active_query, exclude="model")
-        .with_entities(Run.model)
-        .distinct()
-        .order_by(Run.model)
-        .all()
-    )
-    models = [_strip_model_provider(r[0] or "") for r in model_rows if r[0]]
-    run_rows = (
-        apply_filter_set(active_query, exclude="run_name")
-        .with_entities(Run.id, Run.external_run_id, run_name_expr.label("run_name"))
-        .distinct()
-        .all()
-    )
-    run_names = sorted(
-        {
-            (_run_name_value(run_id, external, configured_name))
-            for run_id, external, configured_name in run_rows
-            if _run_name_value(run_id, external, configured_name)
-        }
+    page_rows = page_query.limit(page_size + 1).all()
+    has_more = len(page_rows) > page_size
+    corrections = page_rows[:page_size]
+    next_cursor = (
+        _encode_correction_cursor(sort_key, corrections[-1])
+        if has_more and corrections
+        else None
     )
 
     return {
-        "corrections": _serialize_corrections_with_history(db, corrections, principal),
+        "corrections": _serialize_correction_list_rows(db, corrections, principal),
         "total": filtered_total,
+        "has_more": has_more,
+        "next_cursor": next_cursor,
+        "sort": sort_key,
+        "limit": page_size,
         "stats": stats,
-        "tasks": tasks,
-        "datasets": datasets,
-        "models": sorted(set(models)),
-        "run_names": run_names,
-        "facet_counts": {
-            "task": build_facet_counts("task"),
-            "dataset": build_facet_counts("dataset"),
-            "model": build_facet_counts("model"),
-            "run_name": build_facet_counts("run_name"),
-        },
+        "tasks": sorted(facet_counts["task"]),
+        "datasets": sorted(facet_counts["dataset"]),
+        "models": sorted(facet_counts["model"]),
+        "run_names": sorted(facet_counts["run_name"]),
+        "facet_counts": facet_counts,
     }
 
 
@@ -9627,6 +9798,13 @@ class BulkActionRequest(BaseModel):
     ids: List[int]
     action: str  # approve | reject | reset | delete
     comment: str = ""
+    # How many corrections the reviewer saw selected. When given, the action
+    # is refused unless exactly that many of the ids are still in the queue.
+    expected_count: Optional[int] = None
+    # The status tab the selection was made in. When given, the action is
+    # refused if any selected correction has since left that status (another
+    # reviewer approved, rejected or reset it in the meantime).
+    expected_status: Optional[str] = None
 
 
 @router.post("/api/corrections/bulk")
@@ -9650,6 +9828,14 @@ def bulk_correction_action(
 
     if not corrections:
         raise HTTPException(status_code=404, detail="No corrections found")
+    if request.expected_count is not None and len(corrections) != request.expected_count:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"{len(corrections)} of the {request.expected_count} selected corrections "
+                "are still in the review queue. Reload the list and select again."
+            ),
+        )
 
     runs_by_id = {
         run.id: run
@@ -9669,6 +9855,23 @@ def bulk_correction_action(
             require_correction_delete(db, principal, project_id, correction)
         elif request.action in ("approve", "reject", "reset"):
             require_correction_decision(db, principal, project_id, correction)
+
+    if request.expected_status:
+        try:
+            expected_status = CorrectionStatus(request.expected_status)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail="expected_status is not a correction status"
+            ) from exc
+        changed = sum(1 for c in corrections if c.status != expected_status)
+        if changed:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"{changed} of the {len(corrections)} selected corrections are no "
+                    f"longer {expected_status.value}. Reload the list and select again."
+                ),
+            )
 
     now = utc_now_naive()
     reviewer_id = principal.user.id if principal.auth_type != "none" else None
