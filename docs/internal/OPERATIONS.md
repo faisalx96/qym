@@ -270,8 +270,9 @@ Sizing, per API pod:
   a cancel or a project archive handled by another process sees and stops the
   same job. A job whose process stopped (restart, crash, rollout) shows as failed
   within about 15 seconds instead of running forever; start it again.
-- **Sign-in failure limits** (`QYM_AUTH_LOGIN_MAX_FAILURES_*`) are counted in
-  each web process, so a pod with N processes allows up to N times the limit.
+- **Sign-in failure limits** (`QYM_AUTH_LOGIN_MAX_FAILURES_*` and
+  `QYM_AUTH_LOGIN_EMAIL_CEILING`) are counted in each web process, so a pod with
+  N processes allows up to N times the limit.
 
 ## Optional separate worker Deployment (Helm/Kubernetes sketch)
 
