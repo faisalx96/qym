@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from sqlalchemy import and_, case, false, func, or_, select
+from sqlalchemy import and_, case, false, func, or_, select, true
 from sqlalchemy.orm import Session
 
 from qym_platform.auth import Principal, require_ui_principal
@@ -141,9 +141,15 @@ def _snapshot_project(db, project):
 
 @contextmanager
 def _read_snapshot(auth_db):
-    """Release auth checkout before owning one repeatable-read connection."""
+    """Release auth checkout before owning one repeatable-read connection.
+
+    Writes a read queues with ``after_snapshot`` (the shared overview cache)
+    run once that connection is back in the pool, so a request never waits
+    for a second connection while it holds one.
+    """
     bind = auth_db.get_bind()
     auth_db.close()
+    queued = []
     with bind.connect() as connection:
         if connection.dialect.name == "postgresql":
             connection = connection.execution_options(isolation_level="REPEATABLE READ")
@@ -151,7 +157,23 @@ def _read_snapshot(auth_db):
             # sqlite3's legacy mode otherwise does not start a transaction for SELECT.
             connection.exec_driver_sql("BEGIN")
         with Session(bind=connection, autoflush=False) as db:
+            db.info[_AFTER_SNAPSHOT] = queued
             yield db
+    for write in queued:
+        write()
+
+
+_AFTER_SNAPSHOT = "dashboard_after_snapshot"
+
+
+def after_snapshot(db, write):
+    """Run ``write`` (it opens its own connection) after the request's
+    snapshot connection is released; at once outside ``_read_snapshot``."""
+    queued = db.info.get(_AFTER_SNAPSHOT)
+    if queued is None:
+        write()
+    else:
+        queued.append(write)
 
 
 def _base_conditions(project):
@@ -195,7 +217,7 @@ def _filter_conditions(filters, *, skip=None, facets=False):
     return conditions
 
 
-def _search_condition(text):
+def _search_condition(text, table=Dimension):
     """Find a run by the name the list shows, its run name, or its id."""
     needle = text.lower()
 
@@ -203,9 +225,9 @@ def _search_condition(text):
         return func.lower(func.coalesce(column, "")).contains(needle, autoescape=True)
 
     return or_(
-        contains(Dimension.descriptor["external_run_id"].as_string()),
-        contains(Dimension.descriptor["run_name"].as_string()),
-        func.lower(Dimension.run_key).startswith(needle, autoescape=True),
+        contains(table.descriptor["external_run_id"].as_string()),
+        contains(table.descriptor["run_name"].as_string()),
+        func.lower(table.run_key).startswith(needle, autoescape=True),
     )
 
 
@@ -420,41 +442,60 @@ def _kpis(db, conditions, *, filtered):
     are distinct model names, so reasoning and plain variants of one model
     count once.
     """
-    data = Summary.data
-    task, metric = (
-        data["task_error_count"].as_float(),
-        data["metric_error_count"].as_float(),
-    )
+    if db.get_bind().dialect.name == "postgresql":
+        # Parse each summary once: every ->> on a json column parses it again.
+        from qym_platform.services.dashboard_overview import kpi_record
+
+        record = kpi_record()
+        query = _query(
+            *_kpi_aggregates(lambda name: record.c[name], Dimension.model)
+        ).join(record, true())
+    else:
+        query = _query(
+            *_kpi_aggregates(lambda name: Summary.data[name].as_float(), Dimension.model)
+        )
+    return _kpi_result(db.execute(query.where(*conditions)).one(), filtered=filtered)
+
+
+def _kpi_values(field):
+    """Each run's KPI inputs, reading summary field ``name`` as ``field(name)``."""
+    task, metric = field("task_error_count"), field("metric_error_count")
     # Summaries published before the task/metric split carry one error count.
     errors = case(
         (and_(task.isnot(None), metric.isnot(None)), task + metric),
-        else_=func.coalesce(
-            data["execution_error_count"].as_float(), data["error_count"].as_float(), 0
-        ),
-    )
-    name = func.replace(
-        func.replace(Dimension.model, "|||reasoning", ""), "|||plain", ""
+        else_=func.coalesce(field("execution_error_count"), field("error_count"), 0),
     )
     # Summaries published before shape 4 carry item counts only.
-    executions, successes = (
-        func.coalesce(
-            data["execution_count"].as_float(), data["total_items"].as_float()
+    return {
+        "kpi_items": field("total_items"),
+        "kpi_executions": func.coalesce(field("execution_count"), field("total_items")),
+        "kpi_successes": func.coalesce(
+            field("execution_success_count"), field("success_count")
         ),
-        func.coalesce(
-            data["execution_success_count"].as_float(),
-            data["success_count"].as_float(),
-        ),
+        "kpi_errored": case((errors > 0, 1), else_=0),
+    }
+
+
+def _kpi_totals(values, model):
+    """The KPI aggregates over per-run ``_kpi_values``."""
+    name = func.replace(func.replace(model, "|||reasoning", ""), "|||plain", "")
+    return (
+        func.count(),
+        func.count(func.distinct(case((name != "nomodel", name)))),
+        func.coalesce(func.sum(values["kpi_items"]), 0),
+        func.coalesce(func.sum(values["kpi_executions"]), 0),
+        func.coalesce(func.sum(values["kpi_successes"]), 0),
+        func.coalesce(func.sum(values["kpi_errored"]), 0),
     )
-    runs, models, items, executions, successes, errored = db.execute(
-        _query(
-            func.count(),
-            func.count(func.distinct(case((name != "nomodel", name)))),
-            func.coalesce(func.sum(data["total_items"].as_float()), 0),
-            func.coalesce(func.sum(executions), 0),
-            func.coalesce(func.sum(successes), 0),
-            func.coalesce(func.sum(case((errors > 0, 1), else_=0)), 0),
-        ).where(*conditions)
-    ).one()
+
+
+def _kpi_aggregates(field, model):
+    """The KPI aggregates, reading summary field ``name`` as ``field(name)``."""
+    return _kpi_totals(_kpi_values(field), model)
+
+
+def _kpi_result(values, *, filtered):
+    runs, models, items, executions, successes, errored = values
     return {
         "scope": "filtered" if filtered else "project",
         "runs": int(runs),
@@ -500,6 +541,20 @@ def _overview(db, project, filters, sort="time-desc", collation=None):
     )
 
     def compute():
+        if db.get_bind().dialect.name == "postgresql":
+            # C037: computed in the database once per revision and shared by
+            # every process and pod; this process keeps a small copy.
+            from qym_platform.services.dashboard_overview import shared_overview
+
+            return shared_overview(
+                db,
+                project,
+                filters,
+                sort,
+                collation,
+                catalog_revision=freshness["catalog_revision"],
+                hidden_tasks=PlatformSettings().hidden_tasks,
+            )
         value = _build_overview(db, project, filters, sort, collation)
         return {
             k: v
@@ -512,6 +567,20 @@ def _overview(db, project, filters, sort="time-desc", collation=None):
 
 
 def _build_overview(db, project, filters, sort="time-desc", collation=None):
+    if db.get_bind().dialect.name == "postgresql":
+        # C037: aggregated in the database, one statement, same numbers.
+        from qym_platform.services.dashboard_overview import build_overview_postgres
+
+        whole, part = build_overview_postgres(db, project, filters, sort, collation)
+        result = {**whole, **part, "project": project}
+        result.update(_freshness(db, project))
+        return result
+    return _build_overview_python(db, project, filters, sort, collation)
+
+
+def _build_overview_python(db, project, filters, sort="time-desc", collation=None):
+    """The overview reduced in Python from every run (SQLite, and the
+    reference the PostgreSQL build is tested against)."""
     from qym_platform.services.dashboard_views import build_overview_data, _global_data
 
     base = _base_conditions(project)

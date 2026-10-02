@@ -838,12 +838,21 @@ def test_migration_frozen_schema_and_existing_history_seed(database):
     )
     later_migration = importlib.util.module_from_spec(later)
     later.loader.exec_module(later_migration)
+    # 0069's overview tables reference 0048's summaries: replay them around it.
+    overview = importlib.util.spec_from_file_location(
+        "dashboard_overview_store",
+        path.parent / "0069_dashboard_overview_store.py",
+    )
+    overview_migration = importlib.util.module_from_spec(overview)
+    overview.loader.exec_module(overview_migration)
     with database.begin() as connection:
         migration.op = Operations(MigrationContext.configure(connection))
+        overview_migration.op = later_migration.op = migration.op
+        overview_migration.downgrade()
         migration.downgrade()
         migration.upgrade()
-        later_migration.op = migration.op
         later_migration.upgrade()
+        overview_migration.upgrade()
     with Session(database) as db:
         assert db.get(Partition, "r").queue_state == "backfill"
         assert not db.get(Partition, "r").backfill_complete

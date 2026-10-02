@@ -1466,6 +1466,10 @@ def _deletion_blocker(counts: Dict[str, int], *, archived: bool = False) -> Opti
 
 def _delete_project_rows(db: Session, project_id: str) -> None:
     """Remove everything a run-less project owns, children before parents."""
+    from qym_platform.services.dashboard_overview import forget_shared
+
+    # Overviews stored for its (since purged) runs (C037).
+    forget_shared(db, project_id)
     db.query(ApiKey).filter(ApiKey.project_id == project_id).delete(
         synchronize_session=False
     )

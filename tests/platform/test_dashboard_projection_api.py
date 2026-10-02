@@ -730,13 +730,30 @@ def test_overview_filtered_stream_honors_requested_sort(dataset, monkeypatch):
         captured["filtered"] = [row["run_id"] for row in filtered]
         return {}
 
+    build = dashboard_views.build_overview_data
     monkeypatch.setattr(dashboard_views, "build_overview_data", capture)
-    response = client.post(
-        "/api/dashboard/overview", json={"project_slug": "project", "sort": "time-asc"}
-    )
-    assert response.status_code == 200, response.text
+    if engine.dialect.name == "postgresql":
+        # C037: PostgreSQL aggregates the overview in SQL. The Python build it
+        # must equal (test_overview_sql_equivalence) streams in this order...
+        with Session(engine) as db:
+            dashboard._build_overview_python(db, {"id": "project"}, {}, "time-asc")
+    else:
+        response = client.post(
+            "/api/dashboard/overview", json={"project_slug": "project", "sort": "time-asc"}
+        )
+        assert response.status_code == 200, response.text
     assert captured["filtered"] == [f"run-{index:04}" for index in range(6)]
     assert captured["global"]["aggregations"]["totalRuns"] == 6
+    if engine.dialect.name == "postgresql":
+        # ... and the endpoint's chart data is that build's.
+        monkeypatch.setattr(dashboard_views, "build_overview_data", build)
+        response = client.post(
+            "/api/dashboard/overview", json={"project_slug": "project", "sort": "time-asc"}
+        )
+        assert response.status_code == 200, response.text
+        with Session(engine) as db:
+            expected = dashboard._build_overview_python(db, {"id": "project"}, {}, "time-asc")
+        assert response.json()["chart_data"] == json.loads(json.dumps(expected["chart_data"]))
     points = client.post(
         "/api/dashboard/points",
         json={"project_slug": "project", "sort": "time-asc", "limit": 2},

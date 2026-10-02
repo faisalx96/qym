@@ -1192,3 +1192,60 @@ def _backfill_dataset_search_text(ctx: JobContext) -> bool:
     )
     ctx.log(ctx.progress["message"])
     return True
+
+
+@register(
+    "backfill_dashboard_overview",
+    description="Store each run's overview inputs (migration 0069), so the Runs, Charts and Models overview stops reading every run's JSON.",
+)
+def _backfill_dashboard_overview(ctx: JobContext) -> bool:
+    """Walk the summaries in run-key windows and store the overview inputs of
+    every run whose stored row is missing or older than its summary.
+
+    Resumable from ``ctx.progress``. Runs the summary worker publishes in the
+    meantime get their row from the worker; a row never moves back to an
+    older revision. PostgreSQL only: SQLite builds the overview in Python.
+    """
+    from qym_platform.db.dashboard_models import (
+        DashboardRunDimension as Dimension,
+        DashboardRunOverview as Facts,
+        DashboardRunSummary as Summary,
+    )
+    from qym_platform.services.dashboard_overview import store_overview_facts
+
+    if not ctx.is_postgres():
+        ctx.progress["message"] = "skipped: not PostgreSQL (the overview is built in Python)"
+        ctx.log(ctx.progress["message"])
+        return True
+    window = max(1, int(ctx.params.get("window", 500)))
+    cursor = str(ctx.progress.get("cursor") or "")
+    with ctx.session() as db:
+        keys = list(
+            db.scalars(
+                select(Summary.run_key)
+                .join(Dimension, Dimension.run_key == Summary.run_key)
+                .outerjoin(
+                    Facts,
+                    (Facts.run_key == Summary.run_key)
+                    & (Facts.revision == Summary.projection_revision),
+                )
+                .where(Summary.run_key > cursor, Facts.run_key.is_(None))
+                .order_by(Summary.run_key)
+                .limit(window)
+            )
+        )
+        if keys:
+            # The JSON functions make the planner expect huge row counts; JIT
+            # compiling for a window of runs costs more than it saves.
+            db.execute(text("SET LOCAL jit = off"))
+            store_overview_facts(db, Dimension.run_key.in_(keys))
+        db.commit()
+    ctx.progress["runs_stored"] = int(ctx.progress.get("runs_stored") or 0) + len(keys)
+    if len(keys) < window:
+        ctx.progress["phase"] = "done"
+        ctx.progress["message"] = f"done: {ctx.progress['runs_stored']:,} runs stored"
+        ctx.log(ctx.progress["message"])
+        return True
+    ctx.progress["cursor"] = keys[-1]
+    ctx.progress["message"] = f"{ctx.progress['runs_stored']:,} runs stored"
+    return False

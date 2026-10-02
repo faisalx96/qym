@@ -42,7 +42,7 @@ def test_alembic_has_one_upgrade_head() -> None:
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["0068"]
+    assert heads == ["0069"]
 
 
 def test_migrations_name_their_own_revision_in_job_logs() -> None:
@@ -244,6 +244,53 @@ def test_dataset_search_backfill_job_fills_text_and_published_counts() -> None:
         "v1": {"added": 1, "modified": 0, "deleted": 0, "unchanged": 0},
         "v2": {"added": 0, "modified": 1, "deleted": 0, "unchanged": 0},
     }
+    engine.dispose()
+
+
+def test_overview_store_migration_is_quick_ddl_that_queues_the_backfill(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """C037: 0069 adds two empty tables and queues the overview backfill."""
+    from sqlalchemy.orm import sessionmaker
+
+    from qym_platform.db.maintenance_models import MaintenanceJob
+    from qym_platform.services import maintenance
+
+    overview = _load_migration("0069_dashboard_overview_store.py")
+    engine = sa.create_engine("sqlite://")
+    metadata = sa.MetaData()
+    sa.Table(
+        "dashboard_run_summaries", metadata, sa.Column("run_key", sa.String(36), primary_key=True)
+    )
+    metadata.create_all(engine)
+    MaintenanceJob.__table__.create(engine)
+    jobs = "SELECT kind, status FROM maintenance_jobs ORDER BY kind"
+
+    with engine.begin() as connection:
+        monkeypatch.setattr(overview, "op", Operations(MigrationContext.configure(connection)))
+        overview.upgrade()
+        tables = set(sa.inspect(connection).get_table_names())
+        assert {"dashboard_run_overview", "dashboard_overview_snapshots"} <= tables
+        assert connection.execute(sa.text(jobs)).all() == [("backfill_dashboard_overview", "queued")]
+        overview.downgrade()
+        tables = set(sa.inspect(connection).get_table_names())
+        assert not {"dashboard_run_overview", "dashboard_overview_snapshots"} & tables
+    assert "backfill_dashboard_overview" in maintenance.registry()
+    engine.dispose()
+
+    # On SQLite the job finishes at once.
+    from qym_platform.db.base import Base
+
+    engine = sa.create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    with factory() as db:
+        maintenance.enqueue(db, "backfill_dashboard_overview", {})
+        db.commit()
+    assert maintenance.MaintenanceWorker(factory, engine).tick() == "succeeded"
+    with factory() as db:
+        job = db.query(MaintenanceJob).filter_by(kind="backfill_dashboard_overview").one()
+        assert "skipped: not PostgreSQL" in job.log
     engine.dispose()
 
 

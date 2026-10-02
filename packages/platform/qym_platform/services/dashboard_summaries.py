@@ -1058,6 +1058,14 @@ def ensure_pending_summary(db, run_id, version):
     if db.get(Summary, run_id) is None:
         db.add(Summary(run_key=run_id, project_key=run.project_id, data={}, projection_revision=0))
         db.flush()
+        _store_overview_inputs(db, run_id)
+
+
+def _store_overview_inputs(db, run_id):
+    """C037: keep the run's overview inputs next to what was just written."""
+    from qym_platform.services.dashboard_overview import refresh_run_overview
+
+    refresh_run_overview(db, run_id)
 
 
 # Bump when published summary fields change; older summaries are refreshed
@@ -1572,6 +1580,7 @@ def refresh_run_summary(db, run_id, version):
         key=lambda entry: 0 if entry[3] == "hour" else 1,
     ):
         repair_extrema(db, run.project_id, bucket, granularity)
+    _store_overview_inputs(db, run_id)
 
 
 def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
