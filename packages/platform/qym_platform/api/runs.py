@@ -67,6 +67,7 @@ from qym_platform.permissions import (
 )
 from qym_platform.services.correction_rules import require_correction_decision
 from qym_platform.services.issue_reviews import (
+    ISSUE_REVIEW_COLUMNS,
     change_metric_issue,
     correction_issue_id,
     issue_json_says_decided,
@@ -3619,8 +3620,19 @@ def _build_run_data(
                     ps.metric_name, {}
                 )[int(ps.pass_number)] = ps_meta
         if pass_analysis_by_item:
+            # Only the columns issue_review_statuses reads, as plain rows: a
+            # reviewed repeat run has thousands of these, each carrying the
+            # item's snapshots, and the page only reads their statuses.
             for corr in (
-                db.query(ReviewCorrection)
+                db.query(
+                    ReviewCorrection.id,
+                    ReviewCorrection.item_id,
+                    ReviewCorrection.metric_name,
+                    ReviewCorrection.pass_number,
+                    ReviewCorrection.status,
+                    ReviewCorrection.created_at,
+                    *ISSUE_REVIEW_COLUMNS,
+                )
                 .filter(
                     ReviewCorrection.run_id == run.id,
                     ReviewCorrection.is_active.is_(True),

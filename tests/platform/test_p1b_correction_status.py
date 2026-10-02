@@ -473,6 +473,68 @@ def test_pass_payload_gives_each_pass_issue_its_correction_status(db_session):
     assert statuses[0] is None
 
 
+def test_pass_statuses_read_each_review_row_once_without_its_snapshots(db_session, monkeypatch):
+    """Final review (run page cost on reviewed repeat runs): the build loaded
+    every active pass review row in full, with the item's four snapshots, and
+    normalized each row's issues four times. The statuses need only the status
+    and the issue columns, normalized once per row."""
+    from sqlalchemy import event
+
+    from qym_platform.services import issue_reviews
+
+    _, run, item, principal = setup(db_session)
+    run.samples = 2
+    analysis = deepcopy(item.item_metadata["metric_analyses"]["accuracy"])
+    for number in (1, 2):
+        db_session.add(RunItemPassScore(run_id=run.id, item_id=item.item_id, metric_name="accuracy", pass_number=number,
+                                        score_numeric=0, meta={PASS_ANALYSIS_META_KEY: deepcopy(analysis)}))
+    db_session.commit()
+    for number in (1, 2):
+        act(db_session, run, item, principal, "approve", 0, pass_number=number)
+    active = db_session.query(ReviewCorrection).filter(
+        ReviewCorrection.is_active.is_(True), ReviewCorrection.pass_number.isnot(None)
+    ).order_by(ReviewCorrection.id).all()
+    pass_rows = len(active)
+    assert pass_rows == 4
+    pending = next(c for c in active if c.pass_number == 2 and c.status == CorrectionStatus.PENDING)
+    reject_correction(pending.id, {"comment": "no"}, db=db_session, principal=principal)
+    run_id, item_id = run.id, item.item_id
+    db_session.expunge_all()
+    run = db_session.get(type(run), run_id)
+
+    statements = []
+    normalized = []
+    real_issues = issue_reviews.correction_issues
+
+    def capture(_conn, _cursor, statement, *_args):
+        statements.append(statement)
+
+    def counting(correction):
+        normalized.append(correction.id)
+        return real_issues(correction)
+
+    monkeypatch.setattr(issue_reviews, "correction_issues", counting)
+    engine = db_session.get_bind()
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        row = _row(db_session, run, item_id)
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+
+    statuses = row["pass_review_issue_statuses"]["accuracy"]
+    assert [entry["status"] for entry in statuses[0]] == ["approved", "pending"]
+    assert [entry["status"] for entry in statuses[1]] == ["approved", "rejected"]
+    pass_queries = [
+        sql for sql in statements
+        if "FROM review_corrections" in sql and "review_corrections.pass_number IS NOT NULL" in sql
+    ]
+    assert len(pass_queries) == 1
+    for column in ("input_snapshot", "expected_snapshot", "output_snapshot", "scores_snapshot"):
+        assert column not in pass_queries[0]
+    # Each pass review row's issues are normalized once.
+    assert len(normalized) == pass_rows and len(set(normalized)) == pass_rows
+
+
 def test_run_page_offers_approve_by_the_issue_review_status():
     functions = "\n".join(
         _function("run", name)

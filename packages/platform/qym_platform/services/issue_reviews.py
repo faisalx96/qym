@@ -121,6 +121,21 @@ def correction_issues(correction: ReviewCorrection) -> list[dict[str, Any]]:
     )
 
 
+# The columns ``correction_issues`` reads, for loading only those.
+ISSUE_REVIEW_COLUMNS = (
+    ReviewCorrection.human_root_cause_issues,
+    ReviewCorrection.human_root_causes,
+    ReviewCorrection.human_root_cause,
+    ReviewCorrection.human_root_cause_detail,
+    ReviewCorrection.human_root_cause_note,
+    ReviewCorrection.ai_root_cause_issues,
+    ReviewCorrection.ai_root_causes,
+    ReviewCorrection.ai_root_cause,
+    ReviewCorrection.ai_root_cause_detail,
+    ReviewCorrection.ai_root_cause_note,
+)
+
+
 def correction_issue_id(correction: ReviewCorrection) -> str:
     issues = correction_issues(correction)
     return str(issues[0].get("issue_id") or "") if len(issues) == 1 else ""
@@ -264,14 +279,22 @@ def issue_review_statuses(
     correction while its content matches; an unchanged issue of a legacy
     grouped review takes that review's status; any other issue would get a
     new pending review. ``active`` holds the scope's active corrections,
-    newest first. In older data an issue's JSON ``review_status`` can say
-    pending while its correction is decided, so the run page offers Approve
-    by this status, not by the JSON. One entry per issue, in issue order.
+    newest first (query rows with ``status`` and ``ISSUE_REVIEW_COLUMNS``
+    do). In older data an issue's JSON ``review_status`` can say pending
+    while its correction is decided, so the run page offers Approve by this
+    status, not by the JSON. One entry per issue, in issue order.
     """
-    rows = list(active)
-    scoped = {correction_issue_id(c): c for c in rows if correction_issue_id(c)}
-    legacy = next((c for c in rows if not correction_issue_id(c)), None)
-    legacy_issues = correction_issues(legacy) if legacy else []
+    # Each row's issues are normalized once (a run page has thousands).
+    scoped: dict[str, tuple[ReviewCorrection, list[dict[str, Any]]]] = {}
+    legacy = None
+    legacy_issues: list[dict[str, Any]] = []
+    for row in active:
+        row_issues = correction_issues(row)
+        row_issue_id = str(row_issues[0].get("issue_id") or "") if len(row_issues) == 1 else ""
+        if row_issue_id:
+            scoped[row_issue_id] = (row, row_issues)
+        elif legacy is None:
+            legacy, legacy_issues = row, row_issues
     statuses = []
     seen: set[str] = set()
     for index, issue in enumerate(analysis_root_cause_issues(analysis)):
@@ -280,8 +303,8 @@ def issue_review_statuses(
         candidate = scoped.get(issue_id) if issue_id and issue_id not in seen else None
         seen.add(issue_id)
         content = issue_content(issue)
-        if candidate is not None and issue_content(correction_issues(candidate)[0]) == content:
-            status = candidate.status
+        if candidate is not None and issue_content(candidate[1][0]) == content:
+            status = candidate[0].status
         elif legacy is not None and index < len(legacy_issues) and issue_content(legacy_issues[index]) == content:
             status = legacy.status
         else:
