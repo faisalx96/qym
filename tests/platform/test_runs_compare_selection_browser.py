@@ -296,3 +296,77 @@ def test_a_kept_pass_pick_drops_out_when_the_runs_passes_changed(browser):  # no
         assert view.errors == []
     finally:
         view.close()
+
+
+def test_a_cohort_a_pass_pick_drops_out_when_the_runs_passes_changed(browser):  # noqa: F811
+    """Cohort A names passes the same way as the checked runs: a locked pass
+    reference drops out once its run's passes changed (a new pass_revision),
+    both within one visit and when Cohort A is kept across visits. Before,
+    only the checked runs were reconciled, so Cohort A kept naming a pass
+    that now meant another execution."""
+    runs = make_runs(4)
+    passes = [
+        dict(pass_number=n, status="completed", metric_means={"accuracy": 0.5 + n / 10})
+        for n in (1, 2)
+    ]
+    runs[0].update(samples=2, pass_summaries=passes, pass_revision=1)
+    view = DashboardFixture(browser, runs=runs)
+    page = view.page
+    page.route(
+        "**/api/runs/run-000/passes",
+        lambda route: route.fulfill(
+            json={"samples": 2, "metrics": ["accuracy"], "passes": passes}
+        ),
+    )
+    page.route(
+        "**/api/runs/run-000/group-metrics*",
+        lambda route: route.fulfill(json={"metric": "accuracy", "samples": 2}),
+    )
+    anchor = "[...(window.__dashboardTest.state.cohortAnchorRuns || [])].sort()"
+    loaded = "() => window.__dashboardTest?.state.dashboardPage?.rows.length === 4"
+    settled = (
+        "() => document.getElementById('table-view').getAttribute('aria-busy') !== 'true'"
+    )
+
+    def lock_cohort_a(pass_ref, run_id):
+        page.locator('.samples-toggle[data-run-id="run-000"]').click()
+        page.wait_for_function(
+            "__dashboardTest.state._samplesData['run-000']?.passes?.samples === 2"
+        )
+        if page.locator("#select-mode-btn").get_attribute("aria-pressed") != "true":
+            page.locator("#select-mode-btn").click()
+        page.locator(f'.pass-checkbox[data-pass-ref="{pass_ref}"]').check()
+        page.get_by_role("checkbox", name=f"Select run {run_id}", exact=True).check()
+        page.locator("#cohort-view").click()
+        page.wait_for_function(f"() => {anchor}.length === 2")
+
+    try:
+        page.goto("https://qym.test/projects/demo")
+        page.wait_for_function(loaded)
+
+        # Kept across visits: the pick survives a reload, then drops out once
+        # the run's passes were renumbered while away.
+        lock_cohort_a("run-000::pass2", "run-001")
+        assert page.evaluate(f"() => {anchor}") == ["run-000::pass2", "run-001"]
+        page.reload()  # pagehide saves, the new page restores
+        page.wait_for_function(loaded)
+        page.wait_for_function(settled)
+        assert page.evaluate(f"() => {anchor}") == ["run-000::pass2", "run-001"]
+        runs[0]["pass_revision"] = 2
+        page.reload()
+        page.wait_for_function(loaded)
+        page.wait_for_function(settled)
+        assert page.evaluate(f"() => {anchor}") == ["run-001"]
+        _wait_for_count(page, "Cohort B 0/1 executions")
+
+        # Within one visit: a poll that brings a new pass_revision drops it.
+        page.locator("#compare-clear").click()
+        page.wait_for_function(f"() => {anchor}.length === 0")
+        lock_cohort_a("run-000::pass1", "run-002")
+        runs[0]["pass_revision"] = 3
+        page.evaluate("() => window.__dashboardTest.fetchRuns()")
+        page.wait_for_function(f"() => {anchor}.join(' ') === 'run-002'")
+        _wait_for_count(page, "Cohort B 0/1 executions")
+        assert view.errors == []
+    finally:
+        view.close()

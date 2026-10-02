@@ -7391,8 +7391,13 @@
       if (previous !== undefined && previous !== revision) {
         // A checked pass and its cached details refer to the old mapping.
         // Require the user to select again after the refreshed rows render.
+        const stale = ref => isPassRef(ref) && passRefBase(ref) === run.file_path;
         for (const ref of state.selectedRuns) {
-          if (isPassRef(ref) && passRefBase(ref) === run.file_path) state.selectedRuns.delete(ref);
+          if (stale(ref)) state.selectedRuns.delete(ref);
+        }
+        // A locked Cohort A names passes the same way.
+        if (Array.isArray(state.cohortAnchorRuns)) {
+          state.cohortAnchorRuns = state.cohortAnchorRuns.filter(ref => !stale(ref));
         }
         if (state._samplesData) delete state._samplesData[run.run_id];
       }
@@ -9095,10 +9100,11 @@
         sessionStorage.removeItem(getRunsSelectionKey());
         return;
       }
-      // A pass reference means that pass as numbered when it was picked;
-      // reconcilePassVersions drops it if the run's passes changed meanwhile.
+      // A pass reference (checked or in Cohort A) means that pass as
+      // numbered when it was picked; reconcilePassVersions drops it if the
+      // run's passes changed meanwhile.
       const passRevisions = {};
-      for (const ref of selected) {
+      for (const ref of [...selected, ...cohortA]) {
         const base = passRefBase(ref);
         if (isPassRef(ref) && state._passVersions && base in state._passVersions) {
           passRevisions[base] = state._passVersions[base];
