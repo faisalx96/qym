@@ -131,20 +131,25 @@ def _verified_local_credential(
     """
     normalized = _normalize_email(email)
     throttle = login_throttle(request)
-    client = client_key(request)
-    throttle.check(normalized, client)
-    user = db.query(User).filter(User.email == normalized).first()
-    credential = (
-        db.query(LocalAuthCredential).filter(LocalAuthCredential.user_id == user.id).first()
-        if user is not None and user.is_active
-        else None
-    )
-    stored_hash = credential.password_hash if credential is not None else _dummy_password_hash()
-    password_ok = verify_password(password, stored_hash)
+    # Checked and counted as a failure in one step, so concurrent wrong
+    # passwords cannot all pass the check while the first is being verified.
+    attempt = throttle.begin(normalized, client_key(request))
+    try:
+        user = db.query(User).filter(User.email == normalized).first()
+        credential = (
+            db.query(LocalAuthCredential).filter(LocalAuthCredential.user_id == user.id).first()
+            if user is not None and user.is_active
+            else None
+        )
+        stored_hash = credential.password_hash if credential is not None else _dummy_password_hash()
+        password_ok = verify_password(password, stored_hash)
+    except BaseException:
+        throttle.cancel(attempt)
+        raise
     if credential is None or not password_ok:
-        throttle.record_failure(normalized, client)
+        throttle.failed(attempt)
         raise _invalid_credentials()
-    throttle.record_success(normalized, client)
+    throttle.succeeded(attempt)
     return user, credential
 
 
@@ -308,17 +313,22 @@ def auth_signup_password(
     # "Already exists" answers tell which emails have accounts; they count as
     # failed attempts for the client like wrong passwords do, but never
     # against the email: sign-up must not lock that person's sign-in.
+    # Checked and counted in one step, as at sign-in.
     throttle = login_throttle(request)
-    client = client_key(request)
-    throttle.check_client(client)
+    attempt = throttle.begin_client(client_key(request))
     try:
-        password_hash = hash_password(payload.password)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    if db.query(User.id).filter(User.email == email).first():
-        throttle.record_client_failure(client)
+        try:
+            password_hash = hash_password(payload.password)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        taken = db.query(User.id).filter(User.email == email).first() is not None
+    except BaseException:
+        throttle.cancel(attempt)
+        raise
+    if taken:
+        throttle.failed(attempt)
         raise HTTPException(status_code=409, detail="An account with this email already exists")
+    throttle.succeeded(attempt)
 
     user = User(
         email=email,

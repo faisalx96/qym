@@ -233,3 +233,178 @@ def test_ceiling_window_and_pair_lock_age_out_on_their_own_clocks():
     now[0] += 601
     throttle.check("a@x.com", "c1")
     throttle.check("a@x.com", "c3")
+
+
+# Final review: concurrent attempts. Checking a password takes hundreds of
+# milliseconds, so the check and the count are one step: an attempt counts
+# as a failure from the moment it passes the check.
+
+
+@pytest.fixture()
+def threaded_local(local, tmp_path):
+    """``local`` on a file database with one connection per request thread,
+    so a burst of concurrent requests runs as it does on PostgreSQL."""
+    from sqlalchemy.pool import NullPool
+
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'auth.db'}",
+        connect_args={"check_same_thread": False},
+        poolclass=NullPool,
+    )
+    Base.metadata.create_all(engine)
+    make = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    with local() as source, make() as db:
+        for user in source.query(User).all():
+            db.add(User(id=user.id, email=user.email, role=user.role))
+        db.flush()
+        for credential in source.query(LocalAuthCredential).all():
+            db.add(LocalAuthCredential(user_id=credential.user_id, password_hash=credential.password_hash))
+        db.commit()
+    yield make
+    engine.dispose()
+
+
+def _burst(app, host, count, send):
+    """Start ``count`` requests from one client at once; count the answers."""
+    import threading
+    from collections import Counter
+
+    codes = Counter()
+    guard = threading.Lock()
+    barrier = threading.Barrier(count)
+    with TestClient(app, client=(host, 1)) as client:
+
+        def one(index):
+            barrier.wait()
+            code = send(client, index).status_code
+            with guard:
+                codes[code] += 1
+
+        threads = [threading.Thread(target=one, args=(index,)) for index in range(count)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(60)
+    return dict(codes)
+
+
+def _slow(monkeypatch, name, result):
+    """Make ``qym_platform.api.auth.<name>`` take 0.3 s, as PBKDF2 does, so
+    every request of a burst is in flight while the others are checked."""
+    import time
+
+    from qym_platform.api import auth as auth_api
+
+    def slow(*_args):
+        time.sleep(0.3)
+        return result
+
+    monkeypatch.setattr(auth_api, name, slow)
+
+
+def test_a_burst_of_wrong_passwords_stops_at_the_strict_lock(threaded_local, monkeypatch):
+    app = _app(threaded_local)
+    with TestClient(app, client=("10.0.5.1", 1)) as client:
+        assert _login(client, "person@x.com", "wrong-0").status_code == 401
+    _slow(monkeypatch, "verify_password", False)
+    codes = _burst(
+        app, "10.0.5.1", 20, lambda client, index: _login(client, "person@x.com", f"wrong-{index + 1}")
+    )
+    # 5 per (email, client): four more password checks after the first.
+    assert codes == {401: 4, 429: 16}
+    throttle = app.state.login_throttle
+    assert len(throttle._failures[throttle._pair_key("person@x.com", "10.0.5.1")]) == 5
+
+
+def test_a_burst_of_wrong_passwords_stops_at_the_email_ceiling(threaded_local, monkeypatch):
+    monkeypatch.setenv("QYM_AUTH_LOGIN_EMAIL_CEILING", "3")
+    monkeypatch.setenv("QYM_AUTH_LOGIN_MAX_FAILURES_PER_EMAIL", "100")
+    app = _app(threaded_local)
+    with TestClient(app, client=("10.0.5.2", 1)) as client:
+        assert _login(client, "person@x.com", "wrong-0").status_code == 401
+    _slow(monkeypatch, "verify_password", False)
+    codes = _burst(
+        app, "10.0.5.2", 20, lambda client, index: _login(client, "person@x.com", f"wrong-{index + 1}")
+    )
+    assert codes == {401: 2, 429: 18}
+
+
+def test_a_burst_of_taken_emails_at_sign_up_stops_at_the_client_cap(threaded_local, monkeypatch):
+    monkeypatch.setenv("QYM_AUTH_LOCAL_SIGNUP", "true")
+    monkeypatch.setenv("QYM_AUTH_LOGIN_MAX_FAILURES_PER_CLIENT", "3")
+    app = _app(threaded_local)
+    _slow(monkeypatch, "hash_password", b"not-a-real-hash")
+    payload = {"email": "person@x.com", "password": PASSWORD}
+    codes = _burst(
+        app, "10.0.5.3", 10,
+        lambda client, _index: client.post("/v1/auth/signup/password", json=payload, headers=ORIGIN),
+    )
+    assert codes == {409: 3, 429: 7}
+
+
+def test_an_attempt_counts_until_it_is_settled():
+    from fastapi import HTTPException
+
+    throttle = LoginThrottle(
+        max_per_email=2, max_per_client=100, window_seconds=60, clock=lambda: 1000.0
+    )
+    first = throttle.begin("a@x.com", "c1")
+    second = throttle.begin("a@x.com", "c1")
+    with pytest.raises(HTTPException) as refused:
+        throttle.begin("a@x.com", "c1")
+    assert refused.value.status_code == 429
+    # A request that ended without a verdict is not counted.
+    throttle.cancel(first)
+    third = throttle.begin("a@x.com", "c1")
+    # The right password clears the strict lock, but not for ``second``,
+    # which is still in flight.
+    throttle.succeeded(third)
+    fourth = throttle.begin("a@x.com", "c1")
+    with pytest.raises(HTTPException):
+        throttle.begin("a@x.com", "c1")
+    # Failures stay counted.
+    throttle.failed(second)
+    throttle.failed(fourth)
+    with pytest.raises(HTTPException):
+        throttle.begin("a@x.com", "c1")
+    assert len(throttle._failures["email:a@x.com"]) == 2
+    assert len(throttle._failures["client:c1"]) == 2
+    assert not throttle._in_flight
+
+
+def test_concurrent_first_requests_share_one_throttle(monkeypatch):
+    import threading
+    import time
+
+    from qym_platform import login_throttle as module
+
+    real_settings = module.PlatformSettings
+
+    def slow_settings():
+        time.sleep(0.05)
+        return real_settings()
+
+    monkeypatch.setattr(module, "PlatformSettings", slow_settings)
+
+    class _State:
+        pass
+
+    class _App:
+        state = _State()
+
+    class _Request:
+        app = _App()
+
+    barrier = threading.Barrier(8)
+    seen = []
+
+    def first():
+        barrier.wait()
+        seen.append(id(login_throttle(_Request())))
+
+    threads = [threading.Thread(target=first) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(10)
+    assert len(seen) == 8 and len(set(seen)) == 1
