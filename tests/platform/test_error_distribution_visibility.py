@@ -20,6 +20,9 @@ def test_error_groups_appear_only_when_the_filtered_results_contain_them(page):
           allMetrics: ['accuracy', 'quality'], selectedItemsMetric: 'accuracy',
         };
         const isRepeatAggregateView = () => false;
+        // Run page section nav (C058) and its section header recipe.
+        var setSectionNavCount = () => {};
+        var runSectionHeadHtml = typeof runSectionHeadHtml === 'function' ? runSectionHeadHtml : () => '';
         const stringify = value => typeof value === 'string' ? value : JSON.stringify(value);
         const escapeHtml = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
         const escapeAttr = escapeHtml;

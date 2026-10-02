@@ -5,8 +5,6 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
-from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from qym_platform.auth_oidc import SESSION_MAX_AGE_SECONDS, origin_matches_base, session_auth_enabled
@@ -24,12 +22,18 @@ from qym_platform.api.product_evals import router as product_evals_router
 from qym_platform.api.datasets import router as datasets_router
 from qym_platform.api.insights import router as insights_router
 from qym_platform.api.dashboard import router as dashboard_router
+from qym_platform.api.dashboard_stats import router as dashboard_stats_router
 from qym_platform.api.admin import router as admin_router
 from qym_platform.services.analysis_jobs import (
     analysis_job_manager,
     rule_inference_job_manager,
 )
 from qym_platform.services.dashboard_summaries import DashboardSummaryWorker
+from qym_platform.static_files import GZipExceptStatic, PrecompressedStaticFiles
+
+# Starlette defaults to level 9: on multi-MB run/compare JSON that is about 3x
+# the CPU of level 6 for 2-4 % smaller bodies.
+GZIP_COMPRESSLEVEL = 6
 
 
 def create_app(settings: PlatformSettings | None = None) -> FastAPI:
@@ -73,6 +77,14 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
             maintenance_worker.start()
             logging.getLogger("uvicorn.error").info("Maintenance worker started")
 
+    @app.on_event("startup")
+    def warn_untrusted_proxy() -> None:
+        from qym_platform.login_throttle import proxy_trust_warning
+
+        warning = proxy_trust_warning(settings)
+        if warning:
+            logging.getLogger("uvicorn.error").warning(warning)
+
     @app.on_event("shutdown")
     def stop_dashboard_summary_worker() -> None:
         maintenance_worker.stop()
@@ -84,7 +96,7 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
             )
 
     # Run lists and detail payloads are large JSON; gzip cuts them ~5-10x.
-    app.add_middleware(GZipMiddleware, minimum_size=1024)
+    app.add_middleware(GZipExceptStatic, minimum_size=1024, compresslevel=GZIP_COMPRESSLEVEL)
     # Private pages and API data must not be replayed from the browser cache
     # (e.g. Back after signing out); static assets stay cacheable.
     app.add_middleware(NoStoreMiddleware)
@@ -129,7 +141,8 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     def healthz() -> JSONResponse:
         return JSONResponse({"ok": True, "service": "qym-platform", "env": settings.environment})
 
-    # Serve UI assets from the platform package (no longer from SDK)
+    # Serve UI assets from the platform package (no longer from SDK). Text
+    # assets are gzipped once per file version, not on every request.
     platform_static = Path(__file__).resolve().parent / "_static"
 
     dashboard_dir = platform_static / "dashboard"
@@ -137,11 +150,11 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
 
     # Dashboard (historical + approvals + profile + admin)
     if dashboard_dir.exists():
-        app.mount("/static", StaticFiles(directory=str(dashboard_dir)), name="dashboard_static")
+        app.mount("/static", PrecompressedStaticFiles(directory=str(dashboard_dir)), name="dashboard_static")
 
     # Per-run UI (live/historical run detail)
     if ui_dir.exists():
-        app.mount("/ui", StaticFiles(directory=str(ui_dir)), name="run_ui_static")
+        app.mount("/ui", PrecompressedStaticFiles(directory=str(ui_dir)), name="run_ui_static")
 
     app.include_router(auth_router)
     app.include_router(web_router)
@@ -154,6 +167,7 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     app.include_router(datasets_router)
     app.include_router(insights_router)
     app.include_router(dashboard_router)
+    app.include_router(dashboard_stats_router)
     app.include_router(admin_router)
     app.include_router(step_latency_router)
     app.include_router(runs_router)

@@ -22,6 +22,7 @@ from qym_platform.db.models import (
 from qym_platform.services.root_cause_changes import PASS_ANALYSIS_META_KEY
 from sqlalchemy import inspect, select, text
 from sqlalchemy.orm import Session
+from migration_seed import insert_at_revision
 from test_migrations import _load_migration
 from test_p1_migrations_lifecycle import postgres
 
@@ -30,36 +31,37 @@ def test_populated_0050_upgrade_recovers_approvals_and_retains_tombstones(postgr
     engine, config = postgres
     command.upgrade(config, "0050")
     reviewed_at = datetime(2026, 9, 15, 10)
-    with Session(engine) as db:
-        db.info["dashboard_projection_worker"] = True
-        user = User(id="u", email="u@example.test")
-        db.add(user)
-        db.flush()
-        db.add(Project(id="p", name="Project", slug="p", created_by_user_id="u"))
-        db.flush()
-        db.add(
-            Run(
-                id="r",
-                project_id="p",
-                owner_user_id="u",
-                created_by_user_id="u",
-                task="task",
-                dataset="dataset",
-                metrics=["accuracy"],
-                samples=2,
-                status=RunWorkflowStatus.COMPLETED,
-            )
+    # Seeded at 0050 itself: only the columns this revision has (the ORM
+    # models describe the head schema), and no dashboard outbox hooks.
+    with engine.begin() as db:
+        insert_at_revision(db, User, {"id": "u", "email": "u@example.test"})
+        insert_at_revision(
+            db, Project, {"id": "p", "name": "Project", "slug": "p", "created_by_user_id": "u"}
         )
-        db.flush()
-        db.add(
-            RunItem(
-                run_id="r", item_id="i", index=0, input="question", output="pass two"
-            )
+        insert_at_revision(
+            db,
+            Run,
+            {
+                "id": "r",
+                "project_id": "p",
+                "owner_user_id": "u",
+                "created_by_user_id": "u",
+                "task": "task",
+                "dataset": "dataset",
+                "metrics": ["accuracy"],
+                "samples": 2,
+                "status": RunWorkflowStatus.COMPLETED,
+            },
         )
-        db.add(
-            RunItemScore(
-                run_id="r", item_id="i", metric_name="accuracy", score_numeric=0.5
-            )
+        insert_at_revision(
+            db,
+            RunItem,
+            {"run_id": "r", "item_id": "i", "index": 0, "input": "question", "output": "pass two"},
+        )
+        insert_at_revision(
+            db,
+            RunItemScore,
+            {"run_id": "r", "item_id": "i", "metric_name": "accuracy", "score_numeric": 0.5},
         )
         for number in (1, 2):
             analysis = {
@@ -76,99 +78,104 @@ def test_populated_0050_upgrade_recovers_approvals_and_retains_tombstones(postgr
                     {"category": "Unapproved category", "finding": "Pending sibling"},
                 ],
             }
-            db.add(
-                RunItemPassScore(
-                    run_id="r",
-                    item_id="i",
-                    metric_name="accuracy",
-                    pass_number=number,
-                    score_numeric=number / 10,
-                    meta={PASS_ANALYSIS_META_KEY: analysis},
-                )
+            insert_at_revision(
+                db,
+                RunItemPassScore,
+                {
+                    "run_id": "r",
+                    "item_id": "i",
+                    "metric_name": "accuracy",
+                    "pass_number": number,
+                    "score_numeric": number / 10,
+                    "meta": {PASS_ANALYSIS_META_KEY: analysis},
+                },
             )
-            db.add(
-                RunItemAttempt(
-                    run_id="r",
-                    item_id="i",
-                    pass_number=number,
-                    attempt_number=1,
-                    status="completed",
-                    is_last_attempt=True,
-                    output=f"pass {number}",
-                )
+            insert_at_revision(
+                db,
+                RunItemAttempt,
+                {
+                    "run_id": "r",
+                    "item_id": "i",
+                    "pass_number": number,
+                    "attempt_number": 1,
+                    "status": "completed",
+                    "is_last_attempt": True,
+                    "output": f"pass {number}",
+                },
             )
         # A real legacy aggregate approval has neither of the new columns.
-        db.execute(
-            ReviewCorrection.__table__.insert().values(
-                run_id="r",
-                item_id="i",
-                metric_name="accuracy",
-                task="task",
-                ai_root_cause="Classic category",
-                human_root_cause="Classic category",
-                status=CorrectionStatus.APPROVED,
-                is_active=True,
-                reviewed_at=reviewed_at,
-                reviewed_by_user_id="u",
-            )
+        insert_at_revision(
+            db,
+            ReviewCorrection,
+            {
+                "run_id": "r",
+                "item_id": "i",
+                "metric_name": "accuracy",
+                "task": "task",
+                "ai_root_cause": "Classic category",
+                "human_root_cause": "Classic category",
+                "status": CorrectionStatus.APPROVED,
+                "is_active": True,
+                "reviewed_at": reviewed_at,
+                "reviewed_by_user_id": "u",
+            },
         )
         for run_id in ("collapsed", "unreviewed", "classic"):
-            db.add(
-                Run(
-                    id=run_id,
-                    project_id="p",
-                    owner_user_id="u",
-                    created_by_user_id="u",
-                    task="task",
-                    dataset="dataset",
-                    metrics=["accuracy"],
-                    samples=1,
-                    run_metadata={"preserve": {"run_id": run_id}},
-                    status=RunWorkflowStatus.COMPLETED,
-                )
+            insert_at_revision(
+                db,
+                Run,
+                {
+                    "id": run_id,
+                    "project_id": "p",
+                    "owner_user_id": "u",
+                    "created_by_user_id": "u",
+                    "task": "task",
+                    "dataset": "dataset",
+                    "metrics": ["accuracy"],
+                    "samples": 1,
+                    "run_metadata": {"preserve": {"run_id": run_id}},
+                    "status": RunWorkflowStatus.COMPLETED,
+                },
             )
-            db.flush()
-            db.add(
-                RunItem(
-                    run_id=run_id, item_id="i", index=0, input="question", output=run_id
-                )
+            insert_at_revision(
+                db,
+                RunItem,
+                {"run_id": run_id, "item_id": "i", "index": 0, "input": "question", "output": run_id},
             )
-            db.add(
-                RunItemScore(
-                    run_id=run_id,
-                    item_id="i",
-                    metric_name="accuracy",
-                    score_numeric=0.2,
-                )
+            insert_at_revision(
+                db,
+                RunItemScore,
+                {"run_id": run_id, "item_id": "i", "metric_name": "accuracy", "score_numeric": 0.2},
             )
             if run_id != "classic":
                 retained_analysis = deepcopy(analysis)
                 if run_id == "unreviewed":
-                    retained_analysis["root_cause_issues"][0][
-                        "review_status"
-                    ] = "pending"
-                db.add(
-                    RunItemPassScore(
-                        run_id=run_id,
-                        item_id="i",
-                        metric_name="accuracy",
-                        pass_number=1,
-                        score_numeric=0.2,
-                        meta={PASS_ANALYSIS_META_KEY: retained_analysis},
-                    )
+                    retained_analysis["root_cause_issues"][0]["review_status"] = "pending"
+                insert_at_revision(
+                    db,
+                    RunItemPassScore,
+                    {
+                        "run_id": run_id,
+                        "item_id": "i",
+                        "metric_name": "accuracy",
+                        "pass_number": 1,
+                        "score_numeric": 0.2,
+                        "meta": {PASS_ANALYSIS_META_KEY: retained_analysis},
+                    },
                 )
-                db.add(
-                    RunItemAttempt(
-                        run_id=run_id,
-                        item_id="i",
-                        pass_number=1,
-                        attempt_number=1,
-                        status="completed",
-                        is_last_attempt=True,
-                        output=run_id,
-                    )
+                insert_at_revision(
+                    db,
+                    RunItemAttempt,
+                    {
+                        "run_id": run_id,
+                        "item_id": "i",
+                        "pass_number": 1,
+                        "attempt_number": 1,
+                        "status": "completed",
+                        "is_last_attempt": True,
+                        "output": run_id,
+                    },
                 )
-        db.commit()
 
     with engine.connect() as conn:
         assert "pass_number" not in {
@@ -289,7 +296,7 @@ def test_populated_0050_upgrade_recovers_approvals_and_retains_tombstones(postgr
     migration = _load_migration("0057_pass_review_records.py")
     with engine.begin() as conn:
         migration._backfill(conn)
-        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0065"
+        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0071"
     with Session(engine) as db:
         assert [
             (

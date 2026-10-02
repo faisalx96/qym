@@ -288,7 +288,7 @@ def test_eval_poll_returns_multi_run_compare_url(
     job.mark_run(sdk_run_id="sdk-run-2", status="RUNNING", qym_run_id="qym-run-2")
     job.mark(status="RUNNING")
 
-    monkeypatch.setattr(product_evals.job_manager, "get", lambda eval_id: job)
+    monkeypatch.setattr(product_evals.job_manager, "get", lambda eval_id, **_: job)
 
     response = client.get(
         "/v1/product-evals/eval_poll1",
@@ -353,7 +353,7 @@ def test_eval_poll_includes_pending_planned_attempts(
     job.mark_run(sdk_run_id="sdk-run-1", status="RUNNING", qym_run_id="qym-run-1")
     job.mark(status="RUNNING", run_id="qym-run-1")
 
-    monkeypatch.setattr(product_evals.job_manager, "get", lambda eval_id: job)
+    monkeypatch.setattr(product_evals.job_manager, "get", lambda eval_id, **_: job)
 
     response = client.get(
         "/v1/product-evals/eval_pending_attempts",
@@ -438,7 +438,7 @@ def test_eval_poll_returns_group_analysis_when_completed(
     )
     job.mark(status="COMPLETED")
 
-    monkeypatch.setattr(product_evals.job_manager, "get", lambda eval_id: job)
+    monkeypatch.setattr(product_evals.job_manager, "get", lambda eval_id, **_: job)
 
     response = client.get(
         "/v1/product-evals/eval_completed1",
@@ -497,7 +497,7 @@ def test_stop_product_eval_marks_job_and_runs_stopped(
     job.mark_run(sdk_run_id="sdk-run-2", status="RUNNING", qym_run_id="qym-run-2")
     job.mark(status="RUNNING", run_id="qym-run-1")
 
-    monkeypatch.setattr(product_evals.job_manager, "get", lambda eval_id: job)
+    monkeypatch.setattr(product_evals.job_manager, "get", lambda eval_id, **_: job)
 
     response = client.post(
         "/v1/product-evals/eval_stop1/stop",
@@ -539,7 +539,7 @@ def test_stop_product_eval_job_allows_any_valid_key(
         owner_user_id="user-1",
         project_id="project-1",
     )
-    monkeypatch.setattr(product_evals.job_manager, "get", lambda eval_id: job)
+    monkeypatch.setattr(product_evals.job_manager, "get", lambda eval_id, **_: job)
 
     response = client.post(
         "/v1/product-evals/eval_stop_scope1/stop",
@@ -583,7 +583,7 @@ def test_stop_product_eval_run_marks_run_and_job_stopped(
     job.mark_run(sdk_run_id="sdk-run-1", status="RUNNING", qym_run_id=run_id)
     job.mark(status="RUNNING", run_id=run_id)
 
-    monkeypatch.setattr(product_evals.job_manager, "get_by_qym_run_id", lambda _: job)
+    monkeypatch.setattr(product_evals.job_manager, "get_by_qym_run_id", lambda _, **__: job)
 
     response = client.post(
         f"/v1/product-evals/{run_id}/stop",
@@ -626,7 +626,7 @@ def test_stop_product_eval_run_leaves_a_reviewed_run_alone(
             )
         )
         session.commit()
-    monkeypatch.setattr(product_evals.job_manager, "get_by_qym_run_id", lambda _: None)
+    monkeypatch.setattr(product_evals.job_manager, "get_by_qym_run_id", lambda _, **__: None)
 
     response = client.post(
         f"/v1/product-evals/{run_id}/stop",

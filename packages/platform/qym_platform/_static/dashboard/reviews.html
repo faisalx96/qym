@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Reviews</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p0-20260930">
-  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
-  <script src="/static/qym_safe.js?v=p0-20260930"></script>
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261002">
+  <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
+  <script src="/static/qym_safe.js?v=p1-20261001"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p0-20260930-3"></script>
+  <script src="/static/shell.js?v=p1-20261001"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
     /* ═══════════════════════════════════════════════════
@@ -48,10 +48,37 @@
     .reviews-meta {
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: var(--space-sm);
       margin-top: var(--space-sm);
       color: var(--text-muted);
       font-size: var(--font-base);
+    }
+
+    .reviews-meta strong {
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      font-weight: 650;
+    }
+
+    /* Queue progress: reviewed share of the corrections in the current filters. */
+    .reviews-progress {
+      position: relative;
+      width: 120px;
+      height: 6px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: var(--bg-elevated);
+    }
+
+    .reviews-progress-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 0;
+      border-radius: inherit;
+      background: var(--success);
+      transition: width 0.2s ease;
     }
 
     /* ── Stats Strip ─────────────────────────────── */
@@ -78,6 +105,15 @@
       transition: all 0.15s;
       border: 1px solid transparent;
       position: relative;
+      color: inherit;
+      font: inherit;
+      text-align: center;
+      appearance: none;
+    }
+
+    .stat-card:focus-visible {
+      outline: 2px solid var(--accent-primary);
+      outline-offset: -2px;
     }
 
     .stat-card:hover {
@@ -105,6 +141,10 @@
     }
 
     .stat-card.stat-total .stat-num { color: var(--text-primary); }
+    .stat-card .stat-sub {
+      color: var(--text-muted);
+      font-size: var(--font-sm);
+    }
     .stat-card.stat-pending .stat-num { color: var(--warning); }
     .stat-card.stat-approved .stat-num { color: var(--success); }
     .stat-card.stat-rejected .stat-num { color: var(--error); }
@@ -282,6 +322,18 @@
       font-family: var(--font-mono);
     }
 
+    /* A bulk action that fits none of the selected rows (e.g. Reset on
+       pending ones): still focusable, its title names the rule. */
+    .bulk-bar .btn-sm[aria-disabled="true"] {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .bulk-fit-count {
+      font-family: var(--font-mono);
+      font-weight: 600;
+    }
+
     .btn-sm {
       padding: 4px 10px;
       font-size: var(--font-xs);
@@ -341,14 +393,42 @@
     .correction-list {
       display: flex;
       flex-direction: column;
-      gap: 24px;
+      gap: var(--space-md);
+      transition: opacity 0.15s;
     }
 
-    .card-separator {
-      height: 1px;
-      margin: 0;
-      border: none;
-      background: linear-gradient(90deg, transparent, var(--border-default) 15%, var(--border-default) 85%, transparent);
+    /* A newer request is loading: the cards on screen belong to the previous
+       filter, so dim them and keep bulk actions off until it lands. */
+    .correction-list[aria-busy="true"] {
+      opacity: 0.55;
+    }
+
+    .reviews-more {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-sm);
+      padding: var(--space-md) 0 var(--space-lg);
+      color: var(--text-muted);
+      font-size: var(--font-sm);
+    }
+
+    .reviews-more[hidden] {
+      display: none;
+    }
+
+    .list-error {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-sm);
+      padding: var(--space-xl) var(--space-lg);
+      color: var(--text-secondary);
+      font-size: var(--font-base);
+    }
+
+    .list-error[hidden] {
+      display: none;
     }
 
     .correction-card {
@@ -366,6 +446,20 @@
     .correction-card.selected {
       border-color: var(--accent-primary);
       box-shadow: 0 0 0 1px rgba(0, 212, 170, 0.15);
+    }
+
+    /* The keyboard "current item" (j/k moves it). */
+    .correction-card.is-current {
+      border-color: var(--accent-secondary);
+      box-shadow: 0 0 0 1px var(--accent-secondary);
+    }
+
+    .correction-card:focus {
+      outline: none;
+    }
+
+    .correction-card:focus-visible {
+      box-shadow: 0 0 0 2px var(--accent-secondary);
     }
 
     .correction-card.status-approved {
@@ -458,6 +552,68 @@
       flex-shrink: 0;
     }
 
+    .card-priority {
+      flex-shrink: 0;
+      cursor: default;
+    }
+
+    /* Collapsed one-glance snapshot previews; the full text loads on open. */
+    .card-previews {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--space-md);
+      padding: var(--space-sm) var(--space-md);
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .preview-cell {
+      min-width: 0;
+    }
+
+    .preview-label {
+      margin-bottom: 2px;
+      color: var(--text-muted);
+      font-size: var(--font-sm);
+      font-weight: 600;
+    }
+
+    .preview-text {
+      display: -webkit-box;
+      overflow: hidden;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      font-size: var(--font-base);
+      line-height: 1.5;
+      word-break: break-word;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+
+    .detail-loading {
+      padding: var(--space-md);
+      color: var(--text-muted);
+      font-size: var(--font-sm);
+    }
+
+    .shortcut-list {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: var(--space-sm) var(--space-md);
+      align-items: center;
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: var(--font-base);
+    }
+
+    .shortcut-list dt {
+      display: flex;
+      gap: 4px;
+    }
+
+    .shortcut-list dd {
+      margin: 0;
+    }
+
     .card-provenance {
       font-size: var(--font-xs);
       color: var(--text-muted);
@@ -472,6 +628,28 @@
       gap: 4px;
       flex-shrink: 0;
     }
+    /* Approve, reject and reset are one square size with one icon size. */
+    .card-actions .review-decision {
+      width: var(--control-height);
+      min-width: var(--control-height);
+      height: var(--control-height);
+      padding: 0;
+    }
+    .card-actions .review-decision svg {
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .card-actions .review-decision:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    /* A disabled button shows no tooltip; its wrapper names the rule. */
+    .review-decision-rule { display: inline-flex; }
 
     /* Card Body — Row-aligned Diff View */
     .card-body {
@@ -621,6 +799,23 @@
       color: var(--text-secondary);
       font-size: var(--font-xs);
       max-width: 280px;
+    }
+
+    a.context-chip--link {
+      text-decoration: none;
+    }
+    a.context-chip--link:hover,
+    a.context-chip--link:focus-visible {
+      color: var(--accent-primary);
+      border-color: var(--accent-primary);
+    }
+    a.context-chip--link:focus-visible {
+      outline: 2px solid var(--accent-primary);
+      outline-offset: 2px;
+    }
+    .correction-card.correction-card--target {
+      box-shadow: 0 0 0 2px var(--accent-primary);
+      transition: box-shadow 0.6s ease;
     }
 
     .context-chip strong {
@@ -1133,6 +1328,9 @@
       .card-provenance {
         display: none;
       }
+      .card-previews {
+        grid-template-columns: 1fr;
+      }
       .reviews-stats {
         flex-wrap: wrap;
       }
@@ -1149,7 +1347,7 @@
     .expand-btn .arrow {
       transition: transform 0.2s;
     }
-    .expand-btn.expanded .arrow {
+    .expand-btn[aria-expanded="true"] .arrow {
       transform: rotate(90deg);
     }
 
@@ -1214,6 +1412,11 @@
       cursor: pointer;
     }
 
+    .conf-slider:focus-visible {
+      outline: 1px solid var(--accent-primary);
+      outline-offset: 4px;
+    }
+
     .conf-slider::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
@@ -1255,8 +1458,8 @@
       text-align: right;
     }
   </style>
-  <link rel="stylesheet" href="/static/ui_components.css?v=p0-20260930">
-  <script defer src="/static/ui_components.js?v=p0-20260930-2"></script>
+  <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261001">
+  <script defer src="/static/ui_components.js?v=p1-20261001"></script>
 </head>
 <body>
   <div class="reviews-layout">
@@ -1264,30 +1467,33 @@
       <h1 class="reviews-title">Reviews</h1>
       <p class="reviews-description">Validate corrections before they become examples for future auto-analysis.</p>
       <div class="reviews-meta">
-        <span>Queue <span id="reviews-meta-total">—</span></span>
+        <span>Queue: <strong id="reviews-to-review">—</strong> to review</span>
+        <span aria-hidden="true">·</span>
+        <span id="reviews-progress-label">— reviewed</span>
+        <div class="reviews-progress" id="reviews-progress" role="progressbar" aria-label="Reviewed corrections" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span class="reviews-progress-fill" id="reviews-progress-fill"></span></div>
         <span aria-hidden="true">·</span>
         <span>Approved corrections improve project analysis</span>
       </div>
     </header>
 
-    <!-- Stats Strip -->
-    <div class="reviews-stats qym-stat-strip">
-      <div class="stat-card qym-stat-strip__item stat-total active" data-filter="">
-        <span class="stat-lbl qym-stat-strip__label">Total</span>
-        <span class="stat-num qym-stat-strip__value" id="stat-total">-</span>
-      </div>
-      <div class="stat-card qym-stat-strip__item stat-pending" data-filter="pending">
-        <span class="stat-lbl qym-stat-strip__label">Pending</span>
+    <!-- Status tabs: the queue (pending) opens by default -->
+    <div class="reviews-stats qym-stat-strip" role="tablist" aria-label="Review status">
+      <button type="button" role="tab" class="stat-card qym-stat-strip__item stat-pending active" data-filter="pending" aria-selected="true" aria-controls="correction-list" tabindex="0">
+        <span class="stat-lbl qym-stat-strip__label">To review</span>
         <span class="stat-num qym-stat-strip__value" id="stat-pending">-</span>
-      </div>
-      <div class="stat-card qym-stat-strip__item stat-approved" data-filter="approved">
+      </button>
+      <button type="button" role="tab" class="stat-card qym-stat-strip__item stat-approved" data-filter="approved" aria-selected="false" aria-controls="correction-list" tabindex="-1">
         <span class="stat-lbl qym-stat-strip__label">Approved</span>
         <span class="stat-num qym-stat-strip__value" id="stat-approved">-</span>
-      </div>
-      <div class="stat-card qym-stat-strip__item stat-rejected" data-filter="rejected">
+      </button>
+      <button type="button" role="tab" class="stat-card qym-stat-strip__item stat-rejected" data-filter="rejected" aria-selected="false" aria-controls="correction-list" tabindex="-1">
         <span class="stat-lbl qym-stat-strip__label">Rejected</span>
         <span class="stat-num qym-stat-strip__value" id="stat-rejected">-</span>
-      </div>
+      </button>
+      <button type="button" role="tab" class="stat-card qym-stat-strip__item stat-total" data-filter="" aria-selected="false" aria-controls="correction-list" tabindex="-1">
+        <span class="stat-lbl qym-stat-strip__label">All</span>
+        <span class="stat-num qym-stat-strip__value" id="stat-total">-</span>
+      </button>
     </div>
 
     <!-- Toolbar -->
@@ -1303,8 +1509,14 @@
       <div class="toolbar-sep"></div>
 
       <div class="reviews-search qym-search-wrap">
-        <input type="text" id="search-input" placeholder="Search task, item, root cause..." />
+        <input type="text" id="search-input" placeholder="Search task, item, root cause..." aria-label="Search corrections" />
       </div>
+
+      <select id="sort-select" class="qym-control qym-select" aria-label="Sort corrections" title="Order of the queue">
+        <option value="oldest">Oldest first</option>
+        <option value="confidence">Lowest confidence first</option>
+        <option value="newest">Most recent</option>
+      </select>
 
       <div class="multi-select-wrapper">
         <button class="multi-select-btn" id="task-ms-btn">All Tasks</button>
@@ -1344,12 +1556,12 @@
         <span class="filter-group-label">Confidence</span>
         <div class="conf-slider-wrap">
           <span class="conf-label">Min</span>
-          <input type="range" class="conf-slider" id="conf-min" min="0" max="100" step="5" value="0">
+          <input type="range" class="conf-slider" id="conf-min" min="0" max="100" step="5" value="0" aria-label="Minimum confidence">
           <span class="conf-value" id="conf-min-val">0%</span>
         </div>
         <div class="conf-slider-wrap">
           <span class="conf-label">Max</span>
-          <input type="range" class="conf-slider" id="conf-max" min="0" max="100" step="5" value="100">
+          <input type="range" class="conf-slider" id="conf-max" min="0" max="100" step="5" value="100" aria-label="Maximum confidence">
           <span class="conf-value" id="conf-max-val">100%</span>
         </div>
       </div>
@@ -1367,7 +1579,8 @@
 
       <div class="toolbar-right">
         <button class="btn-clear-filters" id="clear-filters" title="Clear all filters"><svg class="clear-filters-x" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 3l6 6M9 3 3 9"/></svg><span class="clear-filters-label">Clear filters</span></button>
-        <span style="font-size: var(--font-sm); color: var(--text-muted);" id="result-count"></span>
+        <span style="font-size: var(--font-sm); color: var(--text-muted);" id="result-count" aria-live="polite"></span>
+        <button type="button" class="qym-icon-action" id="shortcuts-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts" aria-haspopup="dialog">?</button>
       </div>
     </div>
 
@@ -1378,7 +1591,14 @@
         <span class="spinner-dot"></span>
         <span class="spinner-dot"></span>
       </div>
-      <div class="correction-list" id="correction-list" style="display:none;"></div>
+      <div class="correction-list" id="correction-list" style="display:none;" aria-busy="false" aria-label="Corrections"></div>
+      <div class="list-error" id="list-error" hidden>
+        <div id="reviews-load-error"></div>
+      </div>
+      <div class="reviews-more" id="reviews-more" hidden>
+        <button type="button" class="btn-sm btn-reset" id="load-more">Load more</button>
+        <span id="load-more-status"></span>
+      </div>
       <div class="empty-state" id="empty-state" style="display:none;">
         <div class="empty-icon">&#x2205;</div>
         <div class="empty-title">No corrections found</div>
@@ -1392,18 +1612,42 @@
 
   <!-- Action Modal (approve/reject with comment) -->
   <div class="reviews-modal" id="action-modal">
-    <div class="reviews-modal-content">
+    <div class="reviews-modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-desc">
       <div class="reviews-modal-header">
         <h3 id="modal-title">Approve Correction</h3>
-        <button class="modal-close qym-icon-action" id="modal-close" aria-label="Close">&times;</button>
+        <button class="modal-close qym-icon-action" id="modal-close" type="button" aria-label="Close">&times;</button>
       </div>
       <div class="reviews-modal-body">
         <p id="modal-desc">This correction will be available as evidence when generating project analysis rules.</p>
-        <textarea id="modal-comment" placeholder="Optional review comment..." rows="3"></textarea>
+        <textarea id="modal-comment" dir="auto" aria-label="Review comment (optional)" placeholder="Optional review comment..." rows="3"></textarea>
       </div>
       <div class="reviews-modal-footer">
-        <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
-        <button class="btn btn-primary" id="modal-confirm">Confirm</button>
+        <button class="btn btn-secondary" id="modal-cancel" type="button">Cancel</button>
+        <button class="btn btn-primary" id="modal-confirm" type="button">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Keyboard shortcuts -->
+  <div class="reviews-modal" id="shortcuts-modal" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
+    <div class="reviews-modal-content">
+      <div class="reviews-modal-header">
+        <h3 id="shortcuts-title">Keyboard shortcuts</h3>
+        <button class="modal-close qym-icon-action" id="shortcuts-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="reviews-modal-body">
+        <dl class="shortcut-list">
+          <dt><span class="kbd">j</span><span class="kbd">k</span></dt><dd>Next / previous correction</dd>
+          <dt><span class="kbd">a</span></dt><dd>Approve and move to the next</dd>
+          <dt><span class="kbd">r</span></dt><dd>Reject (asks for a reason)</dd>
+          <dt><span class="kbd">e</span></dt><dd>Edit the human diagnosis</dd>
+          <dt><span class="kbd">o</span></dt><dd>Open or close details</dd>
+          <dt><span class="kbd">x</span></dt><dd>Select or unselect</dd>
+          <dt><span class="kbd">Shift</span><span class="kbd">A</span></dt><dd>Approve the selected corrections</dd>
+          <dt><span class="kbd">/</span></dt><dd>Search</dd>
+          <dt><span class="kbd">?</span></dt><dd>Show this list</dd>
+          <dt><span class="kbd">Esc</span></dt><dd>Close a dialog or cancel editing</dd>
+        </dl>
       </div>
     </div>
   </div>
@@ -1411,6 +1655,24 @@
   <script>
   (() => {
     'use strict';
+
+    // Listeners on document/window outlive this page when the shell swaps in
+    // another one; tie them to this page's lifetime, which ends when the
+    // shell unmounts it (C069) or on qym:before-navigate (C050).
+    const pageLifetime = new AbortController();
+    const shellPageSignal = window.QymShell && typeof window.QymShell.pageSignal === 'function'
+      ? window.QymShell.pageSignal()
+      : undefined;
+    if (shellPageSignal) {
+      if (shellPageSignal.aborted) pageLifetime.abort();
+      else shellPageSignal.addEventListener('abort', () => pageLifetime.abort(), { once: true });
+    }
+    const pageSignal = pageLifetime.signal;
+    const pageListen = (options = {}) => ({ ...options, signal: pageSignal });
+    // Back, Forward or a reload of this entry: the shell puts the saved
+    // scroll position back (even the top, saved as no offsets). Read now,
+    // before the shell saves the new entry's offsets.
+    const RESTORING_REVIEWS_VIEW = !!(history.state && Array.isArray(history.state.qymScroll));
 
     /* ── Helpers ─────────────────────────────────── */
 
@@ -1485,10 +1747,10 @@
       });
       document.addEventListener('click', (e) => {
         if (!dropdown.contains(e.target)) dropdown.classList.remove('open');
-      });
+      }, pageListen());
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') dropdown.classList.remove('open');
-      });
+      }, pageListen());
     }
 
     async function loadHeaderUser() {
@@ -1513,7 +1775,7 @@
     const MODEL_REASONING_BADGE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6" /><path d="M10 21h4" /><path d="M12 2a7 7 0 0 0-4.2 12.6c.7.5 1.2 1.4 1.2 2.3V18h6v-1.1c0-.9.5-1.8 1.2-2.3A7 7 0 0 0 12 2Z" /></svg>';
 
     function renderModelLabel(modelName, hasReasoning) {
-      return '<span class="model-label"><span class="model-label-text">' + escapeHtml(modelName || '—') + '</span>' + (hasReasoning ? '<span class="model-reasoning-badge" title="' + escapeHtml(MODEL_REASONING_BADGE_TITLE) + '" aria-label="' + escapeHtml(MODEL_REASONING_BADGE_TITLE) + '">' + MODEL_REASONING_BADGE_ICON + '</span>' : '') + '</span>';
+      return '<span class="model-label"><span class="model-label-text">' + escapeHtml(modelName || '—') + '</span>' + (hasReasoning ? '<span class="model-reasoning-badge" role="img" title="' + escapeHtml(MODEL_REASONING_BADGE_TITLE) + '" aria-label="' + escapeHtml(MODEL_REASONING_BADGE_TITLE) + '">' + MODEL_REASONING_BADGE_ICON + '</span>' : '') + '</span>';
     }
 
     function parseStructuredString(val) {
@@ -1556,12 +1818,12 @@
       return JSON.stringify(parsed, null, 2);
     }
 
-    function renderSnapshot(val) {
+    function renderSnapshot(val, label = 'Snapshot') {
       if (val === null || val === undefined || val === '') return '';
       const parsed = parseStructuredString(val);
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
         const rows = Object.entries(parsed).map(([key, value]) => {
-          const label = titleCase(key);
+          const keyLabel = titleCase(key);
           if (
             typeof value === 'string' &&
             /^(https?:)?\/\//.test(value) &&
@@ -1569,7 +1831,7 @@
           ) {
             return `
               <div class="snapshot-row">
-                <div class="snapshot-key">${escapeHtml(label)}</div>
+                <div class="snapshot-key">${escapeHtml(keyLabel)}</div>
                 <a class="snapshot-link" href="${escapeHtml(value)}" target="_blank" rel="noopener noreferrer">${escapeHtml(value)}</a>
               </div>
             `;
@@ -1578,14 +1840,15 @@
           const cssClass = key === 'sql' ? 'detail-snapshot sql-block' : 'detail-snapshot';
           return `
             <div class="snapshot-row">
-              <div class="snapshot-key">${escapeHtml(label)}</div>
-              <div class="${cssClass}">${escapeHtml(display)}</div>
+              <div class="snapshot-key">${escapeHtml(keyLabel)}</div>
+              <div class="${cssClass}" tabindex="0" role="region" aria-label="${escapeHtml(`${label}: ${keyLabel}`)}"${QymSafe.textDirAttrs(display)}>${escapeHtml(display)}</div>
             </div>
           `;
         }).join('');
         return `<div class="snapshot-structured">${rows}</div>`;
       }
-      return `<div class="detail-snapshot">${escapeHtml(stringify(parsed))}</div>`;
+      const text = stringify(parsed);
+      return `<div class="detail-snapshot" tabindex="0" role="region" aria-label="${escapeHtml(label)}"${QymSafe.textDirAttrs(text)}>${escapeHtml(text)}</div>`;
     }
 
     function truncate(str, max) {
@@ -1614,17 +1877,38 @@
 
     /* ── State ───────────────────────────────────── */
 
+    const PAGE_SIZE = 25;
+    const SORT_STORAGE_KEY = 'qym.reviews.sort';
+    const SORT_LABELS = { oldest: 'oldest first', confidence: 'lowest confidence first', newest: 'most recent first' };
+    const STATUS_LABELS = { pending: 'To review', approved: 'Approved', rejected: 'Rejected', '': 'All' };
+
+    function readStoredSort() {
+      try {
+        const stored = window.localStorage.getItem(SORT_STORAGE_KEY);
+        return SORT_LABELS[stored] ? stored : 'oldest';
+      } catch {
+        return 'oldest';
+      }
+    }
+
     const state = {
       corrections: [],
       filtered: [],
       stats: { total: 0, pending: 0, approved: 0, rejected: 0 },
+      total: 0,
+      hasMore: false,
+      nextCursor: null,
+      loading: false,
+      loadingMore: false,
       tasks: [],
       datasets: [],
       models: [],
       runNames: [],
       facetCounts: { task: {}, dataset: {}, model: {}, run_name: {} },
       selected: new Set(),
-      statusFilter: '',
+      // The queue: Reviews opens on the pending corrections.
+      statusFilter: 'pending',
+      sort: readStoredSort(),
       taskFilter: null,
       datasetFilter: null,
       modelFilter: null,
@@ -1634,7 +1918,23 @@
       confMin: 0,         // 0-100
       confMax: 100,       // 0-100
       editingId: null,
+      currentId: null,
+      expanded: new Set(),
+      details: new Map(),
+      ringId: null,
+      focusId: (() => {
+        const raw = new URLSearchParams(window.location.search).get('id');
+        return raw && /^\d+$/.test(raw) ? Number(raw) : null;
+      })(),
     };
+
+    // Leaving the page also cancels its requests and the infinite scroll.
+    document.addEventListener('qym:before-navigate', () => {
+      pageLifetime.abort();
+      if (listAbort) listAbort.abort();
+      if (countsAbort) countsAbort.abort();
+      if (moreObserver) moreObserver.disconnect();
+    }, { once: true });
 
     /* ── Toast ───────────────────────────────────── */
 
@@ -1644,6 +1944,8 @@
         container = document.createElement('div');
         container.id = 'toast-container';
         container.className = 'toast-container';
+        container.setAttribute('role', 'status');
+        container.setAttribute('aria-live', 'polite');
         document.body.appendChild(container);
       }
       return container;
@@ -1655,15 +1957,25 @@
       return '&#10007;';
     }
 
+    let toastSeq = 0;
+
     function showToast(type, title, message, options = {}) {
       const container = getToastContainer();
       const toast = document.createElement('div');
       toast.className = `toast toast-${type}`;
       const actions = Array.isArray(options.actions) ? options.actions : [];
+      const titleId = `toast-title-${++toastSeq}`;
+      if (options.alertDialog) {
+        // A confirmation prompt: announced and focused like a small dialog.
+        toast.setAttribute('role', 'alertdialog');
+        toast.setAttribute('aria-labelledby', titleId);
+      } else if (type === 'error') {
+        toast.setAttribute('role', 'alert');
+      }
       toast.innerHTML = `
         <div class="toast-icon">${toastIcon(type)}</div>
         <div class="toast-content">
-          <div class="toast-title">${escapeHtml(title)}</div>
+          <div class="toast-title" id="${titleId}">${escapeHtml(title)}</div>
           ${message ? `<div class="toast-message">${escapeHtml(message)}</div>` : ''}
         </div>
         ${actions.length ? `<div class="toast-actions">${actions.map((action, idx) => `<button type="button" class="toast-action ${action.className || ''}" data-toast-action="${idx}">${escapeHtml(action.label || 'OK')}</button>`).join('')}</div>` : ''}
@@ -1672,9 +1984,20 @@
       container.appendChild(toast);
       const closeToast = () => {
         if (!toast.parentNode) return;
+        if (options.alertDialog && window.QymUIComponents) window.QymUIComponents.releaseDialog(toast);
         toast.classList.add('toast-exit');
         setTimeout(() => toast.remove(), 300);
       };
+      if (options.alertDialog && window.QymUIComponents) {
+        window.QymUIComponents.openDialog(toast, {
+          role: 'alertdialog',
+          initialFocus: '[data-toast-action="0"]',
+          onEscape: () => {
+            if (typeof options.onClose === 'function') options.onClose();
+            closeToast();
+          },
+        });
+      }
       toast.querySelector('.toast-close').addEventListener('click', () => {
         if (typeof options.onClose === 'function') options.onClose();
         closeToast();
@@ -1702,6 +2025,7 @@
         };
         showToast('warning', title, message, {
           persist: true,
+          alertDialog: true,
           onClose: () => settle(false),
           actions: [
             { label: 'Cancel', onClick: () => settle(false) },
@@ -1713,46 +2037,170 @@
 
     /* ── API ─────────────────────────────────────── */
 
-    async function fetchCorrections() {
-      try {
-        const params = new URLSearchParams();
-        if (Array.isArray(state.taskFilter) && state.taskFilter.length) state.taskFilter.forEach(v => params.append('task', v));
-        if (Array.isArray(state.datasetFilter) && state.datasetFilter.length) state.datasetFilter.forEach(v => params.append('dataset', v));
-        if (Array.isArray(state.modelFilter) && state.modelFilter.length) state.modelFilter.forEach(v => params.append('model', v));
-        if (Array.isArray(state.runNameFilter) && state.runNameFilter.length) state.runNameFilter.forEach(v => params.append('run_name', v));
-        if (state.sourceFilter) params.set('source', state.sourceFilter);
-        if (state.confMin > 0) params.set('conf_min', String(state.confMin));
-        if (state.confMax < 100) params.set('conf_max', String(state.confMax));
-        if (state.searchQuery) params.set('search', state.searchQuery);
-        if (CURRENT_PROJECT_SLUG) params.set('project_slug', CURRENT_PROJECT_SLUG);
+    // Only the newest list request may paint: a filter change aborts the
+    // request before it, and any response that is not the latest is dropped.
+    let listRequestSeq = 0;
+    let listAbort = null;
+    let countsRequestSeq = 0;
+    let countsAbort = null;
 
-        const qs = params.toString();
-        const resp = await fetch(apiUrl(`api/corrections${qs ? '?' + qs : ''}`));
-        if (!resp.ok) throw new Error('Failed to fetch');
-        const data = await resp.json();
+    function buildListParams() {
+      const params = new URLSearchParams();
+      if (Array.isArray(state.taskFilter) && state.taskFilter.length) state.taskFilter.forEach(v => params.append('task', v));
+      if (Array.isArray(state.datasetFilter) && state.datasetFilter.length) state.datasetFilter.forEach(v => params.append('dataset', v));
+      if (Array.isArray(state.modelFilter) && state.modelFilter.length) state.modelFilter.forEach(v => params.append('model', v));
+      if (Array.isArray(state.runNameFilter) && state.runNameFilter.length) state.runNameFilter.forEach(v => params.append('run_name', v));
+      if (state.sourceFilter) params.set('source', state.sourceFilter);
+      if (state.confMin > 0) params.set('conf_min', String(state.confMin));
+      if (state.confMax < 100) params.set('conf_max', String(state.confMax));
+      if (state.searchQuery) params.set('search', state.searchQuery);
+      if (state.statusFilter) params.set('status', state.statusFilter);
+      if (CURRENT_PROJECT_SLUG) params.set('project_slug', CURRENT_PROJECT_SLUG);
+      params.set('sort', state.sort);
+      return params;
+    }
 
-        state.corrections = data.corrections || [];
-        state.stats = data.stats || { total: 0, pending: 0, approved: 0, rejected: 0 };
-        state.tasks = data.tasks || [];
-        state.datasets = data.datasets || [];
-        state.models = data.models || [];
-        state.runNames = data.run_names || [];
-        state.facetCounts = data.facet_counts || { task: {}, dataset: {}, model: {}, run_name: {} };
+    function setListBusy(busy) {
+      state.loading = busy;
+      el('correction-list').setAttribute('aria-busy', busy ? 'true' : 'false');
+      el('select-all').disabled = busy;
+      el('bulk-bar').querySelectorAll('button').forEach(btn => { btn.disabled = busy; });
+    }
+
+    function applyCountsPayload(data) {
+      state.stats = data.stats || { total: 0, pending: 0, approved: 0, rejected: 0 };
+      state.total = Number(data.total) || 0;
+      state.tasks = data.tasks || [];
+      state.datasets = data.datasets || [];
+      state.models = data.models || [];
+      state.runNames = data.run_names || [];
+      state.facetCounts = data.facet_counts || { task: {}, dataset: {}, model: {}, run_name: {} };
+      updateStats();
+      buildMultiselectOptions('task', state.tasks);
+      buildMultiselectOptions('dataset', state.datasets);
+      buildMultiselectOptions('model', state.models);
+      buildMultiselectOptions('run_name', state.runNames);
+      updateClearFiltersButton();
+    }
+
+    async function fetchCorrections(options = {}) {
+      const append = !!options.append;
+      if (append && (!state.nextCursor || state.loading || state.loadingMore)) return;
+      if (listAbort) listAbort.abort();
+      if (countsAbort) countsAbort.abort();
+      const seq = ++listRequestSeq;
+      const controller = new AbortController();
+      listAbort = controller;
+      if (append) {
+        state.loadingMore = true;
+        updateLoadMore();
+      } else {
+        // The selection belongs to the list being replaced.
         state.selected.clear();
-
-        applyClientFilters();
-        updateStats();
-        buildMultiselectOptions('task', state.tasks);
-        buildMultiselectOptions('dataset', state.datasets);
-        buildMultiselectOptions('model', state.models);
-        buildMultiselectOptions('run_name', state.runNames);
-        if (typeof updateClearFiltersButton === 'function') updateClearFiltersButton();
-        render();
-      } catch (err) {
-        showToast('error', 'Load failed', err.message);
-      } finally {
-        el('loading').style.display = 'none';
+        updateBulkBar();
+        setListBusy(true);
+        el('list-error').hidden = true;
       }
+      try {
+        const params = buildListParams();
+        params.set('limit', String(PAGE_SIZE));
+        if (append) params.set('cursor', state.nextCursor);
+        const resp = await fetch(apiUrl(`api/corrections?${params.toString()}`), { signal: controller.signal });
+        if (seq !== listRequestSeq) return;
+        if (window.QymAuth && window.QymAuth.handle401(resp)) return;
+        if (!resp.ok) {
+          const detail = await resp.json().catch(() => ({}));
+          // The status lets the error state name the failure (C038).
+          const failure = new Error(detail.detail || `HTTP ${resp.status}`);
+          failure.status = resp.status;
+          throw failure;
+        }
+        const data = await resp.json();
+        if (seq !== listRequestSeq) return;
+
+        const rows = data.corrections || [];
+        state.hasMore = !!data.has_more;
+        state.nextCursor = data.next_cursor || null;
+        applyCountsPayload(data);
+        if (append) {
+          const known = new Set(state.corrections.map(c => c.id));
+          const added = rows.filter(c => !known.has(c.id));
+          state.corrections = state.corrections.concat(added);
+          applyClientFilters();
+          appendCards(added);
+        } else {
+          state.corrections = rows;
+          // Nothing picked on the previous (dimmed) list carries over.
+          state.selected.clear();
+          state.expanded.clear();
+          state.details.clear();
+          if (state.editingId !== null && !rows.some(c => c.id === state.editingId)) state.editingId = null;
+          applyClientFilters();
+          render();
+          await revealRequestedCorrection();
+        }
+      } catch (err) {
+        if (err && err.name === 'AbortError') return;
+        if (seq !== listRequestSeq) return;
+        if (append) showToast('error', 'Load failed', err.message);
+        else showReviewsLoadError(err);
+      } finally {
+        if (seq === listRequestSeq) {
+          listAbort = null;
+          state.loadingMore = false;
+          setListBusy(false);
+          el('loading').style.display = 'none';
+          updateLoadMore();
+        }
+      }
+    }
+
+    // After an action, refresh only the counts and facets (one row), so the
+    // loaded pages, scroll position and keyboard place stay as they are.
+    async function refreshCounts() {
+      if (state.loading) return;
+      if (countsAbort) countsAbort.abort();
+      const seq = ++countsRequestSeq;
+      const listSeqAtStart = listRequestSeq;
+      const controller = new AbortController();
+      countsAbort = controller;
+      try {
+        const params = buildListParams();
+        params.set('limit', '1');
+        const resp = await fetch(apiUrl(`api/corrections?${params.toString()}`), { signal: controller.signal });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (seq !== countsRequestSeq || listSeqAtStart !== listRequestSeq) return;
+        applyCountsPayload(data);
+        updateResultCount();
+      } catch {
+        // Counts are refreshed again on the next load; keep the local numbers.
+      } finally {
+        if (seq === countsRequestSeq) countsAbort = null;
+      }
+    }
+
+    // A failed load is an error with Retry in place of the list, never
+    // "No corrections found" (C038). Rows already shown stay, dimmed.
+    // A failed list load names the failure (signed out, no access, server,
+    // network) with Retry, never "no corrections" (C038, C042).
+    function showReviewsLoadError(err) {
+      el('correction-list').style.display = 'none';
+      el('empty-state').style.display = 'none';
+      el('list-error').hidden = false;
+      const ui = window.QymUIComponents;
+      if (!ui && document.readyState === 'loading') {
+        // ui_components.js is deferred; a fast failure waits for it.
+        window.addEventListener('DOMContentLoaded', () => showReviewsLoadError(err), pageListen({ once: true }));
+        return;
+      }
+      const host = el('reviews-load-error');
+      if (!ui || !host) { showToast('error', 'Load failed', err.message); return; }
+      ui.renderErrorState(host, {
+        title: 'Could not load corrections',
+        error: err,
+        onRetry: () => fetchCorrections(),
+      });
     }
 
     async function apiAction(method, path, body) {
@@ -1794,40 +2242,66 @@
       state.filtered = getClientFilteredCorrections(true);
     }
 
-    function recomputeStatsFromCurrentFilters() {
-      const list = getClientFilteredCorrections(false);
-      state.stats = {
-        total: list.length,
-        pending: list.filter(c => c.status === 'pending').length,
-        approved: list.filter(c => c.status === 'approved').length,
-        rejected: list.filter(c => c.status === 'rejected').length,
-      };
+    function summaryRow(previous, updated) {
+      // Action responses carry the full record; the list keeps summary rows.
+      const row = { ...(previous || {}), ...updated };
+      delete row.history;
+      delete row.input_snapshot;
+      delete row.expected_snapshot;
+      delete row.output_snapshot;
+      return row;
     }
 
-    function refreshVisibleCorrections() {
-      applyClientFilters();
-      updateStats();
-      if (typeof updateClearFiltersButton === 'function') updateClearFiltersButton();
-      render();
+    function shiftStatusCounts(fromStatus, toStatus, removed = false) {
+      if (fromStatus && state.stats[fromStatus] != null) state.stats[fromStatus] = Math.max(0, state.stats[fromStatus] - 1);
+      if (removed) state.stats.total = Math.max(0, state.stats.total - 1);
+      else if (toStatus && state.stats[toStatus] != null) state.stats[toStatus] += 1;
     }
 
     function applyCorrectionUpdate(originalId, updated) {
       if (!updated || !updated.id) return;
       const idx = state.corrections.findIndex(c => c.id === originalId || c.id === updated.id);
-      if (idx >= 0) state.corrections[idx] = updated;
-      else state.corrections.unshift(updated);
-      if (updated.id !== originalId) state.corrections = state.corrections.filter(c => c.id !== originalId);
+      const previous = idx >= 0 ? state.corrections[idx] : null;
+      const row = summaryRow(previous, updated);
+      if (Array.isArray(updated.history)) state.details.set(updated.id, updated);
+      if (updated.id !== originalId) state.details.delete(originalId);
       state.selected.delete(originalId);
       state.selected.delete(updated.id);
       if (state.editingId === originalId || state.editingId === updated.id) state.editingId = null;
-      recomputeStatsFromCurrentFilters();
-      refreshVisibleCorrections();
+      if (previous && previous.status !== row.status) shiftStatusCounts(previous.status, row.status);
+      const stillListed = !state.statusFilter || row.status === state.statusFilter;
+      if (!stillListed) {
+        // Out of this view (approved items leave the queue): drop the card
+        // and move to the next one.
+        removeCorrectionIds([originalId, updated.id], { fromAction: true, keepStats: true });
+        return;
+      }
+      if (idx >= 0) state.corrections[idx] = row;
+      else state.corrections.unshift(row);
+      if (updated.id !== originalId) state.corrections = state.corrections.filter(c => c.id === updated.id || c.id !== originalId);
+      if (state.currentId === originalId) state.currentId = updated.id;
+      applyClientFilters();
+      updateStats();
+      patchCard(originalId, row);
     }
 
-    function applyBulkStatusUpdate(ids, status, comment = '') {
+    function applyBulkStatusUpdate(ids, status, comment = '', serverRows = null) {
       const idSet = new Set(ids.map(Number));
+      const leaving = [];
+      // The server's decided rows carry the reviewer, Self-approved and the
+      // viewer's review_block; the local patch is only a fallback.
+      const updatedById = new Map((Array.isArray(serverRows) ? serverRows : [])
+        .filter(row => row && row.id != null)
+        .map(row => [Number(row.id), row]));
       state.corrections = state.corrections.map(c => {
         if (!idSet.has(c.id)) return c;
+        if (c.status !== status) shiftStatusCounts(c.status, status);
+        const updated = updatedById.get(c.id);
+        if (updated) {
+          if (state.statusFilter && status !== state.statusFilter) leaving.push(c.id);
+          state.details.delete(c.id);
+          return summaryRow(c, { ...updated, status });
+        }
         const next = { ...c, status };
         if (status === 'pending') {
           next.reviewed_by = null;
@@ -1837,39 +2311,71 @@
           next.review_comment = comment || '';
           next.reviewed_at = new Date().toISOString();
         }
+        if (state.statusFilter && status !== state.statusFilter) leaving.push(c.id);
+        state.details.delete(c.id);
         return next;
       });
       idSet.forEach(id => state.selected.delete(id));
       if (idSet.has(state.editingId)) state.editingId = null;
-      recomputeStatsFromCurrentFilters();
-      refreshVisibleCorrections();
+      if (leaving.length) removeCorrectionIds(leaving, { keepStats: true });
+      applyClientFilters();
+      state.filtered.filter(c => idSet.has(c.id)).forEach(c => patchCard(c.id, c));
+      updateStats();
+      updateBulkBar();
     }
 
-    function removeCorrectionIds(ids) {
+    function removeCorrectionIds(ids, options = {}) {
       const idSet = new Set(ids.map(Number));
+      const removed = state.corrections.filter(c => idSet.has(c.id));
+      if (!options.keepStats) removed.forEach(c => shiftStatusCounts(c.status, null, true));
+      const nextCurrent = idSet.has(state.currentId) ? neighbourId(state.currentId, idSet) : state.currentId;
+      const focusWasInside = removed.some(c => {
+        const card = cardElement(c.id);
+        return card && (card.contains(document.activeElement) || document.activeElement === document.body);
+      }) || document.activeElement === document.body;
       state.corrections = state.corrections.filter(c => !idSet.has(c.id));
-      idSet.forEach(id => state.selected.delete(id));
+      state.total = Math.max(0, state.total - removed.length);
+      idSet.forEach(id => {
+        state.selected.delete(id);
+        state.expanded.delete(id);
+        state.details.delete(id);
+        const card = cardElement(id);
+        if (card) card.remove();
+      });
       if (idSet.has(state.editingId)) state.editingId = null;
-      recomputeStatsFromCurrentFilters();
-      refreshVisibleCorrections();
-    }
-
-    function refreshCorrectionsInBackground() {
-      fetchCorrections().catch(err => showToast('error', 'Refresh failed', err.message));
+      applyClientFilters();
+      updateStats();
+      updateBulkBar();
+      updateResultCount();
+      if (!state.filtered.length) render();
+      setCurrent(nextCurrent, { focus: focusWasInside || options.fromAction, scroll: true });
+      // Keep a short queue topped up from the next page.
+      if (state.hasMore && state.filtered.length < 5) fetchCorrections({ append: true });
     }
 
     /* ── Modal ───────────────────────────────────── */
 
     let modalResolve = null;
+    let modalReturnFocus = null;
 
     function openModal(title, desc, confirmLabel, btnClass) {
+      modalReturnFocus = document.activeElement;
       el('modal-title').textContent = title;
       el('modal-desc').textContent = desc;
       el('modal-comment').value = '';
       el('modal-confirm').textContent = confirmLabel;
       el('modal-confirm').className = `btn ${btnClass || 'btn-primary'}`;
       el('action-modal').classList.add('open');
-      el('modal-comment').focus();
+      // Shared modal focus contract: Tab stays inside, Escape cancels, and
+      // focus returns to the approve/reject control that opened it.
+      if (window.QymUIComponents) {
+        window.QymUIComponents.openDialog(el('action-modal').querySelector('.reviews-modal-content'), {
+          initialFocus: el('modal-comment'),
+          onEscape: () => closeModal(null),
+        });
+      } else {
+        el('modal-comment').focus();
+      }
 
       return new Promise((resolve) => {
         modalResolve = resolve;
@@ -1877,11 +2383,16 @@
     }
 
     function closeModal(result) {
+      if (window.QymUIComponents) window.QymUIComponents.releaseDialog(el('action-modal').querySelector('.reviews-modal-content'));
       el('action-modal').classList.remove('open');
       if (modalResolve) {
         modalResolve(result);
         modalResolve = null;
       }
+      const back = modalReturnFocus;
+      modalReturnFocus = null;
+      if (back && back.isConnected && typeof back.focus === 'function') back.focus({ preventScroll: true });
+      else focusCurrentCard();
     }
 
     el('modal-cancel').addEventListener('click', () => closeModal(null));
@@ -1889,9 +2400,34 @@
     el('modal-confirm').addEventListener('click', () => {
       closeModal(el('modal-comment').value || '');
     });
+    el('modal-comment').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        closeModal(el('modal-comment').value || '');
+      }
+    });
 
     el('action-modal').addEventListener('click', (e) => {
       if (e.target === el('action-modal')) closeModal(null);
+    });
+
+    let shortcutsReturnFocus = null;
+    function openShortcuts() {
+      shortcutsReturnFocus = document.activeElement;
+      el('shortcuts-modal').classList.add('open');
+      el('shortcuts-close').focus();
+    }
+    function closeShortcuts() {
+      if (!el('shortcuts-modal').classList.contains('open')) return;
+      el('shortcuts-modal').classList.remove('open');
+      const back = shortcutsReturnFocus;
+      shortcutsReturnFocus = null;
+      if (back && back.isConnected && typeof back.focus === 'function') back.focus({ preventScroll: true });
+    }
+    el('shortcuts-btn').addEventListener('click', openShortcuts);
+    el('shortcuts-close').addEventListener('click', closeShortcuts);
+    el('shortcuts-modal').addEventListener('click', (e) => {
+      if (e.target === el('shortcuts-modal')) closeShortcuts();
     });
 
     /* ── Rendering ───────────────────────────────── */
@@ -1899,10 +2435,17 @@
     function updateStats() {
       const counts = state.stats;
       el('stat-total').textContent = counts.total;
-      el('reviews-meta-total').textContent = `${counts.total} correction${counts.total === 1 ? '' : 's'}`;
       el('stat-pending').textContent = counts.pending;
       el('stat-approved').textContent = counts.approved;
       el('stat-rejected').textContent = counts.rejected;
+      const reviewed = (counts.approved || 0) + (counts.rejected || 0);
+      const pct = counts.total ? Math.round((reviewed / counts.total) * 100) : 0;
+      el('reviews-to-review').textContent = String(counts.pending);
+      el('reviews-progress-label').textContent = `${reviewed} of ${counts.total} reviewed`;
+      el('reviews-progress-fill').style.width = `${pct}%`;
+      const bar = el('reviews-progress');
+      bar.setAttribute('aria-valuenow', String(pct));
+      bar.setAttribute('aria-valuetext', `${reviewed} of ${counts.total} reviewed`);
     }
 
     function getFilterValues(key) {
@@ -2067,79 +2610,371 @@
     setupMultiselectToggle('run_name');
     document.addEventListener('click', () => {
       document.querySelectorAll('.multi-select-dropdown.open').forEach(d => d.classList.remove('open'));
-    });
+    }, { signal: pageSignal });
 
     function updateBulkBar() {
       const bar = el('bulk-bar');
       const count = state.selected.size;
       el('bulk-count').textContent = count;
       bar.classList.toggle('visible', count > 0);
+      Object.keys(BULK_FITS).forEach(syncBulkButton);
+      syncSelectAll();
+    }
+
+    // Approve and reject decide pending corrections; reset withdraws a
+    // decision. The server refuses any other row, so in a mixed selection
+    // (the All tab) each bulk button acts only on the rows it fits.
+    const BULK_FITS = {
+      approve: { label: 'Approve', fits: c => c.status === 'pending', unfit: 'not pending', rule: 'Approve works on pending corrections only.' },
+      reject: { label: 'Reject', fits: c => c.status === 'pending', unfit: 'not pending', rule: 'Reject works on pending corrections only.' },
+      reset: { label: 'Reset', fits: c => c.status === 'approved' || c.status === 'rejected', unfit: 'still pending', rule: 'Reset works on approved or rejected corrections only.' },
+    };
+
+    function bulkSelection(action) {
+      const byId = new Map(state.corrections.map(c => [c.id, c]));
+      const selected = selectedIds();
+      const ids = selected.filter(id => {
+        const c = byId.get(id);
+        return !!c && BULK_FITS[action].fits(c);
+      });
+      return { ids, selected: selected.length, skipped: selected.length - ids.length };
+    }
+
+    function syncBulkButton(action) {
+      const button = el('bulk-' + action);
+      const fit = BULK_FITS[action];
+      const pick = bulkSelection(action);
+      const partial = pick.ids.length > 0 && pick.skipped > 0;
+      button.replaceChildren(document.createTextNode(fit.label));
+      if (partial) {
+        const count = document.createElement('span');
+        count.className = 'bulk-fit-count';
+        count.textContent = String(pick.ids.length);
+        button.append(' ', count);
+      }
+      button.setAttribute('aria-disabled', pick.selected && !pick.ids.length ? 'true' : 'false');
+      button.title = pick.selected && !pick.ids.length
+        ? `None of the selected corrections fits. ${fit.rule}`
+        : partial
+          ? `${fit.label} ${pick.ids.length} of the ${pick.selected} selected; ${pick.skipped} ${pick.skipped > 1 ? 'are' : 'is'} ${fit.unfit} and will be skipped`
+          : '';
+    }
+
+    // Nothing selected, or nothing the action fits: say so and stop.
+    function refuseUnfitSelection(action, pick) {
+      if (!pick.selected) {
+        showToast('warning', 'Nothing selected', 'Select one or more corrections first.');
+        return true;
+      }
+      if (!pick.ids.length) {
+        showToast('warning', 'Nothing to ' + action, `None of the ${pick.selected} selected correction${pick.selected > 1 ? 's' : ''} fits. ${BULK_FITS[action].rule}`);
+        return true;
+      }
+      return false;
+    }
+
+    function skippedNote(action, skipped, done) {
+      if (!skipped) return '';
+      const rows = `${skipped} selected correction${skipped > 1 ? 's' : ''}`;
+      const verb = skipped > 1 ? 'are' : 'is';
+      return done
+        ? ` ${skipped} skipped (${BULK_FITS[action].unfit}) and still selected.`
+        : ` ${rows} ${verb} ${BULK_FITS[action].unfit} and will be skipped.`;
+    }
+
+    function syncSelectAll() {
+      const allChecked = state.filtered.length > 0 && state.filtered.every(c => state.selected.has(c.id));
+      el('select-all').checked = allChecked;
+    }
+
+    function updateResultCount() {
+      const count = el('result-count');
+      const shown = state.filtered.length;
+      const total = Math.max(state.total, shown);
+      if (!shown) {
+        count.textContent = '';
+        return;
+      }
+      count.textContent = total > shown
+        ? `Showing ${shown} of ${total}`
+        : `${total} correction${total !== 1 ? 's' : ''}`;
+    }
+
+    function updateLoadMore() {
+      const more = el('reviews-more');
+      const remaining = Math.max(0, state.total - state.filtered.length);
+      const visible = state.hasMore && state.filtered.length > 0;
+      more.hidden = !visible;
+      if (!visible) return;
+      el('load-more').disabled = state.loadingMore;
+      el('load-more').textContent = state.loadingMore ? 'Loading…' : 'Load more';
+      el('load-more-status').textContent = remaining ? `${remaining} more` : '';
+    }
+
+    function cardElement(id) {
+      return el('correction-list').querySelector(`.correction-card[data-id="${Number(id)}"]`);
+    }
+
+    /* ── View state in the URL ────────────────────── */
+    // Filters live in the query string, so a reviewer can share or bookmark
+    // "the low-confidence sql-eval reviews"; ?id=<review> opens one review.
+    const REVIEW_MULTI_PARAMS = { task: 'taskFilter', dataset: 'datasetFilter', model: 'modelFilter', run: 'runNameFilter' };
+    const REVIEW_NONE = '__none__';
+
+    function applyReviewsUrlState() {
+      const params = new URLSearchParams(window.location.search);
+      const status = params.get('status') || '';
+      if (['pending', 'approved', 'rejected'].includes(status)) {
+        state.statusFilter = status;
+        $$('.stat-card').forEach(card => card.classList.toggle('active', card.dataset.filter === status));
+      }
+      for (const [param, field] of Object.entries(REVIEW_MULTI_PARAMS)) {
+        if (!params.has(param)) continue;
+        const values = params.getAll(param).filter(Boolean);
+        state[field] = values.includes(REVIEW_NONE) ? [] : values;
+      }
+      const source = params.get('source') || '';
+      if (['ai_only', 'human_only', 'corrected'].includes(source)) {
+        state.sourceFilter = source;
+        $$('[data-source]').forEach(chip => {
+          const active = chip.dataset.source === source;
+          chip.classList.toggle('active', active);
+          chip.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+      }
+      const clampPct = value => Math.max(0, Math.min(100, Math.round(Number(value))));
+      if (params.has('conf_min') && Number.isFinite(Number(params.get('conf_min')))) state.confMin = clampPct(params.get('conf_min'));
+      if (params.has('conf_max') && Number.isFinite(Number(params.get('conf_max')))) state.confMax = clampPct(params.get('conf_max'));
+      if (state.confMin > state.confMax) state.confMin = state.confMax;
+      if (el('conf-min')) { el('conf-min').value = state.confMin; el('conf-min-val').textContent = state.confMin + '%'; }
+      if (el('conf-max')) { el('conf-max').value = state.confMax; el('conf-max-val').textContent = state.confMax + '%'; }
+      const query = params.get('q') || '';
+      if (query) {
+        state.searchQuery = query;
+        if (el('search-input')) el('search-input').value = query;
+      }
+    }
+
+    function syncReviewsUrl() {
+      if (!window.QymShell || typeof window.QymShell.replaceUrlQuery !== 'function') return;
+      // A load that lands after leaving the page must not edit the next URL.
+      if (pageSignal && pageSignal.aborted) return;
+      const updates = {
+        status: state.statusFilter || null,
+        source: state.sourceFilter || null,
+        conf_min: state.confMin > 0 ? String(state.confMin) : null,
+        conf_max: state.confMax < 100 ? String(state.confMax) : null,
+        q: state.searchQuery || null,
+      };
+      for (const [param, field] of Object.entries(REVIEW_MULTI_PARAMS)) {
+        const value = state[field];
+        updates[param] = value === null ? null : (value.length ? value : [REVIEW_NONE]);
+      }
+      window.QymShell.replaceUrlQuery(updates);
+    }
+
+    // The run item a review is about, opened on the run page.
+    function reviewRunItemUrl(c) {
+      const slug = c.project_slug || CURRENT_PROJECT_SLUG;
+      if (!c.run_id) return '';
+      const base = slug
+        ? projectUrl(slug, 'runs/' + encodeURIComponent(c.run_id))
+        : `${(window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '')}/run/${encodeURIComponent(c.run_id)}`;
+      const params = new URLSearchParams();
+      if (c.pass_number != null && !c.pass_deleted_at) params.set('pass', String(c.pass_number));
+      if (c.item_id) params.set('item', String(c.item_id));
+      const query = params.toString();
+      return query ? `${base}?${query}` : base;
     }
 
     function render() {
+      syncReviewsUrl();
       const list = el('correction-list');
       const empty = el('empty-state');
-      const count = el('result-count');
 
+      updateResultCount();
+      updateLoadMore();
       if (state.filtered.length === 0) {
         list.style.display = 'none';
+        list.innerHTML = '';
         empty.style.display = 'flex';
-        count.textContent = '';
+        updateEmptyState();
         updateBulkBar();
-        el('select-all').checked = false;
         return;
       }
 
       empty.style.display = 'none';
       list.style.display = 'flex';
-      count.textContent = `${state.filtered.length} correction${state.filtered.length !== 1 ? 's' : ''}`;
-
-      list.innerHTML = state.filtered.map((c, i) => (i > 0 ? '<hr class="card-separator">' : '') + renderCard(c)).join('');
-      attachCardListeners();
+      const focusInList = list.contains(document.activeElement) || document.activeElement === document.body;
+      if (!state.filtered.some(c => c.id === state.currentId)) state.currentId = null;
+      list.innerHTML = state.filtered.map(renderCard).join('');
       updateBulkBar();
+      if (state.currentId !== null && focusInList) focusCurrentCard();
+    }
 
-      // Sync select-all checkbox
-      const allChecked = state.filtered.length > 0 && state.filtered.every(c => state.selected.has(c.id));
-      el('select-all').checked = allChecked;
+    function appendCards(rows) {
+      const list = el('correction-list');
+      const visible = rows.filter(c => !state.statusFilter || c.status === state.statusFilter);
+      if (visible.length) list.insertAdjacentHTML('beforeend', visible.map(renderCard).join(''));
+      updateResultCount();
+      updateLoadMore();
+      updateBulkBar();
+    }
+
+    // Replace one card in place (status change, edit, details) instead of
+    // rebuilding the whole list.
+    function patchCard(id, row) {
+      const card = cardElement(id);
+      const data = row || state.corrections.find(c => c.id === Number(id));
+      if (!card || !data) return;
+      const hadFocus = card.contains(document.activeElement);
+      const focusSelector = hadFocus ? focusSelectorWithin(card) : null;
+      card.outerHTML = renderCard(data);
+      if (state.expanded.has(data.id) && !state.details.has(data.id)) loadCorrectionDetail(data.id);
+      if (hadFocus) {
+        const next = cardElement(data.id);
+        const target = (focusSelector && next && next.querySelector(focusSelector)) || next;
+        if (target) target.focus({ preventScroll: true });
+      }
+      updateBulkBar();
+    }
+
+    function focusSelectorWithin(card) {
+      const active = document.activeElement;
+      if (!active || active === card) return null;
+      for (const attr of ['data-expand', 'data-edit', 'data-check', 'data-reset']) {
+        if (active.hasAttribute && active.hasAttribute(attr)) return `[${attr}]`;
+      }
+      return null;
+    }
+
+    function updateEmptyState() {
+      const title = el('empty-state').querySelector('.empty-title');
+      const desc = el('empty-state').querySelector('.empty-desc');
+      const filtered = hasActiveFilters(true);
+      if (state.statusFilter === 'pending' && !filtered) {
+        title.textContent = 'Nothing to review';
+        desc.textContent = state.stats.total
+          ? 'Every correction in this queue has been reviewed. Approved and rejected corrections stay under their tabs.'
+          : 'Corrections appear here when humans correct AI-suggested root causes on run detail pages. Approved corrections can be used as evidence when generating project analysis rules.';
+      } else if (filtered) {
+        title.textContent = 'No corrections match these filters';
+        desc.textContent = 'Clear the filters or pick another status to see more corrections.';
+      } else {
+        title.textContent = 'No corrections found';
+        desc.textContent = 'Corrections appear here when humans correct AI-suggested root causes on run detail pages. Approved corrections can be used as evidence when generating project analysis rules.';
+      }
+    }
+
+    // Priority for pending corrections. High: the AI was unsure (under 50%
+    // confidence) or a reviewer changed a diagnosis the AI was not sure of
+    // (under 75%). Medium: one weaker signal (under 75% confidence, a changed
+    // diagnosis, or waiting two weeks or more). The tooltip lists the reasons.
+    const PRIORITY_WAIT_DAYS = 14;
+    function correctionPriority(c, issuesChanged) {
+      if ((c.status || 'pending') !== 'pending') return null;
+      const reasons = [];
+      const raw = c.ai_confidence == null ? NaN : Number(c.ai_confidence);
+      const confidence = Number.isFinite(raw) ? raw : null;
+      if (confidence != null && confidence < 0.75) reasons.push(`AI confidence ${Math.round(confidence * 100)}%`);
+      if (issuesChanged) reasons.push('A reviewer changed the AI diagnosis');
+      const created = c.created_at ? Date.parse(c.created_at) : NaN;
+      const days = Number.isFinite(created) ? Math.floor((Date.now() - created) / 86400000) : 0;
+      if (days >= PRIORITY_WAIT_DAYS) reasons.push(`Waiting ${days} days`);
+      const high = (confidence != null && confidence < 0.5) || (issuesChanged && confidence != null && confidence < 0.75);
+      if (high) return { level: 'high', label: 'High priority', reasons };
+      if (reasons.length) return { level: 'medium', label: 'Medium priority', reasons };
+      return null;
+    }
+
+    function renderPreviews(c) {
+      const cells = [['Input', c.input_preview], ['Expected', c.expected_preview], ['Output', c.output_preview]]
+        .filter(([, text]) => text);
+      if (!cells.length) return '';
+      return `<div class="card-previews">${cells.map(([label, text]) => `
+        <div class="preview-cell">
+          <div class="preview-label">${label}</div>
+          <div class="preview-text" title="${escapeHtml(text)}"${QymSafe.textDirAttrs(text)}>${escapeHtml(text)}</div>
+        </div>`).join('')}</div>`;
+    }
+
+    const DECISION_ICONS = {
+      approve: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8.5 3.5 3.5 6.5-7"/></svg>',
+      reject: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg>',
+      reset: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3v3.5h3.5"/><path d="M3.4 9.5A5 5 0 1 0 4.6 4.6L3 6.5"/></svg>',
+    };
+
+    function decisionButton(kind, c, label, tone, block, shortcut) {
+      const title = shortcut ? `${label} (${shortcut})` : label;
+      const button = `<button class="btn-sm ${tone} qym-icon-action review-decision" data-${kind}="${Number(c.id)}" ${block ? 'disabled aria-disabled="true"' : `title="${title}"`} aria-label="${label}">${DECISION_ICONS[kind]}</button>`;
+      return block ? `<span class="review-decision-rule" title="${escapeHtml(block)}">${button}</span>` : button;
+    }
+
+    function renderDecisionActions(c, st, block) {
+      if (st === 'pending') {
+        return decisionButton('approve', c, 'Approve', 'btn-approve', block, 'a')
+          + decisionButton('reject', c, 'Reject', 'btn-reject', block, 'r');
+      }
+      if (st === 'approved' || st === 'rejected') {
+        return decisionButton('reset', c, 'Reset to pending', 'btn-reset', block);
+      }
+      return '';
+    }
+
+    // Selected corrections this viewer may not decide, with the first reason.
+    function blockedSelection(ids) {
+      const byId = new Map(state.corrections.map(c => [c.id, c]));
+      const blocked = ids.map(id => byId.get(id)).filter(c => c && c.review_block);
+      return blocked.length ? { count: blocked.length, reason: blocked[0].review_block } : null;
+    }
+
+    function refuseBlockedSelection(ids) {
+      const blocked = blockedSelection(ids);
+      if (!blocked) return false;
+      showToast('error', 'Not allowed', `${blocked.count} selected correction${blocked.count > 1 ? 's' : ''}: ${blocked.reason}`);
+      return true;
     }
 
     function renderCard(c) {
       const st = c.status || 'pending';
       const isSelected = state.selected.has(c.id);
       const isEditing = state.editingId === c.id;
+      const isCurrent = state.currentId === c.id;
+      const isExpanded = state.expanded.has(c.id);
       const aiIssues = reviewRootCauseIssues(c, 'ai');
       const humanIssues = reviewRootCauseIssues(c, 'human');
       const issuesChanged = reviewIssueSignature(aiIssues) !== reviewIssueSignature(humanIssues);
+      const priority = correctionPriority(c, issuesChanged);
 
       const corrector = c.corrected_by ? (c.corrected_by.display_name || c.corrected_by.email) : '';
       const reviewer = c.reviewed_by ? (c.reviewed_by.display_name || c.reviewed_by.email) : '';
+      // The project's review rules (C074): a reason when this viewer may not
+      // approve, reject or reset; the author decided their own correction.
+      const reviewBlock = c.review_block || '';
+      const selfReviewed = !!c.self_reviewed && (st === 'approved' || st === 'rejected');
+      const id = Number(c.id);
 
       return `
-        <div class="correction-card status-${escapeHtml(st)} ${isSelected ? 'selected' : ''}" data-id="${c.id}">
+        <article class="correction-card status-${escapeHtml(st)} ${isSelected ? 'selected' : ''} ${isCurrent ? 'is-current' : ''} ${state.ringId === id ? 'correction-card--target' : ''}" data-id="${id}" tabindex="-1" aria-label="Correction #${id}, ${escapeHtml(st)}${priority ? ', ' + escapeHtml(priority.label.toLowerCase()) : ''}">
           <div class="card-header">
             <label class="custom-checkbox card-check">
-            <input type="checkbox" data-check="${c.id}" ${isSelected ? 'checked' : ''}>
+            <input type="checkbox" data-check="${id}" ${isSelected ? 'checked' : ''} aria-label="Select correction #${id}">
               <span class="checkmark"></span>
             </label>
             <div class="card-meta">
-              <span class="card-id">#${c.id}</span>
+              <span class="card-id">#${id}</span>
               <span class="card-item-id" title="${escapeHtml(c.item_id)}">${escapeHtml(truncate(c.item_id, 24))}</span>
               <span class="card-status-badge qym-badge ${escapeHtml(st)}"><span class="dot"></span> ${escapeHtml(st)}</span>
+              ${selfReviewed ? `<span class="qym-tag qym-tag--warning" title="${escapeHtml((reviewer || 'The author') + ' wrote this correction and also ' + st + ' it')}">${st === 'approved' ? 'Self-approved' : 'Self-rejected'}</span>` : ''}
+              ${priority ? `<span class="card-priority qym-tag ${priority.level === 'high' ? 'qym-tag--danger' : 'qym-tag--warning'}" title="${escapeHtml(priority.reasons.join(' · '))}">${escapeHtml(priority.label)}</span>` : ''}
               ${c.ai_confidence != null ? `<span class="card-confidence" title="AI confidence">${(c.ai_confidence * 100).toFixed(0)}%</span>` : ''}
             </div>
             <span class="card-provenance">${corrector ? `by ${escapeHtml(corrector)}` : ''} ${c.created_at ? formatDate(c.created_at) : ''}</span>
             <div class="card-actions">
-              ${st === 'pending' ? `
-                <button class="btn-sm btn-approve qym-icon-action" data-approve="${c.id}" title="Approve" aria-label="Approve">&#10003;</button>
-                <button class="btn-sm btn-reject qym-icon-action" data-reject="${c.id}" title="Reject" aria-label="Reject">&#10007;</button>
-              ` : st === 'approved' ? `
-                <button class="btn-sm btn-reset qym-icon-action" data-reset="${c.id}" title="Reset to pending" aria-label="Reset to pending">&#8634;</button>
-              ` : st === 'rejected' ? `
-                <button class="btn-sm btn-reset qym-icon-action" data-reset="${c.id}" title="Reset to pending" aria-label="Reset to pending">&#8634;</button>
-              ` : ''}
-              <button class="btn-ghost qym-icon-action" data-edit="${c.id}" title="Edit correction" aria-label="Edit correction">&#9998;</button>
-              <button class="btn-sm btn-reject" data-delete="${c.id}" title="Remove from the review queue and mark rejected">Delete</button>
-              <button class="expand-btn qym-icon-action" data-expand="${c.id}" title="Show metadata" aria-label="Show metadata">
+              ${renderDecisionActions(c, st, reviewBlock)}
+              <button class="btn-ghost qym-icon-action" data-edit="${id}" title="Edit correction (e)" aria-label="Edit correction">&#9998;</button>
+              <button class="btn-sm btn-reject" data-delete="${id}" title="Remove from the review queue and mark rejected">Delete</button>
+              <button class="expand-btn qym-icon-action" data-expand="${id}" title="Show details (o)" aria-label="Show details" aria-expanded="${isExpanded ? 'true' : 'false'}" aria-controls="detail-${id}">
                 <span class="arrow">&#x25B6;</span>
               </button>
             </div>
@@ -2148,7 +2983,10 @@
           <div class="card-context">
             ${c.task ? `<span class="context-chip" title="${escapeHtml(c.task)}"><strong>Task</strong><span>${escapeHtml(c.task)}</span></span>` : ''}
             ${c.metric_name ? `<span class="context-chip" title="${escapeHtml(c.metric_name)}"><strong>Metric</strong><span>${escapeHtml(c.metric_name)}</span></span>` : ''}
-            ${c.run_name ? `<span class="context-chip" title="${escapeHtml(c.run_name)}"><strong>Run</strong><span>${escapeHtml(c.run_name)}</span></span>` : ''}
+            ${!CURRENT_PROJECT_SLUG && c.project_name ? `<a class="context-chip context-chip--link" href="${escapeHtml(projectUrl(c.project_slug, 'reviews'))}" title="Reviews in ${escapeHtml(c.project_name)}"><strong>Project</strong><span>${escapeHtml(c.project_name)}</span></a>` : ''}
+            ${c.run_name ? (reviewRunItemUrl(c)
+              ? `<a class="context-chip context-chip--link" href="${escapeHtml(reviewRunItemUrl(c))}" title="Open this item in ${escapeHtml(c.run_name)}"><strong>Run</strong><span>${escapeHtml(c.run_name)}</span></a>`
+              : `<span class="context-chip" title="${escapeHtml(c.run_name)}"><strong>Run</strong><span>${escapeHtml(c.run_name)}</span></span>`) : ''}
             ${c.pass_number != null ? `<span class="context-chip"><strong>Pass</strong><span>${escapeHtml(String(c.pass_number))}</span></span>` : ''}
             ${c.dataset ? `<span class="context-chip" title="${escapeHtml(c.dataset)}"><strong>Dataset</strong><span>${escapeHtml(c.dataset)}</span></span>` : ''}
             ${c.model ? `<span class="context-chip" title="${escapeHtml(c.model)}"><strong>Model</strong><span>${renderModelLabel(c.model, !!c.has_reasoning)}</span></span>` : ''}
@@ -2184,64 +3022,103 @@
           ${c.review_comment || reviewer ? `
             <div class="card-footer">
               ${reviewer ? `<span class="review-info">Reviewed by <strong>${escapeHtml(reviewer)}</strong> ${c.reviewed_at ? formatDate(c.reviewed_at) : ''}</span>` : ''}
-              ${c.review_comment ? `<span class="review-comment" title="${escapeHtml(c.review_comment)}">"${escapeHtml(truncate(c.review_comment, 80))}"</span>` : ''}
+              ${c.review_comment ? `<span class="review-comment" title="${escapeHtml(c.review_comment)}">"<bdi>${escapeHtml(truncate(c.review_comment, 80))}</bdi>"</span>` : ''}
             </div>
           ` : ''}
 
-          <!-- Input / Output / Expected always visible -->
-          ${c.input_snapshot ? `
-            <div class="detail-section">
-              <div class="detail-section-title">Input</div>
-              ${renderSnapshot(c.input_snapshot)}
-            </div>
-          ` : ''}
-          ${c.expected_snapshot ? `
-            <div class="detail-section">
-              <div class="detail-section-title">Expected</div>
-              ${renderSnapshot(c.expected_snapshot)}
-            </div>
-          ` : ''}
-          ${c.output_snapshot ? `
-            <div class="detail-section">
-              <div class="detail-section-title">Output</div>
-              ${renderSnapshot(c.output_snapshot)}
-            </div>
-          ` : ''}
+          ${isExpanded ? '' : renderPreviews(c)}
 
-          <!-- Expandable: Scores + Metadata -->
-          <div class="card-detail" id="detail-${c.id}">
-            ${renderHistory(c)}
-            ${c.scores_snapshot && Object.keys(c.scores_snapshot).length ? `
-              <div class="detail-section">
-                <div class="detail-section-title">Metric Scores</div>
-                <div class="detail-scores">
-                  ${Object.entries(c.scores_snapshot).map(([k, v]) =>
-                    `<span class="score-chip"><span class="metric-name">${escapeHtml(k)}: </span><span class="metric-val">${typeof v === 'number' ? v.toFixed(2) : escapeHtml(String(v))}</span></span>`
-                  ).join('')}
-                </div>
-              </div>
-            ` : ''}
-            <div class="detail-section">
-              <div class="detail-section-title">Item Metadata</div>
-              <div class="detail-snapshot">${escapeHtml(JSON.stringify({
-                run_id: c.run_id,
-                run_name: c.run_name,
-                item_id: c.item_id,
-                task: c.task,
-                dataset: c.dataset,
-                model: c.model,
-                ai_confidence: c.ai_confidence,
-                corrected_by: c.corrected_by ? (c.corrected_by.display_name || c.corrected_by.email) : null,
-                created_at: c.created_at,
-                status: c.status,
-                reviewed_by: c.reviewed_by ? (c.reviewed_by.display_name || c.reviewed_by.email) : null,
-                reviewed_at: c.reviewed_at,
-                review_comment: c.review_comment || null,
-              }, null, 2))}</div>
+          <!-- Expandable: full Input / Expected / Output, history, scores, metadata (loaded on open) -->
+          <div class="card-detail ${isExpanded ? 'open' : ''}" id="detail-${id}">
+            ${isExpanded ? renderCardDetail(c) : ''}
+          </div>
+        </article>
+      `;
+    }
+
+    function renderCardDetail(c) {
+      const detail = state.details.get(c.id);
+      if (!detail) return '<div class="detail-loading" role="status">Loading details…</div>';
+      if (detail.error) {
+        return `<div class="detail-loading" role="status">Could not load details. <button type="button" class="btn-sm btn-reset" data-detail-retry="${Number(c.id)}">Retry</button></div>`;
+      }
+      return `
+        ${detail.input_snapshot ? `
+          <div class="detail-section">
+            <div class="detail-section-title">Input</div>
+            ${renderSnapshot(detail.input_snapshot, 'Input')}
+          </div>
+        ` : ''}
+        ${detail.expected_snapshot ? `
+          <div class="detail-section">
+            <div class="detail-section-title">Expected</div>
+            ${renderSnapshot(detail.expected_snapshot, 'Expected')}
+          </div>
+        ` : ''}
+        ${detail.output_snapshot ? `
+          <div class="detail-section">
+            <div class="detail-section-title">Output</div>
+            ${renderSnapshot(detail.output_snapshot, 'Output')}
+          </div>
+        ` : ''}
+        ${renderHistory(detail)}
+        ${c.scores_snapshot && Object.keys(c.scores_snapshot).length ? `
+          <div class="detail-section">
+            <div class="detail-section-title">Metric Scores</div>
+            <div class="detail-scores">
+              ${Object.entries(c.scores_snapshot).map(([k, v]) =>
+                `<span class="score-chip"><span class="metric-name">${escapeHtml(k)}: </span><span class="metric-val">${typeof v === 'number' ? v.toFixed(2) : escapeHtml(String(v))}</span></span>`
+              ).join('')}
             </div>
           </div>
+        ` : ''}
+        <div class="detail-section">
+          <div class="detail-section-title">Item Metadata</div>
+          <div class="detail-snapshot" tabindex="0" role="region" aria-label="Item metadata">${escapeHtml(JSON.stringify({
+            run_id: c.run_id,
+            run_name: c.run_name,
+            item_id: c.item_id,
+            task: c.task,
+            dataset: c.dataset,
+            model: c.model,
+            ai_confidence: c.ai_confidence,
+            corrected_by: c.corrected_by ? (c.corrected_by.display_name || c.corrected_by.email) : null,
+            created_at: c.created_at,
+            status: c.status,
+            reviewed_by: c.reviewed_by ? (c.reviewed_by.display_name || c.reviewed_by.email) : null,
+            reviewed_at: c.reviewed_at,
+            review_comment: c.review_comment || null,
+          }, null, 2))}</div>
         </div>
       `;
+    }
+
+    const detailRequests = new Map();
+    async function loadCorrectionDetail(id) {
+      if (detailRequests.has(id)) return detailRequests.get(id);
+      const request = (async () => {
+        try {
+          const resp = await fetch(apiUrl(`api/corrections/${id}`), { signal: pageSignal });
+          if (!resp.ok) throw new Error('Failed to load details');
+          state.details.set(id, await resp.json());
+        } catch (err) {
+          if (err && err.name === 'AbortError') return;
+          state.details.set(id, { error: true });
+        } finally {
+          detailRequests.delete(id);
+        }
+        if (state.expanded.has(id)) patchCard(id);
+      })();
+      detailRequests.set(id, request);
+      return request;
+    }
+
+    function toggleExpanded(id, open) {
+      const shouldOpen = open == null ? !state.expanded.has(id) : open;
+      if (shouldOpen) state.expanded.add(id);
+      else state.expanded.delete(id);
+      patchCard(id);
+      if (shouldOpen && !state.details.has(id)) loadCorrectionDetail(id);
     }
 
     function reviewRootCauseIssues(correction, source, legacyFallback = true) {
@@ -2307,8 +3184,8 @@
           <div class="review-issue-head"><span class="review-issue-number">Issue ${index + 1}</span>${issue.confidence != null ? `<span class="diff-confidence">${Math.round(issue.confidence * 100)}%</span>` : ''}</div>
           <div class="review-issue-category">${escapeHtml(issue.category || 'Uncategorized')}</div>
           ${issue.subcategory ? `<div class="review-issue-subcategory">${escapeHtml(issue.subcategory)}</div>` : ''}
-          ${issue.finding ? `<div class="review-issue-finding">${escapeHtml(truncate(issue.finding, 300))}</div>` : ''}
-          ${issue.category_reason ? `<details class="review-issue-reason"><summary>Why this category</summary><div>${escapeHtml(issue.category_reason)}</div></details>` : ''}
+          ${issue.finding ? `<div class="review-issue-finding"${QymSafe.textDirAttrs(issue.finding)}>${escapeHtml(truncate(issue.finding, 300))}</div>` : ''}
+          ${issue.category_reason ? `<details class="review-issue-reason"><summary>Why this category</summary><div${QymSafe.textDirAttrs(issue.category_reason)}>${escapeHtml(issue.category_reason)}</div></details>` : ''}
         </article>
       `).join('') + '</div>';
     }
@@ -2336,12 +3213,12 @@
                 <span class="history-review-status ${escapeHtml(review.status)}">${escapeHtml(review.status)}</span>
               ` : '<span class="history-review-status">No review candidate</span>';
               const reviewComment = review && review.review_comment
-                ? `<div class="history-review-comment">${escapeHtml(review.review_comment)}</div>`
+                ? `<div class="history-review-comment"${QymSafe.textDirAttrs(review.review_comment)}>${escapeHtml(review.review_comment)}</div>`
                 : '';
               return `
                 <div class="history-entry">
                   <div class="history-head">
-                    <span class="history-rev">${entry.revision_number != null ? `R${entry.revision_number}` : 'Legacy'}</span>
+                    <span class="history-rev">${entry.revision_number != null ? `R${Number(entry.revision_number)}` : 'Legacy'}</span>
                     <span class="history-actor">${escapeHtml(actor)}</span>
                     <span class="history-time">${entry.created_at ? formatDate(entry.created_at) : ''}</span>
                     ${reviewStatus}
@@ -2367,8 +3244,8 @@
           <button class="btn-sm btn-reset review-issue-add" type="button" data-add-review-issue>Add issue</button>
         </div>
         <div class="edit-actions">
-          <button class="btn-sm btn-approve" type="button" data-save-edit="${c.id}">Save</button>
-          <button class="btn-sm btn-reset" type="button" data-cancel-edit="${c.id}">Cancel</button>
+          <button class="btn-sm btn-approve" type="button" data-save-edit="${Number(c.id)}">Save</button>
+          <button class="btn-sm btn-reset" type="button" data-cancel-edit="${Number(c.id)}">Cancel</button>
         </div>
       `;
     }
@@ -2378,219 +3255,385 @@
         <div class="review-issue-edit-head"><span class="review-issue-number">Issue ${index + 1}</span><button class="qym-icon-action" type="button" data-remove-review-issue title="Remove issue" aria-label="Remove issue">×</button></div>
         <div class="edit-field"><label>Category</label><input class="qym-control qym-input" type="text" data-issue-field="category" value="${escapeHtml(issue.category || '')}" placeholder="Root-cause category" /></div>
         <div class="edit-field"><label>Subcategory</label><input class="qym-control qym-input" type="text" data-issue-field="subcategory" value="${escapeHtml(issue.subcategory || '')}" placeholder="Reusable failure mechanism" /></div>
-        <div class="edit-field"><label>Finding</label><textarea data-issue-field="finding" placeholder="Item-specific diagnosis">${escapeHtml(issue.finding || '')}</textarea></div>
+        <div class="edit-field"><label>Finding</label><textarea data-issue-field="finding" dir="auto" placeholder="Item-specific diagnosis">${escapeHtml(issue.finding || '')}</textarea></div>
       </article>`;
     }
 
-    /* ── Event Handlers ──────────────────────────── */
+    /* ── Current item (keyboard place) ───────────── */
 
-    function attachCardListeners() {
-      // Checkbox toggle
-      $$('[data-check]').forEach(cb => {
-        cb.addEventListener('change', () => {
-          const id = Number(cb.dataset.check);
-          if (cb.checked) state.selected.add(id);
-          else state.selected.delete(id);
-          const card = cb.closest('.correction-card');
-          card.classList.toggle('selected', cb.checked);
-          updateBulkBar();
-          // Sync select-all
-          const allChecked = state.filtered.length > 0 && state.filtered.every(c => state.selected.has(c.id));
-          el('select-all').checked = allChecked;
-        });
-      });
+    function cardIds() {
+      return Array.from(el('correction-list').querySelectorAll('.correction-card')).map(card => Number(card.dataset.id));
+    }
 
-      // Approve
-      $$('[data-approve]').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          const id = Number(btn.dataset.approve);
-          try {
-            const updated = await apiAction('POST', `api/corrections/${id}/approve`, { comment: '' });
-            applyCorrectionUpdate(id, updated);
-            showToast('success', 'Approved', `Correction #${id} approved`);
-            refreshCorrectionsInBackground();
-          } catch (err) {
-            showToast('error', 'Failed', err.message);
-          }
-        });
-      });
+    // The card after this one (else before it), skipping cards being removed.
+    function neighbourId(id, skip = new Set()) {
+      const ids = cardIds();
+      const index = ids.indexOf(Number(id));
+      const after = ids.slice(index + 1).find(candidate => !skip.has(candidate));
+      if (after != null) return after;
+      const before = ids.slice(0, Math.max(index, 0)).reverse().find(candidate => !skip.has(candidate));
+      return before ?? null;
+    }
 
-      // Reject
-      $$('[data-reject]').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          const id = Number(btn.dataset.reject);
-          const comment = await openModal(
-            'Reject Correction',
-            'This correction will NOT be used as evidence when generating project analysis rules.',
-            'Reject',
-            'btn-danger'
-          );
-          if (comment === null) return;
-          try {
-            const updated = await apiAction('POST', `api/corrections/${id}/reject`, { comment });
-            applyCorrectionUpdate(id, updated);
-            showToast('success', 'Rejected', `Correction #${id} rejected`);
-            refreshCorrectionsInBackground();
-          } catch (err) {
-            showToast('error', 'Failed', err.message);
-          }
-        });
-      });
+    function setCurrent(id, options = {}) {
+      const previous = state.currentId;
+      state.currentId = id == null ? null : Number(id);
+      if (previous !== state.currentId && previous != null) cardElement(previous)?.classList.remove('is-current');
+      const card = state.currentId == null ? null : cardElement(state.currentId);
+      if (!card) {
+        if (options.focus) el('search-input').focus({ preventScroll: true });
+        return;
+      }
+      card.classList.add('is-current');
+      if (options.scroll) card.scrollIntoView({ block: 'nearest' });
+      if (options.focus) card.focus({ preventScroll: true });
+    }
 
-      // Reset
-      $$('[data-reset]').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          const id = Number(btn.dataset.reset);
-          try {
-            const updated = await apiAction('POST', `api/corrections/${id}/reset`, {});
-            applyCorrectionUpdate(id, updated);
-            showToast('success', 'Reset', `Correction #${id} reset to pending`);
-            refreshCorrectionsInBackground();
-          } catch (err) {
-            showToast('error', 'Failed', err.message);
-          }
-        });
-      });
+    function focusCurrentCard() {
+      const card = state.currentId == null ? null : cardElement(state.currentId);
+      if (card) card.focus({ preventScroll: true });
+    }
 
-      // Delete
-      $$('[data-delete]').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          const id = Number(btn.dataset.delete);
-          const confirmed = await confirmToast(
-            'Remove this correction?',
-            `Correction #${id} will be marked rejected and kept in review history.`,
-            'Reject & remove'
-          );
-          if (!confirmed) return;
-          try {
-            await apiAction('DELETE', `api/corrections/${id}`);
-            removeCorrectionIds([id]);
-            showToast('success', 'Deleted', `Correction #${id} was marked rejected and removed`);
-            refreshCorrectionsInBackground();
-          } catch (err) {
-            showToast('error', 'Failed', err.message);
-          }
-        });
-      });
+    function moveCurrent(step) {
+      const ids = cardIds();
+      if (!ids.length) return;
+      const index = ids.indexOf(state.currentId);
+      let next = index < 0 ? (step > 0 ? 0 : ids.length - 1) : index + step;
+      next = Math.max(0, Math.min(ids.length - 1, next));
+      setCurrent(ids[next], { focus: true, scroll: true });
+      if (step > 0 && next >= ids.length - 3 && state.hasMore) fetchCorrections({ append: true });
+    }
 
-      // Edit
-      $$('[data-edit]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const id = Number(btn.dataset.edit);
-          state.editingId = state.editingId === id ? null : id;
-          render();
-        });
-      });
-
-      $$('[data-review-issue-list]').forEach(list => {
-        list.addEventListener('click', event => {
-          const add = event.target.closest('[data-add-review-issue]');
-          if (add) {
-            add.insertAdjacentHTML('beforebegin', renderReviewIssueEdit({}, list.querySelectorAll('[data-review-issue-edit]').length));
+    async function revealRequestedCorrection() {
+      const id = state.focusId;
+      if (id == null) return;
+      state.focusId = null;
+      if (!cardElement(id)) {
+        try {
+          const resp = await fetch(apiUrl(`api/corrections/${id}`), { signal: pageSignal });
+          if (!resp.ok) {
+            showToast('warning', 'Review not shown', `Review #${id} is not in this list. Clear the filters to find it.`);
             return;
           }
-          const remove = event.target.closest('[data-remove-review-issue]');
-          if (!remove) return;
-          const row = remove.closest('[data-review-issue-edit]');
-          if (row) row.remove();
-          list.querySelectorAll('[data-review-issue-edit]').forEach((issue, index) => {
-            const number = issue.querySelector('.review-issue-number');
-            if (number) number.textContent = `Issue ${index + 1}`;
-          });
-        });
-      });
-
-      // Save edit
-      $$('[data-save-edit]').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          const id = Number(btn.dataset.saveEdit);
-          const card = btn.closest('.correction-card');
-          const issues = Array.from(card.querySelectorAll('[data-review-issue-edit]')).map(row => {
-            const issue = { category: '', subcategory: '', finding: '' };
-            row.querySelectorAll('[data-issue-field]').forEach(field => {
-              issue[field.dataset.issueField] = field.value.trim();
-            });
-            return issue;
-          }).filter(issue => issue.category || issue.subcategory || issue.finding);
-          const incompleteIssue = issues.findIndex(issue => !issue.category);
-          if (incompleteIssue >= 0) {
-            const row = card.querySelectorAll('[data-review-issue-edit]')[incompleteIssue];
-            const categoryInput = row && row.querySelector('[data-issue-field="category"]');
-            if (categoryInput) categoryInput.focus();
-            showToast('error', 'Category required', `Issue ${incompleteIssue + 1} needs a category.`);
+          const detail = await resp.json();
+          if (!detail || !detail.id) return;
+          if (state.statusFilter && detail.status !== state.statusFilter) {
+            setStatusTab(detail.status === 'pending' || detail.status === 'approved' || detail.status === 'rejected' ? detail.status : '');
+            state.focusId = id;
+            await fetchCorrections();
             return;
           }
-          const firstIssue = issues[0] || {};
-          const categories = [];
-          issues.forEach(issue => {
-            if (issue.category && !categories.some(category => category.toLocaleLowerCase() === issue.category.toLocaleLowerCase())) {
-              categories.push(issue.category);
-            }
-          });
-          const body = {
-            human_root_cause_issues: issues,
-            human_root_causes: categories,
-            human_root_cause: firstIssue.category || '',
-            human_root_cause_detail: firstIssue.subcategory || '',
-            human_root_cause_note: firstIssue.finding || '',
-          };
-          try {
-            const updated = await apiAction('PUT', `api/corrections/${id}`, body);
-            applyCorrectionUpdate(id, updated);
-            showToast('success', 'Saved', 'Correction updated');
-            refreshCorrectionsInBackground();
-          } catch (err) {
-            showToast('error', 'Failed', err.message);
-          }
-        });
-      });
+          state.details.set(detail.id, detail);
+          const row = summaryRow(null, detail);
+          state.corrections.unshift(row);
+          applyClientFilters();
+          el('correction-list').insertAdjacentHTML('afterbegin', renderCard(row));
+        } catch {
+          return;
+        }
+      }
+      // Back, Forward or a reload of this entry: the shell puts the saved
+      // scroll position back, so ?id= must not pull the reader to the card.
+      setCurrent(id, { focus: true, scroll: !RESTORING_REVIEWS_VIEW });
+      toggleExpanded(id, true);
+      if (RESTORING_REVIEWS_VIEW) return;
+      // Ring the linked review briefly (C044); a card re-rendered meanwhile
+      // keeps the ring (renderCard reads ringId).
+      state.ringId = Number(id);
+      const card = cardElement(id);
+      if (card) {
+        card.classList.add('correction-card--target');
+        requestAnimationFrame(() => card.scrollIntoView({ block: 'center' }));
+      }
+      setTimeout(() => {
+        if (state.ringId === Number(id)) state.ringId = null;
+        cardElement(id)?.classList.remove('correction-card--target');
+      }, 2600);
+    }
 
-      // Cancel edit
-      $$('[data-cancel-edit]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          state.editingId = null;
-          render();
-        });
-      });
+    /* ── Actions ─────────────────────────────────── */
 
-      // Expand/collapse context
-      $$('[data-expand]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const id = btn.dataset.expand;
-          const detail = el(`detail-${id}`);
-          const isOpen = detail.classList.toggle('open');
-          btn.classList.toggle('expanded', isOpen);
-        });
+    function describeView() {
+      const parts = [STATUS_LABELS[state.statusFilter] || 'All'];
+      if (state.searchQuery) parts.push(`matching "${state.searchQuery}"`);
+      const source = { ai_only: 'AI only', human_only: 'human only', corrected: 'AI+human corrected' }[state.sourceFilter];
+      if (source) parts.push(`source ${source}`);
+      [['task', 'task'], ['dataset', 'dataset'], ['model', 'model'], ['run_name', 'run']].forEach(([key, label]) => {
+        const value = getFilterState(key);
+        if (value !== null) parts.push(`${label} ${value.length ? value.join(', ') : 'none'}`);
+      });
+      if (state.confMin > 0 || state.confMax < 100) parts.push(`confidence ${state.confMin}–${state.confMax}%`);
+      return parts.join(' · ');
+    }
+
+    // After approve/reject, a card that stays in view (the All tab) hands the
+    // keyboard place to the next pending card, as leaving the queue does.
+    function advanceAfterReview(id) {
+      const card = cardElement(id);
+      if (state.currentId !== id || !card) return;
+      const focus = card.contains(document.activeElement) || document.activeElement === document.body;
+      const ids = cardIds();
+      const index = ids.indexOf(id);
+      const later = ids.slice(index + 1);
+      const statusOf = (cid) => (state.corrections.find(c => c.id === cid) || {}).status;
+      const next = later.find(cid => statusOf(cid) === 'pending') ?? later[0];
+      if (next == null) return;
+      setCurrent(next, { focus, scroll: true });
+    }
+
+    // One request per correction at a time: a repeated key press while the
+    // first approve is in flight must not send a second one.
+    const actionsInFlight = new Set();
+    async function runCorrectionAction(id, action) {
+      if (actionsInFlight.has(id)) return;
+      actionsInFlight.add(id);
+      try {
+        await action();
+      } finally {
+        actionsInFlight.delete(id);
+      }
+    }
+
+    function approveCorrection(id) {
+      return runCorrectionAction(id, async () => {
+        try {
+          const updated = await apiAction('POST', `api/corrections/${id}/approve`, { comment: '' });
+          applyCorrectionUpdate(id, updated);
+          advanceAfterReview(updated.id);
+          showToast('success', 'Approved', `Correction #${id} approved`);
+          refreshCounts();
+        } catch (err) {
+          showToast('error', 'Failed', err.message);
+        }
       });
     }
 
-    /* ── Stat card filter ────────────────────────── */
+    function rejectCorrection(id) {
+      return runCorrectionAction(id, async () => {
+        const comment = await openModal(
+          'Reject Correction',
+          'This correction will NOT be used as evidence when generating project analysis rules.',
+          'Reject',
+          'btn-danger'
+        );
+        if (comment === null) return;
+        try {
+          const updated = await apiAction('POST', `api/corrections/${id}/reject`, { comment });
+          applyCorrectionUpdate(id, updated);
+          advanceAfterReview(updated.id);
+          showToast('success', 'Rejected', `Correction #${id} rejected`);
+          refreshCounts();
+        } catch (err) {
+          showToast('error', 'Failed', err.message);
+        }
+      });
+    }
+
+    function resetCorrection(id) {
+      return runCorrectionAction(id, async () => {
+        try {
+          const updated = await apiAction('POST', `api/corrections/${id}/reset`, {});
+          applyCorrectionUpdate(id, updated);
+          showToast('success', 'Reset', `Correction #${id} reset to pending`);
+          refreshCounts();
+        } catch (err) {
+          showToast('error', 'Failed', err.message);
+        }
+      });
+    }
+
+    async function deleteCorrection(id) {
+      const confirmed = await confirmToast(
+        'Remove this correction?',
+        `Correction #${id} will be marked rejected and kept in review history.`,
+        'Reject & remove'
+      );
+      if (!confirmed) return;
+      try {
+        await apiAction('DELETE', `api/corrections/${id}`);
+        removeCorrectionIds([id], { fromAction: true });
+        showToast('success', 'Deleted', `Correction #${id} was marked rejected and removed`);
+        refreshCounts();
+      } catch (err) {
+        showToast('error', 'Failed', err.message);
+      }
+    }
+
+    function startEditing(id) {
+      const previous = state.editingId;
+      state.editingId = state.editingId === id ? null : id;
+      if (previous !== null && previous !== id) patchCard(previous);
+      patchCard(id);
+      setCurrent(id);
+      if (state.editingId === id) cardElement(id)?.querySelector('[data-issue-field="category"]')?.focus();
+      else focusCurrentCard();
+    }
+
+    function toggleSelected(id, checked) {
+      let isChecked = checked == null ? !state.selected.has(id) : checked;
+      // The cards on screen belong to the previous filter while a list loads.
+      if (state.loading && isChecked) isChecked = false;
+      if (isChecked) state.selected.add(id);
+      else state.selected.delete(id);
+      const card = cardElement(id);
+      if (card) {
+        card.classList.toggle('selected', isChecked);
+        const box = card.querySelector('[data-check]');
+        if (box) box.checked = isChecked;
+      }
+      updateBulkBar();
+    }
+
+    async function saveEdit(id, card) {
+      const issues = Array.from(card.querySelectorAll('[data-review-issue-edit]')).map(row => {
+        const issue = { category: '', subcategory: '', finding: '' };
+        row.querySelectorAll('[data-issue-field]').forEach(field => {
+          issue[field.dataset.issueField] = field.value.trim();
+        });
+        return issue;
+      }).filter(issue => issue.category || issue.subcategory || issue.finding);
+      const incompleteIssue = issues.findIndex(issue => !issue.category);
+      if (incompleteIssue >= 0) {
+        const row = card.querySelectorAll('[data-review-issue-edit]')[incompleteIssue];
+        const categoryInput = row && row.querySelector('[data-issue-field="category"]');
+        if (categoryInput) categoryInput.focus();
+        showToast('error', 'Category required', `Issue ${incompleteIssue + 1} needs a category.`);
+        return;
+      }
+      const firstIssue = issues[0] || {};
+      const categories = [];
+      issues.forEach(issue => {
+        if (issue.category && !categories.some(category => category.toLocaleLowerCase() === issue.category.toLocaleLowerCase())) {
+          categories.push(issue.category);
+        }
+      });
+      const body = {
+        human_root_cause_issues: issues,
+        human_root_causes: categories,
+        human_root_cause: firstIssue.category || '',
+        human_root_cause_detail: firstIssue.subcategory || '',
+        human_root_cause_note: firstIssue.finding || '',
+      };
+      try {
+        const updated = await apiAction('PUT', `api/corrections/${id}`, body);
+        applyCorrectionUpdate(id, updated);
+        setCurrent(updated.id, { focus: true });
+        showToast('success', 'Saved', 'Correction updated');
+        refreshCounts();
+      } catch (err) {
+        showToast('error', 'Failed', err.message);
+      }
+    }
+
+    /* ── Event Handlers (delegated: cards are added and patched in place) ── */
+
+    const listEl = el('correction-list');
+
+    listEl.addEventListener('change', (e) => {
+      const box = e.target.closest('[data-check]');
+      if (!box) return;
+      const id = Number(box.dataset.check);
+      setCurrent(id);
+      toggleSelected(id, box.checked);
+    });
+
+    listEl.addEventListener('focusin', (e) => {
+      const card = e.target.closest('.correction-card');
+      if (card && Number(card.dataset.id) !== state.currentId) setCurrent(Number(card.dataset.id));
+    });
+
+    listEl.addEventListener('click', (e) => {
+      const target = e.target;
+      const card = target.closest('.correction-card');
+      if (!card) return;
+      const cardId = Number(card.dataset.id);
+      const button = target.closest('button');
+      if (!button) {
+        if (!target.closest('a, input, textarea, label, details, .detail-snapshot')) setCurrent(cardId);
+        return;
+      }
+      e.stopPropagation();
+      setCurrent(cardId);
+      if (button.hasAttribute('data-approve')) approveCorrection(Number(button.dataset.approve));
+      else if (button.hasAttribute('data-reject')) rejectCorrection(Number(button.dataset.reject));
+      else if (button.hasAttribute('data-reset')) resetCorrection(Number(button.dataset.reset));
+      else if (button.hasAttribute('data-delete')) deleteCorrection(Number(button.dataset.delete));
+      else if (button.hasAttribute('data-edit')) startEditing(Number(button.dataset.edit));
+      else if (button.hasAttribute('data-expand')) toggleExpanded(Number(button.dataset.expand));
+      else if (button.hasAttribute('data-detail-retry')) {
+        state.details.delete(cardId);
+        patchCard(cardId);
+        loadCorrectionDetail(cardId);
+      } else if (button.hasAttribute('data-save-edit')) saveEdit(Number(button.dataset.saveEdit), card);
+      else if (button.hasAttribute('data-cancel-edit')) {
+        state.editingId = null;
+        patchCard(cardId);
+        focusCurrentCard();
+      } else if (button.hasAttribute('data-add-review-issue')) {
+        const issueList = button.closest('[data-review-issue-list]');
+        button.insertAdjacentHTML('beforebegin', renderReviewIssueEdit({}, issueList.querySelectorAll('[data-review-issue-edit]').length));
+      } else if (button.hasAttribute('data-remove-review-issue')) {
+        const issueList = button.closest('[data-review-issue-list]');
+        const row = button.closest('[data-review-issue-edit]');
+        if (row) row.remove();
+        issueList.querySelectorAll('[data-review-issue-edit]').forEach((issue, index) => {
+          const number = issue.querySelector('.review-issue-number');
+          if (number) number.textContent = `Issue ${index + 1}`;
+        });
+      }
+    });
+
+    /* ── Status tabs (the queue opens on To review) ── */
+
+    function setStatusTab(filter) {
+      state.statusFilter = filter;
+      $$('.stat-card').forEach(tab => {
+        const active = tab.dataset.filter === filter;
+        tab.classList.toggle('active', active);
+        tab.setAttribute('aria-selected', active ? 'true' : 'false');
+        tab.tabIndex = active ? 0 : -1;
+      });
+    }
 
     $$('.stat-card').forEach(card => {
       card.addEventListener('click', () => {
-        $$('.stat-card').forEach(c => c.classList.remove('active'));
-        card.classList.add('active');
-        state.statusFilter = card.dataset.filter;
+        if (state.statusFilter === card.dataset.filter && !state.loading) return;
+        setStatusTab(card.dataset.filter);
         fetchCorrections();
       });
+      card.addEventListener('keydown', (e) => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const tabs = Array.from($$('.stat-card'));
+        const index = tabs.indexOf(card);
+        let next = index;
+        if (e.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
+        else if (e.key === 'ArrowRight') next = (index + 1) % tabs.length;
+        else if (e.key === 'Home') next = 0;
+        else next = tabs.length - 1;
+        tabs[next].focus();
+        tabs[next].click();
+      });
+    });
+
+    /* ── Sort ────────────────────────────────────── */
+
+    el('sort-select').value = state.sort;
+    el('sort-select').addEventListener('change', () => {
+      state.sort = SORT_LABELS[el('sort-select').value] ? el('sort-select').value : 'oldest';
+      try { window.localStorage.setItem(SORT_STORAGE_KEY, state.sort); } catch {}
+      fetchCorrections();
     });
 
     /* ── Search ──────────────────────────────────── */
 
     el('search-input').addEventListener('input', debounce(() => {
-      state.searchQuery = el('search-input').value.trim();
+      const next = el('search-input').value.trim();
+      if (next === state.searchQuery) return;
+      state.searchQuery = next;
       fetchCorrections();
     }, 300));
-
-    /* ── Task filter ─────────────────────────────── */
 
     /* ── Source filter chips ────────────────────── */
 
@@ -2634,8 +3677,8 @@
 
     /* ── Clear All Filters ───────────────────────── */
 
-    function hasActiveFilters() {
-      return state.statusFilter !== ''
+    function hasActiveFilters(ignoreStatus = false) {
+      return (!ignoreStatus && state.statusFilter !== 'pending')
         || state.taskFilter !== null
         || state.datasetFilter !== null
         || state.modelFilter !== null
@@ -2651,7 +3694,6 @@
     }
 
     el('clear-filters').addEventListener('click', () => {
-      state.statusFilter = '';
       state.taskFilter = null;
       state.datasetFilter = null;
       state.modelFilter = null;
@@ -2661,10 +3703,9 @@
       state.confMin = 0;
       state.confMax = 100;
 
-      // Reset UI controls
+      // Reset UI controls; clearing returns to the queue.
       el('search-input').value = '';
-      $$('.stat-card').forEach(c => c.classList.remove('active'));
-      document.querySelector('.stat-card.stat-total').classList.add('active');
+      setStatusTab('pending');
       $$('[data-source]').forEach(c => {
         c.classList.remove('active');
         c.setAttribute('aria-pressed', 'false');
@@ -2685,133 +3726,240 @@
     /* ── Select All ──────────────────────────────── */
 
     el('select-all').addEventListener('change', () => {
-      const checked = el('select-all').checked;
-      if (checked) {
-        state.filtered.forEach(c => state.selected.add(c.id));
-      } else {
-        state.selected.clear();
+      if (state.loading) {
+        el('select-all').checked = false;
+        return;
       }
-      render();
+      const checked = el('select-all').checked;
+      state.filtered.forEach(c => toggleSelected(c.id, checked));
+      if (!checked) state.selected.clear();
+      updateBulkBar();
     });
+
+    /* ── Load more (and on scroll) ───────────────── */
+
+    el('load-more').addEventListener('click', () => fetchCorrections({ append: true }));
+
+    let moreObserver = null;
+    if ('IntersectionObserver' in window) {
+      moreObserver = new IntersectionObserver((entries) => {
+        if (entries.some(entry => entry.isIntersecting) && state.hasMore && !state.loading) {
+          fetchCorrections({ append: true });
+        }
+      }, { root: el('reviews-body'), rootMargin: '0px 0px 600px 0px' });
+      moreObserver.observe(el('reviews-more'));
+    }
 
     /* ── Bulk Actions ────────────────────────────── */
 
-    el('bulk-approve').addEventListener('click', async () => {
-      const ids = [...state.selected];
-      if (!ids.length) {
-        showToast('warning', 'Nothing selected', 'Select one or more corrections first.');
-        return;
-      }
+    function selectedIds() {
+      return [...state.selected];
+    }
+
+    // The tab the selection was made in: the server refuses the action if a
+    // selected correction has since left that status (another reviewer).
+    function expectedStatus() {
+      return state.statusFilter ? { expected_status: state.statusFilter } : {};
+    }
+
+    async function bulkApprove() {
+      const pick = bulkSelection('approve');
+      if (refuseUnfitSelection('approve', pick)) return;
+      const ids = pick.ids;
+      if (refuseBlockedSelection(ids)) return;
+      if (state.loading) return;
       const comment = await openModal(
         `Approve ${ids.length} Correction${ids.length > 1 ? 's' : ''}`,
-        `${ids.length} correction${ids.length > 1 ? 's' : ''} will be approved as rule-generation evidence.`,
+        `${ids.length} selected correction${ids.length > 1 ? 's' : ''} in ${describeView()} will be approved as rule-generation evidence.${skippedNote('approve', pick.skipped, false)}`,
         'Approve All',
         'btn-primary'
       );
       if (comment === null) return;
       try {
-        await apiAction('POST', 'api/corrections/bulk', { ids, action: 'approve', comment });
-        applyBulkStatusUpdate(ids, 'approved', comment);
-        showToast('success', 'Bulk Approved', `${ids.length} corrections approved`);
-        refreshCorrectionsInBackground();
+        const result = await apiAction('POST', 'api/corrections/bulk', { ids, action: 'approve', comment, expected_count: ids.length, ...expectedStatus() });
+        applyBulkStatusUpdate(ids, 'approved', comment, result && result.corrections);
+        showToast('success', 'Bulk Approved', `${ids.length} correction${ids.length > 1 ? 's' : ''} approved.${skippedNote('approve', pick.skipped, true)}`);
+        refreshCounts();
       } catch (err) {
         showToast('error', 'Failed', err.message);
       }
-    });
+    }
+
+    el('bulk-approve').addEventListener('click', bulkApprove);
 
     el('bulk-reject').addEventListener('click', async () => {
-      const ids = [...state.selected];
-      if (!ids.length) {
-        showToast('warning', 'Nothing selected', 'Select one or more corrections first.');
-        return;
-      }
+      const pick = bulkSelection('reject');
+      if (refuseUnfitSelection('reject', pick)) return;
+      const ids = pick.ids;
+      if (refuseBlockedSelection(ids)) return;
+      if (state.loading) return;
       const comment = await openModal(
         `Reject ${ids.length} Correction${ids.length > 1 ? 's' : ''}`,
-        `${ids.length} correction${ids.length > 1 ? 's' : ''} will be rejected.`,
+        `${ids.length} selected correction${ids.length > 1 ? 's' : ''} in ${describeView()} will be rejected.${skippedNote('reject', pick.skipped, false)}`,
         'Reject All',
         'btn-danger'
       );
       if (comment === null) return;
       try {
-        await apiAction('POST', 'api/corrections/bulk', { ids, action: 'reject', comment });
-        applyBulkStatusUpdate(ids, 'rejected', comment);
-        showToast('success', 'Bulk Rejected', `${ids.length} corrections rejected`);
-        refreshCorrectionsInBackground();
+        const result = await apiAction('POST', 'api/corrections/bulk', { ids, action: 'reject', comment, expected_count: ids.length, ...expectedStatus() });
+        applyBulkStatusUpdate(ids, 'rejected', comment, result && result.corrections);
+        showToast('success', 'Bulk Rejected', `${ids.length} correction${ids.length > 1 ? 's' : ''} rejected.${skippedNote('reject', pick.skipped, true)}`);
+        refreshCounts();
       } catch (err) {
         showToast('error', 'Failed', err.message);
       }
     });
 
     el('bulk-reset').addEventListener('click', async () => {
-      const ids = [...state.selected];
-      if (!ids.length) {
-        showToast('warning', 'Nothing selected', 'Select one or more corrections first.');
-        return;
-      }
+      const pick = bulkSelection('reset');
+      if (refuseUnfitSelection('reset', pick)) return;
+      const ids = pick.ids;
+      if (refuseBlockedSelection(ids)) return;
+      if (state.loading) return;
       try {
-        await apiAction('POST', 'api/corrections/bulk', { ids, action: 'reset' });
-        applyBulkStatusUpdate(ids, 'pending');
-        showToast('success', 'Bulk Reset', `${ids.length} corrections reset to pending`);
-        refreshCorrectionsInBackground();
+        const result = await apiAction('POST', 'api/corrections/bulk', { ids, action: 'reset', expected_count: ids.length, ...expectedStatus() });
+        applyBulkStatusUpdate(ids, 'pending', '', result && result.corrections);
+        showToast('success', 'Bulk Reset', `${ids.length} correction${ids.length > 1 ? 's' : ''} reset to pending.${skippedNote('reset', pick.skipped, true)}`);
+        refreshCounts();
       } catch (err) {
         showToast('error', 'Failed', err.message);
       }
     });
 
     el('bulk-delete').addEventListener('click', async () => {
-      const ids = [...state.selected];
+      const ids = selectedIds();
       if (!ids.length) {
         showToast('warning', 'Nothing selected', 'Select one or more corrections first.');
         return;
       }
+      if (state.loading) return;
       const confirmed = await confirmToast(
         `Remove ${ids.length} correction${ids.length > 1 ? 's' : ''}?`,
-        `The selected correction${ids.length > 1 ? 's' : ''} will be marked rejected and kept in review history.`,
+        `The selected correction${ids.length > 1 ? 's' : ''} in ${describeView()} will be marked rejected and kept in review history.`,
         'Reject & remove'
       );
       if (!confirmed) return;
       try {
         const comment = 'Rejected automatically after deletion request.';
-        await apiAction('POST', 'api/corrections/bulk', { ids, action: 'delete', comment });
+        await apiAction('POST', 'api/corrections/bulk', { ids, action: 'delete', comment, expected_count: ids.length, ...expectedStatus() });
         removeCorrectionIds(ids);
         showToast('success', 'Deleted', `${ids.length} correction${ids.length > 1 ? 's were' : ' was'} marked rejected and removed`);
-        refreshCorrectionsInBackground();
+        refreshCounts();
       } catch (err) {
         showToast('error', 'Failed', err.message);
       }
     });
 
     el('bulk-deselect').addEventListener('click', () => {
+      state.selected.forEach(id => {
+        const card = cardElement(id);
+        if (card) {
+          card.classList.remove('selected');
+          const box = card.querySelector('[data-check]');
+          if (box) box.checked = false;
+        }
+      });
       state.selected.clear();
-      render();
+      updateBulkBar();
     });
 
     /* ── Keyboard shortcuts ──────────────────────── */
 
+    function isTypingTarget(target) {
+      if (!target || !target.tagName) return false;
+      if (target.isContentEditable) return true;
+      if (target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return true;
+      if (target.tagName !== 'INPUT') return false;
+      return !['checkbox', 'radio', 'button', 'range'].includes(String(target.type || '').toLowerCase());
+    }
+
+    function currentCorrection() {
+      if (state.currentId == null) return null;
+      return state.corrections.find(c => c.id === state.currentId) || null;
+    }
+
     document.addEventListener('keydown', (e) => {
-      // Escape closes modal
+      if (!document.body.contains(listEl)) return;
+      const modalOpen = el('action-modal').classList.contains('open');
+      const helpOpen = el('shortcuts-modal').classList.contains('open');
       if (e.key === 'Escape') {
-        if (el('action-modal').classList.contains('open')) {
-          closeModal(null);
-        }
+        if (modalOpen) { closeModal(null); return; }
+        if (helpOpen) { closeShortcuts(); return; }
         if (state.editingId !== null) {
+          const id = state.editingId;
           state.editingId = null;
-          render();
+          patchCard(id);
+          setCurrent(id, { focus: true });
         }
+        return;
       }
+      if (modalOpen || helpOpen) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+      if (isTypingTarget(e.target)) return;
+      if (e.target && e.target.closest && e.target.closest('.multi-select-dropdown')) return;
+      const inTablist = !!(e.target && e.target.closest && e.target.closest('[role="tablist"]'));
+
       // '/' focuses search
-      if (e.key === '/' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+      if (e.key === '/') {
         e.preventDefault();
         el('search-input').focus();
+        return;
       }
-    });
+      if (e.key === '?') {
+        e.preventDefault();
+        openShortcuts();
+        return;
+      }
+      if (e.key === 'A' && e.shiftKey) {
+        e.preventDefault();
+        bulkApprove();
+        return;
+      }
+      const onCard = !inTablist && e.target && e.target.classList && e.target.classList.contains('correction-card');
+      if (e.key === 'j' || (onCard && e.key === 'ArrowDown')) {
+        e.preventDefault();
+        moveCurrent(1);
+        return;
+      }
+      if (e.key === 'k' || (onCard && e.key === 'ArrowUp')) {
+        e.preventDefault();
+        moveCurrent(-1);
+        return;
+      }
+      const current = currentCorrection();
+      if (!current) return;
+      if ((e.key === 'a' || e.key === 'r') && current.status === 'pending' && current.review_block) {
+        // The project's review rules stop this viewer (C074); same as the
+        // disabled buttons.
+        e.preventDefault();
+        showToast('error', 'Not allowed', current.review_block);
+      } else if (e.key === 'a' && current.status === 'pending') {
+        e.preventDefault();
+        approveCorrection(current.id);
+      } else if (e.key === 'r' && current.status === 'pending') {
+        e.preventDefault();
+        rejectCorrection(current.id);
+      } else if (e.key === 'e') {
+        e.preventDefault();
+        startEditing(current.id);
+      } else if (e.key === 'x') {
+        e.preventDefault();
+        toggleSelected(current.id);
+      } else if (e.key === 'o' || (onCard && e.key === 'Enter')) {
+        e.preventDefault();
+        toggleExpanded(current.id);
+        focusCurrentCard();
+      }
+    }, { signal: pageSignal });
 
     /* ── Init ────────────────────────────────────── */
 
     async function init() {
       if (window.QymShell && !window.__QYM_USER__) {
-        await new Promise((resolve) => document.addEventListener('qym:shell-ready', resolve, { once: true }));
+        await new Promise((resolve) => document.addEventListener('qym:shell-ready', resolve, pageListen({ once: true })));
       }
+      if (pageSignal && pageSignal.aborted) return;
+      applyReviewsUrlState();
       await loadHeaderUser();
       fetchCorrections();
     }

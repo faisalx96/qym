@@ -201,6 +201,8 @@ _FILE = {"files": {"file": ("notes.md", b"text", "text/markdown")}}
 REFUSED = [
     # Runs: review workflow, score and diagnosis edits, delete/restore.
     ("POST", "/v1/runs/{run_id}/submit", "/v1/runs/r1/submit", None, MGR),
+    ("POST", "/v1/runs/submit", "/v1/runs/submit", {"json": {"run_ids": ["r1"]}}, MGR),
+    ("POST", "/v1/runs/{run_id}/owner", "/v1/runs/r1/owner", {"json": {"user_id": "member"}}, MGR),
     ("POST", "/v1/runs/{run_id}/approve", "/v1/runs/r-review/approve", {"json": {}}, MGR),
     ("POST", "/v1/runs/{run_id}/reject", "/v1/runs/r-review/reject", {"json": {}}, MGR),
     ("POST", "/v1/runs/{run_id}/unapprove", "/v1/runs/r-review/unapprove", None, MGR),
@@ -334,6 +336,13 @@ REFUSED = [
         {"json": {"role": "MANAGER"}},
         MGR,
     ),
+    (
+        "PATCH",
+        "/v1/projects/{project_id}/review-rules",
+        "/v1/projects/pa/review-rules",
+        {"json": {"correction_approvers": "managers"}},
+        MGR,
+    ),
     ("POST", "/v1/projects/{project_id}/llm-connections", "/v1/projects/pa/llm-connections", {"json": {"name": "b"}}, MGR),
     (
         "PUT",
@@ -455,6 +464,7 @@ DATASET_WRITES = [
     ("POST", "/v1/datasets", "/v1/datasets", {"json": {"name": "n", "project_slug": "pa"}}, MGR),
     ("PATCH", "/v1/datasets/{dataset_ref}", "/v1/datasets/golden" + _Q, {"json": {}}, MGR),
     ("DELETE", "/v1/datasets/{dataset_ref}", "/v1/datasets/golden" + _Q, None, MGR),
+    ("POST", "/v1/datasets/{dataset_id}:restore", "/v1/datasets/gone:restore" + _Q, None, MGR),
     ("POST", "/v1/datasets/{dataset_ref}/versions", "/v1/datasets/golden/versions" + _Q, {"json": {}}, MGR),
     (
         "POST",
@@ -559,9 +569,13 @@ ALLOWED = {
     ("POST", "/api/dashboard/runs"): "read",
     ("POST", "/api/dashboard/overview"): "read",
     ("POST", "/api/dashboard/kpis"): "read",
+    ("POST", "/api/dashboard/models/stats"): "read",
+    ("POST", "/api/dashboard/trend"): "read",
     ("POST", "/api/dashboard/points"): "read",
+    ("POST", "/api/dashboard/neighbors"): "read",
     ("POST", "/api/runs/{run_id}/items/details"): "read",
     ("POST", "/api/runs/{run_id}/items/search"): "read",
+    ("POST", "/api/runs/{run_id}/items/reasons"): "read",
     ("POST", "/api/runs/{run_id:path}/analysis-examples"): "read",
     ("POST", "/api/runs/{run_id:path}/analyze-preview"): "read (prompt preview)",
     # Dry runs that store nothing.
@@ -688,6 +702,7 @@ def test_non_members_still_get_403_not_the_archive_state(archived):
         ("GET", "/v1/projects/pa", None),
         ("GET", "/v1/projects/pa/api-keys", None),
         ("POST", "/api/runs/r1/items/details", {"json": {"item_ids": ["i1"]}}),
+        ("POST", "/api/runs/r1/items/reasons", {"json": {"item_ids": ["i1"], "metric": "m"}}),
         (
             "POST",
             "/api/runs/r1/items/search",
@@ -969,7 +984,9 @@ _SLUG_READS = [
     ("GET", "/api/runs/live?project_slug=pa", None),
     ("POST", "/api/dashboard/runs", {"json": {"project_slug": "pa"}}),
     ("POST", "/api/dashboard/kpis", {"json": {"project_slug": "pa"}}),
+    ("POST", "/api/dashboard/trend", {"json": {"project_slug": "pa"}}),
     ("POST", "/api/dashboard/overview", {"json": {"project_slug": "pa"}}),
+    ("POST", "/api/dashboard/neighbors", {"json": {"project_slug": "pa", "run_id": "r1"}}),
     ("GET", "/v1/datasets?project_slug=pa", None),
     ("GET", "/api/projects/pa/analysis-category-catalog", None),
     ("GET", "/api/projects/pa/analysis-config", None),

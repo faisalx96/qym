@@ -49,6 +49,8 @@ def session_factory(monkeypatch):
     monkeypatch.setenv("QYM_AUTH_MODE", "proxy_headers")
     monkeypatch.setenv("QYM_AUTH_LOCAL_ENABLED", "true")
     monkeypatch.setenv("QYM_AUTH_SESSION_SECRET", SECRET)
+    # These tests sign people up next to an admin (C077: sign-up is opt-in).
+    monkeypatch.setenv("QYM_AUTH_LOCAL_SIGNUP", "true")
     monkeypatch.setenv("QYM_BASE_URL", "http://testserver")
     monkeypatch.setenv("QYM_ENVIRONMENT", "test")
     engine = create_engine(
@@ -256,7 +258,8 @@ def test_admin_cannot_disable_themselves_or_the_last_admin(app, session_factory)
         assert "own account" in own.json()["detail"]
         demote = admin.put("/v1/admin/users/admin-1", json={"role": "MEMBER"}, headers=headers)
         assert demote.status_code == 409
-        assert "active admin" in demote.json()["detail"]
+        # C067: never your own admin role, even with other admins around.
+        assert "your own admin role" in demote.json()["detail"]
         # Other users stay manageable.
         member = admin.put("/v1/admin/users/member-1", json={"is_active": False}, headers=headers)
         assert member.status_code == 200

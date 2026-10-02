@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Datasets</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p0-20260930">
-  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
-  <script src="/static/qym_safe.js?v=p0-20260930"></script>
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261002">
+  <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
+  <script src="/static/qym_safe.js?v=p1-20261001"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p0-20260930-3"></script>
+  <script src="/static/shell.js?v=p1-20261001"></script>
   <script src="/static/qym_table.js"></script>
   <script src="/static/metrics.js?v=p0-20260930-3"></script>
-  <script src="/static/trace_viewer.js?v=p0-20260930"></script>
+  <script src="/static/trace_viewer.js?v=p1-20261001"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
     /* ============================================================
@@ -124,7 +124,8 @@
       padding: 7px 12px 7px 10px; cursor: pointer; transition: background .12s ease; border-bottom: 1px solid var(--border-subtle);
     }
     .dsx-version-row:last-child { border-bottom: 0; }
-    .dsx-version-row:hover { background: var(--bg-hover); }
+    .dsx-version-row:hover, .dsx-version-row.focused { background: var(--bg-hover); }
+    .dsx-version-row.focused { box-shadow: inset 0 0 0 1px var(--accent-primary); }
     .dsx-version-row.active { background: rgba(0,212,170,0.07); box-shadow: inset 2px 0 0 var(--accent-primary); }
     /* The version is a fixed gutter, like editor line numbers: always the same style
        and position whether or not the version has a name. Name and status pill cluster
@@ -193,12 +194,23 @@
       font-size: var(--font-sm);
     }
     .dsx-grid { display: grid; gap: var(--space-md); grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); padding: var(--space-lg) var(--space-xl); }
+    .dsx-grid > .dsx-load-error { grid-column: 1 / -1; }
     .dsx-card {
       background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 10px;
       padding: 16px 16px 12px; display: flex; flex-direction: column; gap: 11px; cursor: pointer;
       transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease;
     }
     .dsx-card:hover { border-color: var(--border-strong); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,0.20); }
+    /* Cards and run names are real links (Tab, middle-click, "Copy link"). */
+    a.dsx-card { color: inherit; text-decoration: none; }
+    a.dsx-version-row { color: inherit; text-decoration: none; }
+    a.dsx-version-row:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
+    a.dsx-card:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+    .dsx-table a.run-name,
+    .dsx-table a.run-link,
+    .dsx-item-runs-table a.run-name,
+    .runs-compact .dsx-run-result-table a.run-link { display: inline-block; vertical-align: bottom; }
+    .dsx-runs-pagination { margin-top: var(--space-sm); }
     .dsx-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
     .dsx-card-top .owner-name { min-width: 0; }
     .dsx-card-title { font-size: var(--font-lg); font-weight: 650; color: var(--text-primary); margin: 0; }
@@ -253,6 +265,14 @@
     }
     .dsx-table tbody td { padding: 5px 10px; font-size: var(--font-base); font-family: var(--font-sans); line-height: 1.35; color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle); vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .dsx-table tbody tr { cursor: pointer; transition: background .1s ease; }
+    .dsx-row-link { color: inherit; text-decoration: none; display: inline-block; min-width: 100%; border-radius: 3px; }
+    .dsx-row-link:hover { color: var(--accent-primary); text-decoration: underline; }
+    .dsx-row-link:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+    .dsx-table tbody tr:focus-within td { background: var(--bg-hover); }
+    .dsx-context-menu .actions-item { width: 100%; border: 0; background: transparent; font-family: var(--font-sans); text-align: left; }
+    .dsx-context-menu .actions-item:focus-visible { outline: none; background: var(--bg-elevated); color: var(--text-primary); box-shadow: inset 2px 0 0 var(--accent-primary); }
+    .dsx-context-menu .actions-item[aria-disabled="true"] { color: var(--text-dim); cursor: not-allowed; }
+    .dsx-context-menu .actions-item[aria-disabled="true"]:hover { background: transparent; color: var(--text-dim); }
     .dsx-table tbody tr:hover td { background: var(--bg-hover); }
     .dsx-table th.sortable { cursor: pointer; }
     .dsx-table .sort-btn { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; background: transparent; border: 0; padding: 0; color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit; cursor: inherit; pointer-events: none; }
@@ -287,7 +307,7 @@
     .dsx-table .col-latency { width: 94px; font-variant-numeric: tabular-nums; }
     .dsx-table .col-actions { width: 44px; text-align: right; }
     .dsx-table .run-link,
-    .dsx-table .run-name { cursor: pointer; color: var(--text-primary); text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; background: transparent; border: 0; padding: 0; margin: 0; text-align: left; font: inherit; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dsx-table .run-name { display: inline-block; vertical-align: middle; cursor: pointer; color: var(--text-primary); text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; background: transparent; border: 0; padding: 0; margin: 0; text-align: left; font: inherit; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .dsx-table .run-link:hover,
     .dsx-table .run-link:focus-visible,
     .dsx-table .run-name:hover,
@@ -374,6 +394,14 @@
       min-height: 92px; max-height: 55vh;
     }
     .dsx-code.expanded .dsx-code-input { max-height: none; }
+    /* Arabic and mixed text (C053): every line takes its own direction and
+       aligns to its start. The editor's textarea and highlight layer share
+       the rule, so the caret stays over its glyph. */
+    .dsx-code-hl, .dsx-code-input, .dsx-json-view, .dsx-diff-pane, .dsx-hist-diff-pane,
+    .dsx-preview, .dsx-preview-popover, .dsx-item-run-output {
+      unicode-bidi: plaintext;
+      text-align: start;
+    }
     .dsx-code-input::selection { background: rgba(0,168,255,0.28); }
     .dsx-jtok-key { color: #00a8ff; }
     .dsx-jtok-str { color: #00d4aa; }
@@ -481,7 +509,7 @@
 
     /* LINEAGE */
     .dsx-lineage { padding: var(--space-md); display: flex; flex-direction: column; gap: 10px; font-family: var(--font-mono); font-size: var(--font-md); }
-    .dsx-lineage-node { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--bg-surface); cursor: pointer; }
+    .dsx-lineage-node { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 8px 10px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--bg-surface); cursor: pointer; }
     .dsx-lineage-node:hover { border-color: var(--border-strong); }
     .dsx-lineage-node.active { border-color: var(--accent-primary); }
     .dsx-lineage-tree-node { position: relative; display: flex; flex-direction: column; gap: 4px; }
@@ -493,19 +521,30 @@
     .dsx-lineage-changes { display: flex; flex-direction: column; gap: 2px; margin: 0 0 4px 44px; padding-left: 0; }
     .dsx-lineage-tree-node.has-children > .dsx-lineage-changes { position: relative; }
     .dsx-lineage-tree-node.has-children > .dsx-lineage-changes::before { content: ""; position: absolute; left: -26px; top: -4px; bottom: 0; border-left: 2px solid rgba(152,152,168,0.48); }
-    .dsx-lineage-change { display: flex; align-items: baseline; gap: 8px; padding: 2px 0; font-size: var(--font-base); color: var(--text-secondary); }
+    .dsx-lineage-change { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: var(--font-base); color: var(--text-secondary); flex-wrap: wrap; }
     .dsx-lineage-change .glyph { color: var(--text-dim); width: 14px; text-align: center; flex: 0 0 auto; }
     .dsx-lineage-change .ctype { font-weight: 600; color: var(--text-primary); }
     .dsx-lineage-change .cdetail { color: var(--text-secondary); }
-    .dsx-lineage-change .cwhen { margin-left: auto; color: var(--text-muted); font-size: var(--font-sm); padding-left: 8px; }
-    .dsx-lineage-meta { color: var(--text-muted); font-size: var(--font-sm); }
+    .dsx-lineage-change .cwhen { flex: 0 0 auto; min-width: 150px; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--font-sm); font-variant-numeric: tabular-nums; }
+    .dsx-lineage-log-head { margin: var(--space-xl) 0 var(--space-sm); }
+    .dsx-lineage-log-head h2 { font-size: var(--font-lg); font-weight: 650; margin: 0 0 4px 0; color: var(--text-primary); }
+    .dsx-lineage-log-head p { margin: 0; }
+    .dsx-lineage-log { list-style: none; margin: 0; padding: var(--space-sm) var(--space-md); border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--bg-surface); }
+    .dsx-lineage-log .dsx-lineage-change + .dsx-lineage-change { border-top: 1px solid var(--border-subtle); }
+    .dsx-lineage-log .dsx-lineage-user.owner-name { font-family: var(--font-sans); }
+    .dsx-lineage-open { font-family: var(--font-mono); color: var(--text-primary); font-weight: 650; text-decoration: none; border-radius: 3px; }
+    .dsx-lineage-open.named { color: var(--text-muted); font-weight: 500; }
+    .dsx-lineage-open:hover { text-decoration: underline; color: var(--accent-primary); }
+    .dsx-lineage-open:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+    .dsx-lineage-meta { color: var(--text-muted); font-size: var(--font-sm); white-space: nowrap; }
     .dsx-lineage-user-wrap { display: inline-flex; align-items: center; gap: 5px; color: var(--text-muted); font-size: var(--font-sm); white-space: nowrap; }
     .dsx-lineage-user.owner-name { font-size: var(--font-sm); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 7px 2px 3px; border: 1px solid var(--border-subtle); border-radius: 999px; background: var(--bg-elevated); }
     .dsx-lineage-deltas { display: inline-flex; gap: 5px; align-items: center; flex-wrap: wrap; }
-    .dsx-lineage-node .actions { margin-left: auto; display: inline-flex; gap: 6px; align-items: center; }
+    .dsx-lineage-node .actions { margin-left: auto; display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; align-items: center; }
     .dsx-lineage-node .mini-action { border: 1px solid var(--border-default); background: var(--bg-elevated); color: var(--text-muted); border-radius: 5px; padding: 2px 6px; font-size: var(--font-sm); cursor: pointer; }
     .dsx-lineage-node .mini-action:hover { color: var(--accent-primary); border-color: rgba(0,212,170,0.35); }
-    .dsx-lineage-times { display: inline-flex; gap: 6px; align-items: center; color: var(--text-muted); font-size: var(--font-sm); padding-left: 8px; white-space: nowrap; }
+    .dsx-lineage-times { display: inline-flex; flex-wrap: wrap; gap: 2px 6px; align-items: center; color: var(--text-muted); font-size: var(--font-sm); padding-left: 8px; }
+    .dsx-lineage-times time { white-space: nowrap; font-variant-numeric: tabular-nums; }
     .dsx-lineage-times .sep { color: var(--border-strong); }
 
     /* SETTINGS */
@@ -530,7 +569,19 @@
     .dsx-compare-tabs { display: flex; gap: 2px; padding: 0 var(--space-xl); border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface); }
     .dsx-compare-list { padding: var(--space-md) var(--space-xl); display: flex; flex-direction: column; gap: 6px; }
     .dsx-diff-row { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; }
-    .dsx-diff-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; cursor: pointer; background: var(--bg-surface); }
+    .dsx-diff-head { display: flex; align-items: center; gap: 12px; padding: 6px 12px 6px 6px; cursor: pointer; background: var(--bg-surface); }
+    .dsx-diff-toggle { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; padding: 4px 6px; background: transparent; border: 0; border-radius: 5px; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+    .dsx-diff-toggle:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
+    .dsx-diff-chevron { color: var(--text-dim); width: 12px; transition: transform .12s ease; }
+    .dsx-diff-row.expanded .dsx-diff-chevron { transform: rotate(90deg); }
+    .dsx-diff-when { color: var(--text-muted); font-family: var(--font-mono); font-size: var(--font-sm); font-variant-numeric: tabular-nums; }
+    .dsx-diff-toggle .fields { margin-left: auto; }
+    .dsx-diff-pane.same { grid-column: 2 / span 2; }
+    .dsx-diff-toolarge { grid-column: 2 / span 2; margin: 0; color: var(--warning); font-family: var(--font-sans); font-size: var(--font-sm); }
+    .dsx-hist-diff-field .dsx-diff-toolarge { grid-column: auto; }
+    .dsx-compare-order { margin: 0 0 4px; color: var(--text-muted); font-size: var(--font-sm); }
+    .dsx-compare-more { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 2px; }
+    .dsx-compare-count { color: var(--text-muted); font-size: var(--font-sm); font-variant-numeric: tabular-nums; }
     .dsx-diff-head:hover { background: var(--bg-hover); }
     .dsx-diff-title { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
     .dsx-diff-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -538,13 +589,14 @@
     .dsx-diff-idlabel { color: var(--text-muted); font-size: var(--font-sm); text-transform: uppercase; letter-spacing: 0.05em; }
     .dsx-diff-head .id { font-family: var(--font-mono); font-size: var(--font-md); color: var(--text-primary); }
     .dsx-diff-head .copy { flex: 0 0 auto; }
+    .dsx-diff-head .copy svg { width: 14px; height: 14px; }
     .dsx-diff-head .fields { font-size: var(--font-sm); color: var(--text-muted); flex: 0 0 auto; }
     .dsx-diff-body { display: none; border-top: 1px solid var(--border-subtle); padding: var(--space-md); flex-direction: column; gap: var(--space-sm); }
     .dsx-diff-row.expanded .dsx-diff-body { display: flex; }
     .dsx-diff-field { display: grid; grid-template-columns: 110px 1fr 1fr; gap: 10px; font-family: var(--font-mono); font-size: var(--font-base); }
     .dsx-diff-field .name { color: var(--text-muted); font-family: var(--font-sans); text-transform: uppercase; font-size: var(--font-sm); letter-spacing: 0.05em; padding-top: 6px; }
     .dsx-diff-typenote { display: block; margin-top: 4px; color: var(--warning); font-family: var(--font-sans); font-size: var(--font-sm); text-transform: none; letter-spacing: 0; }
-    .dsx-diff-pane { background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; word-break: break-word; line-height: 1.5; max-height: 240px; overflow: auto; }
+    .dsx-diff-pane { position: relative; background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; word-break: break-word; line-height: 1.5; max-height: 240px; overflow: auto; }
     .dsx-diff-pane.before { border-left: 3px solid var(--error); }
     .dsx-diff-pane.after { border-left: 3px solid var(--success, #22c55e); }
     .dsx-diff-added-tok { background: rgba(34,197,94,0.20); color: var(--text-primary); padding: 0 2px; border-radius: 3px; }
@@ -582,32 +634,27 @@
     .dsx-wiz-slug { font-family: var(--font-mono); color: var(--text-primary); }
     .shell-form-input[aria-invalid="true"] { border-color: var(--error); }
 
-    .dsx-mapping { display: grid; grid-template-columns: 260px 1fr; gap: 14px; }
-    .dsx-mapping-bank { display: flex; flex-direction: column; gap: 8px; align-content: start; }
-    .dsx-mapping-fields { display: flex; flex-direction: column; gap: 8px; }
-    .dsx-mapping-chip {
-      display: flex; align-items: center; justify-content: space-between; gap: 8px;
-      border: 1px solid var(--border-default); background: var(--bg-elevated); border-radius: 6px;
-      padding: 7px 9px; color: var(--text-secondary); font-size: var(--font-base); cursor: grab;
-    }
-    .dsx-mapping-chip:hover { color: var(--text-primary); border-color: var(--border-strong); }
-    .dsx-mapping-chip.dragging { opacity: 0.45; }
-    .dsx-mapping-field {
-      border: 1px dashed var(--border-default); background: var(--bg-elevated); border-radius: 8px;
-      padding: 10px; display: flex; flex-direction: column; gap: 6px;
-    }
-    .dsx-mapping-field.over { border-color: var(--accent-primary); background: rgba(0,212,170,0.06); }
-    .dsx-mapping-field.invalid { border-color: var(--error); }
-    .dsx-mapping-bank { padding: 10px; border: 1px dashed transparent; border-radius: 8px; transition: border-color .12s ease, background .12s ease; }
-    .dsx-mapping-bank.over { border-color: var(--accent-primary); background: rgba(0,212,170,0.06); }
-    .dsx-mapping-chip.dsx-chip-item { cursor: grab; padding: 4px 8px; }
-    .dsx-mapping-chip.dsx-chip-item:active { cursor: grabbing; }
-    .dsx-mapping-field-label { display: flex; align-items: center; justify-content: space-between; color: var(--text-muted); font-size: var(--font-sm); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
-    .dsx-mapping-field-value { display: flex; flex-wrap: wrap; gap: 6px; min-height: 24px; }
-    .dsx-mapping-field-empty { color: var(--text-dim); font-size: var(--font-base); font-style: italic; }
+    .dsx-mapping-step { display: flex; flex-direction: column; gap: 12px; }
+    .dsx-mapping-table-wrap { max-height: 300px; overflow: auto; border: 1px solid var(--border-subtle); border-radius: 6px; }
+    .dsx-mapping-table { width: 100%; border-collapse: collapse; }
+    .dsx-mapping-table th, .dsx-mapping-table td { padding: 6px 10px; border-bottom: 1px solid var(--border-subtle); text-align: left; vertical-align: middle; font-size: var(--font-base); color: var(--text-secondary); }
+    .dsx-mapping-table thead th { position: sticky; top: 0; z-index: 1; background: var(--bg-elevated); color: var(--text-muted); font-size: var(--font-sm); font-weight: 650; text-transform: uppercase; letter-spacing: 0.05em; }
+    .dsx-mapping-table tbody th { font-weight: 600; color: var(--text-primary); white-space: nowrap; }
+    .dsx-mapping-table tbody tr:last-child th, .dsx-mapping-table tbody tr:last-child td { border-bottom: 0; }
+    .dsx-mapping-table tbody tr.ignored th, .dsx-mapping-table tbody tr.ignored td.dsx-mapping-sample { color: var(--text-muted); }
+    .dsx-mapping-col { font-family: var(--font-mono); cursor: pointer; }
+    .dsx-mapping-sample { max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dsx-mapping-table select { min-width: 180px; }
+    .dsx-mapping-summary { color: var(--text-muted); font-size: var(--font-sm); line-height: 1.45; }
+    .dsx-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+    .dsx-file-browse { background: transparent; border: 0; color: var(--text-secondary); font: inherit; font-size: var(--font-md); cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+    .dsx-file-browse strong { color: var(--text-primary); }
+    .dsx-file-browse .dsx-file-choose { color: var(--accent-primary); text-decoration: underline; }
+    .dsx-file-browse:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+    .dsx-wizard-steps { list-style: none; margin: 0; }
     .dsx-preview-table { max-height: 240px; overflow: auto; border: 1px solid var(--border-subtle); border-radius: 6px; }
     .dsx-preview-table table { width: 100%; border-collapse: collapse; }
-    .dsx-preview-table th, .dsx-preview-table td { padding: 6px 9px; font-size: var(--font-sm); font-family: var(--font-mono); border-bottom: 1px solid var(--border-subtle); text-align: left; color: var(--text-secondary); }
+    .dsx-preview-table th, .dsx-preview-table td { padding: 6px 9px; font-size: var(--font-sm); font-family: var(--font-sans); border-bottom: 1px solid var(--border-subtle); text-align: left; color: var(--text-secondary); }
     .dsx-preview-table th { background: var(--bg-elevated); color: var(--text-muted); position: sticky; top: 0; }
 
     /* CHIP INPUTS (alias / labels / tags) */
@@ -617,20 +664,29 @@
     .dsx-chip-item button { background: transparent; border: 0; color: var(--text-dim); cursor: pointer; padding: 0 2px; font-size: 13px; line-height: 1; }
     .dsx-chip-item button:hover { color: var(--error); }
 
+    /* DELETED DATASETS / RULE NOTES */
+    .dsx-deleted-list { padding: 0 var(--space-xl) var(--space-xl); }
+    .dsx-deleted-name { color: var(--text-primary); font-weight: 600; }
+    .dsx-deleted-slug { color: var(--text-muted); font-family: var(--font-mono); font-size: var(--font-sm); margin-top: 2px; }
+    .dsx-deleted-table td.col-run-date { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .dsx-deleted-table td.col-restore { text-align: right; }
+    .dsx-page a.shell-btn { text-decoration: none; }
+    .dsx-rule-note { margin: 0; color: var(--text-muted); font-size: var(--font-sm); }
+    .shell-btn[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
+
     /* MISC */
     .dsx-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--border-default); border-top-color: var(--accent-primary); border-radius: 50%; animation: dsxSpin 0.8s linear infinite; vertical-align: -2px; }
     @keyframes dsxSpin { to { transform: rotate(360deg); } }
 
     @media (max-width: 900px) {
-      .dsx-mapping { grid-template-columns: 1fr; }
       .dsx-hero, .dsx-content, .dsx-toolbar, .dsx-items-toolbar { padding-left: var(--space-md); padding-right: var(--space-md); }
       .dsx-tabs { padding: 0; }
       .dsx-grid { padding: var(--space-md); }
       .dsx-diff-field { grid-template-columns: 1fr; }
     }
   </style>
-  <link rel="stylesheet" href="/static/ui_components.css?v=p0-20260930">
-  <script defer src="/static/ui_components.js?v=p0-20260930-2"></script>
+  <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261001">
+  <script defer src="/static/ui_components.js?v=p1-20261001"></script>
 </head>
 <body>
   <main class="dsx-page" id="dsx-root">
@@ -732,6 +788,33 @@
       return e;
     }
     function escapeHtml(s){ return QymSafe.escapeHtml(s == null ? '' : String(s)); }
+    // A failed load: "not found" only for a real 404, otherwise the shared error
+    // state (what failed, why, Retry / Sign in) in place of the region (C038).
+    function renderDatasetLoadError(host, title, error, onRetry, opts){
+      opts = opts || {};
+      if (!window.QymUIComponents && document.readyState === 'loading') {
+        // ui_components.js is deferred; a fast failure waits for it.
+        window.addEventListener('DOMContentLoaded', () => renderDatasetLoadError(host, title, error, onRetry, opts), { once: true });
+        return;
+      }
+      const kind = window.QymUIComponents ? window.QymUIComponents.classifyError(error).kind : '';
+      if (kind === 'not_found') {
+        title = opts.notFoundTitle || 'Dataset not found';
+      }
+      host.replaceChildren();
+      const panel = el('div', { className: 'dsx-load-error' });
+      host.appendChild(panel);
+      if (window.QymUIComponents) {
+        window.QymUIComponents.renderErrorState(panel, {
+          title,
+          error,
+          onRetry,
+          notFoundMessage: opts.notFoundMessage || 'It may have been deleted, or the link is wrong.',
+        });
+      } else {
+        panel.appendChild(el('div', { className: 'dsx-empty' }, [el('h3', null, title), el('p', null, (error && error.message) || '')]));
+      }
+    }
     function dsxSearchControl(input){
       const wrap = el('div', { className: 'dsx-search-wrap qym-search-wrap' });
       wrap.appendChild(input);
@@ -875,8 +958,37 @@
       if (Shell && typeof Shell.navigateTo === 'function') Shell.navigateTo(url);
       else window.location.href = url;
     }
+    // A real link (open in new tab, copy link, keyboard focus) that navigates
+    // in place on a plain click.
+    function spaLink(href, onNavigate, attrs, children){
+      const a = el('a', Object.assign({ href }, attrs || {}), children);
+      a.addEventListener('click', e => {
+        e.stopPropagation();
+        if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        onNavigate();
+      });
+      return a;
+    }
     function runDetailUrl(runId){
       return apiUrl('/projects/' + encodeURIComponent(state.slug) + '/runs/' + encodeURIComponent(runId));
+    }
+    // A run name as a real link: modified/middle clicks open a tab natively,
+    // a plain click stays in the app. With itemId it opens that run item.
+    function runLinkEl(className, runId, label, opts){
+      opts = opts || {};
+      const href = runDetailUrl(runId) + (opts.itemId ? '?item=' + encodeURIComponent(opts.itemId) : '');
+      return el('a', {
+        className,
+        href,
+        title: opts.title || null,
+        onclick: e => {
+          e.stopPropagation();
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+          e.preventDefault();
+          navigateToApp(href);
+        },
+      }, label);
     }
     function userDisplay(user){
       if (!user) return '';
@@ -979,6 +1091,7 @@
       if (!text) return;
       const pop = el('div', { className: 'dsx-preview-popover' });
       pop.textContent = text;
+      QymSafe.applyTextDir(pop, text);
       document.body.appendChild(pop);
       const rect = anchor.getBoundingClientRect();
       const margin = 10;
@@ -1105,6 +1218,8 @@
         base: params.get('base') || null,
         head: params.get('head') || null,
         q: params.get('q') || '',
+        view: params.get('view') === 'deleted' ? 'deleted' : '',
+        cmpTab: ['changed', 'added', 'removed', 'unchanged'].includes(params.get('tab')) ? params.get('tab') : 'changed',
         page: parseInt(params.get('page') || '0', 10),
         search: params.get('search') || '',
         sort: params.get('sort') || 'index_asc',
@@ -1137,10 +1252,13 @@
           set('label', overrides.label !== undefined ? overrides.label : state.label);
         }
       } else if (mode === 'catalog') {
+        set('view', overrides.view !== undefined ? overrides.view : state.catalogView);
         set('q', overrides.q !== undefined ? overrides.q : state.q);
       } else if (mode === 'compare') {
         set('base', overrides.base !== undefined ? overrides.base : state.baseVersion);
         set('head', overrides.head !== undefined ? overrides.head : state.headVersion);
+        const cmpTab = overrides.cmpTab !== undefined ? overrides.cmpTab : state.cmpTab;
+        if (cmpTab && cmpTab !== 'changed') set('tab', cmpTab);
       }
       const qs = params.toString();
       return path + (qs ? '?' + qs : '');
@@ -1155,6 +1273,8 @@
       state.baseVersion = p.base;
       state.headVersion = p.head;
       state.q = p.q;
+      state.catalogView = p.view || '';
+      state.cmpTab = p.cmpTab || 'changed';
       state.page = p.page || 0;
       state.search = p.search || '';
       state.sort = p.sort || 'index_asc';
@@ -1170,7 +1290,7 @@
     function navigate(overrides, opts){
       opts = opts || {};
       const url = buildUrl(overrides);
-      if (opts.replace) history.replaceState({}, '', url);
+      if (opts.replace) history.replaceState(history.state, '', url);
       else history.pushState({}, '', url);
       const p = parsePath();
       // silent: push/replace URL but don't rebuild the page (caller updates the affected DOM region).
@@ -1219,6 +1339,13 @@
       const project = state.project || resolveProjectFromShell();
       return !!(project && project.is_active === false);
     }
+    // Dataset rights come from the server (dataset.permissions); an older server
+    // without them keeps every action available, and the API still decides.
+    const PRODUCTION_RULE = 'Only project managers can change production.';
+    const DELETE_RULE = 'Only the dataset\u2019s creator or a project manager can delete it.';
+    function datasetPerms(){ return (state.dataset && state.dataset.permissions) || {}; }
+    function canSetProduction(){ return datasetPerms().can_set_production !== false; }
+    function canDeleteDataset(){ return datasetPerms().can_delete !== false; }
     function canEditVersion(v){
       return !!(v && v.status === 'draft' && !projectReadOnly());
     }
@@ -1276,9 +1403,11 @@
       try {
         const r = await apiFetch('/v1/datasets/' + encodeURIComponent(state.datasetRef) + '?project_slug=' + encodeURIComponent(state.slug));
         state.dataset = r.dataset || r;
+        state.detailError = null;
       } catch(e){
         state.detailCacheKey = null;
-        Shell.toast(e.message || 'Failed to load dataset', 'error');
+        // Shown in place of the page (renderDatasetLoadError); a toast would repeat it.
+        state.detailError = e;
         return false;
       }
       try {
@@ -1305,7 +1434,7 @@
       applyRouteState(p);
       if (opts.forceReload) {
         const ok = await ensureDatasetDetailLoaded({ force: true });
-        if (!ok) return;
+        if (!ok) { Shell.toast((state.detailError && state.detailError.message) || 'Failed to load dataset', 'error'); return; }
       } else {
         state.activeVersion = resolveActiveVersion();
       }
@@ -1328,7 +1457,7 @@
     async function refreshDetailView(opts){
       opts = opts || {};
       const ok = await ensureDatasetDetailLoaded({ force: !!opts.force });
-      if (!ok) return;
+      if (!ok) { Shell.toast((state.detailError && state.detailError.message) || 'Failed to load dataset', 'error'); return; }
       normalizeActiveVersionUrl();
       refreshDetailChrome();
       const host = document.getElementById('dsx-tab-content');
@@ -1339,6 +1468,11 @@
       itemPageRenderSeq++;
       const root = document.getElementById('dsx-root');
       root.innerHTML = '';
+      if (state.catalogView === 'deleted') {
+        setDatasetBreadcrumbs([{ label: 'Datasets', href: appPath('/projects/' + state.slug + '/datasets') }, { label: 'Deleted datasets' }]);
+        root.appendChild(deletedCatalogView());
+        return;
+      }
       setDatasetBreadcrumbs([{ label: 'Datasets' }]);
       root.appendChild(catalogView());
     }
@@ -1347,7 +1481,7 @@
       if (!root.children.length) root.innerHTML = '';
       const ok = await ensureDatasetDetailLoaded();
       if (!ok) {
-        root.innerHTML = '<div class="dsx-empty"><h3>Dataset not found</h3></div>';
+        renderDatasetLoadError(root, 'Couldn\u2019t load this dataset', state.detailError, () => renderDetail());
         return;
       }
       normalizeActiveVersionUrl();
@@ -1372,7 +1506,10 @@
         state.dataset = dr.dataset || dr;
         const vresp = await apiFetch('/v1/datasets/' + encodeURIComponent(state.datasetRef) + '/versions?project_slug=' + encodeURIComponent(state.slug));
         state.versions = vresp.versions || [];
-      } catch(e){ Shell.toast(e.message || 'Failed to load dataset', 'error'); return; }
+      } catch(e){
+        renderDatasetLoadError(root, 'Couldn\u2019t load this comparison', e, () => renderCompare());
+        return;
+      }
       setDatasetBreadcrumbs([
         { label: 'Datasets', href: appPath('/projects/' + state.slug + '/datasets') },
         { label: state.dataset.name, href: appPath('/projects/' + state.slug + '/datasets/' + encodeURIComponent(state.datasetRef)) },
@@ -1426,6 +1563,7 @@
       ]); });
       controls.appendChild(dsxSearchControl(search));
       controls.appendChild(sortSel);
+      controls.appendChild(spaLink(buildUrl({ mode: 'catalog', ref: null, view: 'deleted', q: '' }), () => navigate({ mode: 'catalog', ref: null, view: 'deleted', q: '' }), { className: 'shell-btn shell-btn-secondary qym-inline-action qym-inline-action--neutral dsx-deleted-link' }, 'Deleted datasets'));
       if (!projectReadOnly()) controls.appendChild(newBtn);
       bar.appendChild(controls);
       container.appendChild(bar);
@@ -1442,12 +1580,26 @@
       }
       container.appendChild(grid);
 
-      // Load + render
-      (async () => {
+      // Load + render. A failed load is an error with Retry, never "No datasets yet"
+      // (and never the create-your-first-dataset CTA).
+      const loadCatalog = async () => {
         try {
           const resp = await apiFetch('/v1/datasets?project_slug=' + encodeURIComponent(state.slug));
           state.datasets = resp.datasets || [];
-        } catch(e){ state.datasets = []; Shell.toast(e.message || 'Failed to load datasets', 'error'); }
+          state.datasetsError = null;
+        } catch(e){
+          state.datasets = [];
+          state.datasetsError = e;
+        }
+        if (state.datasetsError) {
+          controls.style.display = 'none';
+          sub.textContent = 'Curated examples you version, compare, and run against any model.';
+          renderDatasetLoadError(grid, 'Couldn\u2019t load datasets', state.datasetsError, () => {
+            grid.replaceChildren();
+            loadCatalog();
+          });
+          return;
+        }
         renderCatalogGrid();
         const totalCount = state.datasets.length;
         // First-run: let the empty-state CTA be the single focal point — the hero buttons
@@ -1457,9 +1609,10 @@
         sub.textContent = isEmpty
           ? 'Curated examples you version, compare, and run against any model.'
           : pluralize(totalCount, 'dataset') + ' · ' + pluralize(state.datasets.reduce((s, d) => s + (d.run_count || 0), 0), 'run');
-      })();
+      };
+      loadCatalog();
 
-      const debouncedRender = debounce(() => { state.q = search.value; renderCatalogGrid(); history.replaceState({}, '', buildUrl({})); }, 180);
+      const debouncedRender = debounce(() => { state.q = search.value; renderCatalogGrid(); history.replaceState(history.state, '', buildUrl({})); }, 180);
       search.addEventListener('input', debouncedRender);
       sortSel.addEventListener('change', () => { state._catalogSort = sortSel.value; renderCatalogGrid(); });
 
@@ -1507,7 +1660,17 @@
       }
 
       function catalogCard(d){
-        const card = el('div', { className: 'dsx-card', onclick: () => navigate({ mode: 'detail', ref: d.slug, tab: 'items', v: null, item: null }) });
+        const cardTarget = { mode: 'detail', ref: d.slug, tab: 'items', v: null, item: null };
+        const card = el('a', {
+          className: 'dsx-card',
+          href: buildUrl(cardTarget),
+          'aria-label': 'Open dataset ' + (d.name || d.slug),
+          onclick: e => {
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+            e.preventDefault();
+            navigate(cardTarget);
+          },
+        });
         const top = el('div', { className: 'dsx-card-top' });
         top.appendChild(datasetFingerprint(d.slug || d.name));
         const creatorPill = userPill(d.created_by, 'Created by');
@@ -1562,6 +1725,91 @@
         return card;
       }
 
+      return container;
+    }
+
+    // Deleted datasets: everything a delete moved here, newest first. Restoring
+    // brings a dataset back with its versions, items and history under its
+    // original slug; only project managers restore.
+    function deletedCatalogView(){
+      const container = el('div', { className: 'dsx-page' });
+      const bar = el('div', { className: 'dsx-cat-bar' });
+      bar.appendChild(el('h1', null, 'Deleted datasets'));
+      bar.appendChild(el('span', { className: 'dsx-cat-sub' }, 'Deleted datasets keep their versions, items and history until a project manager restores them.'));
+      bar.appendChild(el('div', { className: 'grow' }));
+      bar.appendChild(spaLink(buildUrl({ mode: 'catalog', ref: null, view: '' }), () => navigate({ mode: 'catalog', ref: null, view: '' }), { className: 'shell-btn shell-btn-secondary qym-inline-action qym-inline-action--neutral' }, '\u2190 All datasets'));
+      container.appendChild(bar);
+      const host = el('div', { className: 'dsx-deleted-list', 'aria-busy': 'true' });
+      host.appendChild(el('div', { className: 'dsx-skel-row' }, [el('div', { className: 'dsx-skeleton', style: { width: '60%' } })]));
+      container.appendChild(host);
+      (async () => {
+        let resp;
+        try {
+          resp = await apiFetch('/v1/datasets?deleted=true&project_slug=' + encodeURIComponent(state.slug));
+        } catch (e) {
+          host.removeAttribute('aria-busy');
+          host.replaceChildren(el('div', { className: 'dsx-empty' }, [el('p', null, e.message || 'Failed to load deleted datasets')]));
+          return;
+        }
+        host.removeAttribute('aria-busy');
+        const rows = resp.datasets || [];
+        const canRestore = !!(resp.permissions && resp.permissions.can_manage) && !projectReadOnly();
+        if (!rows.length) {
+          host.replaceChildren(el('div', { className: 'dsx-empty' }, [el('div', { className: 'icon' }, '\u2205'), el('h3', null, 'No deleted datasets'), el('p', null, 'Datasets you delete appear here and can be restored.')]));
+          return;
+        }
+        host.replaceChildren();
+        const tableWrap = el('div', { className: 'dsx-table-wrap flush' });
+        host.appendChild(tableWrap);
+        window.QymDataTable.render({
+          host: tableWrap,
+          tableClass: 'dsx-table dsx-deleted-table',
+          storageKey: 'datasets.deleted.v1',
+          minWidth: 760,
+          columns: [
+            { id: 'name', label: 'Dataset', className: 'col-name', width: 280, minWidth: 180, flex: 2 },
+            { id: 'deleted', label: 'Deleted', className: 'col-run-date', width: 180, minWidth: 150 },
+            { id: 'by', label: 'Deleted by', className: 'col-by', width: 180, minWidth: 120 },
+            { id: 'versions', label: 'Latest version', className: 'col-version', width: 160, minWidth: 120 },
+            { id: 'restore', label: '', className: 'col-restore', width: 110, minWidth: 100, resizable: false },
+          ],
+          rows,
+          renderRow: d => {
+            const tr = el('tr', { dataset: { datasetId: d.id } });
+            tr.style.cursor = 'default';
+            tr.appendChild(el('td', { className: 'col-name' }, [
+              el('div', { className: 'dsx-deleted-name' }, d.name || d.original_slug),
+              el('div', { className: 'dsx-deleted-slug' }, d.original_slug || d.slug),
+            ]));
+            tr.appendChild(el('td', { className: 'col-run-date' }, el('time', { datetime: d.deleted_at || '', title: relTime(d.deleted_at) }, fullDateTime(d.deleted_at))));
+            tr.appendChild(el('td', { className: 'col-by' }, userPill(d.deleted_by, 'Deleted by') || el('span', { className: 'muted' }, '\u2014')));
+            const latest = d.latest_version;
+            tr.appendChild(el('td', { className: 'col-version' }, latest ? latest.version + ' \u00b7 ' + pluralize(latest.item_count || 0, 'item') : '\u2014'));
+            const restoreBtn = el('button', {
+              className: 'shell-btn shell-btn-secondary qym-inline-action qym-inline-action--accent',
+              type: 'button',
+              'aria-disabled': canRestore ? null : 'true',
+              title: canRestore ? 'Restore "' + (d.name || d.original_slug) + '" with its versions and items' : 'Only project managers can restore a deleted dataset.',
+              'aria-label': 'Restore ' + (d.name || d.original_slug),
+            }, 'Restore');
+            restoreBtn.addEventListener('click', async () => {
+              if (!canRestore) { Shell.toast('Only project managers can restore a deleted dataset.', 'info'); return; }
+              restoreBtn.disabled = true;
+              try {
+                const restored = await apiFetch('/v1/datasets/' + encodeURIComponent(d.id) + ':restore?project_slug=' + encodeURIComponent(state.slug), { method: 'POST' });
+                const ds = restored.dataset || {};
+                Shell.toast('Restored "' + (ds.name || d.name) + '"', 'success');
+                navigate({ mode: 'detail', ref: ds.slug, tab: 'items', v: null, item: null, view: '' });
+              } catch (e) {
+                restoreBtn.disabled = false;
+                Shell.toast(e.message || 'Restore failed', 'error');
+              }
+            });
+            tr.appendChild(el('td', { className: 'col-restore' }, restoreBtn));
+            return tr;
+          },
+        });
+      })();
       return container;
     }
 
@@ -1773,24 +2021,35 @@
       }
       function submitLabel(){ return mode === 'new' ? 'Create dataset' : (mode === 'new-version' ? 'Create version' : 'Add items'); }
 
-      // Modal scaffold via shell modal markup (rolled inline)
+      // Modal scaffold on the shell modal markup, with dialog semantics: a labelled
+      // role="dialog", focus moved into it, Tab kept inside, focus returned to the
+      // control that opened it, and no silent loss of a loaded file (requestClose).
+      const opener = document.activeElement;
       const backdrop = el('div', { className: 'shell-modal-backdrop' });
-      const modal = el('div', { className: 'shell-modal', style: { maxWidth: '780px', width: '100%' } });
+      const modal = el('div', {
+        className: 'shell-modal',
+        role: 'dialog',
+        'aria-modal': 'true',
+        'aria-labelledby': 'dsx-wiz-title',
+        'aria-describedby': 'dsx-wiz-subtitle',
+        style: { maxWidth: '780px', width: '100%' },
+      });
       const header = el('div', { className: 'shell-modal-header' });
       const titleWrap = el('div');
-      const titleEl = el('div', { className: 'shell-modal-title', id: 'dsx-wiz-title' }, wizardTitle());
+      const titleEl = el('h2', { className: 'shell-modal-title', id: 'dsx-wiz-title' }, wizardTitle());
       const subtitleEl = el('div', { className: 'shell-modal-subtitle', id: 'dsx-wiz-subtitle' }, wizardSubtitle());
       titleWrap.appendChild(titleEl);
       titleWrap.appendChild(subtitleEl);
       header.appendChild(titleWrap);
-      const closeBtn = el('button', { className: 'shell-modal-close', onclick: close }, '×');
+      const closeBtn = el('button', { className: 'shell-modal-close qym-icon-action', type: 'button', 'aria-label': 'Close', onclick: () => requestClose() }, '×');
       header.appendChild(closeBtn);
       modal.appendChild(header);
 
-      const steps = el('div', { className: 'dsx-wizard-steps' });
+      const steps = el('ol', { className: 'dsx-wizard-steps', 'aria-label': 'Upload steps' });
       const stepEls = ['Source', 'Map columns', 'Review'].map((label, i) => {
-        const s = el('div', { className: 'dsx-wizard-step' + (i === 0 ? ' active' : '') });
-        s.innerHTML = '<span class="num">' + (i + 1) + '</span>' + label;
+        const s = el('li', { className: 'dsx-wizard-step' + (i === 0 ? ' active' : '') });
+        s.appendChild(el('span', { className: 'num', 'aria-hidden': 'true' }, String(i + 1)));
+        s.appendChild(document.createTextNode(label));
         steps.appendChild(s);
         return s;
       });
@@ -1800,9 +2059,9 @@
       modal.appendChild(body);
 
       const footer = el('div', { className: 'shell-modal-footer' });
-      const backBtn = el('button', { className: 'shell-btn shell-btn-secondary', onclick: stepBack }, '← Back');
-      const nextBtn = el('button', { className: 'shell-btn shell-btn-primary', onclick: stepNext }, 'Continue →');
-      footer.appendChild(el('button', { className: 'shell-btn shell-btn-secondary', onclick: close }, 'Cancel'));
+      const backBtn = el('button', { className: 'shell-btn shell-btn-secondary', type: 'button', onclick: stepBack }, '← Back');
+      const nextBtn = el('button', { className: 'shell-btn shell-btn-primary', type: 'button', onclick: stepNext }, 'Continue →');
+      footer.appendChild(el('button', { className: 'shell-btn shell-btn-secondary', type: 'button', onclick: () => requestClose() }, 'Cancel'));
       const spacer = el('div', { style: { flex: 1 } });
       footer.appendChild(spacer);
       footer.appendChild(backBtn);
@@ -1813,8 +2072,74 @@
       document.body.appendChild(backdrop);
       requestAnimationFrame(() => backdrop.classList.add('shell-modal-open'));
 
-      function close(){ backdrop.classList.remove('shell-modal-open'); setTimeout(() => backdrop.remove(), 200); }
-      function updateSteps(){ stepEls.forEach((s, i) => { s.classList.toggle('active', wstate.step === i + 1); s.classList.toggle('done', wstate.step > i + 1); }); backBtn.style.visibility = wstate.step === 1 ? 'hidden' : 'visible'; nextBtn.textContent = wstate.step === 3 ? submitLabel() : 'Continue →'; }
+      let closed = false;
+      let confirmingClose = false;
+      function close(){
+        if (closed) return;
+        closed = true;
+        document.removeEventListener('keydown', onWizardKey, true);
+        // Focus goes to the opener below (the menu trigger), not the
+        // contract's remembered element.
+        if (window.QymUIComponents) window.QymUIComponents.releaseDialog(modal, { restoreFocus: false });
+        backdrop.classList.remove('shell-modal-open');
+        setTimeout(() => backdrop.remove(), 200);
+        if (opener && opener.isConnected && typeof opener.focus === 'function') opener.focus();
+      }
+      // Escape, the backdrop, x and Cancel all ask first once a file is loaded:
+      // closing throws away the parsed file and the column mapping.
+      async function requestClose(){
+        if (closed || confirmingClose) return;
+        if (!wstate.file) { close(); return; }
+        confirmingClose = true;
+        let res = null;
+        try {
+          res = await Shell.openConfirmDialog({
+            title: 'Discard this upload?',
+            description: '"' + wstate.file.name + '" and your column choices will be lost.',
+            confirmLabel: 'Discard upload',
+            cancelLabel: 'Keep editing',
+            confirmClass: 'shell-btn-danger',
+          });
+        } finally {
+          confirmingClose = false;
+        }
+        if (res && res.confirmed) close();
+        else focusFirst();
+      }
+      function focusables(){
+        return Array.from(modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
+          .filter(node => !node.disabled && node.getAttribute('aria-hidden') !== 'true' && node.offsetParent !== null && !(node.type === 'file' && node.closest('.dsx-file-drop')));
+      }
+      function focusFirst(){
+        requestAnimationFrame(() => {
+          // Closed before this frame (a quick Escape): focus stays on the opener.
+          if (closed) return;
+          const preferred = body.querySelector('[data-autofocus]') || focusables().find(node => body.contains(node));
+          (preferred || nextBtn).focus();
+        });
+      }
+      // The wizard keeps its own Escape (ask first) and Tab trap, so it holds
+      // even where the shared contract (ui_components.js) is not loaded.
+      function onWizardKey(e){
+        if (closed || confirmingClose) return;
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); requestClose(); return; }
+        if (e.key !== 'Tab') return;
+        const nodes = focusables();
+        if (!nodes.length) return;
+        const first = nodes[0], last = nodes[nodes.length - 1];
+        if (!modal.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+        else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+      function updateSteps(){
+        stepEls.forEach((s, i) => {
+          s.classList.toggle('active', wstate.step === i + 1);
+          s.classList.toggle('done', wstate.step > i + 1);
+          if (wstate.step === i + 1) s.setAttribute('aria-current', 'step'); else s.removeAttribute('aria-current');
+        });
+        backBtn.style.visibility = wstate.step === 1 ? 'hidden' : 'visible';
+        nextBtn.textContent = wstate.step === 3 ? submitLabel() : 'Continue →';
+      }
       function stepBack(){ if (wstate.step > 1) { wstate.errors = {}; wstate.step = wstate.step === 3 && wstate.format !== 'csv' ? 1 : wstate.step - 1; render(); } }
       function stepNext(){
         if (wstate.step === 1) {
@@ -1827,15 +2152,16 @@
           if (Object.keys(errors).length) {
             refreshNameError();
             refreshFileStatus();
-            (errors.name && nameInputEl ? nameInputEl : fileInputEl)?.focus?.();
+            (errors.name && nameInputEl ? nameInputEl : body.querySelector('.dsx-file-browse'))?.focus?.();
             return;
           }
           wstate.step = wstate.format === 'csv' ? 2 : 3; render(); return;
         }
         if (wstate.step === 2) {
           if (!wstate.mapping.input || !wstate.mapping.input.length) {
-            wstate.errors = { mapping: 'Assign at least one column to Input before you continue.' };
+            wstate.errors = { mapping: 'Choose Input for at least one column before you continue.' };
             rerenderStep2();
+            body.querySelector('select[data-column]')?.focus();
             return;
           }
           wstate.errors = {};
@@ -1850,6 +2176,7 @@
         if (wstate.step === 1) body.appendChild(renderStep1());
         else if (wstate.step === 2) body.appendChild(renderStep2());
         else body.appendChild(renderStep3());
+        focusFirst();
       }
 
       // ---- Step 1: name + file -------------------------------------------------------
@@ -1892,6 +2219,7 @@
           name: dataset.name,
           slug: dataset.slug,
           nextVersion: nextVersionAfter(dataset.latest_version && dataset.latest_version.version),
+          permissions: dataset.permissions || {},
         };
         wstate.publish = false;
         wstate.setAlias = false;
@@ -1927,7 +2255,7 @@
         if (mode === 'new') {
           const nameField = el('div', { className: 'shell-form-field' });
           nameField.appendChild(el('label', { className: 'shell-form-label', for: 'dsx-wiz-name' }, 'Name *'));
-          nameInputEl = el('input', { className: 'shell-form-input', id: 'dsx-wiz-name', placeholder: 'e.g. Customer Support QA', value: wstate.name, 'aria-describedby': 'dsx-wiz-name-error dsx-wiz-slug' });
+          nameInputEl = el('input', { className: 'shell-form-input', id: 'dsx-wiz-name', placeholder: 'e.g. Customer Support QA', value: wstate.name, 'aria-describedby': 'dsx-wiz-name-error dsx-wiz-slug', 'aria-required': 'true', 'data-autofocus': wstate.name ? null : 'true' });
           nameInputEl.addEventListener('input', e => { wstate.name = e.target.value; refreshNameError(); });
           nameField.appendChild(nameInputEl);
           slugHelpEl = el('div', { className: 'shell-form-help', id: 'dsx-wiz-slug' });
@@ -1937,8 +2265,8 @@
           wrap.appendChild(nameField);
 
           const descField = el('div', { className: 'shell-form-field' });
-          descField.appendChild(el('label', { className: 'shell-form-label' }, 'Description'));
-          const descInput = el('textarea', { className: 'shell-form-input', rows: 2, placeholder: 'Optional', style: { resize: 'vertical' } });
+          descField.appendChild(el('label', { className: 'shell-form-label', for: 'dsx-wiz-description' }, 'Description'));
+          const descInput = el('textarea', { className: 'shell-form-input', id: 'dsx-wiz-description', rows: 2, placeholder: 'Optional', style: { resize: 'vertical' } });
           descInput.value = wstate.description;
           descInput.addEventListener('input', e => { wstate.description = e.target.value; });
           descField.appendChild(descInput);
@@ -1950,12 +2278,21 @@
         }
 
         const fileField = el('div', { className: 'shell-form-field' });
-        fileField.appendChild(el('label', { className: 'shell-form-label' }, 'File (CSV, TSV, JSON, or JSONL) *'));
+        fileField.appendChild(el('label', { className: 'shell-form-label', for: 'dsx-wiz-file', id: 'dsx-wiz-file-label' }, 'File (CSV, TSV, JSON, or JSONL) *'));
         const drop = el('div', { className: 'dsx-file-drop' });
-        fileInputEl = el('input', { type: 'file', accept: '.csv,.tsv,.txt,.jsonl,.ndjson,.json,text/csv,text/tab-separated-values,text/plain,application/json', 'aria-label': 'Dataset file', 'aria-describedby': 'dsx-wiz-file-status' });
-        const dropMsg = el('div', { html: '<strong>Drag & drop</strong> or <span style="color:var(--accent-primary)">click to browse</span>' });
+        fileInputEl = el('input', { type: 'file', id: 'dsx-wiz-file', tabindex: '-1', accept: '.csv,.tsv,.txt,.jsonl,.ndjson,.json,text/csv,text/tab-separated-values,text/plain,application/json', 'aria-describedby': 'dsx-wiz-file-status' });
+        // The visible control is a real button (Enter/Space open the file picker);
+        // dropping a file on the area still works for mouse users.
+        const browseBtn = el('button', {
+          type: 'button',
+          className: 'dsx-file-browse',
+          'aria-describedby': 'dsx-wiz-file-status',
+          'aria-labelledby': 'dsx-wiz-file-label dsx-wiz-file-choose',
+          'data-autofocus': (mode !== 'new' || wstate.name) && !wstate.file ? 'true' : null,
+        }, [el('strong', null, 'Drag & drop'), ' or ', el('span', { id: 'dsx-wiz-file-choose', className: 'dsx-file-choose' }, wstate.file ? 'choose another file' : 'choose a file')]);
+        browseBtn.addEventListener('click', e => { e.stopPropagation(); fileInputEl.click(); });
         drop.appendChild(fileInputEl);
-        drop.appendChild(dropMsg);
+        drop.appendChild(browseBtn);
         const fileNameEl = el('div', { className: 'filename' }, wstate.file ? wstate.file.name : '');
         drop.appendChild(fileNameEl);
         drop.addEventListener('click', () => fileInputEl.click());
@@ -2081,6 +2418,8 @@
         // Problems found while reading the file show right away; "choose a file" only after Continue.
         const message = wstate.file && !wstate.reading ? fileError() : (wstate.errors.file || '');
         if (fileInputEl) fileInputEl.setAttribute('aria-invalid', message ? 'true' : 'false');
+        const browse = fileStatusEl.parentElement && fileStatusEl.parentElement.querySelector('.dsx-file-browse');
+        if (browse) browse.setAttribute('aria-invalid', message ? 'true' : 'false');
         if (!message) return;
         const alert = el('div', { className: 'dsx-wiz-alert error', role: 'alert', id: 'dsx-wiz-file-error' });
         alert.appendChild(el('div', null, message));
@@ -2129,124 +2468,123 @@
         if (cell.length || row.length) { row.push(cell); rows.push(row); }
         return rows;
       }
+      // Best-effort detection of the core fields by column name. Every other column
+      // defaults to Metadata, so nothing is dropped unless the user picks Ignore.
       function autoMap(){
-        // Best-effort detection of the core fields by column name. Anything we don't
-        // recognise stays unassigned in the "Available columns" bank — we never silently
-        // dump every leftover column into Metadata.
         const h = wstate.csvHeaders.map(s => s.toLowerCase());
         const find = (...names) => { for (const n of names) { const i = h.indexOf(n); if (i !== -1) return wstate.csvHeaders[i]; } return ''; };
         const inputCol = find('input', 'question', 'prompt', 'text');
         const expectedCol = find('expected_output', 'expected', 'answer', 'output', 'target', 'label');
+        const idCol = find('id', 'item_id', 'example_id');
         wstate.mapping.input = inputCol ? [inputCol] : [];
         wstate.mapping.expected = expectedCol ? [expectedCol] : [];
-        wstate.mapping.id = find('id', 'item_id', 'example_id');
-        wstate.mapping.metadata = [];
+        wstate.mapping.id = idCol;
+        wstate.mapping.metadata = wstate.csvHeaders.filter(col => col && col !== inputCol && col !== expectedCol && col !== idCol);
       }
 
-      function rerenderStep2(){ body.innerHTML = ''; body.appendChild(renderStep2()); }
-      // Move a column out of every field assignment (back to the unassigned bank).
-      function unassignColumn(col){
+      function rerenderStep2(focusCol){
+        body.innerHTML = '';
+        body.appendChild(renderStep2());
+        if (focusCol != null) {
+          const select = body.querySelector('select[data-column="' + CSS.escape(focusCol) + '"]');
+          if (select) select.focus();
+        }
+      }
+      const COLUMN_ROLES = [
+        ['input', 'Input'],
+        ['expected', 'Expected output'],
+        ['metadata', 'Metadata'],
+        ['id', 'Item ID'],
+        ['ignore', 'Ignore (not imported)'],
+      ];
+      function columnRole(col){
+        if (wstate.mapping.id === col) return 'id';
+        if ((wstate.mapping.input || []).includes(col)) return 'input';
+        if ((wstate.mapping.expected || []).includes(col)) return 'expected';
+        if ((wstate.mapping.metadata || []).includes(col)) return 'metadata';
+        return 'ignore';
+      }
+      // Assign one column to one role, keeping file order inside each list.
+      function setColumnRole(col, role){
         if (wstate.mapping.id === col) wstate.mapping.id = '';
         ['input', 'expected', 'metadata'].forEach(k => { wstate.mapping[k] = (wstate.mapping[k] || []).filter(c => c !== col); });
+        if (role === 'id') {
+          // One Item ID column: the previous one becomes Metadata instead of vanishing.
+          const previous = wstate.mapping.id;
+          if (previous && previous !== col) wstate.mapping.metadata.push(previous);
+          wstate.mapping.id = col;
+        } else if (role !== 'ignore') {
+          wstate.mapping[role].push(col);
+        }
+        const order = col => wstate.csvHeaders.indexOf(col);
+        ['input', 'expected', 'metadata'].forEach(k => wstate.mapping[k].sort((a, b) => order(a) - order(b)));
       }
 
       function renderStep2(){
-        const wrap = el('div', { className: 'dsx-mapping' });
-
-        const bank = el('div', { className: 'dsx-mapping-bank' });
-        bank.appendChild(el('div', { className: 'dsx-mapping-field-label' }, 'Available columns'));
-        const usedSet = new Set([wstate.mapping.id, ...(wstate.mapping.input || []), ...(wstate.mapping.expected || []), ...(wstate.mapping.metadata || [])].filter(Boolean));
-        const unassigned = wstate.csvHeaders.filter(col => !usedSet.has(col));
-        const bankChips = el('div', { className: 'dsx-mapping-field-value' });
-        if (!unassigned.length) {
-          bankChips.appendChild(el('span', { className: 'dsx-mapping-field-empty' }, 'All columns assigned — drag one here to unassign.'));
-        } else {
-          unassigned.forEach(col => bankChips.appendChild(draggableColumn(col)));
-        }
-        bank.appendChild(bankChips);
-        // The bank itself is a drop target: drop a chip here to unassign it.
-        bank.addEventListener('dragover', e => { e.preventDefault(); bank.classList.add('over'); });
-        bank.addEventListener('dragleave', () => bank.classList.remove('over'));
-        bank.addEventListener('drop', e => {
-          e.preventDefault(); bank.classList.remove('over');
-          const col = e.dataTransfer.getData('text/plain'); if (!col) return;
-          unassignColumn(col); rerenderStep2();
-        });
-
-        const fields = el('div', { className: 'dsx-mapping-fields' });
-        fields.appendChild(mappingTarget('id', 'Item ID', 'single'));
-        fields.appendChild(mappingTarget('input', 'Input *', 'multi'));
-        fields.appendChild(mappingTarget('expected', 'Expected output', 'multi'));
-        fields.appendChild(mappingTarget('metadata', 'Metadata', 'multi'));
-
-        const remap = el('button', { className: 'shell-btn shell-btn-secondary', title: 'Guess Input / Expected / Item ID from the column names', onclick: () => { autoMap(); rerenderStep2(); }, style: { alignSelf: 'flex-start', marginTop: '8px' } }, '✨ Auto-detect columns');
-
-        wrap.appendChild(bank);
-        wrap.appendChild(fields);
-        const outer = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } });
-        outer.appendChild(el('div', { className: 'shell-form-help' }, 'Drag columns into a field, between fields, or back to the left to unassign. Unassigned columns are not imported.'));
+        const outer = el('div', { className: 'dsx-mapping-step' });
+        outer.appendChild(el('p', { className: 'shell-form-help', id: 'dsx-wiz-mapping-help' }, 'Choose what each column becomes. Columns you do not recognise default to Metadata so they are kept; choose Ignore to leave a column out. Several Input (or Expected) columns are combined into one JSON object keyed by column name.'));
         if (wstate.errors.mapping && (wstate.mapping.input || []).length) wstate.errors = {};
         if (wstate.errors.mapping) outer.appendChild(el('div', { className: 'dsx-wiz-alert error', role: 'alert', id: 'dsx-wiz-mapping-error' }, wstate.errors.mapping));
-        outer.appendChild(wrap);
+        const tableWrap = el('div', { className: 'dsx-mapping-table-wrap' });
+        const table = el('table', { className: 'dsx-mapping-table', 'aria-describedby': 'dsx-wiz-mapping-help' });
+        table.appendChild(el('caption', { className: 'dsx-sr-only' }, 'Column mapping'));
+        table.appendChild(el('thead', null, el('tr', null, [
+          el('th', { scope: 'col' }, 'Column'),
+          el('th', { scope: 'col' }, 'Sample value'),
+          el('th', { scope: 'col' }, 'Import as'),
+        ])));
+        const tbody = el('tbody');
+        const sample = wstate.csvRows.find(row => row.some(cell => String(cell || '').trim())) || [];
+        wstate.csvHeaders.forEach((col, index) => {
+          if (!col) return;
+          const role = columnRole(col);
+          const selectId = 'dsx-wiz-map-' + index;
+          const tr = el('tr', { className: role === 'ignore' ? 'ignored' : '' });
+          tr.appendChild(el('th', { scope: 'row' }, el('label', { for: selectId, className: 'dsx-mapping-col' }, col)));
+          const value = sample[index] == null ? '' : String(sample[index]);
+          tr.appendChild(el('td', { className: 'dsx-mapping-sample', title: value }, value ? value.slice(0, 160) : '—'));
+          const select = el('select', {
+            className: 'qym-control qym-select',
+            id: selectId,
+            dataset: { column: col },
+          });
+          COLUMN_ROLES.forEach(([value, label]) => {
+            const option = el('option', { value }, label);
+            if (value === role) option.selected = true;
+            select.appendChild(option);
+          });
+          select.addEventListener('change', () => { setColumnRole(col, select.value); rerenderStep2(col); });
+          tr.appendChild(el('td', null, select));
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        tableWrap.appendChild(table);
+        outer.appendChild(tableWrap);
+
+        const summary = el('div', { className: 'dsx-mapping-summary', 'aria-live': 'polite' });
+        const input = wstate.mapping.input || [], expected = wstate.mapping.expected || [];
+        const ignored = wstate.csvHeaders.filter(col => col && columnRole(col) === 'ignore');
+        const parts = [
+          'Input: ' + (input.length ? (input.length > 1 ? '{ ' + input.join(', ') + ' }' : input[0]) : 'none yet'),
+          'Expected: ' + (expected.length ? (expected.length > 1 ? '{ ' + expected.join(', ') + ' }' : expected[0]) : 'none'),
+          'Item ID: ' + (wstate.mapping.id || 'generated'),
+          pluralize((wstate.mapping.metadata || []).length, 'metadata column'),
+        ];
+        if (ignored.length) parts.push('ignored: ' + ignored.join(', '));
+        summary.textContent = parts.join(' · ');
+        outer.appendChild(summary);
+
+        const remap = el('button', { className: 'shell-btn shell-btn-secondary', type: 'button', title: 'Guess Input / Expected / Item ID from the column names; every other column becomes Metadata', onclick: () => { autoMap(); rerenderStep2(); }, style: { alignSelf: 'flex-start' } }, 'Auto-detect columns');
         outer.appendChild(remap);
         return outer;
-
-        // A draggable chip representing a single column. Used both in the bank and inside fields.
-        function draggableColumn(col, onRemove){
-          const chip = el('span', { className: 'dsx-chip-item dsx-mapping-chip', draggable: true });
-          chip.appendChild(document.createTextNode(col));
-          if (onRemove) chip.appendChild(el('button', { title: 'Unassign', onclick: e => { e.stopPropagation(); onRemove(); } }, '×'));
-          chip.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', col); e.dataTransfer.effectAllowed = 'move'; chip.classList.add('dragging'); });
-          chip.addEventListener('dragend', () => chip.classList.remove('dragging'));
-          return chip;
-        }
-
-        function mappingTarget(key, label, kind){
-          const invalid = key === 'input' && !!wstate.errors.mapping;
-          const t = el('div', { className: 'dsx-mapping-field' + (invalid ? ' invalid' : ''), 'aria-invalid': invalid ? 'true' : null });
-          const lbl = el('div', { className: 'dsx-mapping-field-label' });
-          lbl.appendChild(el('span', null, label));
-          const value = el('div', { className: 'dsx-mapping-field-value' });
-          renderValue();
-          t.appendChild(lbl);
-          t.appendChild(value);
-          t.addEventListener('dragover', e => { e.preventDefault(); t.classList.add('over'); });
-          t.addEventListener('dragleave', () => t.classList.remove('over'));
-          t.addEventListener('drop', e => {
-            e.preventDefault(); t.classList.remove('over');
-            const col = e.dataTransfer.getData('text/plain'); if (!col) return;
-            unassignColumn(col);
-            if (kind === 'single') wstate.mapping[key] = col;
-            else { wstate.mapping[key] = (wstate.mapping[key] || []); if (!wstate.mapping[key].includes(col)) wstate.mapping[key].push(col); }
-            rerenderStep2();
-          });
-          return t;
-
-          function renderValue(){
-            value.innerHTML = '';
-            if (kind === 'single') {
-              const v = wstate.mapping[key];
-              if (!v) value.appendChild(el('span', { className: 'dsx-mapping-field-empty' }, 'Drop a column here'));
-              else value.appendChild(draggableColumn(v, () => { wstate.mapping[key] = ''; rerenderStep2(); }));
-            } else {
-              const list = wstate.mapping[key] || [];
-              if (!list.length) value.appendChild(el('span', { className: 'dsx-mapping-field-empty' }, 'Drop columns here'));
-              else list.forEach(col => value.appendChild(draggableColumn(col, () => { wstate.mapping[key] = list.filter(x => x !== col); rerenderStep2(); })));
-              // input/expected combine multiple columns into a JSON object keyed by column name.
-              if ((key === 'input' || key === 'expected') && list.length > 1) {
-                value.appendChild(el('span', { className: 'dsx-mapping-field-empty', style: { flexBasis: '100%', fontStyle: 'normal', color: 'var(--text-muted)' } }, '→ combined into a JSON object: { ' + list.join(', ') + ' }'));
-              }
-            }
-          }
-        }
       }
 
       function renderStep3(){
         const wrap = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '14px' } });
         if (mode === 'new' || mode === 'new-version') {
           const verField = el('div', { className: 'shell-form-field' });
-          verField.appendChild(el('label', { className: 'shell-form-label' }, 'Version name'));
-          const verIn = el('input', { className: 'shell-form-input', value: wstate.versionName, placeholder: 'Optional — e.g. initial import' });
+          verField.appendChild(el('label', { className: 'shell-form-label', for: 'dsx-wiz-version-name' }, 'Version name'));
+          const verIn = el('input', { className: 'shell-form-input', id: 'dsx-wiz-version-name', value: wstate.versionName, placeholder: 'Optional — e.g. initial import' });
           verIn.addEventListener('input', e => { wstate.versionName = e.target.value; });
           verField.appendChild(verIn);
           if (mode === 'new') {
@@ -2268,7 +2606,10 @@
             if (!v) wstate.setAlias = false;
             body.replaceChildren(renderStep3());
           }));
-          opts.appendChild(checkbox('Set as production alias', wstate.publish && wstate.setAlias, v => { wstate.setAlias = v; }, !wstate.publish));
+          const targetPerms = (wstate.target && wstate.target.permissions) || {};
+          const prodBlocked = mode === 'new-version' && targetPerms.can_set_production === false;
+          if (prodBlocked) wstate.setAlias = false;
+          opts.appendChild(checkbox('Set as production alias', wstate.publish && wstate.setAlias, v => { wstate.setAlias = v; }, !wstate.publish || prodBlocked, prodBlocked ? PRODUCTION_RULE : null));
           wrap.appendChild(opts);
           if (mode === 'new-version' && wstate.publish && wstate.setAlias) {
             wrap.appendChild(el('div', { className: 'dsx-wiz-alert warning', role: 'status' }, 'Runs that use the "production" alias of "' + (wstate.target && wstate.target.name) + '" will evaluate this file from now on.'));
@@ -2298,7 +2639,7 @@
           const used = new Set([wstate.mapping.id, ...(wstate.mapping.input || []), ...(wstate.mapping.expected || []), ...(wstate.mapping.metadata || [])].filter(Boolean));
           const ignored = wstate.csvHeaders.filter(col => col && !used.has(col));
           if (ignored.length) {
-            wrap.appendChild(el('div', { className: 'dsx-wiz-alert warning', role: 'status', id: 'dsx-wiz-ignored' }, 'Not imported: ' + pluralize(ignored.length, 'column') + ' (' + ignored.join(', ') + '). Go back to Map columns and drag them to Metadata to keep them.'));
+            wrap.appendChild(el('div', { className: 'dsx-wiz-alert warning', role: 'status', id: 'dsx-wiz-ignored' }, 'Not imported: ' + pluralize(ignored.length, 'column') + ' (' + ignored.join(', ') + '), set to Ignore. Go back to Map columns and choose Metadata to keep them.'));
           }
         } else {
           const extra = new Set();
@@ -2327,7 +2668,7 @@
             let v;
             if (wstate.format === 'csv') { const idx = wstate.csvHeaders.indexOf(h); v = idx >= 0 ? r[idx] : ''; }
             else { v = r[h]; if (v != null && typeof v === 'object') v = JSON.stringify(v); }
-            tr.appendChild(el('td', null, v == null ? '' : String(v).slice(0, 120)));
+            tr.appendChild(QymSafe.applyTextDir(el('td', null, v == null ? '' : String(v).slice(0, 120)), v == null ? '' : String(v)));
           });
           tbody.appendChild(tr);
         });
@@ -2337,8 +2678,8 @@
         return wrap;
       }
 
-      function checkbox(label, checked, onChange, disabled){
-        const wrap = el('label', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: disabled ? 'default' : 'pointer', fontSize: 'var(--font-md)', color: disabled ? 'var(--text-muted)' : 'var(--text-secondary)' }, title: disabled ? 'Publish the version to set an alias' : null });
+      function checkbox(label, checked, onChange, disabled, disabledReason){
+        const wrap = el('label', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: disabled ? 'default' : 'pointer', fontSize: 'var(--font-md)', color: disabled ? 'var(--text-muted)' : 'var(--text-secondary)' }, title: disabled ? (disabledReason || 'Publish the version to set an alias') : null });
         const cb = el('input', { type: 'checkbox' });
         cb.checked = !!checked;
         cb.disabled = !!disabled;
@@ -2444,8 +2785,14 @@
       }
 
       render();
-      backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
-      document.addEventListener('keydown', function escClose(e){ if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escClose); } });
+      backdrop.addEventListener('click', e => { if (e.target === backdrop) requestClose(); });
+      document.addEventListener('keydown', onWizardKey, true);
+      // Registered with the shared modal focus contract too (C049), so a
+      // dialog opened over it (the discard confirm) stacks correctly.
+      if (window.QymUIComponents) window.QymUIComponents.openDialog(modal, {
+        onEscape: requestClose,
+        initialFocus: () => body.querySelector('[data-autofocus]') || focusables().find(node => body.contains(node)) || nextBtn,
+      });
     }
 
     // ============================================================
@@ -2480,7 +2827,11 @@
         const parent = av.parent_version_id && (state.versions || []).find(x => x.id === av.parent_version_id);
         if (parent) {
           meta.appendChild(el('span', { className: 'dot' }));
-          const link = el('span', { style: { cursor: 'pointer', color: 'var(--accent-secondary)' }, title: 'View lineage', onclick: () => navigate({ tab: 'lineage' }) }, 'forked from ' + parent.version);
+          const link = el('a', { href: buildUrl({ tab: 'lineage' }), style: { color: 'var(--accent-secondary)', textDecoration: 'none' }, title: 'View lineage', onclick: e => {
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+            e.preventDefault();
+            navigate({ tab: 'lineage' });
+          } }, 'forked from ' + parent.version);
           meta.appendChild(link);
         }
         if (av.source_type) {
@@ -2554,7 +2905,14 @@
         right.appendChild(el('button', { className: 'shell-btn shell-btn-secondary', onclick: () => openUploadWizard({ mode: 'add-to-draft', ref: state.datasetRef, versionLabel: v.version }) }, 'Import'));
         right.appendChild(el('button', { className: 'shell-btn shell-btn-primary', onclick: publishCurrentVersion }, 'Publish'));
       } else if (v.status === 'published' && !isProd) {
-        right.appendChild(el('button', { className: 'shell-btn shell-btn-primary', onclick: setAsProductionFlow }, 'Set as production'));
+        const allowed = canSetProduction();
+        right.appendChild(el('button', {
+          className: 'shell-btn shell-btn-primary',
+          type: 'button',
+          'aria-disabled': allowed ? null : 'true',
+          title: allowed ? null : PRODUCTION_RULE,
+          onclick: () => { if (allowed) setAsProductionFlow(); else Shell.toast(PRODUCTION_RULE, 'info'); },
+        }, 'Set as production'));
         right.appendChild(el('button', { className: 'shell-btn shell-btn-secondary', onclick: () => createDraftFromVersionFlow(v.version) }, '+ Create draft'));
       } else {
         right.appendChild(el('button', { className: 'shell-btn shell-btn-primary', onclick: () => createDraftFromVersionFlow(v.version) }, '+ Create draft'));
@@ -2586,7 +2944,7 @@
       if (!state.dataset) return;
       openUploadWizard({
         mode: 'new-version',
-        target: { id: state.dataset.id, name: state.dataset.name, slug: state.dataset.slug, nextVersion: suggestNextVersion() },
+        target: { id: state.dataset.id, name: state.dataset.name, slug: state.dataset.slug, nextVersion: suggestNextVersion(), permissions: datasetPerms() },
       });
     }
 
@@ -2669,7 +3027,7 @@
 
     function versionSelectorPill(){
       const wrap = el('div', { className: 'dsx-version-wrap' });
-      const pill = el('button', { className: 'dsx-version-pill', type: 'button', title: 'Switch version', 'aria-haspopup': 'true' });
+      const pill = el('button', { className: 'dsx-version-pill', type: 'button', title: 'Switch version', 'aria-haspopup': 'listbox', 'aria-expanded': 'false' });
       const v = state.activeVersion;
       if (!v) {
         pill.appendChild(el('span', { className: 'label', style: { color: 'var(--text-muted)' } }, 'no versions'));
@@ -2680,62 +3038,121 @@
         if (v.name) pill.appendChild(el('span', { className: 'vname', title: v.name + ' (' + v.version + ')' }, v.name));
         pill.appendChild(el('span', { className: 'dsx-pill qym-badge ' + versionStatePillClass(v) }, versionStateLabel(v)));
       }
+      pill.setAttribute('aria-label', 'Version: ' + (v ? v.version + (v.name ? ' ' + v.name : '') + ', ' + versionStateLabel(v) : 'no versions') + '. Switch version');
       pill.addEventListener('click', e => { e.stopPropagation(); toggleVersionPopover(wrap, pill); });
+      pill.addEventListener('keydown', e => {
+        if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !wrap.querySelector('.dsx-version-popover')) {
+          e.preventDefault();
+          toggleVersionPopover(wrap, pill);
+        }
+      });
       wrap.appendChild(pill);
       return wrap;
     }
 
+    // The version switcher is a search box over a listbox (WAI-ARIA combobox
+    // pattern): the search keeps focus while Up/Down/Home/End move the active
+    // option, Enter opens it, and Escape closes the list and returns focus to
+    // the version button.
     function toggleVersionPopover(wrap, pillEl){
       const existing = wrap.querySelector('.dsx-version-popover');
       if (existing) {
-        const existingClose = existing._closeOnOutside;
-        existing.remove();
-        pillEl.classList.remove('open');
-        if (existingClose) document.removeEventListener('click', existingClose, true);
+        if (existing._dsxClose) existing._dsxClose(false);
+        else existing.remove();
         return;
       }
       pillEl.classList.add('open');
+      pillEl.setAttribute('aria-expanded', 'true');
       const pop = el('div', { className: 'dsx-version-popover' });
       const searchWrap = el('div', { className: 'dsx-version-search' });
-      const searchInput = el('input', { type: 'search', placeholder: 'Search versions...', 'aria-label': 'Search versions' });
+      const listId = 'dsx-version-listbox';
+      const searchInput = el('input', {
+        type: 'search',
+        placeholder: 'Search versions...',
+        'aria-label': 'Search versions',
+        role: 'combobox',
+        'aria-expanded': 'true',
+        'aria-controls': listId,
+        'aria-autocomplete': 'list',
+      });
       searchWrap.appendChild(dsxSearchControl(searchInput));
       pop.appendChild(searchWrap);
-      const list = el('div', { className: 'dsx-version-list' });
+      const list = el('div', { className: 'dsx-version-list', role: 'listbox', id: listId, 'aria-label': 'Versions' });
       const sortedVersions = sortedVersionsDesc(state.versions);
+      let options = [];
+      let activeIndex = -1;
 
-      function closePopover(){
+      function closePopover(returnFocus){
         pop.remove();
         pillEl.classList.remove('open');
+        pillEl.setAttribute('aria-expanded', 'false');
         document.removeEventListener('click', closeOnOutside, true);
+        if (returnFocus && pillEl.isConnected) pillEl.focus();
       }
+      pop._dsxClose = closePopover;
       function versionSearchText(v){
         return [v.version, v.name || '', versionStateLabel(v), v.status, (v.aliases || []).join(' ')].join(' ').toLowerCase();
+      }
+      function setActive(index){
+        if (!options.length) { activeIndex = -1; searchInput.removeAttribute('aria-activedescendant'); return; }
+        activeIndex = (index + options.length) % options.length;
+        options.forEach((row, i) => row.classList.toggle('focused', i === activeIndex));
+        const row = options[activeIndex];
+        searchInput.setAttribute('aria-activedescendant', row.id);
+        row.scrollIntoView({ block: 'nearest' });
       }
       function renderVersionList(query){
         const q = (query || '').trim().toLowerCase();
         list.innerHTML = '';
         const versions = q ? sortedVersions.filter(v => versionSearchText(v).includes(q)) : sortedVersions;
-        if (!versions.length) {
-          list.appendChild(el('div', { className: 'dsx-version-empty' }, 'No matching versions'));
+        options = versions.map((v, i) => versionPopoverRow(v, () => closePopover(false), 'dsx-version-option-' + i));
+        if (!options.length) {
+          list.appendChild(el('div', { className: 'dsx-version-empty', role: 'status' }, 'No matching versions'));
+          setActive(-1);
           return;
         }
-        versions.forEach(v => list.appendChild(versionPopoverRow(v, closePopover)));
+        options.forEach(row => list.appendChild(row));
+        const current = options.findIndex(row => row.getAttribute('aria-selected') === 'true');
+        setActive(current >= 0 && !q ? current : 0);
       }
       renderVersionList('');
       pop.appendChild(list);
       wrap.appendChild(pop);
       searchInput.addEventListener('click', e => e.stopPropagation());
       searchInput.addEventListener('input', () => renderVersionList(searchInput.value));
+      searchInput.addEventListener('keydown', e => {
+        if (e.key === 'ArrowDown') { e.preventDefault(); setActive(activeIndex + 1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(activeIndex - 1); }
+        else if (e.key === 'Home' && !searchInput.value) { e.preventDefault(); setActive(0); }
+        else if (e.key === 'End' && !searchInput.value) { e.preventDefault(); setActive(options.length - 1); }
+        else if (e.key === 'Enter') { e.preventDefault(); if (options[activeIndex]) options[activeIndex].click(); }
+        else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePopover(true); }
+        else if (e.key === 'Tab') { closePopover(false); }
+      });
       setTimeout(() => searchInput.focus(), 0);
-      function closeOnOutside(e){ if (!pop.contains(e.target) && !pillEl.contains(e.target)) closePopover(); }
-      pop._closeOnOutside = closeOnOutside;
+      function closeOnOutside(e){ if (!pop.contains(e.target) && !pillEl.contains(e.target)) closePopover(false); }
       setTimeout(() => document.addEventListener('click', closeOnOutside, true), 0);
     }
 
-    function versionPopoverRow(v, onSelect){
+    function versionPopoverRow(v, onSelect, id){
       const isActive = state.activeVersion && state.activeVersion.id === v.id;
-      const row = el('div', { className: 'dsx-version-row' + (isActive ? ' active' : ''), 'aria-current': isActive ? 'true' : null });
-      row.addEventListener('click', () => { if (onSelect) onSelect(); navigate({ tab: state.tab, v: v.version, item: null }); });
+      // A listbox option that is also a real link (C048 + C051): the
+      // combobox moves through options; middle-click or Copy link work.
+      const target = { tab: state.tab, v: v.version, item: null };
+      const row = el('a', {
+        className: 'dsx-version-row' + (isActive ? ' active' : ''),
+        role: 'option',
+        id: id || null,
+        href: buildUrl(target),
+        tabindex: '-1',
+        'aria-selected': isActive ? 'true' : 'false',
+      });
+      row.addEventListener('click', e => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        e.preventDefault();
+        if (onSelect) onSelect();
+        navigate(target);
+      });
       row.appendChild(el('span', { className: 'vver' }, v.version));
       row.appendChild(el('span', {
         className: 'vname' + (v.name ? '' : ' unnamed'),
@@ -2834,7 +3251,8 @@
         state.search = searchInput.value;
         state.page = 0;
         navigate({ search: state.search, page: 0 }, { replace: true, silent: true });
-        loadItems();
+        // Keep the current rows on screen while the search runs (no skeleton flash).
+        loadItems({ keepTable: tableWrap.querySelector('table') != null });
       }, 200);
       searchInput.addEventListener('input', () => {
         // Invalidate earlier requests immediately, including during the debounce.
@@ -2888,6 +3306,8 @@
           if (state.search) params.set('search', state.search);
           if (state.sort) params.set('sort', state.sort);
           if (state.label) params.set('label', state.label);
+          // The page already has the dataset and version; skip re-sending them.
+          params.set('include_context', 'false');
           const resp = await apiFetch('/v1/datasets/' + encodeURIComponent(state.datasetRef) + '/versions/' + encodeURIComponent(v.version) + '/items?' + params.toString());
           if (!isCurrentRequest()) return;
           const items = resp.items || [];
@@ -2992,7 +3412,15 @@
 
       function renderItemRow(item, isDraft, showIdColumn, metricNames){
         const tr = el('tr', { dataset: { itemPk: item.id, itemId: item.item_id } });
-        tr.appendChild(el('td', { className: 'col-idx' }, String(item.index)));
+        // The index is the row's link: one tab stop per row, Enter opens the item,
+        // and it opens in a new tab like any link.
+        const openLabel = 'Open item ' + (hasUserProvidedItemId(item.item_id) ? item.item_id : '#' + item.index);
+        tr.appendChild(el('td', { className: 'col-idx' }, spaLink(
+          buildUrl({ item: item.item_id, tab: 'details' }),
+          () => navigate({ item: item.item_id, tab: 'details' }),
+          { className: 'dsx-row-link', 'aria-label': openLabel, title: openLabel },
+          String(item.index),
+        )));
         if (showIdColumn) {
           const idTd = el('td', { className: 'col-id' });
           if (hasUserProvidedItemId(item.item_id)) {
@@ -3025,7 +3453,7 @@
         tr.appendChild(actTd);
 
         tr.addEventListener('click', e => {
-          if (e.target.closest('input,button,textarea')) return;
+          if (e.target.closest('input,button,textarea,a')) return;
           navigate({ item: item.item_id, tab: 'details' });
         });
         return tr;
@@ -3038,14 +3466,13 @@
         const preview = el('div', { className: 'dsx-preview' + ((val == null || val === '') ? ' muted' : '') });
         if (val == null || val === '') preview.textContent = '—';
         else preview.textContent = (field === 'input' || field === 'metadata') ? rawItemPreview(val) : compactItemPreview(val);
+        QymSafe.applyTextDir(preview, preview.textContent);
         const fullText = fullPreview(val);
         if (fullText) {
-          preview.setAttribute('tabindex', '0');
-          preview.setAttribute('aria-label', 'Full value preview');
+          // Hover preview only: cells are not tab stops (the row link is), so
+          // keyboard users reach the full value on the item page.
           preview.addEventListener('mouseenter', () => schedulePreviewPopover(preview, fullText));
           preview.addEventListener('mouseleave', hidePreviewPopover);
-          preview.addEventListener('focus', () => showPreviewPopover(preview, fullText));
-          preview.addEventListener('blur', hidePreviewPopover);
         }
         td.appendChild(preview);
         return td;
@@ -3112,8 +3539,10 @@
         changed++;
         const field = el('div', { className: 'dsx-hist-diff-field' });
         field.appendChild(el('div', { className: 'name' }, [label, texts.note ? el('span', { className: 'dsx-diff-typenote' }, texts.note) : null]));
-        if (beforeStr !== '') field.appendChild(el('div', { className: 'dsx-hist-diff-pane before', html: '<span class="label">before</span>' + highlightDiff(beforeStr, afterStr, 'before') }));
-        if (afterStr !== '') field.appendChild(el('div', { className: 'dsx-hist-diff-pane after', html: '<span class="label">after</span>' + highlightDiff(beforeStr, afterStr, 'after') }));
+        const pair = diffHtmlPair(beforeStr, afterStr);
+        if (beforeStr !== '') field.appendChild(el('div', { className: 'dsx-hist-diff-pane before', html: '<span class="label">before</span>' + pair.before }));
+        if (afterStr !== '') field.appendChild(el('div', { className: 'dsx-hist-diff-pane after', html: '<span class="label">after</span>' + pair.after }));
+        if (pair.tooLarge) field.appendChild(el('p', { className: 'dsx-diff-toolarge', role: 'note' }, 'This field is too large to highlight word changes, so both versions are shown side by side.'));
         wrap.appendChild(field);
       });
       if (!changed) wrap.appendChild(el('div', { className: 'dsx-history-unchanged' }, 'No field changes recorded.'));
@@ -3136,7 +3565,7 @@
       const ok = await ensureDatasetDetailLoaded();
       if (renderSeq !== itemPageRenderSeq) return;
       if (!ok) {
-        root.innerHTML = '<div class="dsx-empty"><h3>Dataset not found</h3></div>';
+        renderDatasetLoadError(root, 'Couldn\u2019t load this dataset', state.detailError, () => renderItemPage());
         return;
       }
       normalizeActiveVersionUrl();
@@ -3154,8 +3583,10 @@
         item = resp.item;
       } catch(e) {
         if (renderSeq !== itemPageRenderSeq) return;
-        Shell.toast(e.message || 'Failed to load item', 'error');
-        root.innerHTML = '<div class="dsx-empty"><h3>Item not found</h3></div>';
+        renderDatasetLoadError(root, 'Couldn\u2019t load this item', e, () => renderItemPage(), {
+          notFoundTitle: 'Item not found',
+          notFoundMessage: 'This item is not in version ' + v.version + '. It may have been removed or the link is wrong.',
+        });
         return;
       }
 
@@ -3503,13 +3934,14 @@
         function renderRunRow(r){
           const row = el('tr');
           const runName = r.run_name || r.external_run_id || r.run_id;
-          const runBtn = el('button', { className: 'run-name', type: 'button', onclick: e => { e.stopPropagation(); navigateToApp(runDetailUrl(r.run_id)); } }, runName);
+          const runBtn = runLinkEl('run-name', r.run_id, runName, { itemId: r.item_id, title: 'Open this item in ' + runName });
           row.appendChild(el('td', { className: 'col-run-name' }, runBtn));
           row.appendChild(el('td', { className: 'col-run-date' }, fullDateTime(r.created_at || r.started_at)));
           row.appendChild(el('td', { className: 'col-run-model' }, r.model || '—'));
           const outputText = r.error ? ('ERROR: ' + r.error) : fullPreview(r.output);
           const outputWrap = el('div', { className: 'dsx-run-output-body' });
           const output = el('div', { className: 'dsx-item-run-output' }, outputText || '—');
+          QymSafe.applyTextDir(output, outputText || '');
           if (state.itemRunOutputsExpanded && outputText) {
             output.classList.add('expanded');
             row.classList.add('output-expanded');
@@ -3641,7 +4073,7 @@
       const isDraft = v.status === 'draft';
       const editable = canEditVersion(v);
       // Update URL
-      if (state.itemId !== itemId) { history.replaceState({}, '', buildUrl({ item: itemId })); state.itemId = itemId; }
+      if (state.itemId !== itemId) { history.replaceState(history.state, '', buildUrl({ item: itemId })); state.itemId = itemId; }
 
       let item;
       try { const resp = await apiFetch('/v1/datasets/' + encodeURIComponent(state.datasetRef) + '/versions/' + encodeURIComponent(v.version) + '/items/' + encodeURIComponent(itemId) + '?project_slug=' + encodeURIComponent(state.slug)); item = resp.item; }
@@ -3657,7 +4089,7 @@
           { label: '→', title: 'Next', onClick: () => navigateItem(1) },
           { label: '⧉', title: 'Copy ID', onClick: () => copyToClipboard(item.item_id) },
         ],
-        onClose: () => { history.replaceState({}, '', buildUrl({ item: null })); state.itemId = null; },
+        onClose: () => { history.replaceState(history.state, '', buildUrl({ item: null })); state.itemId = null; },
         onKey: (e) => {
           if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
           const ae = document.activeElement;
@@ -3870,7 +4302,7 @@
           runs.forEach(r => {
             const row = el('tr');
             const runName = r.run_name || r.external_run_id || r.run_id;
-            const runLink = el('button', { className: 'id run-link', type: 'button', onclick: e => { e.stopPropagation(); navigateToApp(runDetailUrl(r.run_id)); } }, runName);
+            const runLink = runLinkEl('id run-link', r.run_id, runName, { itemId: r.item_id });
             runLink.addEventListener('mouseenter', () => schedulePreviewPopover(runLink, runName));
             runLink.addEventListener('mouseleave', hidePreviewPopover);
             runLink.addEventListener('focus', () => showPreviewPopover(runLink, runName));
@@ -4011,6 +4443,9 @@
 
       const listHost = el('div');
       host.appendChild(listHost);
+      // Every run on the dataset is reachable: 100 per page, newest first.
+      const RUNS_PAGE_SIZE = 100;
+      let runsPage = 1;
 
       async function load(){
         listHost.innerHTML = '';
@@ -4018,7 +4453,8 @@
         try {
           const params = new URLSearchParams();
           params.set('project_slug', state.slug);
-          params.set('limit', 100);
+          params.set('limit', RUNS_PAGE_SIZE);
+          params.set('offset', (runsPage - 1) * RUNS_PAGE_SIZE);
           if (activeLabel) params.set('version', activeLabel);
           const resp = await apiFetch('/v1/datasets/' + encodeURIComponent(state.datasetRef) + '/runs?' + params.toString());
           listHost.innerHTML = '';
@@ -4119,12 +4555,7 @@
             const status = String(r.status || '—').toUpperCase();
             const runName = r.run_name || r.external_run_id || r.id;
             const tr = el('tr', { onclick: () => navigateToApp(runDetailUrl(r.id)) });
-            tr.appendChild(el('td', { className: 'col-run-name' }, el('button', {
-              className: 'run-name',
-              type: 'button',
-              title: runName,
-              onclick: e => { e.stopPropagation(); navigateToApp(runDetailUrl(r.id)); },
-            }, runName)));
+            tr.appendChild(el('td', { className: 'col-run-name' }, runLinkEl('run-name', r.id, runName, { title: runName })));
             tr.appendChild(el('td', { className: 'col-run-status' }, [el('span', { className: 'status-badge qym-badge status-' + status, title: status }, status)]));
             tr.appendChild(el('td', { className: 'col-run-date' }, fullDateTime(r.started_at || r.completed_at)));
             tr.appendChild(el('td', { className: 'col-run-model' }, r.model || '—'));
@@ -4134,11 +4565,26 @@
               const peers = runs.map(candidate => (candidate.metric_averages || {})[metric]);
               tr.appendChild(el('td', { className: 'col-metric' }, metricScoreNode(value, peers)));
             });
-            tr.appendChild(el('td', { className: 'col-actions' }, '→'));
+            tr.appendChild(el('td', { className: 'col-actions', 'aria-hidden': 'true' }, '→'));
             return tr;
           }
           listHost.appendChild(tableWrap);
           renderRunsTable();
+          const total = Number(resp.total || 0);
+          if (total > RUNS_PAGE_SIZE && window.QymUIComponents && window.QymUIComponents.renderPagination) {
+            const pager = el('div', { className: 'dsx-runs-pagination' });
+            listHost.appendChild(pager);
+            const start = (runsPage - 1) * RUNS_PAGE_SIZE;
+            window.QymUIComponents.renderPagination(pager, {
+              page: runsPage,
+              pageSize: RUNS_PAGE_SIZE,
+              total,
+              start: start + 1,
+              end: Math.min(total, start + (resp.runs || []).length),
+              noun: 'runs',
+              onPageChange: page => { runsPage = page; load(); },
+            });
+          }
         } catch(e) { listHost.innerHTML = ''; listHost.appendChild(el('div', { className: 'dsx-empty' }, [el('p', null, e.message || 'Failed to load runs')])); }
       }
       load();
@@ -4154,7 +4600,7 @@
       switch (type) {
         case 'created': {
           const from = s.from_version_id && versionsById[s.from_version_id];
-          return { glyph: '✚', label: 'Created', detail: from ? ('forked from ' + from.version) : 'new dataset' };
+          return { glyph: '✚', label: 'Created', detail: from ? ('forked from ' + from.version) : 'new version' };
         }
         case 'published':
           return { glyph: '✔', label: 'Published', detail: pluralize(s.item_count || 0, 'item') };
@@ -4163,20 +4609,28 @@
             s.source_type ? ('source: ' + s.source_type) : null,
             s.item_count != null ? pluralize(s.item_count, 'item') : null,
           ].filter(Boolean).join(' · ') };
-        case 'alias_set':
-          return { glyph: '★', label: 'Alias set', detail: s.alias || '' };
+        case 'alias_set': {
+          const from = s.from_version_id && versionsById[s.from_version_id];
+          return { glyph: '★', label: 'Alias set', detail: (s.alias || '') + (from ? ' (moved from ' + from.version + ')' : '') };
+        }
         default:
           return { glyph: '•', label: type, detail: '' };
       }
     }
 
+    // One line of the change log: when (absolute, with the relative time on
+    // hover), what, which version, who.
     function renderChangeEntry(change, versionsById){
       const d = describeChange(change, versionsById);
-      const row = el('div', { className: 'dsx-lineage-change' });
-      row.appendChild(el('span', { className: 'glyph' }, d.glyph));
+      const v = versionsById[change.dataset_version_id];
+      const row = el('li', { className: 'dsx-lineage-change' });
+      row.appendChild(el('time', { className: 'cwhen', datetime: change.created_at || '', title: relTime(change.created_at) }, fullDateTime(change.created_at)));
+      row.appendChild(el('span', { className: 'glyph', 'aria-hidden': 'true' }, d.glyph));
       row.appendChild(el('span', { className: 'ctype' }, d.label));
+      if (v) row.appendChild(el('span', { className: 'qym-tag qym-tag--version' }, v.version));
       if (d.detail) row.appendChild(el('span', { className: 'cdetail' }, d.detail));
-      if (change.created_at) row.appendChild(el('span', { className: 'cwhen' }, relTime(change.created_at)));
+      const actor = userPill(change.actor, 'By');
+      if (actor) row.appendChild(actor);
       return row;
     }
 
@@ -4185,7 +4639,7 @@
       const headerRow = el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '12px' } });
       const titleCol = el('div');
       titleCol.appendChild(el('h2', { style: { fontSize: 'var(--font-lg)', fontWeight: 650, margin: '0 0 4px 0' } }, 'Version history'));
-      titleCol.appendChild(el('p', { className: 'shell-form-help', style: { margin: 0 } }, 'How each version descends from its parent, and what changed along the way. Click a version to open it.'));
+      titleCol.appendChild(el('p', { className: 'shell-form-help', style: { margin: 0 } }, 'How each version descends from its parent, and what changed along the way. Open a version from its name.'));
       headerRow.appendChild(titleCol);
       wrap.appendChild(headerRow);
       host.appendChild(wrap);
@@ -4213,10 +4667,17 @@
           seen.add(v.id);
           const children = childrenByParent[v.id] || [];
           const node = el('div', { className: 'dsx-lineage-tree-node' + (children.length ? ' has-children' : '') });
-          const row = el('div', { className: 'dsx-lineage-node' + (state.activeVersion && state.activeVersion.id === v.id ? ' active' : '') });
+          const isActive = state.activeVersion && state.activeVersion.id === v.id;
+          const row = el('div', { className: 'dsx-lineage-node' + (isActive ? ' active' : '') });
           // Same gutter pattern as the version picker: muted mono vN first, bold name after.
-          row.appendChild(el('span', { style: { color: v.name ? 'var(--text-muted)' : 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontWeight: v.name ? 500 : 650 } }, v.version));
-          if (v.name) row.appendChild(el('span', { style: { fontWeight: 650 }, title: v.name + ' (' + v.version + ')' }, v.name));
+          // The version identifier is the row's link (keyboard focus, open in a new tab).
+          const openVersion = () => navigate({ tab: 'lineage', v: v.version, item: null });
+          row.appendChild(spaLink(buildUrl({ tab: 'lineage', v: v.version, item: null }), openVersion, {
+            className: 'dsx-lineage-open' + (v.name ? ' named' : ''),
+            'aria-label': 'Open version ' + v.version + (v.name ? ' ' + v.name : ''),
+            'aria-current': isActive ? 'true' : null,
+          }, v.version));
+          if (v.name) row.appendChild(el('span', { style: { fontWeight: 650, fontFamily: 'var(--font-sans)' }, title: v.name + ' (' + v.version + ')' }, v.name));
           row.appendChild(el('span', { className: 'dsx-pill qym-badge ' + (v.status === 'draft' ? 'warning' : 'published') }, v.status));
           (v.aliases || []).forEach(a => row.appendChild(el('span', { className: 'qym-tag qym-tag--version' + (a === 'production' ? ' qym-tag--accent' : '') }, a)));
           row.appendChild(el('span', { className: 'dsx-lineage-meta' }, '· ' + pluralize(v.item_count || 0, 'item') + ' · ' + pluralize(v.run_count || 0, 'run')));
@@ -4238,19 +4699,24 @@
           if (parent) {
             actions.appendChild(el('button', {
               className: 'mini-action',
+              type: 'button',
+              'aria-label': 'Compare ' + parent.version + ' with ' + v.version,
               onclick: e => {
                 e.stopPropagation();
                 navigate({ mode: 'compare', base: parent.version, head: v.version, item: null });
               }
             }, 'Compare'));
           }
+          // Exact times: "what changed first" must be readable without hovering.
           const times = el('span', { className: 'dsx-lineage-times' });
-          if (v.created_at) times.appendChild(el('span', null, 'created ' + fullDate(v.created_at)));
-          if (v.created_at && v.updated_at) times.appendChild(el('span', { className: 'sep' }, '·'));
-          if (v.updated_at) times.appendChild(el('span', null, 'updated ' + relTime(v.updated_at)));
+          if (v.created_at) times.appendChild(el('time', { datetime: v.created_at, title: relTime(v.created_at) }, 'created ' + fullDateTime(v.created_at)));
+          if (v.published_at) {
+            times.appendChild(el('span', { className: 'sep', 'aria-hidden': 'true' }, '·'));
+            times.appendChild(el('time', { datetime: v.published_at, title: relTime(v.published_at) }, 'published ' + fullDateTime(v.published_at)));
+          }
           actions.appendChild(times);
           row.appendChild(actions);
-          row.addEventListener('click', () => navigate({ tab: 'lineage', v: v.version, item: null }));
+          row.addEventListener('click', e => { if (!e.target.closest('a,button')) openVersion(); });
           node.appendChild(row);
 
           if (children.length) {
@@ -4276,6 +4742,21 @@
           }
         });
         wrap.appendChild(lineage);
+
+        // Every recorded change of every version, in the order it happened.
+        const changes = (resp.changes || []).slice().sort((a, b) => {
+          const at = new Date(a.created_at || 0).getTime(), bt = new Date(b.created_at || 0).getTime();
+          return at - bt || (Number(a.id) || 0) - (Number(b.id) || 0);
+        });
+        if (changes.length) {
+          const logHead = el('div', { className: 'dsx-lineage-log-head' });
+          logHead.appendChild(el('h2', { id: 'dsx-lineage-log-title' }, 'Change log'));
+          logHead.appendChild(el('p', { className: 'shell-form-help' }, 'Every change to this dataset’s versions, oldest first, with the time it happened.'));
+          wrap.appendChild(logHead);
+          const log = el('ol', { className: 'dsx-lineage-log', 'aria-labelledby': 'dsx-lineage-log-title' });
+          changes.forEach(change => log.appendChild(renderChangeEntry(change, byId)));
+          wrap.appendChild(log);
+        }
       } catch(e) { if (wrap.contains(skel)) wrap.removeChild(skel); wrap.appendChild(el('div', { className: 'dsx-empty' }, [el('p', null, e.message || 'Failed to load lineage')])); }
     }
 
@@ -4328,8 +4809,12 @@
 
       const danger = el('div', { className: 'dsx-settings-card danger' });
       danger.appendChild(el('h3', null, 'Danger zone'));
-      danger.appendChild(el('p', { style: { color: 'var(--text-muted)', fontSize: 'var(--font-md)', margin: 0 } }, 'Deleting the dataset removes all its versions, items, and history. Run history that references this dataset is preserved.'));
-      danger.appendChild(el('button', { className: 'shell-btn shell-btn-danger', style: { alignSelf: 'flex-start' }, onclick: deleteDatasetFlow }, 'Delete dataset'));
+      danger.appendChild(el('p', { style: { color: 'var(--text-muted)', fontSize: 'var(--font-md)', margin: 0 } }, 'Deleting moves the dataset, with all its versions, items and history, to Deleted datasets, where a project manager can restore it. Runs that used it keep their results.'));
+      if (canDeleteDataset()) {
+        danger.appendChild(el('button', { className: 'shell-btn shell-btn-danger', type: 'button', style: { alignSelf: 'flex-start' }, onclick: deleteDatasetFlow }, 'Delete dataset'));
+      } else {
+        danger.appendChild(el('p', { className: 'dsx-rule-note', role: 'note' }, DELETE_RULE));
+      }
       wrap.appendChild(danger);
 
       host.appendChild(wrap);
@@ -4359,13 +4844,16 @@
     async function deleteDatasetFlow(){
       const ok = await Shell.openConfirmDialog({
         title: 'Delete dataset "' + state.dataset.name + '"?',
-        description: 'This removes all versions and items. Type the dataset name to confirm.',
+        description: [
+          'The dataset moves to Deleted datasets with all its versions, items and history, and SDK references to "' + state.dataset.slug + '" stop resolving. A project manager can restore it there.',
+          'Type the dataset name to confirm.',
+        ],
         confirmLabel: 'Delete dataset',
-        danger: true,
+        confirmClass: 'shell-btn-danger',
         requireText: state.dataset.name,
       });
       if (!ok || !ok.confirmed) return;
-      try { await apiFetch('/v1/datasets/' + encodeURIComponent(state.datasetRef) + '?project_slug=' + encodeURIComponent(state.slug), { method: 'DELETE' }); Shell.toast('Dataset deleted', 'success'); navigate({ mode: 'catalog', ref: null }); }
+      try { await apiFetch('/v1/datasets/' + encodeURIComponent(state.datasetRef) + '?project_slug=' + encodeURIComponent(state.slug), { method: 'DELETE' }); Shell.toast('Dataset deleted. A project manager can restore it from Deleted datasets.', 'success'); navigate({ mode: 'catalog', ref: null, view: '' }); }
       catch(e) { Shell.toast(e.message || 'Delete failed', 'error'); }
     }
     async function nameVersionFlow(){
@@ -4419,17 +4907,21 @@
       publishVersion(state.activeVersion.version);
     }
     async function publishVersion(version){
+      const prodAllowed = canSetProduction();
+      const prod = getProductionVersion();
       const res = await Shell.openFormDialog({
         title: 'Publish draft ' + version + '?',
-        description: 'Review what will change before this draft becomes a published dataset version.',
+        description: prodAllowed
+          ? 'Review what will change before this draft becomes a published dataset version.'
+          : ['Review what will change before this draft becomes a published dataset version.', 'Production stays on ' + (prod ? prod.version : 'its current version') + ': ' + PRODUCTION_RULE.charAt(0).toLowerCase() + PRODUCTION_RULE.slice(1)],
         details: [
           { title: 'Snapshot draft ' + version, body: 'The current items are locked as a read-only version.' },
           { title: 'Future edits use a new draft', body: 'Published versions stay stable for comparisons and prior runs.' },
         ],
         confirmLabel: 'Publish draft',
-        fields: [
-          { type: 'checkbox', name: 'set_prod', label: 'Set as production', help: 'Move the production alias to ' + version + ' after publishing.', value: true },
-        ],
+        fields: prodAllowed
+          ? [{ type: 'checkbox', name: 'set_prod', label: 'Set as production', help: 'Move the production alias to ' + version + ' after publishing.', value: true }]
+          : [],
       });
       if (!res.confirmed) return;
       try {
@@ -4498,52 +4990,115 @@
       return s;
     }
 
+    // Row and overflow menus follow the WAI-ARIA menu pattern: the trigger gets
+    // aria-expanded, items are buttons with role="menuitem", focus moves into the
+    // menu, Up/Down/Home/End move between items, Enter/Space activate, and
+    // Escape or Tab closes it and returns focus to the trigger.
     function openContextMenu(anchor, items){
-      // Close any open menu
-      document.querySelectorAll('.dsx-context-menu').forEach(m => m.remove());
+      const previous = document.querySelector('.dsx-context-menu');
+      if (previous && previous._dsxClose) {
+        const sameTrigger = previous._dsxAnchor === anchor;
+        previous._dsxClose(false);
+        if (sameTrigger) return; // a second click on the trigger closes its menu
+      }
       // Reuse the platform's canonical row-action menu (.actions-menu / .actions-item) so dataset
       // overflow menus look identical to the ones on the runs/reviews tables. It is body-appended
       // and fixed-positioned (rather than the usual .actions-dropdown.open) so it escapes table clipping.
-      const menu = el('div', { className: 'actions-menu dsx-context-menu' });
+      const menuId = 'dsx-menu-' + Math.random().toString(36).slice(2, 9);
+      const menu = el('div', { className: 'actions-menu dsx-context-menu', role: 'menu', id: menuId, 'aria-label': anchor.getAttribute('aria-label') || anchor.textContent.trim() || 'Actions' });
       menu.style.position = 'fixed';
       menu.style.display = 'block';
       menu.style.right = 'auto';
       menu.style.marginTop = '0';
       menu.style.zIndex = '9999';
+      const buttons = [];
       items.forEach(it => {
-        if (it.sep) { menu.appendChild(el('hr')); return; }
-        const b = el('a', { href: '#', className: 'actions-item' + (it.danger ? ' danger' : ''), onclick: e => { e.preventDefault(); e.stopPropagation(); menu.remove(); document.removeEventListener('click', off, true); it.onClick(); } });
+        if (it.sep) { menu.appendChild(el('hr', { role: 'separator' })); return; }
+        const b = el('button', {
+          type: 'button',
+          role: 'menuitem',
+          tabindex: '-1',
+          className: 'actions-item' + (it.danger ? ' danger' : ''),
+          'aria-disabled': it.disabled ? 'true' : null,
+          title: it.title || null,
+          onclick: e => {
+            e.preventDefault(); e.stopPropagation();
+            if (it.disabled) return;
+            // Focus goes back to the trigger first, so a dialog the item opens
+            // (the upload wizard, a confirm) returns focus there when it closes.
+            close(true);
+            it.onClick();
+          },
+        });
         b.appendChild(el('span', null, it.label));
         menu.appendChild(b);
+        buttons.push(b);
       });
       document.body.appendChild(menu);
       const r = anchor.getBoundingClientRect();
       const w = menu.offsetWidth || 200;
       menu.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w)) + 'px';
       menu.style.top = (r.bottom + 4) + 'px';
-      function off(e){ if (!menu.contains(e.target) && e.target !== anchor && !anchor.contains(e.target)) { menu.remove(); document.removeEventListener('click', off, true); } }
+      anchor.setAttribute('aria-haspopup', 'menu');
+      anchor.setAttribute('aria-expanded', 'true');
+      anchor.setAttribute('aria-controls', menuId);
+      function focusAt(index){
+        if (!buttons.length) return;
+        const next = (index + buttons.length) % buttons.length;
+        buttons[next].focus();
+      }
+      function close(returnFocus){
+        menu.remove();
+        anchor.setAttribute('aria-expanded', 'false');
+        anchor.removeAttribute('aria-controls');
+        document.removeEventListener('click', off, true);
+        if (returnFocus && anchor.isConnected) anchor.focus();
+      }
+      menu._dsxClose = close;
+      menu._dsxAnchor = anchor;
+      menu.addEventListener('keydown', e => {
+        const at = buttons.indexOf(document.activeElement);
+        if (e.key === 'ArrowDown') { e.preventDefault(); focusAt(at + 1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); focusAt(at < 0 ? buttons.length - 1 : at - 1); }
+        else if (e.key === 'Home') { e.preventDefault(); focusAt(0); }
+        else if (e.key === 'End') { e.preventDefault(); focusAt(buttons.length - 1); }
+        else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true); }
+        else if (e.key === 'Tab') { close(true); }
+      });
+      function off(e){ if (!menu.contains(e.target) && e.target !== anchor && !anchor.contains(e.target)) close(false); }
       setTimeout(() => document.addEventListener('click', off, true), 0);
+      focusAt(0);
     }
 
     // ============================================================
     // COMPARE VIEW
     // ============================================================
+    // Compare loads one list at a time, 50 rows per page ("Show more" appends the
+    // next page), so a version that edits thousands of items opens at once. Rows
+    // are listed in the order their change happened (oldest first) with its time,
+    // the first rows open expanded, and each row header is a button. The open list
+    // is kept in the URL (?tab=added). Word highlighting uses a linear-space Myers
+    // diff with a budget; a field too large to highlight is shown side by side
+    // with a note instead of a misleading all-red/all-green highlight.
+    const COMPARE_PAGE_SIZE = 50;
+    const COMPARE_EXPANDED_ROWS = 3;
+    const COMPARE_KINDS = [['changed', 'Changed'], ['added', 'Added'], ['removed', 'Removed'], ['unchanged', 'Unchanged']];
     function compareView(){
       const root = el('div', { className: 'dsx-page' });
       const hero = el('div', { className: 'dsx-compare-hero' });
       hero.appendChild(el('h1', { style: { margin: 0, fontSize: 'var(--font-title)', fontWeight: 650 } }, 'Compare versions'));
       hero.appendChild(el('p', { style: { color: 'var(--text-muted)', fontSize: 'var(--font-md)', margin: '4px 0 0 0' } }, state.dataset.name));
       const sels = el('div', { className: 'dsx-compare-selectors' });
-      sels.appendChild(el('div', null, [el('label', { className: 'shell-form-label' }, 'Base'), versionPickerInline('base')]));
-      const swap = el('button', { className: 'dsx-compare-swap', title: 'Swap', onclick: () => navigate({ base: state.headVersion, head: state.baseVersion }) }, '⇄');
+      sels.appendChild(el('div', null, [el('label', { className: 'shell-form-label', for: 'dsx-cmp-base' }, 'Base'), versionPickerInline('base')]));
+      const swap = el('button', { className: 'dsx-compare-swap', type: 'button', title: 'Swap base and head', 'aria-label': 'Swap base and head', onclick: () => navigate({ base: state.headVersion, head: state.baseVersion }) }, '⇄');
       sels.appendChild(swap);
-      sels.appendChild(el('div', null, [el('label', { className: 'shell-form-label' }, 'Head'), versionPickerInline('head')]));
+      sels.appendChild(el('div', null, [el('label', { className: 'shell-form-label', for: 'dsx-cmp-head' }, 'Head'), versionPickerInline('head')]));
       hero.appendChild(sels);
 
       const actions = el('div', { className: 'dsx-compare-actions' });
-      const openBaseBtn = el('button', { className: 'shell-btn shell-btn-secondary', onclick: () => state.baseVersion && navigate({ mode: 'detail', tab: 'items', v: state.baseVersion, base: null, head: null }) }, 'Open base');
-      const openHeadBtn = el('button', { className: 'shell-btn shell-btn-secondary', onclick: () => state.headVersion && navigate({ mode: 'detail', tab: 'items', v: state.headVersion, base: null, head: null }) }, 'Open head');
-      const downloadBtn = el('button', { className: 'shell-btn shell-btn-secondary', onclick: () => downloadDiff() }, 'Download diff');
+      const openBaseBtn = el('button', { className: 'shell-btn shell-btn-secondary', type: 'button', onclick: () => state.baseVersion && navigate({ mode: 'detail', tab: 'items', v: state.baseVersion, base: null, head: null }) }, 'Open base');
+      const openHeadBtn = el('button', { className: 'shell-btn shell-btn-secondary', type: 'button', onclick: () => state.headVersion && navigate({ mode: 'detail', tab: 'items', v: state.headVersion, base: null, head: null }) }, 'Open head');
+      const downloadBtn = el('button', { className: 'shell-btn shell-btn-secondary', type: 'button', onclick: () => downloadDiff() }, 'Download diff');
       if (!state.baseVersion) openBaseBtn.disabled = true;
       if (!state.headVersion) openHeadBtn.disabled = true;
       actions.appendChild(openBaseBtn);
@@ -4554,14 +5109,23 @@
 
       let lastCompareResp = null;
       async function downloadDiff(){
-        if (!lastCompareResp) { Shell.toast('Nothing to download yet', 'info'); return; }
-        const blob = new Blob([JSON.stringify(lastCompareResp, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = (state.dataset.slug || state.datasetRef) + '_' + state.baseVersion + '_vs_' + state.headVersion + '.diff.json';
-        document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        if (!state.baseVersion || !state.headVersion) { Shell.toast('Nothing to download yet', 'info'); return; }
+        downloadBtn.disabled = true;
+        try {
+          // The page shows one page at a time; the download is the complete diff.
+          const full = await apiFetch(compareUrl({}));
+          const blob = new Blob([JSON.stringify(full, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = (state.dataset.slug || state.datasetRef) + '_' + state.baseVersion + '_vs_' + state.headVersion + '.diff.json';
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (e) {
+          Shell.toast(e.message || 'Download failed', 'error');
+        } finally {
+          downloadBtn.disabled = false;
+        }
       }
 
       const summary = el('div', { className: 'dsx-compare-summary qym-stat-strip', id: 'dsx-cmp-summary' });
@@ -4582,22 +5146,49 @@
       });
       root.appendChild(listEl);
 
-      loadCompare();
+      const pages = {};
+      let loadSeq = 0;
+      state.cmpTab = state.cmpTab || 'changed';
+      loadKind(state.cmpTab, 0);
       return root;
 
-      async function loadCompare(){
-        if (!state.baseVersion || !state.headVersion) { listEl.innerHTML = '<div class="dsx-empty"><h3>Pick base and head versions to compare.</h3></div>'; return; }
-        listEl.innerHTML = '<div class="dsx-skel-row"><div class="dsx-skeleton" style="width:60%"></div></div>';
-        try {
-          const url = '/v1/datasets/' + encodeURIComponent(state.datasetRef) + '/versions/' + encodeURIComponent(state.headVersion) + ':compare?base=' + encodeURIComponent(state.baseVersion) + '&include_diffs=1&project_slug=' + encodeURIComponent(state.slug);
-          const resp = await apiFetch(url);
-          lastCompareResp = resp;
-          renderCompareResult(resp);
-        } catch(e) { listEl.innerHTML = '<div class="dsx-empty"><p>'+escapeHtml(e.message || 'Failed to compare')+'</p></div>'; }
+      function compareUrl(params){
+        const qs = new URLSearchParams(Object.assign({
+          base: state.baseVersion,
+          include_diffs: '1',
+          project_slug: state.slug,
+        }, params));
+        return '/v1/datasets/' + encodeURIComponent(state.datasetRef) + '/versions/' + encodeURIComponent(state.headVersion) + ':compare?' + qs.toString();
       }
 
-      function renderCompareResult(resp){
-        const s = resp.summary || {};
+      async function loadKind(kind, offset){
+        if (!state.baseVersion || !state.headVersion) { listEl.innerHTML = '<div class="dsx-empty"><h3>Pick base and head versions to compare.</h3></div>'; return; }
+        const seq = ++loadSeq;
+        const page = pages[kind] || (pages[kind] = { rows: [], total: null, nextOffset: 0, rendered: 0 });
+        if (offset === 0 && !page.rows.length) listEl.innerHTML = '<div class="dsx-skel-row"><div class="dsx-skeleton" style="width:60%"></div></div>';
+        try {
+          const resp = await apiFetch(compareUrl({ kind, limit: String(COMPARE_PAGE_SIZE), offset: String(offset) }));
+          // A response for a tab the reader has since left (including a
+          // "Show more" page) must not take the list or the tab back.
+          if (seq !== loadSeq || kind !== state.cmpTab || !listEl.isConnected) return;
+          lastCompareResp = resp;
+          const rows = kind === 'changed' ? (resp.field_diffs || [])
+            : kind === 'added' ? (resp.added_items || [])
+            : kind === 'removed' ? (resp.removed_items || [])
+            : (resp.unchanged_items || []);
+          page.rows = offset === 0 ? rows.slice() : page.rows.concat(rows);
+          page.total = resp.page ? resp.page.total : page.rows.length;
+          page.nextOffset = resp.page ? resp.page.next_offset : null;
+          renderSummary(resp.summary || {});
+          renderTabs(resp.summary || {}, kind);
+          renderList(kind, offset === 0);
+        } catch (e) {
+          if (seq !== loadSeq) return;
+          listEl.innerHTML = '<div class="dsx-empty"><p>' + escapeHtml(e.message || 'Failed to compare') + '</p></div>';
+        }
+      }
+
+      function renderSummary(s){
         summary.innerHTML = '';
         [{ key: 'added', label: 'Added', cls: 'add' }, { key: 'removed', label: 'Removed', cls: 'rem' }, { key: 'changed', label: 'Changed', cls: 'chg' }, { key: 'unchanged', label: 'Unchanged', cls: '' }].forEach(stat => {
           const div = el('div', { className: 'stat qym-stat-strip__item ' + stat.cls });
@@ -4605,91 +5196,155 @@
           div.appendChild(el('strong', { className: 'qym-stat-strip__value' }, String(s[stat.key] || 0)));
           summary.appendChild(div);
         });
+      }
 
-        // Tabs
-        const tabKey = state._cmpTab || 'changed';
-        listEl.setAttribute('aria-labelledby', 'dsx-cmp-tab-' + tabKey);
+      function renderTabs(s, activeKind){
+        state.cmpTab = activeKind;
+        listEl.setAttribute('aria-labelledby', 'dsx-cmp-tab-' + activeKind);
         tabsEl.innerHTML = '';
-        const tabSpec = [['changed', 'Changed', s.changed || 0], ['added', 'Added', s.added || 0], ['removed', 'Removed', s.removed || 0], ['unchanged', 'Unchanged', s.unchanged || 0]];
-        tabSpec.forEach(([k, lbl, n]) => {
-        const b = el('button', {
-          className: 'dsx-tab qym-tabs__tab' + (tabKey === k ? ' active' : ''),
-          type: 'button',
-          role: 'tab',
-          id: 'dsx-cmp-tab-' + k,
-          'aria-controls': 'dsx-cmp-list',
-          'aria-selected': tabKey === k ? 'true' : 'false',
-        });
+        COMPARE_KINDS.forEach(([k, lbl]) => {
+          const b = el('button', {
+            className: 'dsx-tab qym-tabs__tab' + (activeKind === k ? ' active' : ''),
+            type: 'button',
+            role: 'tab',
+            id: 'dsx-cmp-tab-' + k,
+            'aria-controls': 'dsx-cmp-list',
+            'aria-selected': activeKind === k ? 'true' : 'false',
+            tabindex: activeKind === k ? '0' : '-1',
+          });
           b.appendChild(document.createTextNode(lbl));
-          b.appendChild(el('span', { className: 'count' }, '· ' + n));
+          b.appendChild(el('span', { className: 'count' }, '· ' + (s[k] || 0)));
           b.addEventListener('click', () => {
-            state._cmpTab = k;
-            renderCompareResult(resp);
+            if (k === state.cmpTab && pages[k]) return;
+            // Keep the open list in the URL so a shared link opens the same list.
+            navigate({ cmpTab: k }, { replace: true, silent: true });
+            // Drop any response still in flight for the tab being left.
+            ++loadSeq;
+            if (pages[k] && pages[k].total != null) {
+              renderTabs(s, k);
+              renderList(k, true);
+            } else {
+              renderTabs(s, k);
+              loadKind(k, 0);
+            }
             document.getElementById('dsx-cmp-tab-' + k)?.focus({ preventScroll: true });
           });
           tabsEl.appendChild(b);
         });
-
-        listEl.innerHTML = '';
-        if (tabKey === 'added') {
-          (resp.added_items || []).forEach(it => listEl.appendChild(plainItemRow(it, 'add')));
-          if (!resp.added_items || resp.added_items.length === 0) listEl.appendChild(el('div', { className: 'dsx-empty' }, [el('p', null, 'No items added.')]));
-        } else if (tabKey === 'removed') {
-          (resp.removed_items || []).forEach(it => listEl.appendChild(plainItemRow(it, 'remove')));
-          if (!resp.removed_items || resp.removed_items.length === 0) listEl.appendChild(el('div', { className: 'dsx-empty' }, [el('p', null, 'No items removed.')]));
-        } else if (tabKey === 'changed') {
-          const diffs = resp.field_diffs || [];
-          if (diffs.length === 0) listEl.appendChild(el('div', { className: 'dsx-empty' }, [el('p', null, 'No item-level changes.')]));
-          diffs.forEach((d, idx) => listEl.appendChild(diffRow(d, idx)));
-        } else {
-          // unchanged: just count summary; rendering N items is heavy. Show a small note.
-          listEl.appendChild(el('div', { className: 'dsx-empty' }, [el('p', null, pluralize(s.unchanged || 0, 'item') + ' unchanged between these versions.')]));
-        }
       }
 
-      function plainItemRow(it, kind){
+      function renderList(kind, fresh){
+        const page = pages[kind];
+        if (fresh) {
+          listEl.innerHTML = '';
+          page.rendered = 0;
+          if (kind !== 'unchanged') listEl.appendChild(el('p', { className: 'dsx-compare-order' }, 'Listed in the order the changes happened, oldest first.'));
+        }
+        listEl.querySelector('.dsx-compare-more')?.remove();
+        if (!page.rows.length) {
+          const empty = { changed: 'No item-level changes.', added: 'No items added.', removed: 'No items removed.', unchanged: 'No unchanged items.' }[kind];
+          listEl.appendChild(el('div', { className: 'dsx-empty' }, [el('p', null, empty)]));
+          return;
+        }
+        const startIndex = page.rendered;
+        page.rows.slice(startIndex).forEach((row, i) => {
+          const index = startIndex + i;
+          const node = kind === 'changed' ? diffRow(row, index) : plainItemRow(row, kind === 'added' ? 'add' : (kind === 'removed' ? 'remove' : 'same'), index);
+          listEl.appendChild(node);
+          if (index < COMPARE_EXPANDED_ROWS) node._dsxSetExpanded(true);
+        });
+        page.rendered = page.rows.length;
+        const footer = el('div', { className: 'dsx-compare-more' });
+        footer.appendChild(el('span', { className: 'dsx-compare-count', role: 'status' }, 'Showing ' + page.rows.length + ' of ' + page.total));
+        if (page.nextOffset != null) {
+          const more = el('button', { className: 'shell-btn shell-btn-secondary qym-inline-action', type: 'button' }, 'Show ' + Math.min(COMPARE_PAGE_SIZE, page.total - page.rows.length) + ' more');
+          more.addEventListener('click', async () => {
+            const firstNew = page.rows.length;
+            more.disabled = true;
+            more.textContent = 'Loading…';
+            await loadKind(kind, page.nextOffset);
+            // Continue where the reader was: the first newly loaded row.
+            listEl.querySelectorAll('.dsx-diff-row')[firstNew]?.querySelector('.dsx-diff-toggle')?.focus({ preventScroll: true });
+          });
+          footer.appendChild(more);
+        }
+        listEl.appendChild(footer);
+      }
+
+      // Header button + lazily built body: the diff is computed only when a row opens.
+      function collapsibleRow(headContent, extraHead, buildBody, rowIndex){
         const row = el('div', { className: 'dsx-diff-row' });
+        const bodyId = 'dsx-cmp-body-' + state.cmpTab + '-' + rowIndex;
         const head = el('div', { className: 'dsx-diff-head' });
-        const ident = compareItemIdentity(it);
-        head.appendChild(el('span', null, [
-          el('span', { className: 'dsx-pill qym-badge ' + kind }, kind === 'add' ? '+ added' : '− removed'),
-          document.createTextNode(' '),
-          el('span', { className: 'dsx-diff-idlabel' }, ident.label),
-          document.createTextNode(' '),
-          el('span', { className: 'id', title: ident.title }, ident.value),
-        ]));
+        const toggle = el('button', { className: 'dsx-diff-toggle', type: 'button', 'aria-expanded': 'false', 'aria-controls': bodyId });
+        toggle.appendChild(el('span', { className: 'dsx-diff-chevron', 'aria-hidden': 'true' }, '▸'));
+        headContent.forEach(node => node && toggle.appendChild(node));
+        head.appendChild(toggle);
+        (extraHead || []).forEach(node => node && head.appendChild(node));
         row.appendChild(head);
-        row.addEventListener('click', () => row.classList.toggle('expanded'));
-        const body = el('div', { className: 'dsx-diff-body' });
-        if (it.input != null) body.appendChild(diffField('input', kind === 'add' ? null : it.input, kind === 'add' ? it.input : null, { plain: true }));
-        if (it.expected_output != null) body.appendChild(diffField('expected_output', kind === 'add' ? null : it.expected_output, kind === 'add' ? it.expected_output : null, { plain: true }));
+        const body = el('div', { className: 'dsx-diff-body', id: bodyId });
         row.appendChild(body);
+        let built = false;
+        function setExpanded(open){
+          if (open && !built) { built = true; buildBody(body); }
+          row.classList.toggle('expanded', open);
+          toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+        row._dsxSetExpanded = setExpanded;
+        toggle.addEventListener('click', () => setExpanded(!row.classList.contains('expanded')));
+        head.addEventListener('click', e => { if (!e.target.closest('button, a')) setExpanded(!row.classList.contains('expanded')); });
         return row;
       }
 
-      function diffRow(d, rowIndex){
-        const row = el('div', { className: 'dsx-diff-row' });
-        const head = el('div', { className: 'dsx-diff-head', onclick: () => row.classList.toggle('expanded') });
-        const left = el('div', { className: 'dsx-diff-title' });
-        const ident = compareItemIdentity(d, rowIndex);
-        left.appendChild(el('div', { className: 'dsx-diff-idline' }, [
+      function changeTime(row){
+        if (!row || !row.changed_at) return null;
+        const fromVersion = row.changed_at_source === 'version';
+        return el('time', {
+          className: 'dsx-diff-when',
+          datetime: row.changed_at,
+          title: fromVersion
+            ? 'No edit time was recorded for this item; this is when the head version was created (' + relTime(row.changed_at) + ').'
+            : relTime(row.changed_at),
+        }, (fromVersion ? 'version created ' : 'changed ') + fullDateTime(row.changed_at));
+      }
+
+      function plainItemRow(it, kind, rowIndex){
+        const ident = compareItemIdentity(it, rowIndex);
+        const badge = kind === 'same' ? null : el('span', { className: 'dsx-pill qym-badge ' + kind }, kind === 'add' ? '+ added' : '− removed');
+        return collapsibleRow([
+          badge,
           el('span', { className: 'dsx-diff-idlabel' }, ident.label),
           el('span', { className: 'id', title: ident.title }, ident.value),
-          el('button', { className: 'copy qym-icon-action', type: 'button', title: 'Copy full identifier', 'aria-label': 'Copy full identifier', onclick: e => { e.stopPropagation(); copyToClipboard(ident.copyValue); }, html: ICON_COPY }),
-        ]));
+          kind === 'same' ? null : changeTime(it),
+        ], null, body => {
+          if (kind === 'same') {
+            body.appendChild(diffField('input', it.input, it.input, { plain: true, same: true }));
+            if (it.expected_output != null) body.appendChild(diffField('expected_output', it.expected_output, it.expected_output, { plain: true, same: true }));
+            return;
+          }
+          if (it.input != null) body.appendChild(diffField('input', kind === 'add' ? null : it.input, kind === 'add' ? it.input : null, { plain: true }));
+          if (it.expected_output != null) body.appendChild(diffField('expected_output', kind === 'add' ? null : it.expected_output, kind === 'add' ? it.expected_output : null, { plain: true }));
+        }, rowIndex);
+      }
+
+      function diffRow(d, rowIndex){
+        const ident = compareItemIdentity(d, rowIndex);
         const fallbackEditor = (lastCompareResp && lastCompareResp.target)
           ? (lastCompareResp.target.created_by || lastCompareResp.target.published_by)
           : null;
         const editor = userLabelPill('Edited By', d.edited_by || fallbackEditor);
-        if (editor) left.appendChild(el('div', { className: 'dsx-diff-meta' }, editor));
-        head.appendChild(left);
         const fieldLabels = (d.fields || []).map(f => f + (diffValueTexts((d.before || {})[f], (d.after || {})[f]).note ? ' (type)' : ''));
-        head.appendChild(el('span', { className: 'fields' }, 'fields changed: ' + fieldLabels.join(', ')));
-        row.appendChild(head);
-        const body = el('div', { className: 'dsx-diff-body' });
-        (d.fields || []).forEach(f => body.appendChild(diffField(f, (d.before || {})[f], (d.after || {})[f])));
-        row.appendChild(body);
-        return row;
+        return collapsibleRow([
+          el('span', { className: 'dsx-diff-idlabel' }, ident.label),
+          el('span', { className: 'id', title: ident.title }, ident.value),
+          changeTime(d),
+          el('span', { className: 'fields' }, 'fields changed: ' + fieldLabels.join(', ')),
+        ], [
+          el('button', { className: 'copy qym-icon-action', type: 'button', title: 'Copy full identifier', 'aria-label': 'Copy full identifier', onclick: e => { e.stopPropagation(); copyToClipboard(ident.copyValue); }, html: ICON_COPY }),
+          editor ? el('div', { className: 'dsx-diff-meta' }, editor) : null,
+        ], body => {
+          (d.fields || []).forEach(f => body.appendChild(diffField(f, (d.before || {})[f], (d.after || {})[f])));
+        }, rowIndex);
       }
 
       function diffField(name, before, after, opts){
@@ -4698,18 +5353,30 @@
           ? { before: before == null ? '' : prettyJSON(before), after: after == null ? '' : prettyJSON(after), note: '' }
           : diffValueTexts(before, after);
         f.appendChild(el('div', { className: 'name' }, [name, texts.note ? el('span', { className: 'dsx-diff-typenote' }, texts.note) : null]));
-        const beforeStr = texts.before;
-        const afterStr = texts.after;
-        f.appendChild(el('div', { className: 'dsx-diff-pane before', html: highlightDiff(beforeStr, afterStr, 'before') }));
-        f.appendChild(el('div', { className: 'dsx-diff-pane after', html: highlightDiff(beforeStr, afterStr, 'after') }));
+        if (opts && opts.same) {
+          f.appendChild(el('div', { className: 'dsx-diff-pane same' }, texts.before));
+          return f;
+        }
+        const pair = diffHtmlPair(texts.before, texts.after);
+        const panes = [
+          el('div', { className: 'dsx-diff-pane before', html: pair.before }),
+          el('div', { className: 'dsx-diff-pane after', html: pair.after }),
+        ];
+        panes.forEach(pane => f.appendChild(pane));
+        // A change deep inside a long field (a RAG context) starts in view.
+        requestAnimationFrame(() => panes.forEach(pane => {
+          const mark = pane.querySelector('.dsx-diff-added-tok, .dsx-diff-removed-tok');
+          if (mark && mark.offsetTop > pane.clientHeight - 24) pane.scrollTop = Math.max(0, mark.offsetTop - 48);
+        }));
+        if (pair.tooLarge) f.appendChild(el('p', { className: 'dsx-diff-toolarge', role: 'note' }, 'This field is too large to highlight word changes, so both versions are shown side by side.'));
         return f;
       }
 
       function versionPickerInline(which){
-        const sel = el('select', { className: 'filter-select', style: { minWidth: '180px', maxWidth: '220px', marginTop: '4px' } });
+        const sel = el('select', { className: 'filter-select', id: 'dsx-cmp-' + which, style: { minWidth: '180px', maxWidth: '220px', marginTop: '4px' } });
         sel.appendChild(el('option', { value: '' }, '— select —'));
         state.versions.slice().sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)).forEach(v => {
-          const o = el('option', { value: v.version }, v.version + ' (' + v.status + ')'); sel.appendChild(o);
+          const o = el('option', { value: v.version }, v.version + (v.name ? ' — ' + v.name : '') + ' (' + v.status + ')'); sel.appendChild(o);
         });
         sel.value = (which === 'base' ? state.baseVersion : state.headVersion) || '';
         sel.addEventListener('change', () => { const obj = {}; obj[which] = sel.value; navigate(obj); });
@@ -4717,32 +5384,80 @@
       }
     }
 
-    // Tiny LCS-based word diff for highlighting
-    function highlightDiff(a, b, side){
-      const aw = (a || '').split(/(\s+)/); const bw = (b || '').split(/(\s+)/);
-      const lcs = computeLCS(aw, bw);
-      const out = [];
-      let i = 0, j = 0, k = 0;
-      while (i < aw.length || j < bw.length) {
-        if (k < lcs.length && aw[i] === lcs[k] && bw[j] === lcs[k]) { out.push({ kind: 'same', txt: aw[i] }); i++; j++; k++; }
-        else if (j < bw.length && (k >= lcs.length || bw[j] !== lcs[k])) { out.push({ kind: 'add', txt: bw[j] }); j++; }
-        else if (i < aw.length && (k >= lcs.length || aw[i] !== lcs[k])) { out.push({ kind: 'del', txt: aw[i] }); i++; }
-        else break;
+    // Word diff with a budget. Common leading/trailing tokens are trimmed first
+    // (a small edit inside a long RAG context costs almost nothing), then a
+    // Myers O((N+M)·D) diff runs on the rest. Past the budget it gives up
+    // instead of guessing, and the caller shows the field side by side.
+    const DIFF_CHAR_BUDGET = 400000;
+    const DIFF_TOKEN_BUDGET = 20000;
+    const DIFF_EDIT_BUDGET = 1500;
+    function diffTokensOf(text){ return String(text || '').split(/(\s+)/).filter(t => t !== ''); }
+    function myersDiff(a, b, maxD){
+      const n = a.length, m = b.length;
+      const trace = [];
+      let vPrev = null;
+      const limit = Math.min(n + m, maxD);
+      for (let d = 0; d <= limit; d++) {
+        const v = new Int32Array(2 * d + 1);
+        for (let k = -d; k <= d; k += 2) {
+          let x;
+          if (d === 0) x = 0;
+          else if (k === -d || (k !== d && vPrev[k - 1 + d - 1] < vPrev[k + 1 + d - 1])) x = vPrev[k + 1 + d - 1];
+          else x = vPrev[k - 1 + d - 1] + 1;
+          let y = x - k;
+          while (x < n && y < m && a[x] === b[y]) { x++; y++; }
+          v[k + d] = x;
+          if (x >= n && y >= m) { trace.push(v); return myersBacktrack(trace, a, b, d); }
+        }
+        trace.push(v);
+        vPrev = v;
       }
-      return out.filter(t => side === 'before' ? t.kind !== 'add' : t.kind !== 'del').map(t => {
+      return null;
+    }
+    function myersBacktrack(trace, a, b, dEnd){
+      let x = a.length, y = b.length;
+      const ops = [];
+      for (let d = dEnd; d > 0; d--) {
+        const vPrev = trace[d - 1];
+        const k = x - y;
+        const prevK = (k === -d || (k !== d && vPrev[k - 1 + d - 1] < vPrev[k + 1 + d - 1])) ? k + 1 : k - 1;
+        const prevX = vPrev[prevK + d - 1];
+        const prevY = prevX - prevK;
+        while (x > prevX && y > prevY) { ops.push({ kind: 'same', txt: a[x - 1] }); x--; y--; }
+        if (x === prevX) { ops.push({ kind: 'add', txt: b[y - 1] }); y--; }
+        else { ops.push({ kind: 'del', txt: a[x - 1] }); x--; }
+      }
+      while (x > 0 && y > 0) { ops.push({ kind: 'same', txt: a[x - 1] }); x--; y--; }
+      return ops.reverse();
+    }
+    // Returns the word operations, or null when the field is over budget.
+    function wordDiff(a, b){
+      if (String(a || '').length + String(b || '').length > DIFF_CHAR_BUDGET) return null;
+      const aw = diffTokensOf(a), bw = diffTokensOf(b);
+      let start = 0;
+      while (start < aw.length && start < bw.length && aw[start] === bw[start]) start++;
+      let endA = aw.length, endB = bw.length;
+      while (endA > start && endB > start && aw[endA - 1] === bw[endB - 1]) { endA--; endB--; }
+      const midA = aw.slice(start, endA), midB = bw.slice(start, endB);
+      if (midA.length + midB.length > DIFF_TOKEN_BUDGET) return null;
+      const mid = myersDiff(midA, midB, DIFF_EDIT_BUDGET);
+      if (mid === null) return null;
+      const same = list => list.map(txt => ({ kind: 'same', txt }));
+      return same(aw.slice(0, start)).concat(mid, same(aw.slice(endA)));
+    }
+    // Both sides from one diff: { before, after, tooLarge } (HTML, escaped).
+    function diffHtmlPair(a, b){
+      const ops = wordDiff(a, b);
+      if (ops === null) return { before: escapeHtml(a || ''), after: escapeHtml(b || ''), tooLarge: true };
+      const side = which => ops.filter(t => which === 'before' ? t.kind !== 'add' : t.kind !== 'del').map(t => {
         if (t.kind === 'same') return escapeHtml(t.txt);
         if (t.kind === 'add') return '<span class="dsx-diff-added-tok">' + escapeHtml(t.txt) + '</span>';
         return '<span class="dsx-diff-removed-tok">' + escapeHtml(t.txt) + '</span>';
       }).join('');
+      return { before: side('before'), after: side('after'), tooLarge: false };
     }
-    function computeLCS(a, b){
-      const n = a.length, m = b.length;
-      if (n * m > 200000) { return []; } // bail on huge inputs
-      const dp = Array.from({ length: n + 1 }, () => new Int32Array(m + 1));
-      for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) dp[i+1][j+1] = (a[i] === b[j]) ? dp[i][j] + 1 : Math.max(dp[i+1][j], dp[i][j+1]);
-      const out = []; let i = n, j = m;
-      while (i > 0 && j > 0) { if (a[i-1] === b[j-1]) { out.push(a[i-1]); i--; j--; } else if (dp[i-1][j] >= dp[i][j-1]) i--; else j--; }
-      return out.reverse();
+    function highlightDiff(a, b, side){
+      return diffHtmlPair(a, b)[side === 'before' ? 'before' : 'after'];
     }
 
     // Keep the legacy drawer opener available only for local debugging.
@@ -4757,8 +5472,8 @@
     if (window.QymAuth && typeof window.QymAuth.requireAuth === 'function') {
       window.QymAuth.requireAuth().then(() => route()).catch(() => {});
     } else {
-      document.addEventListener('DOMContentLoaded', route);
-      if (document.readyState !== 'loading') route();
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', route, { once: true });
+      else route();
     }
   })();
   </script>

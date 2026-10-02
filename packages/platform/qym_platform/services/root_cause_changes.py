@@ -937,16 +937,10 @@ def apply_root_cause_change(
             before_state=before_state,
             active_candidates=active_candidates,
         )
-        active_approved = next(
-            (c for c in active_candidates if c.status == CorrectionStatus.APPROVED),
-            None,
-        )
-        auto_approve_human_only = (
-            active_approved is not None
-            and ai_baseline.get("root_cause_source") != "ai"
-            and not (active_approved.ai_root_cause or "").strip()
-            and bool(after_state.get("root_cause"))
-        )
+        # An edit of an approved correction is new text nobody has reviewed:
+        # it goes back to PENDING and never inherits the previous reviewer,
+        # comment or approval (C070). The approved row leaves the active set
+        # below and keeps its approval as history, as after any other edit.
         deactivation_status = (
             CorrectionStatus.WITHDRAWN
             if not after_state.get("root_cause")
@@ -972,24 +966,9 @@ def apply_root_cause_change(
                     else _snapshot_scores(db, run.id, item.item_id)
                 ),
                 created_at=created_at,
-                status=(
-                    CorrectionStatus.APPROVED
-                    if auto_approve_human_only
-                    else CorrectionStatus.PENDING
-                ),
-                reviewed_by_user_id=(
-                    active_approved.reviewed_by_user_id
-                    if auto_approve_human_only
-                    else None
-                ),
-                reviewed_at=created_at if auto_approve_human_only else None,
-                review_comment=(
-                    active_approved.review_comment if auto_approve_human_only else ""
-                ),
+                status=CorrectionStatus.PENDING,
             )
             db.add(candidate)
-            if auto_approve_human_only and active_approved is not None:
-                active_approved.status = CorrectionStatus.SUPERSEDED
     else:
         _deactivate_active_candidates(
             db,

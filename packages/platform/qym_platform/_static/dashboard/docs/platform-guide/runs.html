@@ -3,7 +3,11 @@
 <p class="docs-lead">The Runs page is the project ledger: filter it to a comparable slice, open a run for evidence, or select whole runs and individual repeat passes for comparison.</p>
 
 <h2>Read and narrow the table</h2>
-<p>Use the toolbar to filter by task, dataset and version, model, status, or owner. <strong>Columns</strong> controls visible metrics and system fields. Its <strong>Frozen columns</strong> section chooses which of run name, status, task, model, dataset, owner, and date stay in place while the table scrolls sideways: all of them by default. Unfreeze some to see more scores on a narrower screen; the choice is remembered in this browser, and <strong>Reset to default</strong> freezes them all again. Click a column heading to sort; click the run name to open its detail page.</p>
+<p><strong>Search runs</strong> (press <code>/</code>) finds a run by the name the table shows, its run name, or the start of its run ID. The search is part of the page address, so a reload, the Back button, or a shared link keeps it. The time control limits runs to today, the last 7 or 30 days, or a <strong>Range</strong> of two dates (both included).</p>
+<p>Use the toolbar to filter by task, dataset and version, model, status, or owner. <strong>Columns</strong> controls visible metrics and system fields. Its <strong>Frozen columns</strong> section chooses which of run name, status, task, model, dataset, owner, and date stay in place while the table scrolls sideways: all of them by default. Unfreeze some to see more scores on a narrower screen; the choice is remembered in this browser, and <strong>Reset to default</strong> freezes them all again. When the frozen columns would take more than about half of the table's width, the rightmost ones (date first, then owner, dataset and so on, never the run name) scroll with the table until the rest fit, and the section names them. Your choice is not changed: a wider window freezes them again. Click a column heading to sort (or Tab to it and press Enter); the run name is a link to its detail page, so middle-click, <strong>Open in new tab</strong>, and <strong>Copy link</strong> work as anywhere else.</p>
+
+<h3>Share or bookmark a view</h3>
+<p>The search, filters, the time range, the sort, and the page are part of the address: <code>?q=&hellip;&amp;task=&hellip;&amp;model=&hellip;&amp;dataset=&hellip;&amp;status=&hellip;&amp;owner=&hellip;&amp;range=week&amp;sort=model-asc&amp;page=2</code> (<code>range</code> is <code>today</code>, <code>week</code>, <code>month</code> for 30 days, or <code>custom</code> with a <code>from</code> date, a <code>to</code> date or both). Copy the URL to send a teammate the same view, bookmark it, or open it in a new tab. A model name alone covers its standard and reasoning variants. Browser <strong>Back</strong> from a run returns to the same page, sort, and scroll position, and shows the rows you left at once while it refreshes them. Charts and Models keep their filters in the address the same way. A run opened from this list carries the list's search, filters, time range and sort (<code>?list=&hellip;</code>), so the up and down arrows in its header step to the previous and next run in this order, across pages.</p>
 
 <p>Each row shows workflow status, run identity, task, model, dataset, code version, metric means, latency, owner, date, duration, and available actions. Running repeat evaluations also show current pass progress. A finished run tagged <strong>Incomplete</strong> completed without all of its data: some items never arrived, or the platform rejected some of its events. Hover the tag for the reason; the run page lists what is missing. An item whose failure event was rejected still counts as a task error when its final attempt failed; an item with no outcome at all shows as <strong>Not received</strong> and is left out of Execution success and of the means.</p>
 
@@ -37,19 +41,30 @@
 <table>
   <thead><tr><th>Action</th><th>Rule</th></tr></thead>
   <tbody>
-    <tr><td><strong>Compare</strong></td><td>Select at least two references.</td></tr>
+    <tr><td><strong>Compare</strong></td><td>Select at least two references. On the Compare page, <strong>Copy link</strong> copies the comparison with its metric, item filter, winner, search, sort, page, tab, and open item; <strong>Export HTML</strong> downloads it as a standalone file. Each output's run name opens that item in its run.</td></tr>
     <tr><td><strong>Cohort</strong></td><td>Lock the current selection as Cohort A, then build an execution-balanced Cohort B.</td></tr>
-    <tr><td><strong>Submit</strong></td><td>Every selected run must be yours and in COMPLETED, FAILED, or REJECTED.</td></tr>
+    <tr><td><strong>Submit</strong></td><td>Every selected run must be in COMPLETED, FAILED, or REJECTED, and yours unless you are a project manager or admin. A confirmation lists the runs and takes an optional comment; the runs are submitted together in one request, so either all of them are submitted or none is.</td></tr>
     <tr><td><strong>Delete</strong></td><td>Every selected run must be deletable by you: owner, project manager, or platform admin.</td></tr>
     <tr><td><strong>Clear</strong></td><td>Leave selection or cancel cohort mode. <code>Esc</code> does the same.</td></tr>
   </tbody>
 </table>
+<p>The selection, and a locked Cohort A, stay until you clear them: open a run or Compare and come <strong>Back</strong>, go to another page of the project and return to Runs, or reload, and the same runs are still checked. Each project keeps its own selection in this browser tab. Signing out clears it, with the tab's saved filters, so whoever signs in next in that tab starts clean; a reload keeps it. A run deleted in the meantime drops out of it, and so does a pass reference (checked or in Cohort A) once its run's passes have changed. The pager stays in the status bar next to the selection actions, so you can move between pages with runs selected; in a narrow window it takes a second row there.</p>
 
 <h3>Select an individual pass</h3>
 <p>Expand a repeat row and check a completed pass to create a <strong>pass reference</strong>. It addresses one execution rather than the whole run and can join a normal comparison or a cohort. The parent checkbox follows the visible scope: collapsed, it selects the repeat run; expanded, it selects all available passes. Selecting the whole run removes its selected pass references, and selecting a pass removes its whole-run reference.</p>
 
+<h2>Compare runs against a baseline</h2>
+<p>Compare opens with one card per run and a <strong>Per-Run Averages</strong> table. Columns are labelled by model and start date (<code>gpt-4o &middot; Sep 28</code>), or, when every run uses the same model, by the part of the run names they do not share. Hover a heading for the full run name. The table scrolls sideways inside its card with the metric column pinned, so many runs never squeeze it.</p>
+<ul>
+  <li><strong>Baseline</strong> &mdash; the first run (Cohort A's first run for a cohort) unless you pick another. Every other column shows its change against it on each metric, the mean change over the items both runs scored (so a partial run is not compared on items it never ran): green when better, red when worse (by the metric's declared direction; a metric without one is never colored), muted when the change is within noise.</li>
+  <li><strong>Noise band</strong> &mdash; <code>&plusmn;</code> the 95% band of the mean per-item difference over the items both runs scored. A change inside it is within noise. Hover the change for the p-value and the number of paired items.</li>
+  <li><strong>&uarr; / &darr; counts</strong> &mdash; how many items improved or regressed against the baseline. Click one to show exactly those items in the item list (a banner names the filter; <strong>Clear</strong> removes it).</li>
+  <li><strong>Each pass / Run average</strong> &mdash; a repeat run shows one column per pass under its run heading, or one column with the mean over its passes (Avg@k).</li>
+</ul>
+<p>The baseline and column choice are kept in the link (<code>baseline</code>, <code>columns=runs</code>). When the runs used different datasets or dataset versions, a notice says so: score changes can then come from the data, and only items present in both runs are paired. On a run page, <strong>Compare with previous</strong> opens the run next to the previous finished run of the same task, model and dataset, as the baseline; the button shows the change in the run's primary metric (the two run means, not tested for noise).</p>
+
 <h2>Review workflow</h2>
-<p>An owner submits a finished run; a project manager or admin approves or rejects it and can later withdraw that decision. While a run is submitted, approved, or rejected its results are frozen: late events from the evaluation client cannot change its scores or move it back to running. Withdrawing a decision returns the run to its execution result, so a failed run stays failed. The run page lists every submission, decision, and withdrawal with who made it, when, and the comment.</p>
+<p>An owner submits a finished run (a project manager or admin can submit it on the owner's behalf); a project manager or admin approves or rejects it and can later withdraw that decision. Submitting always asks for confirmation first, with an optional comment kept in the review history. Managers and admins can also transfer a run to another project member from its row actions. The row shows the new status and its next actions as soon as the action succeeds; if an action is refused, the message says why (for example, that the run is already submitted). While a run is submitted or approved its scores cannot be edited or reset on the run or Compare page, and its passes cannot be deleted. While a run is submitted, approved, or rejected its results are frozen: late events from the evaluation client cannot change its scores or move it back to running. Withdrawing a decision returns the run to its execution result, so a failed run stays failed. The run page lists every submission, decision, and withdrawal with who made it, when, and the comment.</p>
 
 <h2>How cohort accounting works</h2>
 <p>Cohorts compare equal numbers of executions, not equal numbers of rows:</p>
@@ -76,13 +91,18 @@
 </div>
 
 <h2>Keyboard shortcuts</h2>
+<p>These single keys work on the Runs page when no field, menu, or dialog has focus, and never with Ctrl, Cmd, or Alt held. Press <code>?</code>, or <strong>Shortcuts</strong> at the right of the status bar (while runs are selected in a narrower window, the button makes room for the pager; <code>?</code> still works), to list them. To stop letter and number keys from acting at all (for example with speech input), turn off <strong>Single-key shortcuts</strong> in that list; the choice is remembered in this browser and also applies to the trace viewer's <code>j</code>, <code>k</code>, and <code>/</code>. <code>Esc</code> keeps working, and the <strong>Shortcuts</strong> button turns them back on.</p>
 <table>
   <thead><tr><th>Key</th><th>Action</th></tr></thead>
   <tbody>
-    <tr><td><code>j</code> / <code>k</code></td><td>Move row focus down / up.</td></tr>
+    <tr><td><code>j</code> / <code>k</code></td><td>Move row focus down / up, across pages (focus moves to the run's link).</td></tr>
+    <tr><td><code>g</code> / <code>G</code></td><td>Focus the first run / the last run of the whole list.</td></tr>
     <tr><td><code>Enter</code></td><td>Open the focused run.</td></tr>
     <tr><td><code>x</code></td><td>Toggle the focused row's selection.</td></tr>
     <tr><td><code>c</code></td><td>Open a ready comparison or cohort.</td></tr>
+    <tr><td><code>/</code></td><td>Search runs.</td></tr>
+    <tr><td><code>1</code> &ndash; <code>4</code></td><td>Time range: all, today, last 7 days, last 30 days.</td></tr>
+    <tr><td><code>?</code></td><td>Show the shortcuts.</td></tr>
     <tr><td><code>Esc</code></td><td>Clear selection or cancel cohort mode.</td></tr>
   </tbody>
 </table>

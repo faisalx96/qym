@@ -5,18 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Runs</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p0-20260930">
-  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
-  <script src="/static/qym_safe.js?v=p0-20260930"></script>
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261002">
+  <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
+  <script src="/static/qym_safe.js?v=p1-20261001"></script>
   <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p0-20260930-3"></script>
+  <script src="/static/shell.js?v=p1-20261001"></script>
   <script src="/static/kpis.js?v=p0-20260930"></script>
-  <link rel="stylesheet" href="/static/ui_components.css?v=p0-20260930">
-  <script defer src="/static/ui_components.js?v=p0-20260930-2"></script>
+  <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261001">
+  <script defer src="/static/ui_components.js?v=p1-20261001"></script>
 </head>
 <body>
   <!-- Command Bar -->
   <div class="command-bar">
+    <label class="runs-search qym-search-wrap">
+      <input type="search" id="runs-search" class="qym-control qym-search" placeholder="Search runs" aria-label="Search runs by name or ID" aria-keyshortcuts="/" maxlength="200" autocomplete="off" spellcheck="false">
+      <span class="kbd runs-search-kbd" aria-hidden="true">/</span>
+    </label>
     <button type="button" class="qym-inline-action qym-inline-action--neutral" id="select-mode-btn"
             aria-pressed="false" aria-controls="runs-table-scroll">Select</button>
     <div class="display-tools" id="display-tools">
@@ -26,10 +30,25 @@
         <div class="multi-select-dropdown" id="metric-visibility-dropdown"></div>
       </div>
     </div>
-    <div class="quick-filters qym-segmented" role="group" aria-label="Time range">
-      <button class="filter-btn qym-segmented__option active" data-filter="all" aria-pressed="true">All</button>
-      <button class="filter-btn qym-segmented__option" data-filter="today" aria-pressed="false">Today</button>
-      <button class="filter-btn qym-segmented__option" data-filter="week" aria-pressed="false">7d</button>
+    <div class="time-range-control multi-select-wrapper">
+      <div class="quick-filters qym-segmented" role="group" aria-label="Time range">
+        <button class="filter-btn qym-segmented__option active" data-filter="all" aria-pressed="true">All</button>
+        <button class="filter-btn qym-segmented__option" data-filter="today" aria-pressed="false">Today</button>
+        <button class="filter-btn qym-segmented__option" data-filter="week" aria-pressed="false" title="Last 7 days">7d</button>
+        <button class="filter-btn qym-segmented__option" data-filter="month" aria-pressed="false" title="Last 30 days">30d</button>
+        <button class="filter-btn qym-segmented__option" data-filter="custom" aria-pressed="false" aria-haspopup="dialog" aria-expanded="false" aria-controls="time-range-dropdown" title="Choose a date range">Range</button>
+      </div>
+      <div class="multi-select-dropdown time-range-dropdown" id="time-range-dropdown" role="dialog" aria-label="Date range">
+        <div class="time-range-fields">
+          <label class="time-range-field"><span>From</span><input type="date" id="time-range-from" class="qym-control qym-input"></label>
+          <label class="time-range-field"><span>To</span><input type="date" id="time-range-to" class="qym-control qym-input"></label>
+        </div>
+        <p class="time-range-error" id="time-range-error" role="alert"></p>
+        <div class="time-range-actions">
+          <button type="button" class="qym-inline-action qym-inline-action--neutral" id="time-range-cancel">Cancel</button>
+          <button type="button" class="qym-inline-action qym-inline-action--accent" id="time-range-apply">Apply</button>
+        </div>
+      </div>
     </div>
     <div class="command-bar-filter-row">
       <div class="filter-dropdowns">
@@ -124,7 +143,7 @@
   <!-- Status Bar -->
   <footer class="status-bar">
     <div class="status-left">
-      <span id="status-filter">0 runs</span>
+      <span id="status-filter">Loading runs…</span>
       <span class="sep" id="selection-status-separator" style="display:none;">·</span>
       <div class="selection-actions" id="compare-panel" style="display:none;" role="group" aria-label="Selected run actions" aria-describedby="selection-guidance">
         <span class="selection-count" id="compare-count">0 selected</span>
@@ -140,18 +159,18 @@
       <div class="table-pagination qym-pagination" id="table-pagination" aria-label="Runs pagination"></div>
     </div>
     <div class="status-right">
-      <span>Last Updated: <span id="last-updated" style="font-family:var(--font-mono)">—</span></span>
+      <span class="status-updated">Last Updated: <span id="last-updated" style="font-family:var(--font-mono)">—</span></span>
       <span class="sep">·</span>
-      <span class="help-trigger"><span class="kbd">?</span> help</span>
+      <button type="button" class="help-trigger qym-inline-action qym-inline-action--neutral" aria-haspopup="dialog" aria-controls="help-modal"><span class="kbd" aria-hidden="true">?</span> Shortcuts</button>
     </div>
   </footer>
 
   <!-- Delete Confirmation Modal -->
   <div class="modal" id="delete-modal" style="display:none;">
-    <div class="modal-content modal-small">
+    <div class="modal-content modal-small" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
       <div class="modal-header">
         <h2 id="delete-modal-title">Delete run</h2>
-        <button class="modal-close qym-icon-action" aria-label="Close" onclick="document.getElementById('delete-modal').style.display='none'">×</button>
+        <button class="modal-close qym-icon-action" type="button" aria-label="Close" data-modal-dismiss="delete-modal">×</button>
       </div>
       <div class="modal-body">
         <p id="delete-modal-description">Are you sure you want to delete this run?</p>
@@ -159,7 +178,7 @@
         <p class="warning-text" id="delete-modal-warning" style="display:none;"></p>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="document.getElementById('delete-modal').style.display='none'">Cancel</button>
+        <button class="btn btn-secondary" type="button" data-modal-dismiss="delete-modal">Cancel</button>
         <button class="btn btn-danger" id="confirm-delete-btn">Delete</button>
       </div>
     </div>
@@ -167,10 +186,10 @@
 
   <!-- Approval/Rejection Modal -->
   <div class="modal" id="workflow-modal" style="display:none;">
-    <div class="modal-content modal-small">
+    <div class="modal-content modal-small" role="dialog" aria-modal="true" aria-labelledby="workflow-modal-title">
       <div class="modal-header">
         <h2 id="workflow-modal-title">Approve Run</h2>
-        <button class="modal-close qym-icon-action" aria-label="Close" onclick="document.getElementById('workflow-modal').style.display='none'">×</button>
+        <button class="modal-close qym-icon-action" type="button" aria-label="Close" data-modal-dismiss="workflow-modal">×</button>
       </div>
       <div class="modal-body">
         <p id="workflow-modal-description">Add an optional comment for this action.</p>
@@ -181,8 +200,31 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="document.getElementById('workflow-modal').style.display='none'">Cancel</button>
+        <button class="btn btn-secondary" type="button" data-modal-dismiss="workflow-modal">Cancel</button>
         <button class="btn btn-primary" id="confirm-workflow-btn">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Transfer ownership (project managers and admins) -->
+  <div class="modal" id="transfer-modal" style="display:none;">
+    <div class="modal-content modal-small" role="dialog" aria-modal="true" aria-labelledby="transfer-modal-title">
+      <div class="modal-header">
+        <h2 id="transfer-modal-title">Transfer ownership</h2>
+        <button class="modal-close qym-icon-action" type="button" aria-label="Close" data-modal-dismiss="transfer-modal">×</button>
+      </div>
+      <div class="modal-body">
+        <p>The new owner can submit and delete this run. Its results and review history stay as they are.</p>
+        <p class="workflow-run-name" id="transfer-run-name"></p>
+        <p id="transfer-current-owner"></p>
+        <div style="margin-top: 12px;">
+          <label for="transfer-owner-select" style="display: block; font-size: var(--font-base); color: var(--text-muted); margin-bottom: 4px;">New owner</label>
+          <select id="transfer-owner-select" class="form-select" style="width: 100%;"></select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" type="button" data-modal-dismiss="transfer-modal">Cancel</button>
+        <button class="btn btn-primary" id="confirm-transfer-btn">Transfer</button>
       </div>
     </div>
   </div>
@@ -191,18 +233,18 @@
 
   <!-- Help Modal -->
   <div class="modal" id="help-modal" style="display:none;">
-    <div class="modal-content">
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="help-modal-title">
       <div class="modal-header">
-        <h2>Keyboard Shortcuts</h2>
-        <button class="modal-close qym-icon-action" aria-label="Close" onclick="document.getElementById('help-modal').style.display='none'">×</button>
+        <h2 id="help-modal-title">Keyboard Shortcuts</h2>
+        <button class="modal-close qym-icon-action" type="button" aria-label="Close" data-modal-dismiss="help-modal">×</button>
       </div>
       <div class="modal-body">
         <div class="shortcut-group">
           <h4>Navigation</h4>
           <div class="shortcut"><span class="kbd">j</span> / <span class="kbd">↓</span> Next row</div>
           <div class="shortcut"><span class="kbd">k</span> / <span class="kbd">↑</span> Previous row</div>
-          <div class="shortcut"><span class="kbd">g</span> First row</div>
-          <div class="shortcut"><span class="kbd">G</span> Last row</div>
+          <div class="shortcut"><span class="kbd">g</span> First run</div>
+          <div class="shortcut"><span class="kbd">G</span> Last run (all pages)</div>
           <div class="shortcut"><span class="kbd">Enter</span> Open run details</div>
         </div>
         <div class="shortcut-group">
@@ -211,13 +253,26 @@
           <div class="shortcut"><span class="kbd">c</span> Compare selected</div>
           <div class="shortcut"><span class="kbd">Esc</span> Exit selection</div>
         </div>
+        <div class="shortcut-group">
+          <h4>Search & Time Range</h4>
+          <div class="shortcut"><span class="kbd">/</span> Search runs</div>
+          <div class="shortcut"><span class="kbd">1</span> All time</div>
+          <div class="shortcut"><span class="kbd">2</span> Today</div>
+          <div class="shortcut"><span class="kbd">3</span> Last 7 days</div>
+          <div class="shortcut"><span class="kbd">4</span> Last 30 days</div>
+        </div>
+        <label class="shortcut-setting">
+          <input type="checkbox" id="single-key-shortcuts-toggle" checked>
+          <span><strong>Single-key shortcuts</strong><span class="shortcut-setting-note">Turn off so letter and number keys never act on this page. Esc still works.</span></span>
+        </label>
       </div>
     </div>
   </div>
 
   <script>window.__QYM_INITIAL_VIEW__ = 'table';</script>
+  <script src="/static/runs_order.js?v=p1-20261002"></script>
   <script src="/static/metrics.js?v=p0-20260930-3"></script>
   <script src="/static/qym_table.js"></script>
-  <script src="/static/dashboard.js?v=p0-20260930-3"></script>
+  <script src="/static/dashboard.js?v=p1-20261002"></script>
 </body>
 </html>

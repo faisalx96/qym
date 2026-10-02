@@ -76,6 +76,7 @@ from qym_platform.item_identity import (
     looks_like_positional_item_id,
 )
 from qym_platform.services.metric_semantics import declared_direction
+from qym_platform.services.score_edits import SCORE_EDIT_META_KEYS
 from qym_platform.services.run_means import (
     errors_left_out,
     is_task_error_pass,
@@ -1565,7 +1566,7 @@ def _ingest_events_sync(
         # Preserve human-edit provenance if an event arrives after a score was
         # reviewed.  Judge metadata belongs on RunItemPassScore, not here.
         for key, value in (existing or {}).items():
-            if key in {"modified", "original_score"} or key.startswith("pass_"):
+            if key in SCORE_EDIT_META_KEYS or key.startswith("pass_"):
                 meta[key] = value
         return meta
 

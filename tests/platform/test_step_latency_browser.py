@@ -543,6 +543,7 @@ def test_comparison_legends_and_svg_preserve_labels_as_text(panel, tmp_path):
     assert panel.page.locator(".sl-plot image").count() == 0
     assert panel.page.evaluate("window.injected !== true")
 
+    panel.page.locator(".sl-export > summary").click()
     with panel.page.expect_download() as downloaded:
         panel.page.locator("[data-sl-download-svg]").click()
     destination = tmp_path / "step-latency.svg"
@@ -598,6 +599,7 @@ def test_wide_comparison_labels_fit_live_and_exported_legends(panel, tmp_path):
         assert bounds[-1]["shown"] == labels[-1]
 
     assert_labels_fit(panel.page.locator(".sl-legend svg"))
+    panel.page.locator(".sl-export > summary").click()
     with panel.page.expect_download() as downloaded:
         panel.page.locator("[data-sl-download-svg]").click()
     destination = tmp_path / "wide-labels.svg"
@@ -619,3 +621,138 @@ def test_csv_exports_preserve_individual_repeat_pass_scopes(panel):
         query = parse_qs(urlparse(href).query)
         assert query["run_ids"] == [",".join(refs)]
         assert query["format"] == ["csv"]
+
+
+# ── C143: normal type scale, one Export menu, collapsed on the run page ──
+
+
+def test_plot_text_stays_on_the_type_scale_at_any_width(panel):
+    panel.page.set_viewport_size({"width": 1440, "height": 900})
+    panel.mount()
+    panel.respond_since(0)
+    panel.expect_latency(222)
+    plot = panel.page.evaluate(
+        """() => {
+          const svg = document.querySelector('.sl-plot svg');
+          const text = svg.querySelector('text');
+          return {
+            drawn: svg.getBoundingClientRect().width,
+            viewBox: svg.viewBox.baseVal.width,
+            font: getComputedStyle(text).fontSize,
+            rendered: text.getBoundingClientRect().height,
+          };
+        }"""
+    )
+    # Drawn 1:1 (not stretched to the panel), so 11px text is 11px on screen.
+    assert abs(plot["drawn"] - plot["viewBox"]) < 1, plot
+    assert plot["viewBox"] > 860, "the plot uses the panel's width"
+    assert plot["font"] == "11px"
+    assert plot["rendered"] < 15, plot
+
+
+def test_downloads_sit_behind_one_export_menu(panel):
+    panel.mount()
+    panel.respond_since(0)
+    panel.expect_latency(222)
+    page = panel.page
+    assert page.locator("#panel .sl-controls > .sl-btn, #panel .sl-controls > a").count() == 0
+    menu = page.locator("#panel details.sl-export")
+    assert menu.count() == 1
+    assert menu.locator("summary").inner_text().strip() == "Export"
+    assert not page.locator("#panel .sl-export-menu").is_visible()
+    menu.locator("summary").click()
+    items = page.locator("#panel .sl-export-item")
+    assert items.all_inner_texts() == ["CSV summary", "CSV raw spans", "SVG plot"]
+    page.keyboard.press("Escape")
+    assert not page.locator("#panel .sl-export-menu").is_visible()
+    menu.locator("summary").click()
+    page.mouse.click(5, 5)
+    assert not page.locator("#panel .sl-export-menu").is_visible()
+
+
+def test_kind_that_repeats_its_phase_adds_no_level(panel):
+    data = payload(300, step="agent:planner")
+    data["groups"][0]["kind"] = "AGENT"
+    panel.mount()
+    panel.respond_since(0, data)
+    panel.expect_latency(300)
+    headers = panel.page.locator("#panel [data-sl-collapse] text").all_text_contents()
+    assert headers == ["AGENT"], headers
+
+
+def test_a_toggle_keeps_the_plot_until_new_data_arrives(panel):
+    panel.mount()
+    panel.respond_since(0)
+    panel.expect_latency(222)
+    start = len(panel.requests())
+    panel.select("rollup", "kind")
+    assert panel.page.locator("#panel .sl-plot > svg").count() == 1
+    assert "Loading" not in panel.page.locator("#panel").inner_text()
+    assert "sl-refreshing" in panel.page.locator("#panel").get_attribute("class")
+    selected = panel.page.locator('[data-sl-seg="rollup"] [data-sl-val="kind"]')
+    assert selected.get_attribute("aria-pressed") == "true"
+    panel.respond_since(start, payload(333, step="llm"))
+    panel.expect_latency(333)
+    assert "sl-refreshing" not in (panel.page.locator("#panel").get_attribute("class") or "")
+
+
+def test_a_redraw_while_new_data_loads_keeps_the_old_plot_as_it_was(panel):
+    """A resize between a toggle and its data used to redraw the old rows
+    under the new grouping (step rows labelled as kinds) and undim them."""
+    panel.mount()
+    panel.respond_since(0)
+    panel.expect_latency(222)
+    start = len(panel.requests())
+    page = panel.page
+    page.evaluate("() => { document.querySelector('#panel .sl-plot > svg').__old = true; }")
+    panel.select("rollup", "kind")
+    # The panel gets narrower: the width observer redraws the panel.
+    page.evaluate("() => { document.getElementById('panel').style.width = '700px'; }")
+    page.wait_for_timeout(300)
+    assert page.evaluate("() => document.querySelector('#panel .sl-plot > svg').__old === true")
+    assert "sl-refreshing" in page.locator("#panel").get_attribute("class")
+    selected = page.locator('[data-sl-seg="rollup"] [data-sl-val="kind"]')
+    assert selected.get_attribute("aria-pressed") == "true"
+    panel.respond_since(start, payload(333, step="llm"))
+    panel.expect_latency(333)
+    assert page.evaluate("() => !document.querySelector('#panel .sl-plot > svg').__old")
+    assert "sl-refreshing" not in (page.locator("#panel").get_attribute("class") or "")
+
+
+def test_collapsible_panel_starts_closed_and_remembers_the_viewer(panel):
+    panel.page.evaluate("() => localStorage.clear()")
+    panel.mount(opts={"collapsible": True})
+    panel.respond_since(0)
+    page = panel.page
+    disclosure = page.locator("#panel [data-sl-disclosure]")
+    disclosure.wait_for()
+    assert disclosure.get_attribute("aria-expanded") == "false"
+    assert page.locator("#panel .sl-plot, #panel .sl-controls").count() == 0
+    assert page.locator("#panel .sl-summary").inner_text() == "1 step · 1 trace"
+    requests = len(panel.requests())
+    disclosure.click()
+    panel.expect_latency(222)
+    assert len(panel.requests()) == requests, "opening uses the loaded data"
+    assert page.evaluate("() => document.activeElement.hasAttribute('data-sl-disclosure')")
+    # A later mount (next visit) opens it again for this viewer.
+    panel.mount(opts={"collapsible": True})
+    panel.respond_since(requests)
+    panel.expect_latency(222)
+    assert page.locator("#panel [data-sl-disclosure]").get_attribute("aria-expanded") == "true"
+
+
+def test_trace_stats_refresh_reattaches_breakdowns_without_a_request(panel):
+    panel.page.locator("#stats").evaluate(
+        "(el, markup) => el.innerHTML = markup", trace_strip()
+    )
+    panel.mount()
+    panel.respond_since(0)
+    requests = len(panel.requests())
+    # The run page redraws the strip (a filter changed the overview).
+    panel.page.locator("#stats").evaluate(
+        "(el, markup) => el.innerHTML = markup", trace_strip()
+    )
+    panel.page.evaluate("() => QymStepLatency.refreshTraceStats()")
+    panel.tile("Avg Tokens").click()
+    assert "llm:test" in panel.page.locator(".sl-ts-inset").inner_text()
+    assert len(panel.requests()) == requests

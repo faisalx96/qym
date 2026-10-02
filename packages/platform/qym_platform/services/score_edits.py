@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 import re
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 # Plain decimal notation only: no thousands separators, comma decimals, hex,
 # or Python-only forms such as "1_000", "nan" and "inf".
@@ -84,3 +84,80 @@ def parse_score_edit(value: Any, score_type: Optional[str]) -> float:
     if kind == "count" and (number < 0 or not number.is_integer()):
         raise ScoreEditError(hint)
     return number
+
+
+# ---------------------------------------------------------------------------
+# Edit record and "Reset to original" (C041)
+# ---------------------------------------------------------------------------
+
+# Score metadata a reviewer's edit adds next to the scorer's own: the edit
+# flag, the score before the first edit (``original_score``, plus its numeric
+# value when the raw value was not a number), and who made the last edit,
+# when, and from which value to which. Every write that re-derives a score's
+# metadata keeps these keys; the run page does not list them as metadata.
+ORIGINAL_NUMERIC_KEY = "original_score_numeric"
+EDIT_RECORD_KEY = "last_edit"
+SCORE_EDIT_META_KEYS = frozenset(
+    {"modified", "original_score", ORIGINAL_NUMERIC_KEY, EDIT_RECORD_KEY}
+)
+_ERROR_KEYS = ("status", "error", "traceback")
+
+
+def is_edited(meta: Any) -> bool:
+    """Whether a score row holds a reviewer's value (``meta.modified``)."""
+    return isinstance(meta, dict) and str(meta.get("modified") or "").lower() == "true"
+
+
+def edit_record(
+    *,
+    user_id: Optional[str],
+    user_name: Optional[str],
+    at: Optional[str],
+    previous: Any,
+    new: Any,
+    action: str = "edit",
+) -> dict:
+    """``meta.last_edit``: who changed the score, when, and from what to what."""
+    return {
+        "action": action,
+        "by_user_id": user_id,
+        "by": user_name or "",
+        "at": at,
+        "from": previous,
+        "to": new,
+    }
+
+
+def _as_number(value: Any) -> Optional[float]:
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    if isinstance(value, (int, float)):
+        number = float(value)
+        return number if math.isfinite(number) else None
+    if isinstance(value, str):
+        try:
+            number = float(value.strip())
+        except ValueError:
+            return None
+        return number if math.isfinite(number) else None
+    return None
+
+
+def restore_original_score(meta: Any, current_raw: Any) -> Tuple[Any, Optional[float], dict]:
+    """Undo a reviewer's edits on one score row.
+
+    Returns the original raw value, its numeric value and the metadata the
+    scorer left: the edit keys are removed and a scorer failure the edit
+    replaced (``supersede_metric_error``'s ``original_*``) is restored.
+    """
+    restored = dict(meta) if isinstance(meta, dict) else {}
+    original = restored.pop("original_score", current_raw)
+    numeric = restored.pop(ORIGINAL_NUMERIC_KEY, None)
+    if numeric is None:
+        numeric = _as_number(original)
+    for key in _ERROR_KEYS:
+        if f"original_{key}" in restored:
+            restored[key] = restored.pop(f"original_{key}")
+    restored.pop("modified", None)
+    restored.pop(EDIT_RECORD_KEY, None)
+    return original, numeric, restored

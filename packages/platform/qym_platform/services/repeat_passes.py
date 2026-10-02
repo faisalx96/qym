@@ -5,6 +5,7 @@ from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
 from qym_platform.datetime_utils import utc_now_naive
+from qym_platform.services.score_edits import SCORE_EDIT_META_KEYS
 from qym_platform.services.run_means import metric_directions, reduce_pass_scores
 from qym_platform.db.models import (
     AuditLog,
@@ -146,7 +147,7 @@ def _aggregate_meta(
         "samples_observed": int(observed),
     }
     for key, value in (stored_meta or {}).items():
-        if key in {"modified", "original_score"} or key.startswith("pass_"):
+        if key in SCORE_EDIT_META_KEYS or key.startswith("pass_"):
             meta[key] = value
     return meta
 

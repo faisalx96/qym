@@ -223,6 +223,15 @@ def purge_soft_deleted_runs(engine: Engine, *, grace_days: int, limit: int = 50,
                 ),
                 {"r": run_id},
             )
+            # Stored overviews of the project hold this run's names and
+            # numbers (C037); its stored overview inputs go with its summary
+            # (ON DELETE CASCADE).
+            conn.execute(
+                text(
+                    "DELETE FROM dashboard_overview_snapshots WHERE project_key IN (SELECT project_key FROM dashboard_run_summaries WHERE run_key = :r)"
+                ),
+                {"r": run_id},
+            )
             for table in (
                 "dashboard_run_summaries",
                 "dashboard_run_dimensions",

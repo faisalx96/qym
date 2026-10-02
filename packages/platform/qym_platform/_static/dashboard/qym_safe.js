@@ -24,6 +24,16 @@
  *   QymSafe.renderMarkdown(t)  The safe markdown subset used by Rendered mode.
  *   QymSafe.looksLikeCode(t)   True for SQL/code; such text is never rewritten.
  *   QymSafe.getTextMode() / setTextMode(mode) / bindTextModeToggle(group, cb)
+ *
+ * Text direction: one policy for every block that shows user or model text.
+ * Mostly-Arabic text gets dir="rtl" lang="ar" (right-aligned, Arabic voice for
+ * screen readers); anything else gets dir="auto", so a paragraph that starts
+ * in Arabic still lays out right to left. Put it on the block element, never
+ * on an inline span inside a left-to-right block.
+ *
+ *   QymSafe.isRTL(text)          True when Arabic letters outnumber Latin ones.
+ *   QymSafe.textDirAttrs(text)   ' dir="rtl" lang="ar"' or ' dir="auto"'.
+ *   QymSafe.applyTextDir(el, t)  The same attributes on a DOM element.
  */
 (function (global) {
   'use strict';
@@ -170,13 +180,44 @@
     return out;
   }
 
+  // ── Text direction ────────────────────────────────────────────────────
+
+  var ARABIC_LETTERS = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/g;
+
+  function isRTL(text) {
+    var value = String(text === null || text === undefined ? '' : text);
+    var rtlChars = (value.match(ARABIC_LETTERS) || []).length;
+    if (!rtlChars) return false;
+    var latinChars = (value.match(/[A-Za-z]/g) || []).length;
+    return rtlChars > latinChars;
+  }
+
+  function textDirAttrs(text) {
+    return isRTL(text) ? ' dir="rtl" lang="ar"' : ' dir="auto"';
+  }
+
+  function applyTextDir(element, text) {
+    if (!element || !element.setAttribute) return element;
+    if (isRTL(text)) {
+      element.setAttribute('dir', 'rtl');
+      element.setAttribute('lang', 'ar');
+    } else {
+      element.setAttribute('dir', 'auto');
+      element.removeAttribute('lang');
+    }
+    return element;
+  }
+
   function textBlock(text, options) {
     var value = String(text === null || text === undefined ? '' : text);
     var opts = options || {};
     var mode = opts.mode || getTextMode();
     var code = looksLikeCode(value);
     var cls = 'qym-text ' + (code ? 'qym-text--code' : 'qym-text--prose') + (opts.className ? ' ' + opts.className : '');
-    var dir = opts.dir ? ' dir="' + escapeHtml(opts.dir) + '"' : '';
+    // An explicit dir wins; otherwise the shared direction policy applies.
+    var dir = opts.dir
+      ? ' dir="' + escapeHtml(opts.dir) + '"' + (opts.dir === 'rtl' ? ' lang="ar"' : '')
+      : textDirAttrs(value);
     var body = (mode === 'rendered' && !code) ? renderMarkdown(value) : escapeHtml(value);
     return '<div class="' + escapeHtml(cls) + '" data-qym-text-mode="' + (mode === 'rendered' && !code ? 'rendered' : 'raw') + '"' + dir + '>' + body + '</div>';
   }
@@ -212,6 +253,9 @@
     raw: raw,
     safeUrl: safeUrl,
     looksLikeCode: looksLikeCode,
+    isRTL: isRTL,
+    textDirAttrs: textDirAttrs,
+    applyTextDir: applyTextDir,
     renderMarkdown: renderMarkdown,
     textBlock: textBlock,
     getTextMode: getTextMode,

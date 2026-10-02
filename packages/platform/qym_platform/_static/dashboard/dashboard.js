@@ -7,6 +7,16 @@
   'use strict';
 
   let dashboardActive = true;
+  // Listeners on document/window are removed when the shell unmounts this
+  // page (QymShell.pageSignal); without it every visit left a live copy of
+  // the shortcuts behind, acting on later pages.
+  const pageSignal = window.QymShell && typeof window.QymShell.pageSignal === 'function'
+    ? window.QymShell.pageSignal()
+    : undefined;
+  const pageListen = (options = {}) => (pageSignal ? { ...options, signal: pageSignal } : options);
+  // The project this page was mounted for. Per-project storage keys use it:
+  // on Back the address already names the next page while this one saves.
+  const mountedProjectSlug = getProjectSlugFromPath();
 
   // ═══════════════════════════════════════════════════
   // BASE URL HANDLING (for proxy/subpath compatibility)
@@ -193,6 +203,8 @@
     tablePage: 1,
     tableFilterKey: '',
     quickFilter: 'all',
+    customRange: { from: '', to: '' },  // quickFilter 'custom': local YYYY-MM-DD dates, both inclusive
+    searchQuery: '',  // Runs page text search (name or id), kept in ?q=
     filterTasks: new Set(),
     filterModels: new Set(),  // Multi-select for models
     filterDatasets: new Set(),
@@ -212,6 +224,7 @@
     allMetrics: [],   // All unique metric names across runs
     visibleMetrics: null, // null = all visible; Set of visible metric names
     runsFrozenColumns: null, // Runs identity columns frozen on scroll; null = not loaded yet
+    runsUnfrozenToFit: [], // frozen columns scrolling for now: the block was too wide
     allModels: [],    // All unique model names
     currentUser: null,
     availableProjects: [],
@@ -253,6 +266,8 @@
     '#2dd4bf', '#c084fc', '#fcd34d', '#6ee7b7'
   ];
   const TABLE_PAGE_SIZE = 50;
+  // Per-browser switch for the Runs single-key shortcuts (WCAG 2.1.4).
+  const SINGLE_KEY_SHORTCUTS_KEY = 'qym:single-key-shortcuts';
   const CHART_FIRST_COL_DEFAULT_WIDTH = 320;
   const CHART_FIRST_COL_MIN_WIDTH = 280;
   const CHART_FIRST_COL_MAX_WIDTH = 720;
@@ -517,7 +532,7 @@
   }
 
   function renderModelReasoningBadge() {
-    return `<span class="model-reasoning-badge" title="${escapeHtml(MODEL_REASONING_BADGE_TITLE)}" aria-label="${escapeHtml(MODEL_REASONING_BADGE_TITLE)}">${MODEL_REASONING_BADGE_ICON}</span>`;
+    return `<span class="model-reasoning-badge" role="img" title="${escapeHtml(MODEL_REASONING_BADGE_TITLE)}" aria-label="${escapeHtml(MODEL_REASONING_BADGE_TITLE)}">${MODEL_REASONING_BADGE_ICON}</span>`;
   }
 
   function renderModelLabel(displayLabel, hasReasoning) {
@@ -607,17 +622,68 @@
     return totalSeconds + 's';
   }
 
-  function isToday(isoStr) {
-    const d = new Date(isoStr);
-    const now = new Date();
-    return d.toDateString() === now.toDateString();
+  // Time range of the segmented filter as [since, until) instants; null = open.
+  function parseLocalDate(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+    if (!match) return null;
+    const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    return Number.isNaN(date.getTime()) ? null : date;
   }
 
-  function isWithinDays(isoStr, days) {
-    const d = new Date(isoStr);
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - days);
-    return d >= cutoff;
+  function timeFilterBounds(now = new Date()) {
+    let since = null;
+    let until = null;
+    if (state.quickFilter === 'today') {
+      since = new Date(now);
+      since.setHours(0, 0, 0, 0);
+      until = new Date(since);
+      until.setDate(until.getDate() + 1);
+    } else if (state.quickFilter === 'week' || state.quickFilter === 'month') {
+      since = new Date(now);
+      since.setDate(since.getDate() - (state.quickFilter === 'week' ? 7 : 30));
+    } else if (state.quickFilter === 'custom') {
+      since = parseLocalDate(state.customRange.from);
+      const last = parseLocalDate(state.customRange.to);
+      if (last) {
+        until = new Date(last);
+        until.setDate(until.getDate() + 1);
+      }
+    }
+    return { since, until };
+  }
+
+  function runMatchesTimeFilter(run, bounds = timeFilterBounds()) {
+    if (!bounds.since && !bounds.until) return true;
+    const date = new Date(run.timestamp);
+    if (Number.isNaN(date.getTime())) return false;
+    return (!bounds.since || date >= bounds.since) && (!bounds.until || date < bounds.until);
+  }
+
+  // The Runs search applies to the Runs table only (Charts and Models share
+  // the other filters but have no search box).
+  function activeSearchQuery() {
+    return state.currentView === 'table' ? state.searchQuery : '';
+  }
+
+  function runMatchesSearch(run, query = activeSearchQuery()) {
+    if (!query) return true;
+    const needle = query.toLowerCase();
+    return [run.external_run_id, run.run_name].some(value => String(value || '').toLowerCase().includes(needle))
+      || String(run.run_id || '').toLowerCase().startsWith(needle);
+  }
+
+  function formatRangeDate(value) {
+    const date = parseLocalDate(value);
+    return date ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+  }
+
+  function customRangeLabel() {
+    const from = formatRangeDate(state.customRange.from);
+    const to = formatRangeDate(state.customRange.to);
+    if (from && to) return from === to ? from : `${from} – ${to}`;
+    if (from) return `From ${from}`;
+    if (to) return `Until ${to}`;
+    return 'Range';
   }
 
   function truncateText(text, maxLen = null) {
@@ -666,6 +732,8 @@
   function getTableFilterKey() {
     return JSON.stringify({
       quickFilter: state.quickFilter,
+      customRange: state.quickFilter === 'custom' ? state.customRange : null,
+      q: activeSearchQuery(),
       tasks: [...state.filterTasks].sort(),
       models: [...state.filterModels].sort(),
       datasets: [...state.filterDatasets].sort(),
@@ -796,7 +864,8 @@
   // GENERIC MULTI-SELECT BUILDER
   // ═══════════════════════════════════════════════════
 
-  function buildMultiSelect({ btnId, dropdownId, stateSet, values, labelFn, htmlLabelFn, defaultLabel, showSearch, searchPlaceholder, colorFn, onchange }) {
+  function buildMultiSelect(options) {
+    const { btnId, dropdownId, stateSet, values, labelFn, htmlLabelFn, defaultLabel, showSearch, searchPlaceholder, colorFn, onchange } = options;
     const btn = el(btnId);
     const dropdown = el(dropdownId);
     if (!btn || !dropdown) return;
@@ -832,6 +901,30 @@
       const labelHtml = htmlLabelFn ? htmlLabelFn(v, label) : escapeHtml(label);
       return `<div class="multi-select-option qym-dropdown__option${emptyClass}" data-value="${escapeHtml(v)}" data-search-label="${escapeHtml(label)}" title="${escapeHtml(label)}"${hidden}>${colorDot}<input type="checkbox" aria-label="${escapeHtml(label)}" ${checked} /><span>${labelHtml}</span><button type="button" class="ms-only-btn qym-dropdown__only" aria-label="Show only ${escapeHtml(label)}" title="Show only this option">Only</button></div>`;
     }).join('');
+    // Never rebuild a menu the user has open: a background refresh would drop
+    // focus and the search caret. Its options refresh when it closes.
+    const syncArgs = { btnId, dropdownId, stateSet, values, defaultLabel, labelFn, htmlLabelFn };
+    if (dropdown._qymOptionsHtml !== undefined && dropdown.classList.contains('open')) {
+      dropdown._qymPendingOptions = dropdown._qymOptionsHtml === html ? null : options;
+      syncMultiSelect(syncArgs);
+      return;
+    }
+    dropdown._qymPendingOptions = null;
+    if (dropdown._qymOptionsHtml === html) {
+      syncMultiSelect(syncArgs);
+      return;
+    }
+    if (!dropdown._qymCloseWatch) {
+      dropdown._qymCloseWatch = new MutationObserver(() => {
+        const pending = dropdown._qymPendingOptions;
+        if (pending && !dropdown.classList.contains('open')) {
+          dropdown._qymPendingOptions = null;
+          buildMultiSelect(pending);
+        }
+      });
+      dropdown._qymCloseWatch.observe(dropdown, { attributes: true, attributeFilter: ['class'] });
+    }
+    dropdown._qymOptionsHtml = html;
     dropdown.innerHTML = html;
 
     // Wire search
@@ -1068,6 +1161,7 @@
       btn.title = 'Columns will appear when metrics are available';
       dropdown.classList.remove('open');
       dropdown.innerHTML = '';
+      dropdown._qymOptionsHtml = undefined;
       return;
     }
     btn.disabled = false;
@@ -1082,7 +1176,7 @@
     const restoreFrozenFocus = focusedFrozen?.dataset?.frozenColumn
       ? `input[data-frozen-column="${focusedFrozen.dataset.frozenColumn}"]`
       : (focusedFrozen?.id === 'mv-frozen-reset' ? '#mv-frozen-reset' : '');
-    dropdown.innerHTML =
+    const html =
       '<div class="model-search-box qym-dropdown__search"><input type="text" class="model-search-input qym-control qym-search" placeholder="Search columns..." value="' + escapeHtml(searchValue) + '" /></div>' +
       '<div class="ms-actions qym-dropdown__actions">' +
         '<button class="ms-action-btn qym-dropdown__action" id="mv-select-all">All</button>' +
@@ -1118,6 +1212,28 @@
 
     // Update button text
     updateMetricVisibilityBtn(metricOptions);
+
+    // As for the filter menus: an open or unchanged Columns menu is synced in
+    // place, never rebuilt under the user; an open one refreshes on close.
+    if (dropdown._qymOptionsHtml !== undefined && (dropdown.classList.contains('open') || dropdown._qymOptionsHtml === html)) {
+      dropdown._qymPendingOptions = dropdown._qymOptionsHtml === html ? null : [availableMetrics, runs];
+      syncMetricVisibilityDropdownState(metricOptions);
+      syncRunsFrozenColumnControls();
+      return;
+    }
+    dropdown._qymPendingOptions = null;
+    if (!dropdown._qymCloseWatch) {
+      dropdown._qymCloseWatch = new MutationObserver(() => {
+        const pending = dropdown._qymPendingOptions;
+        if (pending && !dropdown.classList.contains('open')) {
+          dropdown._qymPendingOptions = null;
+          populateMetricVisibility(...pending);
+        }
+      });
+      dropdown._qymCloseWatch.observe(dropdown, { attributes: true, attributeFilter: ['class'] });
+    }
+    dropdown._qymOptionsHtml = html;
+    dropdown.innerHTML = html;
 
     // Wire search input for metrics
     const mvSearchInput = dropdown.querySelector('.model-search-input');
@@ -1706,6 +1822,10 @@
         file_path: run.file_path,
         timestamp: run.timestamp,
         metric_averages: run.metric_averages || {},
+        // Grouped Pass@K, consistency and reliability need the declared
+        // direction and the primary metric (C008, C035).
+        metric_specs: run.metric_specs || {},
+        metrics: run.metrics || [],
         trace_stats: run.trace_stats || null,
         avg_latency_ms: run.avg_latency_ms,
         median_latency_ms: run.median_latency_ms,
@@ -1808,15 +1928,9 @@
     }
     let runs = [...state.flatRuns];
 
-    // Quick filter (time-based)
-    switch (state.quickFilter) {
-      case 'today':
-        runs = runs.filter(r => isToday(r.timestamp));
-        break;
-      case 'week':
-        runs = runs.filter(r => isWithinDays(r.timestamp, 7));
-        break;
-    }
+    // Quick filter (time-based) and the Runs search
+    const bounds = timeFilterBounds();
+    runs = runs.filter(r => runMatchesTimeFilter(r, bounds) && runMatchesSearch(r));
 
     // Dropdown filters
     if (state.filterTasks.size > 0 && !state.filterTasks.has('__none__')) {
@@ -2093,10 +2207,10 @@
     legendEl.innerHTML = state.allModels.map((model, idx) => {
       const isActive = state.filterModels.size === 0 || state.filterModels.has(model);
       return `
-        <div class="legend-item ${isActive ? '' : 'inactive'}" data-model="${escapeHtml(model)}" title="${escapeHtml(getModelFilterOptionLabel(model))}">
+        <button type="button" class="legend-item ${isActive ? '' : 'inactive'}" data-model="${escapeHtml(model)}" aria-pressed="${isActive ? 'true' : 'false'}" title="${escapeHtml(getModelFilterOptionLabel(model))} (click to show or hide; double-click to show only this model)">
           <span class="legend-color" style="background:${CHART_COLORS[idx % CHART_COLORS.length]}"></span>
           ${renderModelLabelForModelName(model)}
-        </div>
+        </button>
       `;
     }).join('');
 
@@ -2506,9 +2620,10 @@
         }).join('');
         return `
           <div class="chart-table-row">
-            <span class="chart-bar-label clickable-run ${isMultiRun ? 'multi-run' : ''}"
+            <a class="chart-bar-label clickable-run ${isMultiRun ? 'multi-run' : ''}"
+                  href="${escapeHtml(runOpenHref(runData))}"
                   data-file="${escapeHtml(file_path)}"
-                  title="${escapeHtml(tooltipText)}">${displayHtml}${versionTag}</span>
+                  title="${escapeHtml(tooltipText)}">${displayHtml}${versionTag}</a>
             ${dataCells}
           </div>
         `;
@@ -2592,9 +2707,8 @@
 
         state.chartGroupMetricStats[cacheKey] = { status: 'loading', K: runs.length };
         const paths = Array.from(new Set(runs.map(run => run.file_path).filter(Boolean)));
-        fetchModelRunsData(paths).then((payload) => {
-          const detailedRuns = payload && Array.isArray(payload.runs) ? payload.runs : [];
-          const stats = calculateModelStatsFromItems(detailedRuns, metricName, threshold, isBoolean, runsMetricDirection(runs, metricName));
+        fetchChartGroupStats(cacheKey, paths, metricName, threshold, isBoolean, runsMetricDirection(runs, metricName)).then((stats) => {
+          stats = stats || emptyModelStats();
           state.chartGroupMetricStats[cacheKey] = { status: 'ready', K: stats.K || runs.length, stats };
           if (state.currentView === 'charts') renderChartsView();
         }).catch(() => {
@@ -2942,14 +3056,7 @@
     // Wire up click events for run labels
     gridEl.querySelectorAll('.chart-bar-label.clickable-run').forEach(label => {
       label.addEventListener('click', (e) => {
-        const target = e.target.closest('.chart-bar-label');
-        const filePath = target?.dataset.file;
-        if (filePath) {
-          openRun(filePath, e);
-        }
-      });
-      label.addEventListener('auxclick', (e) => {
-        if (e.button !== 1) return;
+        if (isModifiedEvent(e)) return; // native new tab / window
         const target = e.target.closest('.chart-bar-label');
         const filePath = target?.dataset.file;
         if (filePath) {
@@ -2961,6 +3068,15 @@
 
     // Wire up sortable column headers
     gridEl.querySelectorAll('.sortable-col').forEach(header => {
+      if (header.tagName !== 'BUTTON') {
+        header.setAttribute('role', 'button');
+        header.tabIndex = 0;
+        header.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          header.click();
+        });
+      }
       header.addEventListener('click', (e) => {
         const target = e.currentTarget;
         const cardId = target.dataset.card;
@@ -3174,8 +3290,24 @@
 
     // Wire up sorting for all sortable columns
     headerRow.querySelectorAll('.sortable').forEach(th => {
+      enhanceSortableHeader(th);
       th.onclick = () => handleColumnSort(th.dataset.sort);
     });
+    updateSortIndicators();
+  }
+
+  // Keyboard and screen-reader access to sorting: the header label becomes a
+  // <button> (Tab reaches it, Enter/Space sort) and the th carries aria-sort.
+  function enhanceSortableHeader(th) {
+    if (th.querySelector('.th-sort-button')) return;
+    const labelHost = th.querySelector('.run-header-label') || th;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'th-sort-button';
+    while (labelHost.firstChild) button.appendChild(labelHost.firstChild);
+    labelHost.appendChild(button);
+    const label = button.textContent.replace(/\s+/g, ' ').trim();
+    if (label) button.setAttribute('aria-label', `Sort by ${label}`);
   }
 
   function handleColumnSort(sortField) {
@@ -3205,10 +3337,12 @@
 
     headerRow.querySelectorAll('.sortable').forEach(th => {
       th.classList.remove('sorted', 'asc');
+      th.setAttribute('aria-sort', 'none');
       const sortField = th.dataset.sort;
       if (state.sortKey.startsWith(sortField + '-') ||
           (sortField.startsWith('metric-') && state.sortKey.startsWith(sortField))) {
         th.classList.add('sorted');
+        th.setAttribute('aria-sort', state.sortKey.endsWith('-asc') ? 'ascending' : 'descending');
         if (state.sortKey.endsWith('-asc')) {
           th.classList.add('asc');
         }
@@ -3234,6 +3368,8 @@
   // Repeat runs: expand each ×k run into k per-pass pseudo-runs so group
   // analysis pools attempts (the attempt is the atomic unit). Runs without
   // pass data flow through unchanged (each = 1 attempt, today's semantics).
+  // The Models view and Charts groups apply the same rule on the server
+  // (services/model_stats.py expand_sampled_runs); keep the two in step.
   function expandSampledRunsData(runsData) {
     const out = [];
     (runsData || []).forEach(rd => {
@@ -3242,7 +3378,7 @@
       // A snapshot whose errored items alone carry passes (the Models
       // payload) stays one entry per item.
       const hasPassData = samples > 1 && rd?.snapshot?.pass_scores_scope !== 'errored'
-        && rows.some(r => r && r.pass_scores);
+        && rows.some(r => r && r.pass_scores && Object.keys(r.pass_scores).length > 0);
       if (!hasPassData) { out.push(rd); return; }
       const metricNames = rd.snapshot.metric_names || rd.run.metric_names || [];
       for (let p = 0; p < samples; p++) {
@@ -3382,12 +3518,15 @@
     if (state.currentView !== 'table') return '';
     const frozen = new Set(getRunsFrozenColumns());
     const query = String(searchValue || '').toLowerCase();
+    // The fit note is filled by syncRunsFrozenColumnControls(), so the
+    // menu's markup does not change with the window width.
     return '<div class="mv-trace-separator"></div>' +
       '<div class="mv-frozen-header">' +
         '<div class="mv-trace-label" id="mv-frozen-label">Frozen columns</div>' +
         '<button type="button" class="qym-dropdown__action mv-frozen-reset" id="mv-frozen-reset">Reset to default</button>' +
       '</div>' +
-      '<div role="group" aria-labelledby="mv-frozen-label">' +
+      '<p class="mv-frozen-fit" id="mv-frozen-fit" hidden></p>' +
+      '<div role="group" aria-labelledby="mv-frozen-label" aria-describedby="mv-frozen-fit">' +
       RUNS_IDENTITY_COLUMNS.map(column => {
         const hidden = query && !column.label.toLowerCase().includes(query) ? ' style="display:none"' : '';
         return `<label class="multi-select-option qym-dropdown__option"${hidden}><input type="checkbox" ${frozen.has(column.key) ? 'checked' : ''} data-frozen-column="${escapeHtml(column.key)}" /><span>${escapeHtml(column.label)}</span></label>`;
@@ -3425,14 +3564,47 @@
       reset.setAttribute('aria-disabled', isDefault ? 'true' : 'false');
       reset.title = isDefault ? 'Default: all seven columns frozen' : 'Freeze all seven columns again';
     }
+    const fitNote = dropdown.querySelector('#mv-frozen-fit');
+    if (fitNote) {
+      fitNote.textContent = runsFrozenFitNote();
+      fitNote.hidden = !fitNote.textContent;
+    }
+  }
+
+  // A frozen block wider than about 55% of the table's visible width leaves
+  // the scores no room: the seven columns' minimum widths alone (~1090px)
+  // exceed the 1088px a 1280px window shows. The trailing frozen columns
+  // (Date, Owner, Dataset, ...; never Run name) then scroll with the table
+  // until the block fits. The saved choice is not changed, so a wider window
+  // freezes them again. Returns the columns to freeze now and those let go.
+  const RUNS_FROZEN_MAX_SHARE = 0.55;
+  function fitRunsFrozenColumns(widths, available) {
+    const fitted = getRunsFrozenColumns().slice();
+    const unfrozen = [];
+    if (!(available > 0)) return { fitted, unfrozen };
+    let total = fitted.reduce((sum, key) => sum + (widths[key] || 0), 0);
+    while (total > available * RUNS_FROZEN_MAX_SHARE && fitted.length && fitted[fitted.length - 1] !== 'run') {
+      const key = fitted.pop();
+      total -= widths[key] || 0;
+      unfrozen.unshift(key);
+    }
+    return { fitted, unfrozen };
+  }
+
+  // The Columns menu names the columns let go to fit this width.
+  function runsFrozenFitNote() {
+    const labels = (state.runsUnfrozenToFit || [])
+      .map(key => RUNS_IDENTITY_COLUMNS.find(column => column.key === key)?.label)
+      .filter(Boolean);
+    return labels.length ? `Unfrozen to fit this width: ${labels.join(', ')}` : '';
   }
 
   // Marks the frozen columns on the table and writes each one's left offset:
   // the measured width of the frozen columns before it. A frozen column with
   // a scrolling column (or the table's data) to its right is an edge and
   // casts the separator shadow.
-  function applyRunsFrozenColumns(table, widths) {
-    const frozen = new Set(getRunsFrozenColumns());
+  function applyRunsFrozenColumns(table, widths, frozenKeys) {
+    const frozen = new Set(frozenKeys);
     const edges = [];
     let left = 0;
     RUNS_IDENTITY_COLUMNS.forEach((column, index) => {
@@ -3445,7 +3617,10 @@
       const next = RUNS_IDENTITY_COLUMNS[index + 1];
       if (!next || !frozen.has(next.key)) edges.push(column.key);
     });
-    table.dataset.frozenColumns = getRunsFrozenColumns().join(' ');
+    table.dataset.frozenColumns = RUNS_IDENTITY_COLUMNS
+      .map(column => column.key)
+      .filter(key => frozen.has(key))
+      .join(' ');
     table.dataset.frozenEdges = edges.join(' ');
   }
 
@@ -3559,11 +3734,255 @@
         table.style.setProperty(widthVar, `${width}px`);
         widths[key] = width;
       });
-      applyRunsFrozenColumns(table, widths);
+      // A table that does not scroll sideways shows every column either way.
+      const scrolls = !!scroller && scroller.scrollWidth > scroller.clientWidth + 1;
+      const { fitted, unfrozen } = fitRunsFrozenColumns(widths, scrolls ? scroller.clientWidth : 0);
+      applyRunsFrozenColumns(table, widths, fitted);
+      if (unfrozen.join(' ') !== (state.runsUnfrozenToFit || []).join(' ')) {
+        state.runsUnfrozenToFit = unfrozen;
+        syncRunsFrozenColumnControls();
+      }
       if (scroller) {
         scroller.scrollLeft = keepEnd ? scroller.scrollWidth : scrollLeft;
         state._runsTableAtEnd = keepEnd || isRunsTableAtEnd(scroller);
       }
+    });
+  }
+
+  // Controls that keep keyboard focus when their row is rebuilt, most specific first.
+  const RUNS_ROW_FOCUS_TARGETS = [
+    '.row-checkbox', '.samples-toggle', '.run-id', '.run-analysis-chip', '.run-analysis-start',
+    '.actions-trigger', '.approve-run', '.reject-run', '.unapprove-run', '.unreject-run',
+    '.submit-run', '.transfer-run', '.delete-run',
+  ];
+
+  function runsSamplesPanelId(runId) {
+    return `samples-detail-${String(runId || '').replace(/[^A-Za-z0-9_-]/g, '_')}`;
+  }
+
+  // Per-view state of one keyed run row: index, stripes, focus, selection and
+  // the open state of a repeat run. Cheap enough to run for every row.
+  function syncRunsRowState(row, run, idx) {
+    if (!row || !run) return;
+    const samplesOpen = run.samples > 1 && !!(state._samplesExpanded || {})[run.run_id];
+    const selectedPassCount = samplesOpen
+      ? Array.from(state.selectedRuns).filter(ref => isPassRef(ref) && passRefBase(ref) === run.file_path).length
+      : 0;
+    const isSelected = samplesOpen
+      ? selectedPassCount > 0 && selectedPassCount === Number(run.samples)
+      : state.selectedRuns.has(run.file_path);
+    row.dataset.idx = String(idx);
+    row.classList.toggle('run-row-even', idx % 2 === 0);
+    row.classList.toggle('run-row-odd', idx % 2 !== 0);
+    row.classList.toggle('selected', isSelected);
+    row.classList.toggle('focused', idx === state.focusedIndex);
+    row.classList.toggle('samples-open', samplesOpen);
+    const checkbox = row.querySelector('.row-checkbox');
+    if (checkbox) {
+      checkbox.checked = isSelected;
+      checkbox.indeterminate = samplesOpen && selectedPassCount > 0 && selectedPassCount < Number(run.samples);
+      checkbox.setAttribute('aria-label', `${samplesOpen ? 'Select all passes for' : 'Select run'} ${run.external_run_id || run.run_id || ''}`);
+    }
+    const toggle = row.querySelector('.samples-toggle');
+    if (toggle) {
+      const label = `${samplesOpen ? 'Collapse' : 'Expand'} ${run.samples} pass results`;
+      toggle.classList.toggle('open', samplesOpen);
+      toggle.setAttribute('aria-expanded', samplesOpen ? 'true' : 'false');
+      toggle.setAttribute('aria-label', label);
+      toggle.title = label;
+    }
+  }
+
+  function runsTableRows() {
+    const tbody = el('runs-tbody');
+    return tbody ? Array.from(tbody.children).filter(row => row.dataset.file && !row.hasAttribute('data-samples-for')) : [];
+  }
+
+  // Moving the highlight touches two rows, never the table.
+  function syncRunsRowFocus() {
+    let focusedRow = null;
+    runsTableRows().forEach(row => {
+      const focused = Number(row.dataset.idx) === state.focusedIndex;
+      row.classList.toggle('focused', focused);
+      if (focused) focusedRow = row;
+    });
+    return focusedRow;
+  }
+
+  function renderSelectModeControls() {
+    const loaded = !!state.runs;
+    const selectionAvailable = loaded && (usesDashboardSummary() ? state.dashboardOverview.total_count > 0 : state.flatRuns.length > 0);
+    // Until the list answers, a selection kept from an earlier visit stays.
+    if (loaded && !selectionAvailable && !state.dashboardOverview?.freshness?.updating) {
+      state.selectMode = false;
+      state.selectedRuns.clear();
+      state.cohortAnchorRuns = null;
+    } else if (state.selectedRuns.size > 0 || state.cohortAnchorRuns) {
+      state.selectMode = true;
+    }
+    el('table-view')?.classList.toggle('select-mode', state.selectMode);
+    const selectModeBtn = el('select-mode-btn');
+    if (selectModeBtn) {
+      const modeVisible = state.currentView === 'table';
+      selectModeBtn.style.display = modeVisible ? 'inline-flex' : 'none';
+      selectModeBtn.disabled = !selectionAvailable;
+      selectModeBtn.textContent = state.selectMode ? 'Done' : 'Select';
+      selectModeBtn.setAttribute('aria-pressed', state.selectMode ? 'true' : 'false');
+      selectModeBtn.classList.toggle('qym-inline-action--neutral', !state.selectMode);
+      selectModeBtn.classList.toggle('qym-inline-action--accent', state.selectMode);
+    }
+  }
+
+  function syncRunsSelectAll() {
+    const selectAllCheckbox = el('select-all');
+    if (!selectAllCheckbox) return;
+    const visibleFilePaths = runsTableRows().map(row => decodeURIComponent(row.dataset.file));
+    const selectedCount = visibleFilePaths.filter(filePath => state.selectedRuns.has(filePath)).length;
+    selectAllCheckbox.disabled = visibleFilePaths.length === 0;
+    selectAllCheckbox.checked = visibleFilePaths.length > 0 && selectedCount === visibleFilePaths.length;
+    selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < visibleFilePaths.length;
+  }
+
+  // A selection change patches checkboxes, row classes and the selection bar
+  // instead of re-rendering the table and every filter.
+  function syncRunsSelection() {
+    const ctx = state._runsTableCtx;
+    const tbody = el('runs-tbody');
+    if (state.currentView !== 'table' || !ctx || !tbody || !runsTableRows().length) {
+      render();
+      return;
+    }
+    const wasSelectMode = el('table-view')?.classList.contains('select-mode');
+    renderSelectModeControls();
+    // The checkbox column changes the frozen columns' widths.
+    if (wasSelectMode !== state.selectMode) scheduleRunsStickyColumnSizing();
+    tbody.querySelectorAll('tr[data-samples-for] .pass-checkbox').forEach(checkbox => {
+      checkbox.checked = state.selectedRuns.has(checkbox.dataset.passRef);
+    });
+    runsTableRows().forEach(row => {
+      const run = ctx.runFor(decodeURIComponent(row.dataset.file));
+      if (!run) return;
+      syncRunsRowState(row, run, Number(row.dataset.idx));
+      if (run.samples > 1 && state._samplesExpanded?.[run.run_id]) ctx.syncRepeatParentSelection(run, row);
+    });
+    syncRunsSelectAll();
+    renderComparePanel();
+  }
+
+  function closeRunActionsMenu(row) {
+    row?.querySelector('.actions-dropdown')?.classList.remove('open');
+  }
+
+  // The list shows a review action as soon as the server confirms it, so the
+  // row stops offering the old action; the refresh that follows reconciles
+  // the row with the published projection.
+  function applyRunWorkflowResult(filePath, status) {
+    const nextStatus = String(status || '').toUpperCase();
+    if (!nextStatus) return;
+    const patch = run => {
+      if (run && run.file_path === filePath) run.status = nextStatus;
+    };
+    state.flatRuns.forEach(patch);
+    (state.filteredRuns || []).forEach(patch);
+    (state.dashboardPage?.rows || []).forEach(patch);
+    state.dashboardPinnedRuns.forEach(patch);
+    if (state.currentView === 'table' && el('runs-tbody')) renderTableView();
+    renderComparePanel();
+  }
+
+  // One set of listeners for every row the table ever renders.
+  function wireRunsTableEvents() {
+    const tbody = el('runs-tbody');
+    if (!tbody || tbody._qymRowEvents) return;
+    tbody._qymRowEvents = true;
+    const rowFor = target => {
+      const row = target && target.closest ? target.closest('tr[data-file]') : null;
+      return row && row.parentElement === tbody && !row.hasAttribute('data-samples-for') ? row : null;
+    };
+    const runFor = row => state._runsTableCtx?.runFor(decodeURIComponent(row.dataset.file)) || null;
+
+    // Capture phase: row controls handle the event before it reaches the row.
+    tbody.addEventListener('click', event => {
+      const row = rowFor(event.target);
+      if (!row) return;
+      const control = event.target.closest('.samples-toggle, .run-id, .run-analysis-chip, .run-analysis-start, .actions-trigger, .submit-run, .transfer-run, .approve-run, .reject-run, .unapprove-run, .unreject-run, .delete-run');
+      if (!control || !row.contains(control)) return;
+      const run = runFor(row);
+      if (!run) return;
+      event.stopPropagation();
+      if (control.matches('.samples-toggle')) {
+        state._runsTableCtx.toggleSamples(control);
+        return;
+      }
+      if (control.matches('.run-id')) {
+        // The run name is a real link: modified clicks, "Open in new tab"
+        // and "Copy link" stay native; a plain click navigates in-app (C051).
+        if (isModifiedEvent(event)) return;
+        event.preventDefault();
+        openRun(run.file_path, event);
+        return;
+      }
+      event.preventDefault();
+      if (control.matches('.run-analysis-chip, .run-analysis-start')) {
+        navigateTo(control.href);
+        return;
+      }
+      if (control.matches('.actions-trigger')) {
+        const menu = row.querySelector('.actions-dropdown');
+        document.querySelectorAll('.actions-dropdown.open').forEach(other => {
+          if (other !== menu) other.classList.remove('open');
+        });
+        menu?.classList.toggle('open');
+        return;
+      }
+      closeRunActionsMenu(row);
+      const name = getRunDisplayName(run);
+      const target = { filePath: run.file_path };
+      // Submit confirms first, with an optional comment (C061).
+      if (control.matches('.submit-run')) showWorkflowModal('submit', run.run_id, name, { runs: [run] });
+      else if (control.matches('.transfer-run')) showTransferOwnershipModal(run);
+      else if (control.matches('.approve-run')) showWorkflowModal('approve', run.run_id, name, target);
+      else if (control.matches('.reject-run')) showWorkflowModal('reject', run.run_id, name, target);
+      else if (control.matches('.unapprove-run')) showWorkflowModal('unapprove', run.run_id, name, target);
+      else if (control.matches('.unreject-run')) showWorkflowModal('unreject', run.run_id, name, target);
+      else if (control.matches('.delete-run')) confirmDeleteRun(run.file_path, run.run_id);
+    }, true);
+
+    // Middle-click on the run name is the link's own (C051).
+    tbody.addEventListener('auxclick', event => {
+      if (event.button === 1 && event.target.closest('#runs-tbody a.run-id')) event.stopPropagation();
+    }, true);
+
+    tbody.addEventListener('change', event => {
+      const checkbox = event.target.closest('.row-checkbox');
+      const row = checkbox && rowFor(checkbox);
+      const run = row && runFor(row);
+      if (!run) return;
+      if (run.samples > 1 && state._samplesExpanded?.[run.run_id]) {
+        state._runsTableCtx.toggleExpandedPassSelection(run, row);
+      } else {
+        toggleSelect(run.file_path);
+      }
+    });
+
+    // Bubble phase: a plain click on the row moves the highlight; on a repeat
+    // run it opens or closes the passes. Interactive children stop the event.
+    tbody.addEventListener('click', event => {
+      const row = rowFor(event.target);
+      if (!row) return;
+      state.focusedIndex = Number(row.dataset.idx);
+      const rowToggle = row.querySelector('.samples-toggle');
+      if (rowToggle) {
+        rowToggle.click();
+        return;
+      }
+      syncRunsRowFocus();
+    });
+
+    tbody.addEventListener('dblclick', event => {
+      const row = rowFor(event.target);
+      const run = row && runFor(row);
+      if (run) openRun(run.file_path);
     });
   }
 
@@ -3656,25 +4075,13 @@
     const anyRepeatRows = runs.some(r => r.samples > 1);
     if (headerRow) headerRow.classList.toggle('has-repeat-rows', anyRepeatRows);
 
-    tbody.innerHTML = runs.map((run, pageIdx) => {
-      const idx = pagination.start + pageIdx;
+    // Rows are keyed by run: a refresh, sort or page change rebuilds only the
+    // rows whose markup changed. Focus, selection, stripes and the open state
+    // of repeat runs are not part of the markup; syncRunsRowState applies them.
+    const runRowHtml = run => {
       const dt = formatDate(run.timestamp);
       const durationText = formatDurationMs(run.duration_ms);
-      const isFocused = idx === state.focusedIndex;
-      const samplesOpen = run.samples > 1 && !!(state._samplesExpanded || {})[run.run_id];
-      const selectedPassCount = samplesOpen
-        ? Array.from(state.selectedRuns).filter(ref => isPassRef(ref) && passRefBase(ref) === run.file_path).length
-        : 0;
-      const isSelected = samplesOpen
-        ? selectedPassCount > 0 && selectedPassCount === Number(run.samples)
-        : state.selectedRuns.has(run.file_path);
-      const samplesPanelId = `samples-detail-${idx}`;
-      const rowClasses = [
-        idx % 2 === 0 ? 'run-row-even' : 'run-row-odd',
-        isSelected ? 'selected' : '',
-        isFocused ? 'focused' : '',
-        samplesOpen ? 'samples-open' : '',
-      ].filter(Boolean).join(' ');
+      const samplesPanelId = runsSamplesPanelId(run.run_id);
 
       // Generate metric columns
       const metricCells = metricsToShow.map(metric => {
@@ -3714,7 +4121,11 @@
       const canApprove = writable && isProjectManager && status === 'SUBMITTED';
       const canUnapprove = writable && isProjectManager && status === 'APPROVED';
       const canUnreject = writable && isProjectManager && status === 'REJECTED';
-      const canSubmit = writable && isOwner && (status === 'COMPLETED' || status === 'FAILED' || status === 'REJECTED');
+      // The owner submits; a project manager or admin may submit for them (C072).
+      const canSubmit = writable && (isOwner || isProjectManager) && (status === 'COMPLETED' || status === 'FAILED' || status === 'REJECTED');
+      const ownerName = run.owner ? (run.owner.display_name || run.owner.email || '') : '';
+      const submitTitle = isOwner || !ownerName ? 'Submit for approval' : `Submit for approval on behalf of ${ownerName}`;
+      const canTransfer = writable && isProjectManager;
       const canDelete = writable && (globalRole === 'ADMIN' || isProjectManager || isOwner);
       const progressText = (status === 'RUNNING' && run.progress_total)
         ? `${run.progress_completed || 0}/${run.progress_total}`
@@ -3741,27 +4152,22 @@
       }
 
       return `
-        <tr data-idx="${idx}" data-file="${encodeURIComponent(run.file_path)}"
-            data-can-delete-pass="${canDelete && status !== 'RUNNING' && status !== 'PENDING' ? 'true' : 'false'}"
-            class="${rowClasses}">
+        <tr data-file="${encodeURIComponent(run.file_path)}"
+            data-can-delete-pass="${canDelete && !['RUNNING', 'PENDING', 'SUBMITTED', 'APPROVED'].includes(status) ? 'true' : 'false'}">
           <td class="col-run">
             <div class="run-cell-content">
               <label class="custom-checkbox run-select-control" onclick="event.stopPropagation()">
-                <input type="checkbox" class="row-checkbox"
-                  aria-label="${samplesOpen ? 'Select all passes for' : 'Select run'} ${escapeHtml(run.external_run_id || run.run_id || '')}"
-                  ${isSelected ? 'checked' : ''} />
+                <input type="checkbox" class="row-checkbox" />
                 <span class="checkmark"></span>
               </label>
-              ${run.samples > 1 ? `<button type="button" class="samples-toggle qym-icon-action${samplesOpen ? ' open' : ''}"
+              ${run.samples > 1 ? `<button type="button" class="samples-toggle qym-icon-action"
                 data-run-id="${escapeHtml(run.run_id)}" data-panel-id="${samplesPanelId}"
                 data-count="${escapeHtml(run.samples)}"
                 data-status="${escapeHtml(status)}"
                 data-live="${status === 'RUNNING' || status === 'PENDING' ? 'true' : 'false'}"
-                aria-expanded="${samplesOpen ? 'true' : 'false'}" aria-controls="${samplesPanelId}"
-                aria-label="${samplesOpen ? 'Collapse' : 'Expand'} ${run.samples} pass results"
-                title="${samplesOpen ? 'Collapse' : 'Expand'} ${run.samples} pass results"><svg class="samples-toggle-chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m4 6 4 4 4-4"></path></svg></button>`
+                aria-controls="${samplesPanelId}"><svg class="samples-toggle-chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m4 6 4 4 4-4"></path></svg></button>`
                 : (anyRepeatRows ? '<span class="samples-toggle-spacer" aria-hidden="true"></span>' : '')}
-              <span class="run-id" title="${escapeHtml(run.run_id)}">${run.external_run_id ? truncateText(run.external_run_id, 30) : escapeHtml(run.run_id.substring(0, 8))}</span>
+              <a class="run-id" href="${escapeHtml(runOpenHref(run))}" title="${escapeHtml(run.run_id)}">${run.external_run_id ? truncateText(run.external_run_id, 30) : escapeHtml(run.run_id.substring(0, 8))}</a>
               ${run.samples > 1 ? `<span class="run-pass-count">x${run.samples}</span>` : ''}
             </div>
           </td>
@@ -3817,9 +4223,9 @@
             <span class="duration-value">${durationText}</span>
           </td>
           <td class="col-actions">
-            ${(canApprove || canUnapprove || canUnreject) ? `
+            ${(canApprove || canUnapprove || canUnreject || canTransfer) ? `
               <div class="actions-dropdown" onclick="event.stopPropagation()">
-                <button class="actions-trigger qym-icon-action workflow-trigger" title="${(canUnapprove || canUnreject) ? 'Review decision actions' : 'Review'}" aria-label="${(canUnapprove || canUnreject) ? 'Review decision actions' : 'Review run'}">
+                <button class="actions-trigger qym-icon-action workflow-trigger" title="${(canApprove || canUnapprove || canUnreject) ? ((canUnapprove || canUnreject) ? 'Review decision actions' : 'Review') : 'Run actions'}" aria-label="${(canApprove || canUnapprove || canUnreject) ? ((canUnapprove || canUnreject) ? 'Review decision actions' : 'Review run') : 'Run actions'}">
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                     <polyline points="14 2 14 8 20 8"></polyline>
@@ -3855,11 +4261,20 @@
                     </svg>
                     <span>Unreject</span>
                   </a>` : ''}
+                  ${canTransfer ? `<a href="#" class="actions-item transfer-run">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M16 3h5v5"></path>
+                      <path d="M21 3l-7 7"></path>
+                      <path d="M8 21H3v-5"></path>
+                      <path d="M3 21l7-7"></path>
+                    </svg>
+                    <span>Transfer ownership</span>
+                  </a>` : ''}
                 </div>
               </div>
             ` : ''}
             ${canSubmit ? `
-              <a href="#" class="action-icon qym-icon-action submit-run" title="Submit for Approval" aria-label="Submit for approval" onclick="event.stopPropagation()">
+              <a href="#" class="action-icon qym-icon-action submit-run" title="${escapeHtml(submitTitle)}" aria-label="${escapeHtml(submitTitle)}" onclick="event.stopPropagation()">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="22" y1="2" x2="11" y2="13"></line>
                   <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
@@ -3877,154 +4292,64 @@
           </td>
         </tr>
       `;
-    }).join('');
+    };
+
+    // Keep the control a keyboard or screen-reader user is on when its row
+    // has to be rebuilt.
+    const active = document.activeElement;
+    const activeRow = active && tbody.contains(active) ? active.closest('tr[data-file]') : null;
+    const activeFocus = activeRow ? {
+      file: activeRow.dataset.file,
+      selector: RUNS_ROW_FOCUS_TARGETS.find(selector => active.matches(selector)) || null,
+    } : null;
+
+    const structure = JSON.stringify([
+      metricsToShow, visibleTraceMetrics.map(tm => tm.key), [...visibleSystemColumns], anyRepeatRows,
+    ]);
+    const reuse = tbody.dataset.rowStructure === structure;
+    tbody.dataset.rowStructure = structure;
+    const existing = new Map();
+    Array.from(tbody.children).forEach(child => {
+      // Expanded pass rows are re-inserted below for every open repeat run.
+      if (reuse && child.dataset.file && !child.hasAttribute('data-samples-for')) {
+        existing.set(child.dataset.file, child);
+      } else {
+        child.remove();
+      }
+    });
+    const template = document.createElement('template');
+    const ordered = runs.map(run => {
+      const key = encodeURIComponent(run.file_path);
+      const html = runRowHtml(run);
+      let row = existing.get(key);
+      existing.delete(key);
+      if (!row || row._qymRowHtml !== html) {
+        if (row) row.remove();
+        template.innerHTML = html.trim();
+        row = template.content.firstElementChild;
+        row._qymRowHtml = html;
+      }
+      return row;
+    });
+    existing.forEach(row => row.remove());
+    let cursor = tbody.firstElementChild;
+    ordered.forEach(row => {
+      if (row === cursor) {
+        cursor = cursor.nextElementSibling;
+      } else {
+        tbody.insertBefore(row, cursor);
+      }
+    });
+    const runsByFile = new Map(runs.map(run => [run.file_path, run]));
+    ordered.forEach((row, pageIdx) => syncRunsRowState(row, runs[pageIdx], pagination.start + pageIdx));
+    if (activeFocus && !tbody.contains(document.activeElement)) {
+      const row = Array.from(tbody.children).find(candidate => candidate.dataset.file === activeFocus.file);
+      const target = row && activeFocus.selector ? row.querySelector(activeFocus.selector) : row?.querySelector('.row-checkbox');
+      target?.focus({ preventScroll: true });
+    }
 
     // Update sort indicators
     updateSortIndicators();
-
-    // Wire events
-    tbody.querySelectorAll('tr[data-idx]').forEach(tr => {
-      const idx = parseInt(tr.dataset.idx);
-      const filePath = decodeURIComponent(tr.dataset.file);
-      const run = state.filteredRuns[idx - (usesDashboardPage() ? state.dashboardPage.offset : 0)];
-
-      const checkbox = tr.querySelector('.row-checkbox');
-      if (checkbox) {
-        const repeatExpanded = run.samples > 1 && !!state._samplesExpanded?.[run.run_id];
-        const selectedPasses = repeatExpanded
-          ? Array.from(state.selectedRuns).filter(ref => isPassRef(ref) && passRefBase(ref) === filePath).length
-          : 0;
-        checkbox.indeterminate = repeatExpanded
-          && selectedPasses > 0
-          && selectedPasses < Number(run.samples);
-        checkbox.addEventListener('click', (e) => {
-          e.stopPropagation();
-        });
-        checkbox.addEventListener('change', () => {
-          const expanded = run.samples > 1 && !!state._samplesExpanded?.[run.run_id];
-          if (expanded) {
-            toggleExpandedPassSelection(run, tr);
-          } else {
-            toggleSelect(filePath);
-          }
-        });
-      }
-
-      const analysisLink = tr.querySelector('.run-analysis-chip, .run-analysis-start');
-      if (analysisLink) {
-        analysisLink.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          navigateTo(analysisLink.href);
-        });
-      }
-
-      tr.querySelector('.run-id').addEventListener('click', (e) => {
-        e.stopPropagation();
-        openRun(filePath, e);
-      });
-      tr.querySelector('.run-id').addEventListener('auxclick', (e) => {
-        if (e.button !== 1) return;
-        e.preventDefault();
-        e.stopPropagation();
-        openRun(filePath, e);
-      });
-
-      const closeDropdown = () => {
-        tr.querySelector('.actions-dropdown')?.classList.remove('open');
-      };
-
-      const submitBtn = tr.querySelector('.submit-run');
-      if (submitBtn) submitBtn.addEventListener('click', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeDropdown();
-        try {
-          const resp = await fetch(apiUrl(`v1/runs/${encodeURIComponent(run.run_id)}/submit`), { method: 'POST' });
-          if (resp.ok) {
-            showToast('success', 'Submitted', 'Run submitted for approval');
-          } else {
-            showToast('error', 'Submit Failed', 'Could not submit run');
-          }
-          await fetchRuns({ refreshAllPages: true });
-        } catch (err) {
-          console.error('Submit failed', err);
-          showToast('error', 'Submit Failed', err.message || 'Could not submit run');
-        }
-      });
-
-      const approveBtn = tr.querySelector('.approve-run');
-      if (approveBtn) approveBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeDropdown();
-        showWorkflowModal('approve', run.run_id, getRunDisplayName(run));
-      });
-
-      const rejectBtn = tr.querySelector('.reject-run');
-      if (rejectBtn) rejectBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeDropdown();
-        showWorkflowModal('reject', run.run_id, getRunDisplayName(run));
-      });
-
-      const unapproveBtn = tr.querySelector('.unapprove-run');
-      if (unapproveBtn) unapproveBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeDropdown();
-        showWorkflowModal('unapprove', run.run_id, getRunDisplayName(run));
-      });
-
-      const unrejectBtn = tr.querySelector('.unreject-run');
-      if (unrejectBtn) unrejectBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeDropdown();
-        showWorkflowModal('unreject', run.run_id, getRunDisplayName(run));
-      });
-
-      const deleteBtn = tr.querySelector('.delete-run');
-      if (deleteBtn) deleteBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeDropdown();
-        confirmDeleteRun(filePath, run.run_id);
-      });
-
-      // Actions dropdown toggle
-      const actionsDropdown = tr.querySelector('.actions-dropdown');
-      const actionsTrigger = tr.querySelector('.actions-trigger');
-      if (actionsTrigger && actionsDropdown) {
-        actionsTrigger.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          // Close any other open dropdowns
-          document.querySelectorAll('.actions-dropdown.open').forEach(d => {
-            if (d !== actionsDropdown) d.classList.remove('open');
-          });
-          actionsDropdown.classList.toggle('open');
-        });
-      }
-
-      tr.addEventListener('click', () => {
-        state.focusedIndex = idx;
-        // Repeat runs: the whole row is the expand target — the run name
-        // keeps navigating, but any other click toggles the passes (interactive
-        // children all stopPropagation, so they never land here).
-        const rowToggle = tr.querySelector('.samples-toggle');
-        if (rowToggle) {
-          rowToggle.click();
-          return;
-        }
-        renderTableView();
-      });
-
-      tr.addEventListener('dblclick', () => {
-        openRun(filePath);
-      });
-    });
 
     // Repeat runs expand in the table's native group dialect (mock option C):
     // a group-metrics strip styled like a group header, then one real table
@@ -4421,7 +4746,7 @@
         if (isPassRef(ref) && passRefBase(ref) === filePath) state.selectedRuns.delete(ref);
       });
       if (!allSelected) refs.forEach(ref => state.selectedRuns.add(ref));
-      render();
+      syncRunsSelection();
     }
 
     function insertSamplesDetail(runId, row, panelId, animate) {
@@ -4493,10 +4818,10 @@
           sessionStorage.removeItem('compareRuns');
           sessionStorage.removeItem('compareCohorts');
           sessionStorage.setItem('dashboardRunFile', filePath);
-          const base = state.currentProject && state.currentProject.slug
-            ? projectUrl(state.currentProject.slug, `runs/${encodeURIComponent(filePath)}`)
-            : apiUrl(`run/${encodeURIComponent(filePath)}`);
-          openUrl(`${base}?pass=${passNumber}`, event);
+          // The pass carries the list's view too, for its previous / next run
+          // (C044).
+          const url = runFromListUrl(filePath);
+          openUrl(`${url}${url.includes('?') ? '&' : '?'}pass=${passNumber}`, event);
         });
       });
       inserted.forEach(detail => {
@@ -4664,48 +4989,41 @@
           }
         }
       }
-      toggle.addEventListener('keydown', event => {
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        event.preventDefault();
-        toggle.click();
-      });
-      toggle.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const row = toggle.closest('tr');
-        if (!runId || !row) return;
-        const expanded = !state._samplesExpanded[runId];
-        const sampleCount = toggle.dataset.count || '';
-        state._samplesExpanded[runId] = expanded;
-        toggle.classList.toggle('open', expanded);
-        toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-        toggle.setAttribute('aria-label', `${expanded ? 'Collapse' : 'Expand'} ${sampleCount} pass results`);
-        toggle.title = `${expanded ? 'Collapse' : 'Expand'} ${sampleCount} pass results`;
-        row.classList.toggle('samples-open', expanded);
-        if (expanded) {
-          insertSamplesDetail(runId, row, panelId, true);
-          // The fetch fills the optimistic rows in place — no re-animation.
-          if (!state._samplesData[runId]) loadSamplesData(runId, row, panelId, false);
-        } else {
-          // Collapse instantly: rows can't animate height, so a fade would
-          // just hold their space and then snap — instant reads as crisp.
-          samplesDetailRows(runId).forEach(detail => detail.remove());
-          const run = runs.find(candidate => candidate.run_id === runId);
-          if (run) syncRepeatParentSelection(run, row);
-          scheduleRunsStickyColumnSizing();
-        }
-      });
     });
 
-    renderTablePagination(pagination);
-
-    const selectAllCheckbox = el('select-all');
-    if (selectAllCheckbox) {
-      const visibleFilePaths = runs.map(run => run.file_path);
-      const selectedCount = visibleFilePaths.filter(filePath => state.selectedRuns.has(filePath)).length;
-      selectAllCheckbox.disabled = visibleFilePaths.length === 0;
-      selectAllCheckbox.checked = visibleFilePaths.length > 0 && selectedCount === visibleFilePaths.length;
-      selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < visibleFilePaths.length;
+    function toggleSamples(toggle) {
+      const runId = toggle.dataset.runId;
+      const panelId = toggle.dataset.panelId;
+      const row = toggle.closest('tr');
+      if (!runId || !row) return;
+      const expanded = !state._samplesExpanded[runId];
+      state._samplesExpanded[runId] = expanded;
+      const run = runs.find(candidate => candidate.run_id === runId);
+      if (run) syncRunsRowState(row, run, Number(row.dataset.idx));
+      if (expanded) {
+        insertSamplesDetail(runId, row, panelId, true);
+        // The fetch fills the optimistic rows in place — no re-animation.
+        if (!state._samplesData[runId]) loadSamplesData(runId, row, panelId, false);
+      } else {
+        // Collapse instantly: rows can't animate height, so a fade would
+        // just hold their space and then snap — instant reads as crisp.
+        samplesDetailRows(runId).forEach(detail => detail.remove());
+        if (run) syncRepeatParentSelection(run, row);
+        scheduleRunsStickyColumnSizing();
+      }
     }
+
+    // Row events are delegated once on the tbody (see wireRunsTableEvents);
+    // they act on the rows of the latest render.
+    state._runsTableCtx = {
+      runFor: filePath => runsByFile.get(filePath) || null,
+      toggleSamples,
+      toggleExpandedPassSelection,
+      syncRepeatParentSelection,
+    };
+
+    renderTablePagination(pagination);
+    syncRunsSelectAll();
     scheduleRunsStickyColumnSizing();
   }
 
@@ -4830,6 +5148,7 @@
     const countText = filtered === total ? `${total} runs` : `${filtered} of ${total} runs`;
 
     const hasFilters = state.quickFilter !== 'all'
+      || !!activeSearchQuery()
       || state.filterTasks.size > 0
       || (state.filterModels.size > 0)
       || state.filterDatasets.size > 0
@@ -4869,8 +5188,11 @@
       } else if (state.filterUsers.has('__none__')) {
         parts.push('user: none');
       }
+      if (activeSearchQuery()) parts.push(`search: "${activeSearchQuery()}"`);
       if (state.quickFilter === 'today') parts.push('today');
       if (state.quickFilter === 'week') parts.push('last 7d');
+      if (state.quickFilter === 'month') parts.push('last 30d');
+      if (state.quickFilter === 'custom') parts.push(customRangeLabel());
       filterText = countText + (parts.length > 0 ? ` — ${parts.join(', ')}` : '');
     }
 
@@ -4964,7 +5286,8 @@
           const passIsDeletable = !isPassRef(ref)
             || (Number(run.samples) > 1
               && (selectedPassCounts.get(run.file_path) || 0) < Number(run.samples)
-              && !['RUNNING', 'PENDING'].includes(run.status || ''));
+              // A run in review or signed off keeps its passes (C041).
+              && !['RUNNING', 'PENDING', 'SUBMITTED', 'APPROVED'].includes(run.status || ''));
           return (canManageProject || ownsRun) && passIsDeletable;
         });
       const hasSelectedPasses = selectedRefs.some(isPassRef);
@@ -4972,17 +5295,20 @@
       deleteBtn.disabled = !allDeletable;
       deleteBtn.title = allDeletable
         ? (hasSelectedPasses ? 'Delete selected runs and passes' : 'Delete selected runs')
-        : 'Only owned, inactive runs and passes can be deleted';
+        : 'Only owned, inactive runs can be deleted, and passes only while the run is not submitted or approved';
     }
 
     // Bulk actions must follow the same ownership and status rules as row actions.
     const publishBtn = el('publish-selected');
     if (publishBtn) {
       const currentUserId = state.currentUser && state.currentUser.id;
+      // Managers and admins submit any run of the project for its owner (C072).
+      const managesProject = ((state.currentUser && state.currentUser.role) || '') === 'ADMIN'
+        || ((state.currentProject && state.currentProject.role) || '') === 'MANAGER';
       const allSubmittable = selectedRuns.length > 0 && selectedRuns.every(r => {
         const status = r.status || '';
         const isOwner = !!(currentUserId && r.owner && r.owner.id === currentUserId);
-        return isOwner && (status === 'COMPLETED' || status === 'FAILED' || status === 'REJECTED');
+        return (isOwner || managesProject) && (status === 'COMPLETED' || status === 'FAILED' || status === 'REJECTED');
       });
       publishBtn.style.display = (allSubmittable && !isCohortMode && !isProjectReadOnly()) ? 'inline-flex' : 'none';
       publishBtn.textContent = 'Submit';
@@ -4994,6 +5320,7 @@
   // ═══════════════════════════════════════════════════
 
   function render() {
+    if (!dashboardActive) return;
     if (state.dashboardRequestKey !== null) {
       const filterKey = getTableFilterKey();
       if (filterKey !== state.tableFilterKey) {
@@ -5001,6 +5328,9 @@
         state.tablePage = 1;
         state.focusedIndex = -1;
       }
+    }
+    syncDashboardUrl();
+    if (state.dashboardRequestKey !== null) {
       if (dashboardPageRequestKey() !== state.dashboardRequestKey) {
         el('table-view')?.setAttribute('aria-busy', 'true');
         fetchRuns();
@@ -5017,39 +5347,22 @@
     const gridView = el('grid-view');
     const timelineView = el('timeline-view');
     const modelsView = el('models-view');
-    const selectionAvailable = !!state.runs && (usesDashboardSummary() ? state.dashboardOverview.total_count > 0 : state.flatRuns.length > 0);
-
-    if (!selectionAvailable && !state.dashboardOverview?.freshness?.updating) {
-      state.selectMode = false;
-      state.selectedRuns.clear();
-      state.cohortAnchorRuns = null;
-    } else if (state.selectedRuns.size > 0 || state.cohortAnchorRuns) {
-      state.selectMode = true;
-    }
-    if (tableView) {
-      tableView.classList.toggle('select-mode', state.selectMode);
-    }
-    const selectModeBtn = el('select-mode-btn');
-    if (selectModeBtn) {
-      const modeVisible = state.currentView === 'table';
-      selectModeBtn.style.display = modeVisible ? 'inline-flex' : 'none';
-      selectModeBtn.disabled = !selectionAvailable;
-      selectModeBtn.textContent = state.selectMode ? 'Done' : 'Select';
-      selectModeBtn.setAttribute('aria-pressed', state.selectMode ? 'true' : 'false');
-      selectModeBtn.classList.toggle('qym-inline-action--neutral', !state.selectMode);
-      selectModeBtn.classList.toggle('qym-inline-action--accent', state.selectMode);
-    }
+    renderSelectModeControls();
     // Keep selection controls coherent even when loading/empty states return early.
     renderComparePanel();
+
+    // Each page carries only its own view's container (Runs has no charts or
+    // models view), so every container is optional here.
+    const hideViews = () => {
+      [chartsView, tableView, gridView, timelineView, modelsView].forEach(view => {
+        if (view) view.style.display = 'none';
+      });
+    };
 
     if (!state.runs) {
       loading.style.display = 'flex';
       empty.style.display = 'none';
-      chartsView.style.display = 'none';
-      tableView.style.display = 'none';
-      gridView.style.display = 'none';
-      timelineView.style.display = 'none';
-      if (modelsView) modelsView.style.display = 'none';
+      hideViews();
       return;
     }
 
@@ -5076,11 +5389,7 @@
         selectAllCheckbox.disabled = true;
       }
       empty.style.display = 'flex';
-      chartsView.style.display = 'none';
-      tableView.style.display = 'none';
-      gridView.style.display = 'none';
-      timelineView.style.display = 'none';
-      if (modelsView) modelsView.style.display = 'none';
+      hideViews();
       return;
     }
 
@@ -5154,6 +5463,7 @@
     if (state.filterDatasets.size > 0) n++;
     if (state.filterUsers.size > 0) n++;
     if (state.quickFilter !== 'all') n++;
+    if (activeSearchQuery()) n++;
     return n;
   }
 
@@ -5175,6 +5485,35 @@
       btn.classList.toggle('active', active);
       btn.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
+    const rangeButton = $('.filter-btn[data-filter="custom"]');
+    if (rangeButton) {
+      rangeButton.textContent = filter === 'custom' ? customRangeLabel() : 'Range';
+      rangeButton.title = filter === 'custom' ? `Runs from ${customRangeLabel()} (click to change)` : 'Choose a date range';
+    }
+  }
+
+  function applyQuickFilter(filter) {
+    state.quickFilter = filter;
+    setQuickFilterSelection(filter);
+    state.focusedIndex = -1;
+    render();
+  }
+
+  function setSearchQuery(value, { updateInput = false } = {}) {
+    const query = String(value || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+    const input = el('runs-search');
+    if (updateInput && input) input.value = query;
+    if (query === state.searchQuery) return;
+    state.searchQuery = query;
+    // Keep the search in the URL so Back, reload and shared links keep it.
+    try {
+      const url = new URL(window.location.href);
+      if (query) url.searchParams.set('q', query);
+      else url.searchParams.delete('q');
+      window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+    } catch {}
+    state.focusedIndex = -1;
+    render();
   }
 
   function clearAllFilters() {
@@ -5186,7 +5525,10 @@
     state.filterUsers.clear();
     state.quickFilter = 'all';
     setQuickFilterSelection('all');
-    populateFilterDropdowns();
+    if (state.searchQuery) {
+      setSearchQuery('', { updateInput: true });
+      return;
+    }
     render();
   }
 
@@ -5354,12 +5696,16 @@
     if (mvs.inFlightRequestKey === requestKey && mvs.inFlightRequestPromise) {
       combinedRunsPromise = mvs.inFlightRequestPromise;
     } else {
-      const allSelectedPaths = Array.from(new Set(modelSelections.flatMap(({ selectedPaths }) => selectedPaths)));
       const selectedRows = modelSelections.flatMap(({ selectedRuns }) => selectedRuns);
       const selectedRevision = selectedRows.every(run => run._revision !== undefined)
         ? JSON.stringify(selectedRows.map(run => [run.file_path, run._revision]).sort((a, b) => a[0].localeCompare(b[0])))
         : candidates?.selected_revision ?? candidates?.revision;
-      combinedRunsPromise = fetchModelRunsData(allSelectedPaths, selectedRevision);
+      // K-run statistics come from the server, a few hundred bytes per
+      // model, never the selected runs' item rows (C035).
+      combinedRunsPromise = fetchModelStats(
+        modelSelections.map(({ model, selectedPaths }) => ({ key: model, runs: selectedPaths })),
+        mvs.selectedMetric, mvs.threshold, mvs.metricIsBoolean, mvs.metricDirection, selectedRevision,
+      );
       mvs.inFlightRequestKey = requestKey;
       mvs.inFlightRequestPromise = combinedRunsPromise;
     }
@@ -5381,17 +5727,11 @@
       mvs.inFlightRequestPromise = null;
     }
 
-    const combinedRunsData = comparePayload && Array.isArray(comparePayload.runs) ? comparePayload.runs : [];
-    const runsDataById = new Map((combinedRunsData || []).map((runData) => {
-      const runInfo = runData && runData.run ? runData.run : {};
-      const runId = runInfo.file_path || runInfo.run_id || '';
-      return [runId, runData];
-    }));
+    const groupStats = (comparePayload && comparePayload.groups) || {};
 
     mvs.modelStats = {};
     modelSelections.forEach(({ model, selectedPaths, selectedRuns }) => {
-      const detailedData = selectedPaths.map((path) => runsDataById.get(path)).filter(Boolean);
-      mvs.modelStats[model] = calculateModelStatsFromItems(detailedData, mvs.selectedMetric, mvs.threshold, mvs.metricIsBoolean, mvs.metricDirection);
+      mvs.modelStats[model] = { ...(groupStats[model] || emptyModelStats()) };
       mvs.modelStats[model].traceAverages = calculateModelTraceStats(selectedRuns);
       mvs.modelStats[model].totalRetries = selectedRuns.reduce((sum, run) => sum + Number(run.total_retries || 0), 0);
       mvs.modelStats[model].totalAvailable = candidates?.totals?.[model] ?? runsByModel[model].length;
@@ -5519,90 +5859,92 @@
     return entry.promise;
   }
 
-  // Cache for fetched Models run data to avoid re-fetching
-  let modelsRunDataCache = null;
+  function emptyModelStats() {
+    return {
+      passAtK: 0, passHatK: 0, maxAtK: 0, consistency: 0, reliability: 0, avgScore: 0, avgLatency: 0, medianLatency: 0,
+      totalItems: 0, failedCount: 0, K: 0, correctDistribution: [0], runNames: [],
+      minScore: 0, stddevScore: 0
+    };
+  }
 
-  async function fetchModelRunsData(filePaths, revision = (state.dashboardOverview?.catalog_revision ?? state.dashboardOverview?.revision)) {
-    if (filePaths.length === 0) return { runs: [], cacheHit: true };
+  // The last K-run statistics request per view, reused while nothing it
+  // depends on changed (the same groups, metric, threshold and revision).
+  let modelStatsCache = null;
 
-    // Check cache first
-    const paths = [...new Set(filePaths)].sort();
-    const cacheKey = [getProjectSlugFromPath(), revision, ...paths].join('|');
-    if (modelsRunDataCache?.key === cacheKey) return modelsRunDataCache.promise;
+  // Pass@K, Pass^K, Max@K, consistency, reliability, averages, latency, error
+  // counts and the correct-count histogram per group, computed on the server
+  // with the metrics.js rules (services/model_stats.py). groups: [{key, runs}].
+  async function fetchModelStats(groups, metric, threshold, isBoolean, direction, revision = (state.dashboardOverview?.catalog_revision ?? state.dashboardOverview?.revision)) {
+    const payload = {
+      metric,
+      threshold: Number(threshold),
+      is_boolean: !!isBoolean,
+      direction: direction === 'maximize' || direction === 'minimize' ? direction : null,
+      groups: (groups || []).map(group => ({ key: String(group.key), runs: [...new Set(group.runs || [])] })),
+    };
+    if (!metric || payload.groups.length === 0) return { groups: {}, cacheHit: true };
+    const cacheKey = [getProjectSlugFromPath(), revision, JSON.stringify(payload)].join('|');
+    if (modelStatsCache?.key === cacheKey) return modelStatsCache.promise;
     const entry = { key: cacheKey, promise: null };
     entry.promise = (async () => {
-      const runs = [];
-      for (let offset = 0; offset < paths.length; offset += 100) {
-        const batch = paths.slice(offset, offset + 100);
-        const params = batch.map(f => `files=${encodeURIComponent(f)}`).join('&');
-        const response = await fetch(apiUrl(`api/models/runs?${params}`));
-        if (!response.ok) throw new Error(`Could not load selected runs (HTTP ${response.status})`);
-        const data = await response.json();
-        if (!Array.isArray(data.runs) || data.runs.length !== batch.length) throw new Error('Some selected runs are no longer available. Refresh the model selection.');
-        runs.push(...data.runs);
+      let data;
+      try {
+        data = await dashboardQuery('models/stats', payload);
+      } catch (error) {
+        throw new Error(`Could not load model statistics (${error.message || 'request failed'})`);
       }
-      return { runs, cacheHit: false };
+      if (!data || typeof data.groups !== 'object') throw new Error('Incomplete model statistics response');
+      if (Array.isArray(data.missing) && data.missing.length) throw new Error('Some selected runs are no longer available. Refresh the model selection.');
+      return { groups: data.groups, cacheHit: false };
     })();
-    modelsRunDataCache = entry;
-    entry.promise.catch(() => { if (modelsRunDataCache === entry) modelsRunDataCache = null; });
+    modelStatsCache = entry;
+    entry.promise.catch(() => { if (modelStatsCache === entry) modelStatsCache = null; });
     return entry.promise;
   }
 
-  function calculateModelStatsFromItems(runsData, metricName, threshold, isBoolean, direction = null) {
-    // Get run names before delegating to shared function
-    const runNames = (runsData || []).map((r, i) => r?.run?.run_name || `Run ${i + 1}`);
-    const K = runsData?.length || 0;
-
-    if (!runsData || runsData.length === 0) {
-      return {
-        passAtK: 0, passHatK: 0, maxAtK: 0, consistency: 0, reliability: 0, avgScore: 0, avgLatency: 0, medianLatency: 0,
-        totalItems: 0, failedCount: 0, K: 0, correctDistribution: [0], runNames: [],
-        minScore: 0, stddevScore: 0
-      };
-    }
-
-    const effectiveThreshold = isBoolean ? 0.9999 : threshold;
-    // Pass/fail and the best score follow the declared direction (C008).
-
-    // Use shared metrics calculation. Repeat runs pool their ATTEMPTS: a ×k
-    // run contributes k per-pass entries, so Pass@K math runs over the pooled
-    // attempt set — never pass@k of pass@k.
-    const metrics = window.QymMetrics.calculateItemLevelMetrics({
-      runsData: expandSampledRunsData(runsData),
-      metricName,
-      threshold: effectiveThreshold,
-      direction,
-      isBoolean: !!isBoolean,
-      getMetricIndex: (runData) => {
-        const metricNames = runData?.snapshot?.metric_names || runData?.run?.metric_names || [];
-        return metricNames.indexOf(metricName);
-      },
-      getItemId: (row) => row.item_id || String(row.index),
-      trackDistribution: true
-    });
-
-    // A lower-is-better metric leaves errors out: a model with no score left
-    // has no average (its 0 would read as the best value and rank first).
-    const noScore = metrics.totalScoreCount === 0 && window.QymMetrics.errorsLeftOut(direction);
-    return {
-      passAtK: metrics.passAtK,
-      passHatK: metrics.passHatK,
-      maxAtK: noScore ? null : metrics.maxAtK,
-      consistency: metrics.consistency,
-      reliability: metrics.reliability,
-      avgScore: noScore ? null : metrics.avgScore,
-      avgLatency: metrics.avgLatency,
-      medianLatency: metrics.medianLatency,
-      totalItems: metrics.totalItems,
-      failedCount: metrics.failedCount,
-      totalScoreSum: metrics.totalScoreSum,
-      totalScoreCount: metrics.totalScoreCount,
-      minScore: noScore ? null : metrics.minScore,
-      stddevScore: metrics.stddevScore,
-      K: metrics.K,
-      correctDistribution: metrics.correctDistribution || new Array(K + 1).fill(0),
-      runNames
+  // Charts "Grouped" asks for every group's statistics in one render: the
+  // requests of one tick that share a metric rule go out as one batch (at
+  // most 100 groups or 2000 runs each), not one request per group (C035).
+  let chartGroupStatsBatches = new Map();
+  function fetchChartGroupStats(key, paths, metric, threshold, isBoolean, direction) {
+    const rule = {
+      metric,
+      threshold: Number(threshold),
+      is_boolean: !!isBoolean,
+      direction: direction === 'maximize' || direction === 'minimize' ? direction : null,
     };
+    const signature = JSON.stringify(rule);
+    let batch = chartGroupStatsBatches.get(signature);
+    const runCount = batch ? batch.groups.reduce((sum, group) => sum + group.runs.length, 0) : 0;
+    if (!batch || batch.groups.length >= 100 || runCount + paths.length > 2000) {
+      if (batch) chartGroupStatsBatches.delete(signature);
+      batch = { rule, groups: [], waiters: new Map() };
+      chartGroupStatsBatches.set(signature, batch);
+      const pending = batch;
+      setTimeout(() => {
+        if (chartGroupStatsBatches.get(signature) === pending) chartGroupStatsBatches.delete(signature);
+        dashboardQuery('models/stats', { ...pending.rule, groups: pending.groups }).then((data) => {
+          const missing = new Set(Array.isArray(data?.missing) ? data.missing : []);
+          pending.groups.forEach((group) => {
+            const waiter = pending.waiters.get(group.key);
+            if (group.runs.some(run => missing.has(run)) || !data?.groups?.[group.key]) {
+              waiter.reject(new Error('Some runs of this group are no longer available.'));
+            } else {
+              waiter.resolve(data.groups[group.key]);
+            }
+          });
+        }).catch((error) => {
+          pending.waiters.forEach(waiter => waiter.reject(error));
+        });
+      }, 0);
+    }
+    const existing = batch.waiters.get(key);
+    if (existing) return existing.promise;
+    const waiter = {};
+    waiter.promise = new Promise((resolve, reject) => { waiter.resolve = resolve; waiter.reject = reject; });
+    batch.waiters.set(key, waiter);
+    batch.groups.push({ key, runs: [...new Set(paths)] });
+    return waiter.promise;
   }
 
   function calculateModelTraceStats(runs) {
@@ -5940,7 +6282,7 @@
     oldConfirm.parentNode.replaceChild(confirm, oldConfirm);
     el('run-selection-model-name').innerHTML = renderModelLabelForModelName(modelName);
     el('run-selection-model-name').title = getModelFilterOptionLabel(modelName);
-    modal.style.display = 'flex';
+    showLegacyModal(modal);
 
     const updateCounter = () => {
       const counter = listEl.querySelector('#selection-count');
@@ -6022,7 +6364,7 @@
     confirm.addEventListener('click', () => {
       if (selected.size) mvs.modelRunSelections[modelName] = [...selected];
       else delete mvs.modelRunSelections[modelName];
-      modal.style.display = 'none';
+      hideLegacyModal(modal);
       modelRunSelectionToken++;
       renderModelsView();
     });
@@ -6132,7 +6474,7 @@
       });
     });
 
-    modal.style.display = 'flex';
+    showLegacyModal(modal);
 
     // Wire confirm button
     const newConfirmBtn = confirmBtn.cloneNode(true);
@@ -6150,7 +6492,7 @@
         delete mvs.modelRunSelections[modelName];
       }
 
-      modal.style.display = 'none';
+      hideLegacyModal(modal);
       renderModelsView();
     });
   }
@@ -6189,14 +6531,16 @@
     if (state.selectedRuns.has(filePath)) {
       state.selectedRuns.delete(filePath);
     } else {
-      if (!canSelectForCohortB(filePath)) return;
-      // Selecting the whole run supersedes any of its picked passes.
-      for (const ref of Array.from(state.selectedRuns)) {
-        if (isPassRef(ref) && passRefBase(ref) === filePath) state.selectedRuns.delete(ref);
+      // A refused pick still resets the checkbox the browser already ticked.
+      if (canSelectForCohortB(filePath)) {
+        // Selecting the whole run supersedes any of its picked passes.
+        for (const ref of Array.from(state.selectedRuns)) {
+          if (isPassRef(ref) && passRefBase(ref) === filePath) state.selectedRuns.delete(ref);
+        }
+        state.selectedRuns.add(filePath);
       }
-      state.selectedRuns.add(filePath);
     }
-    render();
+    syncRunsSelection();
   }
 
   function setSelectMode(enabled) {
@@ -6205,7 +6549,7 @@
       state.selectedRuns.clear();
       state.cohortAnchorRuns = null;
     }
-    render();
+    syncRunsSelection();
   }
 
   function toggleModelFilter(model) {
@@ -6239,6 +6583,7 @@
   function selectAll() {
     if (getActiveCohortAnchorRuns()) {
       showToast('error', 'Select All Disabled In Cohort Mode', 'Choose Cohort B runs explicitly so you can control membership and avoid overlap with Cohort A.');
+      syncRunsSelectAll();
       return;
     }
     const { pageRuns } = getTablePageSlice(state.filteredRuns);
@@ -6249,14 +6594,14 @@
     } else {
       visibleFilePaths.forEach(filePath => state.selectedRuns.add(filePath));
     }
-    render();
+    syncRunsSelection();
   }
 
   function clearSelection() {
     const restoreTableFocus = !!document.activeElement?.closest?.('#compare-panel, .run-select-control');
     state.selectedRuns.clear();
     state.cohortAnchorRuns = null;
-    render();
+    syncRunsSelection();
     if (restoreTableFocus) el('select-all')?.focus({ preventScroll: true });
   }
 
@@ -6280,6 +6625,29 @@
     return `${labels[0]}, ${labels[1]} +${labels.length - 2}`;
   }
 
+  function runDetailUrl(filePath) {
+    return state.currentProject && state.currentProject.slug
+      ? projectUrl(state.currentProject.slug, `runs/${encodeURIComponent(filePath)}`)
+      : apiUrl(`run/${encodeURIComponent(filePath)}`);
+  }
+
+  // A run opened from the Runs list carries the list's filters, range,
+  // search and sort, so its page steps to the previous and next run in this
+  // order (C044, runs_order.js).
+  function runFromListUrl(filePath) {
+    const url = runDetailUrl(filePath);
+    if (state.currentView !== 'table' || !window.QymRunsOrder) return url;
+    return window.QymRunsOrder.runHref(url, window.QymRunsOrder.contextFromParams({
+      ...dashboardUrlParams(), q: activeSearchQuery() || null,
+    }));
+  }
+
+  // Where a run's name link points (the analyzer while it picks a run).
+  function runOpenHref(run) {
+    if (analysisRunPickerContext && run) return analyzerUrlForRun(run);
+    return runFromListUrl(run.file_path);
+  }
+
   function openRun(filePath, e) {
     const run = state.flatRuns.find(candidate => candidate.file_path === filePath);
     if (analysisRunPickerContext && run) {
@@ -6290,10 +6658,7 @@
     sessionStorage.removeItem('compareRuns');
     sessionStorage.removeItem('compareCohorts');
     sessionStorage.setItem('dashboardRunFile', filePath);
-    const url = state.currentProject && state.currentProject.slug
-      ? projectUrl(state.currentProject.slug, `runs/${encodeURIComponent(filePath)}`)
-      : apiUrl(`run/${encodeURIComponent(filePath)}`);
-    openUrl(url, e);
+    openUrl(runFromListUrl(filePath), e);
   }
 
   function openComparison(e) {
@@ -6383,7 +6748,7 @@
       state.selectedRuns.delete(passRefBase(ref));
       state.selectedRuns.add(ref);
     }
-    render();
+    syncRunsSelection();
   }
 
   function openCohortComparison(e) {
@@ -6445,6 +6810,28 @@
       : `An admin can restore it for ${graceDays} day${graceDays === 1 ? '' : 's'}; then it is permanently removed.`;
   }
 
+  // Legacy page modals (#delete-modal, #workflow-modal, #help-modal,
+  // #run-selection-modal) use the shared modal focus contract
+  // (QymUIComponents.openDialog): focus moves in, Tab stays inside, Escape
+  // closes, and focus returns to the control that opened the modal.
+  function showLegacyModal(modal, options = {}) {
+    if (!modal) return;
+    modal.style.display = 'flex';
+    const panel = modal.querySelector('.modal-content') || modal;
+    window.QymUIComponents?.openDialog?.(panel, { onEscape: () => hideLegacyModal(modal), ...options });
+  }
+
+  function hideLegacyModal(modal) {
+    if (!modal) return;
+    const panel = modal.querySelector('.modal-content') || modal;
+    window.QymUIComponents?.releaseDialog?.(panel);
+    modal.style.display = 'none';
+  }
+
+  document.querySelectorAll('[data-modal-dismiss]').forEach(button => {
+    button.addEventListener('click', () => hideLegacyModal(el(button.getAttribute('data-modal-dismiss'))));
+  });
+
   function confirmDeleteRun(filePath, runId) {
     const modal = el('delete-modal');
     const titleEl = el('delete-modal-title');
@@ -6457,7 +6844,7 @@
     // A deleted run can be restored, so no "cannot be undone" warning.
     setDeleteWarning('');
     runNameEl.textContent = runId;
-    modal.style.display = 'flex';
+    showLegacyModal(modal, { initialFocus: '[data-modal-dismiss]:not(.modal-close)' });
 
     // Remove old listener and add new one
     const newConfirmBtn = confirmBtn.cloneNode(true);
@@ -6477,7 +6864,7 @@
         if (response.ok) {
           const result = await response.json().catch(() => ({}));
           const graceDays = Number(result.purge_after_days) || 0;
-          modal.style.display = 'none';
+          hideLegacyModal(modal);
           // Remove from selection if selected
           state.selectedRuns.delete(filePath);
           showToast('success', 'Run deleted', graceDays > 0
@@ -6539,7 +6926,7 @@
       ? `Deleted passes cannot be restored.${runRefs.length ? ' Deleted runs can.' : ''}`
       : '');
     runNameEl.textContent = `${selectionParts.join(' and ')} selected`;
-    modal.style.display = 'flex';
+    showLegacyModal(modal, { initialFocus: '[data-modal-dismiss]:not(.modal-close)' });
 
     // Remove old listener and add new one
     const newConfirmBtn = confirmBtn.cloneNode(true);
@@ -6600,7 +6987,7 @@
         }
       }
 
-      modal.style.display = 'none';
+      hideLegacyModal(modal);
       newConfirmBtn.disabled = false;
       newConfirmBtn.textContent = 'Delete';
 
@@ -6616,13 +7003,59 @@
     });
   }
 
-  function showWorkflowModal(action, runId, runName) {
+  function submitModalDescription(runs) {
+    const me = state.currentUser && state.currentUser.id;
+    const many = runs.length > 1;
+    const parts = [many
+      ? `Send these ${runs.length} runs to the project's managers for approval. Their scores are locked while they are in review.`
+      : "Send this run to the project's managers for approval. Its scores are locked while it is in review."];
+    const rejected = runs.filter(r => String(r.status || '').toUpperCase() === 'REJECTED').length;
+    if (rejected) {
+      parts.push(many
+        ? `${rejected} of them were rejected: submitting starts a new review round, and each rejection stays in its run's review history.`
+        : 'It was rejected: submitting starts a new review round, and the rejection stays in its review history.');
+    }
+    const others = runs.filter(r => r.owner && r.owner.id && r.owner.id !== me);
+    if (others.length) {
+      const names = [...new Set(others.map(r => r.owner.display_name || r.owner.email || ''))].filter(Boolean);
+      parts.push(many
+        ? `${others.length} of them belong to someone else (${names.join(', ')}); you submit them on their behalf, and the review history records it.`
+        : `It belongs to ${names[0] || 'someone else'}; you submit it on their behalf, and the review history records it.`);
+    }
+    return parts.join(' ');
+  }
+
+  async function postSubmit(runIds, comment) {
+    if (runIds.length === 1) {
+      return fetch(apiUrl(`v1/runs/${encodeURIComponent(runIds[0])}/submit`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comment }),
+      });
+    }
+    // One request, one transaction: every run is submitted or none is.
+    return fetch(apiUrl('v1/runs/submit'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ run_ids: runIds, comment }),
+    });
+  }
+
+  // options: { runs } for submit (one or many runs); { filePath } for the
+  // other actions so the row can show the new status at once (C040).
+  function showWorkflowModal(action, runId, runName, options) {
+    const filePath = (options && options.filePath) || runId;
     const modal = el('workflow-modal');
     const titleEl = el('workflow-modal-title');
     const descEl = el('workflow-modal-description');
     const runNameEl = el('workflow-run-name');
     const commentEl = el('workflow-comment');
     const confirmBtn = el('confirm-workflow-btn');
+
+    if (action === 'submit') {
+      showSubmitModal(options && options.runs ? options.runs : [], runName, modal, titleEl, descEl, runNameEl, commentEl, confirmBtn);
+      return;
+    }
 
     const isApprove = action === 'approve';
     const isUnapprove = action === 'unapprove';
@@ -6640,7 +7073,7 @@
     // The same name the runs table and the delete dialog use.
     runNameEl.textContent = runName || runId;
     commentEl.value = '';
-    modal.style.display = 'flex';
+    showLegacyModal(modal, { initialFocus: commentEl });
 
     // Update button style
     confirmBtn.className = isApprove ? 'btn btn-primary' : 'btn btn-danger';
@@ -6665,7 +7098,9 @@
         if (response.ok) {
           const result = await response.json().catch(() => ({}));
           const restored = String(result.status || 'completed').toLowerCase();
-          modal.style.display = 'none';
+          hideLegacyModal(modal);
+          // Show the new status (and the actions it allows) at once.
+          if (result.status) applyRunWorkflowResult(filePath, result.status);
           await fetchRuns({ refreshAllPages: true });
           showToast(
             'success',
@@ -6687,23 +7122,136 @@
       }
     });
 
-    // Focus the comment field
-    setTimeout(() => commentEl.focus(), 100);
+  }
+
+  function showSubmitModal(runs, runName, modal, titleEl, descEl, runNameEl, commentEl, confirmBtn) {
+    const many = runs.length > 1;
+    const label = many ? `Submit ${runs.length} runs` : 'Submit';
+    titleEl.textContent = many ? `Submit ${runs.length} runs for approval` : 'Submit for approval';
+    descEl.textContent = submitModalDescription(runs);
+    runNameEl.textContent = many
+      ? runs.slice(0, 5).map(getRunDisplayName).join(', ') + (runs.length > 5 ? `, and ${runs.length - 5} more` : '')
+      : (runName || (runs[0] && getRunDisplayName(runs[0])) || '');
+    commentEl.value = '';
+    confirmBtn.className = 'btn btn-primary';
+    confirmBtn.textContent = label;
+
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+    newConfirmBtn.addEventListener('click', async () => {
+      newConfirmBtn.disabled = true;
+      newConfirmBtn.textContent = 'Submitting...';
+      try {
+        const response = await postSubmit(runs.map(r => r.run_id || r.file_path), (commentEl.value || '').trim());
+        if (response.ok) {
+          hideLegacyModal(modal);
+          if (many) runs.forEach(r => state.selectedRuns.delete(r.file_path));
+          // Show the new status (and the actions it allows) at once (C040).
+          runs.forEach(r => { if (r.file_path) applyRunWorkflowResult(r.file_path, 'SUBMITTED'); });
+          await fetchRuns({ refreshAllPages: true });
+          showToast('success', 'Submitted', many ? `Submitted ${runs.length} runs for approval` : 'Run submitted for approval');
+        } else {
+          const data = await response.json().catch(() => ({}));
+          showToast('error', 'Submit failed', data.detail || 'Could not submit');
+          if (response.status === 409) fetchRuns({ refreshAllPages: true }).catch(() => {});
+        }
+      } catch (err) {
+        showToast('error', 'Submit failed', err.message || 'Could not submit');
+      } finally {
+        newConfirmBtn.disabled = false;
+        newConfirmBtn.textContent = label;
+      }
+    });
+    // The shared dialog contract (C049): focus on the comment, Tab inside,
+    // Escape closes, focus returns to the Submit control.
+    showLegacyModal(modal, { initialFocus: commentEl });
+  }
+
+  async function showTransferOwnershipModal(run) {
+    const modal = el('transfer-modal');
+    const select = el('transfer-owner-select');
+    const confirmBtn = el('confirm-transfer-btn');
+    let projectId = state.currentProject && state.currentProject.id;
+    if (!projectId && state.currentProject && state.currentProject.slug) {
+      try {
+        const res = await fetch(apiUrl(`v1/projects/by-slug/${encodeURIComponent(state.currentProject.slug)}`));
+        projectId = res.ok ? (await res.json()).id : null;
+      } catch (err) {
+        projectId = null;
+      }
+    }
+    if (!modal || !select || !confirmBtn || !projectId) return;
+    el('transfer-run-name').textContent = getRunDisplayName(run);
+    const ownerName = run.owner ? (run.owner.display_name || run.owner.email || '') : '';
+    el('transfer-current-owner').textContent = ownerName ? `Current owner: ${ownerName}` : '';
+    select.innerHTML = '<option value="">Loading members...</option>';
+    select.disabled = true;
+    showLegacyModal(modal, { initialFocus: '[data-modal-dismiss]:not(.modal-close)' });
+    try {
+      const res = await fetch(apiUrl(`v1/projects/${encodeURIComponent(projectId)}/members`));
+      const data = await res.json();
+      // A disabled account keeps its membership but cannot own runs.
+      const members = (data.members || []).filter(m => m.is_active !== false && (!run.owner || m.user_id !== run.owner.id));
+      select.innerHTML = members.length
+        ? members.map(m => `<option value="${escapeHtml(m.user_id)}">${escapeHtml(m.display_name || m.email)}${m.display_name ? ` (${escapeHtml(m.email)})` : ''}</option>`).join('')
+        : '<option value="">No other members</option>';
+      select.disabled = members.length === 0;
+    } catch (err) {
+      select.innerHTML = '<option value="">Could not load members</option>';
+    }
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+    newConfirmBtn.addEventListener('click', async () => {
+      if (!select.value) return;
+      newConfirmBtn.disabled = true;
+      try {
+        const response = await fetch(apiUrl(`v1/runs/${encodeURIComponent(run.run_id)}/owner`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: select.value }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (response.ok) {
+          hideLegacyModal(modal);
+          await fetchRuns({ refreshAllPages: true });
+          const name = data.owner ? (data.owner.display_name || data.owner.email) : '';
+          showToast('success', 'Ownership transferred', `${getRunDisplayName(run)} now belongs to ${name}`);
+        } else {
+          showToast('error', 'Transfer failed', data.detail || 'Could not transfer the run');
+        }
+      } catch (err) {
+        showToast('error', 'Transfer failed', err.message || 'Could not transfer the run');
+      } finally {
+        newConfirmBtn.disabled = false;
+      }
+    });
+  }
+
+  function runsTotalCount() {
+    return usesDashboardPage() ? state.dashboardPage.total_runs : state.filteredRuns.length;
+  }
+
+  // Focus a row by its index across all pages. On the current page this only
+  // moves the highlight; another page is fetched and lands on the row.
+  function focusRunIndex(newIdx) {
+    if (newIdx < 0 || newIdx >= runsTotalCount()) return;
+    state.focusedIndex = newIdx;
+    const page = Math.floor(newIdx / TABLE_PAGE_SIZE) + 1;
+    if (page !== state.tablePage || !state._runsTableCtx) {
+      setTablePage(page);
+      render();
+    }
+    const focusedRow = syncRunsRowFocus();
+    if (focusedRow) {
+      focusedRow.scrollIntoView({ block: 'nearest' });
+      // Move real focus to the run's link, so assistive tech follows the
+      // highlighted row (C051).
+      focusedRow.querySelector('a.run-id')?.focus({ preventScroll: true });
+    }
   }
 
   function moveFocus(delta) {
-    const newIdx = state.focusedIndex + delta;
-    if (newIdx >= 0 && newIdx < (usesDashboardPage() ? state.dashboardPage.total_runs : state.filteredRuns.length)) {
-      state.focusedIndex = newIdx;
-      setTablePage(Math.floor(newIdx / TABLE_PAGE_SIZE) + 1);
-      render();
-
-      // Scroll into view
-      const row = $(`tr[data-idx="${newIdx}"]`);
-      if (row) {
-        row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      }
-    }
+    focusRunIndex(state.focusedIndex + delta);
   }
 
   function openFocusedRun() {
@@ -6774,8 +7322,7 @@
   }
 
   function getDashboardStateKey() {
-    const projectSlug = getProjectSlugFromPath() || '__global__';
-    return `qym:dashboard-state:${projectSlug}`;
+    return `qym:dashboard-state:${mountedProjectSlug || '__global__'}`;
   }
 
   function saveRunsDataCache(data) {
@@ -6844,8 +7391,13 @@
       if (previous !== undefined && previous !== revision) {
         // A checked pass and its cached details refer to the old mapping.
         // Require the user to select again after the refreshed rows render.
+        const stale = ref => isPassRef(ref) && passRefBase(ref) === run.file_path;
         for (const ref of state.selectedRuns) {
-          if (isPassRef(ref) && passRefBase(ref) === run.file_path) state.selectedRuns.delete(ref);
+          if (stale(ref)) state.selectedRuns.delete(ref);
+        }
+        // A locked Cohort A names passes the same way.
+        if (Array.isArray(state.cohortAnchorRuns)) {
+          state.cohortAnchorRuns = state.cohortAnchorRuns.filter(ref => !stale(ref));
         }
         if (state._samplesData) delete state._samplesData[run.run_id];
       }
@@ -6889,11 +7441,73 @@
     state.aggregations = usesDashboardSummary() ? state.dashboardOverview.aggregations : computeAggregations(state.flatRuns);
     state.chartData = usesDashboardSummary() ? buildDashboardChartData() : computeChartData(state.flatRuns);
     saveRunsDataCache(data);
-    populateFilterDropdowns();
+    // render() rebuilds the filter menus; doing it here as well doubled the work.
     populateMetricVisibility();
     el('last-updated').textContent = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    state.runsEverLoaded = true;
+    clearRunsStale();
     render();
     renderDashboardFreshness(state.dashboardOverview?.freshness);
+  }
+
+  // ── Failed loads and refreshes (C038) ──────────────────────────────
+  // The first failed load shows an error with Retry instead of the table.
+  // A failed refresh keeps the last rows, dimmed, under a banner that says
+  // how old they are and whether the latest filter change is applied; the
+  // busy state always ends.
+  function runsLoadFailed(err) {
+    el('table-view')?.setAttribute('aria-busy', 'false');
+    const ui = window.QymUIComponents;
+    const info = ui ? ui.classifyError(err) : { kind: 'unknown', message: 'Something went wrong while loading. Try again.' };
+    const retry = () => {
+      clearRunsStale();
+      const loading = el('loading');
+      if (loading && !state.runsEverLoaded) {
+        loading.innerHTML = '<div class="loading-spinner"></div><span>Loading runs...</span>';
+      }
+      fetchRuns({ refreshAllPages: true });
+    };
+    if (!state.runsEverLoaded) {
+      const loading = el('loading');
+      if (loading) {
+        loading.style.display = '';
+        if (ui) ui.renderErrorState(loading, { title: 'Couldn\u2019t load runs', error: err, onRetry: retry });
+        else loading.textContent = 'Couldn\u2019t load runs. ' + info.message;
+      }
+      if (el('status-filter')) el('status-filter').textContent = 'Runs not loaded';
+      return;
+    }
+    const tableView = el('table-view');
+    if (!tableView) {
+      if (!state.runsStale) showToast('error', 'Couldn’t refresh runs', info.message);
+      state.runsStale = true;
+      return;
+    }
+    let banner = el('runs-stale-banner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'runs-stale-banner';
+      banner.className = 'qym-stale-banner';
+      banner.setAttribute('role', 'alert');
+      tableView.parentNode.insertBefore(banner, tableView);
+    }
+    const shownAt = el('last-updated')?.textContent || '';
+    const notApplied = state.dashboardRequestKey && state.dashboardRequestKey !== dashboardPageRequestKey();
+    banner.innerHTML = '<span class="qym-stale-banner__text"></span>'
+      + '<button type="button" class="qym-inline-action qym-inline-action--neutral" data-runs-retry>Retry</button>';
+    banner.querySelector('.qym-stale-banner__text').textContent = 'Couldn\u2019t refresh runs. ' + info.message
+      + (shownAt && shownAt !== '\u2014' ? ' Showing runs from ' + shownAt + '.' : '')
+      + (notApplied ? ' Your latest filter, sort or page change is not applied.' : '');
+    banner.querySelector('[data-runs-retry]').addEventListener('click', retry);
+    tableView.classList.add('qym-is-stale');
+    if (!state.runsStale) showToast('error', 'Couldn\u2019t refresh runs', info.message);
+    state.runsStale = true;
+  }
+
+  function clearRunsStale() {
+    state.runsStale = false;
+    el('runs-stale-banner')?.remove();
+    el('table-view')?.classList.remove('qym-is-stale');
   }
 
   async function _fetchRemainingPages(data, totalCount) {
@@ -7142,18 +7756,10 @@
       datasets: [...state.filterDatasets], statuses: [...state.filterStatuses],
       versions: [...state.filterVersions], users: [...state.filterUsers],
     };
-    if (state.quickFilter === 'today') {
-      const start = new Date(now);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(start);
-      end.setDate(end.getDate() + 1);
-      filters.since = start.toISOString();
-      filters.until = end.toISOString();
-    } else if (state.quickFilter === 'week') {
-      const start = new Date(now);
-      start.setDate(start.getDate() - 7);
-      filters.since = start.toISOString();
-    }
+    const { since, until } = timeFilterBounds(now);
+    if (since) filters.since = since.toISOString();
+    if (until) filters.until = until.toISOString();
+    if (activeSearchQuery()) filters.q = activeSearchQuery();
     return filters;
   }
 
@@ -7308,20 +7914,22 @@
         throw error;
       }
       if (response.status === 404) throw new Error('Project not found');
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        const error = new Error(`HTTP ${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
       return await response.json();
     } finally {
       if (controller) dashboardRequests.delete(controller);
     }
   }
 
+  // The run page orders its previous / next run the same way (runs_order.js).
   function dashboardCollation(overview, sortKey) {
-    const field = sortKey.replace(/-(asc|desc)$/, '');
-    const column = { task: 'tasks', model: 'models', dataset: 'dataset_names', version: 'git_commits', owner: 'owner_names' }[field];
+    const column = window.QymRunsOrder.collatedColumn(sortKey);
     if (!column) return null;
-    return (overview?.sort_values?.[column] || []).slice().sort(
-      field === 'model' ? compareModelVariantKeys : (a, b) => String(a).localeCompare(String(b))
-    );
+    return window.QymRunsOrder.collation(sortKey, overview?.sort_values?.[column] || []);
   }
 
   function renderDashboardFreshness(freshness) {
@@ -7390,12 +7998,41 @@
       queueRunsFetch({});
       return;
     }
+    // A poll that brings back exactly what the page shows must not touch the
+    // table, the filter menus or keyboard focus.
+    const overviewMark = page.overview ? [
+      page.overview.catalog_revision, page.overview.revision, page.overview.total_runs,
+      page.overview.total_count, page.overview.facets, page.overview.kpis, page.overview.freshness,
+    ] : null;
+    const signature = JSON.stringify([
+      key, page.rows, pinnedRows, page.total_runs, page.freshness, page.revision, page.catalog_revision,
+      overviewMark, retained,
+    ]);
+    if (state.dashboardPage && state.dashboardRequestKey === key && signature === state._dashboardPageSignature) {
+      el('table-view')?.setAttribute('aria-busy', 'false');
+      const updated = el('last-updated');
+      if (updated) updated.textContent = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      renderDashboardFreshness(page.freshness || state.dashboardOverview?.freshness);
+      try { updateRunsRefreshCadence && updateRunsRefreshCadence(); } catch {}
+      return;
+    }
+    state._dashboardPageSignature = signature;
     const total = Number(page.total_runs || 0);
     if (offset >= total && offset > 0) {
       state.tablePage = Math.max(1, Math.ceil(total / TABLE_PAGE_SIZE));
       queueRunsFetch({});
       return;
     }
+    // The pinned rows go in too: a selection kept across visits (C043) needs
+    // its off-page runs' data (passes, status) while the cached page shows.
+    // applyDashboardPageResult keeps only the rows still selected then.
+    rememberDashboardPage(key, { filterKey, offset, page, overview, pinnedRows });
+    applyDashboardPageResult({ key, filterKey, offset, page, overview, pinnedRows, retained });
+  }
+
+  function applyDashboardPageResult({ key, filterKey, offset, page, overview, pinnedRows, retained }) {
+    const total = Number(page.total_runs || 0);
+    const retainedIds = new Set();
     const pageData = { tasks: page.tasks || {}, project: page.project || state.currentProject, total_count: overview.total_count };
     const normalizedRows = new Map(flattenRuns(pageData).runs.map(run => [run.file_path, run]));
     // Task/model groups lose cross-group order. Keep the API's sorted rows,
@@ -7503,7 +8140,9 @@
       }
 
       if (!runsResponse.ok) {
-        throw new Error(`HTTP ${runsResponse.status}`);
+        const error = new Error(`HTTP ${runsResponse.status}`);
+        error.status = runsResponse.status;
+        throw error;
       }
 
       const data = await runsResponse.json();
@@ -7546,10 +8185,7 @@
         showProjectNotFound();
         return;
       }
-      el('loading').innerHTML = `
-        <span style="color:var(--error);">Failed to load runs</span>
-        <span>Is the server running?</span>
-      `;
+      runsLoadFailed(err);
     } finally {
       state.runsFetchMeta.inFlight = false;
       if (dashboardActive && state.runsFetchMeta.pendingOptions) {
@@ -7716,29 +8352,22 @@
       if (!dropdown.contains(e.target)) {
         dropdown.classList.remove('open');
       }
-    });
+    }, pageListen());
 
     // Close on escape key
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         dropdown.classList.remove('open');
       }
-    });
+    }, pageListen());
   }
 
   function populateFilterDropdowns() {
     // For each filter, compute applicable values from runs matching ALL OTHER active filters.
     // This ensures each dropdown only shows values that would produce results.
     function runsExcluding(skipFilter) {
-      let runs = state.flatRuns;
-      switch (state.quickFilter) {
-        case 'today':
-          runs = runs.filter(r => isToday(r.timestamp));
-          break;
-        case 'week':
-          runs = runs.filter(r => isWithinDays(r.timestamp, 7));
-          break;
-      }
+      const bounds = timeFilterBounds();
+      let runs = state.flatRuns.filter(r => runMatchesTimeFilter(r, bounds) && runMatchesSearch(r));
       if (skipFilter !== 'tasks' && state.filterTasks.size > 0 && !state.filterTasks.has('__none__')) {
         runs = runs.filter(r => matchesFilterSelection(state.filterTasks, r.task_name));
       }
@@ -7771,6 +8400,7 @@
       .sort((a, b) => getOwnerFilterLabel(a).localeCompare(getOwnerFilterLabel(b)))
       .concat(ownerValues.includes(EMPTY_FILTER_VALUE) ? [EMPTY_FILTER_VALUE] : []);
     const constrainingFiltersActive = state.quickFilter !== 'all'
+      || !!activeSearchQuery()
       || state.filterTasks.size > 0
       || state.filterDatasets.size > 0
       || state.filterModels.size > 0
@@ -7783,6 +8413,7 @@
 
     state.allModels = usesDashboardSummary() ? (state.dashboardOverview.all_models || []).slice().sort(compareModelVariantKeys)
       : [...new Set(state.flatRuns.map(r => getRunModelKey(r)).filter(m => !isEmptyFilterValue(m)))].sort(compareModelVariantKeys);
+    pruneUrlModelVariants();
 
     // Task multi-select
     buildMultiSelect({
@@ -7874,7 +8505,7 @@
         dd.classList.remove('open');
       }
     });
-  });
+  }, pageListen());
 
   // Close actions dropdowns when clicking outside
   document.addEventListener('click', (e) => {
@@ -7883,7 +8514,7 @@
         d.classList.remove('open');
       });
     }
-  });
+  }, pageListen());
 
   // Clear all filters button
   el('clear-all-filters')?.addEventListener('click', clearAllFilters);
@@ -7891,13 +8522,88 @@
 
   // Quick filters
   $$('.filter-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      state.quickFilter = btn.dataset.filter;
-      setQuickFilterSelection(state.quickFilter);
-      state.focusedIndex = -1;
-      render();
+    btn.addEventListener('click', (e) => {
+      if (btn.dataset.filter === 'custom') {
+        e.stopPropagation();
+        toggleTimeRangeDropdown();
+        return;
+      }
+      toggleTimeRangeDropdown(false);
+      applyQuickFilter(btn.dataset.filter);
     });
   });
+
+  // Custom date range: two inclusive local dates, applied explicitly.
+  function toggleTimeRangeDropdown(open) {
+    const dropdown = el('time-range-dropdown');
+    const button = $('.filter-btn[data-filter="custom"]');
+    if (!dropdown) return;
+    const next = open === undefined ? !dropdown.classList.contains('open') : open;
+    if (next) {
+      document.querySelectorAll('.multi-select-dropdown.open').forEach(other => {
+        if (other !== dropdown) other.classList.remove('open');
+      });
+      el('time-range-from').value = state.customRange.from || '';
+      el('time-range-to').value = state.customRange.to || '';
+      el('time-range-error').textContent = '';
+    }
+    dropdown.classList.toggle('open', next);
+    button?.setAttribute('aria-expanded', next ? 'true' : 'false');
+    if (next) el('time-range-from')?.focus();
+  }
+
+  el('time-range-apply')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const from = el('time-range-from').value;
+    const to = el('time-range-to').value;
+    if (!from && !to) {
+      el('time-range-error').textContent = 'Choose a start date, an end date, or both.';
+      return;
+    }
+    if (from && to && from > to) {
+      el('time-range-error').textContent = 'The start date is after the end date.';
+      return;
+    }
+    state.customRange = { from, to };
+    toggleTimeRangeDropdown(false);
+    applyQuickFilter('custom');
+    $('.filter-btn[data-filter="custom"]')?.focus();
+  });
+  el('time-range-cancel')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleTimeRangeDropdown(false);
+    $('.filter-btn[data-filter="custom"]')?.focus();
+  });
+  el('time-range-dropdown')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleTimeRangeDropdown(false);
+      $('.filter-btn[data-filter="custom"]')?.focus();
+    } else if (e.key === 'Enter' && e.target.matches('input')) {
+      e.preventDefault();
+      el('time-range-apply')?.click();
+    }
+  });
+
+  // Runs search: debounced, matched on the server against the run name the
+  // list shows, the run name and the run id.
+  const runsSearch = el('runs-search');
+  if (runsSearch) {
+    const applySearch = debounce(() => setSearchQuery(runsSearch.value), 200);
+    runsSearch.addEventListener('input', applySearch);
+    runsSearch.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        e.preventDefault();
+        if (runsSearch.value) setSearchQuery('', { updateInput: true });
+        else runsSearch.blur();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        setSearchQuery(runsSearch.value);
+      }
+    });
+  }
 
   // View toggle (Charts vs Runs vs Models)
   $$('.view-toggle-btn').forEach(btn => {
@@ -7946,18 +8652,21 @@
   // Close run selection modal when clicking outside
   el('run-selection-modal')?.addEventListener('click', (e) => {
     if (e.target.id === 'run-selection-modal') {
-      el('run-selection-modal').style.display = 'none';
+      hideLegacyModal(el('run-selection-modal'));
     }
   });
+
+  wireRunsTableEvents();
 
   // Select all checkbox
   el('select-all')?.addEventListener('click', (e) => e.stopPropagation());
   el('select-all')?.addEventListener('change', selectAll);
   // Pass checkboxes live inside re-rendered expansion rows; delegate once.
   document.addEventListener('change', (e) => {
+    if (!dashboardActive) return;
     const cb = e.target.closest?.('.pass-checkbox');
     if (cb) togglePassSelection(cb.dataset.passRef);
-  });
+  }, pageListen());
   el('runs-tbody')?.addEventListener('click', event => {
     const button = event.target.closest('[data-execution-errors]');
     if (!button) return;
@@ -7974,6 +8683,30 @@
   runsTableScroll?.addEventListener('scroll', () => {
     state._runsTableAtEnd = isRunsTableAtEnd(runsTableScroll);
   }, { passive: true });
+  // A wider or narrower table (window resize, sidebar) fits the frozen
+  // columns again.
+  if (runsTableScroll && typeof ResizeObserver === 'function') {
+    let fittedWidth = runsTableScroll.clientWidth;
+    state._runsTableResizeObserver = new ResizeObserver(() => {
+      if (!dashboardActive || runsTableScroll.clientWidth === fittedWidth) return;
+      fittedWidth = runsTableScroll.clientWidth;
+      scheduleRunsStickyColumnSizing();
+    });
+    state._runsTableResizeObserver.observe(runsTableScroll);
+  }
+  // The table's scrollbar mirror rests on the status bar. A selection in a
+  // narrow bar puts the pager on a second row there (dashboard.css), so the
+  // mirror follows the bar's real height instead of the one-row height.
+  const statusBar = document.querySelector('.status-bar');
+  const runsScrollMirror = document.querySelector('[data-qym-scroll-mirror-for="runs-table-scroll"]');
+  if (statusBar && runsScrollMirror && typeof ResizeObserver === 'function') {
+    state._statusBarResizeObserver = new ResizeObserver(() => {
+      if (!dashboardActive) return;
+      const height = statusBar.offsetHeight;
+      runsScrollMirror.style.bottom = height > 0 ? height + 'px' : '';
+    });
+    state._statusBarResizeObserver.observe(statusBar);
+  }
 
   // Compare actions
   el('compare-view')?.addEventListener('click', openComparison);
@@ -7981,10 +8714,57 @@
   el('delete-selected')?.addEventListener('click', confirmDeleteSelected);
   el('compare-clear')?.addEventListener('click', clearSelection);
 
-  // Keyboard navigation
+  // Keyboard navigation. Single-key shortcuts act on the Runs table only, can
+  // be turned off in the shortcuts help (WCAG 2.1.4), never fire with a
+  // modifier key, and never fire while a menu, dialog or popover is open.
+  function singleKeyShortcutsEnabled() {
+    try {
+      return window.localStorage.getItem(SINGLE_KEY_SHORTCUTS_KEY) !== 'off';
+    } catch {
+      return true;
+    }
+  }
+
+  function setSingleKeyShortcutsEnabled(enabled) {
+    try {
+      if (enabled) window.localStorage.removeItem(SINGLE_KEY_SHORTCUTS_KEY);
+      else window.localStorage.setItem(SINGLE_KEY_SHORTCUTS_KEY, 'off');
+    } catch {}
+  }
+
+  function shortcutOverlayOpen() {
+    if (document.querySelector('.multi-select-dropdown.open, .actions-dropdown.open')) return true;
+    return Array.from(document.querySelectorAll('.modal, .shell-modal-backdrop, [role="dialog"][aria-modal="true"]'))
+      .some(node => node.getClientRects().length > 0);
+  }
+
+  const shortcutsToggle = el('single-key-shortcuts-toggle');
+  if (shortcutsToggle) {
+    shortcutsToggle.checked = singleKeyShortcutsEnabled();
+    shortcutsToggle.addEventListener('change', () => setSingleKeyShortcutsEnabled(shortcutsToggle.checked));
+  }
+
   document.addEventListener('keydown', (e) => {
+    // A page left through in-app navigation keeps no say over the next page.
+    if (!dashboardActive) return;
+    // Escape inside the help panel is handled by the dialog contract; this
+    // covers focus that fell outside it (e.g. to body) and still releases the
+    // dialog so focus returns to the trigger.
+    if (e.key === 'Escape' && el('help-modal')?.style.display === 'flex') {
+      e.preventDefault();
+      hideLegacyModal(el('help-modal'));
+      return;
+    }
+    // Browser and OS shortcuts (copy, open in new tab...) stay native.
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    // A focused run-name link keeps the row shortcuts (j/k/x...); Enter is
+    // the link's own activation and Escape leaves it.
+    const runLink = e.target.closest?.('#runs-tbody a.run-id');
+    if (runLink && e.key === 'Enter') return;
+    // An open dialog owns the keyboard: no table shortcut acts behind it.
+    if (e.target.closest('[role="dialog"], [role="alertdialog"], .modal')) return;
     // Keyboard shortcuts must not take over native interactive controls.
-    if (e.target.closest('input, select, textarea, button, a, [contenteditable="true"]')) {
+    if ((!runLink || e.key === 'Escape') && e.target.closest('input, select, textarea, button, a, [contenteditable="true"]')) {
       if (e.key === 'Escape') {
         const isSelectionControl = !!e.target.closest('#compare-panel, .run-select-control');
         if (isSelectionControl && state.selectMode) {
@@ -7996,6 +8776,18 @@
       }
       return;
     }
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+    // Charts and Models load this script too but have no runs table.
+    if (state.currentView !== 'table' || !el('runs-tbody')) return;
+    if (shortcutOverlayOpen()) return;
+
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (state.selectMode) setSelectMode(false);
+      else clearSelection();
+      return;
+    }
+    if (!singleKeyShortcutsEnabled()) return;
 
     switch (e.key) {
       case 'j':
@@ -8009,18 +8801,13 @@
         moveFocus(-1);
         break;
       case 'g':
-        if (!e.shiftKey) {
-          e.preventDefault();
-          state.focusedIndex = 0;
-          setTablePage(1);
-          render();
-        }
+        e.preventDefault();
+        focusRunIndex(0);
         break;
       case 'G':
+        // The last run of the whole list, not of the current page.
         e.preventDefault();
-        state.focusedIndex = state.filteredRuns.length - 1;
-        setTablePage(getTablePageCount(state.filteredRuns.length));
-        render();
+        focusRunIndex(runsTotalCount() - 1);
         break;
       case 'Enter':
         e.preventDefault();
@@ -8039,58 +8826,41 @@
           openComparison();
         }
         break;
-      case 'Escape':
-        e.preventDefault();
-        if (state.selectMode) setSelectMode(false);
-        else clearSelection();
+      case '/':
+        if (el('runs-search')) {
+          e.preventDefault();
+          el('runs-search').focus();
+          el('runs-search').select();
+        }
         break;
       case '?':
+        // Charts and Models have no shortcut list.
+        if (!el('help-modal')) break;
         e.preventDefault();
-        el('help-modal').style.display = 'flex';
+        showLegacyModal(el('help-modal'));
         break;
       case '1':
       case '2':
       case '3':
-        const filters = ['all', 'today', 'week'];
-        const idx = parseInt(e.key) - 1;
-        if (idx >= 0 && idx < filters.length) {
-          e.preventDefault();
-          state.quickFilter = filters[idx];
-          setQuickFilterSelection(state.quickFilter);
-          render();
-        }
-        break;
-      case 't':
+      case '4': {
+        const filter = ['all', 'today', 'week', 'month'][Number(e.key) - 1];
         e.preventDefault();
-        state.currentView = 'table';
-        $$('.view-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === 'table'));
-        render();
+        applyQuickFilter(filter);
         break;
-      case 'h':
-        e.preventDefault();
-        state.currentView = 'charts';
-        $$('.view-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === 'charts'));
-        render();
-        break;
-      case 'm':
-        e.preventDefault();
-        state.currentView = 'models';
-        $$('.view-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === 'models'));
-        render();
-        break;
+      }
     }
-  });
+  }, pageListen());
 
   // Close modal on click outside
   el('help-modal')?.addEventListener('click', (e) => {
     if (e.target === el('help-modal')) {
-      el('help-modal').style.display = 'none';
+      hideLegacyModal(el('help-modal'));
     }
   });
 
   // Header help shortcut
   $('.help-trigger')?.addEventListener('click', () => {
-    el('help-modal').style.display = 'flex';
+    showLegacyModal(el('help-modal'));
   });
 
   // ═══════════════════════════════════════════════════
@@ -8143,57 +8913,30 @@
   // WORKFLOW SUBMIT
   // ═══════════════════════════════════════════════════
 
-  async function submitSelectedRuns() {
+  function submitSelectedRuns() {
     if (state.selectedRuns.size === 0) return;
     const selectedRuns = state.flatRuns.filter(r => state.selectedRuns.has(r.file_path));
 
     // Pre-validate: check which runs can be submitted
     const submittableStatuses = ['COMPLETED', 'FAILED', 'REJECTED'];
-    const submittable = [];
-    const notSubmittable = [];
-
-    for (const run of selectedRuns) {
-      const status = run.status || '';
-      if (submittableStatuses.includes(status)) {
-        submittable.push(run);
-      } else {
-        notSubmittable.push(run);
-      }
-    }
-
-    // If some runs can't be submitted, show a single clear error
+    const notSubmittable = selectedRuns.filter(r => !submittableStatuses.includes(r.status || ''));
     if (notSubmittable.length > 0) {
       const statuses = [...new Set(notSubmittable.map(r => r.status))].join(', ');
-      showToast('error', 'Cannot Submit', `${notSubmittable.length} run(s) already have status: ${statuses}`);
+      showToast('error', 'Cannot submit', `${notSubmittable.length} run(s) already have status: ${statuses}`);
       return;
     }
-
-    // Submit only the valid runs
-    let ok = 0;
-    let failed = 0;
-
-    for (const run of submittable) {
-      const runId = run.run_id || run.file_path;
-      try {
-        const res = await fetch(apiUrl(`v1/runs/${encodeURIComponent(runId)}/submit`), { method: 'POST' });
-        if (res.ok) ok++;
-        else failed++;
-      } catch (e) {
-        failed++;
-      }
+    const globalRole = (state.currentUser && state.currentUser.role) || '';
+    const projectRole = (state.currentProject && state.currentProject.role) || '';
+    const isProjectManager = globalRole === 'ADMIN' || projectRole === 'MANAGER';
+    const me = state.currentUser && state.currentUser.id;
+    const notMine = selectedRuns.filter(r => !(r.owner && r.owner.id === me));
+    if (!isProjectManager && notMine.length > 0) {
+      showToast('error', 'Cannot submit', `${notMine.length} selected run(s) belong to someone else. Only their owner, a project manager or an admin can submit them.`);
+      return;
     }
-
-    try {
-      await fetchRuns({ refreshAllPages: true });
-    } catch {}
-
-    try {
-      if (failed === 0) showToast('success', 'Submitted', `Submitted ${ok} run(s)`);
-      else showToast('error', 'Partial Submit', `Submitted ${ok}, failed ${failed}`);
-    } catch {
-      if (failed === 0) alert(`Submitted ${ok} run(s)`);
-      else alert(`Submitted ${ok}, failed ${failed}`);
-    }
+    if (!selectedRuns.length) return;
+    // Confirm with an optional comment, then submit all in one request (C061).
+    showWorkflowModal('submit', null, '', { runs: selectedRuns });
   }
 
   // Compare panel: submit selected runs
@@ -8203,7 +8946,213 @@
   // STATE PERSISTENCE (for back/forward navigation)
   // ═══════════════════════════════════════════════════
 
+  // ── View state in the URL ─────────────────────────
+  // Filters, time range, sort and page live in the query string, so a view
+  // can be shared, bookmarked, reloaded in a new tab and restored by Back.
+  // The URL wins over the per-tab sessionStorage copy; a bare URL (sidebar
+  // link) still restores the tab's last filters.
+  const DASHBOARD_URL_FILTERS = {
+    task: 'filterTasks', model: 'filterModels', dataset: 'filterDatasets',
+    status: 'filterStatuses', version: 'filterVersions', owner: 'filterUsers',
+  };
+  const DEFAULT_SORT_KEY = 'time-desc';
+
+  // A plain model name in the URL means every variant of it ("|||plain" and
+  // "|||reasoning"); variants missing from the facets are dropped once the
+  // facets arrive. Written back as the plain name when that is equivalent.
+  function modelUrlValues() {
+    const values = [];
+    for (const key of state.filterModels) {
+      const parsed = parseModelVariantKey(key);
+      if (!parsed.isVariantKey) { values.push(key); continue; }
+      const plain = getModelVariantKey(parsed.rawModelName, false);
+      const reasoning = getModelVariantKey(parsed.rawModelName, true);
+      const reasoningKnown = state.allModels.includes(reasoning);
+      const plainKnown = state.allModels.includes(plain);
+      if (key === plain) {
+        values.push(state.filterModels.has(reasoning) || !reasoningKnown ? parsed.rawModelName : key);
+      } else if (!state.filterModels.has(plain)) {
+        values.push(plainKnown ? key : parsed.rawModelName);
+      }
+    }
+    return [...new Set(values)];
+  }
+
+  function dashboardUrlParams() {
+    const table = state.currentView === 'table';
+    const params = { range: state.quickFilter && state.quickFilter !== 'all' ? state.quickFilter : null };
+    // The Range dates (C060) travel with range=custom.
+    const custom = state.quickFilter === 'custom';
+    params.from = custom && state.customRange.from ? state.customRange.from : null;
+    params.to = custom && state.customRange.to ? state.customRange.to : null;
+    for (const [param, field] of Object.entries(DASHBOARD_URL_FILTERS)) {
+      params[param] = field === 'filterModels' ? modelUrlValues() : [...state[field]];
+    }
+    params.sort = table && state.sortKey !== DEFAULT_SORT_KEY ? state.sortKey : null;
+    params.page = table && state.tablePage > 1 ? String(state.tablePage) : null;
+    return params;
+  }
+
+  function syncDashboardUrl() {
+    if (!dashboardActive || !window.QymShell || typeof window.QymShell.replaceUrlQuery !== 'function') return;
+    window.QymShell.replaceUrlQuery(dashboardUrlParams());
+  }
+
+  function applyDashboardUrlState() {
+    const params = new URLSearchParams(window.location.search);
+    // Any view parameter makes the URL the whole view: a link that carries
+    // only a sort or a page was written with no filters, so the tab's saved
+    // filters must not narrow it.
+    const urlHasView = Object.keys(DASHBOARD_URL_FILTERS).some(key => params.has(key))
+      || ['range', 'from', 'to', 'sort', 'page', 'q'].some(key => params.has(key));
+    if (urlHasView) {
+      for (const [param, field] of Object.entries(DASHBOARD_URL_FILTERS)) {
+        const values = params.getAll(param).filter(Boolean);
+        if (field !== 'filterModels') { state[field] = new Set(values); continue; }
+        const models = new Set();
+        const expanded = new Set();
+        for (const value of values) {
+          if (value === '__none__' || parseModelVariantKey(value).isVariantKey) { models.add(value); continue; }
+          for (const key of [getModelVariantKey(value, false), getModelVariantKey(value, true)]) {
+            models.add(key);
+            expanded.add(key);
+          }
+        }
+        state.filterModels = models;
+        state._urlModelExpansion = expanded.size ? expanded : null;
+      }
+      const range = params.get('range');
+      // The Range picker allows a start date, an end date or both, so a
+      // custom range may be open on one side (runs_order.js reads it alike).
+      const from = parseLocalDate(params.get('from')) ? params.get('from') : '';
+      const to = parseLocalDate(params.get('to')) ? params.get('to') : '';
+      if (range === 'custom' && (from || to)) {
+        state.customRange = { from, to };
+        state.quickFilter = 'custom';
+      } else {
+        state.quickFilter = ['today', 'week', 'month'].includes(range) ? range : 'all';
+      }
+      setQuickFilterSelection(state.quickFilter);
+    }
+    const sort = params.get('sort');
+    if (sort && /^[^\s].*-(asc|desc)$/.test(sort)) state.sortKey = sort;
+    const page = parseInt(params.get('page') || '', 10);
+    if (Number.isFinite(page) && page > 1) state.tablePage = page;
+  }
+
+  function pruneUrlModelVariants() {
+    const expanded = state._urlModelExpansion;
+    if (!expanded || !state.allModels.length) return;
+    state._urlModelExpansion = null;
+    const known = new Set(state.allModels);
+    const removable = [...expanded].filter(key => !known.has(key));
+    if (!removable.length) return;
+    const raws = new Set(removable.map(key => parseModelVariantKey(key).rawModelName));
+    for (const raw of raws) {
+      const variants = [getModelVariantKey(raw, false), getModelVariantKey(raw, true)];
+      // A model that is not in this project at all keeps one key, so the
+      // filter still says "no runs" instead of silently showing everything.
+      if (!variants.some(key => known.has(key))) {
+        state.filterModels.delete(variants[1]);
+        continue;
+      }
+      variants.filter(key => !known.has(key)).forEach(key => state.filterModels.delete(key));
+    }
+    // Dropping a variant with no runs does not change the result: keep the
+    // page the URL asked for.
+    const filterKey = getTableFilterKey();
+    if (state.tableFilterKey !== filterKey && state.dashboardOverviewFilterKey === state.tableFilterKey) {
+      state.dashboardOverviewFilterKey = filterKey;
+    }
+    state.tableFilterKey = filterKey;
+  }
+
+  // ── Back to the list: cached page first, then revalidate ──
+  const DASHBOARD_PAGE_CACHE_MAX_AGE_MS = 5 * 60 * 1000;
+  function dashboardPageCache() {
+    if (!(window.__QYM_RUNS_PAGE_CACHE__ instanceof Map)) window.__QYM_RUNS_PAGE_CACHE__ = new Map();
+    return window.__QYM_RUNS_PAGE_CACHE__;
+  }
+
+  function rememberDashboardPage(key, entry) {
+    const cache = dashboardPageCache();
+    cache.delete(key);
+    // Stored as JSON: rendering normalizes rows in place.
+    try { cache.set(key, { json: JSON.stringify(entry), savedAt: Date.now() }); } catch { return; }
+    while (cache.size > 4) cache.delete(cache.keys().next().value);
+  }
+
+  function restoreDashboardPageCache() {
+    if (state.currentView !== 'table') return false;
+    const key = dashboardPageRequestKey();
+    const cached = dashboardPageCache().get(key);
+    if (!cached || Date.now() - cached.savedAt > DASHBOARD_PAGE_CACHE_MAX_AGE_MS) return false;
+    try {
+      applyDashboardPageResult({ ...JSON.parse(cached.json), key, retained: [] });
+      // Stale until the background fetch lands.
+      el('table-view')?.setAttribute('aria-busy', 'true');
+      return true;
+    } catch (err) {
+      console.warn('Cached runs page could not be shown:', err);
+      return false;
+    }
+  }
+
+  // ── Compare selection (C043) ──
+  // Runs ticked for Compare, and a locked Cohort A, stay until the user
+  // clears them: through Back/Forward, opening a run or Compare, and the
+  // project's other pages. Kept per project in this tab. Runs that no longer
+  // exist drop out when the list answers (applyDashboardPageResult).
+  function getRunsSelectionKey() {
+    return `qym:runs-selection:${mountedProjectSlug || '__global__'}`;
+  }
+
+  function saveRunsSelection() {
+    if (state.currentView !== 'table') return;
+    const selected = [...state.selectedRuns];
+    const cohortA = Array.isArray(state.cohortAnchorRuns) ? [...state.cohortAnchorRuns] : [];
+    try {
+      if (!selected.length && !cohortA.length) {
+        sessionStorage.removeItem(getRunsSelectionKey());
+        return;
+      }
+      // A pass reference (checked or in Cohort A) means that pass as
+      // numbered when it was picked; reconcilePassVersions drops it if the
+      // run's passes changed meanwhile.
+      const passRevisions = {};
+      for (const ref of [...selected, ...cohortA]) {
+        const base = passRefBase(ref);
+        if (isPassRef(ref) && state._passVersions && base in state._passVersions) {
+          passRevisions[base] = state._passVersions[base];
+        }
+      }
+      sessionStorage.setItem(getRunsSelectionKey(), JSON.stringify({ selected, cohortA, passRevisions }));
+    } catch {}
+  }
+
+  function restoreRunsSelection() {
+    if (state.currentView !== 'table') return;
+    let saved = null;
+    try {
+      saved = JSON.parse(sessionStorage.getItem(getRunsSelectionKey()) || 'null');
+    } catch {}
+    if (!saved || typeof saved !== 'object') return;
+    const refs = value => (Array.isArray(value) ? value.filter(ref => typeof ref === 'string' && ref) : []);
+    state.selectedRuns.clear();
+    refs(saved.selected).forEach(ref => state.selectedRuns.add(ref));
+    const cohortA = refs(saved.cohortA);
+    state.cohortAnchorRuns = cohortA.length ? cohortA : null;
+    if (saved.passRevisions && typeof saved.passRevisions === 'object') {
+      state._passVersions = state._passVersions || {};
+      for (const [runId, revision] of Object.entries(saved.passRevisions)) {
+        if (Number.isFinite(revision)) state._passVersions[runId] = revision;
+      }
+    }
+  }
+
   function saveDashboardState() {
+    if (!dashboardActive && !state._savingOnTeardown) return;
+    saveRunsSelection();
     const {
       inFlightRequestPromise,
       inFlightRequestKey,
@@ -8221,6 +9170,7 @@
       filterDatasets: [...state.filterDatasets],
       filterUsers: [...state.filterUsers],
       quickFilter: state.quickFilter,
+      customRange: state.customRange,
       chartFirstColWidth: state.chartFirstColWidth,
     };
     sessionStorage.setItem(getDashboardStateKey(), JSON.stringify(stateToSave));
@@ -8263,6 +9213,12 @@
         if (parsed.filterVersions) state.filterVersions = new Set(parsed.filterVersions);
         if (parsed.filterDatasets) state.filterDatasets = new Set(parsed.filterDatasets);
         if (parsed.filterUsers) state.filterUsers = new Set(parsed.filterUsers);
+        if (parsed.customRange && typeof parsed.customRange === 'object') {
+          state.customRange = {
+            from: parseLocalDate(parsed.customRange.from) ? parsed.customRange.from : '',
+            to: parseLocalDate(parsed.customRange.to) ? parsed.customRange.to : '',
+          };
+        }
         if (parsed.quickFilter) {
           state.quickFilter = parsed.quickFilter;
           setQuickFilterSelection(state.quickFilter);
@@ -8274,33 +9230,46 @@
     } else {
       applyChartFirstColWidth(CHART_FIRST_COL_DEFAULT_WIDTH);
     }
+    applyDashboardUrlState();
   }
 
   // Save state before navigating away
-  window.addEventListener('beforeunload', saveDashboardState);
-  window.addEventListener('pagehide', saveDashboardState);
+  window.addEventListener('beforeunload', saveDashboardState, pageListen());
+  window.addEventListener('pagehide', saveDashboardState, pageListen());
   function teardownDashboard() {
     document.getElementById('execution-error-modal')?.remove();
     dashboardActive = false;
     for (const controller of dashboardRequests) controller.abort();
     state.chartHistoryObserver?.disconnect();
+    state._runsTableResizeObserver?.disconnect();
+    state._statusBarResizeObserver?.disconnect();
     for (const entry of state.chartHistory.values()) entry.controller?.abort();
     state.chartHistoryQueue.length = 0;
+    state._savingOnTeardown = true;
     saveDashboardState();
+    state._savingOnTeardown = false;
     state.runsFetchMeta.pendingOptions = null;
     if (window.__QYM_DASHBOARD_INTERVAL__) {
       clearInterval(window.__QYM_DASHBOARD_INTERVAL__);
       window.__QYM_DASHBOARD_INTERVAL__ = null;
     }
   }
-  document.addEventListener('qym:before-navigate', teardownDashboard, { once: true });
+  document.addEventListener('qym:before-navigate', teardownDashboard, pageListen({ once: true }));
 
   // Also save on visibility change (for mobile)
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') {
+    if (dashboardActive && document.visibilityState === 'hidden') {
       saveDashboardState();
+    } else if (state._pollMissedWhileHidden && dashboardActive) {
+      state._pollMissedWhileHidden = false;
+      fetchRuns();
     }
-  });
+  }, pageListen());
+  // Back/forward can restore this page from the browser cache; it may predate
+  // a change made elsewhere (for example a run restored from Deleted Runs).
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted && dashboardActive) fetchRuns({ refreshAllPages: true });
+  }, pageListen());
 
   // ═══════════════════════════════════════════════════
   // INIT
@@ -8311,18 +9280,35 @@
     emptyDocsLink.href = apiUrl('docs-guide#get-started/first-run');
   }
 
+  function restoreSearchFromUrl() {
+    if (state.currentView !== 'table' || !el('runs-search')) return;
+    let query = '';
+    try {
+      query = new URLSearchParams(window.location.search).get('q') || '';
+    } catch {}
+    query = query.replace(/\s+/g, ' ').trim().slice(0, 200);
+    state.searchQuery = query;
+    el('runs-search').value = query;
+  }
+
   // Check auth first before loading dashboard
   async function checkAuthAndInit() {
     try {
       restoreDashboardState();
+      restoreRunsSelection();
+      restoreSearchFromUrl();
       restoreRunsDataCache();
 
       // If shell is present, wait for it to fetch the user
       if (window.QymShell && !window.__QYM_USER__) {
-        await new Promise(r => document.addEventListener('qym:shell-ready', r, { once: true }));
+        await new Promise(r => document.addEventListener('qym:shell-ready', r, pageListen({ once: true })));
       }
+      if (!dashboardActive) return;
       if (window.__QYM_USER__) {
         state.currentUser = window.__QYM_USER__;
+        // Back to a list seen moments ago: show those rows at once and
+        // revalidate in the background.
+        restoreDashboardPageCache();
         startHeartbeat();
         fetchRuns({ refreshAllPages: true });
         return;
@@ -8375,11 +9361,20 @@
         : updating ? backoffMs
         : (state.dashboardOverview?.has_active_runs || hasActiveRuns()) ? LIVE_REFRESH_INTERVAL_MS : IDLE_REFRESH_INTERVAL_MS;
       if (window.__QYM_DASHBOARD_INTERVAL__) clearInterval(window.__QYM_DASHBOARD_INTERVAL__);
-      window.__QYM_DASHBOARD_INTERVAL__ = setInterval(fetchRuns, intervalMs);
+      window.__QYM_DASHBOARD_INTERVAL__ = setInterval(pollRuns, intervalMs);
     } catch {
       if (window.__QYM_DASHBOARD_INTERVAL__) clearInterval(window.__QYM_DASHBOARD_INTERVAL__);
-      window.__QYM_DASHBOARD_INTERVAL__ = setInterval(fetchRuns, IDLE_REFRESH_INTERVAL_MS);
+      window.__QYM_DASHBOARD_INTERVAL__ = setInterval(pollRuns, IDLE_REFRESH_INTERVAL_MS);
     }
+  }
+
+  // Hidden tabs do not poll; the first look back refreshes once.
+  function pollRuns() {
+    if (document.hidden) {
+      state._pollMissedWhileHidden = true;
+      return;
+    }
+    fetchRuns();
   }
   updateRunsRefreshCadence();
 

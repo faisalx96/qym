@@ -47,8 +47,9 @@ def _rule(css: str, selector: str) -> str:
 def test_dashboard_delete_action_binding_allows_non_deletable_runs() -> None:
     source = DASHBOARD_JS.read_text(encoding="utf-8")
 
-    assert "const deleteBtn = tr.querySelector('.delete-run');" in source
-    assert "if (deleteBtn) deleteBtn.addEventListener('click'" in source
+    # Row actions are delegated once on the tbody; a row without a Delete
+    # action simply has no .delete-run to match.
+    assert "else if (control.matches('.delete-run')) confirmDeleteRun(run.file_path, run.run_id);" in source
     assert "tr.querySelector('.delete-run').addEventListener" not in source
 
 
@@ -362,7 +363,7 @@ def test_runs_badges_separate_error_types_without_changing_item_math() -> None:
     assert "run.samples > 1 ? ' across all passes' : ''" in source
     assert "const retryScope = run.samples > 1 ? ' across all passes' : ' across all items';" in source
     assert "${retryScope}" in source
-    assert "dashboard.js?v=p0-20260930-3" in index
+    assert "dashboard.js?v=p1-20261002" in index
 
 
 def test_repeat_run_rows_show_each_pass_retry_count() -> None:
@@ -441,16 +442,15 @@ def test_repeat_parent_checkbox_selects_its_current_scope() -> None:
     # Collapsed repeat rows represent the logical run; expanded rows represent
     # the selectable execution members shown directly beneath them.
     assert "samplesOpen ? 'Select all passes for' : 'Select run'" in source
-    assert "if (expanded) {\n            toggleExpandedPassSelection(run, tr);" in source
+    assert "state._runsTableCtx.toggleExpandedPassSelection(run, row);" in source
     assert "checkbox.checked = state.selectedRuns.has(filePath);" in source
     assert "checkbox.checked = refs.length > 0 && selectedCount === refs.length;" in source
     assert "checkbox.indeterminate = selectedCount > 0 && selectedCount < refs.length;" in source
-    assert "const repeatExpanded = run.samples > 1" in source
-    assert "checkbox.indeterminate = repeatExpanded" in source
+    assert "checkbox.indeterminate = samplesOpen && selectedPassCount > 0" in source
     assert "isPartiallySelected" not in source
     assert "state.selectedRuns.delete(filePath);" in source
     assert "if (!allSelected) refs.forEach(ref => state.selectedRuns.add(ref));" in source
-    assert "dashboard.js?v=p0-20260930-3" in index
+    assert "dashboard.js?v=p1-20261002" in index
 
 
 def test_repeat_comparison_selection_expands_to_exact_passes() -> None:
@@ -497,9 +497,10 @@ def test_repeat_run_expander_uses_accessible_attached_inspector() -> None:
     styles = (DASHBOARD_DIR / "dashboard.css").read_text(encoding="utf-8")
 
     assert '<button type="button" class="samples-toggle' in source
-    assert 'aria-expanded="${samplesOpen ? \'true\' : \'false\'}"' in source
+    # The open state lives outside the keyed row markup; the native button
+    # gives Enter and Space activation.
+    assert "toggle.setAttribute('aria-expanded', samplesOpen ? 'true' : 'false');" in source
     assert 'aria-controls="${samplesPanelId}"' in source
-    assert "event.key !== 'Enter' && event.key !== ' '" in source
     assert "toggle.setAttribute('aria-expanded'" in source
     assert 'class="samples-detail-panel"' in source
     assert "samples-retry-btn" in source
@@ -534,8 +535,8 @@ def test_repeat_drawer_follows_mock_option_c() -> None:
 
     # leading disclosure chevron before the run name (mock C's toggle), the
     # pass-count chip after it, and a spacer aligning chevron-less rows
-    toggle_at = source.index('class="samples-toggle qym-icon-action${samplesOpen')
-    run_id_at = source.index('<span class="run-id"', toggle_at)
+    toggle_at = source.index('class="samples-toggle qym-icon-action"')
+    run_id_at = source.index('<a class="run-id"', toggle_at)
     assert toggle_at < run_id_at < source.index('class="run-pass-count"', toggle_at)
     assert 'class="samples-toggle-spacer"' in source
     assert "headerRow.classList.toggle('has-repeat-rows', anyRepeatRows)" in source
@@ -587,7 +588,7 @@ def test_repeat_drawer_follows_mock_option_c() -> None:
     assert "${latencyStat}" in source
 
     # the whole repeat-run row is an expand target (name still navigates)
-    assert "const rowToggle = tr.querySelector('.samples-toggle');" in source
+    assert "const rowToggle = row.querySelector('.samples-toggle');" in source
 
     # user-initiated expands fade in (opacity only — a transform would unpin
     # the sticky columns); collapse is instant and re-renders have no motion
@@ -598,7 +599,9 @@ def test_repeat_drawer_follows_mock_option_c() -> None:
 
     # each completed pass row deep-links to the run page scoped to that pass
     assert 'data-pass-number="${firstPass}"' in source
-    assert "`${base}?pass=${passNumber}`" in source
+    # (and carries the list's view for its previous / next run, C044)
+    assert "const url = runFromListUrl(filePath);" in source
+    assert "`${url}${url.includes('?') ? '&' : '?'}pass=${passNumber}`" in source
     assert '.runs-table > tbody > tr.pass-member[data-pass-number]:hover' in styles
 
     # first expand renders optimistically from pass_summaries (shimmer for
@@ -713,7 +716,7 @@ def test_run_page_supports_single_pass_scope() -> None:
     # Missing attempts become pending instead of inheriting the latest
     # run-level output/status. Header and trace summary use the pass endpoint.
     assert "output: att ? (att.output ?? null) : null" in source
-    assert "fetch(apiUrl('api/runs/' + RUN_ID + '/passes'))" in source
+    assert "fetch(apiUrl('api/runs/' + RUN_ID + '/passes')" in source
     assert "const pass = state.viewPass ? state.passSummary : null;" in source
     assert "let runtimeMs = pass ? pass.duration_ms : run.duration_ms;" in source
     assert "? state.passSummary?.trace_stats" in source
@@ -810,8 +813,9 @@ def test_repeat_and_compare_share_grouped_output_interaction() -> None:
     assert "window.location.pathname + '?pass=' + encodeURIComponent(att.pass_number)" in repeat_outputs
     assert 'class="qym-output-card__link"' in repeat_outputs
     assert "${identityHtml}${verdictFor(row, runIdx)}" in compare_outputs
+    # Collapsed rows keep a status column even when it is empty (C065).
     assert (
-        "(!isExpanded && (!isRepeatItem || hasAnyTaskError) ? statusIndicator : '')"
+        "'<span class=\"rdi-status\">' + (!isRepeatItem || hasAnyTaskError ? statusIndicator : '') + '</span>'"
         in collapsed_run_header
     )
     assert "qym-tag--success" in repeat_outputs
@@ -1022,9 +1026,12 @@ def test_item_detail_section_has_one_defined_shared_shell() -> None:
 
     for source in (run, compare):
         assert "items-comparison qym-item-section" in source
-        assert "qym-item-section-head" in source
         assert "qym-item-result-meter" not in source
         assert "items-fmeter" not in source
+    assert "qym-item-section-head" in compare
+    # The run page names its Items section with the run section header
+    # recipe, like every other run section (C058).
+    assert '<header class="run-section-head" data-run-section="items" id="run-section-items">' in run
 
 
 def test_compare_expanded_item_shell_matches_run_detail() -> None:
@@ -1036,7 +1043,7 @@ def test_compare_expanded_item_shell_matches_run_detail() -> None:
     # selected-metric pills that are visible directly below.
     assert "const compactItemLabel = Number.isFinite(sourceRowIndex)" in compare
     assert '${isExpanded\n                  ? `<span class="item-header-spacer"></span><span class="item-pass-note">${visibleRunCount} run' in compare
-    assert ': `<span class="item-title">${escapeHtml(titleText)}</span><span class="item-agg-pills qym-item-metric-grid" data-qym-metric-grid>${headerPills}</span>`}' in compare
+    assert ': `<span class="item-title"${QymSafe.textDirAttrs(titleText)}>${escapeHtml(titleText)}</span><span class="item-agg-pills qym-item-metric-grid" data-qym-metric-grid>${headerPills}</span>`}' in compare
     assert '<div class="input-label">INPUT ' in compare
     assert '<div class="expected-label">EXPECTED OUTPUT ' in compare
 
@@ -1357,9 +1364,8 @@ def test_run_detail_includes_non_redundant_intelligence_charts() -> None:
     assert 'relationshipPanels.push(\'<div class="ri-panel">' in active
     assert 'frontierPanel = \'<div class="ri-panel system-frontier-panel">' in active
     assert "radar" not in source.lower()
-    assert '<h3 class="section-title">Latency and Trace Analysis</h3>' in source
-    assert "Inspect response latency, quality tradeoffs, and trace-level execution behavior." in source
-    assert 'class="ri-header system-metrics-header"' in source
+    assert "runSectionHeadHtml('latency', 'Latency and traces'," in source
+    assert "Response latency, quality tradeoffs and trace-level execution behavior." in source
     assert "const latencyPanels = (latencyCard || '') + (frontierPanel || '');" in source
     assert "'<div class=\"system-metrics-grid\">' + latencyPanels + '</div>'" in source
     assert "'<div class=\"system-trace-row\">' + traceCard + '</div>'" in source
@@ -1546,7 +1552,7 @@ def test_charts_grouped_view_uses_presets_for_version_model_splits() -> None:
     assert "function renderEmptyGroupStatCells()" in charts_block
     assert "function renderGroupStatBar(value, label, title, modelIdx)" in charts_block
     assert "scheduleChartGroupMetricStats(runs, groupMetricName, threshold, isBoolean)" in charts_block
-    assert "calculateModelStatsFromItems(detailedRuns, metricName, threshold, isBoolean, runsMetricDirection(runs, metricName))" in charts_block
+    assert "fetchChartGroupStats(cacheKey, paths, metricName, threshold, isBoolean, runsMetricDirection(runs, metricName))" in charts_block
     assert "const GROUP_DISPLAY_COLUMNS = [" in source
     assert "Grouped Run Columns" in source
     assert "...GROUP_DISPLAY_COLUMNS.map(col => col.key)" in source
@@ -1748,7 +1754,7 @@ def test_dashboard_stops_polling_before_shell_navigation() -> None:
     assert "dashboardActive = false;" in source
     assert "window.__QYM_DASHBOARD_INTERVAL__ = null;" in source
     assert (
-        "document.addEventListener('qym:before-navigate', teardownDashboard, { once: true });"
+        "document.addEventListener('qym:before-navigate', teardownDashboard, pageListen({ once: true }));"
         in source
     )
     assert "if (!dashboardActive) return;" in source
@@ -1763,9 +1769,9 @@ def test_changed_route_assets_are_cache_versioned() -> None:
     # The project-not-found page loads the same shared shell assets as the
     # dashboard pages, every one of them versioned.
     assert '{static_root}/auth.js?v=p0-20260930"' in runs_api
-    assert '{static_root}/shell.css?v=p0-20260930-3"' in runs_api
-    assert '{static_root}/dashboard.css?v=p0-20260930"' in runs_api
-    assert '{static_root}/shell.js?v=p0-20260930-3"' in runs_api
+    assert '{static_root}/shell.css?v=p1-20261001"' in runs_api
+    assert '{static_root}/dashboard.css?v=p1-20261002"' in runs_api
+    assert '{static_root}/shell.js?v=p1-20261001"' in runs_api
 
 
 def test_every_page_versions_the_shared_shell_assets() -> None:
@@ -1870,8 +1876,13 @@ def test_run_header_status_and_actions_share_one_height() -> None:
         'class="qym-inline-action qym-inline-action--neutral" '
         'id="export-download-btn"'
     ) in run
+    # Copy link is the primary action; the HTML file is an export (C059).
     assert (
         'class="qym-inline-action qym-inline-action--accent" '
+        'id="copy-run-link-btn"'
+    ) in run
+    assert (
+        'class="qym-inline-action qym-inline-action--neutral" '
         'id="export-share-btn"'
     ) in run
     assert "qym-inline-action--langfuse" not in run
@@ -2094,7 +2105,11 @@ def test_compare_view_uses_current_run_detail_component_contracts() -> None:
     assert compare.count('class="compare-section-copy"') >= 3
     assert "container.hidden = tabs.length < 2;" in compare
     assert (
-        'class="export-html-btn qym-inline-action qym-inline-action--accent" '
+        'class="qym-inline-action qym-inline-action--accent" '
+        'id="copy-compare-link-btn"'
+    ) in compare
+    assert (
+        'class="export-html-btn qym-inline-action qym-inline-action--neutral" '
         'id="export-share-btn"'
     ) in compare
 
@@ -2233,15 +2248,15 @@ def test_clear_filter_control_has_aligned_label_and_soft_count_pill() -> None:
     for page in DASHBOARD_DIR.glob("*.html"):
         source = page.read_text(encoding="utf-8")
         if page.name == "analyzer.html":
-            assert "dashboard.css?v=p0-20260930" in source
-            assert "playground.js?v=p0-20260930" in source
-            assert "ui_components.css?v=p0-20260930" in source
-            assert "ui_components.js?v=p0-20260930-2" in source
+            assert "dashboard.css?v=p1-20261002" in source
+            assert "playground.js?v=p1-20261002" in source
+            assert "ui_components.css?v=p1-20261001" in source
+            assert "ui_components.js?v=p1-20261001" in source
             continue
         if "ui_components.css?v=" in source:
-            assert "ui_components.css?v=p0-20260930" in source
+            assert "ui_components.css?v=p1-20261001" in source
         if "ui_components.js?v=" in source:
-            assert "ui_components.js?v=p0-20260930-2" in source
+            assert "ui_components.js?v=p1-20261001" in source
 
 
 def test_operational_statistics_use_connected_strip_contract() -> None:
@@ -2420,11 +2435,15 @@ def test_run_selection_uses_explicit_mode_and_reclaims_checkbox_column() -> None
     assert "panel.closest('.status-bar')?.classList.toggle('selection-active', showActions)" in panel
     assert "separator.style.display = showActions ? '' : 'none';" in panel
     assert "allDeletable" in panel
-    assert "isOwner && (status === 'COMPLETED'" in panel
-    assert "const selectionAvailable = !!state.runs && (usesDashboardSummary() ? state.dashboardOverview.total_count > 0 : state.flatRuns.length > 0);" in source
+    # Owners, and project managers or admins for the owner (C072).
+    assert "(isOwner || managesProject) && (status === 'COMPLETED'" in panel
+    assert "const selectionAvailable = loaded && (usesDashboardSummary() ? state.dashboardOverview.total_count > 0 : state.flatRuns.length > 0);" in source
+    # A selection kept from an earlier visit (C043) is cleared only once the
+    # list has answered with no runs, never while it is still loading.
+    assert "if (loaded && !selectionAvailable && !state.dashboardOverview?.freshness?.updating) {" in source
     assert "selectMode: false" in source
     assert "function setSelectMode(enabled)" in source
-    assert "tableView.classList.toggle('select-mode', state.selectMode);" in source
+    assert "el('table-view')?.classList.toggle('select-mode', state.selectMode);" in source
     assert "selectModeBtn.textContent = state.selectMode ? 'Done' : 'Select';" in source
     assert "el('select-mode-btn')?.addEventListener('click', () => setSelectMode(!state.selectMode));" in source
     select_mode = source.split("function setSelectMode(enabled)", 1)[1].split(
@@ -2709,7 +2728,8 @@ def test_reviews_and_dataset_controls_match_the_approved_shared_components() -> 
     assert "padding-inline: var(--space-md)" in item_tabs
     assert ".dsx-item-actions > .shell-btn.qym-inline-action {" in components
     assert datasets.count("shell-btn shell-btn-primary qym-inline-action") >= 2
-    assert datasets.count("shell-btn shell-btn-secondary qym-inline-action") == 2
+    # Item Previous/Next, Deleted datasets / All datasets, Restore, compare "Show more".
+    assert datasets.count("shell-btn shell-btn-secondary qym-inline-action") == 6
     assert "shell-btn shell-btn-danger qym-inline-action" in datasets
     assert "requestAnimationFrame(() => activeTab.scrollIntoView({ block: 'nearest', inline: 'nearest' }));" in datasets
 
@@ -2927,10 +2947,11 @@ def test_datasets_runs_tab_is_flush_without_redundant_heading() -> None:
 
 def test_datasets_version_switching_preserves_lineage_tab() -> None:
     source = (DASHBOARD_DIR / "datasets.html").read_text(encoding="utf-8")
-    version_row_block = source.split("function versionPopoverRow(v, onSelect){", 1)[1].split("function buildTabs(){", 1)[0]
+    version_row_block = source.split("function versionPopoverRow(v, onSelect, id){", 1)[1].split("function buildTabs(){", 1)[0]
     lineage_block = source.split("async function renderLineageTab(host){", 1)[1].split("    // -------------------------------------------------------------\n    // SETTINGS TAB", 1)[0]
 
-    assert "navigate({ tab: state.tab, v: v.version, item: null });" in version_row_block
+    assert "const target = { tab: state.tab, v: v.version, item: null };" in version_row_block
+    assert "navigate(target);" in version_row_block
     assert "navigate({ tab: 'lineage', v: v.version, item: null })" in lineage_block
     assert "navigate({ tab: 'items', v: v.version })" not in lineage_block
     assert "const childrenByParent = {};" in lineage_block
@@ -3080,7 +3101,11 @@ def test_datasets_version_popover_uses_fast_switcher() -> None:
     assert "versionSearchText(v).includes(q)" in source
     assert "appendVersionSection" not in source
     assert "dsx-version-popover-header" not in source
-    assert "versionPopoverRow(v, closePopover)" in source
+    assert "versionPopoverRow(v, () => closePopover(false), 'dsx-version-option-' + i)" in source
+    # Keyboard: a combobox over a listbox, Escape returns focus to the version button.
+    assert "role: 'listbox'" in source and "role: 'option'" in source
+    assert "searchInput.setAttribute('aria-activedescendant', row.id);" in source
+    assert "else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePopover(true); }" in source
     assert "Changes vs production" not in source
     assert "compareSummaryCache" not in source
 
@@ -3386,8 +3411,8 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert 'data-jump-issues' in run
     assert 'new Set(SOLUTION_PRESETS)' in run
     assert "const issueCount = rootCauseIssues(analysis).length;" in run
-    assert "renderMetricRootCauseIssues(analysis, itemId, metricName, legacyReview)" in run
-    assert "renderMetricAnalysisCard(itemId, metricName, metricAnalyses[metricName], row.review_corrections?.[metricName])" in run
+    assert "renderMetricRootCauseIssues(analysis, itemId, metricName, legacyReview, issueStatuses)" in run
+    assert "renderMetricAnalysisCard(itemId, metricName, metricAnalyses[metricName], row.review_corrections?.[metricName], row.review_issue_statuses?.[metricName])" in run
     assert 'data-approve-issue="' in run
     assert "Choose a saved solution, or add a new one for this issue." in run
     assert 'id="analysis-metric-list"' in analyzer
@@ -3431,7 +3456,7 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert '"type": "retrying"' in analysis_api
     assert "state.phase === 'retrying'" in playground
     assert "Retrying timed-out analysis…" in playground
-    assert "playground.js?v=p0-20260930" in (
+    assert "playground.js?v=p1-20261002" in (
         DASHBOARD_DIR / "analyzer.html"
     ).read_text(encoding="utf-8")
     assert "Timeout retries: <strong>" in playground
@@ -4078,11 +4103,23 @@ def test_runs_table_freezes_the_chosen_identity_columns() -> None:
 
     # JS writes the offsets from the measured widths of the frozen set only,
     # remembers the choice per browser, and offers it in the Columns menu.
-    assert "applyRunsFrozenColumns(table, widths);" in source
+    assert "applyRunsFrozenColumns(table, widths, fitted);" in source
     assert "table.style.setProperty(`--runs-col-${column.key}-left`, `${left}px`);" in source
     assert "const RUNS_FROZEN_COLUMNS_STORAGE_KEY = 'qym:runs-frozen-columns';" in source
     assert "renderRunsFrozenColumnsSection(searchValue);" in source
-    assert '<div role="group" aria-labelledby="mv-frozen-label">' in source
+    assert '<div role="group" aria-labelledby="mv-frozen-label" aria-describedby="mv-frozen-fit">' in source
+    # A block wider than ~55% of a table that scrolls lets trailing columns
+    # go (never Run name) without touching the saved choice, re-checked when
+    # the table resizes; the Columns menu names them.
+    assert "const RUNS_FROZEN_MAX_SHARE = 0.55;" in source
+    fit = source.split("function fitRunsFrozenColumns(widths, available) {", 1)[1].split("\n  }\n", 1)[0]
+    assert "fitted[fitted.length - 1] !== 'run'" in fit
+    assert "localStorage" not in fit
+    assert "new ResizeObserver(" in source
+    assert "Unfrozen to fit this width: " in source
+    fit_note = _rule(styles, ".mv-frozen-fit {")
+    assert "font-size: var(--font-sm);" in fit_note
+    assert "color: var(--text-muted);" in fit_note
     assert "Reset to default" in source
     # Focus padding follows the frozen block that is actually stuck.
     assert "runsFrozenWidth(scroller)" in source
