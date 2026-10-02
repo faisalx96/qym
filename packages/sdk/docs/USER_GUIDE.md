@@ -29,23 +29,18 @@ A step-by-step guide to evaluating your LLM applications. Follow this guide care
 pip install qym
 ```
 
-### Step 2: Set up Langfuse credentials (optional for CSV datasets)
+### Step 2: Choose a dataset source
 
-qym integrates with [Langfuse](https://langfuse.com) for dataset storage and tracing. If you're using a **local CSV file** as your dataset, Langfuse credentials are optional—evaluations will run without tracing.
+qym reads test items from one of two places:
 
-Create a `.env` file in your project root:
+- **qym platform dataset** — versioned and shared with your team. Requires `QYM_BASE_URL` and `QYM_API_KEY` (Step 3).
+- **Local CSV or JSONL file** — no platform needed. Evaluations still run with the terminal UI, but runs and traces are not sent to the platform.
 
-```bash
-# .env
-LANGFUSE_PUBLIC_KEY=pk-lf-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-LANGFUSE_SECRET_KEY=sk-lf-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-LANGFUSE_HOST=https://cloud.langfuse.com
-```
+qym reads credentials from environment variables. On `import qym`, it also loads a `.env` file from the directory where you run your script.
 
-> ⚠️ **Common Error**: If you see `"Missing Langfuse public key"`, your `.env` file is not being loaded. Make sure:
+> ⚠️ **Common Error**: If you see `"... qym platform credentials are missing"`, your `.env` file is not being loaded. Make sure:
 > - The file is named exactly `.env` (not `env` or `.env.txt`)
 > - It's in the same directory where you run your script
-> - You have `python-dotenv` installed (`pip install python-dotenv`)
 
 ### Step 3: Connect to a qym platform deployment
 
@@ -72,12 +67,11 @@ If your deployment uses an internal or self-signed HTTPS certificate, also set `
 
 ### Step 4: Verify setup
 
-```python
-from langfuse import Langfuse
-
-client = Langfuse()
-print("Connected to Langfuse!")  # If no error, you're ready
+```bash
+qym config check
 ```
+
+`Connected to <your platform URL>` means the platform is reachable and your API key works. Using only local CSV/JSONL files? Skip this step.
 
 ---
 
@@ -90,7 +84,7 @@ print("Connected to Langfuse!")  # If no error, you're ready
 │                        qym (قيِّم)                            │
 │                                                             │
 │   Dataset          Your Task         Metrics                │
-│   (Langfuse)   →   Function    →    (Scoring)   →  Results  │
+│   (qym/CSV)    →   Function    →    (Scoring)   →  Results  │
 │                                                             │
 │   100 items        Runs on each      Compares output        │
 │   with input       item in parallel  to expected            │
@@ -103,9 +97,9 @@ print("Connected to Langfuse!")  # If no error, you're ready
 | Concept | Description |
 |---------|-------------|
 | **Task** | Your function that takes input and returns output (e.g., calls an LLM) |
-| **Dataset** | Collection of test items (Langfuse dataset or local CSV file) |
+| **Dataset** | Collection of test items (qym platform dataset or local CSV/JSONL file) |
 | **Metrics** | Functions that score your output |
-| **Trace** | Langfuse observability object for logging (optional) |
+| **Trace** | OpenTelemetry span tree for one item, viewable on the platform (optional) |
 
 ---
 
@@ -130,7 +124,7 @@ The evaluator looks at your function signature and passes arguments intelligentl
 
 **Special parameters** automatically populated by the evaluator:
 - `model` or `model_name`: The current model being evaluated
-- `trace_id`: The Langfuse trace ID for the current item
+- `trace_id`: The OpenTelemetry trace ID for the current item
 
 ### Basic Task (Any Parameter Name Works)
 
@@ -226,14 +220,14 @@ The evaluator detects `model_name` or `model` parameters and passes the model au
 
 ### Task with Trace ID (For Observability)
 
-If you need the Langfuse trace ID for logging or debugging, add a `trace_id` parameter:
+If you need the trace ID for logging or debugging, add a `trace_id` parameter:
 
 ```python
 def my_task(question, trace_id=None):
     """
     Args:
         question: The input
-        trace_id: Langfuse trace ID (passed automatically by Evaluator)
+        trace_id: OpenTelemetry trace ID (passed automatically by Evaluator)
     """
     # Use trace_id for custom logging, linking to external systems, etc.
     print(f"Processing with trace: {trace_id}")
@@ -243,9 +237,9 @@ def my_task(question, trace_id=None):
     return result
 ```
 
-The evaluator automatically detects the `trace_id` parameter and passes the current Langfuse trace ID. This is useful for:
+The evaluator automatically detects the `trace_id` parameter and passes the current OpenTelemetry trace ID. This is useful for:
 - Linking evaluation results to external logging systems
-- Debugging specific items in Langfuse
+- Finding the item's trace in the platform trace viewer
 - Correlating traces across services
 
 ### Async Task (Recommended for LLM Calls)
@@ -570,7 +564,7 @@ The pairwise judge returns:
 **Factory options for `create_judge()` and `create_pairwise_judge()`:**
 - `choices` — dict mapping verdict labels to scores. Binary (2 labels) or multi-level (any number). Scores should be between 0.0 and 1.0.
 - `judge_model`, `judge_api_key`, `judge_base_url` — per-judge LLM provider override
-- `langfuse_prompt` — fetch prompt template from Langfuse prompt management instead of using the `prompt` parameter
+- `langfuse_prompt` — deprecated and has no effect. qym logs a warning and uses the `prompt` template; put your template in `prompt`
 - `system_prompt` — override the default system prompt
 
 **Reliability:** LLM judge calls include **exponential backoff with jitter** (3 attempts) so transient API failures don't cause metric errors. Template variables are substituted safely — missing variables produce a clear error rather than a silent failure.
@@ -680,7 +674,7 @@ def detailed_metric(output, expected):
     }
 ```
 
-The metadata appears in your CSV results and Langfuse traces for debugging.
+The metadata appears in your CSV results and, when `QYM_API_KEY` is set, in the platform run view for debugging.
 
 #### Using Task Metadata in Custom Metrics
 
@@ -771,7 +765,7 @@ def good_metric(output, expected):
 
 ## 5. Setting Up Your Dataset
 
-### Dataset Structure in Langfuse
+### Dataset Item Structure
 
 Each dataset item must have:
 
@@ -781,60 +775,55 @@ Each dataset item must have:
 | `expected_output` | ⚠️ For built-in metrics | The correct answer for comparison |
 | `metadata` | Optional | Extra info (user_id, category, etc.) |
 
-### Creating a Dataset in Langfuse UI
+### JSONL Item Format
 
-1. Go to your Langfuse project
-2. Click **Datasets** → **New Dataset**
-3. Name it (e.g., `qa-test-set`)
-4. Add items with this structure:
+In a JSONL file, each line is one item:
 
 **Simple string input:**
 ```json
-{
-  "input": "What is the capital of France?",
-  "expected_output": "Paris"
-}
+{"input": "What is the capital of France?", "expected_output": "Paris"}
 ```
 
 **Dict input (keys match your task parameters):**
 ```json
-{
-  "input": {
-    "question": "What is the capital of France?",
-    "context": "France is a country in Western Europe."
-  },
-  "expected_output": "Paris"
-}
+{"input": {"question": "What is the capital of France?", "context": "France is a country in Western Europe."}, "expected_output": "Paris"}
 ```
 
-### Creating a Dataset via Python
+Optional keys: `metadata`, `labels`, and `item_id` (or `id`).
+
+### Creating a Dataset on the qym Platform
+
+Platform datasets are project-scoped and versioned. Create them in the platform UI (CSV or JSONL upload) or with the `qym dataset` CLI:
+
+```bash
+# Upload qa.jsonl as version v1, publish it, and point the "production" alias at it
+qym dataset upload --name qa-test-set --file qa.jsonl --publish --production
+
+# List datasets and check the name
+qym dataset list
+```
+
+For a CSV file, `--input-col` and `--expected-col` name the columns (defaults: `input` and `expected_output`). Use `--project <slug>` to choose the project.
+
+`dataset="qa-test-set"` loads the version that the `production` alias points to. To pick another version, set `dataset_version` or `dataset_alias` in `config` (CLI: `--dataset-version` or `--dataset-alias`). See the [Platform User Guide](../../../packages/platform/docs/USER_GUIDE.md#datasets) for versions, aliases, and cloning.
+
+### JSONL Datasets (Local)
+
+Run a local JSONL file directly, with no platform dataset:
 
 ```python
-from langfuse import Langfuse
+from qym import Evaluator, JsonlDataset
 
-client = Langfuse()
-
-# Create dataset
-dataset = client.create_dataset(name="my-qa-dataset")
-
-# Add items - string input
-client.create_dataset_item(
-    dataset_name="my-qa-dataset",
-    input="What is 2 + 2?",
-    expected_output="4"
-)
-
-# Add items - dict input
-client.create_dataset_item(
-    dataset_name="my-qa-dataset",
-    input={"question": "Capital of Japan?", "hint": "Starts with T"},
-    expected_output="Tokyo"
+evaluator = Evaluator(
+    task=my_task,
+    dataset=JsonlDataset("qa.jsonl"),  # or dataset="qa.jsonl"
+    metrics=["exact_match"],
 )
 ```
 
 ### CSV Datasets (Local)
 
-If you already have test cases in a spreadsheet or CSV, you can run evaluations directly from a local `.csv` file—**no Langfuse dataset required**.
+If you already have test cases in a spreadsheet or CSV, you can run evaluations directly from a local `.csv` file—**no platform dataset required**.
 
 **You can use any column names** — you map them when constructing the dataset (Python) or via CLI flags.
 
@@ -933,7 +922,7 @@ evaluator = Evaluator(
 
 Without `input_mapping`, your task parameters should match the CSV column names (`def task(sql_prompt, sql_context): ...`). With `input_mapping`, the original input remains visible in saved results and the UI, while the task and metric `input_data` use the mapped parameter names.
 
-**Tracing behavior:** If your Langfuse credentials are set, runs created from CSV will still emit Langfuse traces (useful if your task expects `trace_id`). If credentials are not set, evaluation still runs (without tracing).
+**Tracing behavior:** CSV runs use the same OpenTelemetry tracing as platform-dataset runs. When `QYM_API_KEY` is set, runs and traces stream to the platform. Without it, the evaluation still runs, but no runs or traces are sent to the platform.
 
 ### ⚠️ Common Dataset Mistakes
 
@@ -979,7 +968,7 @@ def length_check(output, expected):
 # 3. Create evaluator
 evaluator = Evaluator(
     task=simple_task,
-    dataset="my-qa-dataset",  # Must exist in Langfuse
+    dataset="my-qa-dataset",  # Must exist on the qym platform
     metrics=["exact_match", length_check],  # Mix built-in and custom
     config={
         "max_concurrency": 5,  # Run 5 items in parallel
@@ -997,14 +986,14 @@ print(f"Total items: {results.total_items}")
 
 ### What Happens When You Run
 
-1. **Dataset loads** (from Langfuse or local CSV)
+1. **Dataset loads** (from the qym platform or a local CSV/JSONL file)
 2. **Version captured** — git branch and commit are auto-detected
 3. **Dashboard appears** showing live progress (TUI + platform streaming)
 4. **Items run in parallel** (controlled by `max_concurrency`), with automatic retries on technical failures (up to `max_retries`, default 2); `BusinessRuleError` stops immediately
 5. **LLM calls traced** — supported LLM calls are captured as spans when tracing is enabled
 6. **Metrics score** each output
 7. **Results save** to CSV automatically and stream to the platform (if `QYM_API_KEY` is set)
-8. **Traces viewable** in the embedded trace viewer and Langfuse (if configured)
+8. **Traces viewable** in the platform's embedded trace viewer (if `QYM_API_KEY` is set)
 
 ### The Dashboard
 
@@ -1264,7 +1253,7 @@ qym run create --task-file agent.py --task-function my_task \
 qym run create \
     --task-file agent.py \            # Python file containing your task
     --task-function my_task \          # Function name to call
-    --dataset qa-dataset \             # Langfuse dataset name
+    --dataset qa-dataset \             # Platform dataset name or .csv/.jsonl path
     --metrics exact_match,fuzzy_match \ # Comma-separated metrics
     --model gpt-4 \                    # Optional: tag with model name
     --samples 8 \                      # Repeat every item 8x as ONE run (pass@k)
@@ -1429,9 +1418,9 @@ Traces appear in two places:
 
 1. **Embedded Trace Viewer** — click the trace icon on any item in the run or compare view to see a full span tree with LLM message reconstruction, reasoning display, error highlighting, and duration waterfall. See the [Platform User Guide](../../../packages/platform/docs/USER_GUIDE.md#trace-viewer).
 
-2. **Langfuse** — if Langfuse credentials are configured, traces are also sent there. Click the trace link on any item row to jump directly to Langfuse.
+2. **API** — query stored spans via `GET /api/runs/{run_id}/spans` or `GET /api/runs/{run_id}/items/{item_id}/trace`.
 
-3. **API** — query stored spans via `GET /api/runs/{run_id}/spans` or `GET /api/runs/{run_id}/items/{item_id}/trace`.
+To also export traces to an [Arize Phoenix](https://phoenix.arize.com) collector, install `opentelemetry-exporter-otlp` and set `PHOENIX_ENDPOINT` (for example `http://localhost:6006/v1/traces`) or the `phoenix_endpoint` config key.
 
 ### Privacy
 
@@ -1554,7 +1543,7 @@ qym_results/
 | `expected_output` | The expected answer from dataset |
 | `{metric}_score` | Score for each metric (e.g., `exact_match_score`) |
 | `time` | Latency in seconds |
-| `trace_id` | Langfuse trace ID for debugging |
+| `trace_id` | OpenTelemetry trace ID for debugging |
 
 ### Export Formats
 
@@ -1653,14 +1642,14 @@ evaluator = Evaluator(
 
         # Tracing
         "otel_enabled": True,       # Enable auto-instrumentation (default: True)
+        "phoenix_endpoint": None,   # Also export traces to Phoenix (OTLP URL)
 
         # Output
         "output_dir": "./results",  # Where to save files
 
-        # Langfuse (override env vars)
-        "langfuse_public_key": "pk-...",
-        "langfuse_secret_key": "sk-...",
-        "langfuse_host": "https://cloud.langfuse.com",
+        # qym platform (override QYM_BASE_URL / QYM_API_KEY)
+        "platform_url": "https://your-qym-platform.example.com",
+        "platform_api_key": "...",
     }
 )
 ```
@@ -1723,22 +1712,21 @@ results = Evaluator.run_parallel(runs=runs_config, max_parallel_runs=3)
 ### "Dataset 'X' not found"
 
 ```
-DatasetNotFoundError: Dataset 'my-dataset' not found.
-Available datasets: qa-set, test-data, ...
+DatasetNotFoundError: Failed to load qym dataset 'my-dataset': HTTP Error 404: Not Found
 ```
 
-**Solution**: Check the exact dataset name in Langfuse. Names are case-sensitive.
+**Solution**: Check the exact dataset name with `qym dataset list`. If you set `dataset_version` or `dataset_alias`, check that the version or alias exists.
 
-### "Missing Langfuse public key"
+### "qym platform credentials are missing"
 
 ```
-LangfuseConnectionError: Missing Langfuse public key.
+DatasetNotFoundError: Dataset 'my-dataset' is not a local file and qym platform credentials are missing. Set QYM_BASE_URL and QYM_API_KEY, or pass CsvDataset/JsonlDataset.
 ```
 
 **Solution**:
-1. Create `.env` file with credentials
-2. Add `from dotenv import load_dotenv; load_dotenv()` at the **top** of your script
-3. Or export environment variables directly
+1. Add `QYM_BASE_URL` and `QYM_API_KEY` to a `.env` file in the directory where you run your script
+2. Or export the environment variables directly
+3. For a local file, make sure the path ends in `.csv` or `.jsonl`
 
 ### "Metric 'X' not found"
 
@@ -1792,7 +1780,7 @@ load_dotenv()  # Optional for CSV datasets
 
 from qym import Evaluator, CsvDataset
 
-# Minimal example (Langfuse dataset)
+# Minimal example (qym platform dataset)
 evaluator = Evaluator(
     task=lambda x: f"Response: {x}",
     dataset="my-dataset",
@@ -1800,7 +1788,7 @@ evaluator = Evaluator(
 )
 results = evaluator.run()
 
-# CSV dataset example (no Langfuse required)
+# CSV dataset example (no platform required)
 evaluator = Evaluator(
     task=my_task,
     dataset=CsvDataset("data.csv", input_col="question", expected_col="answer"),

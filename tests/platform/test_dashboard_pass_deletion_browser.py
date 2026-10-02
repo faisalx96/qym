@@ -7,7 +7,7 @@ import pytest
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite://")
 
-from test_dashboard_paging_browser import DashboardFixture, browser, make_runs
+from test_dashboard_paging_browser import DashboardFixture, make_runs
 from test_performance_views_browser import source_run_api
 
 pytestmark = pytest.mark.browser
@@ -172,5 +172,86 @@ def test_poll_clears_old_selection_and_rejects_delayed_pass_details(browser):
                 == 0
             )
             assert client.get("/api/runs/run-1").json()["run"]["samples"] == 2
+        finally:
+            fixture.close()
+
+
+def test_single_pass_delete_removes_that_pass_and_keeps_the_others(browser):
+    pass_rows = """() => Array.from(
+      document.querySelectorAll('tr.pass-member[data-samples-for="run-1"]')
+    ).map(row => [
+      row.querySelector('.pass-member-id').textContent.trim(),
+      row.querySelector('.col-metric-value').textContent.trim(),
+    ])"""
+    with source_run_api(count=2) as client:
+        fixture = PassDashboard(browser, client)
+        page = fixture.page
+        console_errors = []
+        confirmations = []
+        page.on(
+            "console",
+            lambda message: message.type == "error"
+            and console_errors.append(message.text),
+        )
+
+        def accept_confirmation(dialog):
+            confirmations.append(dialog.message)
+            dialog.accept()
+
+        def delete_then_publish(route):
+            if route.request.method != "DELETE":
+                route.fallback()
+                return
+            # Real deletion; the stubbed runs list then serves the new pass
+            # revision, as the dashboard API does after a delete.
+            url = urlparse(route.request.url)
+            response = client.delete(url.path, params=parse_qs(url.query))
+            fixture.refresh_descriptor()
+            route.fulfill(
+                status=response.status_code,
+                body=response.content,
+                content_type="application/json",
+            )
+
+        try:
+            fixture.open_passes()
+            page.on("dialog", accept_confirmation)
+            page.route("**/api/runs/run-1/passes/*", delete_then_publish)
+            before = page.evaluate(pass_rows)
+            assert [label for label, _ in before] == ["Pass 1", "Pass 2", "Pass 3"]
+            # Distinct per-pass scores identify the survivors after renumbering.
+            assert len({score for _, score in before}) == 3
+            page.locator('.pass-checkbox[data-pass-ref="run-1::pass3"]').check()
+            assert page.locator("#compare-panel").is_visible()
+
+            with page.expect_response(
+                lambda response: response.request.method == "DELETE"
+            ) as deleted:
+                page.locator('.pass-delete-action[data-delete-pass="2"]').click()
+
+            response = deleted.value
+            assert response.status == 200
+            request_url = urlparse(response.url)
+            assert request_url.path == "/api/runs/run-1/passes/2"
+            assert parse_qs(request_url.query) == {"expected_pass_version": ["0"]}
+            assert len(confirmations) == 1 and "Pass 2" in confirmations[0]
+            toast = page.locator(".toast").first
+            toast.wait_for()
+            assert "toast-success" in toast.get_attribute("class"), toast.inner_text()
+            assert "Pass deleted" in toast.inner_text()
+            page.wait_for_function(
+                "__dashboardTest.state._samplesData['run-1']?.passes.samples === 2"
+            )
+            assert page.evaluate(pass_rows) == [
+                ["Pass 1", before[0][1]],
+                ["Pass 2", before[2][1]],
+            ]
+            assert page.locator(".toast-error").count() == 0
+            # The old Pass 3 selection must not carry over to the renumbered
+            # Pass 2 or keep the selection actions open.
+            assert page.locator(".pass-checkbox:checked").count() == 0
+            assert not page.locator("#compare-panel").is_visible()
+            assert client.get("/api/runs/run-1").json()["run"]["samples"] == 2
+            assert console_errors == []
         finally:
             fixture.close()

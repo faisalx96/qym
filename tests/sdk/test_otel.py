@@ -68,6 +68,23 @@ def test_qym_span_processor_emits_only_for_active_stream():
     assert len(stream_a.events) == 1
 
 
+def test_qym_span_processor_drops_network_noise_spans():
+    processor = QymSpanProcessor()
+    stream = _FakeStream()
+    processor.set_stream(stream)
+
+    token = processor.activate_stream()
+    try:
+        for name in ("openai.chat", "connect", "dns.resolve", "tls.handshake", "eval-item"):
+            span = _FakeSpan()
+            span.name = name
+            processor.on_end(span)
+    finally:
+        processor.reset_stream(token)
+
+    assert [payload["name"] for _, payload in stream.events] == ["openai.chat", "eval-item"]
+
+
 def test_qym_span_processor_tags_metric_usage_scope():
     processor = QymSpanProcessor()
     stream = _FakeStream()

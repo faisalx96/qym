@@ -7,7 +7,7 @@ from qym.core.config import EvaluatorConfig
 from qym.core.dataset import CsvDataset
 from qym.core.evaluator import Evaluator
 import qym.core.otel as otel_module
-from qym.utils.env import get_langfuse_host_env, get_platform_url_env, load_cwd_dotenv
+from qym.utils.env import get_platform_url_env, load_cwd_dotenv
 
 
 def test_load_cwd_dotenv_only_reads_exact_cwd_file(tmp_path, monkeypatch):
@@ -58,21 +58,6 @@ def test_evaluator_loads_cwd_dotenv_and_ignores_langfuse_client(tmp_path, monkey
     # deprecated and ignored, and no client is created from credentials.
     assert evaluator.client is None
     assert evaluator.langfuse_enabled is False
-
-
-def test_langfuse_base_url_alias_is_used_for_host(tmp_path, monkeypatch):
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    monkeypatch.chdir(workspace)
-    (workspace / ".env").write_text(
-        "LANGFUSE_BASE_URL=https://lf.example.com\n",
-        encoding="utf-8",
-    )
-
-    monkeypatch.delenv("LANGFUSE_HOST", raising=False)
-    monkeypatch.delenv("LANGFUSE_BASE_URL", raising=False)
-    load_cwd_dotenv()
-    assert get_langfuse_host_env() == "https://lf.example.com"
 
 
 def test_qym_base_url_is_used_for_platform_url(monkeypatch):

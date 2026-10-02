@@ -28,7 +28,7 @@ qym is the Python SDK for evaluating LLM applications with repeatable datasets, 
 
 You can run evaluations from Python or the CLI, score outputs with built-in and LLM-as-judge metrics, and optionally stream runs to a qym platform deployment for shared review and comparison.
 
-The SDK supports [Langfuse](https://langfuse.com) datasets with tracing or local CSV files for lightweight offline evaluation.
+Datasets come from the qym platform (versioned) or from local CSV/JSONL files for lightweight offline evaluation. Traces use OpenTelemetry and stream to the qym platform.
 
 ## Features
 
@@ -42,7 +42,7 @@ The SDK supports [Langfuse](https://langfuse.com) datasets with tracing or local
 - **Real-Time Dashboard** — Terminal UI + platform dashboard with live progress, metrics, trace viewer, project-scoped metric-aware AI analysis, and corrections review
 - **Version Tracking** — Auto-detects git branch and commit per run for version leaderboards
 - **Framework Agnostic** — Works with LangChain, LangGraph, LlamaIndex, CrewAI, Haystack, OpenAI Agents, or any Python function
-- **Flexible Datasets** — Use Langfuse datasets (with tracing) or local CSV files (custom column names supported)
+- **Flexible Datasets** — Use versioned qym platform datasets or local CSV/JSONL files (custom column names supported)
 - **Auto-Save & Retry** — Automatically persist results to CSV/XLSX/JSON, with exponential backoff retries on failure (default: 2 retries, 300s timeout)
 - **Resume Runs** — Checkpoint partial results and resume interrupted evaluations; Ctrl+C sends STOPPED status instead of leaving runs stuck
 
@@ -59,17 +59,12 @@ pip install qym
 Create a `.env` file:
 
 ```bash
-# Langfuse (required for Langfuse datasets, optional for CSV)
-LANGFUSE_PUBLIC_KEY=pk-...
-LANGFUSE_SECRET_KEY=sk-...
-LANGFUSE_HOST=https://cloud.langfuse.com  # or your self-hosted instance
-
-# qym Platform (optional — syncs runs to a central dashboard)
+# qym Platform (required for platform datasets; optional for local files)
 QYM_API_KEY=your-api-key
 QYM_BASE_URL=https://your-qym-platform.example.com
 ```
 
-**To get your API key:** Use the API key flow provided by your qym platform deployment. Set `QYM_API_KEY` and `QYM_BASE_URL` to enable automatic streaming of evaluation runs.
+**To get your API key:** Use the API key flow provided by your qym platform deployment. `QYM_API_KEY` and `QYM_BASE_URL` let the SDK load platform datasets and stream runs and traces to the platform.
 
 For an internal/self-signed platform certificate, point the SDK at the issuing CA:
 
@@ -79,13 +74,13 @@ QYM_PLATFORM_CA_BUNDLE=/path/to/internal-ca.pem
 
 For local development only, certificate verification can be disabled with `QYM_PLATFORM_SSL_VERIFY=false`.
 
-> **Using CSV datasets?** Langfuse credentials are optional. Without them, evaluations still run but without tracing.
+> **Using local CSV or JSONL files?** Platform credentials are optional. Without them, evaluations still run with the terminal UI, but runs and traces are not sent to the platform.
 
 ### 3. Run Evaluation
 
 You need three things:
 1. **Task function** - Takes input (and optionally `model_name`), returns output
-2. **Dataset** - Langfuse dataset name or a local CSV file
+2. **Dataset** - qym platform dataset name or a local CSV/JSONL file
 3. **Metrics** - Built-in (`exact_match`, `contains`, `fuzzy_match`) or custom functions
 
 ```python
@@ -95,16 +90,16 @@ from qym import Evaluator
 def my_llm_task(question):
     return call_your_llm(question)
 
-# Run evaluation with a Langfuse dataset
+# Run evaluation with a qym platform dataset
 evaluator = Evaluator(
     task=my_llm_task,
-    dataset="my-langfuse-dataset",  # Dataset name in Langfuse
+    dataset="my-dataset",  # Dataset name on the qym platform ("production" alias)
     metrics=["exact_match", "contains"],
 )
 results = evaluator.run()
 ```
 
-**Using a local CSV instead of Langfuse:**
+**Using a local CSV instead of a platform dataset:**
 
 ```python
 from qym import Evaluator, CsvDataset
@@ -119,7 +114,7 @@ evaluator = Evaluator(
 results = evaluator.run()
 ```
 
-> CSV datasets work without Langfuse credentials. If credentials are set, traces are still recorded.
+> A path that ends in `.csv` or `.jsonl` also works as `dataset="qa.csv"`. `JsonlDataset` loads JSONL files directly.
 
 CSV rows can also provide several task inputs. Use a list for `input_col`, and add `input_mapping` when the CSV column names differ from your task parameters:
 
@@ -161,7 +156,7 @@ def on_progress(snapshot: ProgressSnapshot):
 
 evaluator = Evaluator(
     task=my_llm_task,
-    dataset="my-langfuse-dataset",
+    dataset="my-dataset",
     metrics=["exact_match"],
     progress_callback=on_progress,
 )
@@ -223,7 +218,7 @@ The CLI uses noun-verb command groups. All commands support `--json` for structu
 # Run an evaluation
 qym run create --task-file agent.py --task-function chat --dataset qa-set --metrics exact_match
 
-# Run from a local CSV (no Langfuse dataset required)
+# Run from a local CSV (no platform dataset required)
 qym run create --task-file agent.py --task-function chat \
   --dataset-csv datasets/qa.csv \
   --csv-input-col question --csv-expected-col answer --csv-metadata-cols category,difficulty \

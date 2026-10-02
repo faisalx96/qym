@@ -571,37 +571,6 @@ def _refresh_live_trace_stats(
     )
 
 
-def _upsert_trace_aggregate(
-    db: Session, run_id: str, trace_id: str, bucket: Dict[str, Any]
-) -> None:
-    agg = (
-        db.query(RunTraceAggregate)
-        .filter(
-            RunTraceAggregate.run_id == run_id,
-            RunTraceAggregate.trace_id == trace_id,
-        )
-        .first()
-    )
-    if not agg:
-        agg = RunTraceAggregate(run_id=run_id, trace_id=trace_id)
-        db.add(agg)
-        db.flush()
-
-    agg.span_count = int(bucket["span_count"])
-    agg.tokens = int(bucket["tokens"])
-    agg.cost = float(bucket["cost"])
-    agg.llm_calls = int(bucket["llm_calls"])
-    agg.tool_calls = int(bucket["tool_calls"])
-    agg.tool_errors = int(bucket["tool_errors"])
-    agg.malformed_tool_calls = int(bucket["malformed_tool_calls"])
-    agg.noisy_reasoning = int(bucket["noisy_reasoning"])
-    agg.provider_errors = int(bucket["provider_errors"])
-    agg.has_reasoning = bool(bucket["has_reasoning"])
-    agg.has_reasoning_tokens = bool(bucket["has_reasoning_tokens"])
-    agg.reasoning_tokens = int(bucket["reasoning_tokens"])
-    agg.raw_bucket = _sanitize_for_json(bucket)
-
-
 def _store_trace_stats(db: Session, run: Run) -> None:
     """Reconcile trace statistics and their durable contribution ledger."""
     _refresh_live_trace_stats(db, run)

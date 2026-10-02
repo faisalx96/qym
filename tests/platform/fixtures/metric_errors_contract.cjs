@@ -26,6 +26,7 @@ for (const meta of [
   { status: 'error', error: '' },
   { status: 'failed' },
   { status: 'timeout' },
+  { status: ' Timeout ' },
   { error: 'BusinessRuleError' },
 ]) {
   const row = {
@@ -36,6 +37,8 @@ for (const meta of [
   assert.equal(metrics.isErrorRow(row), true);
   assert.deepEqual(plain(metrics.getRowScore(row, 0, 'broken')), { score: 0, isError: true });
   assert.deepEqual(plain(metrics.getRowScore(row, 1, 'healthy')), { score: 1, isError: false });
+  // Without a metric name, a metric exception does not mark the score.
+  assert.deepEqual(plain(metrics.getRowScore(row, 0)), { score: 0, isError: false });
   const stats = metrics.calculateItemLevelMetrics({
     runsData: [{ snapshot: { rows: [row] } }], metricName: 'broken',
     getMetricIndex: () => 0, threshold: 0.8,
@@ -51,3 +54,8 @@ for (const meta of [
 
 assert.deepEqual(plain(metrics.getRowScore({ status: 'error', metric_values: [1] }, 0, 'quality')),
   { score: 0, isError: true });
+for (const status of ['error', 'FAILED']) {
+  const row = { status, metric_values: [1], metric_meta: {} };
+  assert.equal(metrics.isTaskErrorRow(row), true, status);
+  assert.equal(metrics.isErrorRow(row), true, status);
+}

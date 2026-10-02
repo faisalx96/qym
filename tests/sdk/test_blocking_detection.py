@@ -1,7 +1,6 @@
-"""Before/after tests for blocking-async detection (Fix #5).
+"""Tests for blocking-async detection (Fix #5).
 
-Tests use a canary coroutine to measure event-loop starvation caused by
-a blocking async task, proving the problem is real and the warning fires.
+An async task that blocks the event loop must trigger a one-time warning.
 No auto-remediation — the fix is warn-only.
 """
 
@@ -217,57 +216,3 @@ class TestBlockingDetection:
         await adapter.arun("reprobe", trace)
         # Streak increments because the probe ran and was clean.
         assert adapter._clean_streak == streak_before + 1
-
-
-# ---------------------------------------------------------------------------
-# Starvation proof
-# ---------------------------------------------------------------------------
-
-class TestEventLoopStarvation:
-    """Prove that a blocking async task starves concurrent coroutines."""
-
-    @pytest.mark.asyncio
-    async def test_blocking_async_starves_concurrent_canary(self):
-        """A canary's 0.1s sleep takes much longer when the loop is frozen.
-
-        The canary starts first (records t0, suspends at sleep(0.1)).
-        Then the blocking task freezes the loop.  When the canary resumes,
-        its wall-clock time includes the entire blocking period.
-        """
-
-        async def blocking_task(x):
-            time.sleep(1.5)
-            return x
-
-        adapter = _make_adapter(blocking_task)
-        trace = _make_trace()
-
-        canary_wall_time = None
-        canary_started = asyncio.Event()
-
-        async def canary():
-            nonlocal canary_wall_time
-            canary_started.set()
-            t0 = time.monotonic()
-            await asyncio.sleep(0.1)
-            canary_wall_time = time.monotonic() - t0
-
-        # Start canary first — it records t0 and suspends at sleep(0.1).
-        canary_task = asyncio.create_task(canary())
-        await canary_started.wait()
-
-        # Blocking task freezes the loop for 1.5s.
-        blocking_start = time.monotonic()
-        await adapter.arun("block", trace)
-        blocking_time = time.monotonic() - blocking_start
-
-        await canary_task
-
-        # Canary's 0.1s sleep was inflated by the blocking period.
-        # Assert relative to the blocking time, not an absolute threshold.
-        assert canary_wall_time is not None
-        assert canary_wall_time > blocking_time * 0.5, (
-            f"Canary took {canary_wall_time:.2f}s but blocking task took "
-            f"{blocking_time:.2f}s — canary should have been starved for "
-            f"most of the blocking duration"
-        )

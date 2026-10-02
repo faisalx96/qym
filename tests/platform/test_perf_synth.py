@@ -8,11 +8,10 @@ from sqlalchemy import text
 from qym_platform.tools.perf import synth
 
 
-@pytest.fixture
-def seeded(postgres_engine, tmp_path):
-    manifest = synth.generate(
-        engine=postgres_engine,
-        scale=0.003,
+def _generate(engine, tmp_path, scale):
+    return synth.generate(
+        engine=engine,
+        scale=scale,
         seed=3,
         projects=2,
         users=3,
@@ -21,7 +20,11 @@ def seeded(postgres_engine, tmp_path):
         out_dir=str(tmp_path),
         repeat_share=0.5,
     )
-    return postgres_engine, manifest
+
+
+@pytest.fixture
+def seeded(postgres_engine, tmp_path):
+    return postgres_engine, _generate(postgres_engine, tmp_path, scale=0.003)
 
 
 def test_generator_reproduces_production_shape(seeded):
@@ -67,8 +70,14 @@ def test_generator_reproduces_production_shape(seeded):
         assert conn.execute(text("SELECT count(*) FROM dashboard_partition_state")).scalar() == 0
 
 
-def test_reset_removes_only_generated_rows(seeded):
-    engine, _ = seeded
+def test_reset_removes_only_generated_rows(postgres_engine, tmp_path):
+    # One generated run is enough to prove reset; the production-shape scale
+    # above costs ~35s more and adds nothing here.
+    engine = postgres_engine
+    _generate(engine, tmp_path, scale=0.0004)
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM runs")).scalar() == 1
+        assert conn.execute(text("SELECT count(*) FROM spans")).scalar() > 0
     with engine.begin() as conn:
         conn.execute(text("INSERT INTO users (id, email, display_name, title, role, is_active, created_at, updated_at) VALUES ('keep', 'keep@example.test', 'Keep', '', 'ADMIN', true, now(), now())"))
     synth.reset(engine)

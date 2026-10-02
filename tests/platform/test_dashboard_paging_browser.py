@@ -20,15 +20,6 @@ STATIC = (
 pytestmark = pytest.mark.browser
 
 
-@pytest.fixture(scope="module")
-def browser():
-    api = pytest.importorskip("playwright.sync_api")
-    with api.sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
-        yield browser
-        browser.close()
-
-
 def make_runs(count=123):
     now = datetime.now(timezone.utc)
     return [

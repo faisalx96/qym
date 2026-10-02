@@ -30,9 +30,7 @@ from qym_platform.services.root_cause_changes import PASS_ANALYSIS_META_KEY
 from sqlalchemy import event
 from sqlalchemy.orm import Session, sessionmaker
 from test_issue_reviews import act
-from test_pass_review_records import records, repeat, reviews, score
-from test_retention import migrated_postgres
-from test_root_cause_issue_persistence import db_session
+from test_pass_review_records import records, reviews, score
 
 
 def _add_third_pass(db, run, item):

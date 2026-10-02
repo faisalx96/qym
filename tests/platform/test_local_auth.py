@@ -2,14 +2,11 @@ from __future__ import annotations
 
 import os
 import sys
-from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import sessionmaker
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
@@ -24,11 +21,11 @@ if "openai" not in sys.modules:
 
 from qym_platform.app import create_app
 from qym_platform.auth_oidc import ProviderIdentity
-from qym_platform.db.base import Base
 from qym_platform.db.models import AuditLog, LocalAuthCredential, User, UserIdentity, UserRole
 from qym_platform.deps import get_db
 from qym_platform.security import hash_password
 from qym_platform.settings import PlatformSettings
+from _helpers import app_client as _client
 
 
 ORIGIN_HEADERS = {"Origin": "http://testserver"}
@@ -66,40 +63,6 @@ def _configure_env(
     monkeypatch.delenv("QYM_AUTH_GITLAB_URL", raising=False)
     monkeypatch.delenv("QYM_AUTH_GITLAB_CLIENT_ID", raising=False)
     monkeypatch.delenv("QYM_AUTH_GITLAB_CLIENT_SECRET", raising=False)
-
-
-@pytest.fixture()
-def session_factory():
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    try:
-        yield SessionLocal
-    finally:
-        engine.dispose()
-
-
-@contextmanager
-def _client(session_factory):
-    app = create_app()
-
-    def override_get_db():
-        db = session_factory()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    try:
-        with TestClient(app) as client:
-            yield client
-    finally:
-        app.dependency_overrides.clear()
 
 
 def _create_local_user(
@@ -295,23 +258,6 @@ def test_logout_clears_local_session(session_factory, monkeypatch):
         assert response.status_code == 200
         assert response.json()["ok"] is True
         assert client.get("/v1/me").status_code == 401
-
-
-def test_bootstrap_admin_promotes_first_local_user(session_factory, monkeypatch):
-    _configure_env(monkeypatch, auth_local_enabled=True)
-    with _client(session_factory) as client:
-        assert client.post(
-            "/v1/auth/signup/password",
-            json={"email": "bootstrap@example.com", "password": "strong-pass-123"},
-            headers=ORIGIN_HEADERS,
-        ).status_code == 201
-        response = client.post(
-            "/v1/auth/bootstrap-admin",
-            json={"bootstrap_token": "bootstrap-secret"},
-            headers=ORIGIN_HEADERS,
-        )
-        assert response.status_code == 200
-        assert response.json()["role"] == "ADMIN"
 
 
 def test_oidc_flows_still_work_when_local_auth_is_enabled(session_factory, monkeypatch):

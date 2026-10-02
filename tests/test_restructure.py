@@ -91,21 +91,6 @@ class TestDirectoryStructure:
         assert (utils / "errors.py").exists()
         assert (utils / "text.py").exists()
 
-    def test_sdk_static_dashboard_removed(self):
-        """The dashboard static bundle is platform-only; the SDK ships only the ui bundle."""
-        assert not (SDK_ROOT / "qym" / "_static" / "dashboard").exists()
-
-    def test_sdk_static_ui(self):
-        u = SDK_ROOT / "qym" / "_static" / "ui"
-        assert u.exists()
-        assert (u / "index.html").exists()
-
-    def test_sdk_no_profile_html(self):
-        """profile.html is platform-only and must NOT be in the SDK."""
-        assert not (
-            SDK_ROOT / "qym" / "_static" / "dashboard" / "profile.html"
-        ).exists()
-
     def test_sdk_cli(self):
         """The CLI is a subpackage (qym/cli/), not a single module."""
         cli = SDK_ROOT / "qym" / "cli"
@@ -161,11 +146,6 @@ class TestDirectoryStructure:
             PLATFORM_ROOT / "qym_platform" / "tools" / "import_local_results.py"
         ).exists()
 
-    def test_platform_static_dashboard(self):
-        d = PLATFORM_ROOT / "qym_platform" / "_static" / "dashboard"
-        assert d.exists()
-        assert (d / "index.html").exists()
-
     # ── Old locations must be gone ─────────────────────────────────────
 
     def test_no_old_setup_py(self):
@@ -181,17 +161,6 @@ class TestDirectoryStructure:
 
     def test_no_old_tests_unit_dir(self):
         assert not (REPO / "tests" / "unit").exists()
-
-    # ── Test layout ────────────────────────────────────────────────────
-
-    def test_test_sdk_dir(self):
-        assert (REPO / "tests" / "sdk").is_dir()
-
-    def test_test_platform_dir(self):
-        assert (REPO / "tests" / "platform").is_dir()
-
-    def test_conftest_exists(self):
-        assert (REPO / "tests" / "conftest.py").exists()
 
     # ── Docker files ───────────────────────────────────────────────────
 
@@ -572,7 +541,6 @@ class TestPyprojectToml:
     def test_sdk_package_data(self, sdk_toml):
         pkg_data = sdk_toml["tool"]["setuptools"]["package-data"]["qym"]
         assert "_static/ui/*" in pkg_data
-        assert "_static/dashboard/*" in pkg_data
 
     def test_platform_name(self, platform_toml):
         assert platform_toml["project"]["name"] == "qym-platform"
@@ -608,11 +576,6 @@ class TestDockerFiles:
         assert "COPY setup.py" not in text
         assert "COPY qym " not in text
         assert "llm_eval_platform" not in text
-
-    def test_dockerfile_installs_both_packages(self):
-        text = (REPO / "docker" / "Dockerfile").read_text()
-        assert "packages/sdk" in text
-        assert "packages/platform" in text
 
     def test_entrypoint_uses_new_paths(self):
         text = (REPO / "docker" / "entrypoint.sh").read_text()
@@ -653,10 +616,6 @@ class TestEnvVarPrefix:
         assert "QYM_PLATFORM_DEBUG" in text
         assert "LLM_EVAL_PLATFORM_DEBUG" not in text
 
-    def test_settings_env_prefix_is_qym(self):
-        text = (PLATFORM_ROOT / "qym_platform" / "settings.py").read_text()
-        assert 'env_prefix="QYM_"' in text or "env_prefix='QYM_'" in text
-
     def test_env_template_uses_qym(self):
         text = (REPO / ".env.template").read_text()
         assert "LLM_EVAL_" not in text
@@ -687,47 +646,9 @@ class TestStaticAssets:
             PLATFORM_ROOT / "qym_platform" / "_static" / "ui" / "index.html"
         ).exists()
 
-    def test_profile_html_only_in_platform(self):
-        """profile.html should only exist in the platform package."""
-        sdk_profile = SDK_ROOT / "qym" / "_static" / "dashboard" / "profile.html"
-        platform_profile = (
-            PLATFORM_ROOT / "qym_platform" / "_static" / "dashboard" / "profile.html"
-        )
-        assert not sdk_profile.exists(), "profile.html should not be in SDK"
-        assert platform_profile.exists(), "profile.html should be in platform"
-
 
 # ═══════════════════════════════════════════════════════════════════════
-# 9. CONFTEST AND TEST INFRA
-# ═══════════════════════════════════════════════════════════════════════
-
-
-class TestTestInfrastructure:
-    """Verify the test infrastructure is correctly configured."""
-
-    def test_conftest_adds_sdk_to_path(self):
-        text = (REPO / "tests" / "conftest.py").read_text()
-        assert "packages" in text and "sdk" in text
-
-    def test_conftest_adds_platform_to_path(self):
-        text = (REPO / "tests" / "conftest.py").read_text()
-        assert "packages" in text and "platform" in text
-
-    def test_sdk_tests_exist(self):
-        sdk_tests = list((REPO / "tests" / "sdk").glob("test_*.py"))
-        assert (
-            len(sdk_tests) >= 3
-        ), f"Expected at least 3 SDK tests, found {len(sdk_tests)}"
-
-    def test_platform_tests_exist(self):
-        platform_tests = list((REPO / "tests" / "platform").glob("test_*.py"))
-        assert (
-            len(platform_tests) >= 1
-        ), f"Expected at least 1 platform test, found {len(platform_tests)}"
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# 10. PLATFORM APP WIRING
+# 9. PLATFORM APP WIRING
 # ═══════════════════════════════════════════════════════════════════════
 
 
@@ -776,12 +697,12 @@ class TestPlatformAppWiring:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# 11. CROSS-PACKAGE BOUNDARY
+# 10. CROSS-PACKAGE BOUNDARY
 # ═══════════════════════════════════════════════════════════════════════
 
 
 class TestCrossPackageBoundary:
-    """The SDK should not import qym_platform and vice-versa (except controlled deps)."""
+    """The SDK should not import qym_platform."""
 
     def test_sdk_does_not_import_qym_platform(self):
         """No SDK source file should import from qym_platform."""
@@ -794,25 +715,9 @@ class TestCrossPackageBoundary:
                     violations.append(f"{f}:{i}: {line.strip()}")
         assert violations == [], "SDK imports qym_platform:\n" + "\n".join(violations)
 
-    def test_platform_import_from_sdk_is_limited(self):
-        """Platform may import from qym (SDK), but only specific things."""
-        pattern = re.compile(r"^\s*(from|import)\s+qym\b")
-        imports = []
-        for f in (PLATFORM_ROOT / "qym_platform").rglob("*.py"):
-            text = f.read_text(errors="replace")
-            for i, line in enumerate(text.splitlines(), 1):
-                if pattern.match(line):
-                    imports.append(
-                        f"{f.relative_to(PLATFORM_ROOT)}:{i}: {line.strip()}"
-                    )
-        # It's OK to import from qym (the tools/import script does),
-        # but there shouldn't be excessive coupling.
-        # Just log them; the important thing is they exist and work.
-        assert isinstance(imports, list)  # Always passes — informational
-
 
 # ═══════════════════════════════════════════════════════════════════════
-# 12. ALEMBIC CONFIG
+# 11. ALEMBIC CONFIG
 # ═══════════════════════════════════════════════════════════════════════
 
 

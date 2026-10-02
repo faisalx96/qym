@@ -325,40 +325,6 @@ class TestEvaluator:
         assert "Dict task outputs must use qym's envelope" in result["_error"]
 
     @pytest.mark.asyncio
-    async def test_csv_dataset_without_langfuse_credentials_does_not_require_client(
-        self, tmp_path, mock_task, monkeypatch
-    ):
-        p = tmp_path / "qa.csv"
-        p.write_text("q,a\nhello,world\n", encoding="utf-8")
-        ds = CsvDataset(p, input_col="q", expected_col="a")
-
-        # Ensure a deterministic no-credentials environment even if the developer machine has Langfuse env vars.
-        monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
-        monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
-
-        with patch("qym.core.evaluator.auto_detect_task"):
-            evaluator = Evaluator(
-                task=mock_task,
-                dataset=ds,
-                metrics=[],
-                config={"run_name": "csv-run"},
-                langfuse_client=None,
-            )
-
-        assert evaluator.client is None
-
-        evaluator.task_adapter = MagicMock()
-        evaluator.task_adapter.arun = AsyncMock(return_value="ok")
-        evaluator._notify_observer = MagicMock()
-        evaluator.model_name = "test-model"
-
-        item = ds.get_items()[0]
-        tracker = MagicMock()
-        res = await evaluator._evaluate_item(0, item, tracker)
-        assert res["success"] is True
-        assert res["output"] == "ok"
-
-    @pytest.mark.asyncio
     async def test_run_sends_none_and_empty_output_to_metrics(
         self, tmp_path, monkeypatch
     ):
