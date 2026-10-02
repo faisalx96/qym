@@ -405,10 +405,15 @@ def _before_flush(session, flush_context, instances):
         ):
             pending.append((obj, obj in deleted, obj in new))
     session.info["dashboard_source_changes"] = pending
-    from qym_platform.db.models import DatasetAlias, DatasetVersion, User
+    from qym_platform.db.models import (
+        DatasetAlias,
+        DatasetVersion,
+        EvalExperimentJob,
+        User,
+    )
     from sqlalchemy import inspect
 
-    users, versions = set(), set()
+    users, versions, jobs = set(), set(), set()
     for obj in changed:
         if (
             obj not in new
@@ -423,7 +428,16 @@ def _before_flush(session, flush_context, instances):
         elif isinstance(obj, DatasetAlias):
             versions.add(obj.dataset_version_id)
             versions.update(inspect(obj).attrs.dataset_version_id.history.deleted)
-    session.info["dashboard_dimension_changes"] = (users, versions)
+        elif isinstance(obj, EvalExperimentJob) and obj not in new:
+            # The service reports versioning when the job finishes, usually
+            # after its run was published; republish the run's descriptor.
+            attrs = inspect(obj).attrs
+            if (
+                attrs.remote_versioning.history.has_changes()
+                or attrs.remote_result.history.has_changes()
+            ):
+                jobs.add(obj.id)
+    session.info["dashboard_dimension_changes"] = (users, versions, jobs)
 
 
 def _after_flush(session, flush_context):
@@ -432,9 +446,11 @@ def _after_flush(session, flush_context):
     from qym_platform.db.models import Approval, Run
 
     pending = session.info.pop("dashboard_source_changes", [])
-    users, versions = session.info.pop("dashboard_dimension_changes", (set(), set()))
+    users, versions, jobs = session.info.pop(
+        "dashboard_dimension_changes", (set(), set(), set())
+    )
     dimensions = []
-    if users or versions:
+    if users or versions or jobs:
         query = select(Run.id, Run.project_id).where(
             or_(
                 Run.owner_user_id.in_(users),
@@ -444,6 +460,7 @@ def _after_flush(session, flush_context):
                     )
                 ),
                 Run.dataset_version_id.in_(versions),
+                Run.experiment_job_id.in_(jobs),
             )
         )
         dimensions = [

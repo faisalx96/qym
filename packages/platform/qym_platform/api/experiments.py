@@ -135,6 +135,11 @@ from qym_platform.services.eval_model_slots import (
     descriptor_for_schema,
     list_model_slots,
 )
+from qym_platform.services.run_versioning import (
+    parse_versioning_params,
+    project_versioning_values,
+    versioning_conditions,
+)
 from qym_platform.services.eval_priority import (
     PREEMPTION_ACK_REQUIRED,
     high_priority_warning,
@@ -1272,12 +1277,25 @@ def list_experiments(
     environment_id: Optional[str] = Query(None, max_length=36),
     created_by: Optional[str] = Query(None, max_length=36),
     mine: bool = Query(False),
+    versioning: Optional[List[str]] = Query(
+        None,
+        description=(
+            "key=value over the Evaluation Service's versioning_metadata (any key). "
+            "Lists experiments with a job whose run matches every key; repeat a "
+            "key to match any of its values."
+        ),
+    ),
+    include_versioning_facets: bool = Query(False),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_project_access(db, principal, project_id)
+    try:
+        versioning_filter = parse_versioning_params(versioning)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
     query = db.query(EvalExperiment).filter(EvalExperiment.project_id == project_id)
     if status is not None:
         query = query.filter(EvalExperiment.status == status)
@@ -1291,6 +1309,17 @@ def list_experiments(
             .filter(
                 EvalExperimentJob.experiment_id == EvalExperiment.id,
                 EvalExperimentJob.environment_id == environment_id,
+            )
+            .exists()
+        )
+    if versioning_filter:
+        # One job's run must match every key (same semantics as the run list).
+        query = query.filter(
+            db.query(EvalExperimentJob.id)
+            .filter(
+                EvalExperimentJob.experiment_id == EvalExperiment.id,
+                EvalExperimentJob.run_id.isnot(None),
+                *versioning_conditions(EvalExperimentJob.run_id, versioning_filter),
             )
             .exists()
         )
@@ -1308,7 +1337,7 @@ def list_experiments(
         ):
             jobs_by_experiment.setdefault(job.experiment_id, []).append(job)
     emails = _user_emails(db, [x.created_by_user_id for x in experiments])
-    return {
+    result: Dict[str, Any] = {
         "experiments": [
             _serialize_experiment(
                 x,
@@ -1321,6 +1350,9 @@ def list_experiments(
         "limit": limit,
         "offset": offset,
     }
+    if include_versioning_facets:
+        result["versioning_facets"] = project_versioning_values(db, project_id)
+    return result
 
 
 @router.get(_PREFIX + "/{experiment_id}")

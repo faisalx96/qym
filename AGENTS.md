@@ -89,8 +89,9 @@ All commands support `--json` (structured JSON to stdout, human text to stderr).
 
 ```bash
 # Inspect runs
-qym run list [--limit 50] [--task TEXT] [--model TEXT] [--status TEXT] [--origin official|local|all] --json
-#   each run carries origin ("official"|"local") and experiment ({id, name, job_id} or null)
+qym run list [--limit 50] [--task TEXT] [--model TEXT] [--status TEXT] [--origin official|local|all] [--versioning KEY=VALUE ...] --json
+#   each run carries origin ("official"|"local"), experiment ({id, name, job_id} or null)
+#   and versioning (the Evaluation Service's versioning_metadata, any key; {} when none)
 qym run get <run_id> --json
 qym run failed <run_id> --json
 qym run compare <id1> <id2> --json

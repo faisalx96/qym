@@ -159,6 +159,7 @@ def purge_soft_deleted_runs(engine: Engine, *, grace_days: int, limit: int = 50,
             for table in (
                 "dashboard_run_summaries",
                 "dashboard_run_dimensions",
+                "dashboard_run_versions",
                 "dashboard_record_state",
                 "dashboard_record_causes",
             ):

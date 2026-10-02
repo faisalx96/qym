@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time as dt_time, timezone
 from queue import Empty, Full
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from urllib import request
 
 from .tls import urlopen
@@ -714,19 +714,28 @@ class PlatformClient:
             raise RuntimeError(f"Platform did not return run_id/live_url: {data}")
         return PlatformRunHandle(run_id=run_id, live_url=live_url)
 
-    def list_runs(self, *, origin: Optional[str] = None) -> Dict[str, Any]:
+    def list_runs(
+        self,
+        *,
+        origin: Optional[str] = None,
+        versioning: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
         """List runs (``GET /api/runs``), grouped as ``{"tasks": {task: {model: [run]}}}``.
 
         ``origin`` is ``"official"``, ``"local"`` or ``"all"`` (default: no
-        filter); anything else raises ``ValueError`` before any request. Each run
-        dict carries ``origin`` and ``experiment`` (``{id, name, job_id}`` for
-        official runs, ``None`` for local ones).
+        filter). ``versioning`` is a list of ``"KEY=VALUE"`` filters on the
+        Evaluation Service's ``versioning_metadata`` (any key, e.g.
+        ``["agent_version=v1.12"]``): a repeated key matches any of its values,
+        different keys must all match. Invalid values raise ``ValueError`` before
+        any request. Each run dict carries ``origin``, ``experiment`` (``{id,
+        name, job_id}`` for official runs, ``None`` for local ones) and
+        ``versioning``.
         """
         from ..cli._platform_api import PlatformAPIClient
 
         return PlatformAPIClient(
             platform_url=self.platform_url, api_key=self.api_key
-        ).list_runs(origin=origin)
+        ).list_runs(origin=origin, versioning=versioning)
 
     def get_dataset_items(
         self,

@@ -6,7 +6,7 @@
  *   new     → /projects/{slug}/experiments?new=1  (launch form, experiment_launch.js)
  *
  * Consumes the experiments API (api/experiments.py):
- *   GET  /v1/projects/{pid}/experiments[?status=&mine=&limit=&offset=]
+ *   GET  /v1/projects/{pid}/experiments[?status=&mine=&versioning=key=value&limit=&offset=]
  *   GET  /v1/projects/{pid}/experiments/{xid}
  *   POST /v1/projects/{pid}/experiments/{xid}/cancel
  *   POST /v1/projects/{pid}/experiments/{xid}/jobs/{jid}/cancel
@@ -73,6 +73,9 @@
     page: 1,
     status: '',
     mine: false,
+    // versioning_metadata key -> selected value (any key the service reports)
+    versioning: {},
+    versioningFacets: {},
     // detail
     detail: null,
     crumbLabel: null,
@@ -332,6 +335,11 @@
     state.creating = !state.experimentId && params.get('new') === '1';
     state.status = params.get('status') || '';
     state.mine = params.get('mine') === '1';
+    state.versioning = {};
+    params.getAll('versioning').forEach((entry) => {
+      const at = entry.indexOf('=');
+      if (at > 0) state.versioning[entry.slice(0, at)] = entry.slice(at + 1);
+    });
 
     const [project, me] = await Promise.all([
       request('v1/projects/by-slug/' + encodeURIComponent(state.slug)),
@@ -365,6 +373,8 @@
       const query = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String((state.page - 1) * PAGE_SIZE) });
       if (state.status) query.set('status', state.status);
       if (state.mine) query.set('mine', 'true');
+      query.set('include_versioning_facets', 'true');
+      appendVersioning(query);
       const res = await request(experimentsPath('?' + query.toString()));
       if (!state.active || generation !== state.generation) return;
       if (!res.ok) {
@@ -376,6 +386,7 @@
       const changed = print !== state.lastFingerprint;
       state.lastFingerprint = print;
       state.list = res.data;
+      state.versioningFacets = res.data.versioning_facets || {};
       if (changed || !opts.silent) renderList();
       schedulePoll(changed);
     }
@@ -520,16 +531,18 @@
       el('span', { className: 'exp-toolbar-label', text: 'Status' }),
       statusSelect,
       el('label', { className: 'exp-check' }, [mineBox, 'Created by me']),
+    ].concat(versioningSelects(), [
       el('span', { className: 'exp-toolbar-spacer' }),
       needsPolling() ? el('span', { className: 'exp-poll-note', text: 'Auto-refreshing while experiments run' }) : null,
-    ]);
+    ]));
 
     const card = el('section', { className: 'exp-card' });
+    const filtered = state.status || state.mine || Object.keys(state.versioning).length > 0;
     if (!experiments.length) {
       card.appendChild(el('div', { className: 'exp-empty' }, [
-        el('h2', { className: 'exp-empty-title', text: state.status || state.mine ? 'No matching experiments' : 'No experiments yet' }),
-        el('p', { className: 'exp-empty-body', text: state.status || state.mine
-          ? 'Try a different status or include experiments created by others.'
+        el('h2', { className: 'exp-empty-title', text: filtered ? 'No matching experiments' : 'No experiments yet' }),
+        el('p', { className: 'exp-empty-body', text: filtered
+          ? 'Try different filters or include experiments created by others.'
           : 'Experiments launch evaluation jobs on this project’s environments. Register an environment in Project Settings → Environments first.' }),
       ]));
     } else {
@@ -599,10 +612,54 @@
     host.appendChild(table);
   }
 
+  // Evaluation Service versioning_metadata: one select per key the project's
+  // runs report. An experiment matches when one job's run matches every key.
+  // "kb_version" -> "KB version": short words read as acronyms.
+  function versioningWords(key) {
+    const words = String(key).replace(/[_-]+/g, ' ').trim().split(/\s+/).filter(Boolean)
+      .map((word) => (word.length <= 2 ? word.toUpperCase() : word.toLowerCase()));
+    return words.length ? words.join(' ') : String(key);
+  }
+
+  function appendVersioning(params) {
+    Object.keys(state.versioning).sort().forEach((key) => {
+      params.append('versioning', key + '=' + state.versioning[key]);
+    });
+  }
+
+  function versioningSelects() {
+    const facets = state.versioningFacets || {};
+    const keys = Object.keys(facets).concat(Object.keys(state.versioning))
+      .filter((key, index, all) => all.indexOf(key) === index)
+      .sort((a, b) => a.localeCompare(b));
+    const nodes = [];
+    keys.forEach((key) => {
+      const words = versioningWords(key);
+      const label = words.charAt(0).toUpperCase() + words.slice(1);
+      const values = (facets[key] || []).slice();
+      const selected = state.versioning[key];
+      if (selected !== undefined && values.indexOf(selected) < 0) values.unshift(selected);
+      const select = el('select', { className: 'qym-control qym-select', 'aria-label': label, title: 'Evaluation Service versioning: ' + key, 'data-exp-versioning': key },
+        [el('option', { value: '', text: 'All ' + words + 's' })].concat(
+          values.map((value) => el('option', { value: value, text: value, selected: value === selected }))
+        ));
+      select.addEventListener('change', () => {
+        if (select.value) state.versioning[key] = select.value;
+        else delete state.versioning[key];
+        state.page = 1;
+        syncListUrl();
+        refresh();
+      });
+      nodes.push(el('span', { className: 'exp-toolbar-label', text: label }), select);
+    });
+    return nodes;
+  }
+
   function syncListUrl() {
     const params = new URLSearchParams();
     if (state.status) params.set('status', state.status);
     if (state.mine) params.set('mine', '1');
+    appendVersioning(params);
     const query = params.toString();
     history.replaceState(history.state, '', projectPage('/experiments') + (query ? '?' + query : ''));
   }

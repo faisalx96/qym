@@ -74,9 +74,14 @@ from qym_platform.services.eval_run_linking import strip_launch_token
 from qym_platform.services.run_experiment_panel import run_experiment_panel
 from qym_platform.services.run_payloads import compact_row, detail_item_ids, search_conditions
 from qym_platform.services.run_origin import (
+    experiment_refs_and_versioning,
     experiment_refs_for_jobs,
     parse_origin_filter,
     run_origin_fields,
+)
+from qym_platform.services.run_versioning import (
+    parse_versioning_params,
+    versioning_conditions,
 )
 from qym_platform.services.repeat_passes import (
     RepeatPassDeletionError,
@@ -2290,11 +2295,21 @@ def legacy_list_runs(
             "verified at ingest), 'local', or 'all' (default)"
         ),
     ),
+    versioning: Optional[List[str]] = Query(
+        default=None,
+        description=(
+            "Filter by the Evaluation Service's versioning_metadata as key=value "
+            "(any key, e.g. agent_version=v1.12). Repeat a key to match any of its "
+            "values; different keys must all match. key=__empty__ matches runs "
+            "without the key."
+        ),
+    ),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     try:
         origin_filter = parse_origin_filter(origin)
+        versioning_filter = parse_versioning_params(versioning)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
     # A unique tie-breaker keeps offset pages disjoint when runs share a timestamp.
@@ -2367,6 +2382,8 @@ def legacy_list_runs(
         q = q.filter(~Run.status.in_(_LIVE_RUN_STATUSES))
     if origin_filter is not None:
         q = q.filter(Run.origin == origin_filter)
+    if versioning_filter:
+        q = q.filter(*versioning_conditions(Run.id, versioning_filter))
 
     user_filter = (owner_user_id or user_id or user or "").strip()
     if user_filter:
@@ -2740,7 +2757,7 @@ def legacy_list_runs(
 
     # --- Build summaries from pre-fetched data ---
     dataset_info = _dataset_version_info_map(db, runs)
-    experiment_refs = experiment_refs_for_jobs(
+    experiment_refs, job_versioning = experiment_refs_and_versioning(
         db, (r.experiment_job_id for r in runs)
     )
     tasks: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
@@ -2915,6 +2932,7 @@ def legacy_list_runs(
             if isinstance(r.run_metadata, dict)
             else None,
             **run_origin_fields(r, experiment_refs),
+            "versioning": job_versioning.get(r.experiment_job_id or "", {}),
         }
 
         task = summary["task_name"]

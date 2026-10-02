@@ -193,6 +193,9 @@
     filterVersions: new Set(),
     filterUsers: new Set(),
     filterOrigin: 'all',
+    // Evaluation Service versioning_metadata: key -> Set of selected values.
+    filterVersioning: new Map(),
+    versioningFilterIds: new Map(),
     knownVersions: new Set(),
     knownVersionsProjectSlug: '',
     currentView: window.__QYM_INITIAL_VIEW__ || 'charts',
@@ -684,6 +687,7 @@
       versions: [...state.filterVersions].sort(),
       users: [...state.filterUsers].sort(),
       origin: state.filterOrigin,
+      versioning: versioningFilters(),
     });
   }
 
@@ -793,6 +797,38 @@
     if (value === EMPTY_FILTER_VALUE) return 'Empty / Missing';
     const label = getOwnerFilterLabel(value);
     return `<span class="owner-filter-label"><span class="owner-avatar">${escapeHtml(getInitials(label))}</span><span class="owner-filter-text">${escapeHtml(label)}</span></span>`;
+  }
+
+  // ── Versioning filters (Evaluation Service versioning_metadata) ──
+  // One dropdown per key the project's runs report: agent_version, kb_version
+  // or any key the service adds later. Values of a key are alternatives;
+  // different keys must all match (the server applies the same rule).
+
+  function getRunVersioning(run) {
+    return run && run.versioning && typeof run.versioning === 'object' ? run.versioning : {};
+  }
+
+  function activeVersioningFilters() {
+    return [...state.filterVersioning].filter(([, selection]) => selection.size > 0);
+  }
+
+  function versioningFilters() {
+    const filters = {};
+    activeVersioningFilters().forEach(([key, selection]) => { filters[key] = [...selection].sort(); });
+    return filters;
+  }
+
+  function matchesVersioningFilters(run, skipKey = null) {
+    const versioning = getRunVersioning(run);
+    return activeVersioningFilters().every(([key, selection]) =>
+      key === skipKey || matchesFilterSelection(selection, versioning[key]));
+  }
+
+  // "kb_version" -> "KB version": short words read as acronyms.
+  function getVersioningKeyWords(key) {
+    const words = String(key).replace(/[_-]+/g, ' ').trim().split(/\s+/).filter(Boolean)
+      .map(word => (word.length <= 2 ? word.toUpperCase() : word.toLowerCase()));
+    return words.length ? words.join(' ') : String(key);
   }
 
   function summarizeFilterSelection(selection, labelFn = null) {
@@ -1814,6 +1850,9 @@
     if (state.filterOrigin !== 'all') {
       runs = runs.filter(r => getRunOrigin(r) === state.filterOrigin);
     }
+    if (activeVersioningFilters().length > 0) {
+      runs = runs.filter(r => matchesVersioningFilters(r));
+    }
 
     // Sort
     sortRuns(runs);
@@ -2030,7 +2069,7 @@
     // Update subtitle with filter info
     const subtitleEl = $('.charts-subtitle');
     if (subtitleEl) {
-      const isFiltered = state.quickFilter !== 'all' || state.filterOrigin !== 'all' || state.filterStatuses.size > 0 || state.filterVersions.size > 0;
+      const isFiltered = state.quickFilter !== 'all' || state.filterOrigin !== 'all' || state.filterStatuses.size > 0 || state.filterVersions.size > 0 || activeVersioningFilters().length > 0;
       if (isFiltered) {
         subtitleEl.textContent = `Filtered: ${usesDashboardSummary() ? state.dashboardOverview.total_runs : state.filteredRuns.length} runs • Showing average metric scores across all items`;
       } else {
@@ -2041,7 +2080,7 @@
     if (!chartData || chartData.combos.length === 0) {
       el('charts-grid').innerHTML = `
         <div class="chart-no-data" style="grid-column: 1/-1;">
-          ${state.quickFilter !== 'all' || state.filterOrigin !== 'all' || state.filterStatuses.size > 0 || state.filterVersions.size > 0
+          ${state.quickFilter !== 'all' || state.filterOrigin !== 'all' || state.filterStatuses.size > 0 || state.filterVersions.size > 0 || activeVersioningFilters().length > 0
             ? 'No runs match current filters'
             : 'No data available for charts. Run some evaluations first.'}
         </div>
@@ -4517,7 +4556,8 @@
       || state.filterDatasets.size > 0
       || state.filterStatuses.size > 0
       || state.filterVersions.size > 0
-      || state.filterUsers.size > 0;
+      || state.filterUsers.size > 0
+      || activeVersioningFilters().length > 0;
 
     let filterText = countText;
     if (hasFilters) {
@@ -4544,6 +4584,9 @@
       } else if (state.filterUsers.has('__none__')) {
         parts.push('user: none');
       }
+      activeVersioningFilters().forEach(([key, selection]) => {
+        parts.push(`${getVersioningKeyWords(key)}: ${summarizeFilterSelection(selection)}`);
+      });
       if (state.filterOrigin === 'official') parts.push('official runs');
       if (state.filterOrigin === 'local') parts.push('local runs');
       if (state.quickFilter === 'today') parts.push('today');
@@ -4832,6 +4875,7 @@
     if (state.filterUsers.size > 0) n++;
     if (state.quickFilter !== 'all') n++;
     if (state.filterOrigin !== 'all') n++;
+    n += activeVersioningFilters().length;
     return n;
   }
 
@@ -4870,6 +4914,7 @@
     state.filterVersions.clear();
     state.filterDatasets.clear();
     state.filterUsers.clear();
+    state.filterVersioning.clear();
     state.quickFilter = 'all';
     setQuickFilterSelection('all');
     state.filterOrigin = 'all';
@@ -6725,6 +6770,7 @@
       versions: [...state.filterVersions], users: [...state.filterUsers],
     };
     if (state.filterOrigin !== 'all') filters.origins = [state.filterOrigin];
+    if (activeVersioningFilters().length > 0) filters.versioning = versioningFilters();
     if (state.quickFilter === 'today') {
       const start = new Date(now);
       start.setHours(0, 0, 0, 0);
@@ -7309,7 +7355,7 @@
   function populateFilterDropdowns() {
     // For each filter, compute applicable values from runs matching ALL OTHER active filters.
     // This ensures each dropdown only shows values that would produce results.
-    function runsExcluding(skipFilter) {
+    function runsExcluding(skipFilter, skipVersioningKey = null) {
       let runs = state.flatRuns;
       switch (state.quickFilter) {
         case 'today':
@@ -7340,6 +7386,9 @@
       if (state.filterOrigin !== 'all') {
         runs = runs.filter(r => getRunOrigin(r) === state.filterOrigin);
       }
+      if (activeVersioningFilters().length > 0) {
+        runs = runs.filter(r => matchesVersioningFilters(r, skipVersioningKey));
+      }
       return runs;
     }
 
@@ -7359,7 +7408,8 @@
       || state.filterDatasets.size > 0
       || state.filterModels.size > 0
       || state.filterStatuses.size > 0
-      || state.filterUsers.size > 0;
+      || state.filterUsers.size > 0
+      || activeVersioningFilters().length > 0;
     const versionValues = facets?.versions || collectFilterValues(runsExcluding('versions'), r => getRunVersionKey(r));
     const versions = (!facets && !constrainingFiltersActive && state.knownVersions.size > versionValues.length)
       ? Array.from(new Set([...versionValues, ...state.knownVersions])).sort()
@@ -7424,6 +7474,70 @@
         return v;
       },
       defaultLabel: 'All Versions', showSearch: true, searchPlaceholder: 'Search versions...',
+    });
+
+    let versioningValues = facets?.versioning;
+    if (!versioningValues) {
+      versioningValues = {};
+      const keys = new Set();
+      state.flatRuns.forEach(r => Object.keys(getRunVersioning(r)).forEach(key => keys.add(key)));
+      keys.forEach(key => {
+        const values = collectFilterValues(runsExcluding('versioning', key), r => getRunVersioning(r)[key]);
+        if (values.some(v => v !== EMPTY_FILTER_VALUE)) versioningValues[key] = values;
+      });
+    }
+    renderVersioningFilters(versioningValues);
+  }
+
+  function renderVersioningFilters(valuesByKey) {
+    const host = el('versioning-filters');
+    if (!host) return;
+    // A key stays while it is filtered on, even if no listed run reports it now.
+    const keys = [...new Set([
+      ...Object.keys(valuesByKey || {}),
+      ...activeVersioningFilters().map(([key]) => key),
+    ])].sort((a, b) => a.localeCompare(b));
+    const wrappers = new Map([...host.querySelectorAll(':scope > .multi-select-wrapper')]
+      .map(wrapper => [wrapper.dataset.versioningKey, wrapper]));
+    wrappers.forEach((wrapper, key) => { if (!keys.includes(key)) wrapper.remove(); });
+    host.hidden = keys.length === 0;
+    keys.forEach(key => {
+      if (!state.versioningFilterIds.has(key)) state.versioningFilterIds.set(key, state.versioningFilterIds.size);
+      const id = state.versioningFilterIds.get(key);
+      let wrapper = wrappers.get(key);
+      if (!wrapper) {
+        wrapper = document.createElement('div');
+        wrapper.className = 'multi-select-wrapper';
+        wrapper.dataset.versioningKey = key;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'multi-select-btn';
+        btn.id = `filter-versioning-btn-${id}`;
+        btn.title = `Evaluation Service versioning: ${key}`;
+        const dropdown = document.createElement('div');
+        dropdown.className = 'multi-select-dropdown';
+        dropdown.id = `filter-versioning-dropdown-${id}`;
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          document.querySelectorAll('.multi-select-dropdown.open').forEach(other => {
+            if (other !== dropdown) other.classList.remove('open');
+          });
+          dropdown.classList.toggle('open');
+        });
+        wrapper.append(btn, dropdown);
+      }
+      host.appendChild(wrapper);
+      if (!state.filterVersioning.has(key)) state.filterVersioning.set(key, new Set());
+      const selection = state.filterVersioning.get(key);
+      const values = (valuesByKey && valuesByKey[key])
+        || [...selection].filter(v => v !== '__none__');
+      const words = getVersioningKeyWords(key);
+      buildMultiSelect({
+        btnId: `filter-versioning-btn-${id}`, dropdownId: `filter-versioning-dropdown-${id}`,
+        stateSet: selection, values,
+        labelFn: null, defaultLabel: `All ${words}s`,
+        showSearch: true, searchPlaceholder: `Search ${words}...`,
+      });
     });
   }
 
@@ -7807,6 +7921,7 @@
       filterUsers: [...state.filterUsers],
       quickFilter: state.quickFilter,
       filterOrigin: state.filterOrigin,
+      filterVersioning: Object.fromEntries(activeVersioningFilters().map(([key, selection]) => [key, [...selection]])),
       chartFirstColWidth: state.chartFirstColWidth,
     };
     sessionStorage.setItem(getDashboardStateKey(), JSON.stringify(stateToSave));
@@ -7852,6 +7967,11 @@
         if (parsed.quickFilter) {
           state.quickFilter = parsed.quickFilter;
           setQuickFilterSelection(state.quickFilter);
+        }
+        if (parsed.filterVersioning && typeof parsed.filterVersioning === 'object') {
+          state.filterVersioning = new Map(Object.entries(parsed.filterVersioning)
+            .filter(([, values]) => Array.isArray(values))
+            .map(([key, values]) => [key, new Set(values.map(String))]));
         }
         if (ORIGIN_FILTER_VALUES.includes(parsed.filterOrigin)) {
           state.filterOrigin = parsed.filterOrigin;

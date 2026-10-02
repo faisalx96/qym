@@ -983,6 +983,15 @@ html {
   position: relative;
 }
 
+/* One dropdown per versioning_metadata key, laid out with the other filters. */
+.versioning-filters {
+  display: contents;
+}
+
+.versioning-filters[hidden] {
+  display: none;
+}
+
 .multi-select-btn {
   padding: var(--space-xs) var(--space-sm);
   padding-right: 24px;

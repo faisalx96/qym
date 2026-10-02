@@ -459,6 +459,25 @@ qym run list --origin local
 
 `--origin` accepts `official`, `local`, or `all` (the default). Each JSON row carries `origin` and an `experiment` reference (`id`, `name`, `job_id`), or `null`. The API equivalent is `GET /api/runs?origin=official`.
 
+### Filtering by agent, KB or any reported version
+
+When a job finishes, the Evaluation Service reports `versioning_metadata` (today `agent_version` and `kb_version`). Every key it reports becomes a filter, so a key the service adds later shows up without a platform change.
+
+- The **Runs**, **Dashboard**, **Charts**, and **Models** pages show one dropdown per key next to the other filters (for example **All agent versions**, **All kb versions**). Values are listed newest first. **Empty / Missing** matches runs that don't report the key, such as local runs.
+- Values you pick within one key are alternatives. Picks across different keys must all match: agent `v1.12` **and** KB `381`.
+- **Experiments** has one select per key. An experiment matches when one of its job's runs matches every selected key.
+- The versions appear on a run a few seconds after its job finishes, once the dashboard catches up.
+
+From the CLI and API:
+
+```bash
+qym run list --versioning agent_version=v1.12 --versioning kb_version=381 --json
+qym run list --versioning agent_version=v1.12 --versioning agent_version=v1.13
+qym run list --versioning prompt_version=__empty__
+```
+
+Each JSON row carries `versioning`, for example `{"agent_version": "v1.12", "kb_version": "381"}`, or `{}`. The API equivalents are `GET /api/runs?versioning=agent_version%3Dv1.12` and `GET /v1/projects/{id}/experiments?versioning=agent_version%3Dv1.12`. Dashboard API calls take `"versioning": {"agent_version": ["v1.12"]}` in their `filters`.
+
 ## Connect the SDK and CLI
 
 Create a project API key, then configure the process that runs qym:

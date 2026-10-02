@@ -838,6 +838,7 @@ def _sync_dimension(db, run_id, version):
         experiment_refs_for_jobs,
         run_origin_fields,
     )
+    from qym_platform.services.run_versioning import run_versioning, sync_run_versions
 
     run = db.get(Run, run_id)
     dimension = db.get(Dimension, run_id)
@@ -931,6 +932,7 @@ def _sync_dimension(db, run_id, version):
     )
     dimension.present = run.deleted_at is None
     dimension.hidden_at = dimension.hidden_at if run.deleted_at is not None else None
+    versioning = run_versioning(db, run.experiment_job_id)
     dimension.descriptor = {
         "run_id": run.id,
         "run_name": config.get("run_name") or run.external_run_id or "",
@@ -965,10 +967,12 @@ def _sync_dimension(db, run_id, version):
         **run_origin_fields(
             run, experiment_refs_for_jobs(db, [run.experiment_job_id])
         ),
+        "versioning": versioning,
         **dataset,
     }
     if created:
         db.add(dimension)
+    sync_run_versions(db, run.id, run.project_id, versioning)
     db.flush()
     new_hour = _hour(dimension.timestamp)
     if old_visible != dimension.present or old_hour != new_hour or created:
@@ -1238,15 +1242,19 @@ def refresh_run_summary(db, run_id, version):
 
 
 def _descriptor_origin_stale(run, dimension):
-    """An official run whose descriptor predates the ``origin`` field."""
+    """An official run whose descriptor predates ``origin`` or ``versioning``.
+
+    ``versioning`` matters only for runs linked to an experiment job: republishing
+    fills the descriptor and the run's ``dashboard_run_versions`` rows (0066).
+    """
     from qym_platform.db.models import RunOrigin
 
+    if run is None or dimension is None:
+        return False
+    descriptor = dimension.descriptor or {}
     return (
-        run is not None
-        and dimension is not None
-        and run.origin == RunOrigin.OFFICIAL
-        and "origin" not in (dimension.descriptor or {})
-    )
+        run.origin == RunOrigin.OFFICIAL and "origin" not in descriptor
+    ) or (run.experiment_job_id is not None and "versioning" not in descriptor)
 
 
 def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
@@ -1433,13 +1441,23 @@ def reconcile_summary_shapes(db, *, limit=100):
     from qym_platform.db.models import Run, RunOrigin
 
     # Official runs published before descriptors carried ``origin`` would list
-    # as local; only those few are requeued (``origin`` is indexed).
+    # as local, and runs linked to an experiment job published before
+    # ``versioning`` (0066) would not match versioning filters; only those few
+    # are requeued (``origin`` and ``experiment_job_id`` are indexed).
     stale_origin = (
         select(Dimension.run_key)
         .join(Run, Run.id == Dimension.run_key)
         .where(
-            Run.origin == RunOrigin.OFFICIAL,
-            Dimension.descriptor["origin"].as_string().is_(None),
+            or_(
+                and_(
+                    Run.origin == RunOrigin.OFFICIAL,
+                    Dimension.descriptor["origin"].as_string().is_(None),
+                ),
+                and_(
+                    Run.experiment_job_id.isnot(None),
+                    Dimension.descriptor["versioning"].as_string().is_(None),
+                ),
+            )
         )
     )
     outdated = (

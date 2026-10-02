@@ -19,9 +19,15 @@ from qym_platform.db.dashboard_models import (
 )
 from qym_platform.db.models import Project, ProjectMembership, UserRole
 from qym_platform.deps import get_db
+from qym_platform.db.dashboard_models import DashboardRunVersion as RunVersion
 from qym_platform.permissions import has_project_access
 from qym_platform.settings import PlatformSettings
 from qym_platform.services.dashboard_cache import DashboardSnapshotCache
+from qym_platform.services.run_versioning import (
+    EMPTY as VERSIONING_EMPTY,
+    parse_versioning_filter,
+    versioning_conditions,
+)
 
 _overview_cache = DashboardSnapshotCache()
 _page_cache = DashboardSnapshotCache()
@@ -39,6 +45,8 @@ _FILTER_COLUMNS = {
     "origins": func.coalesce(Dimension.descriptor["origin"].as_string(), "local"),
 }
 _ORIGIN_FILTER_VALUES = {"official", "local", "__none__"}
+# Values listed per versioning key in the facets, newest first.
+_VERSIONING_FACET_LIMIT = 500
 
 
 def _parse_filters(raw: Optional[str]) -> dict:
@@ -47,9 +55,16 @@ def _parse_filters(raw: Optional[str]) -> dict:
     except (ValueError, TypeError):
         raise HTTPException(400, "Invalid dashboard filters") from None
     if not isinstance(value, dict) or set(value) - (
-        set(_FILTER_COLUMNS) | {"since", "until"}
+        set(_FILTER_COLUMNS) | {"since", "until", "versioning"}
     ):
         raise HTTPException(400, "Invalid dashboard filters")
+    try:
+        # ``{key: [values]}`` over any versioning_metadata key; see run_versioning.
+        value["versioning"] = parse_versioning_filter(value.get("versioning"))
+    except ValueError:
+        raise HTTPException(400, "Invalid versioning filter") from None
+    if not value["versioning"]:
+        value.pop("versioning")
     for key in _FILTER_COLUMNS:
         values = value.get(key, [])
         if (
@@ -157,8 +172,16 @@ def _base_conditions(project):
     return conditions
 
 
-def _filter_conditions(filters, *, skip=None, facets=False):
-    conditions = []
+def _filter_conditions(filters, *, skip=None, skip_versioning=None, facets=False):
+    conditions = versioning_conditions(
+        Dimension.run_key,
+        {
+            key: values
+            for key, values in (filters.get("versioning") or {}).items()
+            if key != skip_versioning
+        },
+        facets=facets,
+    )
     for name, column in _FILTER_COLUMNS.items():
         values = filters.get(name, [])
         if name == skip or not values:
@@ -366,7 +389,68 @@ def _facets(db, base, filters):
         result[name] = sorted(normalized - {"__empty__"}, key=str.casefold) + (
             ["__empty__"] if "__empty__" in normalized else []
         )
+    result["versioning"] = _versioning_facets(db, base, filters)
     return result
+
+
+def _versioning_facet_values(db, conditions, key=None):
+    """``{key: [values]}`` among runs matching ``conditions``, newest first.
+
+    ``__empty__`` is appended when some matching run lacks the key.
+    """
+    query = (
+        _query(RunVersion.key, RunVersion.value, func.max(Dimension.timestamp))
+        .join(RunVersion, RunVersion.run_key == Dimension.run_key)
+        .where(*conditions)
+        .group_by(RunVersion.key, RunVersion.value)
+    )
+    if key is not None:
+        query = query.where(RunVersion.key == key)
+    latest = {}
+    for name, value, at in db.execute(query):
+        latest.setdefault(name, []).append((at, value))
+    if not latest:
+        return {}
+    total = db.scalar(_query(func.count()).where(*conditions)) or 0
+    counts = dict(
+        db.execute(
+            _query(RunVersion.key, func.count())
+            .join(RunVersion, RunVersion.run_key == Dimension.run_key)
+            .where(*conditions, RunVersion.key.in_(list(latest)))
+            .group_by(RunVersion.key)
+        ).all()
+    )
+    result = {}
+    for name, entries in latest.items():
+        entries.sort(
+            key=lambda entry: (entry[0] or datetime.min, entry[1]), reverse=True
+        )
+        values = [value for _, value in entries[:_VERSIONING_FACET_LIMIT]]
+        if counts.get(name, 0) < total:
+            values.append(VERSIONING_EMPTY)
+        result[name] = values
+    return result
+
+
+def _versioning_facets(db, base, filters):
+    """Versioning facet values, each key computed without its own selection."""
+    selected = filters.get("versioning") or {}
+    result = {
+        name: values
+        for name, values in _versioning_facet_values(
+            db, base + _filter_conditions(filters, facets=True)
+        ).items()
+        if name not in selected
+    }
+    for name in selected:
+        values = _versioning_facet_values(
+            db,
+            base + _filter_conditions(filters, skip_versioning=name, facets=True),
+            key=name,
+        ).get(name)
+        if values:
+            result[name] = values
+    return dict(sorted(result.items(), key=lambda item: item[0].casefold()))
 
 
 def _overview(db, project, filters, sort="time-desc", collation=None):

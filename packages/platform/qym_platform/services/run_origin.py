@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -54,6 +54,37 @@ def experiment_refs_for_jobs(
         job_id: {"id": experiment_id, "name": name or "", "job_id": job_id}
         for job_id, experiment_id, name in rows
     }
+
+
+def experiment_refs_and_versioning(
+    db: Session, job_ids: Iterable[Optional[str]]
+) -> Tuple[Dict[str, Dict[str, str]], Dict[str, Dict[str, str]]]:
+    """:func:`experiment_refs_for_jobs` plus each job's versioning, in one query."""
+    from qym_platform.services.run_versioning import resolve_job_versioning
+
+    ids = {job_id for job_id in job_ids if job_id}
+    if not ids:
+        return {}, {}
+    rows = (
+        db.query(
+            EvalExperimentJob.id,
+            EvalExperiment.id,
+            EvalExperiment.name,
+            EvalExperimentJob.remote_versioning,
+            EvalExperimentJob.remote_status,
+        )
+        .join(EvalExperiment, EvalExperiment.id == EvalExperimentJob.experiment_id)
+        .filter(EvalExperimentJob.id.in_(ids))
+        .all()
+    )
+    refs = {
+        job_id: {"id": experiment_id, "name": name or "", "job_id": job_id}
+        for job_id, experiment_id, name, _, _ in rows
+    }
+    versioning = resolve_job_versioning(
+        db, ((job_id, stored, status) for job_id, _, _, stored, status in rows)
+    )
+    return refs, versioning
 
 
 def run_origin_fields(

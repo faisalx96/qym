@@ -245,6 +245,37 @@ the last 5 minutes" (there is no `last_viewed_at` column).
 - **Experiment status rule:** QUEUED plus BLOCKED jobs give RUNNING.
 - **Remote-cancel give-up:** after 2h15m.
 
+### B14. Filtering on `versioning_metadata` (Implemented)
+
+**Question.** The run page and the launch form showed agent and KB versions, but no list
+could filter on them. How should filtering work, given the service may add keys?
+
+**Decision.**
+- **Any key.** One row per run and key in `dashboard_run_versions` (0066), written by
+  the dashboard worker with the run's dimension. No key name is hard-coded: the UI
+  builds one dropdown per key it sees, and the APIs take `key=value`.
+- **Matching.** Values of one key are alternatives, and different keys must all match.
+  `__empty__` matches runs without the key, for example local runs.
+- **Values.** Stored as strings: numbers as text, booleans as `true`/`false`, nested
+  values as compact JSON. `null` or blank counts as missing. At most 32 keys per run,
+  keys up to 100 characters and values up to 500. A longer key or value is not
+  filterable rather than truncated, and the run page still shows it.
+- **Experiments.** An experiment matches when one job's linked run matches every key.
+  A job whose run was hard-deleted no longer matches. The page has one single-value
+  select per key, not a multi-select.
+- **Facets.** Values are listed newest first, capped at 500 per key.
+- **Timing.** The versions appear a few seconds after the job finishes, once the worker
+  republishes the run. The service only reports them at completion.
+- **Not done.** The runs table has no versioning column.
+
+**Why.** An indexed side table keeps filters to index lookups on large projects, and
+the dashboard cache invalidates with the run's republished revision. Using the
+projection matches how every other runs-list filter works.
+
+**To reverse or extend.** Add a column in `dashboard.js` from `run.versioning`. Change
+the limits in `services/run_versioning.py`. Use a multi-select on Experiments if
+alternatives are needed there.
+
 ---
 
 ## C. Operational follow-ups (not blocking)

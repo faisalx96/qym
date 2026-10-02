@@ -294,7 +294,7 @@ Per-environment settings (**Project Settings → Environments → Policies**, ma
 
 ### Deploying the release
 
-The Evaluation Service tables come in migrations `0060`–`0064` on top of `0059`:
+The Evaluation Service tables come in migrations `0060`–`0066` on top of `0059`:
 
 | Migration | Adds | Startup cost |
 |---|---|---|
@@ -303,12 +303,14 @@ The Evaluation Service tables come in migrations `0060`–`0064` on top of `0059
 | `0062` | `eval_config_presets`, `eval_config_preset_versions` | New tables: instant |
 | `0063` | `eval_experiment_jobs.attempt` and `retry_of_job_id`; per-attempt unique key | Small table |
 | `0064` | `eval_run_scores` (best-run index, created empty); `eval_experiment_jobs.run_linked_at` | New table: instant |
+| `0065` | `eval_experiments.qym_api_key_id` and `qym_api_key_encrypted` (the submitting user's key) | Nullable columns: instant |
+| `0066` | `dashboard_run_versions` (filterable `versioning_metadata`, created empty) | New table: instant. The dashboard worker fills it: its shape reconcile requeues every run linked to a job, in batches of 100 back to back until none is left |
 
 Steps:
 
 1. Set `QYM_LLM_CONFIG_ENCRYPTION_KEY` on every API and worker process (if it isn't
    already set for LLM connections), plus any `QYM_EVAL_*` overrides.
-2. Deploy the image. The API applies migrations up to `0064` before it reports ready,
+2. Deploy the image. The API applies migrations up to `0066` before it reports ready,
    as for every release. A split worker starts after the API, with
    `QYM_SKIP_MIGRATIONS=1`. On a large `runs` table, time the `0061` scan on a
    populated copy before setting readiness deadlines.

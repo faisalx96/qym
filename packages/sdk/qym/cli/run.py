@@ -19,6 +19,7 @@ from ._platform_api import (
     PlatformAPIClient,
     PlatformAPIError,
     normalize_run_origin,
+    parse_versioning_filters,
     run_origin_of,
 )
 from ._legacy import load_function_from_file, load_multi_run_specs
@@ -347,6 +348,16 @@ def run_list(
         metavar="[official|local|all]",
         help="Filter by run origin: official (dispatched by the platform), local, or all",
     ),
+    versioning: Optional[List[str]] = typer.Option(
+        None,
+        "--versioning",
+        metavar="KEY=VALUE",
+        help=(
+            "Filter by the Evaluation Service's versioning_metadata, any key "
+            "(e.g. agent_version=v1.12). Repeat a key to match any of its values; "
+            "different keys must all match. KEY=__empty__ matches runs without it."
+        ),
+    ),
 ) -> None:
     """List recent evaluation runs from the platform."""
     try:
@@ -358,11 +369,20 @@ def run_list(
             suggestion="Use --origin " + "|".join(RUN_ORIGIN_CHOICES) + ".",
         )
         raise typer.Exit(code=ExitCode.USAGE_ERROR)
+    try:
+        parse_versioning_filters(versioning)
+    except ValueError as exc:
+        output_error(
+            "usage_error",
+            str(exc),
+            suggestion="Use --versioning KEY=VALUE, e.g. --versioning agent_version=v1.12.",
+        )
+        raise typer.Exit(code=ExitCode.USAGE_ERROR)
 
     client = PlatformAPIClient()
 
     try:
-        data = client.list_runs(origin=origin_value)
+        data = client.list_runs(origin=origin_value, versioning=versioning)
     except PlatformAPIError as exc:
         output_error(
             error_type="connection_failed" if exc.status_code == 0 else "failure",
@@ -395,6 +415,7 @@ def run_list(
                 row = dict(run_summary)
                 row["origin"] = run_origin_of(row)
                 row.setdefault("experiment", None)
+                row.setdefault("versioning", {})
                 flat_runs.append(row)
 
     # Sort by timestamp descending, apply limit

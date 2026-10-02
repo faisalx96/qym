@@ -48,6 +48,39 @@ def run_origin_of(run: dict) -> str:
     return str(run.get("origin") or "local").lower()
 
 
+#: Matches runs without the key in a ``versioning`` filter.
+VERSIONING_EMPTY = "__empty__"
+
+
+def parse_versioning_filters(entries: Optional[list]) -> dict:
+    """``["agent_version=v1.12", "kb_version=381"]`` -> ``{key: [values]}``.
+
+    Filters on the Evaluation Service's ``versioning_metadata`` (any key).
+    Repeating a key matches any of its values; different keys must all match.
+    Raises ``ValueError`` for an entry without ``=`` or with an empty key.
+    """
+    filters: dict = {}
+    for entry in entries or []:
+        key, sep, value = str(entry).partition("=")
+        if not sep or not key.strip():
+            raise ValueError(f"Invalid versioning filter: {entry!r} (expected KEY=VALUE)")
+        values = filters.setdefault(key.strip(), [])
+        if value.strip() not in values:
+            values.append(value.strip())
+    return filters
+
+
+def run_matches_versioning(run: dict, filters: dict) -> bool:
+    """Whether a run row's ``versioning`` matches a parsed versioning filter."""
+    versioning = run.get("versioning") if isinstance(run.get("versioning"), dict) else {}
+    for key, values in filters.items():
+        value = versioning.get(key)
+        value = VERSIONING_EMPTY if value is None or str(value).strip() == "" else str(value)
+        if value not in values:
+            return False
+    return True
+
+
 class PlatformAPIError(Exception):
     """Error from the platform API with HTTP status code."""
 
@@ -151,28 +184,46 @@ class PlatformAPIClient:
 
     # ── Run operations ──────────────────────────────────────────
 
-    def list_runs(self, origin: Optional[str] = None) -> dict:
+    def list_runs(
+        self, origin: Optional[str] = None, versioning: Optional[list] = None
+    ) -> dict:
         """GET /api/runs -> tasks grouped by task name and model.
 
         ``origin`` filters by run origin: ``official`` (dispatched by the
         platform and verified at ingest), ``local``, or ``all`` (default).
-        Each run row carries ``origin`` and ``experiment`` (``{id, name,
-        job_id}`` for official runs, ``None`` for local ones). Raises
-        ``ValueError`` for any other ``origin`` value.
+        ``versioning`` is a list of ``KEY=VALUE`` filters on the Evaluation
+        Service's ``versioning_metadata`` (see :func:`parse_versioning_filters`).
+        Each run row carries ``origin``, ``experiment`` (``{id, name, job_id}``
+        for official runs, ``None`` for local ones) and ``versioning``. Raises
+        ``ValueError`` for an invalid ``origin`` or ``versioning`` value.
         """
         value = normalize_run_origin(origin)
+        versioning_filters = parse_versioning_filters(versioning)
+        params = [("origin", value)] if value else []
+        params += [
+            ("versioning", f"{key}={item}")
+            for key, items in versioning_filters.items()
+            for item in items
+        ]
         path = "/api/runs"
-        if value:
-            path += "?" + urlencode({"origin": value})
+        if params:
+            path += "?" + urlencode(params)
         data = self._get(path)
-        if value in ("official", "local") and isinstance(data, dict):
-            # Older platforms ignore the query parameter; filter here as well.
+        if (value in ("official", "local") or versioning_filters) and isinstance(
+            data, dict
+        ):
+            # Older platforms ignore the query parameters; filter here as well.
             tasks = data.get("tasks")
             if isinstance(tasks, dict):
                 filtered: dict = {}
                 for task, models in tasks.items():
                     for model, runs in (models or {}).items():
-                        kept = [r for r in runs if run_origin_of(r) == value]
+                        kept = [
+                            r
+                            for r in runs
+                            if (value in (None, "all") or run_origin_of(r) == value)
+                            and run_matches_versioning(r, versioning_filters)
+                        ]
                         if kept:
                             filtered.setdefault(task, {})[model] = kept
                 data["tasks"] = filtered
