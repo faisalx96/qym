@@ -356,6 +356,10 @@ def test_back_from_the_next_run_restores_the_view_of_the_one_before(app):
     assert page.input_value("#items-search") == ""
     page.go_back()
     _pager_ready(page, "run-003")
+    # The path changes before the shell swaps the page in, and the outgoing
+    # run's pager and cards match the selectors above until it does: wait for
+    # the restored view itself, not for elements both pages share.
+    page.wait_for_function("() => document.querySelector('#items-search')?.value === 'Question 2'")
     page.locator("#items-grid .item-card").first.wait_for()
     assert page.input_value("#items-search") == "Question 2"
     assert page.locator("#filter-count").inner_text() == count
