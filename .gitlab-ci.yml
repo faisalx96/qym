@@ -4,6 +4,7 @@ variables:
   ENV: "dev"
 
 stages:
+  - workflow
   - package
 
 workflow:
@@ -38,7 +39,7 @@ package:
       - qa
       - main
       - master
-      - prerpod
+      - preprod
       - eval
   script:
     - source /internet.sh
