@@ -352,7 +352,8 @@
           <header><span class="badge" aria-hidden="true">☰</span><h3>A faster Runs list</h3></header>
           <p>Find a run in seconds, without the list shifting under you.</p>
           <ul>
-            <li><strong>Search runs:</strong> press <code>/</code> and type a run name.</li>
+            <li><strong>Search runs:</strong> press <code>/</code> and type part of a run name or ID.</li>
+            <li><strong>Fast on big projects:</strong> the summaries behind Runs, Charts and Models are computed in the database and shared, so they open quickly on projects with thousands of runs.</li>
             <li><strong>Any date range:</strong> pick 30 days or your own two dates, on Runs, Charts and Models.</li>
             <li><strong>Calmer shortcuts:</strong> single-key shortcuts work only on the table, never while typing or in a menu, and can be turned off.</li>
             <li><strong>Every deleted run:</strong> Deleted Runs is a paged table across your projects, with search and bulk restore.</li>
@@ -408,7 +409,7 @@
       <div class="admins">
         <h3>For admins</h3>
         <ul>
-          <li>The database upgrades by itself when the new version starts. Dataset search keeps working while a background job prepares the faster search; you can follow it in <strong>Admin › Maintenance</strong>.</li>
+          <li>The database upgrades by itself when the new version starts. Dataset search, run search and the project overview keep working while background jobs prepare their faster versions; you can follow them in <strong>Admin › Maintenance</strong>.</li>
           <li>Open email sign-up is now off once an admin exists. Set <code>QYM_AUTH_LOCAL_SIGNUP=true</code> to keep it open.</li>
           <li>Behind a load balancer, set <code>FORWARDED_ALLOW_IPS</code> so sign-in limits apply per user and not to everyone at once.</li>
           <li>Only admins can rename a project, list all users or change roles, and an admin can’t remove their own admin role.</li>

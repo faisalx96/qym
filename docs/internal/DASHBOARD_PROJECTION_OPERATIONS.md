@@ -42,6 +42,23 @@ status and hidden flag; on PostgreSQL the hash is computed in the database, and 
 overview and KPIs. Each API process reuses page, overview, catalog and KPI
 snapshots keyed by that revision (and by filters, sort and hidden-task policy);
 an idle entry expires after five minutes and any published change misses it.
+
+On PostgreSQL the Runs, Charts and Models overview is aggregated in the
+database, in one statement, with the same numbers as the Python build (sums
+add in the same order). It reads each run's overview inputs from
+`dashboard_run_overview`, typed values the summary worker stores when it
+publishes the run (the `backfill_dashboard_overview` job, queued by migration
+`0069`, stores them for older runs). A stored row counts only while its revision
+equals the summary's publication counter; any other run is read from its JSON,
+so a missing or stale row is slower, never wrong. The computed overview is
+stored in `dashboard_overview_snapshots`, keyed by project, catalog revision,
+day, hidden-task policy, filters and sort, so every process and pod reuses it:
+the project-wide part once per revision, a new filter, search or sort only its
+filtered part. A request reads the store on its own snapshot connection and
+writes after releasing it. Entries of a replaced revision go two minutes after
+it changes, any entry after a day, and a project keeps at most 200; purging a
+run or deleting a project removes the project's entries. SQLite builds the
+overview in Python, as before.
 Deleting, restoring, submitting, approving, rejecting and withdrawing a review
 decision update the run's dimension in the same transaction (and bump the
 publication counter of an already published summary; a pending summary stays
@@ -51,7 +68,10 @@ same values.
 
 Filters accept `q`, a case-insensitive search (at most 200 characters) over the
 run's displayed name (`external_run_id`), its run name, and the start of its
-run ID. A page orders narrow keys first and then reads only the page's rows; the
+run ID. On PostgreSQL the trigram index `ix_dashboard_run_dimensions_search_trgm`
+serves it; the `build_runs_search_index` job (migration `0070`) builds it
+CONCURRENTLY. Without `pg_trgm` the job logs that the index was skipped and
+finishes, and the search scans the project's runs. A page orders narrow keys first and then reads only the page's rows; the
 nearest distinct means shown beside each metric value come from one query over
 the page's (task, model, dataset) groups.
 
