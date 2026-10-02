@@ -258,6 +258,16 @@ def _dataset_for_upload(db: Session, project: Project, name: str, slug: str) -> 
     if by_name:
         # e.g. an older dataset whose slug was derived with earlier slug rules.
         return by_name
+    if by_slug and _was_named(db, by_slug, clean):
+        # An SDK/CI job still uploading under the display name it had before
+        # a rename: say what it is called now (uploads never follow renames).
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Dataset '{clean}' was renamed to '{by_slug.name}'. Upload with the name "
+                f"'{by_slug.name}' or the slug '{by_slug.slug}'."
+            ),
+        )
     if by_slug:
         raise HTTPException(
             status_code=409,
@@ -267,6 +277,23 @@ def _dataset_for_upload(db: Session, project: Project, name: str, slug: str) -> 
             ),
         )
     return None
+
+
+def _was_named(db: Session, dataset: Dataset, name: str) -> bool:
+    """Whether the dataset had this display name before a rename (its audit rows)."""
+    previous = (
+        db.query(AuditLog.before)
+        .filter(
+            AuditLog.entity_type == "dataset",
+            AuditLog.entity_id == dataset.id,
+            AuditLog.action == "dataset.renamed",
+        )
+        .all()
+    )
+    return any(
+        isinstance(before, dict) and _same_dataset_name(str(before.get("name") or ""), name)
+        for (before,) in previous
+    )
 
 
 def _resolve_version(db: Session, dataset: Dataset, ref: Optional[str]) -> DatasetVersion:
@@ -540,7 +567,7 @@ def _audit(
     before: Optional[Dict[str, Any]] = None,
     after: Optional[Dict[str, Any]] = None,
 ) -> None:
-    """Who changed what on a dataset: deletes, restores, slug renames, publishes, alias moves."""
+    """Who changed what on a dataset: deletes, restores, renames, publishes, alias moves."""
     db.add(
         AuditLog(
             actor_user_id=principal.user.id if principal.user else None,
@@ -1376,7 +1403,12 @@ def update_dataset(
     project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     if req.name is not None:
-        dataset.name = req.name.strip()
+        next_name = req.name.strip()
+        if next_name != dataset.name:
+            # Uploads by the old name stop finding the dataset; record who
+            # renamed it and from what, so the upload error can name it too.
+            _audit(db, principal, "dataset.renamed", dataset, before={"name": dataset.name}, after={"name": next_name})
+        dataset.name = next_name
     next_slug = None
     previous_slug = dataset.slug
     if req.slug is not None:
