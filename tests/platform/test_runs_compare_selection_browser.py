@@ -424,6 +424,40 @@ def test_a_cohort_a_pass_pick_drops_out_when_the_runs_passes_changed(browser):  
         view.close()
 
 
+# Sign-out (P1 round 2 leftover) ----------------------------------------------
+
+
+def test_signing_out_clears_the_tabs_selection_and_saved_filters(app):
+    """The kept selection, the saved filters and the runs cache live in this
+    tab's sessionStorage. Nothing cleared them at sign-out, so the next person
+    to sign in in the same tab got the previous user's picks and filters back.
+    The sign-in page now starts the tab clean; a reload by the same user
+    still keeps them."""
+    page = app.goto("/projects/pa?model=m-b")
+    _runs_ready(page)
+    _select(page, "run-001", "run-003")
+    _wait_for_count(page, "2 executions selected")
+    page.reload()
+    _runs_ready(page)
+    _wait_for_count(page, "2 executions selected")
+    saved = set(page.evaluate("() => Object.keys(sessionStorage)"))
+    assert {SELECTION_KEY + "pa", "qym:dashboard-state:pa"} <= saved, saved
+
+    page.locator("#shell-user-trigger").click()
+    page.locator("#shell-signout-btn").click()
+    page.wait_for_url("**/login?**")
+    page.locator("#auth-root").wait_for()
+    assert page.evaluate("() => Object.keys(sessionStorage)") == []
+
+    # The next person to sign in in this tab: no picks, no saved filters.
+    page = app.goto("/projects/pa")
+    _runs_ready(page)
+    page.wait_for_timeout(300)
+    assert _selection(page)["count"] == ""
+    assert page.evaluate("() => location.search") == ""
+    assert " of " not in page.locator("#status-filter").inner_text()
+
+
 # The pager with a kept selection (P1 round 2 leftover) -----------------------
 
 STATUS_BAR_GEOMETRY = """() => {

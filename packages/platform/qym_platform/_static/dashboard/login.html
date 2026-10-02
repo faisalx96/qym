@@ -473,6 +473,14 @@
   <script>
     window.__QYM_LOGIN_BOOTSTRAP__ = __QYM_LOGIN_BOOTSTRAP_JSON__;
     window.__QYM_ROOT_PATH__ = __QYM_ROOT_PATH_JSON__;
+    // Signing in starts this tab clean. Its sessionStorage holds the state of
+    // whoever used the tab before (signed out, or their session ended): the
+    // Runs selection (qym:runs-selection:<project>), saved filters
+    // (qym:dashboard-state:<project>), the runs cache (qym:runs-cache:<project>)
+    // and Compare hand-offs. Pages save their state as they unload, so it is
+    // cleared here, after that. The server sends a signed-in reader past this
+    // page, so a reload of any page keeps its state.
+    try { window.sessionStorage.clear(); } catch (err) { /* storage off */ }
   </script>
   <script>
     (function () {
