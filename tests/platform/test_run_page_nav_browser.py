@@ -538,3 +538,98 @@ def test_a_category_filter_in_the_url_shows_on_its_chip(app, factory):
         page.locator("#items-grid .item-card").first.wait_for()
         assert page.locator("#filter-count").inner_text().startswith("12 of 12"), foreign
         assert page.evaluate(VIEW_URL_STATE) == {}, foreign
+
+
+# Leftovers (P1 round 2 reviews) ----------------------------------------------
+
+# A provider's whole error text, as an LLM API returns it: several KB.
+LONG_ERROR = "RateLimitError: " + " ".join(f"quota detail {n} for org-123" for n in range(300))
+SHORT_ERROR = "Timeout: no answer in 30 s"
+
+
+def _add_error_run(make, run_id="run-errors"):
+    """Twelve items: four fail with a long error, two with a short one."""
+    now = datetime.utcnow().replace(microsecond=0)
+    with make() as db:
+        db.add(
+            Run(
+                id=run_id, project_id="pa", created_by_user_id="dev", owner_user_id="dev",
+                task="support-qa", dataset="golden", model=MODELS[0], metrics=["faithfulness"],
+                run_metadata={}, run_config={"run_name": "Errors run"},
+                status=RunWorkflowStatus.COMPLETED, started_at=now - timedelta(days=3),
+                ended_at=now - timedelta(days=3) + timedelta(minutes=2), created_at=now - timedelta(days=3),
+            )
+        )
+        db.flush()
+        db.add(RunMetricSpec(run_id=run_id, metric_name="faithfulness", position=0, score_type="score", direction="maximize"))
+        for i in range(12):
+            error = LONG_ERROR if i < 4 else SHORT_ERROR if i < 6 else None
+            db.add(
+                RunItem(
+                    run_id=run_id, item_id=f"item-{i}", index=i, input=f"Question {i}",
+                    expected=f"Answer {i}", output=None if error else f"Output {i}",
+                    error=error, latency_ms=100 + i, item_metadata={},
+                )
+            )
+            if not error:
+                db.add(RunItemScore(run_id=run_id, item_id=f"item-{i}", metric_name="faithfulness",
+                                    score_numeric=0.5, score_raw=0.5))
+        db.commit()
+    return run_id
+
+
+def _error_card(page, title):
+    return page.locator("#error-distribution-section .error-card").filter(
+        has=page.locator(f'.error-card-title:text-is("{title}")')
+    )
+
+
+def test_an_error_card_filter_keeps_the_link_short_and_round_trips(app, factory):
+    """C045: an Errors card filter is in the URL. A label of several KB went
+    there whole, so a shared or reloaded link could pass a server's URL limit.
+    A long label is now kept as its start plus a hash of the whole label, and
+    a reload matches it back to the run's own error."""
+    run_id = _add_error_run(factory)
+    page = app.goto(f"/projects/pa/runs/{run_id}")
+    page.locator("#items-grid .item-card").first.wait_for()
+    _error_card(page, "RateLimitError").click()
+    page.wait_for_function("() => new URLSearchParams(location.search).has('filters')")
+    assert page.locator("#filter-count").inner_text().startswith("4 of 12")
+    query = urlparse(page.url).query
+    assert len(page.url) < 300, len(page.url)
+    stored = json.loads(page.evaluate(VIEW_URL_STATE)["filters"])["errors"]["task"]
+    assert stored["kind"] == "Task error" and "label" not in stored
+    assert stored["prefix"] == LONG_ERROR[:40]
+    assert re.fullmatch(r"[0-9a-z]+\.[0-9a-z]+", stored["hash"]), stored
+
+    # Copy link shares the same short URL.
+    page.evaluate("() => { window.__copied = []; QymShell.copyText = text => { window.__copied.push(String(text)); return Promise.resolve(true); }; }")
+    page.locator("#copy-run-link-btn").click()
+    page.wait_for_function("() => window.__copied.length === 1")
+    assert urlparse(page.evaluate("window.__copied[0]")).query == query
+
+    # A reload opens the same view: the same items, the card shown active,
+    # and the URL written back unchanged.
+    page = app.goto(f"/projects/pa/runs/{run_id}?{query}")
+    page.locator("#items-grid .item-card").first.wait_for()
+    assert page.locator("#filter-count").inner_text().startswith("4 of 12")
+    card = _error_card(page, "RateLimitError")
+    assert card.get_attribute("aria-pressed") == "true"
+    assert card.get_attribute("data-error-label") == LONG_ERROR
+    assert urlparse(page.url).query == query
+
+    # A short label stays readable in the URL, as before. (The cards count
+    # the filtered items: turn the long one off first.)
+    card.click()
+    page.wait_for_function("() => !new URLSearchParams(location.search).has('filters')")
+    _error_card(page, "Timeout").click()
+    page.wait_for_function("() => (new URLSearchParams(location.search).get('filters') || '').includes('Timeout')")
+    assert json.loads(page.evaluate(VIEW_URL_STATE)["filters"])["errors"]["task"] == {"kind": "Task error", "label": SHORT_ERROR}
+    assert page.locator("#filter-count").inner_text().startswith("2 of 12")
+
+    # A shortened label this run does not have is ignored, never applied.
+    foreign = {"errors": {"task": {"kind": "Task error", "prefix": LONG_ERROR[:40], "hash": "zz.zz"}}}
+    page = app.goto(f"/projects/pa/runs/{run_id}?filters=" + quote(json.dumps(foreign), safe=""))
+    page.locator("#items-grid .item-card").first.wait_for()
+    assert page.locator("#filter-count").inner_text().startswith("12 of 12")
+    assert page.evaluate(VIEW_URL_STATE) == {}

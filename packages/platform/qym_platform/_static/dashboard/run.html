@@ -13284,6 +13284,43 @@
         ['task', 'taskErrorFilter'], ['metric', 'metricErrorFilter'],
         ['trace', 'traceErrorFilter'], ['analysis', 'analysisErrorFilter'],
       ];
+      // An error label is the error's whole text, which can run to several
+      // KB (a provider's full error message). A long one goes in the URL as
+      // its first characters plus a hash of the whole label, and is matched
+      // back to this run's own label on load, so a link stays a normal length
+      // and still reopens the same filter.
+      const RUN_VIEW_ERROR_LABEL_MAX = 80;
+      const RUN_VIEW_ERROR_PREFIX = 40;
+
+      function errorLabelHash(label) {
+        let hash = 0x811c9dc5;
+        for (let index = 0; index < label.length; index++) {
+          hash = Math.imul(hash ^ label.charCodeAt(index), 16777619);
+        }
+        return (hash >>> 0).toString(36) + '.' + label.length.toString(36);
+      }
+
+      function errorFilterUrlValue(filter) {
+        const label = String(filter.label);
+        if (label.length <= RUN_VIEW_ERROR_LABEL_MAX) return { kind: filter.kind, label: label };
+        // Whole characters: a cut surrogate pair would not survive the URL.
+        const prefix = Array.from(label).slice(0, RUN_VIEW_ERROR_PREFIX).join('');
+        return { kind: filter.kind, prefix: prefix, hash: errorLabelHash(label) };
+      }
+
+      // The run's error label a shortened URL value names, or null when this
+      // run has no such error (the filter is then left off).
+      function errorLabelFromUrlValue(kind, prefix, hash) {
+        for (const row of state.snapshot.rows || []) {
+          const buckets = {};
+          collectRowErrors(row, buckets);
+          for (const bucket of Object.values(buckets)) {
+            if (bucket.kind === kind && bucket.label.length > RUN_VIEW_ERROR_LABEL_MAX
+              && bucket.label.startsWith(prefix) && errorLabelHash(bucket.label) === hash) return bucket.label;
+          }
+        }
+        return null;
+      }
 
       function runViewFiltersParam() {
         const out = {};
@@ -13301,7 +13338,7 @@
         }
         const errors = {};
         RUN_VIEW_ERROR_SLOTS.forEach(([key, slot]) => {
-          if (state[slot]) errors[key] = { kind: state[slot].kind, label: state[slot].label };
+          if (state[slot]) errors[key] = errorFilterUrlValue(state[slot]);
         });
         if (Object.keys(errors).length) out.errors = errors;
         if (state.scoreDistFilter) out.score = [state.scoreDistFilter.min, state.scoreDistFilter.max];
@@ -13388,7 +13425,13 @@
         const errors = parsed.errors && typeof parsed.errors === 'object' ? parsed.errors : {};
         RUN_VIEW_ERROR_SLOTS.forEach(([key, slot]) => {
           const value = errors[key];
-          if (value && typeof value.kind === 'string' && typeof value.label === 'string') state[slot] = { kind: value.kind, label: value.label };
+          if (!value || typeof value.kind !== 'string') return;
+          if (typeof value.label === 'string') {
+            state[slot] = { kind: value.kind, label: value.label };
+          } else if (typeof value.prefix === 'string' && typeof value.hash === 'string') {
+            const label = errorLabelFromUrlValue(value.kind, value.prefix, value.hash);
+            if (label !== null) state[slot] = { kind: value.kind, label: label };
+          }
         });
         if (_isNumberPair(parsed.score) && parsed.score[1] !== null) state.scoreDistFilter = { min: parsed.score[0], max: parsed.score[1] };
         const repeat = parsed.repeat;
