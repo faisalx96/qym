@@ -43,6 +43,8 @@ The numbers are the Python reducers' numbers, to the last bit:
   added), for the values the platform writes: success rates, latencies and
   medians are floats. PostgreSQL's JSON writes a whole float as ``1``, so the
   assembly turns such sums back into floats.
+- Floats leave the database as text that reads back as the same float: the
+  statement runs with ``extra_float_digits = 3``, whatever the server sets.
 - Days and the latest time read the typed ``timestamp`` column, not the
   descriptor's ``timestamp`` text: ``_sync_dimension`` writes both from the
   same value, at full precision, so they are the same instant.
@@ -116,6 +118,7 @@ _SUMMARY_FIELDS = (
 )
 _NUMERIC_TEXT = r"^\s*[-+]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][-+]?[0-9]+)?\s*$"
 _PLAIN_DECIMAL = r"^-?[0-9]{1,17}(\.[0-9]{1,20})?$"
+_ISO_MICROSECONDS = 'YYYY-MM-DD"T"HH24:MI:SS.US'
 
 def kpi_record():
     """The summary fields the KPIs read, as floats, from one parse per run."""
@@ -620,7 +623,7 @@ def build_overview_postgres(
     statement = select(
         func.json_build_object(*[item for key, value in parts.items() for item in (key, value)])
     )
-    raw = _scalar_without_jit(db, statement)
+    raw = _overview_scalar(db, statement)
     if isinstance(raw, str):
         raw = json.loads(raw)
     whole = _assemble_global(raw, now) if include_global else None
@@ -629,16 +632,29 @@ def build_overview_postgres(
     return whole, filtered
 
 
-def _scalar_without_jit(db, statement):
-    """Run ``statement`` with JIT off, then restore the request's setting.
+def _overview_scalar(db, statement):
+    """Run ``statement`` with JIT off and exact float text, then restore the
+    request's settings.
 
     The set-returning functions make the planner expect millions of rows;
-    JIT compiling for that costs seconds and saves nothing here.
+    JIT compiling for that costs seconds and saves nothing here. The float
+    sums leave PostgreSQL as JSON text: with ``extra_float_digits`` at 0 or
+    below (a server, database or role may set it) that text is rounded, and
+    the numbers would no longer be the Python build's. 3 writes text that
+    reads back as the same float on every version.
     """
-    previous = db.execute(sql_text("SELECT current_setting('jit')")).scalar()
+    settings = ("jit", "extra_float_digits")
+    previous = db.execute(
+        select(*(func.current_setting(name) for name in settings))
+    ).one()
     db.execute(sql_text("SET LOCAL jit = off"))
+    db.execute(sql_text("SET LOCAL extra_float_digits = 3"))
     value = db.execute(statement).scalar()
-    db.execute(select(func.set_config("jit", previous, True)))
+    db.execute(
+        select(
+            *(func.set_config(name, setting, True) for name, setting in zip(settings, previous))
+        )
+    )
     return value
 
 
@@ -804,7 +820,9 @@ def _chart_parts(scope, means, names):
         func.min(c.pos_c).label("first"),
         func.count().label("runs"),
         func.coalesce(func.sum(c.item_count), 0).label("items"),
-        func.max(c.timestamp).label("latest"),
+        # Six fractional digits always: JSON drops trailing zeros (".12"),
+        # which datetime.fromisoformat refuses before Python 3.11.
+        func.to_char(func.max(c.timestamp), _ISO_MICROSECONDS).label("latest"),
         func.sum(aggregate_order_by(c.latency, c.pos_c)).label("latency_sum"),
         func.count(c.latency).label("latency_count"),
         func.array_agg(aggregate_order_by(c.median, c.median))

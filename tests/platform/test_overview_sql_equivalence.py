@@ -16,10 +16,11 @@ from __future__ import annotations
 
 import json
 import random
+import re
 from datetime import datetime, timedelta
 
 import pytest
-from sqlalchemy import delete, update
+from sqlalchemy import delete, text, update
 from sqlalchemy.orm import Session
 
 from qym_platform.api import dashboard
@@ -363,6 +364,93 @@ def test_float_sums_add_in_the_python_order(pg):
             _store_all(pg)
         for sort in ("time-asc", "time-desc", "metric-q-desc", "metric-q-asc"):
             _assert_same(pg, {}, sort, None)
+
+
+class _Python39Datetime(datetime):
+    """``datetime`` whose ``fromisoformat`` reads fractional seconds as Python
+    3.9 and 3.10 do: three or six digits, anything else is a ValueError."""
+
+    @classmethod
+    def fromisoformat(cls, value):
+        fraction = re.search(r"T[0-9:]+[.]([0-9]+)", value)
+        if fraction and len(fraction.group(1)) not in (3, 6):
+            raise ValueError(f"Invalid isoformat string: {value!r}")
+        return super().fromisoformat(value)
+
+
+def _seed_runs_at(engine, stamps):
+    """One run per model, started at ``stamps``, with means and latencies
+    whose float sums need every digit."""
+    with Session(engine) as db:
+        for index, stamp in enumerate(stamps):
+            key, task = f"stamp-{index}", f"t{index % 2}"
+            db.add(
+                Dimension(
+                    run_key=key, project_key="p", task=task, model=f"m{index}|||plain",
+                    dataset="d", version="", owner="u", status="COMPLETED",
+                    timestamp=stamp, created_at=stamp, present=True,
+                    descriptor={
+                        "run_id": key, "task_name": task, "dataset_name": "d",
+                        "metrics": ["q"], "timestamp": stamp.isoformat() + "Z",
+                    },
+                )
+            )
+            db.add(
+                Summary(
+                    run_key=key, project_key="p", projection_revision=1,
+                    data={
+                        "metric_averages": {"q": 1 / 3 + index / 7},
+                        "success_rate": 2 / 3,
+                        "avg_latency_ms": 1234.5678 + index / 3,
+                        "median_latency_ms": 1000 / 3,
+                        "total_items": 3,
+                    },
+                )
+            )
+        db.commit()
+
+
+def test_latest_times_read_on_every_supported_python(pg, monkeypatch):
+    """PostgreSQL's JSON drops a time's trailing zeros ("12:34:56.12"), which
+    datetime.fromisoformat refuses before Python 3.11 (CI runs 3.9): the
+    overview of such a run must not fail, and must show the Python build's
+    latest time."""
+    from qym_platform.services import dashboard_overview
+
+    monkeypatch.setattr(dashboard_overview, "datetime", _Python39Datetime)
+    start = datetime(2026, 9, 20, 12, 34, 56)
+    _seed_runs_at(
+        pg,
+        [start.replace(microsecond=micro) for micro in (100000, 120000, 123400, 123450, 123456, 0)],
+    )
+    for stored in (False, True):
+        if stored:
+            _store_all(pg)
+        _assert_same(pg, {}, "time-desc", None)
+
+
+def test_float_text_is_exact_whatever_the_server_sets(pg):
+    """A server, database or role may set extra_float_digits to 0, which
+    rounds float text to 15 digits: the overview's sums must still be the
+    Python build's floats, and the rest of the request keeps the setting."""
+    _seed_runs_at(pg, [datetime(2026, 9, 20) + timedelta(hours=hour) for hour in range(6)])
+    _seed_projection(pg, count=30)
+    parsed = dashboard._parse_filters("{}")
+    with Session(pg) as db:
+        db.execute(text("SET LOCAL extra_float_digits = 0"))
+        expected = dashboard._build_overview_python(db, PROJECT, parsed)
+        whole, part = build_overview_postgres(db, PROJECT, parsed)
+        assert db.execute(text("SHOW extra_float_digits")).scalar() == "0"
+    for key in ("project", "revision", "catalog_revision", "freshness"):
+        expected.pop(key)
+    actual = {**whole, **part}
+    for payload in (expected, actual):
+        payload["sort_values"] = {
+            name: sorted(values, key=lambda value: (value is None, str(value)))
+            for name, values in payload["sort_values"].items()
+        }
+    problems = _diff(expected, actual)
+    assert not problems, problems[:10]
 
 
 def test_an_empty_or_unknown_project_matches(pg):
