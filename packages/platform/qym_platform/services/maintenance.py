@@ -1281,6 +1281,15 @@ def _backfill_dashboard_overview(ctx: JobContext) -> bool:
         db.commit()
     ctx.progress["runs_stored"] = int(ctx.progress.get("runs_stored") or 0) + len(keys)
     if len(keys) < window:
+        # Without statistics the overview statement nests loops over the
+        # whole table (seconds instead of milliseconds) until autovacuum
+        # analyzes it; give the planner statistics right after the load.
+        try:
+            with ctx.autocommit() as conn:
+                conn.execute(text("ANALYZE dashboard_run_overview"))
+                conn.execute(text("ANALYZE dashboard_run_dimensions"))
+        except Exception as exc:  # noqa: BLE001 - autovacuum analyzes later anyway
+            ctx.log(f"analyze skipped ({type(exc).__name__}); autovacuum will analyze later")
         ctx.progress["phase"] = "done"
         ctx.progress["message"] = f"done: {ctx.progress['runs_stored']:,} runs stored"
         ctx.log(ctx.progress["message"])

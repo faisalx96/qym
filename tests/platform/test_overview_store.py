@@ -297,6 +297,15 @@ def test_the_backfill_job_stores_missing_and_stale_rows_in_windows(pg):  # noqa:
     assert fresh == len(keys)
     for key in keys:
         assert _stored_row(pg, key) == _read_from_json(pg, key), key
+    # The planner gets statistics at once instead of waiting for autovacuum.
+    with pg.connect() as conn:
+        analyzed = conn.execute(
+            text(
+                "SELECT relname FROM pg_stat_user_tables WHERE last_analyze IS NOT NULL "
+                "AND relname IN ('dashboard_run_overview', 'dashboard_run_dimensions')"
+            )
+        ).scalars().all()
+    assert sorted(analyzed) == ["dashboard_run_dimensions", "dashboard_run_overview"]
 
 
 def test_the_backfill_job_finishes_at_once_on_sqlite(database):  # noqa: F811
