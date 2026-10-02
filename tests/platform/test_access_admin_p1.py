@@ -314,7 +314,7 @@ def test_throttle_window_releases_and_success_resets():
     now[0] += 61
     throttle.check("a@x.com", "c")
     throttle.record_failure("a@x.com", "c")
-    throttle.record_success("a@x.com")
+    throttle.record_success("a@x.com", "c")
     throttle.record_failure("a@x.com", "c")
     throttle.check("a@x.com", "c")
 

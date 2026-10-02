@@ -35,11 +35,16 @@ class PlatformSettings(BaseSettings):
     # admins add people in Admin > Users. While no active admin exists, sign-up
     # stays open so the first person can create an account and claim admin.
     auth_local_signup: bool = Field(default=False)
-    # Failed password sign-ins allowed per email and per client address within
-    # the window before further attempts get 429 (login_throttle.py).
+    # Failed password sign-ins allowed within the window before further
+    # attempts get 429 (login_throttle.py): per email from one client address
+    # (only that client is refused), and per client address over all emails.
     auth_login_max_failures_per_email: int = Field(default=5, ge=1)
     auth_login_max_failures_per_client: int = Field(default=30, ge=1)
     auth_login_failure_window_seconds: int = Field(default=300, ge=1)
+    # Ceiling per email over every client together: past it, password sign-in
+    # for that email pauses from everywhere until failures age out.
+    auth_login_email_ceiling: int = Field(default=50, ge=1)
+    auth_login_email_ceiling_window_seconds: int = Field(default=900, ge=1)
     auth_google_client_id: str = Field(default="")
     auth_google_client_secret: str = Field(default="")
     auth_github_client_id: str = Field(default="")

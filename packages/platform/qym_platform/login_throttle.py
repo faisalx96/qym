@@ -1,11 +1,20 @@
 """Throttle password guessing on the email/password sign-in endpoints.
 
-Failed attempts are counted per email and per client address over a sliding
-window. Once either count reaches its limit, further attempts for that email or
-from that address are refused with 429 until the oldest failure leaves the
+Failed attempts are counted over sliding windows, under three limits:
+
+- per email from one client address (default 5 in 5 minutes): the strict
+  lock. Only the client that made the wrong attempts is refused, so one
+  client cannot lock a person out from everywhere; the right password from
+  another client still works.
+- per client address over every email (default 30 in 5 minutes).
+- per email over every client together (default 50 in 15 minutes): a high
+  ceiling that bounds guessing spread over many addresses.
+
+Past a limit, attempts are refused with 429 until enough failures leave the
 window, whether or not the password is right, so guessing cannot continue
 behind the limit. Unknown and known emails are counted the same way, so the
-limit does not reveal which accounts exist.
+limits do not reveal which accounts exist. "Account already exists" answers
+at sign-up count only against the client, never the email.
 
 The counters live in the API process. With several replicas each one counts on
 its own, which multiplies the budget by the replica count but keeps the
@@ -19,7 +28,7 @@ import os
 import threading
 import time
 from collections import deque
-from typing import Callable, Deque, Dict, Mapping, Optional
+from typing import Callable, Deque, Dict, List, Mapping, Optional, Tuple
 
 from fastapi import HTTPException, Request
 
@@ -35,20 +44,35 @@ class LoginThrottle:
         max_per_email: int,
         max_per_client: int,
         window_seconds: int,
+        email_ceiling: int = 50,
+        email_ceiling_window_seconds: int = 900,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
+        # ``max_per_email`` is the strict lock: failures for one email from
+        # one client address.
         self.max_per_email = max(1, int(max_per_email))
         self.max_per_client = max(1, int(max_per_client))
         self.window_seconds = max(1, int(window_seconds))
+        self.email_ceiling = max(1, int(email_ceiling))
+        self.email_ceiling_window_seconds = max(1, int(email_ceiling_window_seconds))
         self._clock = clock
         self._failures: Dict[str, Deque[float]] = {}
         self._lock = threading.Lock()
+
+    @staticmethod
+    def _pair_key(email: str, client: str) -> str:
+        return "pair:" + client + "\x00" + email
+
+    def _window(self, key: str) -> int:
+        if key.startswith("email:"):
+            return self.email_ceiling_window_seconds
+        return self.window_seconds
 
     def _recent(self, key: str, now: float) -> Deque[float]:
         entries = self._failures.get(key)
         if entries is None:
             return deque()
-        cutoff = now - self.window_seconds
+        cutoff = now - self._window(key)
         while entries and entries[0] <= cutoff:
             entries.popleft()
         if not entries:
@@ -60,19 +84,15 @@ class LoginThrottle:
         if len(entries) < limit:
             return None
         # Allowed again once enough failures have aged out of the window.
-        release_at = entries[len(entries) - limit] + self.window_seconds
+        release_at = entries[len(entries) - limit] + self._window(key)
         return max(1, math.ceil(release_at - now))
 
-    def check(self, email: str, client: str) -> None:
-        """Raise 429 when this email or client used up its failed attempts."""
+    def _refuse(self, limits: List[Tuple[str, int]]) -> None:
         now = self._clock()
         with self._lock:
             waits = [
                 wait
-                for wait in (
-                    self._retry_after("email:" + email, self.max_per_email, now),
-                    self._retry_after("client:" + client, self.max_per_client, now),
-                )
+                for wait in (self._retry_after(key, limit, now) for key, limit in limits)
                 if wait is not None
             ]
         if waits:
@@ -83,7 +103,22 @@ class LoginThrottle:
                 headers={"Retry-After": str(wait)},
             )
 
-    def record_failure(self, email: str, client: str) -> None:
+    def check(self, email: str, client: str) -> None:
+        """Raise 429 when this client used up its attempts for this email or
+        overall, or when the email reached its ceiling across all clients."""
+        self._refuse(
+            [
+                (self._pair_key(email, client), self.max_per_email),
+                ("client:" + client, self.max_per_client),
+                ("email:" + email, self.email_ceiling),
+            ]
+        )
+
+    def check_client(self, client: str) -> None:
+        """Raise 429 when this client used up its failed attempts (sign-up)."""
+        self._refuse([("client:" + client, self.max_per_client)])
+
+    def _record(self, keys: Tuple[str, ...]) -> None:
         now = self._clock()
         with self._lock:
             if len(self._failures) >= _MAX_TRACKED_KEYS:
@@ -93,12 +128,21 @@ class LoginThrottle:
                     self._recent(key, now)
                 while len(self._failures) >= _MAX_TRACKED_KEYS:
                     self._failures.pop(next(iter(self._failures)))
-            for key in ("email:" + email, "client:" + client):
+            for key in keys:
                 self._failures.setdefault(key, deque()).append(now)
 
-    def record_success(self, email: str) -> None:
+    def record_failure(self, email: str, client: str) -> None:
+        self._record((self._pair_key(email, client), "client:" + client, "email:" + email))
+
+    def record_client_failure(self, client: str) -> None:
+        """A failure that says nothing about the email's password (sign-up)."""
+        self._record(("client:" + client,))
+
+    def record_success(self, email: str, client: str) -> None:
+        """Clear this client's strict lock for the email. The per-email
+        ceiling and the per-client count only age out."""
         with self._lock:
-            self._failures.pop("email:" + email, None)
+            self._failures.pop(self._pair_key(email, client), None)
 
 
 def _describe_wait(seconds: int) -> str:
@@ -118,6 +162,8 @@ def login_throttle(request: Request) -> LoginThrottle:
             max_per_email=settings.auth_login_max_failures_per_email,
             max_per_client=settings.auth_login_max_failures_per_client,
             window_seconds=settings.auth_login_failure_window_seconds,
+            email_ceiling=settings.auth_login_email_ceiling,
+            email_ceiling_window_seconds=settings.auth_login_email_ceiling_window_seconds,
         )
         state.login_throttle = throttle
     return throttle

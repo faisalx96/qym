@@ -124,6 +124,8 @@ def _verified_local_credential(
 ) -> tuple[User, LocalAuthCredential]:
     """Check an email and password, throttling failures per email and client.
 
+    Wrong attempts lock the email only for the client that made them; the
+    email's ceiling across all clients is much higher (login_throttle.py).
     Every failure costs one password hash, whether or not the account exists,
     so neither the answer nor its timing tells which emails have accounts.
     """
@@ -142,7 +144,7 @@ def _verified_local_credential(
     if credential is None or not password_ok:
         throttle.record_failure(normalized, client)
         raise _invalid_credentials()
-    throttle.record_success(normalized)
+    throttle.record_success(normalized, client)
     return user, credential
 
 
@@ -304,17 +306,18 @@ def auth_signup_password(
 
     email = _normalize_email(payload.email)
     # "Already exists" answers tell which emails have accounts; they count as
-    # failed attempts for the client like wrong passwords do.
+    # failed attempts for the client like wrong passwords do, but never
+    # against the email: sign-up must not lock that person's sign-in.
     throttle = login_throttle(request)
     client = client_key(request)
-    throttle.check(email, client)
+    throttle.check_client(client)
     try:
         password_hash = hash_password(payload.password)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if db.query(User.id).filter(User.email == email).first():
-        throttle.record_failure(email, client)
+        throttle.record_client_failure(client)
         raise HTTPException(status_code=409, detail="An account with this email already exists")
 
     user = User(
