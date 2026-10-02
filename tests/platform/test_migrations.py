@@ -45,6 +45,27 @@ def test_alembic_has_one_upgrade_head() -> None:
     assert heads == ["0071"]
 
 
+def test_operations_docs_name_the_current_migration_head() -> None:
+    """The deploy runbook tells operators which revision to wait for before
+    the API is healthy and before a separate worker (QYM_SKIP_MIGRATIONS=1)
+    starts; an older head there lets the worker start before the newest
+    tables exist. Every place the docs name the head names this one."""
+    import re
+
+    config = Config()
+    config.set_main_option("script_location", str(MIGRATIONS_DIR))
+    (head,) = ScriptDirectory.from_config(config).get_heads()
+    pattern = re.compile(r"(?:one head,|migration head|migrated to|\(head)\s+`(\d{4})`")
+    named = {}
+    for doc in ("docs/internal/OPERATIONS.md", "docs/RELEASE_NOTES.md"):
+        named[doc] = pattern.findall((ROOT / doc).read_text(encoding="utf-8"))
+    # The chain's head, the runbook's wait and the worker's start, the
+    # release note.
+    assert len(named["docs/internal/OPERATIONS.md"]) == 3, named
+    assert named["docs/RELEASE_NOTES.md"][:1] == [head], named
+    assert {revision for found in named.values() for revision in found} == {head}, named
+
+
 def test_migrations_name_their_own_revision_in_job_logs() -> None:
     """Admins see "queued by migration NNNN" in the maintenance UI; after a
     renumbering the text must still name the migration that queued the job."""
