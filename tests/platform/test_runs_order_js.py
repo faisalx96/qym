@@ -93,10 +93,12 @@ def test_query_sends_the_filters_and_sort_the_list_sends():
           api.query('range=week&sort=bad sort', now),
           api.query('range=custom&from=2026-09-01&to=2026-09-30', now),
           api.query('range=custom&from=2026-09-01', now),
+          api.query('range=custom&to=2026-09-30', now),
+          api.query('range=custom&from=bad&to=', now),
           api.query('', now),
         ];"""
     )
-    first, today, week, custom, half_custom, empty = result
+    first, today, week, custom, from_only, to_only, no_dates, empty = result
     assert first == {
         "filters": {
             "tasks": ["t"],
@@ -123,7 +125,14 @@ def test_query_sends_the_filters_and_sort_the_list_sends():
         "2026-08-31T21:00:00.000Z",
         "2026-09-30T21:00:00.000Z",
     )
-    assert "since" not in half_custom["filters"]
+    # The Range picker allows one side only ("From" or "Until" a date); the
+    # list bounds it on that side (dashboard.js timeFilterBounds), and so must
+    # the run page, or its arrows step through runs the list does not show.
+    assert from_only["filters"]["since"] == "2026-08-31T21:00:00.000Z"
+    assert "until" not in from_only["filters"]
+    assert to_only["filters"]["until"] == "2026-09-30T21:00:00.000Z"
+    assert "since" not in to_only["filters"]
+    assert "since" not in no_dates["filters"] and "until" not in no_dates["filters"]
     assert empty == {
         "filters": {"tasks": [], "models": [], "datasets": [], "statuses": [], "versions": [], "users": []},
         "sort": "time-desc",
@@ -150,6 +159,29 @@ def test_text_sorts_collate_like_the_list():
         None,
         "git_commits",
         None,
+    ]
+
+
+def test_values_that_compare_equal_collate_the_same_whatever_their_order():
+    """One model name from two providers shows the same label: the list and
+    the run page collate separately fetched value lists, so ties must not keep
+    the order the database happened to return."""
+    assert run_js(
+        """const models = ['openai/gpt-4o|||plain', 'azure/gpt-4o|||plain', 'acme/alpha|||plain'];
+        // Two spellings of one text (composed and decomposed accent) that
+        // localeCompare calls equal.
+        const datasets = ['caf\\u00e9', 'cafe\\u0301', 'b'];
+        return [
+          api.collation('model-asc', models),
+          api.collation('model-desc', models.slice().reverse()),
+          api.collation('dataset-asc', datasets).map(escape),
+          api.collation('dataset-asc', datasets.slice().reverse()).map(escape),
+        ];"""
+    ) == [
+        ["acme/alpha|||plain", "azure/gpt-4o|||plain", "openai/gpt-4o|||plain"],
+        ["acme/alpha|||plain", "azure/gpt-4o|||plain", "openai/gpt-4o|||plain"],
+        ["b", "cafe%u0301", "caf%E9"],
+        ["b", "cafe%u0301", "caf%E9"],
     ]
 
 

@@ -8849,7 +8849,9 @@
         if (itemId) url.searchParams.set('item', itemId);
         else {
           Object.entries(runViewParams()).forEach(([key, value]) => {
-            if (value) url.searchParams.set(key, value);
+            (Array.isArray(value) ? value : [value]).forEach(item => {
+              if (item) url.searchParams.append(key, item);
+            });
           });
         }
         return url.toString();
@@ -13267,11 +13269,11 @@
 
       // ── View state in the URL (C045) ──
       // The item filters (bar clicks and the filter builder), search, sort,
-      // page, the Display layout and analysis metric with its pass threshold
-      // live in the query string, like the list pages, so a reload, Back and
-      // a shared link open the same view. Read once before the first render;
-      // written (replaceState) after every items render. Writing never
-      // re-renders or scrolls.
+      // page, the Display layout, analysis metric with its pass threshold and
+      // Columns (fields turned off) live in the query string, like the list
+      // pages, so a reload, Back and a shared link open the same view. Read
+      // once before the first render; written (replaceState) after every
+      // items render. Writing never re-renders or scrolls.
       const RUN_VIEW_SORTS = ['score_asc', 'score_desc', 'latency_asc', 'latency_desc'];
       const RUN_VIEW_SHOW = ['passed', 'failed', 'metric_errors', 'errors', 'edited_metrics', 'retries', 'trace_errors'];
       const RUN_VIEW_ERROR_SLOTS = [
@@ -13317,6 +13319,11 @@
           && state.metricTypes?.[metric] !== 'numeric' && !!metricDirectionOf(metric);
       }
 
+      // The item and metric fields the Display Columns turned off.
+      function hiddenFieldKeys(keys, visibility) {
+        return keys.filter(key => visibility[key] === false);
+      }
+
       function runViewParams() {
         const metric = state.selectedMetric;
         const defaultMetric = state.allMetrics.length
@@ -13334,6 +13341,8 @@
           show: state.itemFilter !== 'all' ? state.itemFilter : null,
           filters: runViewFiltersParam(),
           page: !heatmap && state.page > 1 ? String(state.page) : null,
+          hide_field: hiddenFieldKeys(state.allMetadataKeys, state.visibleMetadataFields),
+          hide_metric_field: hiddenFieldKeys(state.allMetricMetaKeys, state.visibleMetricMetaFields),
         };
       }
 
@@ -13388,7 +13397,13 @@
         }
         if (parsed.categories && typeof parsed.categories === 'object' && !Array.isArray(parsed.categories)) {
           Object.entries(parsed.categories).forEach(([key, value]) => {
-            if (_isStringList(value) && !['approval', 'complexity', 'domain', 'root_cause'].includes(key)) state.categoryFilters[key] = value;
+            // Only this run's own metadata categories. The filter shows on its
+            // category's chip, as a chip click leaves it: a filter whose
+            // category is not shown could neither be seen nor turned off there.
+            if (!_isStringList(value) || key === '__proto__' || !state.allMetadataKeys.includes(key)
+              || ['approval', 'complexity', 'domain', 'root_cause'].includes(key)) return;
+            state.categoryFilters[key] = value;
+            state.selectedCategories.add(key);
           });
         }
       }
@@ -13427,6 +13442,13 @@
         const show = params.get('show');
         if (RUN_VIEW_SHOW.includes(show)) state.itemFilter = show;
         if (params.has('filters')) applyRunViewFiltersParam(params.get('filters'));
+        // Display > Columns: the item and metric fields turned off.
+        params.getAll('hide_field').forEach(key => {
+          if (state.allMetadataKeys.includes(key)) state.visibleMetadataFields[key] = false;
+        });
+        params.getAll('hide_metric_field').forEach(key => {
+          if (state.allMetricMetaKeys.includes(key)) state.visibleMetricMetaFields[key] = false;
+        });
         const page = parseInt(params.get('page') || '', 10);
         if (Number.isFinite(page) && page > 1) state.page = page;
       }

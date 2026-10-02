@@ -599,7 +599,9 @@ def test_repeat_drawer_follows_mock_option_c() -> None:
 
     # each completed pass row deep-links to the run page scoped to that pass
     assert 'data-pass-number="${firstPass}"' in source
-    assert "`${base}?pass=${passNumber}`" in source
+    # (and carries the list's view for its previous / next run, C044)
+    assert "const url = runFromListUrl(filePath);" in source
+    assert "`${url}${url.includes('?') ? '&' : '?'}pass=${passNumber}`" in source
     assert '.runs-table > tbody > tr.pass-member[data-pass-number]:hover' in styles
 
     # first expand renders optimistically from pass_summaries (shimmer for

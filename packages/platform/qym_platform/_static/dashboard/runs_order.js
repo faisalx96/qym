@@ -86,7 +86,8 @@
   }
 
   // The time bounds of a list range, in the viewer's local days, as the list
-  // computes them (dashboard.js timeFilterBounds).
+  // computes them (dashboard.js timeFilterBounds). A custom Range may be open
+  // on one side ("From" or "Until" a date), as the Range picker allows.
   function rangeBounds(range, from, to, now) {
     var since = null;
     var until = null;
@@ -99,10 +100,10 @@
     } else if (range === 'week' || range === 'month') {
       since = new Date(at);
       since.setDate(since.getDate() - (range === 'week' ? 7 : 30));
-    } else if (range === 'custom' && parseLocalDate(from) && parseLocalDate(to)) {
+    } else if (range === 'custom') {
       since = parseLocalDate(from);
       until = parseLocalDate(to);
-      until.setDate(until.getDate() + 1);
+      if (until) until.setDate(until.getDate() + 1);
     }
     return { since: since, until: until };
   }
@@ -165,12 +166,20 @@
   }
 
   // The order of a text sort's values, which the server sorts by; null for a
-  // sort the server orders by itself.
+  // sort the server orders by itself. Values that compare equal (one model
+  // name from two providers) fall back to their code-point order: the list
+  // and the run page collate value lists they fetched separately, whose
+  // order the database does not fix, and must still order them alike.
   function collation(sort, values) {
     if (!collatedColumn(sort)) return null;
     var field = sortField(sort);
-    return (values || []).slice().sort(field === 'model' ? compareModelKeys : function (a, b) {
+    var compare = field === 'model' ? compareModelKeys : function (a, b) {
       return String(a).localeCompare(String(b));
+    };
+    return (values || []).slice().sort(function (a, b) {
+      var left = String(a);
+      var right = String(b);
+      return compare(a, b) || (left < right ? -1 : (left > right ? 1 : 0));
     });
   }
 

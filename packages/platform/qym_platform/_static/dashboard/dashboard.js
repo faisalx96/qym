@@ -4766,10 +4766,10 @@
           sessionStorage.removeItem('compareRuns');
           sessionStorage.removeItem('compareCohorts');
           sessionStorage.setItem('dashboardRunFile', filePath);
-          const base = state.currentProject && state.currentProject.slug
-            ? projectUrl(state.currentProject.slug, `runs/${encodeURIComponent(filePath)}`)
-            : apiUrl(`run/${encodeURIComponent(filePath)}`);
-          openUrl(`${base}?pass=${passNumber}`, event);
+          // The pass carries the list's view too, for its previous / next run
+          // (C044).
+          const url = runFromListUrl(filePath);
+          openUrl(`${url}${url.includes('?') ? '&' : '?'}pass=${passNumber}`, event);
         });
       });
       inserted.forEach(detail => {
@@ -8939,9 +8939,11 @@
         state._urlModelExpansion = expanded.size ? expanded : null;
       }
       const range = params.get('range');
-      const from = params.get('from') || '';
-      const to = params.get('to') || '';
-      if (range === 'custom' && parseLocalDate(from) && parseLocalDate(to)) {
+      // The Range picker allows a start date, an end date or both, so a
+      // custom range may be open on one side (runs_order.js reads it alike).
+      const from = parseLocalDate(params.get('from')) ? params.get('from') : '';
+      const to = parseLocalDate(params.get('to')) ? params.get('to') : '';
+      if (range === 'custom' && (from || to)) {
         state.customRange = { from, to };
         state.quickFilter = 'custom';
       } else {

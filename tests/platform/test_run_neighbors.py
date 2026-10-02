@@ -9,11 +9,13 @@ the project's default order (newest first, no filters).
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -38,14 +40,27 @@ TASKS = ("support-qa", "sql-gen")
 DATASETS = ("golden", "hard-cases", "Beta")
 
 
-@pytest.fixture()
-def client(monkeypatch):
+@pytest.fixture(params=["sqlite", "postgres"])
+def client(request, monkeypatch):
+    """The list and the neighbours order alike on both databases (Postgres
+    orders text by its collation, SQLite by code point)."""
     monkeypatch.setenv("QYM_AUTH_MODE", "none")
     monkeypatch.setenv("QYM_AUTH_LOCAL_ENABLED", "false")
     monkeypatch.setenv("QYM_MAINTENANCE_MODE", "false")
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
+    admin = None
+    if request.param == "postgres":
+        url = os.environ.get("QYM_TEST_POSTGRES_URL")
+        if not url:
+            pytest.skip("QYM_TEST_POSTGRES_URL not configured")
+        schema = "qym_run_neighbors_" + uuid4().hex
+        admin = create_engine(url)
+        with admin.begin() as conn:
+            conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+        engine = create_engine(url, connect_args={"options": f"-csearch_path={schema}"})
+    else:
+        engine = create_engine(
+            "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+        )
     Base.metadata.create_all(engine)
     make = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     now = datetime.utcnow().replace(microsecond=0)
@@ -54,6 +69,11 @@ def client(monkeypatch):
             [
                 User(id="dev", email="dev@local", display_name="Dev", role=UserRole.ADMIN),
                 User(id="ann", email="ann@local", display_name="Ann", role=UserRole.MEMBER),
+            ]
+        )
+        db.flush()
+        db.add_all(
+            [
                 Project(id="pa", name="Support bot", slug="pa", created_by_user_id="dev"),
                 Project(id="pb", name="Other", slug="pb", created_by_user_id="dev"),
             ]
@@ -127,6 +147,10 @@ def client(monkeypatch):
     yield test_client
     test_client.close()
     engine.dispose()
+    if admin is not None:
+        with admin.begin() as conn:
+            conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        admin.dispose()
 
 
 def _list_order(client, filters, sort, collation=None):

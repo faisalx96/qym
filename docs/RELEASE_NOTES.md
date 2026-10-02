@@ -13,7 +13,7 @@ Fixes the P1 issues of the September design review: a run page you can read and 
 
 ## What changed
 
-- Run page: a sticky section nav with counts and the item Filters, one header recipe for every section, filters and view changes that keep the reader's place, the reason each failing item failed, item deep links (`?item=`), the item view (filters, search, sort, page, layout) in the address, previous / next run arrows in the order of the Runs list you came from, collapsed step latency and live updates while a run is running. The Overview trend keeps its range and task in the address.
+- Run page: a sticky section nav with counts and the item Filters, one header recipe for every section, filters and view changes that keep the reader's place, the reason each failing item failed, item deep links (`?item=`), the item view (filters, search, sort, page, layout, columns) in the address, previous / next run arrows in the order of the Runs list you came from, collapsed step latency and live updates while a run is running. The Overview trend keeps its range and task in the address.
 - Reviews: opens on the Pending queue with progress, sorting and keyboard review; bulk actions refuse a stale selection and return the decided rows.
 - Approval rules per project: who may approve corrections (all members by default, or managers) and an optional "different reviewer" rule, enforced for approve, reject, reset, delete and bulk, with Self-approved shown.
 - Submitting a run asks for confirmation with an optional comment; several runs submit in one request; managers and admins submit on behalf of the owner and can transfer a run to another active member.

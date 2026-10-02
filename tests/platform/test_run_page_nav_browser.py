@@ -386,3 +386,155 @@ def test_overview_range_and_trend_task_live_in_the_url(app):
     page.locator('#trend-range [data-days="7"]').click()
     page.wait_for_function("() => !new URLSearchParams(location.search).has('range')")
     assert page.evaluate(VIEW_URL_STATE) == {"task": task, "dataset": dataset}
+
+
+# Review fixes (P1 round 2) ----------------------------------------------------
+
+
+def test_a_one_sided_custom_range_reaches_the_run_page_and_survives_a_reload(app):
+    """The Range picker allows a start date alone. The list bounds the runs on
+    that side; a reload, a shared link and the run page's arrows must too."""
+    page = app.goto("/projects/pa")
+    _runs_ready(page)
+    since = page.evaluate("() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toLocaleDateString('en-CA'); }")
+    page.locator('.filter-btn[data-filter="custom"]').click()
+    page.fill("#time-range-from", since)
+    page.locator("#time-range-apply").click()
+    page.wait_for_function("() => new URLSearchParams(location.search).get('from')")
+    _runs_ready(page)
+    expected = page.evaluate(
+        """async since => {
+          const [y, m, d] = since.split('-').map(Number);
+          const response = await fetch('/api/dashboard/runs', {method: 'POST', headers: {'content-type': 'application/json'},
+            body: JSON.stringify({project_slug: 'pa', filters: {since: new Date(y, m - 1, d).toISOString()}, limit: 1})});
+          return (await response.json()).total_runs;
+        }""",
+        since,
+    )
+    assert 1 < expected < RUNS + 1  # the range leaves some runs out
+
+    # Reloading the list's URL keeps the range (it used to fall back to all).
+    page = app.goto(f"/projects/pa?range=custom&from={since}")
+    _runs_ready(page)
+    assert page.evaluate(VIEW_URL_STATE) == {"range": "custom", "from": since}
+    assert page.locator('.filter-btn[data-filter="custom"]').get_attribute("aria-pressed") == "true"
+    first, hrefs = _row_ids(page)
+    assert hrefs[0].endswith("?list=" + quote(f"range=custom&from={since}", safe=""))
+
+    # The run page counts and steps through the same runs as the list.
+    page.locator("#runs-tbody a.run-id").first.click()
+    assert _pager_ready(page, first[0]) == f"1 of {expected}"
+    assert "you came from" in page.locator("#run-pager-pos").get_attribute("title")
+
+
+def test_a_pass_opened_from_the_list_carries_the_list(app):
+    page = app.goto("/projects/pa?sort=run-desc")
+    _runs_ready(page)
+    run_id = "showcase-balanced-analysis"
+    page.locator(f'.samples-toggle[data-run-id="{run_id}"]').click()
+    page.locator('tr.pass-member[data-pass-number="2"]').first.click()
+    page.wait_for_function("runId => location.pathname.endsWith('/runs/' + runId)", arg=run_id)
+    params = parse_qs(urlparse(page.url).query)
+    assert params["pass"] == ["2"] and params["list"] == ["sort=run-desc"]
+    position = _pager_ready(page, run_id)
+    assert "you came from" in page.locator("#run-pager-pos").get_attribute("title"), position
+
+
+def _add_metadata_run(make, run_id="run-meta"):
+    """A run whose items carry four metadata categories and metric fields."""
+    now = datetime.utcnow().replace(microsecond=0)
+    with make() as db:
+        db.add(
+            Run(
+                id=run_id, project_id="pa", created_by_user_id="dev", owner_user_id="dev",
+                task="support-qa", dataset="golden", model=MODELS[0], metrics=["faithfulness"],
+                run_metadata={}, run_config={"run_name": "Metadata run"},
+                status=RunWorkflowStatus.COMPLETED, started_at=now - timedelta(days=2),
+                ended_at=now - timedelta(days=2) + timedelta(minutes=2), created_at=now - timedelta(days=2),
+            )
+        )
+        db.flush()
+        db.add(RunMetricSpec(run_id=run_id, metric_name="faithfulness", position=0, score_type="score", direction="maximize"))
+        for i in range(12):
+            db.add(
+                RunItem(
+                    run_id=run_id, item_id=f"item-{i}", index=i, input=f"Question {i}",
+                    expected=f"Answer {i}", output=f"Output {i}", latency_ms=100 + i,
+                    item_metadata={
+                        "lang": ("en", "ar")[i % 2], "region": ("eu", "us", "asia")[i % 3],
+                        "source": ("web", "api")[i % 2], "tier": ("gold", "silver", "bronze")[i % 3],
+                    },
+                )
+            )
+            db.add(
+                RunItemScore(
+                    run_id=run_id, item_id=f"item-{i}", metric_name="faithfulness",
+                    score_numeric=(i % 10) / 10, score_raw=(i % 10) / 10,
+                    meta={"judge": "j-1", "rationale": f"Because {i}"},
+                )
+            )
+        db.commit()
+    return run_id
+
+
+def _field_checked(page, dropdown, key):
+    return page.evaluate(
+        "([dropdown, key]) => [...document.querySelectorAll('#' + dropdown + ' [data-field-key]')]"
+        ".find(node => node.dataset.fieldKey === key)?.querySelector('input').checked",
+        [dropdown, key],
+    )
+
+
+def test_display_columns_live_in_the_url(app, factory):
+    """Display > Columns (the item and metric fields shown) is part of the
+    Display tab, so it is in the URL like the layout and the metric."""
+    run_id = _add_metadata_run(factory)
+    page = app.goto(f"/projects/pa/runs/{run_id}?hide_field=lang&hide_field=nosuch&hide_metric_field=judge")
+    page.locator("#items-grid .item-card").first.wait_for()
+    assert _field_checked(page, "metadata-fields-dropdown", "lang") is False
+    assert _field_checked(page, "metadata-fields-dropdown", "tier") is True
+    assert _field_checked(page, "metric-meta-fields-dropdown", "judge") is False
+    assert _field_checked(page, "metric-meta-fields-dropdown", "rationale") is True
+    # An unknown field is ignored and dropped from the URL.
+    assert parse_qs(urlparse(page.url).query) == {"hide_field": ["lang"], "hide_metric_field": ["judge"]}
+
+    # Turning a field off (or back on) writes the URL.
+    page.evaluate(
+        "() => [...document.querySelectorAll('#metadata-fields-dropdown [data-field-key]')]"
+        ".find(node => node.dataset.fieldKey === 'tier').querySelector('input').click()"
+    )
+    page.wait_for_function("() => new URLSearchParams(location.search).getAll('hide_field').includes('tier')")
+    page.evaluate(
+        "() => [...document.querySelectorAll('#metric-meta-fields-dropdown [data-field-key]')]"
+        ".find(node => node.dataset.fieldKey === 'judge').querySelector('input').click()"
+    )
+    page.wait_for_function("() => !new URLSearchParams(location.search).has('hide_metric_field')")
+    assert parse_qs(urlparse(page.url).query) == {"hide_field": ["lang", "tier"]}
+
+    # Copy link carries every hidden field.
+    page.evaluate("() => { window.__copied = []; QymShell.copyText = text => { window.__copied.push(String(text)); return Promise.resolve(true); }; }")
+    page.locator("#copy-run-link-btn").click()
+    page.wait_for_function("() => window.__copied.length === 1")
+    assert parse_qs(urlparse(page.evaluate("window.__copied[0]")).query) == {"hide_field": ["lang", "tier"]}
+
+
+def test_a_category_filter_in_the_url_shows_on_its_chip(app, factory):
+    """A category filter only exists on a shown category (a chip click turns
+    both off together). One from the URL selects its category, and a category
+    this run does not have is ignored instead of hiding every item."""
+    run_id = _add_metadata_run(factory)
+    filters = quote(json.dumps({"categories": {"tier": ["gold"]}}), safe="")
+    page = app.goto(f"/projects/pa/runs/{run_id}?filters={filters}")
+    page.locator("#items-grid .item-card").first.wait_for()
+    assert page.locator("#filter-count").inner_text().startswith("4 of 12")
+    chip = page.locator('.category-chip[data-chip-key="tier"]')
+    chip.wait_for()
+    assert chip.get_attribute("aria-pressed") == "true"
+    # The categories chosen by default stay shown.
+    assert page.locator('.category-chip[data-chip-key="lang"]').get_attribute("aria-pressed") == "true"
+
+    for foreign in ({"nosuch": ["x"]}, {"__proto__": ["x"]}):
+        page = app.goto(f"/projects/pa/runs/{run_id}?filters=" + quote(json.dumps({"categories": foreign}), safe=""))
+        page.locator("#items-grid .item-card").first.wait_for()
+        assert page.locator("#filter-count").inner_text().startswith("12 of 12"), foreign
+        assert page.evaluate(VIEW_URL_STATE) == {}, foreign
