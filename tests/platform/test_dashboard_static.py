@@ -1770,7 +1770,7 @@ def test_changed_route_assets_are_cache_versioned() -> None:
     # dashboard pages, every one of them versioned.
     assert '{static_root}/auth.js?v=p0-20260930"' in runs_api
     assert '{static_root}/shell.css?v=p1-20261001"' in runs_api
-    assert '{static_root}/dashboard.css?v=p1-20261001-2"' in runs_api
+    assert '{static_root}/dashboard.css?v=p1-20261002"' in runs_api
     assert '{static_root}/shell.js?v=p1-20261001"' in runs_api
 
 
@@ -2248,8 +2248,8 @@ def test_clear_filter_control_has_aligned_label_and_soft_count_pill() -> None:
     for page in DASHBOARD_DIR.glob("*.html"):
         source = page.read_text(encoding="utf-8")
         if page.name == "analyzer.html":
-            assert "dashboard.css?v=p1-20261001-2" in source
-            assert "playground.js?v=p1-20261001-2" in source
+            assert "dashboard.css?v=p1-20261002" in source
+            assert "playground.js?v=p1-20261002" in source
             assert "ui_components.css?v=p1-20261001" in source
             assert "ui_components.js?v=p1-20261001" in source
             continue
@@ -2437,7 +2437,10 @@ def test_run_selection_uses_explicit_mode_and_reclaims_checkbox_column() -> None
     assert "allDeletable" in panel
     # Owners, and project managers or admins for the owner (C072).
     assert "(isOwner || managesProject) && (status === 'COMPLETED'" in panel
-    assert "const selectionAvailable = !!state.runs && (usesDashboardSummary() ? state.dashboardOverview.total_count > 0 : state.flatRuns.length > 0);" in source
+    assert "const selectionAvailable = loaded && (usesDashboardSummary() ? state.dashboardOverview.total_count > 0 : state.flatRuns.length > 0);" in source
+    # A selection kept from an earlier visit (C043) is cleared only once the
+    # list has answered with no runs, never while it is still loading.
+    assert "if (loaded && !selectionAvailable && !state.dashboardOverview?.freshness?.updating) {" in source
     assert "selectMode: false" in source
     assert "function setSelectMode(enabled)" in source
     assert "el('table-view')?.classList.toggle('select-mode', state.selectMode);" in source
@@ -3453,7 +3456,7 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert '"type": "retrying"' in analysis_api
     assert "state.phase === 'retrying'" in playground
     assert "Retrying timed-out analysis…" in playground
-    assert "playground.js?v=p1-20261001-2" in (
+    assert "playground.js?v=p1-20261002" in (
         DASHBOARD_DIR / "analyzer.html"
     ).read_text(encoding="utf-8")
     assert "Timeout retries: <strong>" in playground
@@ -4100,11 +4103,23 @@ def test_runs_table_freezes_the_chosen_identity_columns() -> None:
 
     # JS writes the offsets from the measured widths of the frozen set only,
     # remembers the choice per browser, and offers it in the Columns menu.
-    assert "applyRunsFrozenColumns(table, widths);" in source
+    assert "applyRunsFrozenColumns(table, widths, fitted);" in source
     assert "table.style.setProperty(`--runs-col-${column.key}-left`, `${left}px`);" in source
     assert "const RUNS_FROZEN_COLUMNS_STORAGE_KEY = 'qym:runs-frozen-columns';" in source
     assert "renderRunsFrozenColumnsSection(searchValue);" in source
-    assert '<div role="group" aria-labelledby="mv-frozen-label">' in source
+    assert '<div role="group" aria-labelledby="mv-frozen-label" aria-describedby="mv-frozen-fit">' in source
+    # A block wider than ~55% of a table that scrolls lets trailing columns
+    # go (never Run name) without touching the saved choice, re-checked when
+    # the table resizes; the Columns menu names them.
+    assert "const RUNS_FROZEN_MAX_SHARE = 0.55;" in source
+    fit = source.split("function fitRunsFrozenColumns(widths, available) {", 1)[1].split("\n  }\n", 1)[0]
+    assert "fitted[fitted.length - 1] !== 'run'" in fit
+    assert "localStorage" not in fit
+    assert "new ResizeObserver(" in source
+    assert "Unfrozen to fit this width: " in source
+    fit_note = _rule(styles, ".mv-frozen-fit {")
+    assert "font-size: var(--font-sm);" in fit_note
+    assert "color: var(--text-muted);" in fit_note
     assert "Reset to default" in source
     # Focus padding follows the frozen block that is actually stuck.
     assert "runsFrozenWidth(scroller)" in source

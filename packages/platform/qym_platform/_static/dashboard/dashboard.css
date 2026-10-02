@@ -10494,6 +10494,22 @@ td.col-trace-metric-value {
   opacity: 0.45;
   cursor: default;
 }
+/* Frozen columns that scroll for now because the block would cover most of
+   a narrow table; the saved choice is kept. Width 0 + min-width 100%: the
+   note wraps to the menu instead of widening it. */
+.mv-frozen-fit {
+  width: 0;
+  min-width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 10px 4px;
+  font-size: var(--font-sm);
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+.mv-frozen-fit[hidden] {
+  display: none;
+}
 
 /* ─── Responsive ─── */
 @media (max-width: 980px) {

@@ -14,6 +14,9 @@
     ? window.QymShell.pageSignal()
     : undefined;
   const pageListen = (options = {}) => (pageSignal ? { ...options, signal: pageSignal } : options);
+  // The project this page was mounted for. Per-project storage keys use it:
+  // on Back the address already names the next page while this one saves.
+  const mountedProjectSlug = getProjectSlugFromPath();
 
   // ═══════════════════════════════════════════════════
   // BASE URL HANDLING (for proxy/subpath compatibility)
@@ -221,6 +224,7 @@
     allMetrics: [],   // All unique metric names across runs
     visibleMetrics: null, // null = all visible; Set of visible metric names
     runsFrozenColumns: null, // Runs identity columns frozen on scroll; null = not loaded yet
+    runsUnfrozenToFit: [], // frozen columns scrolling for now: the block was too wide
     allModels: [],    // All unique model names
     currentUser: null,
     availableProjects: [],
@@ -3514,12 +3518,15 @@
     if (state.currentView !== 'table') return '';
     const frozen = new Set(getRunsFrozenColumns());
     const query = String(searchValue || '').toLowerCase();
+    // The fit note is filled by syncRunsFrozenColumnControls(), so the
+    // menu's markup does not change with the window width.
     return '<div class="mv-trace-separator"></div>' +
       '<div class="mv-frozen-header">' +
         '<div class="mv-trace-label" id="mv-frozen-label">Frozen columns</div>' +
         '<button type="button" class="qym-dropdown__action mv-frozen-reset" id="mv-frozen-reset">Reset to default</button>' +
       '</div>' +
-      '<div role="group" aria-labelledby="mv-frozen-label">' +
+      '<p class="mv-frozen-fit" id="mv-frozen-fit" hidden></p>' +
+      '<div role="group" aria-labelledby="mv-frozen-label" aria-describedby="mv-frozen-fit">' +
       RUNS_IDENTITY_COLUMNS.map(column => {
         const hidden = query && !column.label.toLowerCase().includes(query) ? ' style="display:none"' : '';
         return `<label class="multi-select-option qym-dropdown__option"${hidden}><input type="checkbox" ${frozen.has(column.key) ? 'checked' : ''} data-frozen-column="${escapeHtml(column.key)}" /><span>${escapeHtml(column.label)}</span></label>`;
@@ -3557,14 +3564,47 @@
       reset.setAttribute('aria-disabled', isDefault ? 'true' : 'false');
       reset.title = isDefault ? 'Default: all seven columns frozen' : 'Freeze all seven columns again';
     }
+    const fitNote = dropdown.querySelector('#mv-frozen-fit');
+    if (fitNote) {
+      fitNote.textContent = runsFrozenFitNote();
+      fitNote.hidden = !fitNote.textContent;
+    }
+  }
+
+  // A frozen block wider than about 55% of the table's visible width leaves
+  // the scores no room: the seven columns' minimum widths alone (~1090px)
+  // exceed the 1088px a 1280px window shows. The trailing frozen columns
+  // (Date, Owner, Dataset, ...; never Run name) then scroll with the table
+  // until the block fits. The saved choice is not changed, so a wider window
+  // freezes them again. Returns the columns to freeze now and those let go.
+  const RUNS_FROZEN_MAX_SHARE = 0.55;
+  function fitRunsFrozenColumns(widths, available) {
+    const fitted = getRunsFrozenColumns().slice();
+    const unfrozen = [];
+    if (!(available > 0)) return { fitted, unfrozen };
+    let total = fitted.reduce((sum, key) => sum + (widths[key] || 0), 0);
+    while (total > available * RUNS_FROZEN_MAX_SHARE && fitted.length && fitted[fitted.length - 1] !== 'run') {
+      const key = fitted.pop();
+      total -= widths[key] || 0;
+      unfrozen.unshift(key);
+    }
+    return { fitted, unfrozen };
+  }
+
+  // The Columns menu names the columns let go to fit this width.
+  function runsFrozenFitNote() {
+    const labels = (state.runsUnfrozenToFit || [])
+      .map(key => RUNS_IDENTITY_COLUMNS.find(column => column.key === key)?.label)
+      .filter(Boolean);
+    return labels.length ? `Unfrozen to fit this width: ${labels.join(', ')}` : '';
   }
 
   // Marks the frozen columns on the table and writes each one's left offset:
   // the measured width of the frozen columns before it. A frozen column with
   // a scrolling column (or the table's data) to its right is an edge and
   // casts the separator shadow.
-  function applyRunsFrozenColumns(table, widths) {
-    const frozen = new Set(getRunsFrozenColumns());
+  function applyRunsFrozenColumns(table, widths, frozenKeys) {
+    const frozen = new Set(frozenKeys);
     const edges = [];
     let left = 0;
     RUNS_IDENTITY_COLUMNS.forEach((column, index) => {
@@ -3577,7 +3617,10 @@
       const next = RUNS_IDENTITY_COLUMNS[index + 1];
       if (!next || !frozen.has(next.key)) edges.push(column.key);
     });
-    table.dataset.frozenColumns = getRunsFrozenColumns().join(' ');
+    table.dataset.frozenColumns = RUNS_IDENTITY_COLUMNS
+      .map(column => column.key)
+      .filter(key => frozen.has(key))
+      .join(' ');
     table.dataset.frozenEdges = edges.join(' ');
   }
 
@@ -3691,7 +3734,14 @@
         table.style.setProperty(widthVar, `${width}px`);
         widths[key] = width;
       });
-      applyRunsFrozenColumns(table, widths);
+      // A table that does not scroll sideways shows every column either way.
+      const scrolls = !!scroller && scroller.scrollWidth > scroller.clientWidth + 1;
+      const { fitted, unfrozen } = fitRunsFrozenColumns(widths, scrolls ? scroller.clientWidth : 0);
+      applyRunsFrozenColumns(table, widths, fitted);
+      if (unfrozen.join(' ') !== (state.runsUnfrozenToFit || []).join(' ')) {
+        state.runsUnfrozenToFit = unfrozen;
+        syncRunsFrozenColumnControls();
+      }
       if (scroller) {
         scroller.scrollLeft = keepEnd ? scroller.scrollWidth : scrollLeft;
         state._runsTableAtEnd = keepEnd || isRunsTableAtEnd(scroller);
@@ -3760,8 +3810,10 @@
   }
 
   function renderSelectModeControls() {
-    const selectionAvailable = !!state.runs && (usesDashboardSummary() ? state.dashboardOverview.total_count > 0 : state.flatRuns.length > 0);
-    if (!selectionAvailable && !state.dashboardOverview?.freshness?.updating) {
+    const loaded = !!state.runs;
+    const selectionAvailable = loaded && (usesDashboardSummary() ? state.dashboardOverview.total_count > 0 : state.flatRuns.length > 0);
+    // Until the list answers, a selection kept from an earlier visit stays.
+    if (loaded && !selectionAvailable && !state.dashboardOverview?.freshness?.updating) {
       state.selectMode = false;
       state.selectedRuns.clear();
       state.cohortAnchorRuns = null;
@@ -7270,8 +7322,7 @@
   }
 
   function getDashboardStateKey() {
-    const projectSlug = getProjectSlugFromPath() || '__global__';
-    return `qym:dashboard-state:${projectSlug}`;
+    return `qym:dashboard-state:${mountedProjectSlug || '__global__'}`;
   }
 
   function saveRunsDataCache(data) {
@@ -8624,6 +8675,17 @@
   runsTableScroll?.addEventListener('scroll', () => {
     state._runsTableAtEnd = isRunsTableAtEnd(runsTableScroll);
   }, { passive: true });
+  // A wider or narrower table (window resize, sidebar) fits the frozen
+  // columns again.
+  if (runsTableScroll && typeof ResizeObserver === 'function') {
+    let fittedWidth = runsTableScroll.clientWidth;
+    state._runsTableResizeObserver = new ResizeObserver(() => {
+      if (!dashboardActive || runsTableScroll.clientWidth === fittedWidth) return;
+      fittedWidth = runsTableScroll.clientWidth;
+      scheduleRunsStickyColumnSizing();
+    });
+    state._runsTableResizeObserver.observe(runsTableScroll);
+  }
 
   // Compare actions
   el('compare-view')?.addEventListener('click', openComparison);
@@ -9015,8 +9077,60 @@
     }
   }
 
+  // ── Compare selection (C043) ──
+  // Runs ticked for Compare, and a locked Cohort A, stay until the user
+  // clears them: through Back/Forward, opening a run or Compare, and the
+  // project's other pages. Kept per project in this tab. Runs that no longer
+  // exist drop out when the list answers (applyDashboardPageResult).
+  function getRunsSelectionKey() {
+    return `qym:runs-selection:${mountedProjectSlug || '__global__'}`;
+  }
+
+  function saveRunsSelection() {
+    if (state.currentView !== 'table') return;
+    const selected = [...state.selectedRuns];
+    const cohortA = Array.isArray(state.cohortAnchorRuns) ? [...state.cohortAnchorRuns] : [];
+    try {
+      if (!selected.length && !cohortA.length) {
+        sessionStorage.removeItem(getRunsSelectionKey());
+        return;
+      }
+      // A pass reference means that pass as numbered when it was picked;
+      // reconcilePassVersions drops it if the run's passes changed meanwhile.
+      const passRevisions = {};
+      for (const ref of selected) {
+        const base = passRefBase(ref);
+        if (isPassRef(ref) && state._passVersions && base in state._passVersions) {
+          passRevisions[base] = state._passVersions[base];
+        }
+      }
+      sessionStorage.setItem(getRunsSelectionKey(), JSON.stringify({ selected, cohortA, passRevisions }));
+    } catch {}
+  }
+
+  function restoreRunsSelection() {
+    if (state.currentView !== 'table') return;
+    let saved = null;
+    try {
+      saved = JSON.parse(sessionStorage.getItem(getRunsSelectionKey()) || 'null');
+    } catch {}
+    if (!saved || typeof saved !== 'object') return;
+    const refs = value => (Array.isArray(value) ? value.filter(ref => typeof ref === 'string' && ref) : []);
+    state.selectedRuns.clear();
+    refs(saved.selected).forEach(ref => state.selectedRuns.add(ref));
+    const cohortA = refs(saved.cohortA);
+    state.cohortAnchorRuns = cohortA.length ? cohortA : null;
+    if (saved.passRevisions && typeof saved.passRevisions === 'object') {
+      state._passVersions = state._passVersions || {};
+      for (const [runId, revision] of Object.entries(saved.passRevisions)) {
+        if (Number.isFinite(revision)) state._passVersions[runId] = revision;
+      }
+    }
+  }
+
   function saveDashboardState() {
     if (!dashboardActive && !state._savingOnTeardown) return;
+    saveRunsSelection();
     const {
       inFlightRequestPromise,
       inFlightRequestKey,
@@ -9105,6 +9219,7 @@
     dashboardActive = false;
     for (const controller of dashboardRequests) controller.abort();
     state.chartHistoryObserver?.disconnect();
+    state._runsTableResizeObserver?.disconnect();
     for (const entry of state.chartHistory.values()) entry.controller?.abort();
     state.chartHistoryQueue.length = 0;
     state._savingOnTeardown = true;
@@ -9157,6 +9272,7 @@
   async function checkAuthAndInit() {
     try {
       restoreDashboardState();
+      restoreRunsSelection();
       restoreSearchFromUrl();
       restoreRunsDataCache();
 

@@ -19,6 +19,7 @@ Fixes the P1 issues of the September design review: a run page you can read and 
 - Submitting a run asks for confirmation with an optional comment; several runs submit in one request; managers and admins submit on behalf of the owner and can transfer a run to another active member.
 - Datasets: indexed search over IDs, inputs, outputs and metadata; stored lineage counts; compare ordered by time with timestamps and paged diffs; Deleted datasets with restore.
 - Runs list: keyed rows, stable menus, a custom date range; Deleted Runs lists every deleted run, page by page.
+- Runs list: runs checked for Compare stay checked after Back and on return to Runs until you clear them; frozen columns that would cover more than about half the table scroll with it until they fit (date first, never the run name), and the Columns menu names them; your saved choice is kept.
 - Admin: confirm-and-undo when disabling users, never zero active admins, no self-disable or self-demotion.
 - Compare and Models: a baseline with noise bands, short labels, server-side model stats.
 
