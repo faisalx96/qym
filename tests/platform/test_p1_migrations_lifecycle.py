@@ -10,10 +10,8 @@ from uuid import uuid4
 
 import pytest
 from alembic import command
-from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, inspect, select, text
-from sqlalchemy.engine import make_url
+from sqlalchemy import inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from qym_platform.db.dashboard_models import DashboardRunDimension, DashboardRunSummary
@@ -29,36 +27,6 @@ from qym_platform.db.models import (
     User,
     UserRole,
 )
-
-MIGRATIONS = (
-    Path(__file__).resolve().parents[2] / "packages/platform/qym_platform/migrations"
-)
-
-
-@pytest.fixture
-def postgres(request, monkeypatch):
-    url = os.environ.get("QYM_TEST_POSTGRES_URL")
-    if not url:
-        pytest.skip("QYM_TEST_POSTGRES_URL not configured")
-    schema = "qym_migration_lifecycle_" + uuid4().hex
-    admin = create_engine(url)
-    with admin.begin() as connection:
-        connection.execute(text(f'CREATE SCHEMA "{schema}"'))
-    scoped = make_url(url).update_query_dict({"options": f"-csearch_path={schema}"})
-    engine = create_engine(scoped)
-    monkeypatch.setenv("QYM_DATABASE_URL", scoped.render_as_string(hide_password=False))
-    monkeypatch.setenv("PYTHON_DOTENV_DISABLED", "1")
-    config = Config()
-    config.set_main_option("script_location", str(MIGRATIONS))
-
-    def cleanup():
-        engine.dispose()
-        with admin.begin() as connection:
-            connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
-        admin.dispose()
-
-    request.addfinalizer(cleanup)
-    return engine, config
 
 
 def seed(engine, *, before_dashboard=False):

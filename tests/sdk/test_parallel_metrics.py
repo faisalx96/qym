@@ -123,8 +123,8 @@ class TestParallelMetrics:
         record_property("speedup", speedup)
 
     @pytest.mark.asyncio
-    async def test_mixed_async_sync_metrics_produce_same_scores(self):
-        """Async + sync metrics under gather must return identical scores to sequential."""
+    async def test_mixed_async_sync_metrics_keep_their_own_scores(self):
+        """Async + sync metrics under gather must each return their own score."""
 
         async def async_metric(output, expected):
             await asyncio.sleep(0.5)
@@ -139,17 +139,13 @@ class TestParallelMetrics:
         item = _make_item()
         tracker = MagicMock()
 
-        # OLD path — sequential
-        seq_scores = await _run_metrics_sequentially(
-            evaluator, "output", "world", "hello",
-        )
-
-        # NEW path — parallel
         result = await evaluator._evaluate_item(0, item, tracker)
 
         # Pure correctness — no timing assertions
-        assert seq_scores["async_m"] == result["scores"]["async_m"]
-        assert seq_scores["sync_m"] == result["scores"]["sync_m"]
+        assert result["scores"] == {
+            "async_m": {"score": 1.0, "metadata": {"kind": "async"}},
+            "sync_m": {"score": 0.5, "metadata": {"kind": "sync"}},
+        }
 
     @pytest.mark.asyncio
     async def test_metric_error_isolated_under_gather(self):
@@ -322,25 +318,32 @@ class TestMetricBlockingDetection:
         )
 
     @pytest.mark.asyncio
-    async def test_probe_only_runs_once_per_function(self):
+    async def test_probe_only_runs_once_per_function(self, caplog):
         """After the first probe, subsequent calls skip the heartbeat overhead."""
 
-        async def fast_metric(output, expected):
+        calls = 0
+
+        async def late_blocking_metric(output, expected):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                time.sleep(1.5)  # would trip the probe if it ran again
             return 1.0
 
-        func_id = id(fast_metric)
-        evaluator = _make_evaluator({"fast": fast_metric})
+        evaluator = _make_evaluator({"late": late_blocking_metric})
         tracker = MagicMock()
 
-        # First call — probes
-        await evaluator._evaluate_item(0, _make_item(), tracker)
-        assert func_id in Evaluator._metric_blocking_probed
+        with caplog.at_level(logging.WARNING, logger="qym.core.evaluator"):
+            # First call — probed and clean
+            await evaluator._evaluate_item(0, _make_item(), tracker)
+            # Second call — blocks, but is no longer probed
+            await evaluator._evaluate_item(1, _make_item(), tracker)
 
-        # Second call — should skip probe (already in probed set)
-        await evaluator._evaluate_item(1, _make_item(), tracker)
-        # If it probed again, this would be a no-op since set already has it,
-        # but the point is verified by the code path (no heartbeat overhead).
-        assert func_id in Evaluator._metric_blocking_probed
+        assert calls == 2
+        warnings = [r for r in caplog.records if "block the event loop" in r.message]
+        assert warnings == [], (
+            f"Expected no warning from an unprobed call, got {len(warnings)}"
+        )
 
     @pytest.mark.asyncio
     async def test_blocking_metric_detected_even_when_raises(self, caplog):

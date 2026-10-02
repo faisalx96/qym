@@ -36,6 +36,7 @@ from qym_platform.db.models import (
     ReviewCorrection,
     Run,
     RunItem,
+    RunItemScore,
     RunWorkflowStatus,
     User,
     UserRole,
@@ -637,7 +638,6 @@ def test_analysis_config_uses_catalog_categories_for_prompt_injection(
                 item_metadata={},
             ),
             {},
-            [],
             config=config,
         )
     )
@@ -905,3 +905,171 @@ def test_missing_legacy_run_renders_recoverable_analysis_page(
     assert response.status_code == 200
     assert 'id="analysis-error"' in response.text
     assert 'role="alert"' in response.text
+
+
+PLAYGROUND_RUN_ID = "analysis/playground-run"
+
+
+def _seed_playground_item(client: TestClient) -> None:
+    """Add one item that fails one metric and passes another."""
+    session_scope = client.app.dependency_overrides[get_db]()
+    db = next(session_scope)
+    try:
+        db.add(
+            Run(
+                id=PLAYGROUND_RUN_ID,
+                project_id="analysis-project",
+                created_by_user_id="analysis-manager",
+                owner_user_id="analysis-manager",
+                task="task",
+                dataset="dataset",
+                metrics=["capital_correctness", "tone_match"],
+                status=RunWorkflowStatus.COMPLETED,
+                run_metadata={},
+                run_config={},
+            )
+        )
+        db.add_all(
+            [
+                RunItem(
+                    run_id=PLAYGROUND_RUN_ID,
+                    item_id="capital-item",
+                    index=0,
+                    input={"question": "Which city is the capital of Australia?"},
+                    expected={"answer": "Canberra"},
+                    output={"answer": "Sydney"},
+                    item_metadata={},
+                ),
+                RunItemScore(
+                    run_id=PLAYGROUND_RUN_ID,
+                    item_id="capital-item",
+                    metric_name="capital_correctness",
+                    score_numeric=0.0,
+                    meta={"reason": "Named the largest city instead of the capital"},
+                ),
+                RunItemScore(
+                    run_id=PLAYGROUND_RUN_ID,
+                    item_id="capital-item",
+                    metric_name="tone_match",
+                    score_numeric=0.9,
+                    meta={"reason": "Polite and concise tone"},
+                ),
+            ]
+        )
+        db.commit()
+    finally:
+        session_scope.close()
+
+
+def test_analyzer_preview_shows_only_the_selected_metric_evidence(
+    analysis_route_client: TestClient,
+) -> None:
+    _seed_playground_item(analysis_route_client)
+
+    response = analysis_route_client.post(
+        f"/api/runs/{PLAYGROUND_RUN_ID}/analyze-preview",
+        headers=_headers(),
+        json={
+            "item_id": "capital-item",
+            # The passing metric, so the default failed-metric pick cannot
+            # stand in for the requested one.
+            "metric": "tone_match",
+            "config": {
+                "additional_instructions": "Grader note: {grader_note}",
+                "custom_variable_mapping": {"grader_note": "metric_metadata.reason"},
+            },
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["metric_name"] == "tone_match"
+    assert [message["role"] for message in payload["messages"]] == ["system", "user"]
+    system_prompt = payload["messages"][0]["content"]
+    assert '"question": "Which city is the capital of Australia?"' in system_prompt
+    assert '"answer": "Sydney"' in system_prompt
+    assert '"tone_match"' in system_prompt
+    assert '"score": 0.9' in system_prompt
+    assert '"reason": "Polite and concise tone"' in system_prompt
+    # Metric-relative custom variables resolve against the selected metric.
+    assert "Grader note: Polite and concise tone" in system_prompt
+    # The other metric is a separate target and must not leak into this prompt.
+    assert '"capital_correctness"' not in system_prompt
+    assert "Named the largest city instead of the capital" not in system_prompt
+    assert payload["prompt_characters"] == sum(
+        len(message["content"]) for message in payload["messages"]
+    )
+
+
+def test_analyzer_test_sends_the_returned_prompt_with_the_requested_timeout(
+    analysis_route_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_playground_item(analysis_route_client)
+    provider_requests: list[dict] = []
+
+    async def create_completion(**kwargs):
+        provider_requests.append(kwargs)
+        return SimpleNamespace(
+            id="provider-request-1",
+            usage=None,
+            choices=[
+                SimpleNamespace(
+                    finish_reason="stop",
+                    message=SimpleNamespace(
+                        content=(
+                            '{"root_cause": "Reasoning Error",'
+                            ' "root_cause_detail": "Capital confused with largest city",'
+                            ' "root_cause_note": "The answer named Sydney.",'
+                            ' "confidence": 0.7,'
+                            ' "solution": "Add Output Validation"}'
+                        )
+                    ),
+                )
+            ],
+        )
+
+    async def skip_aggregation(*_args, **_kwargs):
+        return {}
+
+    monkeypatch.setattr(
+        "qym_platform.api.analysis._get_llm_config",
+        lambda *_args, **_kwargs: {"llm_model": "fake-analyzer-model"},
+    )
+    monkeypatch.setattr(
+        "qym_platform.api.analysis.build_client",
+        lambda _config: SimpleNamespace(
+            chat=SimpleNamespace(
+                completions=SimpleNamespace(create=create_completion)
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "qym_platform.api.analysis.aggregate_analysis_categories",
+        skip_aggregation,
+    )
+
+    response = analysis_route_client.post(
+        f"/api/runs/{PLAYGROUND_RUN_ID}/analyze-test",
+        headers=_headers(),
+        json={
+            "item_ids": ["capital-item"],
+            "metric": "tone_match",
+            "timeout_seconds": 37,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    results = response.json()["results"]
+    assert len(results) == 1
+    result = results[0]
+    assert not result["error"]
+    assert result["metric_name"] == "tone_match"
+    assert len(provider_requests) == 1
+    assert provider_requests[0]["model"] == "fake-analyzer-model"
+    # The playground shows the exact messages the provider received.
+    assert provider_requests[0]["messages"] == result["messages"]
+    sent_system_prompt = provider_requests[0]["messages"][0]["content"]
+    assert '"reason": "Polite and concise tone"' in sent_system_prompt
+    assert "Named the largest city instead of the capital" not in sent_system_prompt
+    assert result["request_timeout_seconds"] == 37

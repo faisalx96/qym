@@ -7,10 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from cryptography.fernet import Fernet
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.orm import Session
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("QYM_AUTH_MODE", "proxy_headers")
@@ -24,8 +21,6 @@ for src in (PLATFORM_SRC, SDK_SRC):
 if "openai" not in sys.modules:
     sys.modules["openai"] = MagicMock()
 
-from qym_platform.app import create_app
-from qym_platform.db.base import Base
 from qym_platform.db.models import (
     ApiKey,
     Approval,
@@ -43,9 +38,9 @@ from qym_platform.db.models import (
     User,
     UserRole,
 )
-from qym_platform.deps import get_db
 from qym_platform.security import api_key_prefix, hash_api_key
 from qym_platform.services.analysis_prompts import DEFAULT_ANALYSIS_PROMPTS
+from _helpers import sqlite_session_factory
 
 
 @pytest.fixture()
@@ -54,36 +49,8 @@ def session_factory(monkeypatch):
     monkeypatch.setenv("QYM_AUTH_MODE", "proxy_headers")
     monkeypatch.setenv("QYM_LLM_CONFIG_ENCRYPTION_KEY", Fernet.generate_key().decode("utf-8"))
     monkeypatch.setenv("QYM_ALLOW_LEGACY_EMPTY_API_KEY_SCOPES", "true")
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    try:
-        yield SessionLocal
-    finally:
-        engine.dispose()
-
-
-@pytest.fixture()
-def client(session_factory):
-    app = create_app()
-
-    def override_get_db():
-        db = session_factory()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    try:
-        with TestClient(app) as test_client:
-            yield test_client
-    finally:
-        app.dependency_overrides.clear()
+    with sqlite_session_factory() as factory:
+        yield factory
 
 
 def _headers(email: str) -> dict[str, str]:
@@ -240,7 +207,7 @@ def _seed_project_world(session: Session) -> dict[str, str]:
     return {"project_one_id": project_one.id, "token": token, "candidate_id": candidate.id}
 
 
-def test_project_member_visibility_and_mutation_are_project_scoped(client, session_factory):
+def test_project_run_mutations_are_project_scoped(client, session_factory):
     with session_factory() as session:
         _seed_project_world(session)
 
@@ -264,6 +231,24 @@ def test_project_member_visibility_and_mutation_are_project_scoped(client, sessi
         json={"file_path": "run-editable", "row_index": 0, "metric_name": "judge", "new_score": 0.1},
     )
     assert outsider_resp.status_code == 403
+
+    # A manager of a different project cannot delete this project's runs.
+    outsider_delete = client.post(
+        "/api/runs/delete",
+        headers=_headers("outsider@example.com"),
+        json={"file_path": "run-delete"},
+    )
+    assert outsider_delete.status_code == 403
+    assert outsider_delete.json()["detail"] == "Permission denied"
+
+    # Project access is not enough: a plain member cannot delete a run it does not own.
+    member_delete_other = client.post(
+        "/api/runs/delete",
+        headers=_headers("member@example.com"),
+        json={"file_path": "run-manager-owned"},
+    )
+    assert member_delete_other.status_code == 403
+    assert member_delete_other.json()["detail"] == "Permission denied"
 
     owner_delete = client.post(
         "/api/runs/delete",

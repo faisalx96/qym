@@ -3,8 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 import pytest
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
 from qym_platform.api.analysis import (
     _analysis_example_filter_query,
@@ -15,17 +14,10 @@ from qym_platform.api.analysis import (
 )
 from qym_platform.api.runs import _apply_metric_analysis_patch, update_root_cause
 from qym_platform.auth import Principal
-from qym_platform.db.base import Base
 from qym_platform.db.models import (
     CorrectionStatus,
-    Project,
     ReviewCorrection,
-    Run,
-    RunItem,
     RunItemPassScore,
-    RunItemScore,
-    RunWorkflowStatus,
-    User,
     UserRole,
 )
 from qym_platform.services.llm_analyzer import AnalysisResult
@@ -34,76 +26,7 @@ from qym_platform.services.root_cause_changes import (
     apply_human_patch,
     build_ai_state,
 )
-
-
-ISSUES = [
-    {
-        "category": "Agent behavior",
-        "subcategory": "Retrieval omission",
-        "finding": "The lookup omitted a valid active status.",
-    },
-    {
-        "category": "Agent behavior",
-        "subcategory": "Predicate construction",
-        "finding": "The final filter used OR instead of AND.",
-    },
-]
-
-
-@pytest.fixture
-def db_session() -> Session:
-    engine = create_engine("sqlite:///:memory:")
-
-    @event.listens_for(engine, "connect")
-    def _sqlite_functions(connection, _record) -> None:
-        connection.create_function("btrim", 1, lambda value: str(value or "").strip())
-
-    Base.metadata.create_all(engine)
-    session = sessionmaker(bind=engine)()
-    try:
-        yield session
-    finally:
-        session.close()
-
-
-def _seed_run(session: Session) -> tuple[User, Run, RunItem]:
-    actor = User(id="issue-user", email="issue-user@example.com")
-    project = Project(
-        id="issue-project",
-        name="Issue Project",
-        slug="issue-project",
-        created_by_user_id=actor.id,
-        is_active=True,
-    )
-    run = Run(
-        id="issue-run",
-        project_id=project.id,
-        created_by_user_id=actor.id,
-        owner_user_id=actor.id,
-        task="issue-task",
-        dataset="issue-dataset",
-        metrics=["accuracy"],
-        status=RunWorkflowStatus.COMPLETED,
-    )
-    item = RunItem(
-        run_id=run.id,
-        item_id="issue-item",
-        index=0,
-        input={"question": "q"},
-        expected={"answer": "expected"},
-        output={"answer": "actual"},
-        item_metadata={},
-    )
-    score = RunItemScore(
-        run_id=run.id,
-        item_id=item.item_id,
-        metric_name="accuracy",
-        score_numeric=0.0,
-        meta={"reason": "wrong"},
-    )
-    session.add_all([actor, project, run, item, score])
-    session.commit()
-    return actor, run, item
+from _helpers import ISSUES, _seed_run
 
 
 def test_human_patches_keep_independent_issue_findings() -> None:

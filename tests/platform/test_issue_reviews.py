@@ -5,20 +5,11 @@ from fastapi import HTTPException
 
 from qym_platform.api import runs as runs_api
 from qym_platform.api.analysis import approve_correction, approve_metric_analysis, update_correction, delete_correction, reset_correction
-from qym_platform.auth import Principal
 from qym_platform.db.models import CorrectionStatus, ReviewCorrection, RunItemPassScore
 from qym_platform.services.approved_diagnoses import load_approved_diagnoses
 from qym_platform.services.issue_reviews import correction_issue_id, issue_content
 from qym_platform.services.root_cause_changes import PASS_ANALYSIS_META_KEY, replace_metric_review_candidate
-from test_root_cause_issue_persistence import db_session, _seed_run, ISSUES
-
-
-def setup(session):
-    actor, run, item = _seed_run(session)
-    analysis = {"root_cause_issues": deepcopy(ISSUES), "root_cause": ISSUES[0]["category"], "source": "ai", "solution": "Old shared solution", "solution_note": "Shared notes"}
-    item.item_metadata = {"metric_analyses": {"accuracy": analysis, "style": {"keep": True}}}
-    session.commit()
-    return actor, run, item, Principal(user=actor, auth_type="none")
+from _helpers import ISSUES, setup
 
 
 def act(session, run, item, principal, action, index=0, issue=None, pass_number=None):

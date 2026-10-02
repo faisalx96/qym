@@ -9,17 +9,10 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+pytestmark = pytest.mark.browser
+
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "packages/platform/qym_platform/_static/dashboard/step_latency.js"
-
-
-@pytest.fixture(scope="module")
-def browser():
-    api = pytest.importorskip("playwright.sync_api")
-    with api.sync_playwright() as playwright:
-        instance = playwright.chromium.launch()
-        yield instance
-        instance.close()
 
 
 def payload(latency=222, *, step="llm:test", tokens=500):

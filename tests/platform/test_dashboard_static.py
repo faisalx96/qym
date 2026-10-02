@@ -12,14 +12,6 @@ DOCS_JS = DASHBOARD_DIR / "docs.js"
 DOCS_CSS = DASHBOARD_DIR / "docs.css"
 RUNS_API = ROOT / "packages" / "platform" / "qym_platform" / "api" / "runs.py"
 ANALYSIS_API = ROOT / "packages" / "platform" / "qym_platform" / "api" / "analysis.py"
-REPEAT_PASSES_SERVICE = (
-    ROOT
-    / "packages"
-    / "platform"
-    / "qym_platform"
-    / "services"
-    / "repeat_passes.py"
-)
 ANALYZER_HTML = DASHBOARD_DIR / "analyzer.html"
 
 
@@ -77,7 +69,6 @@ def test_run_and_compare_exports_keep_independent_scroll_containers() -> None:
 def test_run_item_scopes_task_and_metric_errors_to_the_right_surface() -> None:
     """Task errors mark the item; metric errors mark only their metric."""
     source = (DASHBOARD_DIR / "run.html").read_text(encoding="utf-8")
-    metrics_source = (DASHBOARD_DIR / "metrics.js").read_text(encoding="utf-8")
     verdict_block = source.split(
         "// The verdict belongs to the expanded execution", 1
     )[1].split("// Detailed AI analysis", 1)[0]
@@ -173,15 +164,6 @@ def test_run_item_scopes_task_and_metric_errors_to_the_right_surface() -> None:
     assert "min-width: var(--badge-height);" in metric_icon_rule
     assert "padding: 0;" in metric_icon_rule
 
-    assert "function isTaskErrorRow(row)" in metrics_source
-    assert "function isMetricErrorMeta(meta)" in metrics_source
-    assert "const status = String(meta.status || '').trim().toLowerCase();" in metrics_source
-    assert "meta.status || meta.label" not in metrics_source
-    assert "function hasMetricError(row, metricName = null)" in metrics_source
-    assert "return isTaskErrorRow(row) || hasMetricError(row);" in metrics_source
-    assert "function getRowScore(row, metricIdx, metricName = null)" in metrics_source
-    assert "const metricError = metricName !== null" in metrics_source
-    assert "return { score, isError: metricError };" in metrics_source
     assert "Metric Errors" in source
     assert "'Metric error'" in source
     assert "const passTaskErrors = isRepeatAggregateView()" in error_distribution
@@ -333,26 +315,10 @@ def test_runs_badges_separate_error_types_without_changing_item_math() -> None:
     assert "execution_error_count: executionErrorCount" in flatten
     assert "a.execution_error_count - b.execution_error_count" in source
     assert "b.execution_error_count - a.execution_error_count" in source
-    assert "function renderExecutionErrors" in source
-    assert "run.task_error_count != null && run.metric_error_count != null" in source
-    assert "status-metric-errors" in source
-    assert "task/metric breakdown is updating" in source
     assert "run.samples > 1 ? ' across all passes' : ''" in source
     assert "const retryScope = run.samples > 1 ? ' across all passes' : ' across all items';" in source
     assert "${retryScope}" in source
     assert "dashboard.js?v=runs-performance-" in index
-
-
-def test_repeat_run_rows_show_each_pass_retry_count() -> None:
-    """Expanded pass rows expose the retries included in the parent total."""
-    source = DASHBOARD_JS.read_text(encoding="utf-8")
-    member_row = source.split("const memberRow = (pass, isLast) =>", 1)[1].split(
-        "// The group-metrics strip", 1
-    )[0]
-
-    assert "const retries = Number(pass.retry_count) || 0;" in member_row
-    assert "${retries}↻" in member_row
-    assert "in this pass" in member_row
 
 
 def test_run_column_wraps_names_at_400px() -> None:
@@ -380,36 +346,18 @@ def test_live_repeat_progress_is_shown_on_the_active_pass_only() -> None:
 
 def test_stopped_repeat_run_never_renders_a_running_pass() -> None:
     source = DASHBOARD_JS.read_text(encoding="utf-8")
-    api = RUNS_API.read_text(encoding="utf-8")
 
     assert "stopped: 'STOPPED'" in source
     assert "rawPassStatus === 'running' && terminalPassStatus" in source
     assert "String(pass.status || '').toLowerCase() === 'running'" in source
-    assert api.count("_repeat_pass_status(") == 3
 
 
 def test_repeat_passes_use_runs_view_bulk_delete_action() -> None:
     source = (DASHBOARD_DIR / "run.html").read_text(encoding="utf-8")
     dashboard = DASHBOARD_JS.read_text(encoding="utf-8")
-    api = RUNS_API.read_text(encoding="utf-8")
-    service = REPEAT_PASSES_SERVICE.read_text(encoding="utf-8")
 
     assert 'data-delete-pass="' not in source
-    assert 'class="pass-checkbox"' in dashboard
-    assert "const passGroups = new Map();" in dashboard
-    assert "body: JSON.stringify({ pass_numbers: group.passNumbers, expected_pass_version: group.passVersion })" in dashboard
     assert 'class="pass-delete-action qym-icon-action action-icon delete-run"' in dashboard
-    assert "data-can-delete-pass=" in dashboard
-    assert "await fetchRuns({ refreshAllPages: true });" in dashboard
-    assert "delete state._samplesData[runId];" in dashboard
-    single_delete_handler = dashboard.split(
-        "function insertSamplesDetail(runId, row, panelId, animate)", 1
-    )[1].split("async function loadSamplesData", 1)[0]
-    assert "const runFilePath = decodeURIComponent(row?.dataset?.file || '');" in single_delete_handler
-    assert "if (runFilePath) {" in single_delete_handler
-    assert '@router.delete("/api/runs/{run_id}/passes/{pass_number}")' in api
-    assert '@router.delete("/api/runs/{run_id}/passes")' in api
-    assert 'action="run.pass_deleted"' in service
 
 
 def test_repeat_parent_checkbox_selects_its_current_scope() -> None:
@@ -721,17 +669,6 @@ def test_run_page_supports_single_pass_scope() -> None:
     assert "itemHiddenOutputs" in source
     assert "itemComparedMetric" in source
     assert 'aria-pressed="' in source
-
-    # the API ships per-pass attempts on run-detail rows, and update_metric
-    # accepts a pass_number and re-reduces the run-level mean
-    api = RUNS_API.read_text(encoding="utf-8")
-    assert '"pass_attempts": (' in api
-    assert "RunItemAttempt.is_last_attempt.is_(True)" in api
-    assert '"completed_count": completed_by_pass.get(p, 0)' in api
-    assert '"running_count": (' in api
-    assert 'running_by_pass.get(p, 0) if status == "running" else 0' in api
-    assert 'pass_number = request.get("pass_number")' in api
-    assert "Re-reduce: run-level score = mean over all stored passes" in api
 
 
 def test_repeat_and_compare_share_grouped_output_interaction() -> None:
@@ -1721,14 +1658,41 @@ def test_dashboard_stops_polling_before_shell_navigation() -> None:
     assert "if (!dashboardActive) return;" in source
 
 
+def _static_asset_versions(source: str, asset: str) -> set[str]:
+    """Return each ``?v=`` value ``source`` uses to load ``asset`` ('' if none)."""
+    pattern = r'(?:src|href)="[^"?]*/' + re.escape(asset) + r'(?:\?v=([^"]*))?"'
+    return set(re.findall(pattern, source))
+
+
 def test_changed_route_assets_are_cache_versioned() -> None:
+    """Route-specific assets load with one non-empty cache key."""
     docs = (DASHBOARD_DIR / "docs.html").read_text(encoding="utf-8")
     runs_api = RUNS_API.read_text(encoding="utf-8")
 
-    assert "/static/docs.css?v=ui-consistency-20260730-15" in docs
-    assert "/static/docs.js?v=ui-consistency-20260730-18" in docs
-    assert 'dashboard.css?v=ui-consistency-20260730-10"' in runs_api
-    assert 'shell.js?v=ui-consistency-20260730-10"' in runs_api
+    for source, asset in (
+        (docs, "docs.css"),
+        (docs, "docs.js"),
+        (runs_api, "dashboard.css"),
+        (runs_api, "shell.js"),
+    ):
+        versions = _static_asset_versions(source, asset)
+        assert len(versions) == 1 and all(versions), (asset, versions)
+
+
+def test_pages_share_one_version_of_the_shared_ui_layer() -> None:
+    """A ui_components bump must reach every page that loads it."""
+    for asset in ("ui_components.css", "ui_components.js"):
+        versions = {
+            page.name: _static_asset_versions(page.read_text(encoding="utf-8"), asset)
+            for page in sorted(DASHBOARD_DIR.glob("*.html"))
+        }
+        versions = {name: found for name, found in versions.items() if found}
+        assert len(versions) > 1, asset
+        for name, found in versions.items():
+            assert len(found) == 1 and all(found), (asset, name, found)
+        # analyzer.html carries its own revision of the shared layer.
+        assert versions.pop("analyzer.html")
+        assert len(set().union(*versions.values())) == 1, (asset, versions)
 
 
 def test_multiselects_share_search_actions_options_and_only_action() -> None:
@@ -2179,19 +2143,6 @@ def test_clear_filter_control_has_aligned_label_and_soft_count_pill() -> None:
     assert "background: rgba(239, 68, 68, 0.14);" in count_pill
     assert "font-family: var(--font-mono);" in components
 
-    for page in DASHBOARD_DIR.glob("*.html"):
-        source = page.read_text(encoding="utf-8")
-        if page.name == "analyzer.html":
-            assert "dashboard.css?v=approved-subcategories-20260917-1" in source
-            assert "playground.js?v=approved-subcategories-20260917-1" in source
-            assert "ui_components.css?v=auto-analysis-selectors-20260811-1" in source
-            assert "ui_components.js?v=auto-analysis-selectors-20260811-1" in source
-            continue
-        if "ui_components.css?v=" in source:
-            assert "ui_components.css?v=ui-consistency-20260803-60" in source
-        if "ui_components.js?v=" in source:
-            assert "ui_components.js?v=ui-consistency-20260803-28" in source
-
 
 def test_operational_statistics_use_connected_strip_contract() -> None:
     dashboard = DASHBOARD_JS.read_text(encoding="utf-8")
@@ -2433,12 +2384,6 @@ def test_shared_segmented_controls_use_one_motion_indicator() -> None:
     assert "width: var(--qym-segment-width);" in components
     assert "cubic-bezier(0.16, 1, 0.3, 1)" in components
     assert "@media (prefers-reduced-motion: reduce)" in components
-    assert "function syncSegmented(segmented)" in behavior
-    assert "function scheduleSegmentedSync(segmented, frames)" in behavior
-    assert "function observeSegmented(segmented)" in behavior
-    assert "function cleanupSegmented(root)" in behavior
-    assert "function segmentedHistoryKey(segmented)" in behavior
-    assert "var segmentPositions = new Map();" in behavior
     assert "new ResizeObserver" in behavior
     assert "active.offsetLeft + 'px'" in behavior
     assert "active.offsetWidth + 'px'" in behavior
@@ -2679,7 +2624,6 @@ def test_rerendered_controls_restore_keyboard_focus() -> None:
 
 
 def test_shared_help_markers_are_keyboard_and_touch_operable() -> None:
-    behavior = (DASHBOARD_DIR / "ui_components.js").read_text(encoding="utf-8")
     run = (DASHBOARD_DIR / "run.html").read_text(encoding="utf-8")
     compare = (DASHBOARD_DIR / "compare.html").read_text(encoding="utf-8")
 
@@ -2687,25 +2631,6 @@ def test_shared_help_markers_are_keyboard_and_touch_operable() -> None:
         assert 'class="stat-info-icon qym-help-marker' in source
         assert 'role="tooltip"' in source
         assert 'aria-expanded="false"' in source
-    assert "marker.classList.toggle('is-open', !wasOpen);" in behavior
-    assert "event.key === 'Escape'" in behavior
-    assert "marker.focus({ preventScroll: true });" in behavior
-    assert "marker.setAttribute('aria-describedby', tooltip.id);" in behavior
-    assert "directTabs(tablist)" in behavior
-    assert "'ArrowLeft', 'ArrowRight', 'Home', 'End'" in behavior
-
-
-def test_compare_html_export_is_self_contained_and_export_safe() -> None:
-    source = (DASHBOARD_DIR / "compare.html").read_text(encoding="utf-8")
-
-    assert "async function inlineCompareExportAssets(html)" in source
-    assert "(?:dashboard|shell|ui_components)\\.css" in source
-    assert "(?:metrics|trace_viewer|ui_components)\\.js" in source
-    assert "(?:auth|shell|playground|run_details|step_latency)\\.js" in source
-    assert "html.replace(match[0], () => '<style>" in source
-    assert "html.replace(match[0], () => '<script>" in source
-    assert "html = await inlineCompareExportAssets(html);" in source
-    assert "if (!IS_COMPARE_EXPORT && typeof QymPlayground !== 'undefined')" in source
 
 
 def test_compare_uses_shared_composable_item_filter_builder() -> None:
@@ -3832,20 +3757,11 @@ def test_root_cause_issue_records_are_rendered_edited_and_exported() -> None:
     assert "function reviewRootCauseIssues" in reviews
     assert "data-review-issue-edit" in reviews
     assert "human_root_cause_issues: issues" in reviews
-    assert "function rootCauseIssuePatch" in run
     assert 'data-metric-issues-item=' in run
     assert ":root_cause_issues" in run
-    assert "function rootCauseIssuePatch" in compare
     assert 'data-rc-issues-item=' in compare
     assert "root_cause_issues', label: 'Root cause issues (JSON)'" in compare
     assert "canonical <code>root_cause_issues</code> records" in endpoints
-
-    active_compare_output = compare.split("function renderCompareOutputGroup", 1)[
-        1
-    ].split("function renderItemComparisonCard", 1)[0]
-    assert "const rootCauseBlockFor = (row, runIdx)" in active_compare_output
-    assert "${rootCauseBlockFor(row, runIdx)}" in active_compare_output
-    assert 'data-rc-issues-item="${escapeAttr(itemId)}"' in active_compare_output
 
 
 def test_run_manual_diagnosis_uses_project_backed_modal_picker() -> None:

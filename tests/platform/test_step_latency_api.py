@@ -6,10 +6,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.orm import Session
 
 ROOT = Path(__file__).resolve().parents[2]
 PLATFORM_SRC = ROOT / "packages" / "platform"
@@ -20,8 +17,6 @@ if "openai" not in sys.modules:
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
 
-from qym_platform.app import create_app
-from qym_platform.db.base import Base
 from qym_platform.db.models import (
     Project,
     ProjectMembership,
@@ -33,47 +28,12 @@ from qym_platform.db.models import (
     User,
     UserRole,
 )
-from qym_platform.deps import get_db
 
 
 @pytest.fixture(autouse=True)
 def _auth_mode(monkeypatch):
     monkeypatch.setenv("QYM_AUTH_MODE", "proxy_headers")
     monkeypatch.setenv("QYM_AUTH_SESSION_SECRET", "test-secret")
-
-
-@pytest.fixture()
-def session_factory():
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    try:
-        yield SessionLocal
-    finally:
-        engine.dispose()
-
-
-@pytest.fixture()
-def client(session_factory, _auth_mode):
-    app = create_app()
-
-    def override_get_db():
-        db = session_factory()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    try:
-        with TestClient(app) as test_client:
-            yield test_client
-    finally:
-        app.dependency_overrides.clear()
 
 
 def _headers(email: str) -> dict:

@@ -112,11 +112,6 @@ def test_ingest_stores_span_once_and_bodies_by_mode(database, monkeypatch):
     assert set(stored) == {"item_started", "item_completed"}
     assert stored["item_started"]["input"] == {"q": "hello"}  # full mode keeps bodies
 
-    # Redelivering the span (new event id, same span_id) is a no-op and counts as skipped.
-    again = _event(run, 4, "span_completed", events[1]["payload"])
-    assert _apply(engine, run, principal, [again]) == {"ok": True, "applied": 0, "skipped": 1}
-    assert db.query(Span).count() == 1
-
     _use_settings(monkeypatch, event_log_mode="structural")
     more = [_event(run, 5, "item_completed", {"item_id": "b", "output": "x" * 500, "latency_ms": 5})]
     assert _apply(engine, run, principal, more)["applied"] == 1

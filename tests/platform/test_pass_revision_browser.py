@@ -14,7 +14,7 @@ from test_auto_analysis_release_gate_browser import (
     _url,
     _wait_ready,
 )
-from test_performance_views_browser import ViewFixture, browser, source_run_api
+from test_performance_views_browser import ViewFixture, source_run_api
 
 
 @pytest.fixture

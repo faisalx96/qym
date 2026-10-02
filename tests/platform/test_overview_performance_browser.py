@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import mimetypes
 import json
+import os
 import subprocess
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -16,9 +17,9 @@ STATIC = (
     Path(__file__).resolve().parents[2]
     / "packages/platform/qym_platform/_static/dashboard"
 )
-SCREENSHOTS = (
-    Path(__file__).resolve().parents[2] / "artifacts/p1-validation/screenshots"
-)
+# Evidence screenshots go to a temp dir unless QYM_EVIDENCE_SCREENSHOTS names a
+# directory (e.g. artifacts/p1-validation/screenshots) to refresh on purpose.
+EVIDENCE_ENV = "QYM_EVIDENCE_SCREENSHOTS"
 BASELINE = "b1d1d00587df4fcf0e70875c29b0bb0cbc20172c"
 pytestmark = pytest.mark.browser
 
@@ -35,13 +36,11 @@ def baseline_asset(name):
     )
 
 
-@pytest.fixture(scope="module")
-def browser():
-    api = pytest.importorskip("playwright.sync_api")
-    with api.sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
-        yield browser
-        browser.close()
+@pytest.fixture
+def screenshots(tmp_path):
+    target = Path(os.environ[EVIDENCE_ENV]) if os.environ.get(EVIDENCE_ENV) else tmp_path
+    target.mkdir(parents=True, exist_ok=True)
+    return target
 
 
 class OverviewFixture:
@@ -206,7 +205,7 @@ class OverviewFixture:
         assert not self.errors
 
 
-def test_overview_post_filters_progress_links_and_layout(browser):
+def test_overview_post_filters_progress_links_and_layout(browser, screenshots):
     fixture = OverviewFixture(browser)
     try:
         fixture.open()
@@ -226,23 +225,21 @@ def test_overview_post_filters_progress_links_and_layout(browser):
         assert [request["limit"] for request in fixture.requests] == [8, 5, 5]
         assert "RUNNING" not in fixture.requests[1]["filters"]["statuses"]
         assert fixture.requests[2]["filters"]["statuses"] == ["APPROVED"]
-        SCREENSHOTS.mkdir(parents=True, exist_ok=True)
-        page.screenshot(path=str(SCREENSHOTS / "overview-desktop.png"), full_page=True)
+        page.screenshot(path=str(screenshots / "overview-desktop.png"), full_page=True)
         assert page.locator("#recent-runs-table").evaluate(
             "element => element.getBoundingClientRect().right <= innerWidth"
         )
         page.set_viewport_size({"width": 1280, "height": 900})
         page.screenshot(
-            path=str(SCREENSHOTS / "overview-desktop-1280.png"), full_page=True
+            path=str(screenshots / "overview-desktop-1280.png"), full_page=True
         )
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
     finally:
         fixture.close()
 
 
-def test_overview_narrow_layout_matches_baseline_limitation(browser):
+def test_overview_narrow_layout_matches_baseline_limitation(browser, screenshots):
     geometry = {}
-    SCREENSHOTS.mkdir(parents=True, exist_ok=True)
     for baseline in (True, False):
         fixture = OverviewFixture(browser, baseline=baseline)
         try:
@@ -251,7 +248,7 @@ def test_overview_narrow_layout_matches_baseline_limitation(browser):
             name = "baseline" if baseline else "current"
             fixture.page.screenshot(
                 path=str(
-                    SCREENSHOTS
+                    screenshots
                     / f"overview-narrow{'-baseline' if baseline else ''}.png"
                 ),
                 full_page=True,
@@ -265,7 +262,7 @@ def test_overview_narrow_layout_matches_baseline_limitation(browser):
             })""")
         finally:
             fixture.close()
-    (SCREENSHOTS / "overview-narrow-comparison.json").write_text(
+    (screenshots / "overview-narrow-comparison.json").write_text(
         json.dumps(
             {
                 "baseline_ref": BASELINE,

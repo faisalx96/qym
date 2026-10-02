@@ -197,7 +197,6 @@ def test_prompt_renders_subcategory_definitions_and_issue_schema() -> None:
     prompt = build_analysis_prompt(
         item,
         {},
-        [],
         config={
             "root_cause_categories": ["Agent"],
             "category_taxonomy": {
@@ -254,7 +253,7 @@ def test_prompt_does_not_leak_previous_structured_diagnosis_as_metadata() -> Non
         },
     )
 
-    prompt = build_analysis_prompt(item, {}, [])[0]["content"]
+    prompt = build_analysis_prompt(item, {})[0]["content"]
 
     assert '"locale": "ar-SA"' in prompt
     assert "Old category" not in prompt
