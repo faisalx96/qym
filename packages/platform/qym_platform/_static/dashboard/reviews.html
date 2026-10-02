@@ -322,6 +322,18 @@
       font-family: var(--font-mono);
     }
 
+    /* A bulk action that fits none of the selected rows (e.g. Reset on
+       pending ones): still focusable, its title names the rule. */
+    .bulk-bar .btn-sm[aria-disabled="true"] {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .bulk-fit-count {
+      font-family: var(--font-mono);
+      font-weight: 600;
+    }
+
     .btn-sm {
       padding: 4px 10px;
       font-size: var(--font-xs);
@@ -2605,7 +2617,69 @@
       const count = state.selected.size;
       el('bulk-count').textContent = count;
       bar.classList.toggle('visible', count > 0);
+      Object.keys(BULK_FITS).forEach(syncBulkButton);
       syncSelectAll();
+    }
+
+    // Approve and reject decide pending corrections; reset withdraws a
+    // decision. The server refuses any other row, so in a mixed selection
+    // (the All tab) each bulk button acts only on the rows it fits.
+    const BULK_FITS = {
+      approve: { label: 'Approve', fits: c => c.status === 'pending', unfit: 'not pending', rule: 'Approve works on pending corrections only.' },
+      reject: { label: 'Reject', fits: c => c.status === 'pending', unfit: 'not pending', rule: 'Reject works on pending corrections only.' },
+      reset: { label: 'Reset', fits: c => c.status === 'approved' || c.status === 'rejected', unfit: 'still pending', rule: 'Reset works on approved or rejected corrections only.' },
+    };
+
+    function bulkSelection(action) {
+      const byId = new Map(state.corrections.map(c => [c.id, c]));
+      const selected = selectedIds();
+      const ids = selected.filter(id => {
+        const c = byId.get(id);
+        return !!c && BULK_FITS[action].fits(c);
+      });
+      return { ids, selected: selected.length, skipped: selected.length - ids.length };
+    }
+
+    function syncBulkButton(action) {
+      const button = el('bulk-' + action);
+      const fit = BULK_FITS[action];
+      const pick = bulkSelection(action);
+      const partial = pick.ids.length > 0 && pick.skipped > 0;
+      button.replaceChildren(document.createTextNode(fit.label));
+      if (partial) {
+        const count = document.createElement('span');
+        count.className = 'bulk-fit-count';
+        count.textContent = String(pick.ids.length);
+        button.append(' ', count);
+      }
+      button.setAttribute('aria-disabled', pick.selected && !pick.ids.length ? 'true' : 'false');
+      button.title = pick.selected && !pick.ids.length
+        ? `None of the selected corrections fits. ${fit.rule}`
+        : partial
+          ? `${fit.label} ${pick.ids.length} of the ${pick.selected} selected; ${pick.skipped} ${pick.skipped > 1 ? 'are' : 'is'} ${fit.unfit} and will be skipped`
+          : '';
+    }
+
+    // Nothing selected, or nothing the action fits: say so and stop.
+    function refuseUnfitSelection(action, pick) {
+      if (!pick.selected) {
+        showToast('warning', 'Nothing selected', 'Select one or more corrections first.');
+        return true;
+      }
+      if (!pick.ids.length) {
+        showToast('warning', 'Nothing to ' + action, `None of the ${pick.selected} selected correction${pick.selected > 1 ? 's' : ''} fits. ${BULK_FITS[action].rule}`);
+        return true;
+      }
+      return false;
+    }
+
+    function skippedNote(action, skipped, done) {
+      if (!skipped) return '';
+      const rows = `${skipped} selected correction${skipped > 1 ? 's' : ''}`;
+      const verb = skipped > 1 ? 'are' : 'is';
+      return done
+        ? ` ${skipped} skipped (${BULK_FITS[action].unfit}) and still selected.`
+        : ` ${rows} ${verb} ${BULK_FITS[action].unfit} and will be skipped.`;
     }
 
     function syncSelectAll() {
@@ -3689,16 +3763,14 @@
     }
 
     async function bulkApprove() {
-      const ids = selectedIds();
-      if (!ids.length) {
-        showToast('warning', 'Nothing selected', 'Select one or more corrections first.');
-        return;
-      }
+      const pick = bulkSelection('approve');
+      if (refuseUnfitSelection('approve', pick)) return;
+      const ids = pick.ids;
       if (refuseBlockedSelection(ids)) return;
       if (state.loading) return;
       const comment = await openModal(
         `Approve ${ids.length} Correction${ids.length > 1 ? 's' : ''}`,
-        `${ids.length} selected correction${ids.length > 1 ? 's' : ''} in ${describeView()} will be approved as rule-generation evidence.`,
+        `${ids.length} selected correction${ids.length > 1 ? 's' : ''} in ${describeView()} will be approved as rule-generation evidence.${skippedNote('approve', pick.skipped, false)}`,
         'Approve All',
         'btn-primary'
       );
@@ -3706,7 +3778,7 @@
       try {
         const result = await apiAction('POST', 'api/corrections/bulk', { ids, action: 'approve', comment, expected_count: ids.length, ...expectedStatus() });
         applyBulkStatusUpdate(ids, 'approved', comment, result && result.corrections);
-        showToast('success', 'Bulk Approved', `${ids.length} corrections approved`);
+        showToast('success', 'Bulk Approved', `${ids.length} correction${ids.length > 1 ? 's' : ''} approved.${skippedNote('approve', pick.skipped, true)}`);
         refreshCounts();
       } catch (err) {
         showToast('error', 'Failed', err.message);
@@ -3716,16 +3788,14 @@
     el('bulk-approve').addEventListener('click', bulkApprove);
 
     el('bulk-reject').addEventListener('click', async () => {
-      const ids = selectedIds();
-      if (!ids.length) {
-        showToast('warning', 'Nothing selected', 'Select one or more corrections first.');
-        return;
-      }
+      const pick = bulkSelection('reject');
+      if (refuseUnfitSelection('reject', pick)) return;
+      const ids = pick.ids;
       if (refuseBlockedSelection(ids)) return;
       if (state.loading) return;
       const comment = await openModal(
         `Reject ${ids.length} Correction${ids.length > 1 ? 's' : ''}`,
-        `${ids.length} selected correction${ids.length > 1 ? 's' : ''} in ${describeView()} will be rejected.`,
+        `${ids.length} selected correction${ids.length > 1 ? 's' : ''} in ${describeView()} will be rejected.${skippedNote('reject', pick.skipped, false)}`,
         'Reject All',
         'btn-danger'
       );
@@ -3733,7 +3803,7 @@
       try {
         const result = await apiAction('POST', 'api/corrections/bulk', { ids, action: 'reject', comment, expected_count: ids.length, ...expectedStatus() });
         applyBulkStatusUpdate(ids, 'rejected', comment, result && result.corrections);
-        showToast('success', 'Bulk Rejected', `${ids.length} corrections rejected`);
+        showToast('success', 'Bulk Rejected', `${ids.length} correction${ids.length > 1 ? 's' : ''} rejected.${skippedNote('reject', pick.skipped, true)}`);
         refreshCounts();
       } catch (err) {
         showToast('error', 'Failed', err.message);
@@ -3741,17 +3811,15 @@
     });
 
     el('bulk-reset').addEventListener('click', async () => {
-      const ids = selectedIds();
-      if (!ids.length) {
-        showToast('warning', 'Nothing selected', 'Select one or more corrections first.');
-        return;
-      }
+      const pick = bulkSelection('reset');
+      if (refuseUnfitSelection('reset', pick)) return;
+      const ids = pick.ids;
       if (refuseBlockedSelection(ids)) return;
       if (state.loading) return;
       try {
         const result = await apiAction('POST', 'api/corrections/bulk', { ids, action: 'reset', expected_count: ids.length, ...expectedStatus() });
         applyBulkStatusUpdate(ids, 'pending', '', result && result.corrections);
-        showToast('success', 'Bulk Reset', `${ids.length} corrections reset to pending`);
+        showToast('success', 'Bulk Reset', `${ids.length} correction${ids.length > 1 ? 's' : ''} reset to pending.${skippedNote('reset', pick.skipped, true)}`);
         refreshCounts();
       } catch (err) {
         showToast('error', 'Failed', err.message);

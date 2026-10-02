@@ -40,15 +40,70 @@ def issue_snapshot(issue: dict[str, Any]) -> dict[str, Any]:
 
 
 def lock_issue_correction(db: Session, correction: ReviewCorrection) -> None:
-    """Use the same lock order as issue edits, then recheck active state."""
-    if not correction_issue_id(correction):
-        return
+    """Lock the correction's item, then the correction row, and reload it.
+
+    Same lock order as issue edits (item, then correction rows), for legacy
+    and issue corrections alike. The row lock (SELECT ... FOR UPDATE on
+    Postgres) makes the status the caller checks next the status it changes:
+    a decision another reviewer committed meanwhile is read here, not lost.
+    """
     db.query(RunItem).filter(
         RunItem.run_id == correction.run_id, RunItem.item_id == correction.item_id,
     ).populate_existing().with_for_update().one_or_none()
-    db.refresh(correction)
-    if not correction.is_active:
+    if correction.id is not None:
+        db.query(ReviewCorrection).filter(
+            ReviewCorrection.id == correction.id
+        ).populate_existing().with_for_update().one_or_none()
+    if correction_issue_id(correction) and not correction.is_active:
         raise HTTPException(409, "This issue was edited. Reload before reviewing it.")
+
+
+# The statuses each review decision applies to: approve and reject decide a
+# pending correction; reset withdraws a decision.
+DECISION_STATUSES = {
+    "approve": (CorrectionStatus.PENDING,),
+    "reject": (CorrectionStatus.PENDING,),
+    "reset": (CorrectionStatus.APPROVED, CorrectionStatus.REJECTED),
+}
+_DECISION_PAST = {"approve": "approved", "reject": "rejected", "reset": "reset"}
+
+
+def _status_words(action: str) -> str:
+    return " or ".join(status.value for status in DECISION_STATUSES[action])
+
+
+def decision_status_conflict(
+    action: str, corrections: Iterable[ReviewCorrection], *, noun: str = "correction"
+) -> HTTPException | None:
+    """409 naming how many corrections the decision does not fit, or None.
+
+    Call after ``lock_issue_correction`` so the statuses are current.
+    """
+    rows = list(corrections)
+    allowed = DECISION_STATUSES[action]
+    wrong = [row for row in rows if row.status not in allowed]
+    if not wrong:
+        return None
+    rule = f"Only {_status_words(action)} {noun}s can be {_DECISION_PAST[action]}."
+    if len(rows) == 1:
+        status = getattr(wrong[0].status, "value", wrong[0].status)
+        detail = f"This {noun} is {status}. {rule}"
+        if action != "reset" and wrong[0].status in DECISION_STATUSES["reset"]:
+            detail += " Reset it to pending first."
+        return HTTPException(409, detail + " Reload to see its current state.")
+    return HTTPException(
+        409,
+        f"{len(wrong)} of the {len(rows)} selected {noun}s are not "
+        f"{_status_words(action)}. {rule} Reload the list and select again.",
+    )
+
+
+def require_decision_status(
+    action: str, corrections: Iterable[ReviewCorrection], *, noun: str = "correction"
+) -> None:
+    conflict = decision_status_conflict(action, corrections, noun=noun)
+    if conflict is not None:
+        raise conflict
 
 
 def correction_issues(correction: ReviewCorrection) -> list[dict[str, Any]]:
@@ -452,6 +507,11 @@ def change_metric_issue(
     )
     if action == "approve":
         candidate = candidates[index]
+        if candidate.id is not None:
+            # The caller holds the item (and pass) lock; lock this review row
+            # too and judge the status it has now, not the one first read.
+            db.refresh(candidate, with_for_update=True)
+        require_decision_status("approve", [candidate], noun="issue")
         if not candidate.human_root_cause_issues and candidate.ai_root_cause_issues:
             candidate.human_root_cause_issues = deepcopy(candidate.ai_root_cause_issues)
             for suffix in ("root_cause", "root_causes", "root_cause_detail", "root_cause_note", "category_taxonomy", "solution", "solution_note"):

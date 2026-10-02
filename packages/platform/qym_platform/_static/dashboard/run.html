@@ -11447,10 +11447,14 @@
           const confidence = issue.confidence == null ? '' : Math.round(issue.confidence * 100) + '%';
           const status = String(issue.review_status || analysis.review_status || legacyReview.status || 'pending').toLowerCase();
           const data = ' data-metric-issues-item="' + escapeAttr(itemId) + '" data-metric-name="' + escapeAttr(metricName) + '" data-issue-index="' + index + '"';
+          // Approve decides a pending issue only; a rejected one is reset to
+          // pending on Reviews first (the server refuses it with 409).
           const approval = status === 'approved'
             ? '<span class="qym-badge rc-status-pill approved">Approved</span>'
-            : '<span class="qym-badge rc-status-pill pending">' + (status === 'rejected' ? 'Rejected' : 'Pending review') + '</span>' +
-              (IS_EXPORT ? '' : '<button type="button" class="qym-inline-action qym-inline-action--accent" data-approve-issue="' + index + '" data-issue-item="' + escapeAttr(itemId) + '" data-metric-name="' + escapeAttr(metricName) + '" aria-label="Approve issue ' + (index + 1) + '">✓ Approve</button>');
+            : status === 'rejected'
+              ? '<span class="qym-badge rc-status-pill pending" title="Reset it to pending on Reviews to decide it again">Rejected</span>'
+              : '<span class="qym-badge rc-status-pill pending">Pending review</span>' +
+                (IS_EXPORT ? '' : '<button type="button" class="qym-inline-action qym-inline-action--accent" data-approve-issue="' + index + '" data-issue-item="' + escapeAttr(itemId) + '" data-metric-name="' + escapeAttr(metricName) + '" aria-label="Approve issue ' + (index + 1) + '">✓ Approve</button>');
           return '<article class="metric-analysis-issue" role="listitem" data-root-cause-issue="' + index + '" style="--metric-analysis-category-color:' + color + ';">' +
             '<div class="metric-analysis-issue-head"><span class="metric-analysis-issue-number">Issue ' + (index + 1) + '</span>' +
               '<span class="qym-tag metric-analysis-problem-tag">Problem</span>' +

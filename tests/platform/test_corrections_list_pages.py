@@ -364,18 +364,19 @@ def test_bulk_refuses_a_stale_selection(env):
 
     refused = client.post(
         "/api/corrections/bulk",
-        json={"ids": ids, "action": "reset", "expected_count": len(ids)},
+        json={"ids": ids, "action": "approve", "expected_count": len(ids)},
     )
     assert refused.status_code == 409
     assert "2 of the 3 selected corrections" in refused.json()["detail"]
 
     accepted = client.post(
         "/api/corrections/bulk",
-        json={"ids": ids[1:], "action": "reset", "expected_count": 2},
+        json={"ids": ids[1:], "action": "approve", "expected_count": 2},
     )
     assert accepted.status_code == 200, accepted.text
     assert accepted.json()["affected"] == 2
-    # Without expected_count the call keeps its old contract.
+    # Without expected_count the call keeps its old contract (the two now
+    # approved rows can be reset; the inactive one is left out).
     legacy = client.post("/api/corrections/bulk", json={"ids": ids, "action": "reset"})
     assert legacy.status_code == 200
     assert legacy.json()["affected"] == 2

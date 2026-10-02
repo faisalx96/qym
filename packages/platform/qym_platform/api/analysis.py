@@ -113,8 +113,10 @@ from qym_platform.services.correction_rules import (
 from qym_platform.services.issue_reviews import (
     change_metric_issue, correction_issue_id, correction_issues, issue_content,
     filter_explicitly_approved_issue_corrections,
+    decision_status_conflict,
     lock_correction_pass,
     lock_issue_correction,
+    require_decision_status,
     sync_correction_issue_metadata,
     sync_issue_candidates,
 )
@@ -8613,6 +8615,7 @@ def _approve_candidate(
 ) -> None:
     lock_issue_correction(db, correction)
     _require_active_candidate(correction)
+    require_decision_status("approve", [correction])
     before = correction_review_state(correction)
 
     has_human_label = any(
@@ -8694,6 +8697,7 @@ def _reject_candidate(
     """Reject a review candidate while preserving its full audit history."""
     lock_issue_correction(db, correction)
     _require_active_candidate(correction)
+    require_decision_status("reject", [correction])
     before = correction_review_state(correction)
     correction.status = CorrectionStatus.REJECTED
     correction.reviewed_by_user_id = reviewer_id
@@ -8709,6 +8713,9 @@ def _reset_candidate(
     db: Session, *, correction: ReviewCorrection, actor_user_id: Optional[str]
 ) -> None:
     """Return a candidate to pending; the audit row keeps the cleared decision."""
+    lock_issue_correction(db, correction)
+    _require_active_candidate(correction)
+    require_decision_status("reset", [correction])
     before = correction_review_state(correction)
     correction.status = CorrectionStatus.PENDING
     correction.reviewed_by_user_id = None
@@ -9814,7 +9821,6 @@ def reset_correction(
     require_project_writable(db, run.project_id)
     require_correction_decision(db, principal, run.project_id, c)
 
-    lock_issue_correction(db, c)
     _reset_candidate(
         db,
         correction=c,
@@ -9887,6 +9893,7 @@ def bulk_correction_action(
         elif request.action in ("approve", "reject", "reset"):
             require_correction_decision(db, principal, project_id, correction)
 
+    expected_status = None
     if request.expected_status:
         try:
             expected_status = CorrectionStatus(request.expected_status)
@@ -9894,6 +9901,17 @@ def bulk_correction_action(
             raise HTTPException(
                 status_code=400, detail="expected_status is not a correction status"
             ) from exc
+
+    now = utc_now_naive()
+    reviewer_id = principal.user.id if principal.auth_type != "none" else None
+    affected = 0
+
+    # Match issue edit lock order for multi-item review actions. Each lock
+    # reloads its correction, so the status checks below read the statuses
+    # as they are now, not as they were when the selection was loaded.
+    for candidate in sorted(corrections, key=lambda row: (row.run_id, row.item_id, row.id)):
+        lock_issue_correction(db, candidate)
+    if expected_status is not None:
         changed = sum(1 for c in corrections if c.status != expected_status)
         if changed:
             raise HTTPException(
@@ -9903,14 +9921,12 @@ def bulk_correction_action(
                     f"longer {expected_status.value}. Reload the list and select again."
                 ),
             )
-
-    now = utc_now_naive()
-    reviewer_id = principal.user.id if principal.auth_type != "none" else None
-    affected = 0
-
-    # Match issue edit lock order for multi-item review actions.
-    for candidate in sorted(corrections, key=lambda row: (row.run_id, row.item_id, row.id)):
-        lock_issue_correction(db, candidate)
+    # Approve and reject decide pending corrections; reset withdraws a
+    # decision. A selection with any other row is refused as a whole.
+    if request.action in ("approve", "reject", "reset"):
+        conflict = decision_status_conflict(request.action, corrections)
+        if conflict is not None:
+            raise conflict
     if request.action == "approve":
         # Bulk requests can span projects. Acquire catalog locks in a stable
         # order before publishing any category versions.

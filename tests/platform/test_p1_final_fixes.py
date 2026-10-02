@@ -221,7 +221,7 @@ def test_bulk_approve_returns_rows_with_reviewer_and_self_review(client, session
         _run(db, "r1")
         _run(db, "r2")
         mine = _correction(db, author="member-1")
-        theirs = _correction(db, run_id="r2", author="owner-1", status=CorrectionStatus.REJECTED, reviewer="manager-1")
+        theirs = _correction(db, run_id="r2", author="owner-1")
     body = _ok(
         client.post(
             "/api/corrections/bulk",
