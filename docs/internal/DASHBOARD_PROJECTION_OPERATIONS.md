@@ -42,6 +42,12 @@ status and hidden flag; on PostgreSQL the hash is computed in the database, and 
 overview and KPIs. Each API process reuses page, overview, catalog and KPI
 snapshots keyed by that revision (and by filters, sort and hidden-task policy);
 an idle entry expires after five minutes and any published change misses it.
+Deleting, restoring, submitting, approving, rejecting and withdrawing a review
+decision update the run's dimension in the same transaction (and bump the
+publication counter of an already published summary; a pending summary stays
+at revision 0 so the run keeps showing as pending), so the next list request
+shows the change without waiting for the worker, which later republishes the
+same values.
 
 On PostgreSQL the Runs, Charts and Models overview is aggregated in the
 database, in one statement, with the same numbers as the Python build (sums
@@ -51,20 +57,21 @@ publishes the run (the `backfill_dashboard_overview` job, queued by migration
 `0069`, stores them for older runs). A stored row counts only while its revision
 equals the summary's publication counter; any other run is read from its JSON,
 so a missing or stale row is slower, never wrong. The computed overview is
-stored in `dashboard_overview_snapshots`, keyed by project, catalog revision,
-day, hidden-task policy, filters and sort, so every process and pod reuses it:
-the project-wide part once per revision, a new filter, search or sort only its
-filtered part. A request reads the store on its own snapshot connection and
+stored in `dashboard_overview_snapshots`, so every process and pod reuses it.
+The project-wide part is one entry per project, catalog revision, day and
+hidden-task policy. Each filter, search and sort adds an entry that holds only
+its filtered part, keyed by those and by the filters, sort and collation; a
+read joins it with the project-wide part. Every key also carries the stored
+payload's shape number (`SHARED_SHAPE`), so a release that changes the payload
+never reads an older release's entries. A time range that no later request
+repeats (Last 7 and Last 30 days: now minus N days, to the millisecond) gets
+no entry of its own: it reuses the project-wide part and builds its filtered
+part each time. A request reads the store on its own snapshot connection and
 writes after releasing it. Entries of a replaced revision go two minutes after
-it changes, any entry after a day, and a project keeps at most 200; purging a
-run or deleting a project removes the project's entries. SQLite builds the
-overview in Python, as before.
-Deleting, restoring, submitting, approving, rejecting and withdrawing a review
-decision update the run's dimension in the same transaction (and bump the
-publication counter of an already published summary; a pending summary stays
-at revision 0 so the run keeps showing as pending), so the next list request
-shows the change without waiting for the worker, which later republishes the
-same values.
+it changes, any entry after a day, and a project keeps at most 200 filter
+entries (its project-wide parts are not counted); purging a run or deleting a
+project removes the project's entries. SQLite builds the overview in Python,
+as before.
 
 Filters accept `q`, a case-insensitive search (at most 200 characters) over the
 run's displayed name (`external_run_id`), its run name, and the start of its

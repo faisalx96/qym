@@ -324,12 +324,13 @@ class DashboardRunOverview(Base):
 
 
 class DashboardOverviewSnapshot(Base):
-    """A computed overview, shared by every process and pod (C037).
+    """A computed overview part, shared by every process and pod (C037).
 
-    Keyed by a hash of project, catalog revision, hidden-task policy, filters,
-    sort and day, so an entry is never reused across a published change.
-    Writers prune stale revisions and old entries; losing a row only costs a
-    recompute.
+    A project-wide part ("p:" keys: project, catalog revision, hidden-task
+    policy and day) or one filter's part ("f:" keys: those and the filters,
+    sort and collation), so an entry is never reused across a published
+    change. Writers prune stale revisions and old entries; losing a row only
+    costs a recompute.
     """
 
     __tablename__ = "dashboard_overview_snapshots"

@@ -188,6 +188,67 @@ def test_one_overview_per_revision_is_shared_by_every_process(pg, emitter):  # n
     assert {revision for _, revision in _snapshots(pg)} == {current["catalog_revision"]}
 
 
+def _payloads(engine):
+    with Session(engine) as db:
+        return [json.loads(payload) for payload in db.scalars(
+            select(Snapshot.payload).where(Snapshot.project_key == "p")
+        )]
+
+
+def test_a_moving_time_range_shares_only_the_project_part(pg, emitter):  # noqa: F811
+    """Last 7 and 30 days send ``since`` as now minus N days to the
+    millisecond, so no later request repeats it. Such a filter reuses the
+    stored project part, builds its filtered part, and neither reads nor
+    stores an entry of its own: it cannot push reusable entries out."""
+    run = emitter("store-moving", 1, ["q"])
+    run.post(run.started(2) + run.passed("a", 0, 1, {"q": 1.0}))
+    drain(pg)
+    _served(pg)
+    assert len(_snapshots(pg)) == 2
+    builder = dashboard_overview.build_overview_postgres
+    base = datetime.utcnow() - timedelta(days=7)
+    with patch.object(dashboard_overview, "build_overview_postgres", wraps=builder) as build:
+        for step in range(3):
+            since = (base + timedelta(milliseconds=1371 * step + 17)).isoformat() + "Z"
+            _assert_same(_served(pg, {"since": since}), _python(pg, {"since": since}))
+            assert build.call_args.kwargs["include_global"] is False
+        assert build.call_count == 3
+        assert len(_snapshots(pg)) == 2
+        # A whole-minute bound (Today, a custom range) is stored and reused.
+        day = (base.replace(hour=0, minute=0, second=0, microsecond=0)).isoformat() + "Z"
+        _assert_same(_served(pg, {"since": day}), _python(pg, {"since": day}))
+        assert len(_snapshots(pg)) == 3
+        _served(pg, {"since": day})
+        assert build.call_count == 4
+
+
+def test_filter_entries_hold_their_part_and_the_cap_keeps_the_project_part(pg, emitter, monkeypatch):  # noqa: F811
+    """A filter's entry stores only its filtered part (the project part is
+    stored once and joined on read), and the per-project cap removes filter
+    entries only: the project part every filter reuses stays."""
+    monkeypatch.setattr(dashboard_overview, "SHARED_PER_PROJECT", 2)
+    run = emitter("store-cap", 1, ["q"])
+    run.post(run.started(2) + run.passed("a", 0, 1, {"q": 1.0}))
+    drain(pg)
+    builder = dashboard_overview.build_overview_postgres
+    with patch.object(dashboard_overview, "build_overview_postgres", wraps=builder) as build:
+        _served(pg)
+        for status in ("RUNNING", "COMPLETED", "FAILED"):
+            _served(pg, {"statuses": [status]})
+            time.sleep(0.01)
+        # Every filter after the first reused the stored project part.
+        assert [call.kwargs["include_global"] for call in build.call_args_list] == [True, False, False, False]
+        payloads = _payloads(pg)
+        assert len(payloads) == 3
+        assert sum("aggregations" in payload for payload in payloads) == 1
+        assert all("chart_data" in payload for payload in payloads if "aggregations" not in payload)
+        # Read back from the store: the same overview as the Python build.
+        _assert_same(_served(pg, {"statuses": ["FAILED"]}), _python(pg, {"statuses": ["FAILED"]}))
+        assert build.call_count == 4
+        _served(pg, {"statuses": ["CANCELLED"]})
+        assert build.call_args.kwargs["include_global"] is False
+
+
 def test_a_request_never_waits_for_a_second_connection(pg, emitter):  # noqa: F811
     """The shared store is read on the request's own snapshot connection and
     written after that connection is released: with one pooled connection the

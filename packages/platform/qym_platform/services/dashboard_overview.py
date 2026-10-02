@@ -1130,22 +1130,43 @@ def _assemble_chart(raw: Dict[str, Any]) -> Dict[str, Any]:
 
 # Entries of a replaced catalog revision stay this long for readers still on
 # an older snapshot; any entry goes after a day; a project keeps at most
-# SHARED_PER_PROJECT entries (every distinct filter, search and sort is one).
+# SHARED_PER_PROJECT filter entries (every distinct filter, search and sort is
+# one). Its project parts (one per revision, day and hidden-task policy) are
+# not counted: every filter reuses them.
 SHARED_GRACE = timedelta(minutes=2)
 SHARED_MAX_AGE = timedelta(days=1)
 SHARED_PER_PROJECT = 200
 # Bump when the stored payload changes shape, so pods of a new release never
-# read an entry an older release stored for the same revision.
-SHARED_SHAPE = 1
+# read an entry an older release stored for the same revision. 2: a filter
+# entry holds only its filtered part.
+SHARED_SHAPE = 2
+# Key prefixes: the whole-project part and one filter's part.
+_PROJECT_PART = "p:"
+_FILTER_PART = "f:"
 
 
-def _shared_key(*parts) -> str:
+def _shared_key(kind: str, *parts) -> str:
     import hashlib
 
     text = json.dumps(
         [SHARED_SHAPE, *parts], sort_keys=True, separators=(",", ":"), default=str
     )
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    # 64 characters: the kind's prefix and 62 hex digits of the hash.
+    return kind + hashlib.sha256(text.encode("utf-8")).hexdigest()[: 64 - len(kind)]
+
+
+def _stable_bounds(filters) -> bool:
+    """Whether the time range is one a later request repeats.
+
+    Today and a custom range are whole days (whole minutes in UTC). Last 7
+    and 30 days are now minus N days to the millisecond, a bound no later
+    request sends again: an entry stored for it would never be read.
+    """
+    for name in ("since", "until"):
+        bound = filters.get(name)
+        if isinstance(bound, datetime) and (bound.second or bound.microsecond):
+            return False
+    return True
 
 
 def load_shared(db, keys) -> Dict[str, Any]:
@@ -1212,7 +1233,10 @@ def store_shared(engine, entries, project_key: str, catalog_revision: str) -> No
             )
             newest = (
                 select(Snapshot.cache_key)
-                .where(Snapshot.project_key == project_key)
+                .where(
+                    Snapshot.project_key == project_key,
+                    Snapshot.cache_key.startswith(_FILTER_PART),
+                )
                 .order_by(Snapshot.created_at.desc())
                 .offset(SHARED_PER_PROJECT)
             )
@@ -1244,7 +1268,9 @@ def shared_overview(
 
     The whole-project part is stored per revision and day, so a new filter,
     search or sort only computes the filtered part (and reads only the
-    filtered runs). ``db`` is the request's repeatable-read snapshot, which
+    filtered runs); a filter's entry holds that part only, and a read joins
+    the two. A time range no later request repeats (Last 7 or 30 days) has no
+    entry of its own. ``db`` is the request's repeatable-read snapshot, which
     ``catalog_revision`` was read from; what this request computes is stored
     after that snapshot's connection is released.
     """
@@ -1253,20 +1279,26 @@ def shared_overview(
     now = now or datetime.now(timezone.utc)
     engine = db.get_bind().engine
     base = (project["id"], catalog_revision, hidden_tasks, now.date().isoformat())
-    key = _shared_key("overview", *base, filters, sort, list(collation or ()))
-    whole_key = _shared_key("overview-project", *base)
-    stored = load_shared(db, [key, whole_key])
-    if key in stored:
-        return stored[key]
-    whole = stored.get(whole_key)
+    whole_key = _shared_key(_PROJECT_PART, *base)
+    key = (
+        _shared_key(_FILTER_PART, *base, filters, sort, list(collation or ()))
+        if _stable_bounds(filters)
+        else None
+    )
+    stored = load_shared(db, [whole_key] + ([key] if key else []))
+    whole, part = stored.get(whole_key), stored.get(key) if key else None
+    if whole is not None and part is not None:
+        return {**whole, **part}
     built, part = build_overview_postgres(
         db, project, filters, sort, collation, now=now, include_global=whole is None
     )
     entries = {}
     if whole is None:
         whole = entries[whole_key] = built
-    payload = entries[key] = {**whole, **part}
-    after_snapshot(
-        db, lambda: store_shared(engine, entries, project["id"], catalog_revision)
-    )
-    return payload
+    if key:
+        entries[key] = part
+    if entries:
+        after_snapshot(
+            db, lambda: store_shared(engine, entries, project["id"], catalog_revision)
+        )
+    return {**whole, **part}
