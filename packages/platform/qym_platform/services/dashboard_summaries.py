@@ -902,6 +902,7 @@ def dashboard_approval_info(db, approval):
 
 
 def _sync_dimension(db, run_id, version):
+    from qym_platform.api.dashboard import run_search_text
     from qym_platform.api.runs import (
         _dataset_version_fields,
         _dataset_version_info_map,
@@ -1018,6 +1019,11 @@ def _sync_dimension(db, run_id, version):
         "ingest_incomplete": runs_list_ingest_flag(metadata),
         **dataset,
     }
+    # Unchanged unless a name changes, so the search index over it keeps
+    # this row's descriptor-only updates HOT.
+    dimension.search_text = run_search_text(
+        dimension.descriptor["external_run_id"], dimension.descriptor["run_name"]
+    )
     if created:
         db.add(dimension)
     db.flush()

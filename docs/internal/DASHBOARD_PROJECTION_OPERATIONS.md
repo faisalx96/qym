@@ -75,10 +75,21 @@ as before.
 
 Filters accept `q`, a case-insensitive search (at most 200 characters) over the
 run's displayed name (`external_run_id`), its run name, and the start of its
-run ID. On PostgreSQL the trigram index `ix_dashboard_run_dimensions_search_trgm`
-serves it; the `build_runs_search_index` job (migration `0070`) builds it
-CONCURRENTLY. Without `pg_trgm` the job logs that the index was skipped and
-finishes, and the search scans the project's runs. A page orders narrow keys first and then reads only the page's rows; the
+run ID. The two names are stored, lowercased, in
+`dashboard_run_dimensions.search_text`, which the summary worker writes with
+the descriptor; it changes only when a name does, so a live run's descriptor
+rewrites stay HOT updates. On PostgreSQL the trigram index
+`ix_dashboard_run_dimensions_search_trgm` over `search_text` and the run ID
+serves the search; the `build_runs_search_index` job (queued by migrations
+`0070` and `0071`) fills `search_text` for older rows and builds the index
+CONCURRENTLY. Until the job reaches a row, the search reads that row's names
+from its descriptor, with the same results; the partial index
+`ix_dashboard_run_dimensions_unsearchable` (rows without `search_text`, empty
+once the job is done) keeps that branch indexed. Without `pg_trgm` the job logs
+that the index was skipped and finishes, and the search scans the project's
+runs.
+
+A page orders narrow keys first and then reads only the page's rows; the
 nearest distinct means shown beside each metric value come from one query over
 the page's (task, model, dataset) groups.
 

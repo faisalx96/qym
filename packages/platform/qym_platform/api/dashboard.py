@@ -218,50 +218,64 @@ def _filter_conditions(filters, *, skip=None, facets=False):
 
 
 RUNS_SEARCH_INDEX = "ix_dashboard_run_dimensions_search_trgm"
+# The rows whose ``search_text`` is still NULL. Empty once the
+# build_runs_search_index job has filled them; it lets the planner serve the
+# search's branch for such rows from an index too.
+RUNS_UNSEARCHABLE_INDEX = "ix_dashboard_run_dimensions_unsearchable"
+
+
+def run_search_text(external_run_id, run_name) -> str:
+    """What the Runs search box matches (``Dimension.search_text``): the name
+    the list shows (the external run id) and the run name, lowercased, on two
+    lines. A search never contains a line break, so a match never spans the
+    two names.
+
+    A column of its own, written only by the summary worker's dimension sync:
+    the trigram index over it (``RUNS_SEARCH_INDEX``) leaves the descriptor
+    rewrites of a live run HOT, which an index over descriptor expressions
+    did not.
+    """
+    return (
+        ("" if external_run_id is None else str(external_run_id))
+        + "\n"
+        + ("" if run_name is None else str(run_name))
+    ).lower()
 
 
 def _search_name(table, key):
     return func.coalesce(table.descriptor[key].as_string(), "")
 
 
-def _search_text(table=Dimension):
-    """What the Runs search box matches: the name the list shows (the
-    external run id) and the run name, lowercased, on two lines.
-
-    One text per run, so one trigram index (``RUNS_SEARCH_INDEX``, built by
-    the ``build_runs_search_index`` job) serves the search; its expression is
-    compiled from this one. A search never contains a line break, so a match
-    never spans the two names.
-    """
+def _descriptor_search_text(table=Dimension):
+    """``run_search_text`` read from the descriptor, for a row written before
+    ``search_text`` existed that the job has not filled yet."""
     return func.lower(
         _search_name(table, "external_run_id") + "\n" + _search_name(table, "run_name")
     )
 
 
-# A trigram index needs three characters of the search to narrow anything.
-_TRIGRAM = 3
-
-
 def _search_condition(text, table=Dimension):
-    """Find a run by the name the list shows, its run name, or its id."""
+    """Find a run by the name the list shows, its run name, or its id.
+
+    The stored text is what ``RUNS_SEARCH_INDEX`` serves. A row without it is
+    matched on its descriptor (``RUNS_UNSEARCHABLE_INDEX`` keeps that branch
+    indexable), so the results never depend on the job's progress.
+    """
     needle = text.lower()
-    if len(needle) >= _TRIGRAM:
-        names = [_search_text(table)]
-    else:
-        # The index cannot serve so short a search: match each name on its
-        # own, which stops at the first that matches (the same runs).
-        names = [
-            func.lower(_search_name(table, key)) for key in ("external_run_id", "run_name")
-        ]
     return or_(
-        *(name.contains(needle, autoescape=True) for name in names),
+        table.search_text.contains(needle, autoescape=True),
+        and_(
+            table.search_text.is_(None),
+            _descriptor_search_text(table).contains(needle, autoescape=True),
+        ),
         func.lower(table.run_key).startswith(needle, autoescape=True),
     )
 
 
 def runs_search_index_ddl():
-    """CREATE INDEX for the Runs search: trigrams of ``_search_text`` and of
-    the lowercased run id (the id matches by prefix)."""
+    """CREATE INDEX for the Runs search: trigrams of the stored search text
+    and of the lowercased run id (the id matches by prefix). Neither changes
+    when a live run's descriptor does."""
     from sqlalchemy.dialects import postgresql
 
     dialect = postgresql.dialect()
@@ -271,8 +285,15 @@ def runs_search_index_ddl():
 
     return (
         f"CREATE INDEX CONCURRENTLY {RUNS_SEARCH_INDEX} ON dashboard_run_dimensions "
-        f"USING gin (({compiled(_search_text())}) gin_trgm_ops, "
+        f"USING gin (search_text gin_trgm_ops, "
         f"({compiled(func.lower(Dimension.run_key))}) gin_trgm_ops)"
+    )
+
+
+def runs_unsearchable_index_ddl():
+    return (
+        f"CREATE INDEX CONCURRENTLY {RUNS_UNSEARCHABLE_INDEX} ON dashboard_run_dimensions "
+        "(project_key) WHERE search_text IS NULL"
     )
 
 

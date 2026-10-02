@@ -179,6 +179,11 @@ class DashboardRunDimension(Base):
     hidden_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     # Labels and small display descriptors only. No item/score/span payloads.
     descriptor: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # What the Runs search box matches (api.dashboard.run_search_text), kept
+    # apart from the descriptor so the trigram index over it leaves a live
+    # run's descriptor rewrites HOT. NULL until the build_runs_search_index
+    # job (migration 0071) fills a row written before the column existed.
+    search_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
 class RollupNumbers:

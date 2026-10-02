@@ -197,6 +197,69 @@ def test_runs_search_index_job_without_pg_trgm_finishes_and_search_still_works(p
         assert _search(pg_engine, needle) == expected, needle
 
 
+def _live_run(engine, run_id="live-run"):
+    """A running run, listed by the summary worker's own dimension write."""
+    from qym_platform.db.models import Run, RunWorkflowStatus
+    from qym_platform.services.dashboard_summaries import _sync_dimension
+
+    make = sessionmaker(bind=engine)
+    with make() as db:
+        db.add(
+            Run(
+                id=run_id, project_id="p", created_by_user_id="u", owner_user_id="u",
+                task="t", dataset="d", metrics=["q"], run_metadata={},
+                run_config={"run_name": "Nightly candidate"}, external_run_id="candidate-0902",
+                status=RunWorkflowStatus.RUNNING, last_event_at=datetime(2026, 9, 2),
+            )
+        )
+        db.flush()
+        _sync_dimension(db, run_id, 1)
+        db.commit()
+    return run_id
+
+
+def _publications(engine, run_id, count):
+    """``count`` publications of a live run whose last event moves (the
+    descriptor's ``last_event_at`` changes, nothing else), in one transaction:
+    (dimension updates, HOT updates) as PostgreSQL counted them."""
+    from qym_platform.db.models import Run
+    from qym_platform.services.dashboard_summaries import _sync_dimension
+
+    make = sessionmaker(bind=engine)
+    with make() as db:
+        run = db.get(Run, run_id)
+        for step in range(count):
+            run.last_event_at = datetime(2026, 9, 2, 0, step + 1)
+            db.flush()
+            _sync_dimension(db, run_id, 2 + step)
+            db.flush()
+        counts = db.execute(
+            text(
+                "SELECT pg_stat_get_xact_tuples_updated(to_regclass('dashboard_run_dimensions')), "
+                "pg_stat_get_xact_tuples_hot_updated(to_regclass('dashboard_run_dimensions'))"
+            )
+        ).one()
+        db.rollback()
+    return tuple(counts)
+
+
+def test_a_live_runs_publications_stay_hot_updates_with_the_search_index(pg_engine):
+    """The search index covers a column only the run's names change. A live
+    run's publications rewrite its descriptor (the last event moves), and
+    with an index over descriptor expressions none of those updates could be
+    HOT: each one inserted into every index of the table."""
+    run_id = _live_run(pg_engine)
+    status, log, _ = _run(pg_engine, "build_runs_search_index")
+    assert status == "succeeded", log
+    assert dashboard.RUNS_SEARCH_INDEX in _indexes(pg_engine, "dashboard_run_dimensions")
+    with pg_engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        conn.execute(text("VACUUM dashboard_run_dimensions"))
+    assert _publications(pg_engine, run_id, 4) == (4, 4)
+    # The search still finds the run by either name.
+    assert _search(pg_engine, "candidate-09") == ["Nightly candidate"]
+    assert _search(pg_engine, "NIGHTLY") == ["Nightly candidate"]
+
+
 def test_dataset_search_job_without_pg_trgm_finishes_and_search_still_works(pg_engine):
     from qym_platform.services.dataset_search import filter_dataset_item_search
 

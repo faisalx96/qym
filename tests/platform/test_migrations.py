@@ -42,7 +42,7 @@ def test_alembic_has_one_upgrade_head() -> None:
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["0070"]
+    assert heads == ["0071"]
 
 
 def test_migrations_name_their_own_revision_in_job_logs() -> None:
@@ -309,6 +309,79 @@ def test_overview_store_and_runs_search_migrations_are_quick_ddl_that_queue_jobs
         with factory() as db:
             job = db.query(MaintenanceJob).filter_by(kind=kind).one()
             assert "skipped: not PostgreSQL" in job.log, kind
+    engine.dispose()
+
+
+def test_runs_search_text_migration_adds_a_column_and_queues_the_job_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """0071 adds the nullable ``search_text`` column (instant DDL) and queues
+    build_runs_search_index again, unless a job 0070 queued still waits to
+    start (this release's job does both)."""
+    from sqlalchemy.orm import sessionmaker
+
+    from qym_platform.db.base import Base
+    from qym_platform.db.dashboard_models import DashboardRunDimension as Dimension
+    from qym_platform.db.maintenance_models import MaintenanceJob
+    from qym_platform.services import maintenance
+
+    search = _load_migration("0070_runs_search_index.py")
+    text_column = _load_migration("0071_runs_search_text.py")
+    engine = sa.create_engine("sqlite://")
+    metadata = sa.MetaData()
+    sa.Table(
+        "dashboard_run_dimensions", metadata, sa.Column("run_key", sa.String(36), primary_key=True)
+    )
+    metadata.create_all(engine)
+    MaintenanceJob.__table__.create(engine)
+    jobs = "SELECT kind, status FROM maintenance_jobs ORDER BY created_at"
+    with engine.begin() as connection:
+        operations = Operations(MigrationContext.configure(connection))
+        monkeypatch.setattr(search, "op", operations)
+        monkeypatch.setattr(text_column, "op", operations)
+        search.upgrade()
+        text_column.upgrade()
+        columns = {c["name"] for c in sa.inspect(connection).get_columns("dashboard_run_dimensions")}
+        assert "search_text" in columns
+        # 0070's job has not started: it is the one that runs.
+        assert connection.execute(sa.text(jobs)).all() == [("build_runs_search_index", "queued")]
+        text_column.downgrade()
+        connection.execute(sa.text("UPDATE maintenance_jobs SET status = 'succeeded'"))
+        # A database whose 0070 job already ran gets a new one.
+        text_column.upgrade()
+        assert connection.execute(sa.text(jobs)).all() == [
+            ("build_runs_search_index", "succeeded"),
+            ("build_runs_search_index", "queued"),
+        ]
+        text_column.downgrade()
+        columns = {c["name"] for c in sa.inspect(connection).get_columns("dashboard_run_dimensions")}
+        assert "search_text" not in columns
+    engine.dispose()
+
+    # The job fills the column for rows written before it existed.
+    engine = sa.create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    stamp = sa.func.now()
+    with factory() as db:
+        for index, (external, name) in enumerate([("Base-0818", "Baseline"), ("", None), (7, "Seven")]):
+            db.add(
+                Dimension(
+                    run_key=f"r{index}", project_key="p", task="t", model="m", dataset="d",
+                    version="", owner="u", status="COMPLETED", timestamp=stamp, created_at=stamp,
+                    present=True, descriptor={"external_run_id": external, "run_name": name},
+                )
+            )
+        db.commit()
+        maintenance.enqueue(db, "build_runs_search_index", {"window": 2})
+        db.commit()
+    assert maintenance.MaintenanceWorker(factory, engine).tick() == "succeeded"
+    with factory() as db:
+        assert {row.run_key: row.search_text for row in db.query(Dimension)} == {
+            "r0": "base-0818\nbaseline", "r1": "\n", "r2": "7\nseven",
+        }
+        job = db.query(MaintenanceJob).filter_by(kind="build_runs_search_index").one()
+        assert job.progress["runs_filled"] == 3
     engine.dispose()
 
 

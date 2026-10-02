@@ -1206,22 +1206,90 @@ def _ensure_pg_trgm(ctx: JobContext, index: str) -> bool:
 
 @register(
     "build_runs_search_index",
-    description="Build the trigram index that serves the Runs search box (migration 0070).",
+    description="Fill each run's search text and build the trigram index that serves the Runs search box (migrations 0070, 0071).",
 )
 def _build_runs_search_index(ctx: JobContext) -> bool:
-    """Index the text the Runs search box matches (run names and ids) with
-    pg_trgm, CONCURRENTLY. Without the extension the job logs that the index
-    was skipped and finishes; the search still works, as a scan of the
-    project's runs. PostgreSQL only."""
-    from qym_platform.api.dashboard import RUNS_SEARCH_INDEX, runs_search_index_ddl
+    """Three phases, each resumable from ``ctx.progress``.
 
+    ``probe`` (PostgreSQL) builds the partial index of the runs without
+    ``search_text``, CONCURRENTLY; ``fill`` walks dashboard_run_dimensions in
+    run-key windows and stores ``search_text`` where it is NULL (rows written
+    before migration 0071); ``index`` (PostgreSQL) enables pg_trgm and builds
+    the trigram index over ``search_text`` and the run id, CONCURRENTLY. It
+    replaces 0070's index over descriptor expressions, which made every
+    descriptor rewrite of a live run a non-HOT update. Without the extension
+    the job logs that the index was skipped and finishes; the search still
+    works, as a scan of the project's runs. Until ``fill`` reaches a row, the
+    search reads that row's names from its descriptor, with the same results.
+    """
+    from qym_platform.api.dashboard import (
+        RUNS_SEARCH_INDEX,
+        RUNS_UNSEARCHABLE_INDEX,
+        run_search_text,
+        runs_search_index_ddl,
+        runs_unsearchable_index_ddl,
+    )
+    from qym_platform.db.dashboard_models import DashboardRunDimension as Dimension
+
+    phase = ctx.progress.get("phase") or "probe"
+    window = max(1, int(ctx.params.get("window", 500)))
+    if phase == "probe":
+        if ctx.is_postgres():
+            with ctx.autocommit() as conn:
+                # An earlier interrupted build leaves an INVALID index behind; rebuild it.
+                conn.execute(text(f"DROP INDEX CONCURRENTLY IF EXISTS {RUNS_UNSEARCHABLE_INDEX}"))
+                conn.execute(text(runs_unsearchable_index_ddl()))
+        ctx.progress["phase"], ctx.progress["cursor"] = "fill", ""
+        return False
+    if phase == "fill":
+        cursor = str(ctx.progress.get("cursor") or "")
+        with ctx.session() as db:
+            rows = db.execute(
+                select(
+                    Dimension.run_key,
+                    Dimension.descriptor["external_run_id"].as_string(),
+                    Dimension.descriptor["run_name"].as_string(),
+                )
+                .where(Dimension.run_key > cursor, Dimension.search_text.is_(None))
+                .order_by(Dimension.run_key)
+                .limit(window)
+            ).all()
+            if rows:
+                table = Dimension.__table__
+                filled = [(key, run_search_text(external, name)) for key, external, name in rows]
+                # One statement per window; the IS NULL guard leaves a row the
+                # summary worker wrote meanwhile as it wrote it.
+                if ctx.is_postgres():
+                    batch = sa_values(
+                        column("rk", Text), column("st", Text), name="filled"
+                    ).data(filled)
+                    db.execute(
+                        update(table)
+                        .where(table.c.run_key == batch.c.rk, table.c.search_text.is_(None))
+                        .values(search_text=batch.c.st)
+                    )
+                else:
+                    db.connection().execute(
+                        update(table)
+                        .where(table.c.run_key == bindparam("rk"), table.c.search_text.is_(None))
+                        .values(search_text=bindparam("st")),
+                        [{"rk": key, "st": value} for key, value in filled],
+                    )
+            db.commit()
+        ctx.progress["runs_filled"] = int(ctx.progress.get("runs_filled") or 0) + len(rows)
+        if len(rows) < window:
+            ctx.progress["phase"], ctx.progress["cursor"] = "index", ""
+        else:
+            ctx.progress["cursor"] = rows[-1][0]
+        ctx.progress["message"] = f"{ctx.progress['runs_filled']:,} runs given search text"
+        return False
+    filled = int(ctx.progress.get("runs_filled") or 0)
     if not ctx.is_postgres():
-        ctx.progress["message"] = "skipped: not PostgreSQL"
-        ctx.log(ctx.progress["message"])
-        return True
-    if _ensure_pg_trgm(ctx, "runs search index"):
+        ctx.progress["message"] = f"done: {filled:,} runs given search text; index skipped: not PostgreSQL"
+    elif _ensure_pg_trgm(ctx, "runs search index"):
         with ctx.autocommit() as conn:
-            # An earlier interrupted build leaves an INVALID index behind; rebuild it.
+            # Replaces an older definition and an INVALID index an earlier
+            # interrupted build left behind.
             conn.execute(text(f"DROP INDEX CONCURRENTLY IF EXISTS {RUNS_SEARCH_INDEX}"))
             started = time.perf_counter()
             conn.execute(text(runs_search_index_ddl()))
@@ -1230,6 +1298,7 @@ def _build_runs_search_index(ctx: JobContext) -> bool:
     else:
         ctx.progress["message"] = "done: index skipped (pg_trgm is not available)"
     ctx.progress["phase"] = "done"
+    ctx.log(ctx.progress["message"])
     return True
 
 
