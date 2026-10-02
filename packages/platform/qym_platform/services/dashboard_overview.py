@@ -486,8 +486,8 @@ def build_overview_postgres(
     }
     terms = _filter_conditions({k: filters[k] for k in ("since", "until") if k in filters})
     if filters.get("q"):
-        # The search as a semi-join: as a per-row flag it would read every
-        # run's JSON.
+        # The search as a semi-join, which the trigram index serves (C060); as
+        # a per-row flag it would read every run's JSON.
         searched = aliased(Dimension)
         terms.append(
             Dimension.run_key.in_(

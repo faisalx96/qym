@@ -217,17 +217,62 @@ def _filter_conditions(filters, *, skip=None, facets=False):
     return conditions
 
 
+RUNS_SEARCH_INDEX = "ix_dashboard_run_dimensions_search_trgm"
+
+
+def _search_name(table, key):
+    return func.coalesce(table.descriptor[key].as_string(), "")
+
+
+def _search_text(table=Dimension):
+    """What the Runs search box matches: the name the list shows (the
+    external run id) and the run name, lowercased, on two lines.
+
+    One text per run, so one trigram index (``RUNS_SEARCH_INDEX``, built by
+    the ``build_runs_search_index`` job) serves the search; its expression is
+    compiled from this one. A search never contains a line break, so a match
+    never spans the two names.
+    """
+    return func.lower(
+        _search_name(table, "external_run_id") + "\n" + _search_name(table, "run_name")
+    )
+
+
+# A trigram index needs three characters of the search to narrow anything.
+_TRIGRAM = 3
+
+
 def _search_condition(text, table=Dimension):
     """Find a run by the name the list shows, its run name, or its id."""
     needle = text.lower()
-
-    def contains(column):
-        return func.lower(func.coalesce(column, "")).contains(needle, autoescape=True)
-
+    if len(needle) >= _TRIGRAM:
+        names = [_search_text(table)]
+    else:
+        # The index cannot serve so short a search: match each name on its
+        # own, which stops at the first that matches (the same runs).
+        names = [
+            func.lower(_search_name(table, key)) for key in ("external_run_id", "run_name")
+        ]
     return or_(
-        contains(table.descriptor["external_run_id"].as_string()),
-        contains(table.descriptor["run_name"].as_string()),
+        *(name.contains(needle, autoescape=True) for name in names),
         func.lower(table.run_key).startswith(needle, autoescape=True),
+    )
+
+
+def runs_search_index_ddl():
+    """CREATE INDEX for the Runs search: trigrams of ``_search_text`` and of
+    the lowercased run id (the id matches by prefix)."""
+    from sqlalchemy.dialects import postgresql
+
+    dialect = postgresql.dialect()
+
+    def compiled(expression):
+        return str(expression.compile(dialect=dialect, compile_kwargs={"literal_binds": True}))
+
+    return (
+        f"CREATE INDEX CONCURRENTLY {RUNS_SEARCH_INDEX} ON dashboard_run_dimensions "
+        f"USING gin (({compiled(_search_text())}) gin_trgm_ops, "
+        f"({compiled(func.lower(Dimension.run_key))}) gin_trgm_ops)"
     )
 
 

@@ -42,7 +42,7 @@ def test_alembic_has_one_upgrade_head() -> None:
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["0069"]
+    assert heads == ["0070"]
 
 
 def test_migrations_name_their_own_revision_in_job_logs() -> None:
@@ -247,16 +247,19 @@ def test_dataset_search_backfill_job_fills_text_and_published_counts() -> None:
     engine.dispose()
 
 
-def test_overview_store_migration_is_quick_ddl_that_queues_the_backfill(
+def test_overview_store_and_runs_search_migrations_are_quick_ddl_that_queue_jobs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """C037: 0069 adds two empty tables and queues the overview backfill."""
+    """C037/C060: 0069 adds two empty tables and queues the overview backfill;
+    0070 only queues the runs search index job (the index is built
+    CONCURRENTLY by the job, never by the migration)."""
     from sqlalchemy.orm import sessionmaker
 
     from qym_platform.db.maintenance_models import MaintenanceJob
     from qym_platform.services import maintenance
 
     overview = _load_migration("0069_dashboard_overview_store.py")
+    search = _load_migration("0070_runs_search_index.py")
     engine = sa.create_engine("sqlite://")
     metadata = sa.MetaData()
     sa.Table(
@@ -267,30 +270,45 @@ def test_overview_store_migration_is_quick_ddl_that_queues_the_backfill(
     jobs = "SELECT kind, status FROM maintenance_jobs ORDER BY kind"
 
     with engine.begin() as connection:
-        monkeypatch.setattr(overview, "op", Operations(MigrationContext.configure(connection)))
+        operations = Operations(MigrationContext.configure(connection))
+        monkeypatch.setattr(overview, "op", operations)
+        monkeypatch.setattr(search, "op", operations)
+        statements = []
+        sa.event.listen(
+            connection, "before_cursor_execute", lambda *args: statements.append(args[2])
+        )
         overview.upgrade()
+        search.upgrade()
         tables = set(sa.inspect(connection).get_table_names())
         assert {"dashboard_run_overview", "dashboard_overview_snapshots"} <= tables
-        assert connection.execute(sa.text(jobs)).all() == [("backfill_dashboard_overview", "queued")]
+        assert connection.execute(sa.text(jobs)).all() == [
+            ("backfill_dashboard_overview", "queued"),
+            ("build_runs_search_index", "queued"),
+        ]
+        assert not [s for s in statements if "INDEX" in s.upper() and "TRGM" in s.upper()]
+        search.downgrade()
         overview.downgrade()
         tables = set(sa.inspect(connection).get_table_names())
         assert not {"dashboard_run_overview", "dashboard_overview_snapshots"} & tables
-    assert "backfill_dashboard_overview" in maintenance.registry()
+    registered = maintenance.registry()
+    assert {"backfill_dashboard_overview", "build_runs_search_index"} <= set(registered)
     engine.dispose()
 
-    # On SQLite the job finishes at once.
+    # On SQLite both jobs finish at once.
     from qym_platform.db.base import Base
 
     engine = sa.create_engine("sqlite://")
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
-    with factory() as db:
-        maintenance.enqueue(db, "backfill_dashboard_overview", {})
-        db.commit()
-    assert maintenance.MaintenanceWorker(factory, engine).tick() == "succeeded"
-    with factory() as db:
-        job = db.query(MaintenanceJob).filter_by(kind="backfill_dashboard_overview").one()
-        assert "skipped: not PostgreSQL" in job.log
+    worker = maintenance.MaintenanceWorker(factory, engine)
+    for kind in ("backfill_dashboard_overview", "build_runs_search_index"):
+        with factory() as db:
+            maintenance.enqueue(db, kind, {})
+            db.commit()
+        assert worker.tick() == "succeeded"
+        with factory() as db:
+            job = db.query(MaintenanceJob).filter_by(kind=kind).one()
+            assert "skipped: not PostgreSQL" in job.log, kind
     engine.dispose()
 
 

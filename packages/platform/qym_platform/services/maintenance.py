@@ -1168,12 +1168,7 @@ def _backfill_dataset_search_text(ctx: JobContext) -> bool:
                     "ON dataset_items (dataset_version_id) WHERE search_text IS NULL"
                 )
             )
-        try:
-            with ctx.autocommit() as conn:
-                conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
-        except Exception as exc:  # noqa: BLE001 - a missing privilege must not fail the backfill
-            ctx.log(f"search index skipped: pg_trgm is not available ({type(exc).__name__}); search still works without it")
-        else:
+        if _ensure_pg_trgm(ctx, "search index"):
             with ctx.autocommit() as conn:
                 # An earlier interrupted build leaves an INVALID index behind; rebuild it.
                 conn.execute(text("DROP INDEX CONCURRENTLY IF EXISTS ix_dataset_items_search_trgm"))
@@ -1191,6 +1186,50 @@ def _backfill_dataset_search_text(ctx: JobContext) -> bool:
         f"{int(ctx.progress.get('versions_counted') or 0):,} versions counted"
     )
     ctx.log(ctx.progress["message"])
+    return True
+
+
+def _ensure_pg_trgm(ctx: JobContext, index: str) -> bool:
+    """Enable pg_trgm for a trigram index; False (logged) when it cannot be.
+
+    A missing privilege or package must not fail the job or the deploy: the
+    searches the index would serve still work without it, only slower.
+    """
+    try:
+        with ctx.autocommit() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+    except Exception as exc:  # noqa: BLE001 - see above
+        ctx.log(f"{index} skipped: pg_trgm is not available ({type(exc).__name__}); search still works without it")
+        return False
+    return True
+
+
+@register(
+    "build_runs_search_index",
+    description="Build the trigram index that serves the Runs search box (migration 0070).",
+)
+def _build_runs_search_index(ctx: JobContext) -> bool:
+    """Index the text the Runs search box matches (run names and ids) with
+    pg_trgm, CONCURRENTLY. Without the extension the job logs that the index
+    was skipped and finishes; the search still works, as a scan of the
+    project's runs. PostgreSQL only."""
+    from qym_platform.api.dashboard import RUNS_SEARCH_INDEX, runs_search_index_ddl
+
+    if not ctx.is_postgres():
+        ctx.progress["message"] = "skipped: not PostgreSQL"
+        ctx.log(ctx.progress["message"])
+        return True
+    if _ensure_pg_trgm(ctx, "runs search index"):
+        with ctx.autocommit() as conn:
+            # An earlier interrupted build leaves an INVALID index behind; rebuild it.
+            conn.execute(text(f"DROP INDEX CONCURRENTLY IF EXISTS {RUNS_SEARCH_INDEX}"))
+            started = time.perf_counter()
+            conn.execute(text(runs_search_index_ddl()))
+        ctx.log(f"created {RUNS_SEARCH_INDEX} in {time.perf_counter() - started:.0f}s")
+        ctx.progress["message"] = f"done: {RUNS_SEARCH_INDEX} built"
+    else:
+        ctx.progress["message"] = "done: index skipped (pg_trgm is not available)"
+    ctx.progress["phase"] = "done"
     return True
 
 
