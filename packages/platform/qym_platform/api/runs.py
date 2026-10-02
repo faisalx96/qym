@@ -69,6 +69,7 @@ from qym_platform.services.correction_rules import require_correction_decision
 from qym_platform.services.issue_reviews import (
     change_metric_issue,
     correction_issue_id,
+    issue_review_statuses,
     reconcile_issue_edits,
 )
 from qym_platform.services.run_lifecycle import (
@@ -3525,11 +3526,16 @@ def _build_run_data(
     )
     correction_by_item: Dict[str, ReviewCorrection] = {}
     corrections_by_item_metric: Dict[str, Dict[str, ReviewCorrection]] = {}
+    # Every active correction of an (item, metric, pass) scope: an issue's
+    # review status is its correction's, not the issue JSON's (older data
+    # can say pending there while the correction is decided).
+    issue_reviews: Dict[Any, List[ReviewCorrection]] = {}
     for corr in corrections:
         if corr.metric_name:
             corrections_by_item_metric.setdefault(corr.item_id, {}).setdefault(
                 corr.metric_name, corr
             )
+            issue_reviews.setdefault((corr.item_id, corr.metric_name, None), []).append(corr)
         else:
             correction_by_item.setdefault(corr.item_id, corr)
 
@@ -3611,6 +3617,25 @@ def _build_run_data(
                 pass_meta_by_item.setdefault(ps.item_id, {}).setdefault(
                     ps.metric_name, {}
                 )[int(ps.pass_number)] = ps_meta
+        if pass_analysis_by_item:
+            for corr in (
+                db.query(ReviewCorrection)
+                .filter(
+                    ReviewCorrection.run_id == run.id,
+                    ReviewCorrection.is_active.is_(True),
+                    ReviewCorrection.pass_number.isnot(None),
+                )
+                .filter(
+                    ReviewCorrection.item_id.in_(item_ids)
+                    if item_ids is not None
+                    else True
+                )
+                .all()
+            ):
+                if corr.metric_name:
+                    issue_reviews.setdefault(
+                        (corr.item_id, corr.metric_name, int(corr.pass_number)), []
+                    ).append(corr)
 
         # Every pass's final attempt — output, latency, trace — so the UI can
         # show each attempt, not just the item's last one.  Event state fills
@@ -3765,6 +3790,27 @@ def _build_run_data(
             if iid and ev.sent_at:
                 _item_start_ts[iid] = int(ev.sent_at.timestamp() * 1000)
 
+    # Newest first, in the order the issue routes read them.
+    for scope_reviews in issue_reviews.values():
+        scope_reviews.sort(
+            key=lambda corr: (corr.created_at or datetime.min, corr.id or 0),
+            reverse=True,
+        )
+
+    def issue_statuses_by_metric(
+        analyses: Any, item_id: str, number: Optional[int] = None
+    ) -> Dict[str, Any]:
+        if not isinstance(analyses, dict):
+            return {}
+        result = {}
+        for metric_name, analysis in analyses.items():
+            statuses = issue_review_statuses(
+                analysis, issue_reviews.get((item_id, metric_name, number), ())
+            )
+            if statuses:
+                result[metric_name] = statuses
+        return result
+
     ui_rows = []
     meta_keys = new_meta_key_index() if compact else None
     stats = {
@@ -3899,6 +3945,11 @@ def _build_run_data(
                     }
                     for metric_name, metric_correction in metric_corrections.items()
                 },
+                # metric -> [{issue_id, status}] per root-cause issue: what
+                # the issue's Approve is judged by (issue_review_statuses).
+                "review_issue_statuses": issue_statuses_by_metric(
+                    item_metadata.get("metric_analyses"), it.item_id
+                ),
                 "trace_stats": (
                     item_metadata.get("trace_stats")
                     if isinstance(item_metadata, dict)
@@ -3933,6 +3984,21 @@ def _build_run_data(
                 "pass_metric_analyses": (
                     {
                         m: [by_pass.get(p) for p in range(1, run_samples + 1)]
+                        for m, by_pass in (
+                            pass_analysis_by_item.get(it.item_id) or {}
+                        ).items()
+                    }
+                    if repeat_context and pass_analysis_by_item.get(it.item_id)
+                    else None
+                ),
+                # Repeat runs: metric -> [review_issue_statuses entry per
+                # pass], from each pass's own corrections.
+                "pass_review_issue_statuses": (
+                    {
+                        m: [
+                            issue_statuses_by_metric({m: by_pass.get(p)}, it.item_id, p).get(m)
+                            for p in range(1, run_samples + 1)
+                        ]
                         for m, by_pass in (
                             pass_analysis_by_item.get(it.item_id) or {}
                         ).items()

@@ -3411,8 +3411,8 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert 'data-jump-issues' in run
     assert 'new Set(SOLUTION_PRESETS)' in run
     assert "const issueCount = rootCauseIssues(analysis).length;" in run
-    assert "renderMetricRootCauseIssues(analysis, itemId, metricName, legacyReview)" in run
-    assert "renderMetricAnalysisCard(itemId, metricName, metricAnalyses[metricName], row.review_corrections?.[metricName])" in run
+    assert "renderMetricRootCauseIssues(analysis, itemId, metricName, legacyReview, issueStatuses)" in run
+    assert "renderMetricAnalysisCard(itemId, metricName, metricAnalyses[metricName], row.review_corrections?.[metricName], row.review_issue_statuses?.[metricName])" in run
     assert 'data-approve-issue="' in run
     assert "Choose a saved solution, or add a new one for this issue." in run
     assert 'id="analysis-metric-list"' in analyzer

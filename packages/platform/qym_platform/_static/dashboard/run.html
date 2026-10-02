@@ -7988,6 +7988,7 @@
           : (rawStatus || (hasPassScore ? 'completed' : 'pending'));
         const latencyMs = Number(att?.latency_ms || 0);
         const passReviewCorrections = {};
+        const passIssueStatuses = {};
         const passAnalyses = row.pass_metric_analyses || {};
         metricNames.forEach(metricName => {
           const values = passAnalyses[metricName];
@@ -7997,6 +7998,10 @@
             id: null,
             status: String(analysis.review_status || 'pending').toLowerCase(),
           };
+          const statuses = (row.pass_review_issue_statuses || {})[metricName];
+          if (Array.isArray(statuses) && Array.isArray(statuses[passNumber - 1])) {
+            passIssueStatuses[metricName] = statuses[passNumber - 1];
+          }
         });
         return {
           ...row,
@@ -8010,6 +8015,7 @@
           review_correction_id: null,
           review_correction_status: '',
           review_corrections: passReviewCorrections,
+          review_issue_statuses: passIssueStatuses,
           status: status,
           error: att?.error || '',
           output: att ? (att.output ?? null) : null,
@@ -11416,7 +11422,7 @@
         return score < passThreshold;
       }
 
-      function renderMetricAnalysisCard(itemId, metricName, storedAnalysis, legacyReview = {}) {
+      function renderMetricAnalysisCard(itemId, metricName, storedAnalysis, legacyReview = {}, issueStatuses = null) {
         // Display failed analysis like an untouched metric. Keep the stored
         // failure available to Error Distribution and the diagnosis editor.
         const analysis = storedAnalysis && typeof storedAnalysis === 'object' && !storedAnalysis.error
@@ -11434,18 +11440,30 @@
             (confidence ? '<span class="metric-analysis-confidence">' + escapeHtml(confidence) + '</span>' : '') +
             '<div class="metric-analysis-actions">' + editButton + '</div>' +
           '</div>' +
-          renderMetricRootCauseIssues(analysis, itemId, metricName, legacyReview) +
+          renderMetricRootCauseIssues(analysis, itemId, metricName, legacyReview, issueStatuses) +
         '</div>';
       }
 
-      function renderMetricRootCauseIssues(analysis, itemId = '', metricName = '', legacyReview = {}) {
+      function renderMetricRootCauseIssues(analysis, itemId = '', metricName = '', legacyReview = {}, issueStatuses = null) {
         const issues = rootCauseIssues(analysis);
         if (!issues.length) return '<div class="metric-analysis-empty">No root-cause issues assigned.</div>';
+        // The status of the issue's own review as the server holds it (row
+        // review_issue_statuses), which Approve is judged by: older data can
+        // say pending in the issue JSON while that review is decided.
+        const reviewStatus = (issue, index) => {
+          if (!Array.isArray(issueStatuses)) return '';
+          const entry = issue.issue_id
+            ? issueStatuses.find(candidate => candidate && candidate.issue_id === issue.issue_id)
+            : issueStatuses[index];
+          if (!entry || (!issue.issue_id && entry.issue_id)) return '';
+          return String(entry.status || '').toLowerCase();
+        };
         return '<div class="metric-analysis-issue-list" role="list" aria-label="Root-cause issues">' + issues.map((issue, index) => {
           const color = rootCauseColor(issue.category);
           const hasSolution = Boolean(String(issue.solution || '').trim());
           const confidence = issue.confidence == null ? '' : Math.round(issue.confidence * 100) + '%';
-          const status = String(issue.review_status || analysis.review_status || legacyReview.status || 'pending').toLowerCase();
+          const status = reviewStatus(issue, index)
+            || String(issue.review_status || analysis.review_status || legacyReview.status || 'pending').toLowerCase();
           const data = ' data-metric-issues-item="' + escapeAttr(itemId) + '" data-metric-name="' + escapeAttr(metricName) + '" data-issue-index="' + index + '"';
           // Approve decides a pending issue only; a rejected one is reset to
           // pending on Reviews first (the server refuses it with 409).
@@ -14185,7 +14203,7 @@
                 hasAnyTaskError,
               );
             }).map(metricName => {
-              return renderMetricAnalysisCard(itemId, metricName, metricAnalyses[metricName], row.review_corrections?.[metricName]);
+              return renderMetricAnalysisCard(itemId, metricName, metricAnalyses[metricName], row.review_corrections?.[metricName], row.review_issue_statuses?.[metricName]);
             }).filter(Boolean).join('');
             if (analysisCards) {
               perMetricAnalysisHtml = '<section class="metric-analysis-list" aria-label="Per-metric root cause analysis"><div class="metric-analysis-toolbar"><div class="metric-analysis-intro"><h3 class="metric-analysis-heading"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 5 5M7 10h6M10 7v6"/></svg><span>Per-metric root cause analysis</span></h3><p class="metric-analysis-help">Review the problem and proposed fix for each metric.</p></div></div>' + analysisCards + '</section>';

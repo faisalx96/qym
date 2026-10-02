@@ -254,6 +254,42 @@ def filter_explicitly_approved_issue_corrections(
     return approved
 
 
+def issue_review_statuses(
+    analysis: Any, active: Iterable[ReviewCorrection]
+) -> list[dict[str, str]]:
+    """Each issue's review status as the run page's Approve route judges it.
+
+    A read-only copy of how ``change_metric_issue`` matches an issue to its
+    review row (``sync_issue_candidates``): an issue keeps its own active
+    correction while its content matches; an unchanged issue of a legacy
+    grouped review takes that review's status; any other issue would get a
+    new pending review. ``active`` holds the scope's active corrections,
+    newest first. In older data an issue's JSON ``review_status`` can say
+    pending while its correction is decided, so the run page offers Approve
+    by this status, not by the JSON. One entry per issue, in issue order.
+    """
+    rows = list(active)
+    scoped = {correction_issue_id(c): c for c in rows if correction_issue_id(c)}
+    legacy = next((c for c in rows if not correction_issue_id(c)), None)
+    legacy_issues = correction_issues(legacy) if legacy else []
+    statuses = []
+    seen: set[str] = set()
+    for index, issue in enumerate(analysis_root_cause_issues(analysis)):
+        issue_id = str(issue.get("issue_id") or "")
+        # A repeated ID is given a new one when the issue is next saved.
+        candidate = scoped.get(issue_id) if issue_id and issue_id not in seen else None
+        seen.add(issue_id)
+        content = issue_content(issue)
+        if candidate is not None and issue_content(correction_issues(candidate)[0]) == content:
+            status = candidate.status
+        elif legacy is not None and index < len(legacy_issues) and issue_content(legacy_issues[index]) == content:
+            status = legacy.status
+        else:
+            status = CorrectionStatus.PENDING
+        statuses.append({"issue_id": issue_id, "status": getattr(status, "value", status)})
+    return statuses
+
+
 def apply_issue_review(issue: dict[str, Any], correction: ReviewCorrection) -> None:
     issue["review_status"] = correction.status.value
     for key in REVIEW_FIELDS[1:]:

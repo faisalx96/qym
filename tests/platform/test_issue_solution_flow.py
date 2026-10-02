@@ -163,8 +163,8 @@ def test_legacy_shared_solution_block_is_not_rendered():
     source = (DASHBOARD / "run.html").read_text()
     assert 'Shared · legacy' not in source
     assert 'metric-analysis-shared-solution' not in source
-    assert 'renderMetricRootCauseIssues(analysis, itemId, metricName, legacyReview)' in source
-    assert 'renderMetricAnalysisCard(itemId, metricName, metricAnalyses[metricName], row.review_corrections?.[metricName])' in source
+    assert 'renderMetricRootCauseIssues(analysis, itemId, metricName, legacyReview, issueStatuses)' in source
+    assert 'renderMetricAnalysisCard(itemId, metricName, metricAnalyses[metricName], row.review_corrections?.[metricName], row.review_issue_statuses?.[metricName])' in source
 
 
 @pytest.mark.parametrize("page", ["run", "compare"])

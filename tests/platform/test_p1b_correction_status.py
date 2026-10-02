@@ -20,9 +20,10 @@ from fastapi import HTTPException
 from qym_platform.api import analysis as analysis_api
 from qym_platform.api import runs as runs_api
 from qym_platform.api.analysis import reject_correction, reset_correction
-from qym_platform.db.models import CorrectionStatus, ReviewCorrection, RunItem
+from qym_platform.db.models import CorrectionStatus, ReviewCorrection, RunItem, RunItemPassScore
+from qym_platform.services.root_cause_changes import PASS_ANALYSIS_META_KEY
 
-from test_issue_reviews import candidates, setup
+from test_issue_reviews import act, candidates, setup
 from test_review_rules import (  # noqa: F401  (fixtures)
     MANAGER,
     MEMBER,
@@ -354,4 +355,153 @@ def test_run_page_offers_approve_only_on_pending_issues():
         assert.ok(render('rejected').includes('>Rejected</span>'));
         assert.ok(render('rejected').includes('Reset it to pending on Reviews'));
         assert.ok(!render('approved').includes('data-approve-issue'));
+    """)
+
+
+# ---------------------------------------------------------------------------
+# Run page: each issue's review status comes from its correction (leftover)
+# ---------------------------------------------------------------------------
+
+
+def _row(db, run, item_id):
+    rows = runs_api._build_run_data(db, run, compact=True)["snapshot"]["rows"]
+    return next(row for row in rows if row["item_id"] == item_id)
+
+
+def _json_says_pending(issues):
+    for issue in issues:
+        issue["review_status"] = "pending"
+
+
+def test_run_payload_gives_each_issue_its_correction_status(db_session):
+    """Older data: an issue's JSON says pending while its correction is
+    approved or rejected. The run page showed Approve and the server refused
+    it (409). The payload now names each issue's own review status, the one
+    Approve is judged by."""
+    _, run, item, principal = setup(db_session)
+    runs_api.update_root_cause_issue(_issue_request(item, 0), db=db_session, principal=principal)
+    db_session.expire_all()
+    first, second = candidates(db_session, run)
+    reject_correction(second.id, {"comment": "no"}, db=db_session, principal=principal)
+    db_session.expire_all()
+    metadata = deepcopy(item.item_metadata)
+    issues = metadata["metric_analyses"]["accuracy"]["root_cause_issues"]
+    ids = [issue["issue_id"] for issue in issues]
+    _json_says_pending(issues)
+    item.item_metadata = metadata
+    db_session.commit()
+
+    row = _row(db_session, run, item.item_id)
+    assert row["review_issue_statuses"] == {
+        "accuracy": [{"issue_id": ids[0], "status": "approved"}, {"issue_id": ids[1], "status": "rejected"}]
+    }
+    # The same statuses the Approve route judges by.
+    for index in (0, 1):
+        with pytest.raises(HTTPException) as refused:
+            runs_api.update_root_cause_issue(_issue_request(item, index), db=db_session, principal=principal)
+        assert refused.value.status_code == 409
+        db_session.rollback()
+        db_session.expire_all()
+
+    # Reset on Reviews: pending again, and Approve goes through.
+    reset_correction(second.id, db=db_session, principal=principal)
+    db_session.expire_all()
+    assert _row(db_session, run, item.item_id)["review_issue_statuses"]["accuracy"][1]["status"] == "pending"
+    result = runs_api.update_root_cause_issue(_issue_request(item, 1), db=db_session, principal=principal)
+    assert [entry["status"] for entry in result["row"]["review_issue_statuses"]["accuracy"]] == ["approved", "approved"]
+
+    # An issue whose content no longer matches its review would get a new
+    # pending review: pending, and Approve goes through.
+    db_session.expire_all()
+    metadata = deepcopy(item.item_metadata)
+    metadata["metric_analyses"]["accuracy"]["root_cause_issues"][0]["finding"] = "Changed outside the routes"
+    item.item_metadata = metadata
+    db_session.commit()
+    assert _row(db_session, run, item.item_id)["review_issue_statuses"]["accuracy"][0]["status"] == "pending"
+    runs_api.update_root_cause_issue(_issue_request(item, 0), db=db_session, principal=principal)
+
+
+@pytest.mark.parametrize("status", [CorrectionStatus.APPROVED, CorrectionStatus.REJECTED])
+def test_run_payload_gives_a_legacy_grouped_issue_its_review_status(client, session_factory, status):
+    with session_factory() as db:
+        _run(db, "r1")
+        _legacy_group(db, status=status)
+        item = db.query(RunItem).filter_by(run_id="r1").one()
+        metadata = deepcopy(item.item_metadata)
+        _json_says_pending(metadata["metric_analyses"]["accuracy"]["root_cause_issues"])
+        item.item_metadata = metadata
+        db.commit()
+    row = _ok(client.get("/api/runs/r1?view=compact", headers=_ui(MANAGER)))["snapshot"]["rows"][0]
+    # No issue ID yet: the entry goes by position.
+    assert row["review_issue_statuses"] == {"accuracy": [{"issue_id": "", "status": status.value}]}
+
+
+def test_pass_payload_gives_each_pass_issue_its_correction_status(db_session):
+    _, run, item, principal = setup(db_session)
+    run.samples = 2
+    analysis = deepcopy(item.item_metadata["metric_analyses"]["accuracy"])
+    for number in (1, 2):
+        db_session.add(RunItemPassScore(run_id=run.id, item_id=item.item_id, metric_name="accuracy", pass_number=number,
+                                        score_numeric=0, meta={PASS_ANALYSIS_META_KEY: deepcopy(analysis)}))
+    db_session.commit()
+    act(db_session, run, item, principal, "approve", 0, pass_number=2)
+    score = db_session.query(RunItemPassScore).filter_by(pass_number=2).one()
+    meta = deepcopy(score.meta)
+    _json_says_pending(meta[PASS_ANALYSIS_META_KEY]["root_cause_issues"])
+    score.meta = meta
+    db_session.commit()
+
+    statuses = _row(db_session, run, item.item_id)["pass_review_issue_statuses"]["accuracy"]
+    assert [entry["status"] for entry in statuses[1]] == ["approved", "pending"]
+    assert [entry["status"] for entry in statuses[0]] == ["pending", "pending"]
+
+
+def test_run_page_offers_approve_by_the_issue_review_status():
+    functions = "\n".join(
+        _function("run", name)
+        for name in ("rootCauseIssues", "renderMetricRootCauseIssues", "scopedPassAttempt",
+                     "scopedPassMetricMeta", "scopedPassItemMetadata", "scopeRowToPass")
+    )
+    _run_javascript(functions + r"""
+        const escapeHtml = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+        const escapeAttr = escapeHtml;
+        const rootCauseColor = () => 'var(--warning)';
+        const IS_EXPORT = false;
+        const analysis = {review_status: 'pending', root_cause_issues: [
+          {issue_id: 'i1', category: 'Retrieval', review_status: 'pending'},
+          {issue_id: 'i2', category: 'Prompt', review_status: 'pending'},
+        ]};
+        const render = (statuses, value = analysis) => renderMetricRootCauseIssues(value, 'item-1', 'accuracy', {}, statuses);
+        const approveButtons = html => (html.match(/data-approve-issue="/g) || []).length;
+        // The JSON says pending; the issues' own reviews are decided.
+        const decided = render([{issue_id: 'i2', status: 'rejected'}, {issue_id: 'i1', status: 'approved'}]);
+        assert.equal(approveButtons(decided), 0);
+        assert.ok(decided.includes('rc-status-pill approved">Approved</span>'));
+        assert.ok(decided.includes('>Rejected</span>'));
+        // The review status wins over the JSON either way.
+        const pending = render([{issue_id: 'i1', status: 'pending'}, {issue_id: 'i2', status: 'pending'}],
+          {root_cause_issues: analysis.root_cause_issues.map(issue => ({...issue, review_status: 'approved'}))});
+        assert.equal(approveButtons(pending), 2);
+        // Without statuses (an exported page) the JSON still decides.
+        assert.equal(approveButtons(render(undefined)), 2);
+        // An issue without an ID goes by position, never by another issue's entry.
+        const legacy = {root_cause_issues: [{category: 'Retrieval'}]};
+        assert.equal(approveButtons(render([{issue_id: '', status: 'approved'}], legacy)), 0);
+        assert.equal(approveButtons(render([{issue_id: 'i9', status: 'approved'}], legacy)), 1);
+
+        // A pass view reads that pass's statuses.
+        const row = {
+          item_id: 'item-1', item_metadata: {},
+          pass_metric_analyses: {accuracy: [analysis, analysis]},
+          pass_review_issue_statuses: {accuracy: [
+            [{issue_id: 'i1', status: 'pending'}, {issue_id: 'i2', status: 'pending'}],
+            [{issue_id: 'i1', status: 'approved'}, {issue_id: 'i2', status: 'pending'}],
+          ]},
+        };
+        for (const [pass, buttons] of [[1, 2], [2, 1]]) {
+          const scoped = scopeRowToPass(row, ['accuracy'], pass);
+          const html = renderMetricRootCauseIssues(scoped.item_metadata.metric_analyses.accuracy, 'item-1', 'accuracy',
+            scoped.review_corrections.accuracy, scoped.review_issue_statuses.accuracy);
+          assert.equal(approveButtons(html), buttons, 'pass ' + pass);
+        }
     """)
