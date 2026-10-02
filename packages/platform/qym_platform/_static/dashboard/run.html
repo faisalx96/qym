@@ -11,6 +11,7 @@
   <script src="/static/auth.js?v=p0-20260930"></script>
   <script src="/static/shell.js?v=p1-20261001"></script>
   <script src="/static/metrics.js?v=p0-20260930-3"></script>
+  <script src="/static/runs_order.js?v=p1-20261002"></script>
   <script src="/static/run_details.js?v=p1-20261001"></script>
   <script src="/static/qym_live.js?v=p1-20261001"></script>
   <script src="/static/trace_viewer.js?v=p1-20261001"></script>
@@ -393,6 +394,59 @@
     }
     .hero-previous-delta--improved { color: var(--success); }
     .hero-previous-delta--regressed { color: var(--error); }
+    /* Previous / next run in the Runs list order (C044): a second row on the
+       header's right, opposite the run name. The arrows sit at the right
+       edge, so they stay under the pointer from run to run; the position
+       grows to their left. */
+    .hero-top.hero-top--paged {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas: "identity right" "identity pager";
+      column-gap: 10px;
+      row-gap: 6px;
+      align-items: start;
+    }
+    .hero-top--paged > .hero-identity { grid-area: identity; }
+    .hero-top--paged > .hero-right { grid-area: right; }
+    .hero-pager {
+      grid-area: pager;
+      justify-self: end;
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      min-height: var(--control-height);
+    }
+    .hero-pager__pos {
+      margin-right: var(--space-xs);
+      font-size: var(--font-sm);
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+    .hero-pager__num {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      color: var(--text-secondary);
+    }
+    .hero-pager__step {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+    }
+    .hero-pager__step svg {
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.75;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .hero-pager__step[aria-disabled="true"],
+    .hero-pager__step[aria-disabled="true"]:hover {
+      color: var(--text-dim);
+      cursor: default;
+    }
     .hero-actions > a.qym-inline-action { text-decoration: none; }
     .hero-actions {
       display: flex;
@@ -969,6 +1023,13 @@
       }
       .hero-top {
         flex-direction: column;
+      }
+      .hero-top.hero-top--paged {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: "identity" "right" "pager";
+      }
+      .hero-pager {
+        justify-self: start;
       }
       .hero-right {
         width: 100%;
@@ -7596,6 +7657,7 @@
           state.langfuseProjectId = data.run.langfuse_project_id || '';
           syncProjectLinks(data.run.project);
           processRun();
+          applyRunViewUrlState();
           initializeRunDetails();
           render();
           applyReadOnlyMode();
@@ -8779,11 +8841,17 @@
         };
       }
 
-      // The link a teammate can open: this run (and pass), optionally one item.
+      // The link a teammate can open: this run (and pass) in the view on
+      // screen (C045), or one item.
       function runShareUrl(itemId) {
         const url = new URL(window.location.pathname, window.location.origin);
         if (VIEW_PASS) url.searchParams.set('pass', String(VIEW_PASS));
         if (itemId) url.searchParams.set('item', itemId);
+        else {
+          Object.entries(runViewParams()).forEach(([key, value]) => {
+            if (value) url.searchParams.set(key, value);
+          });
+        }
         return url.toString();
       }
 
@@ -8938,8 +9006,9 @@
               ? '<a class="hero-pass-pill" href="' + escapeAttr(window.location.pathname + '?pass=1') + '" title="View the remaining pass and its reviews">Pass 1</a>'
               : '');
 
+        const pagerHtml = runPagerHtml();
         el('run-summary').innerHTML = '<div class="run-summary-card">' +
-          '<div class="hero-top">' +
+          '<div class="hero-top' + (pagerHtml ? ' hero-top--paged' : '') + '">' +
             '<div class="hero-identity">' +
               '<div class="hero-eyebrow">Run Detail</div>' +
               '<div class="hero-headline">' +
@@ -8956,12 +9025,112 @@
               '</div>' +
               '<div class="hero-actions">' + actionsHtml + '</div>' +
             '</div>' +
+            pagerHtml +
           '</div>' +
           ingestWarningHtml +
           '<div class="hero-meta-grid">' + metaHtml + '</div>' +
           executionContextHtml +
         '</div>';
         syncComparePrevious();
+        syncRunPager();
+      }
+
+      // ── Previous / next run (C044) ──
+      // The runs before and after this one in the Runs list order the reader
+      // came from: the list's filters, range, search and sort travel in
+      // ?list= (runs_order.js). With no list (a direct link) it is the
+      // project's default order, newest first with no filters. The arrows are
+      // real links that carry ?list= on; they are disabled at the ends. The
+      // pager renders in place from the first paint (arrows disabled), so its
+      // answer moves nothing.
+      const RUNS_LIST_CONTEXT = window.QymRunsOrder
+        ? window.QymRunsOrder.normalizeContext(new URLSearchParams(window.location.search).get(window.QymRunsOrder.PARAM))
+        : '';
+      let runPagerRequest = null;
+      let runPagerData = null;
+
+      function runPagerSlug() {
+        return (state.run && state.run.project && state.run.project.slug) || CURRENT_PROJECT_SLUG;
+      }
+
+      function runPagerHtml() {
+        if (IS_EXPORT || !RUN_ID || !window.QymRunsOrder || !runPagerSlug()) return '';
+        const step = (key, label, path) =>
+          '<a class="hero-pager__step qym-icon-action" data-run-pager="' + key + '" role="link" aria-disabled="true" aria-label="' + label + '" title="' + label + '">' +
+            '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="' + path + '"/></svg>' +
+          '</a>';
+        return '<nav class="hero-pager" id="run-pager" aria-label="Previous and next run">' +
+          '<span class="hero-pager__pos" id="run-pager-pos"></span>' +
+          step('previous', 'Previous run', 'M4 10l4-4 4 4') +
+          step('next', 'Next run', 'M4 6l4 4 4-4') +
+        '</nav>';
+      }
+
+      function fetchRunNeighbors() {
+        const order = window.QymRunsOrder.query(RUNS_LIST_CONTEXT);
+        const body = { project_slug: runPagerSlug(), run_id: RUN_ID, filters: order.filters, sort: order.sort };
+        const post = payload => fetch(apiUrl('api/dashboard/neighbors'), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload), signal: pageSignal,
+        }).then(response => (response.ok ? response.json() : null));
+        // A text sort: collate its values as the list does, then ask again.
+        return post(body).then(data => (data && data.collation_needed
+          ? post({ ...body, collation: window.QymRunsOrder.collation(order.sort, data.sort_values) || [] })
+          : data)).catch(() => null);
+      }
+
+      function applyRunPager(data) {
+        const pager = el('run-pager');
+        if (!pager) return;
+        const context = data && data.context;
+        const listContext = context === 'list' ? RUNS_LIST_CONTEXT : '';
+        const position = el('run-pager-pos');
+        if (position) {
+          if (context && data.position) {
+            position.innerHTML = '<span class="hero-pager__num">' + escapeHtml(Number(data.position).toLocaleString('en-US')) + '</span> of ' +
+              '<span class="hero-pager__num">' + escapeHtml(Number(data.total).toLocaleString('en-US')) + '</span>';
+            position.title = listContext
+              ? 'This run’s place in the Runs list you came from (its filters, search and sort).'
+              : (RUNS_LIST_CONTEXT
+                ? 'This run is no longer in the Runs list you came from; this is its place in the project’s Runs list (newest first, no filters).'
+                : 'This run’s place in the project’s Runs list (newest first, no filters).');
+          } else {
+            position.textContent = '';
+            position.removeAttribute('title');
+          }
+        }
+        if (context) pager.removeAttribute('title');
+        else pager.title = data && !data.failed ? 'This run is not in the project’s Runs list.' : 'Could not load the Runs list order.';
+        pager.querySelectorAll('[data-run-pager]').forEach(link => {
+          const which = link.dataset.runPager;
+          const target = data && data[which];
+          const noun = which === 'previous' ? 'Previous run' : 'Next run';
+          if (!target) {
+            link.removeAttribute('href');
+            link.setAttribute('role', 'link');
+            link.setAttribute('aria-disabled', 'true');
+            link.setAttribute('aria-label', 'No ' + noun.toLowerCase());
+            link.title = 'No ' + noun.toLowerCase();
+            return;
+          }
+          const base = projectUrl(runPagerSlug(), 'runs/' + encodeURIComponent(target.run_id));
+          link.href = window.QymRunsOrder.runHref(base, listContext);
+          link.removeAttribute('role');
+          link.removeAttribute('aria-disabled');
+          link.setAttribute('aria-label', noun + ': ' + (target.run_name || target.run_id));
+          link.title = noun + ': ' + (target.run_name || target.run_id);
+        });
+      }
+
+      function syncRunPager() {
+        if (!el('run-pager')) return;
+        if (runPagerData) { applyRunPager(runPagerData); return; }
+        if (!runPagerRequest) runPagerRequest = fetchRunNeighbors();
+        runPagerRequest.then(data => {
+          if (pageGone()) return;
+          runPagerData = data || { failed: true };
+          applyRunPager(runPagerData);
+        });
       }
 
       // ── Compare with the previous run (C057) ──
@@ -13096,6 +13265,172 @@
         frame = requestAnimationFrame(tick);
       }
 
+      // ── View state in the URL (C045) ──
+      // The item filters (bar clicks and the filter builder), search, sort,
+      // page, the Display layout and analysis metric with its pass threshold
+      // live in the query string, like the list pages, so a reload, Back and
+      // a shared link open the same view. Read once before the first render;
+      // written (replaceState) after every items render. Writing never
+      // re-renders or scrolls.
+      const RUN_VIEW_SORTS = ['score_asc', 'score_desc', 'latency_asc', 'latency_desc'];
+      const RUN_VIEW_SHOW = ['passed', 'failed', 'metric_errors', 'errors', 'edited_metrics', 'retries', 'trace_errors'];
+      const RUN_VIEW_ERROR_SLOTS = [
+        ['task', 'taskErrorFilter'], ['metric', 'metricErrorFilter'],
+        ['trace', 'traceErrorFilter'], ['analysis', 'analysisErrorFilter'],
+      ];
+
+      function runViewFiltersParam() {
+        const out = {};
+        if (filterRuleCount(state.filterRoot) > 0) out.rules = state.filterRoot;
+        if (state.approvalFilter !== null) out.approval = state.approvalFilter;
+        if (state.complexityFilter !== null) out.complexity = state.complexityFilter;
+        if (state.domainFilter !== null) {
+          out.domain = state.domainFilter;
+          if (state.domainFilterMode === 'exclude') out.domainMode = 'exclude';
+          if (state.domainExclusive.size) out.domainOnly = Array.from(state.domainExclusive);
+        }
+        if (state.rootCauseFilter !== null) {
+          out.rootCause = state.rootCauseFilter;
+          if (state.rootCauseMetric !== 'all') out.rootCauseMetric = state.rootCauseMetric;
+        }
+        const errors = {};
+        RUN_VIEW_ERROR_SLOTS.forEach(([key, slot]) => {
+          if (state[slot]) errors[key] = { kind: state[slot].kind, label: state[slot].label };
+        });
+        if (Object.keys(errors).length) out.errors = errors;
+        if (state.scoreDistFilter) out.score = [state.scoreDistFilter.min, state.scoreDistFilter.max];
+        if (state.repeatDistFilter) out.repeat = state.repeatDistFilter;
+        if (state.latencyDistFilter) {
+          const max = state.latencyDistFilter.max;
+          out.latency = [state.latencyDistFilter.min, Number.isFinite(max) ? max : null];
+        }
+        const categories = {};
+        Object.entries(state.categoryFilters).forEach(([key, value]) => { if (value !== null) categories[key] = value; });
+        if (Object.keys(categories).length) out.categories = categories;
+        return Object.keys(out).length ? JSON.stringify(out) : null;
+      }
+
+      // The Display pass threshold applies to a scored metric with a
+      // declared direction (updateThresholdControl).
+      function metricHasPassThreshold(metric) {
+        return !!metric && !state.metricIsBoolean[metric]
+          && state.metricTypes?.[metric] !== 'numeric' && !!metricDirectionOf(metric);
+      }
+
+      function runViewParams() {
+        const metric = state.selectedMetric;
+        const defaultMetric = state.allMetrics.length
+          ? window.QymMetrics.defaultMetricName(state.allMetrics, state.metricSpecs) : null;
+        const threshold = metricHasPassThreshold(metric) ? state.metricThresholds[metric] : null;
+        const defaultThreshold = metric ? window.QymMetrics.defaultPassThreshold(state.metricSpecs[metric]) : null;
+        const heatmap = state.itemDetailView === 'heatmap';
+        return {
+          q: state.searchQuery || null,
+          sort: state.sortBy !== 'index' ? state.sortBy : null,
+          view: heatmap ? 'heatmap' : null,
+          metric: metric && metric !== defaultMetric ? metric : null,
+          threshold: threshold != null && defaultThreshold != null && Math.abs(threshold - defaultThreshold) > 1e-9
+            ? String(Math.round(threshold * 100)) : null,
+          show: state.itemFilter !== 'all' ? state.itemFilter : null,
+          filters: runViewFiltersParam(),
+          page: !heatmap && state.page > 1 ? String(state.page) : null,
+        };
+      }
+
+      function syncRunViewUrl() {
+        if (IS_EXPORT || pageGone() || !window.QymShell || typeof window.QymShell.replaceUrlQuery !== 'function') return;
+        window.QymShell.replaceUrlQuery(runViewParams());
+      }
+
+      const _isStringList = value => Array.isArray(value) && value.length <= 500 && value.every(item => typeof item === 'string');
+      const _isNumberPair = value => Array.isArray(value) && value.length === 2
+        && typeof value[0] === 'number' && (typeof value[1] === 'number' || value[1] === null);
+      function _validFilterRule(node, depth) {
+        if (!node || typeof node !== 'object' || depth > 6) return false;
+        if (Array.isArray(node.children)) {
+          return (node.op === 'and' || node.op === 'or') && node.children.length <= 50
+            && node.children.every(child => _validFilterRule(child, depth + 1));
+        }
+        const value = node.value;
+        return typeof node.field === 'string' && typeof node.oper === 'string'
+          && (typeof value === 'string' || typeof value === 'number' || _isStringList(value));
+      }
+
+      function applyRunViewFiltersParam(raw) {
+        let parsed = null;
+        try { parsed = JSON.parse(raw); } catch (err) { return; }
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+        if (_validFilterRule(parsed.rules, 0) && Array.isArray(parsed.rules.children)) state.filterRoot = parsed.rules;
+        if (parsed.approval === 'approved' || parsed.approval === 'not_approved') state.approvalFilter = parsed.approval;
+        if (_isStringList(parsed.complexity)) state.complexityFilter = parsed.complexity;
+        if (_isStringList(parsed.domain)) {
+          state.domainFilter = parsed.domain;
+          state.domainFilterMode = parsed.domainMode === 'exclude' ? 'exclude' : 'include';
+          if (state.domainFilterMode === 'include' && _isStringList(parsed.domainOnly)) state.domainExclusive = new Set(parsed.domainOnly);
+        }
+        if (_isStringList(parsed.rootCause)) {
+          state.rootCauseFilter = parsed.rootCause;
+          if (state.allMetrics.includes(parsed.rootCauseMetric)) state.rootCauseMetric = parsed.rootCauseMetric;
+        }
+        const errors = parsed.errors && typeof parsed.errors === 'object' ? parsed.errors : {};
+        RUN_VIEW_ERROR_SLOTS.forEach(([key, slot]) => {
+          const value = errors[key];
+          if (value && typeof value.kind === 'string' && typeof value.label === 'string') state[slot] = { kind: value.kind, label: value.label };
+        });
+        if (_isNumberPair(parsed.score) && parsed.score[1] !== null) state.scoreDistFilter = { min: parsed.score[0], max: parsed.score[1] };
+        const repeat = parsed.repeat;
+        if (repeat && typeof repeat === 'object' && state.allMetrics.includes(repeat.metric)
+          && ['bucket', 'samples', 'threshold'].every(key => Number.isFinite(repeat[key]))) {
+          state.repeatDistFilter = { metric: repeat.metric, bucket: repeat.bucket, samples: repeat.samples, threshold: repeat.threshold };
+        }
+        if (_isNumberPair(parsed.latency)) {
+          state.latencyDistFilter = { min: parsed.latency[0], max: parsed.latency[1] === null ? Infinity : parsed.latency[1] };
+        }
+        if (parsed.categories && typeof parsed.categories === 'object' && !Array.isArray(parsed.categories)) {
+          Object.entries(parsed.categories).forEach(([key, value]) => {
+            if (_isStringList(value) && !['approval', 'complexity', 'domain', 'root_cause'].includes(key)) state.categoryFilters[key] = value;
+          });
+        }
+      }
+
+      // Before the first render: the page opens on the view its URL names,
+      // never on the default view first.
+      function applyRunViewUrlState() {
+        if (IS_EXPORT) return;
+        const params = new URLSearchParams(window.location.search);
+        const search = (params.get('q') || '').trim();
+        if (search) {
+          state.searchQuery = search;
+          const input = el('items-search');
+          if (input) input.value = search;
+        }
+        const sort = params.get('sort');
+        if (RUN_VIEW_SORTS.includes(sort)) {
+          state.sortBy = sort;
+          const select = el('sort-select');
+          if (select) select.value = sort;
+        }
+        const metric = params.get('metric');
+        if (metric && state.allMetrics.includes(metric)) state.selectedMetric = metric;
+        const threshold = Number(params.get('threshold'));
+        if (params.has('threshold') && metricHasPassThreshold(state.selectedMetric) && Number.isFinite(threshold) && threshold >= 0 && threshold <= 100) {
+          state.metricThresholds[state.selectedMetric] = threshold / 100;
+        }
+        if (params.get('view') === 'heatmap' && (parseInt(state.run?.samples, 10) || 1) > 1) {
+          state.itemDetailView = 'heatmap';
+          document.querySelectorAll('.items-view-toggle [data-items-view]').forEach(option => {
+            const active = option.dataset.itemsView === 'heatmap';
+            option.classList.toggle('active', active);
+            option.setAttribute('aria-pressed', active ? 'true' : 'false');
+          });
+        }
+        const show = params.get('show');
+        if (RUN_VIEW_SHOW.includes(show)) state.itemFilter = show;
+        if (params.has('filters')) applyRunViewFiltersParam(params.get('filters'));
+        const page = parseInt(params.get('page') || '', 10);
+        if (Number.isFinite(page) && page > 1) state.page = page;
+      }
+
       // The address bar names the last opened item, so it can be copied or
       // shared as is; closing that item removes it again.
       function syncItemUrl(itemId, opened) {
@@ -13600,6 +13935,7 @@
           }
         }
         if (state.page > totalPages) state.page = totalPages;
+        syncRunViewUrl();
         const start = (state.page - 1) * state.pageSize;
         const pageItems = items.slice(start, start + state.pageSize);
 

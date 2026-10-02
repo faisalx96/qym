@@ -290,8 +290,38 @@
       // ── Trend (C056) ──
       // One task's primary metric per day (each finished run counts once,
       // with its run mean) and its runs per day, from POST /api/dashboard/trend.
-      const trendView = { days: 7, task: null, dataset: null, data: null, slug: '', generation: 0 };
+      const trendView = { days: 7, task: null, dataset: null, data: null, slug: '', generation: 0, chosen: false };
       let trendResizeObserver = null;
+
+      // The range, and a task and dataset the reader picked, live in the URL
+      // (?range=30d&task=…&dataset=…; C045), so a reload, Back and a shared
+      // link open the same trend. Written with replaceState: nothing redraws.
+      const TREND_URL_RANGES = { '7d': 7, '30d': 30, '90d': 90 };
+      function applyTrendUrlState() {
+        const params = new URLSearchParams(window.location.search);
+        const days = TREND_URL_RANGES[params.get('range')];
+        if (days) trendView.days = days;
+        const task = params.get('task');
+        if (task) {
+          trendView.task = task;
+          trendView.dataset = params.get('dataset') || null;
+          trendView.chosen = true;
+        }
+        document.querySelectorAll('#trend-range [data-days]').forEach(button => {
+          const active = Number(button.dataset.days) === trendView.days;
+          button.classList.toggle('active', active);
+          button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+      }
+      function syncTrendUrl() {
+        if (!window.QymShell || typeof window.QymShell.replaceUrlQuery !== 'function') return;
+        window.QymShell.replaceUrlQuery({
+          range: trendView.days === 7 ? null : trendView.days + 'd',
+          task: trendView.chosen ? trendView.task : null,
+          dataset: trendView.chosen ? trendView.dataset : null,
+        });
+      }
+      applyTrendUrlState();
 
       function trendIsRate(values) {
         return values.every(value => value >= 0 && value <= 1);
@@ -495,6 +525,9 @@
           trendView.data = data;
           trendView.task = data.task || null;
           trendView.dataset = data.task ? data.dataset : null;
+          // A picked task that has no runs in the range falls back: the URL
+          // names what is shown.
+          syncTrendUrl();
           renderTrend(data);
         } catch (e) {
           if (!overviewActive || generation !== trendView.generation) return;
@@ -514,12 +547,15 @@
           button.classList.toggle('active', active);
           button.setAttribute('aria-pressed', active ? 'true' : 'false');
         });
+        syncTrendUrl();
         loadTrend(trendView.slug);
       });
       document.getElementById('trend-task').addEventListener('change', event => {
         const entry = (trendView.data?.tasks || [])[Number(event.target.value)];
         trendView.task = entry ? entry.task : null;
         trendView.dataset = entry ? entry.dataset : null;
+        trendView.chosen = !!entry;
+        syncTrendUrl();
         loadTrend(trendView.slug);
       });
 

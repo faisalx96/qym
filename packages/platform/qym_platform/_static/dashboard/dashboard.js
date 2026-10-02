@@ -6579,10 +6579,21 @@
       : apiUrl(`run/${encodeURIComponent(filePath)}`);
   }
 
+  // A run opened from the Runs list carries the list's filters, range,
+  // search and sort, so its page steps to the previous and next run in this
+  // order (C044, runs_order.js).
+  function runFromListUrl(filePath) {
+    const url = runDetailUrl(filePath);
+    if (state.currentView !== 'table' || !window.QymRunsOrder) return url;
+    return window.QymRunsOrder.runHref(url, window.QymRunsOrder.contextFromParams({
+      ...dashboardUrlParams(), q: activeSearchQuery() || null,
+    }));
+  }
+
   // Where a run's name link points (the analyzer while it picks a run).
   function runOpenHref(run) {
     if (analysisRunPickerContext && run) return analyzerUrlForRun(run);
-    return runDetailUrl(run.file_path);
+    return runFromListUrl(run.file_path);
   }
 
   function openRun(filePath, e) {
@@ -6595,7 +6606,7 @@
     sessionStorage.removeItem('compareRuns');
     sessionStorage.removeItem('compareCohorts');
     sessionStorage.setItem('dashboardRunFile', filePath);
-    openUrl(runDetailUrl(filePath), e);
+    openUrl(runFromListUrl(filePath), e);
   }
 
   function openComparison(e) {
@@ -7858,13 +7869,11 @@
     }
   }
 
+  // The run page orders its previous / next run the same way (runs_order.js).
   function dashboardCollation(overview, sortKey) {
-    const field = sortKey.replace(/-(asc|desc)$/, '');
-    const column = { task: 'tasks', model: 'models', dataset: 'dataset_names', version: 'git_commits', owner: 'owner_names' }[field];
+    const column = window.QymRunsOrder.collatedColumn(sortKey);
     if (!column) return null;
-    return (overview?.sort_values?.[column] || []).slice().sort(
-      field === 'model' ? compareModelVariantKeys : (a, b) => String(a).localeCompare(String(b))
-    );
+    return window.QymRunsOrder.collation(sortKey, overview?.sort_values?.[column] || []);
   }
 
   function renderDashboardFreshness(freshness) {

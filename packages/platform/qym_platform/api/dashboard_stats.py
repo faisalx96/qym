@@ -8,6 +8,9 @@
   projection (C056).
 - ``GET /api/dashboard/previous-run``: the run a run detail page compares
   with: the previous finished run of the same task, model and dataset (C057).
+- ``POST /api/dashboard/neighbors``: the runs before and after one run in the
+  Runs list order the reader came from, for the run page's previous / next
+  arrows (C044).
 """
 
 from __future__ import annotations
@@ -23,11 +26,18 @@ from sqlalchemy.orm import Session
 
 from qym_platform.api.dashboard import (
     _base_conditions,
+    _body_parameters,
+    _filter_conditions,
     _freshness,
+    _ordered_query,
+    _parse_collation,
+    _parse_filters,
     _project,
     _query,
     _read_snapshot,
     _snapshot_project,
+    _sort,
+    _sort_columns,
 )
 from qym_platform.auth import Principal, require_ui_principal
 from qym_platform.db.dashboard_models import (
@@ -557,3 +567,131 @@ def dashboard_previous_run(
         ),
         "primary": primary,
     }
+
+
+# --------------------------------------------------------------------------
+# Previous / next run in the Runs list order (C044)
+# --------------------------------------------------------------------------
+
+# Text sorts the browser collates (runs_order.js collation()).
+_COLLATED_SORTS = ("task", "model", "dataset", "version", "owner")
+
+
+def _filtered(filters: Dict[str, Any]) -> bool:
+    return any(value for value in filters.values())
+
+
+def _list_position(db, project, run_id: str, filters, sort: str, collation):
+    """Where ``run_id`` sits in the Runs list for ``filters`` and ``sort``:
+    its position, the list's length and the runs on either side, or None when
+    the run is not in that list. One query, ordered exactly as the list pages
+    (``_build_page``): the sort, then the list's group order and the run id.
+    """
+    conditions = _base_conditions(project) + _filter_conditions(filters)
+    query, legacy_order = _ordered_query(conditions, Dimension.run_key)
+    order = [*_sort(sort, collation), *legacy_order]
+    ranked = query.add_columns(
+        func.row_number().over(order_by=order).label("position"),
+        func.lag(Dimension.run_key).over(order_by=order).label("previous_key"),
+        func.lead(Dimension.run_key).over(order_by=order).label("next_key"),
+        func.count().over().label("total"),
+    ).subquery()
+    row = db.execute(
+        select(
+            ranked.c.position,
+            ranked.c.previous_key,
+            ranked.c.next_key,
+            ranked.c.total,
+        ).where(ranked.c.run_key == run_id)
+    ).first()
+    if row is None:
+        return None
+    keys = [key for key in (row.previous_key, row.next_key) if key]
+    descriptors = (
+        dict(
+            db.execute(
+                select(Dimension.run_key, Dimension.descriptor).where(
+                    Dimension.run_key.in_(keys)
+                )
+            ).all()
+        )
+        if keys
+        else {}
+    )
+
+    def neighbor(key):
+        if not key:
+            return None
+        descriptor = descriptors.get(key) or {}
+        name = descriptor.get("run_name") or descriptor.get("external_run_id") or key
+        return {"run_id": key, "run_name": name}
+
+    return {
+        "position": int(row.position),
+        "total": int(row.total),
+        "previous": neighbor(row.previous_key),
+        "next": neighbor(row.next_key),
+    }
+
+
+@router.post("/neighbors")
+def dashboard_neighbors(
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+):
+    """The runs before and after ``run_id`` in the Runs list order.
+
+    Takes the list's own request: ``filters``, ``sort`` and, for a text sort
+    (task, model, dataset, version, owner), the ``collation`` the browser
+    sorts the values in. A text sort without ``collation`` answers
+    ``collation_needed`` with the ``sort_values`` to collate, and the caller
+    asks again with them, as the list does.
+
+    ``context`` says which order answered: ``list`` (the one asked for),
+    ``default`` (newest first with no filters, when the run is not in the
+    list asked for, or no list was given) or null (the run is in neither).
+    """
+    if not isinstance(payload, dict):
+        raise HTTPException(400, "Invalid dashboard query")
+    args = _body_parameters(
+        payload, {"project_slug", "run_id", "filters", "sort", "collation"}
+    )
+    run_id = payload.get("run_id")
+    if not isinstance(run_id, str) or not run_id or len(run_id) > 200:
+        raise HTTPException(400, "Invalid run id")
+    if not args["project_slug"]:
+        raise HTTPException(400, "Invalid project slug")
+    filters = _parse_filters(args["filters"])
+    sort, collation = args["sort"], _parse_collation(args["collation"])
+    _sort(sort)  # an unknown sort is refused before any read
+    field = sort.rpartition("-")[0]
+    project = _project(db, principal, args["project_slug"])
+    with _read_snapshot(db) as reader:
+        if field in _COLLATED_SORTS and "collation" not in payload:
+            values = reader.scalars(
+                _query(_sort_columns()[field])
+                .where(*_base_conditions(project), *_filter_conditions(filters))
+                .distinct()
+            )
+            return {
+                "run_id": run_id,
+                "collation_needed": True,
+                "sort": sort,
+                "sort_values": [value for value in values if value is not None],
+            }
+        context = "list"
+        found = _list_position(reader, project, run_id, filters, sort, collation)
+        if found is None and (_filtered(filters) or sort != "time-desc"):
+            context = "default"
+            found = _list_position(reader, project, run_id, {}, "time-desc", [])
+        if found is None:
+            return {
+                "run_id": run_id,
+                "context": None,
+                "position": None,
+                "total": 0,
+                "previous": None,
+                "next": None,
+            }
+        return {"run_id": run_id, "context": context, **found}
