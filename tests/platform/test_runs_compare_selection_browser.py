@@ -162,6 +162,58 @@ def test_deleted_runs_drop_out_of_the_kept_selection(app, factory):  # noqa: F81
     assert stored is not None and "run-002" not in stored and "run-001" in stored
 
 
+def test_kept_off_page_picks_count_and_compare_right_before_the_list_answers(
+    app, factory  # noqa: F811
+):
+    """Back shows the cached rows at once and revalidates. A kept pick from
+    another page (a repeat run of three passes) must already count as its
+    three executions and open Compare as three pass columns then; before,
+    the cached page held no data for it until the list answered, so it
+    counted as one and Compare got the whole run (its final-pass outputs in
+    one misleading column)."""
+    with factory() as db:
+        db.get(Run, "run-060").samples = 3
+        db.commit()
+    _publish(factory)
+    page = app.goto("/projects/pa?page=2")
+    _runs_ready(page)
+    _select(page, "run-060")
+    _wait_for_count(page, "3 executions selected")
+    _nav(page, "runs")
+    page.wait_for_function("() => location.pathname === '/projects/pa' && !location.search")
+    _runs_ready(page)
+    _select(page, "run-001")
+    _wait_for_count(page, "4 executions selected")
+    page.locator("#runs-tbody a.run-id").nth(3).click()
+    page.wait_for_url("**/projects/pa/runs/**")
+
+    # Hold the revalidation so the cached rows are what the reader acts on.
+    held = []
+    page.route("**/api/dashboard/runs*", lambda route: held.append(route))
+    try:
+        page.go_back()
+        page.wait_for_function("() => location.pathname === '/projects/pa'")
+        page.wait_for_function(
+            "() => document.getElementById('table-view')?.getAttribute('aria-busy') === 'true'"
+            " && !!document.querySelector('#runs-tbody a.run-id')"
+        )
+        assert held, "the list request should still be pending"
+        assert _selection(page)["count"] == "4 executions selected"
+        page.locator("#compare-view").click()
+        page.wait_for_url("**/compare?**")
+        runs = page.evaluate("() => new URLSearchParams(location.search).getAll('runs')")
+        assert sorted(runs) == [
+            "run-001", "run-060::pass1", "run-060::pass2", "run-060::pass3",
+        ]
+    finally:
+        page.unroute("**/api/dashboard/runs*")
+        for route in held:
+            try:
+                route.continue_()
+            except Exception:  # the page that asked has gone
+                pass
+
+
 def _add_second_project(factory):  # noqa: F811
     now = datetime.utcnow()
     with factory() as db:
@@ -370,3 +422,4 @@ def test_a_cohort_a_pass_pick_drops_out_when_the_runs_passes_changed(browser):  
         assert view.errors == []
     finally:
         view.close()
+

@@ -8023,7 +8023,10 @@
       queueRunsFetch({});
       return;
     }
-    rememberDashboardPage(key, { filterKey, offset, page, overview, pinnedRows: [] });
+    // The pinned rows go in too: a selection kept across visits (C043) needs
+    // its off-page runs' data (passes, status) while the cached page shows.
+    // applyDashboardPageResult keeps only the rows still selected then.
+    rememberDashboardPage(key, { filterKey, offset, page, overview, pinnedRows });
     applyDashboardPageResult({ key, filterKey, offset, page, overview, pinnedRows, retained });
   }
 
