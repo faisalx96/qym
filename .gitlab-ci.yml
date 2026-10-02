@@ -38,6 +38,7 @@ package:
       - qa
       - main
       - master
+      - prerpod
       - eval
   script:
     - source /internet.sh
