@@ -276,6 +276,37 @@ projection matches how every other runs-list filter works.
 the limits in `services/run_versioning.py`. Use a multi-select on Experiments if
 alternatives are needed there.
 
+### B15. Best-run scope chosen before retrieval, global when unchosen (Implemented)
+
+**Question.** The best run was always ranked on the launch form's dataset version. How
+should the user choose what "best" means, and what happens when they choose nothing?
+
+**Decision.**
+- **Prompt first.** The picker asks for a dataset, a version and one value per
+  versioning key, and retrieves nothing until **Find best runs**. The form's base stays
+  pending (Blank) until then.
+- **Any means open.** A part left on *Any* is not filtered. A dataset without a version
+  covers all its versions; it used to fall back to the `production` alias or the
+  latest published version.
+- **Global.** Choosing nothing ranks every eligible run of the environment, including
+  runs on custom dataset strings, which were never eligible before. The UI warns that
+  scores across datasets or versions are not strictly comparable.
+- **Independent of the form.** The scope doesn't follow the launch form's dataset, and
+  "Best run" no longer needs a project dataset to be picked.
+- **Versioning values.** These come from `dashboard_run_versions` (B14). The prompt
+  offers one value per key, and the API accepts several (`versioning=key=value`, repeated).
+- **Reading the config.** Ranking, the best-run base and promote read only
+  `run_metadata.qym_config` (and the job's copy) with SQL JSON paths. Before, each of
+  them loaded the whole `run_metadata`, `run_config` and job `request_body`.
+
+**Why.** The user asked for the scope to be chosen explicitly, with a global fallback.
+"Any" as "not filtered" is the same rule the run-list filters use.
+
+**To reverse.** To exclude custom-dataset runs from global rankings, add
+`EvalRunScore.dataset_version_id.isnot(None)` back to `_eligible` for global scopes.
+To prefill the dataset from the form, initialise the picker's `draft` from
+`api.target()`.
+
 ---
 
 ## C. Operational follow-ups (not blocking)

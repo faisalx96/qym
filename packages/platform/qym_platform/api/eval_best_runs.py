@@ -1,8 +1,13 @@
 """Best-run candidates of an environment (plan §5.1, §10.2; issue #37).
 
 ``GET /v1/projects/{project_id}/eval-environments/{env_id}/best-runs`` ranks the
-environment's official runs on one dataset version. Project members may read it. The
+environment's official runs in the scope the user chose: a dataset, a dataset version
+and ``versioning`` (``key=value``, any versioning_metadata key). Each part left out is
+not constrained, so no scope ranks globally (§10.2). Project members may read it. The
 ranking rules and the response shape are documented in ``services/eval_best_run.py``.
+
+``GET …/eval-environments/{env_id}/best-runs/scope`` lists what the launch form's scope
+prompt offers: the datasets, versions and versioning values that have eligible runs.
 
 ``GET …/eval-environments/{env_id}/best-runs/{run_id}/base`` (#38, plan §10.3) turns
 one official run of the environment into a launch-form base: its stored config
@@ -13,7 +18,7 @@ latest job. See ``services/eval_best_run_base.py``. Nothing is persisted.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -26,8 +31,10 @@ from qym_platform.services.eval_best_run import (
     DEFAULT_LIMIT,
     MAX_LIMIT,
     BestRunError,
+    best_run_scope,
     rank_best_runs,
 )
+from qym_platform.services.run_versioning import parse_versioning_params
 from qym_platform.services.eval_best_run_base import run_base
 
 router = APIRouter()
@@ -40,6 +47,13 @@ def list_best_runs(
     dataset_id: Optional[str] = Query(default=None, max_length=200),
     dataset_version_id: Optional[str] = Query(default=None, max_length=36),
     dataset_version: Optional[str] = Query(default=None, max_length=100),
+    versioning: Optional[List[str]] = Query(
+        default=None,
+        description=(
+            "key=value over the job's versioning_metadata (any key). Repeat a key "
+            "to match any of its values; different keys must all match."
+        ),
+    ),
     metric: Optional[str] = Query(default=None, max_length=200),
     k: Optional[int] = Query(default=None, ge=1, le=1000),
     limit: int = Query(default=DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
@@ -47,9 +61,13 @@ def list_best_runs(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
-    """Top ``limit`` eligible runs on the dataset version, best first."""
+    """Top ``limit`` eligible runs in the chosen scope (global when none), best first."""
     _require_project_access(db, principal, project_id)
     env = _get_environment(db, project_id, env_id)
+    try:
+        versioning_filter = parse_versioning_params(versioning)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
     try:
         return rank_best_runs(
             db,
@@ -57,6 +75,7 @@ def list_best_runs(
             dataset_id=dataset_id,
             dataset_version_id=dataset_version_id,
             dataset_version=dataset_version,
+            versioning=versioning_filter,
             metric=metric,
             k=k,
             limit=limit,
@@ -64,6 +83,19 @@ def list_best_runs(
         )
     except BestRunError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+@router.get("/v1/projects/{project_id}/eval-environments/{env_id}/best-runs/scope")
+def get_best_run_scope(
+    project_id: str,
+    env_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """The datasets, versions and versioning values the scope prompt offers."""
+    _require_project_access(db, principal, project_id)
+    env = _get_environment(db, project_id, env_id)
+    return best_run_scope(db, env)
 
 
 @router.get(

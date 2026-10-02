@@ -421,7 +421,14 @@ Each environment can have **Official defaults**: a curated, versioned configurat
 
 ### Best run and drift warnings
 
-**Start from → Best run** ranks the environment's official runs on the selected **dataset version**. Runs on other versions are never compared; when the version has no eligible run, the picker says so.
+**Start from → Best run** first asks what to rank on, and retrieves nothing until you click **Find best runs**:
+
+- **Dataset** and **Dataset version**: only datasets and versions that have eligible runs are listed, with their run counts.
+- One select per **versioning** key the runs reported, for example **Agent version** and **KB version**.
+
+Each part left on **Any** is not filtered. Leaving everything on **Any** ranks every run of the environment, across datasets and versions, including runs on a custom dataset string. Scores from different datasets or versions aren't strictly comparable, so the picker reminds you when no version is chosen. Pick a version to compare like with like. When a chosen version has no eligible run, the picker says so and offers the latest version that has runs. Change the selects and click **Update best runs** to rank again.
+
+The API equivalents are `GET …/eval-environments/{id}/best-runs/scope` for the choices and `GET …/eval-environments/{id}/best-runs?dataset_id=&dataset_version_id=&versioning=agent_version%3Dv1.12` for the ranking. Leave out a parameter to leave that part open.
 
 - A run is eligible when it is official, linked to a job on the environment, not deleted, completed (a run that moved on to submitted or approved review also counts; a rejected one does not), and has a score for the chosen metric.
 - **Rank by metric** defaults to the environment's ranking metric, then to the most common metric. Runs are ordered by mean score (in the metric's direction), then pass@k, then size (larger first), then recency.

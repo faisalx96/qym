@@ -30,11 +30,17 @@ from qym_platform.db.models import (
 )
 from qym_platform.services import eval_presets
 from qym_platform.services.eval_best_run import ELIGIBLE_RUN_STATUSES
+from qym_platform.services.eval_config_snapshot import (
+    QYM_CONFIG,
+    QYM_LAUNCH,
+    job_qym_config,
+    run_metadata_values,
+)
 from qym_platform.services.eval_experiments import redact_secret_refs
 from qym_platform.services.eval_model_slots import list_model_slots
 from qym_platform.services.eval_presets import PresetError
 from qym_platform.services.eval_temporary_models import unbind_temporary
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 SOURCE_KINDS = ("saved", "run", "job")
 # The parts of a stored config that make up one configuration (§8.1).
@@ -90,12 +96,12 @@ def _schema_by_hash(
     )
 
 
-def _job_snapshot(job: EvalExperimentJob) -> Optional[Mapping[str, Any]]:
-    """The job's ``run_metadata.qym_config`` as stored in its request body."""
-    body = _mapping(job.request_body)
-    config = _mapping(_mapping(body.get("evaluator")).get("config"))
-    snapshot = _mapping(config.get("run_metadata")).get("qym_config")
-    return snapshot if isinstance(snapshot, Mapping) else None
+def _job_snapshot(db: Session, job: EvalExperimentJob) -> Optional[Mapping[str, Any]]:
+    """The job's ``run_metadata.qym_config`` as stored in its request body.
+
+    Read with a JSON path: the rest of ``request_body`` is never loaded.
+    """
+    return job_qym_config(db, job.id)
 
 
 def _from_saved(
@@ -124,13 +130,25 @@ def _from_saved(
 def _from_job(
     db: Session, env: EvalEnvironment, source_id: str
 ) -> Tuple[Dict[str, Any], Optional[EvalEnvironmentSchema], Dict[str, Any]]:
-    job = db.get(EvalExperimentJob, source_id)
+    job = db.get(
+        EvalExperimentJob,
+        source_id,
+        options=[
+            load_only(
+                EvalExperimentJob.id,
+                EvalExperimentJob.experiment_id,
+                EvalExperimentJob.environment_id,
+                EvalExperimentJob.combo_index,
+                EvalExperimentJob.schema_id,
+            )
+        ],
+    )
     experiment = db.get(EvalExperiment, job.experiment_id) if job is not None else None
     if job is None or experiment is None or experiment.project_id != env.project_id:
         raise PresetError(404, "Job not found")
     if job.environment_id != env.id:
         raise PresetError(422, "This job ran on another environment")
-    snapshot = _job_snapshot(job)
+    snapshot = _job_snapshot(db, job)
     if not snapshot:
         raise PresetError(422, "This job has no stored configuration")
     source = {
@@ -148,26 +166,54 @@ def _from_job(
 def _from_run(
     db: Session, env: EvalEnvironment, source_id: str
 ) -> Tuple[Dict[str, Any], Optional[EvalEnvironmentSchema], Dict[str, Any]]:
-    run = db.get(Run, source_id)
+    run = db.get(
+        Run,
+        source_id,
+        options=[
+            load_only(
+                Run.id,
+                Run.project_id,
+                Run.deleted_at,
+                Run.origin,
+                Run.status,
+                Run.experiment_job_id,
+                Run.external_run_id,
+                Run.task,
+            )
+        ],
+    )
     if run is None or run.project_id != env.project_id or run.deleted_at is not None:
         raise PresetError(404, "Run not found")
     if run.origin != RunOrigin.OFFICIAL:
         raise PresetError(422, "Only official runs can be promoted")
     if run.status not in ELIGIBLE_RUN_STATUSES:
         raise PresetError(422, "Only completed runs can be promoted")
-    metadata = _mapping(run.run_metadata)
-    snapshot = _mapping(metadata.get("qym_config"))
+    # Only the two launch keys, as SQL JSON paths; never the whole run_metadata.
+    metadata = run_metadata_values(db, [run.id], [QYM_CONFIG, QYM_LAUNCH]).get(
+        run.id, {}
+    )
+    snapshot = _mapping(metadata.get(QYM_CONFIG))
     if not snapshot:
         raise PresetError(422, "This run has no stored configuration")
     job = (
-        db.get(EvalExperimentJob, run.experiment_job_id)
+        db.get(
+            EvalExperimentJob,
+            run.experiment_job_id,
+            options=[
+                load_only(
+                    EvalExperimentJob.id,
+                    EvalExperimentJob.environment_id,
+                    EvalExperimentJob.schema_id,
+                )
+            ],
+        )
         if run.experiment_job_id
         else None
     )
     env_id = (
         job.environment_id
         if job is not None
-        else _mapping(metadata.get("qym_launch")).get("environment_id")
+        else _mapping(metadata.get(QYM_LAUNCH)).get("environment_id")
     )
     if env_id != env.id:
         raise PresetError(422, "This run ran on another environment")

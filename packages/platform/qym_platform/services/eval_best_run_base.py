@@ -12,7 +12,10 @@
    (``request_body…run_metadata.qym_config``), else the experiment spec expanded at the
    job's ``combo_index`` with the job's ``params.slot_bindings``. Only ``evaluator``,
    ``env_overrides`` and ``slot_bindings`` are kept; secret refs are dropped and
-   reserved ``run_metadata`` keys (``qym_launch``/``qym_config``) removed.
+   reserved ``run_metadata`` keys (``qym_launch``/``qym_config``) removed. Only the
+   ``qym_config`` key is read, with a SQL JSON path (``eval_config_snapshot``): the
+   rest of ``run_metadata``, ``run_config`` and the job's ``request_body`` are never
+   loaded.
 3. **Re-map** onto the environment's current schema with ``eval_presets.remap`` (§9.3):
    dropped settings and unfixable errors are reported, never raised.
 4. **Temporary models** become unbound (``eval_temporary_models.unbind_temporary``):
@@ -57,7 +60,7 @@ from __future__ import annotations
 import copy
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from qym_platform.datetime_utils import to_api_timestamp
 from qym_platform.db.models import (
@@ -77,6 +80,7 @@ from qym_platform.services.eval_best_run import (
 )
 from qym_platform.services.eval_bindings import resolve_slot_bindings
 from qym_platform.services.eval_config import binding_kind
+from qym_platform.services.eval_config_snapshot import job_qym_config, run_qym_config
 from qym_platform.services.eval_experiments import (
     is_secret_ref,
     redact_secret_refs,
@@ -115,14 +119,50 @@ def official_run_job(
     404 for a run that does not exist, belongs to another project or was deleted;
     422 for a local run (or one without a job) and for a job on another environment.
     """
-    run = db.get(Run, run_id) if run_id else None
+    run = (
+        db.get(
+            Run,
+            run_id,
+            options=[
+                load_only(
+                    Run.id,
+                    Run.project_id,
+                    Run.deleted_at,
+                    Run.origin,
+                    Run.experiment_job_id,
+                    Run.external_run_id,
+                    Run.task,
+                    Run.model,
+                    Run.status,
+                    Run.ended_at,
+                    Run.dataset_version_id,
+                )
+            ],
+        )
+        if run_id
+        else None
+    )
     if run is None or run.project_id != project_id or run.deleted_at is not None:
         raise BestRunError(404, "Run not found")
     if run.origin != RunOrigin.OFFICIAL or not run.experiment_job_id:
         raise BestRunError(
             422, "Only an official run launched from an experiment can be a base"
         )
-    job = db.get(EvalExperimentJob, run.experiment_job_id)
+    job = db.get(
+        EvalExperimentJob,
+        run.experiment_job_id,
+        options=[
+            load_only(
+                EvalExperimentJob.id,
+                EvalExperimentJob.experiment_id,
+                EvalExperimentJob.environment_id,
+                EvalExperimentJob.combo_index,
+                EvalExperimentJob.schema_id,
+                EvalExperimentJob.params,
+                EvalExperimentJob.remote_versioning,
+            )
+        ],
+    )
     wanted = set(environment_ids)
     if job is None or job.environment_id not in wanted:
         raise BestRunError(
@@ -171,12 +211,6 @@ def _document(snapshot: Any) -> Optional[Dict[str, Any]]:
     return doc
 
 
-def _job_snapshot(job: EvalExperimentJob) -> Any:
-    body = _mapping(job.request_body)
-    config = _mapping(_mapping(body.get("evaluator")).get("config"))
-    return _mapping(config.get("run_metadata")).get("qym_config")
-
-
 def _experiment_combo(db: Session, job: EvalExperimentJob) -> Optional[Dict[str, Any]]:
     """The experiment spec at the job's combination (jobs without a snapshot)."""
     experiment = db.get(EvalExperiment, job.experiment_id)
@@ -197,14 +231,16 @@ def _experiment_combo(db: Session, job: EvalExperimentJob) -> Optional[Dict[str,
 def stored_config(
     db: Session, run: Run, job: EvalExperimentJob
 ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-    """``(document, source)``: the run's ``qym_config``, else the job row's."""
-    for source, snapshot in (
-        ("run", _mapping(run.run_metadata).get("qym_config")),
-        ("job", _job_snapshot(job)),
-    ):
-        doc = _document(snapshot)
-        if doc is not None:
-            return doc, source
+    """``(document, source)``: the run's ``qym_config``, else the job row's.
+
+    Each is one JSON path read; the job's copy is only read when the run has none.
+    """
+    doc = _document(run_qym_config(db, run.id))
+    if doc is not None:
+        return doc, "run"
+    doc = _document(job_qym_config(db, job.id))
+    if doc is not None:
+        return doc, "job"
     doc = _document(_experiment_combo(db, job))
     return (doc, "experiment") if doc is not None else (None, None)
 

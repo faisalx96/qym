@@ -570,9 +570,12 @@ def test_best_run_option_is_enabled_and_wired():
     base = re.search(r"const BASE_OPTIONS = \[(.*?)\];", LAUNCH, re.S).group(1)
     assert re.search(r"kind: 'best_run'[^}]*available: true", base)
     assert "'Coming soon' };" not in LAUNCH.split("function baseAvailability")[1][:400]
-    # Needs an environment and a project dataset (custom strings are never ranked).
-    assert "Runs on a custom dataset string are never ranked" in LAUNCH
-    assert "Pick a project dataset first" in LAUNCH
+    # Only needs an environment: the picker asks for the scope itself (§10.2).
+    availability = LAUNCH.split("if (kind === 'best_run') {")[1][:400]
+    assert "return { ok: true };" in availability
+    assert "Pick a project dataset first" not in LAUNCH
+    # Nothing is retrieved before the user picks a scope: the base stays pending.
+    assert "if (out.pending) {" in LAUNCH and "info.pending = true;" in LAUNCH
     # base_source for the launch, validated server-side.
     assert "return { kind: 'best_run', run_id: info.runId };" in LAUNCH
     # The picker is created through the hook and its env follows the base env.
@@ -591,6 +594,14 @@ def test_best_run_option_is_enabled_and_wired():
 def test_picker_module_uses_the_best_run_apis_safely():
     assert "window.QymLaunchBestRun = { create" in MODULE
     assert "'/best-runs?'" in MODULE
+    # Scope prompt (§10.2): dataset, version, one select per versioning key, Find.
+    assert "'/best-runs/scope'" in MODULE
+    assert "'data-xlb-scope-dataset'" in MODULE and "'data-xlb-scope-version'" in MODULE
+    assert "'data-xlb-scope-versioning'" in MODULE and "'data-xlb-find': '1'" in MODULE
+    assert "q.append('versioning', key + '=' + applied.versioning[key])" in MODULE
+    assert "q.set('dataset_version_id', applied.versionId)" in MODULE
+    assert "return { runId: '', pending: true };" in MODULE
+    assert "if (!applied) {" in MODULE.split("function fetchList")[1][:400]
     assert "'/best-runs/' + encodeURIComponent(id) + '/base'" in MODULE
     assert "q.set('exclude_errored', 'false')" in MODULE
     assert "'data-xlb-metric': '1'" in MODULE  # metric selector
@@ -614,3 +625,36 @@ def test_picker_assets_are_loaded_by_the_page():
         sel.startswith(".xlb-")
         for sel in re.findall(r"^(\.[\w-]+)", STYLES, flags=re.M)
     )
+
+
+# --------------------------------------------------------------------------- loading
+
+
+def test_base_and_promote_read_only_the_launch_keys_of_run_metadata(
+    client, session_factory, env, conn, dataset
+):
+    """The run's config is one JSON path; run_metadata/request_body are never loaded."""
+    from sqlalchemy import event
+    from test_eval_best_run import whole_json_reads
+    from test_experiments_api import MANAGER
+
+    run_id, job = _official_run(session_factory, client, env, _golden_spec(conn.id))
+    engine = session_factory().get_bind()
+    statements = []
+    listener = lambda *a: statements.append(a[2])  # noqa: E731
+    event.listen(engine, "before_cursor_execute", listener)
+    try:
+        base = _base(client, env.id, run_id)
+        prefill = client.get(
+            f"/v1/projects/{P1}/eval-environments/{env.id}/promote-prefill",
+            params={"kind": "run", "id": run_id},
+            headers=_headers(MANAGER),
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", listener)
+    assert base.status_code == 200, base.text
+    assert base.json()["config_source"] == "run"
+    snapshot = job.request_body["evaluator"]["config"]["run_metadata"]["qym_config"]
+    assert base.json()["config"]["env_overrides"] == snapshot["env_overrides"]
+    assert prefill.status_code == 200, prefill.text
+    assert whole_json_reads(statements) == []

@@ -552,25 +552,49 @@ which the SDK carries into `runs.run_metadata`:
 
 `services/eval_best_run.py`:
 
+- **Scope, chosen before retrieval.** "Start from → Best run" first asks the user what to
+  rank on, and nothing is retrieved until they click **Find best runs**:
+  - **Dataset:** any dataset of the project that has eligible runs, or *Any dataset*.
+  - **Dataset version:** one version of that dataset, or *Any version*.
+  - **Versioning:** one select per `versioning_metadata` key the eligible runs reported
+    (`agent_version`, `kb_version`, or any key the service adds), each defaulting to
+    *Any*. Values come from `dashboard_run_versions`.
+
+  Each choice narrows the ranking, and whatever is left on *Any* is not constrained.
+  Leaving everything on *Any* retrieves the **global** best run of the environment:
+  every eligible run across datasets and versions, including runs on a custom dataset
+  string. Scores from different datasets or versions are not strictly comparable, so
+  the picker says so whenever no version is chosen. The prompt's options come from
+  `GET …/best-runs/scope`: datasets and versions with eligible runs, and the versioning
+  values those runs reported, each with run counts.
 - **Eligible:** `runs.origin = official`, linked to a job on this environment, status
-  `COMPLETED`, not soft-deleted, **same `dataset_version_id`** as the launch form, and
-  having an `eval_run_scores` row for the chosen metric. Scores on different dataset
-  versions are not comparable, so there's no cross-version toggle. When no run exists on
-  the selected version, the UI says so and links to the latest version that has runs.
-  Runs launched with a custom dataset string (no `dataset_version_id`) are never eligible.
+  `COMPLETED`, not soft-deleted, inside the chosen scope, and having an
+  `eval_run_scores` row for the chosen metric. When a chosen version has no run, the UI
+  says so and links to the latest version of that dataset that has runs.
 - **Metric:** selector defaults to `environment.ranking_metric`, otherwise the most common
-  metric on the environment's runs. It respects `direction`.
+  metric in the scope (then on the environment). It respects `direction`.
 - **Order:** `mean_score` (by direction) → `pass_at_k[k]` → `item_count` (larger runs
   first) → most recent.
 - Excludes runs with `error_item_count / item_count > 20%` by default (toggleable), so
   a run that "wins" by crashing on hard items is not picked.
-- `GET …/best-runs` returns the top 5, each with score, pass@k, agent/KB versions
-  (`remote_versioning`), a params summary and age, so the user can pick another one.
+- `GET …/best-runs?dataset_id=&dataset_version_id=&versioning=key%3Dvalue` returns the top
+  5 in the scope, each with its dataset and version, score, pass@k, agent/KB versions
+  (`remote_versioning`), a params summary and age, so the user can pick another one. The
+  response echoes the `scope` (`global: true` when nothing was chosen).
+- **Reading the stored config.** Ranking selects only the columns it shows. The params
+  summary comes from `run_metadata.qym_config`, which holds `env_overrides`, `evaluator`
+  and `slot_bindings`. It is extracted with a SQL JSON path (`->` on PostgreSQL,
+  `JSON_EXTRACT` on SQLite) in the same query. The rest of `run_metadata`, `run_config`
+  and the job's `request_body` are never loaded. `remote_result` is read only for jobs
+  that finished before `remote_versioning` was stored, in one query.
 
 ### 10.3 Launching from best run
 
 "Start from best run" loads `qym_config` from the chosen run (falling back to the job
 row), re-maps it onto the current schema (§9.3), and re-resolves connection bindings.
+Only that key is read, with a JSON path: `run_metadata.qym_config`, else the job's
+`request_body.evaluator.config.run_metadata.qym_config`. Promote-to-official reads a
+run's config the same way (`services/eval_config_snapshot.py`).
 Deleted connections become an unbound slot with a warning. The form header shows
 "Base: run *abc123* · accuracy 0.84 · agent v1.12 / kb 381". Because agent and KB
 versions may have changed since that run, the header warns when the environment's latest
@@ -637,7 +661,9 @@ distinct.
   1. Environment picker (multi; "+ New environment" opens the §12.1 dialog inline).
   2. Dataset picker (native datasets + version/alias) or custom dataset string.
   3. **Start from:** segmented control *Official defaults · Best run · Saved preset · Blank*.
-     "Best run" shows the top-5 list (§10.2) with the metric selector.
+     "Best run" first asks for the scope (dataset, version, versioning; *Any* leaves a
+     part open) and retrieves nothing until **Find best runs**. It then shows the top-5
+     list (§10.2) with the metric selector, and loads the top run as the base.
   4. **Models:** one card per confirmed slot with a multi-select of project models,
      plus "+ Temporary model" and Inherit.
   5. **Settings:** the generated grouped form with search, a "changed only" filter, and
@@ -844,6 +870,8 @@ Resolved (2026-09-29):
   an environment URL belongs to exactly one project (§4.1).
 - **Access (D8):** qym is the Evaluation Service's only caller. The remote queue shows all
   jobs, and managers can cancel orphans (§12.2a).
-- Also: best-run ranking requires the same dataset **version**;
+- Also: best-run ranking was first limited to the launch form's dataset **version**.
+  Since 2026-10-02 the user chooses the scope before retrieval (dataset, version,
+  versioning), and an unchosen part is open, up to a global ranking (§10.2);
 promote-to-official always opens the editor for review; caps of 64 jobs per sweep and 5
 in-flight per environment accepted; users may add **temporary models** (§7.5).

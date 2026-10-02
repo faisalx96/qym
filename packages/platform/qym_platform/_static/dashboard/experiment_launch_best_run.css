@@ -15,6 +15,7 @@
 .xlb-table .xlb-num { text-align: right; }
 .xlb-table tr.xlb-selected td { background: var(--bg-active); color: var(--text-primary); }
 .xlb-params { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+.xlb-dataset { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
 .xlb-age { color: var(--text-muted); }
 .xlb-action { text-align: right; }
 

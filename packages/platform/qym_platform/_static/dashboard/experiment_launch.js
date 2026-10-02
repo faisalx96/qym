@@ -92,7 +92,7 @@
     'static/experiment_launch.css?v=experiment-launch-20260930-6',
     'static/experiment_launch_advanced.css?v=experiment-launch-advanced-20260930-1',
     'static/experiment_launch_sweeps.css?v=experiment-launch-sweeps-20260930-1',
-    'static/experiment_launch_best_run.css?v=experiment-launch-best-run-20260930-1',
+    'static/experiment_launch_best_run.css?v=experiment-launch-best-run-20261002-scope',
   ];
   const RUN_NAMES_SHOWN = 12;
   const PREVIEW_DELAY_MS = 600;
@@ -728,9 +728,9 @@
       if (kind === 'clone') return { ok: !!st.clone };
       if (!env) return { ok: false, reason: 'Pick an environment first' };
       if (kind === 'best_run') {
+        // The picker asks for the dataset, version and versioning to rank on (§10.2).
         if (!window.QymLaunchBestRun) return { ok: false, reason: 'The best-run picker did not load' };
-        if (st.datasetMode !== 'project') return { ok: false, reason: 'Runs on a custom dataset string are never ranked' };
-        return st.datasetName ? { ok: true } : { ok: false, reason: 'Pick a project dataset first' };
+        return { ok: true };
       }
       if (kind === 'official') {
         return hasOfficial(env) ? { ok: true } : { ok: false, reason: 'No official defaults are published for ' + env.name };
@@ -1038,7 +1038,11 @@
         if (!st.active || generation !== st.baseGeneration) return null;
         st.bestRunId = out.runId || '';
         st.bestRunEnv = envId;
-        if (out.error || !out.base) {
+        if (out.pending) {
+          // Nothing is retrieved until the user picks a scope and clicks Find (§10.2).
+          info.loaded = false;
+          info.pending = true;
+        } else if (out.error || !out.base) {
           info.loaded = false;
           info.error = out.error || 'Failed to load that run';
         } else {
@@ -1604,7 +1608,7 @@
     const BASE_HINTS = {
       official: 'The environment\'s published defaults. Your edits are layered on top: a changed setting shows a dot and resets to the base value.',
       saved: 'A saved preset of this environment. Your edits are layered on top: a changed setting shows a dot and resets to the base value.',
-      best_run: 'The configuration of a top-ranked official run on this dataset version, re-mapped onto the current schema. Your edits are layered on top: a changed setting shows a dot and resets to the base value.',
+      best_run: 'The configuration of a top-ranked official run, in the scope you choose above (dataset, version and versioning; Any leaves that part open), re-mapped onto the current schema. Your edits are layered on top: a changed setting shows a dot and resets to the base value.',
       clone: 'A copy of an earlier experiment\'s configuration. Your edits are layered on top: a changed setting shows a dot and resets to the base value.',
       editor: 'What you publish is compared with this configuration: a changed setting shows a dot and resets to its value here.',
       blank: 'Blank starts from the environment\'s own settings: only what you change below is sent.',

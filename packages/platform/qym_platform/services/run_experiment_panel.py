@@ -65,12 +65,28 @@ def run_params_summary(
     bool}``, read from ``qym_config`` with the job row (when given) as the fallback
     for the swept values, as the panel does.
     """
-    config = _mapping(_mapping(run.run_metadata).get("qym_config"))
+    return params_summary(
+        _mapping(run.run_metadata).get("qym_config"),
+        run_samples=run.samples,
+        job_params=job.params if job is not None else None,
+    )
+
+
+def params_summary(
+    qym_config: Any, *, run_samples: Any = None, job_params: Any = None
+) -> Dict[str, Any]:
+    """:func:`run_params_summary` from an already extracted ``qym_config``.
+
+    The best-run ranking reads only ``run_metadata.qym_config`` in SQL
+    (``eval_config_snapshot``) and passes it here with the run's ``samples`` and
+    the job's ``params``.
+    """
+    config = _mapping(qym_config)
     evaluator = _mapping(config.get("evaluator"))
     samples = _mapping(evaluator.get("config")).get("samples")
     sweep = _clean(_mapping(config.get("sweep")))
-    if not sweep and job is not None:
-        sweep = _clean(_mapping(_mapping(job.params).get("sweep")))
+    if not sweep and job_params is not None:
+        sweep = _clean(_mapping(_mapping(job_params).get("sweep")))
     return {
         "sweep": sweep,
         "slot_bindings": _clean(_mapping(config.get("slot_bindings"))),
@@ -79,7 +95,7 @@ def run_params_summary(
         "samples": (
             samples
             if isinstance(samples, int) and not isinstance(samples, bool)
-            else (int(run.samples) if run.samples else None)
+            else (int(run_samples) if run_samples else None)
         ),
         "has_config": bool(config),
     }

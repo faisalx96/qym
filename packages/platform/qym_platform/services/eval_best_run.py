@@ -1,8 +1,26 @@
-"""Best-run ranking for "Start from best run" (plan §10.2, §5.1, §4.7; issue #37).
+"""Best-run ranking for "Start from best run" (plan §10.2, §5.1, §4.7; issues #37, #38).
 
-``rank_best_runs`` ranks the official runs of one environment on one dataset version
-from the ``eval_run_scores`` index (``services/eval_run_scores.py``), and is served by
+``rank_best_runs`` ranks the official runs of one environment from the
+``eval_run_scores`` index (``services/eval_run_scores.py``), and is served by
 ``GET /v1/projects/{pid}/eval-environments/{eid}/best-runs``.
+
+Scope (§10.2): the launch form asks the user for a dataset, a dataset version and
+``versioning_metadata`` values **before** it retrieves anything. Each choice narrows the
+ranking; whatever is left unchosen is not constrained, so choosing nothing ranks the
+environment's runs globally:
+
+- ``dataset_version_id`` (or ``dataset_id`` + ``dataset_version``, a version or alias):
+  runs on that version only;
+- ``dataset_id`` alone: runs on any version of that dataset;
+- ``versioning`` (``{key: [values]}``, any key; ``services/run_versioning.py``): runs
+  whose job reported matching versions. Values of a key are alternatives, keys must all
+  match, ``__empty__`` matches runs without the key;
+- nothing: every eligible run of the environment, across datasets and versions
+  (including runs on a custom dataset string). Scores from different datasets or
+  versions are not strictly comparable; the UI says so.
+
+``best_run_scope`` lists what can be chosen: the datasets and versions that have
+eligible runs, and the versioning keys and values those runs reported.
 
 Eligibility (every rule is in the SQL, so nothing is filtered after the limit):
 
@@ -10,14 +28,12 @@ Eligibility (every rule is in the SQL, so nothing is filtered after the limit):
   environment, in the environment's project, not soft-deleted;
 - the run completed: ``COMPLETED``, or a review status a completed run moves on to
   (``SUBMITTED``/``APPROVED``). ``REJECTED`` runs are never a base;
-- an ``eval_run_scores`` row for the metric, on the **same** ``dataset_version_id``.
-  Scores on other versions are not comparable, so there is no cross-version mode.
-  A custom dataset string (no qym dataset / version) is never eligible;
+- an ``eval_run_scores`` row for the metric, in the scope;
 - unless ``exclude_errored`` is off, ``error_item_count / item_count <= 20%``, so a run
   that "wins" by crashing on hard items is not picked.
 
-Metric: the request's, else ``environment.ranking_metric``, else the metric most runs on
-the version have (then on the whole environment). Direction is the majority
+Metric: the request's, else ``environment.ranking_metric``, else the metric most runs in
+the scope have (then on the whole environment). Direction is the majority
 ``direction`` of the metric's rows. ``k``: the request's, else ``environment.ranking_k``;
 with no ``k`` the pass@k tie-breaker is skipped (each run still lists its values).
 
@@ -27,11 +43,17 @@ Order: ``mean_score`` (by direction) → ``pass_at_k[k]`` (higher first, missing
 row tied with the last one on ``mean_score``; the pass@k tie-break (JSON) is then applied
 in Python. Runs, jobs and scores come back in that one joined query (no N+1).
 
+Loading: only the columns the payload needs are read. The configuration summary comes
+from ``run_metadata.qym_config`` extracted in SQL (``eval_config_snapshot``): the rest of
+``run_metadata``, ``run_config`` and the job's ``request_body``/``remote_result`` are
+never loaded (``remote_result`` is read, in one query, only for jobs that finished
+before ``remote_versioning`` was stored).
+
 Versioning: ``remote_versioning`` is the job's stored value; for jobs finished before it
 was stored, it is read from the job's ``remote_result`` (``versioning_metadata``, else the
 legacy flat ``agent_version``/``kb_version`` keys, guide §5).
 
-When the version has no eligible run at all, ``latest_version_with_runs`` points to the
+When a chosen version has no eligible run, ``latest_version_with_runs`` points to the
 newest version of the same dataset that has one (any metric).
 
 Response shape (what #38 consumes)::
@@ -40,6 +62,8 @@ Response shape (what #38 consumes)::
       "environment_id": "…",
       "dataset": {"id": "…", "name": "…", "slug": "…"} | null,
       "dataset_version": {"id": "…", "version": "v3", "name": "…"} | null,
+      "scope": {"dataset": {…} | null, "dataset_version": {…} | null,
+                "versioning": {key: [values]}, "global": true | false},
       "metric": "accuracy" | null,
       "metric_source": "request" | "environment" | "most_common" | null,
       "direction": "maximize" | "minimize" | null,
@@ -62,13 +86,16 @@ Response shape (what #38 consumes)::
           "item_count": 50, "error_item_count": 1, "error_ratio": 0.02,
           "completed_at": "2026-09-30T12:00:00Z" | null,
           "age_seconds": 3600 | null,
+          "dataset": {"id": "…", "name": "…"} | null,
+          "dataset_version": {"id": "…", "version": "v3"} | null,
           "remote_versioning": {"agent_version": "…", "kb_version": "…"} | null,
           "params": {"sweep": {…}, "slot_bindings": {…}, "base_source": {…} | null,
                      "schema_hash": "…" | null, "samples": 3 | null, "has_config": true}
         }, …
       ],
       "reason": null | "custom_dataset" | "unknown_dataset_version" | "no_metric"
-                     | "no_runs_on_version" | "no_runs_for_metric" | "all_excluded",
+                     | "no_runs_on_version" | "no_runs_in_scope" | "no_runs_for_metric"
+                     | "all_excluded",
       "latest_version_with_runs": {"id": "…", "version": "v2", "name": "…",
                                    "run_count": 4} | null,
       "latest_remote_versioning": {"versioning": {…}, "job_id": "…",
@@ -90,7 +117,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from sqlalchemy import case, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from qym_platform.datetime_utils import to_api_timestamp, utc_now_naive
 from qym_platform.db.models import (
@@ -105,9 +132,12 @@ from qym_platform.db.models import (
     RunOrigin,
     RunWorkflowStatus,
 )
+from qym_platform.db.dashboard_models import DashboardRunVersion as RunVersion
+from qym_platform.services.eval_config_snapshot import QYM_CONFIG
 from qym_platform.services.eval_dispatcher import extract_versioning
 from qym_platform.services.eval_experiments import redact_secret_refs
-from qym_platform.services.run_experiment_panel import run_params_summary
+from qym_platform.services.run_experiment_panel import params_summary
+from qym_platform.services.run_versioning import versioning_conditions
 
 # Runs in these statuses completed; review may have moved them on. REJECTED is out.
 ELIGIBLE_RUN_STATUSES = (
@@ -131,10 +161,17 @@ class BestRunError(Exception):
 
 
 @dataclass
-class _Target:
+class _Scope:
+    """What the user chose to rank on; ``None`` / empty means not constrained."""
+
     dataset: Optional[Dataset]
     version: Optional[DatasetVersion]
+    versioning: Dict[str, List[str]]
     reason: Optional[str]
+
+    @property
+    def is_global(self) -> bool:
+        return self.dataset is None and self.version is None and not self.versioning
 
 
 # --------------------------------------------------------------------------- dataset
@@ -171,42 +208,25 @@ def _version_by_ref(
     return db.get(DatasetVersion, alias.dataset_version_id) if alias else None
 
 
-def _default_version(db: Session, dataset: Dataset) -> Optional[DatasetVersion]:
-    """What a run with no version resolves to: ``production`` alias, else latest published."""
-    version = _version_by_ref(db, dataset, "production")
-    if version is not None:
-        return version
-    return db.execute(
-        select(DatasetVersion)
-        .where(
-            DatasetVersion.dataset_id == dataset.id,
-            DatasetVersion.status == DatasetVersionStatus.PUBLISHED,
-        )
-        .order_by(
-            DatasetVersion.published_at.desc().nullslast(),
-            DatasetVersion.created_at.desc(),
-        )
-        .limit(1)
-    ).scalar_one_or_none()
-
-
-def resolve_target(
+def resolve_scope(
     db: Session,
     env: EvalEnvironment,
     *,
     dataset_id: Optional[str] = None,
     dataset_version_id: Optional[str] = None,
     dataset_version: Optional[str] = None,
-) -> _Target:
-    """The dataset version to rank on.
+    versioning: Optional[Mapping[str, List[str]]] = None,
+) -> _Scope:
+    """The scope to rank in; each part the user did not choose stays open (§10.2).
 
     ``dataset_version_id`` wins (it must belong to the project, and to ``dataset_id``
-    when both are given). Otherwise ``dataset_id`` (id, slug or name, as the launch
-    form's ``evaluator.dataset`` string) with ``dataset_version`` (version or alias),
-    else the version a run without one resolves to. A dataset string that is not a
-    qym dataset is a custom dataset: never eligible, not an error.
+    when both are given). Otherwise ``dataset_id`` (id, slug or name) narrows to that
+    dataset, and ``dataset_version`` (version or alias) to one of its versions. No
+    dataset ranks across every dataset. A dataset string that is not a qym dataset is
+    a custom dataset: nothing to rank, not an error.
     """
     project_id = env.project_id
+    chosen = {key: list(values) for key, values in (versioning or {}).items() if values}
     if dataset_version_id:
         version = db.get(DatasetVersion, dataset_version_id)
         dataset = db.get(Dataset, version.dataset_id) if version else None
@@ -219,21 +239,21 @@ def resolve_target(
             raise BestRunError(404, "Dataset version not found")
         if dataset_id and dataset_id not in (dataset.id, dataset.slug, dataset.name):
             raise BestRunError(400, "dataset_version_id is not a version of dataset_id")
-        return _Target(dataset, version, None)
+        return _Scope(dataset, version, chosen, None)
+    ref = (dataset_version or "").strip()
     if not dataset_id:
-        raise BestRunError(400, "dataset_id or dataset_version_id is required")
+        if ref:
+            raise BestRunError(400, "dataset_version needs dataset_id")
+        return _Scope(None, None, chosen, None)
     dataset = _find_dataset(db, project_id, dataset_id)
     if dataset is None:
-        return _Target(None, None, "custom_dataset")
-    ref = (dataset_version or "").strip()
-    version = (
-        _version_by_ref(db, dataset, ref) if ref else _default_version(db, dataset)
-    )
+        return _Scope(None, None, chosen, "custom_dataset")
+    if not ref:
+        return _Scope(dataset, None, chosen, None)
+    version = _version_by_ref(db, dataset, ref)
     if version is None:
-        return _Target(
-            dataset, None, "unknown_dataset_version" if ref else "custom_dataset"
-        )
-    return _Target(dataset, version, None)
+        return _Scope(dataset, None, chosen, "unknown_dataset_version")
+    return _Scope(dataset, version, chosen, None)
 
 
 # --------------------------------------------------------------------------- queries
@@ -247,16 +267,28 @@ def _eligible(query, env: EvalEnvironment):
         .where(
             EvalRunScore.environment_id == env.id,
             EvalRunScore.project_id == env.project_id,
-            EvalRunScore.dataset_version_id.isnot(None),
             Run.project_id == env.project_id,
             Run.origin == RunOrigin.OFFICIAL,
             Run.status.in_(ELIGIBLE_RUN_STATUSES),
             Run.deleted_at.is_(None),
             # Guards a stale denormalized row (the run's version is the truth).
-            Run.dataset_version_id == EvalRunScore.dataset_version_id,
+            Run.dataset_version_id.is_not_distinct_from(
+                EvalRunScore.dataset_version_id
+            ),
             EvalExperimentJob.environment_id == env.id,
         )
     )
+
+
+def _in_scope(query, scope: _Scope):
+    """Narrow an eligible query to what the user chose."""
+    if scope.version is not None:
+        query = query.where(EvalRunScore.dataset_version_id == scope.version.id)
+    elif scope.dataset is not None:
+        query = query.where(EvalRunScore.dataset_id == scope.dataset.id)
+    if scope.versioning:
+        query = query.where(*versioning_conditions(Run.id, scope.versioning))
+    return query
 
 
 def _error_ok():
@@ -268,35 +300,35 @@ def _error_ok():
 
 
 def _metric_counts(
-    db: Session, env: EvalEnvironment, version_id: Optional[str]
+    db: Session, env: EvalEnvironment, scope: Optional[_Scope]
 ) -> List[Tuple[str, int]]:
-    """``[(metric, run_count)]`` most common first (on the version, or env-wide)."""
+    """``[(metric, run_count)]`` most common first (in the scope, or env-wide)."""
     query = _eligible(
         select(EvalRunScore.metric_name, func.count(EvalRunScore.run_id)), env
     )
-    if version_id is not None:
-        query = query.where(EvalRunScore.dataset_version_id == version_id)
+    if scope is not None:
+        query = _in_scope(query, scope)
     rows = db.execute(query.group_by(EvalRunScore.metric_name)).all()
     return sorted(((str(m), int(n)) for m, n in rows), key=lambda r: (-r[1], r[0]))
 
 
 def _direction_counts(
-    db: Session, env: EvalEnvironment, version_id: str, metric: str
+    db: Session, env: EvalEnvironment, scope: _Scope, metric: str
 ) -> Tuple[Optional[str], int, int]:
     """(majority direction, eligible count, count hidden by the error filter)."""
     rows = db.execute(
-        _eligible(
-            select(
-                EvalRunScore.direction,
-                func.count(),
-                func.sum(case((_error_ok(), 0), else_=1)),
+        _in_scope(
+            _eligible(
+                select(
+                    EvalRunScore.direction,
+                    func.count(),
+                    func.sum(case((_error_ok(), 0), else_=1)),
+                ),
+                env,
             ),
-            env,
+            scope,
         )
-        .where(
-            EvalRunScore.dataset_version_id == version_id,
-            EvalRunScore.metric_name == metric,
-        )
+        .where(EvalRunScore.metric_name == metric)
         .group_by(EvalRunScore.direction)
     ).all()
     if not rows:
@@ -393,11 +425,40 @@ def job_versioning(job: EvalExperimentJob) -> Optional[Dict[str, Any]]:
     value = job.remote_versioning
     if not isinstance(value, Mapping) or not value:
         value = extract_versioning(job.remote_result)
+    return _redacted_versioning(value)
+
+
+def _redacted_versioning(value: Any) -> Optional[Dict[str, Any]]:
     return (
         redact_secret_refs(dict(value))
         if isinstance(value, Mapping) and value
         else None
     )
+
+
+def _versionings(
+    db: Session, stored: Mapping[str, Any]
+) -> Dict[str, Optional[Dict[str, Any]]]:
+    """``{job_id: versioning}`` from ``{job_id: remote_versioning}``.
+
+    Jobs without a stored value fall back to their ``remote_result``, read in one
+    query for those jobs only (the rest of the job row is never loaded).
+    """
+    out: Dict[str, Optional[Dict[str, Any]]] = {}
+    legacy = []
+    for job_id, value in stored.items():
+        if isinstance(value, Mapping) and value:
+            out[job_id] = _redacted_versioning(value)
+        else:
+            legacy.append(job_id)
+    if legacy:
+        for job_id, result in db.execute(
+            select(EvalExperimentJob.id, EvalExperimentJob.remote_result).where(
+                EvalExperimentJob.id.in_(legacy)
+            )
+        ):
+            out[job_id] = _redacted_versioning(extract_versioning(result))
+    return out
 
 
 # Finished jobs scanned for the newest reported versioning (older ones may not have it).
@@ -411,41 +472,96 @@ def latest_versioning(db: Session, env: EvalEnvironment) -> Optional[Dict[str, A
     the environment runs now, as far as the platform knows: the Evaluation Service
     exposes no version endpoint, so the latest job result is the source.
     """
-    jobs = (
-        db.query(EvalExperimentJob)
-        .filter(
+    rows = db.execute(
+        select(
+            EvalExperimentJob.id,
+            EvalExperimentJob.run_id,
+            EvalExperimentJob.finished_at,
+            EvalExperimentJob.remote_versioning,
+        )
+        .where(
             EvalExperimentJob.environment_id == env.id,
             EvalExperimentJob.finished_at.isnot(None),
         )
         .order_by(EvalExperimentJob.finished_at.desc(), EvalExperimentJob.id.desc())
         .limit(_LATEST_VERSIONING_SCAN)
-    )
-    for job in jobs:
-        value = job_versioning(job)
+    ).all()
+    versionings = _versionings(db, {row[0]: row[3] for row in rows})
+    for job_id, run_id, finished_at, _ in rows:
+        value = versionings.get(job_id)
         if value:
             return {
                 "versioning": value,
-                "job_id": job.id,
-                "run_id": job.run_id,
-                "finished_at": to_api_timestamp(job.finished_at),
+                "job_id": job_id,
+                "run_id": run_id,
+                "finished_at": to_api_timestamp(finished_at),
             }
     return None
+
+
+# Columns the ranking payload reads; nothing else of the run or job row is loaded.
+_RUN_COLUMNS = (
+    Run.id,
+    Run.external_run_id,
+    Run.task,
+    Run.model,
+    Run.status,
+    Run.samples,
+    Run.ended_at,
+    Run.created_at,
+)
+_JOB_COLUMNS = (
+    EvalExperimentJob.id,
+    EvalExperimentJob.experiment_id,
+    EvalExperimentJob.combo_index,
+    EvalExperimentJob.params,
+    EvalExperimentJob.remote_versioning,
+)
+
+
+@dataclass
+class _Candidate:
+    score: EvalRunScore
+    run: Run
+    job: EvalExperimentJob
+    qym_config: Any
+    dataset_name: Optional[str]
+    dataset_version: Optional[str]
 
 
 def _candidates(
     db: Session,
     env: EvalEnvironment,
     *,
-    version_id: str,
+    scope: _Scope,
     metric: str,
     direction: str,
     limit: int,
     exclude_errored: bool,
-) -> List[Tuple[EvalRunScore, Run, EvalExperimentJob]]:
+) -> List[_Candidate]:
     """Top ``limit`` rows by mean plus every row tied with the last one."""
-    base = _eligible(select(EvalRunScore, Run, EvalExperimentJob), env).where(
-        EvalRunScore.dataset_version_id == version_id,
-        EvalRunScore.metric_name == metric,
+    base = (
+        _in_scope(
+            _eligible(
+                select(
+                    EvalRunScore,
+                    Run,
+                    EvalExperimentJob,
+                    Run.run_metadata[QYM_CONFIG].label("qym_config"),
+                    Dataset.name,
+                    DatasetVersion.version,
+                ),
+                env,
+            ),
+            scope,
+        )
+        .outerjoin(Dataset, Dataset.id == EvalRunScore.dataset_id)
+        .outerjoin(DatasetVersion, DatasetVersion.id == EvalRunScore.dataset_version_id)
+        .where(EvalRunScore.metric_name == metric)
+        .options(
+            load_only(*_RUN_COLUMNS, raiseload=True),
+            load_only(*_JOB_COLUMNS, raiseload=True),
+        )
     )
     if exclude_errored:
         base = base.where(_error_ok())
@@ -467,7 +583,7 @@ def _candidates(
     )
     if len(rows) == limit:
         # pass@k (JSON) may reorder runs tied on the mean across the cut-off.
-        seen = [score.run_id for score, _, _ in rows]
+        seen = [row[0].run_id for row in rows]
         rows += list(
             db.execute(
                 base.where(
@@ -476,19 +592,19 @@ def _candidates(
                 )
             ).all()
         )
-    return rows
+    return [_Candidate(*row) for row in rows]
 
 
 def _run_payload(
     rank: int,
-    score: EvalRunScore,
-    run: Run,
-    job: EvalExperimentJob,
+    candidate: _Candidate,
     *,
+    versioning: Optional[Dict[str, Any]],
     direction: str,
     k: Optional[int],
     now: datetime,
 ) -> Dict[str, Any]:
+    score, run, job = candidate.score, candidate.run, candidate.job
     item_count = int(score.item_count or 0)
     errors = int(score.error_item_count or 0)
     completed = score.completed_at or run.ended_at
@@ -517,9 +633,37 @@ def _run_payload(
         "age_seconds": (
             max(0, int((now - reference).total_seconds())) if reference else None
         ),
-        "remote_versioning": job_versioning(job),
-        "params": run_params_summary(run, job),
+        "dataset": (
+            {"id": score.dataset_id, "name": candidate.dataset_name or ""}
+            if score.dataset_id
+            else None
+        ),
+        "dataset_version": (
+            {"id": score.dataset_version_id, "version": candidate.dataset_version or ""}
+            if score.dataset_version_id
+            else None
+        ),
+        "remote_versioning": versioning,
+        "params": params_summary(
+            candidate.qym_config, run_samples=run.samples, job_params=job.params
+        ),
     }
+
+
+def _dataset_payload(dataset: Optional[Dataset]) -> Optional[Dict[str, Any]]:
+    return (
+        {"id": dataset.id, "name": dataset.name, "slug": dataset.slug}
+        if dataset
+        else None
+    )
+
+
+def _version_payload(version: Optional[DatasetVersion]) -> Optional[Dict[str, Any]]:
+    return (
+        {"id": version.id, "version": version.version, "name": version.name or ""}
+        if version
+        else None
+    )
 
 
 def rank_best_runs(
@@ -529,6 +673,7 @@ def rank_best_runs(
     dataset_id: Optional[str] = None,
     dataset_version_id: Optional[str] = None,
     dataset_version: Optional[str] = None,
+    versioning: Optional[Mapping[str, List[str]]] = None,
     metric: Optional[str] = None,
     k: Optional[int] = None,
     limit: int = DEFAULT_LIMIT,
@@ -538,27 +683,26 @@ def rank_best_runs(
     """The ranked candidates (shape in the module docstring)."""
     limit = max(1, min(int(limit or DEFAULT_LIMIT), MAX_LIMIT))
     now = now or utc_now_naive()
-    target = resolve_target(
+    scope = resolve_scope(
         db,
         env,
         dataset_id=dataset_id,
         dataset_version_id=dataset_version_id,
         dataset_version=dataset_version,
+        versioning=versioning,
     )
-    dataset, version = target.dataset, target.version
+    dataset, version = scope.dataset, scope.version
     k = k if k is not None else env.ranking_k
     out: Dict[str, Any] = {
         "environment_id": env.id,
-        "dataset": (
-            {"id": dataset.id, "name": dataset.name, "slug": dataset.slug}
-            if dataset
-            else None
-        ),
-        "dataset_version": (
-            {"id": version.id, "version": version.version, "name": version.name or ""}
-            if version
-            else None
-        ),
+        "scope": {
+            "dataset": _dataset_payload(dataset),
+            "dataset_version": _version_payload(version),
+            "versioning": dict(scope.versioning),
+            "global": scope.is_global,
+        },
+        "dataset": _dataset_payload(dataset),
+        "dataset_version": _version_payload(version),
         "metric": None,
         "metric_source": None,
         "direction": None,
@@ -569,14 +713,14 @@ def rank_best_runs(
         "eligible_count": 0,
         "excluded_errored_count": 0,
         "runs": [],
-        "reason": target.reason,
+        "reason": scope.reason,
         "latest_version_with_runs": None,
         "latest_remote_versioning": latest_versioning(db, env),
     }
-    if version is None:
+    if scope.reason is not None:
         return out
 
-    counts = _metric_counts(db, env, version.id)
+    counts = _metric_counts(db, env, scope)
     out["metrics"] = [{"name": m, "run_count": n} for m, n in counts]
     requested = (metric or "").strip()
     if requested:
@@ -589,17 +733,20 @@ def rank_best_runs(
     out["metric"], out["metric_source"] = metric, source
 
     if not counts:
-        out["reason"] = "no_runs_on_version"
-        if dataset is not None:
-            out["latest_version_with_runs"] = _latest_version_with_runs(
-                db, env, dataset, version.id
-            )
+        if version is not None:
+            out["reason"] = "no_runs_on_version"
+            if dataset is not None:
+                out["latest_version_with_runs"] = _latest_version_with_runs(
+                    db, env, dataset, version.id
+                )
+        else:
+            out["reason"] = "no_runs_in_scope"
         return out
     if metric is None:
         out["reason"] = "no_metric"
         return out
 
-    direction, eligible, hidden = _direction_counts(db, env, version.id, metric)
+    direction, eligible, hidden = _direction_counts(db, env, scope, metric)
     out["eligible_count"] = eligible
     out["excluded_errored_count"] = hidden if exclude_errored else 0
     if direction is None:
@@ -607,32 +754,136 @@ def rank_best_runs(
         return out
     out["direction"] = direction
 
-    rows = _candidates(
+    candidates = _candidates(
         db,
         env,
-        version_id=version.id,
+        scope=scope,
         metric=metric,
         direction=direction,
         limit=limit,
         exclude_errored=exclude_errored,
     )
-    rows.sort(key=lambda r: sort_key(r[0], r[1], direction=direction, k=k))
+    candidates.sort(key=lambda c: sort_key(c.score, c.run, direction=direction, k=k))
+    top = candidates[:limit]
+    versionings = _versionings(db, {c.job.id: c.job.remote_versioning for c in top})
     out["runs"] = [
-        _run_payload(rank, score, run, job, direction=direction, k=k, now=now)
-        for rank, (score, run, job) in enumerate(rows[:limit], start=1)
+        _run_payload(
+            rank,
+            candidate,
+            versioning=versionings.get(candidate.job.id),
+            direction=direction,
+            k=k,
+            now=now,
+        )
+        for rank, candidate in enumerate(top, start=1)
     ]
     if not out["runs"]:
         out["reason"] = "all_excluded"
     return out
 
 
+def best_run_scope(db: Session, env: EvalEnvironment) -> Dict[str, Any]:
+    """What the scope prompt offers: datasets, versions and versioning with runs.
+
+    ``{"datasets": [{"id", "name", "slug", "run_count", "versions": [{"id",
+    "version", "name", "run_count"}]}], "other_run_count": n, "versioning": {key:
+    [{"value", "run_count"}]}, "total_runs": n}``. Counts are distinct eligible runs
+    (any metric, before the error filter). ``other_run_count`` counts runs on a custom
+    dataset string or a deleted dataset: they are ranked only when no dataset is
+    chosen. Versions and values are listed newest first.
+    """
+    runs = func.count(func.distinct(EvalRunScore.run_id))
+    latest = func.max(func.coalesce(EvalRunScore.completed_at, Run.created_at))
+    rows = db.execute(
+        _eligible(
+            select(
+                Dataset.id,
+                Dataset.name,
+                Dataset.slug,
+                DatasetVersion.id,
+                DatasetVersion.version,
+                DatasetVersion.name,
+                runs,
+                latest,
+            ).select_from(EvalRunScore),
+            env,
+        )
+        .outerjoin(
+            Dataset,
+            (Dataset.id == EvalRunScore.dataset_id) & Dataset.deleted_at.is_(None),
+        )
+        .outerjoin(DatasetVersion, DatasetVersion.id == EvalRunScore.dataset_version_id)
+        .group_by(
+            Dataset.id,
+            Dataset.name,
+            Dataset.slug,
+            DatasetVersion.id,
+            DatasetVersion.version,
+            DatasetVersion.name,
+        )
+    ).all()
+    datasets: Dict[str, Dict[str, Any]] = {}
+    other = 0
+    for ds_id, ds_name, slug, dv_id, dv_version, dv_name, count, at in rows:
+        if ds_id is None:
+            other += int(count)
+            continue
+        entry = datasets.setdefault(
+            ds_id,
+            {
+                "id": ds_id,
+                "name": ds_name,
+                "slug": slug,
+                "run_count": 0,
+                "versions": [],
+            },
+        )
+        entry["run_count"] += int(count)
+        if dv_id is not None:
+            entry["versions"].append(
+                {
+                    "id": dv_id,
+                    "version": dv_version,
+                    "name": dv_name or "",
+                    "run_count": int(count),
+                    "_at": at,
+                }
+            )
+    for entry in datasets.values():
+        entry["versions"].sort(key=lambda v: (v["_at"] or datetime.min), reverse=True)
+        for item in entry["versions"]:
+            item.pop("_at")
+    values: Dict[str, List[Dict[str, Any]]] = {}
+    for key, value, count, _ in db.execute(
+        _eligible(
+            select(RunVersion.key, RunVersion.value, runs, latest).select_from(
+                EvalRunScore
+            ),
+            env,
+        )
+        .join(RunVersion, RunVersion.run_key == EvalRunScore.run_id)
+        .group_by(RunVersion.key, RunVersion.value)
+        .order_by(RunVersion.key, latest.desc(), RunVersion.value)
+    ):
+        values.setdefault(key, []).append({"value": value, "run_count": int(count)})
+    total = db.scalar(_eligible(select(runs).select_from(EvalRunScore), env)) or 0
+    return {
+        "environment_id": env.id,
+        "datasets": sorted(datasets.values(), key=lambda d: str(d["name"]).casefold()),
+        "other_run_count": other,
+        "versioning": values,
+        "total_runs": int(total),
+    }
+
+
 __all__ = [
     "BestRunError",
+    "best_run_scope",
     "ELIGIBLE_RUN_STATUSES",
     "job_versioning",
     "latest_versioning",
     "MAX_ERROR_PERCENT",
     "rank_best_runs",
-    "resolve_target",
+    "resolve_scope",
     "sort_key",
 ]

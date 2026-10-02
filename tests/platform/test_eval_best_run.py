@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -293,15 +294,13 @@ def test_custom_dataset_runs_are_never_eligible(sessions, seed):
 
 def test_version_resolution(sessions, seed):
     on_v2 = _run(sessions, mean=0.5, version="dv-2")
-    on_v3 = _run(sessions, mean=0.5, version="dv-3")
+    on_v3 = _run(sessions, mean=0.6, version="dv-3")
     # By version name or alias, with the dataset by slug.
     assert _ids(
         _rank(
             sessions, dataset_id="golden", dataset_version_id=None, dataset_version="v2"
         )
     ) == [on_v2]
-    # No version: latest published (v3), then the production alias wins.
-    assert _ids(_rank(sessions, dataset_version_id=None)) == [on_v3]
     with sessions() as db:
         db.add(
             DatasetAlias(
@@ -312,7 +311,16 @@ def test_version_resolution(sessions, seed):
             )
         )
         db.commit()
-    assert _ids(_rank(sessions, dataset_version_id=None)) == [on_v2]
+    assert _ids(
+        _rank(sessions, dataset_version_id=None, dataset_version="production")
+    ) == [on_v2]
+    # A dataset without a version is not narrowed to one: every version ranks.
+    every = _rank(sessions, dataset_version_id=None)
+    assert _ids(every) == [on_v3, on_v2]
+    assert every["dataset_version"] is None
+    assert every["scope"]["dataset"]["id"] == "ds-1"
+    assert every["scope"]["global"] is False
+    assert [r["dataset_version"]["version"] for r in every["runs"]] == ["v3", "v2"]
     unknown = _rank(sessions, dataset_version_id=None, dataset_version="v9")
     assert unknown["reason"] == "unknown_dataset_version"
 
@@ -659,7 +667,20 @@ def test_api_access_and_validation(client, sessions):
         ).status_code
         == 404
     )
-    assert client.get(URL, headers=_headers(MEMBER)).status_code == 400
+    # No scope is a global ranking, not an error (§10.2).
+    assert client.get(URL, headers=_headers(MEMBER)).status_code == 200
+    assert (
+        client.get(
+            URL, params={"dataset_version": "v1"}, headers=_headers(MEMBER)
+        ).status_code
+        == 400
+    )
+    assert (
+        client.get(
+            URL, params={"versioning": "agent_version"}, headers=_headers(MEMBER)
+        ).status_code
+        == 400
+    )
     assert (
         client.get(
             URL, params={"dataset_version_id": "dv-missing"}, headers=_headers(MEMBER)
@@ -695,4 +716,171 @@ def test_api_access_and_validation(client, sessions):
             URL, params={"dataset_version_id": "dv-x"}, headers=_headers(MEMBER)
         ).status_code
         == 404
+    )
+
+
+# --------------------------------------------------------------------------- scope (§10.2)
+
+
+def _versions(sessions, run_id, **values):
+    """The ``dashboard_run_versions`` rows the projection worker writes for a run."""
+    from qym_platform.db.dashboard_models import DashboardRunVersion
+
+    with sessions() as db:
+        for key, value in values.items():
+            db.add(
+                DashboardRunVersion(
+                    run_key=run_id, key=key, project_key=P1, value=value
+                )
+            )
+        db.commit()
+
+
+def _global(sessions, **kwargs):
+    kwargs.setdefault("dataset_id", None)
+    kwargs.setdefault("dataset_version_id", None)
+    return _rank(sessions, **kwargs)
+
+
+def test_no_scope_ranks_globally_across_datasets_and_versions(sessions, seed):
+    on_v1 = _run(sessions, mean=0.5, version="dv-1")
+    on_v3 = _run(sessions, mean=0.7, version="dv-3")
+    custom = _run(sessions, mean=0.6, version=None)  # a custom dataset string
+    _run(sessions, mean=0.9, env_id="env-b")  # another environment
+    result = _global(sessions, metric="accuracy")
+    assert _ids(result) == [on_v3, custom, on_v1]
+    assert result["scope"] == {
+        "dataset": None,
+        "dataset_version": None,
+        "versioning": {},
+        "global": True,
+    }
+    assert result["reason"] is None and result["eligible_count"] == 3
+    rows = {r["run_id"]: r for r in result["runs"]}
+    assert rows[on_v3]["dataset"] == {"id": "ds-1", "name": "Golden"}
+    assert rows[on_v3]["dataset_version"] == {"id": "dv-3", "version": "v3"}
+    assert rows[custom]["dataset"] is None and rows[custom]["dataset_version"] is None
+    # A version still ranks only its own runs.
+    assert _ids(_rank(sessions, metric="accuracy")) == [on_v1]
+
+
+def test_versioning_scope_matches_any_key(sessions, seed):
+    a = _run(sessions, mean=0.5)
+    b = _run(sessions, mean=0.6)
+    c = _run(sessions, mean=0.7)
+    _versions(sessions, a, agent_version="v1", kb_version="381")
+    _versions(sessions, b, agent_version="v2", kb_version="381", prompt="p7")
+    assert _ids(_rank(sessions, versioning={"agent_version": ["v1"]})) == [a]
+    assert _ids(_rank(sessions, versioning={"agent_version": ["v1", "v2"]})) == [b, a]
+    assert _ids(
+        _rank(sessions, versioning={"agent_version": ["v2"], "kb_version": ["381"]})
+    ) == [b]
+    assert _ids(_rank(sessions, versioning={"prompt": ["p7"]})) == [b]
+    assert _ids(_rank(sessions, versioning={"agent_version": ["__empty__"]})) == [c]
+    # Composes with a global dataset scope.
+    result = _global(sessions, versioning={"kb_version": ["381"]})
+    assert _ids(result) == [b, a]
+    assert result["scope"]["global"] is False
+    assert result["scope"]["versioning"] == {"kb_version": ["381"]}
+    nothing = _global(sessions, versioning={"agent_version": ["v9"]})
+    assert nothing["runs"] == [] and nothing["reason"] == "no_runs_in_scope"
+
+
+def test_scope_lists_datasets_versions_and_versioning_with_runs(sessions, seed):
+    from qym_platform.services.eval_best_run import best_run_scope
+
+    first = _run(sessions, mean=0.5, version="dv-1", completed_at=T0)
+    _run(sessions, mean=0.5, version="dv-3", completed_at=T0 + timedelta(hours=1))
+    _run(sessions, mean=0.5, version="dv-3", metric="latency", direction="minimize")
+    _run(sessions, mean=0.5, version=None)
+    _run(sessions, mean=0.9, version="dv-2", origin=RunOrigin.LOCAL)  # not eligible
+    _versions(sessions, first, agent_version="v1")
+    with sessions() as db:
+        scope = best_run_scope(db, db.get(EvalEnvironment, "env-a"))
+    assert scope["datasets"] == [
+        {
+            "id": "ds-1",
+            "name": "Golden",
+            "slug": "golden",
+            "run_count": 3,
+            "versions": [
+                {"id": "dv-3", "version": "v3", "name": "", "run_count": 2},
+                {"id": "dv-1", "version": "v1", "name": "", "run_count": 1},
+            ],
+        }
+    ]
+    assert scope["other_run_count"] == 1
+    assert scope["versioning"] == {"agent_version": [{"value": "v1", "run_count": 1}]}
+    assert scope["total_runs"] == 4
+
+
+def test_api_scope_route_and_versioning_param(client, sessions):
+    a = _run(sessions, mean=0.5)
+    _run(sessions, mean=0.9, version="dv-2")
+    _versions(sessions, a, agent_version="v1")
+    scope = client.get(URL + "/scope", headers=_headers(MEMBER))
+    assert scope.status_code == 200, scope.text
+    assert [d["id"] for d in scope.json()["datasets"]] == ["ds-1"]
+    assert client.get(URL + "/scope", headers=_headers(OUTSIDER)).status_code == 403
+    body = client.get(
+        URL, params={"versioning": "agent_version=v1"}, headers=_headers(MEMBER)
+    ).json()
+    assert [r["run_id"] for r in body["runs"]] == [a]
+    assert body["scope"]["global"] is False
+
+
+# --------------------------------------------------------------------------- loading
+
+
+WHOLE_JSON_COLUMNS = (
+    "runs.run_metadata",
+    "runs.run_config",
+    "eval_experiment_jobs.request_body",
+)
+
+
+def whole_json_reads(statements, columns=WHOLE_JSON_COLUMNS):
+    """Columns read whole (not through a JSON path) by the captured statements."""
+    found = []
+    for sql in statements:
+        for column in columns:
+            for match in re.finditer(re.escape(column), sql):
+                before = sql[max(0, match.start() - 13) : match.start()]
+                after = sql[match.end() : match.end() + 4].lstrip()
+                if before.endswith("JSON_EXTRACT(") or after.startswith(("->", "#>")):
+                    continue
+                found.append(column)
+    return found
+
+
+def test_ranking_reads_only_the_qym_config_key(sessions, seed):
+    stored = _run(
+        sessions,
+        mean=0.9,
+        run_metadata={
+            "qym_config": {
+                "env_overrides": {"TEMP": 0.2},
+                "sweep": {"/env_overrides/TEMP": 0.2},
+            },
+            "trace_stats": {"big": "x" * 10_000},
+        },
+        job_fields={"remote_versioning": {"agent_version": "1"}},
+    )
+    with sessions() as db:
+        env = db.get(EvalEnvironment, "env-a")
+        statements = []
+        listener = lambda *a: statements.append(a[2])  # noqa: E731
+        event.listen(db.get_bind(), "before_cursor_execute", listener)
+        try:
+            result = rank_best_runs(db, env, metric="accuracy", now=NOW)
+        finally:
+            event.remove(db.get_bind(), "before_cursor_execute", listener)
+    assert _ids(result) == [stored]
+    assert result["runs"][0]["params"]["sweep"] == {"/env_overrides/TEMP": 0.2}
+    assert whole_json_reads(statements) == []
+    # Stored versioning: the job's remote_result is never read.
+    assert not any("remote_result" in sql for sql in statements)
+    assert any(
+        "JSON_EXTRACT(runs.run_metadata" in sql or "runs.run_metadata ->" in sql
+        for sql in statements
     )
