@@ -10,7 +10,7 @@
   <thead><tr><th>Tab</th><th>Purpose</th></tr></thead>
   <tbody>
     <tr><td><strong>General</strong></td><td>Name, slug, description, current role, member count, and status.</td></tr>
-    <tr><td><strong>Members</strong></td><td>Add people and assign MEMBER or MANAGER. Only managers/admins can change membership, and the final manager cannot be removed or demoted. Removing a member revokes their API keys for the project.</td></tr>
+    <tr><td><strong>Members</strong></td><td>Add people and assign MEMBER or MANAGER. Only managers/admins can change membership, and the final manager cannot be removed or demoted. Removing a member revokes their API keys for the project. The removal dialog says how many runs they own in the project (Deleted Runs included) and can transfer all of them to another active member in the same step; without a transfer the runs stay in the project under their name. Each transferred run is recorded with who moved it. While the project is archived, members can be removed but runs are not transferred.</td></tr>
     <tr><td><strong>API Keys</strong></td><td>Create project-bound Bearer keys, identify them by name/prefix, and revoke eligible keys.</td></tr>
     <tr><td><strong>LLM Connections</strong></td><td>Add, edit, test, choose a default, or remove providers used by AI-assisted root-cause analysis.</td></tr>
     <tr><td><strong>Danger Zone</strong></td><td>Admins can archive the project (reversible), unarchive it, or delete it permanently.</td></tr>

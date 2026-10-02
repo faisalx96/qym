@@ -89,6 +89,10 @@
     .key-modal .token-field { flex: 1; font-family: var(--font-mono); font-size: var(--font-base); color: var(--text-primary); background: var(--bg-base); border: 1px solid var(--border-default); border-radius: 8px; padding: 10px 12px; word-break: break-all; }
     .key-modal .warn { margin-top: var(--space-md); color: var(--warning); font-size: var(--font-sm); }
     .key-modal .footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: var(--space-lg); }
+    /* Remove-member dialog (shell modal recipe): room for the runs picker. */
+    .remove-member-modal { width: 480px; }
+    .remove-member-modal .remove-member-transfer { margin: var(--space-md) 0 0; }
+    .remove-member-modal .shell-modal-note:empty { display: none; }
 
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); }
     .form-group { display: flex; flex-direction: column; gap: 6px; }
@@ -861,33 +865,7 @@
           });
         });
         document.querySelectorAll('[data-member-remove]').forEach(btn => {
-          btn.addEventListener('click', async () => {
-            const uid = btn.dataset.memberRemove;
-            const member = state.members.find(m => m.user_id === uid);
-            const who = member ? (member.display_name || member.email) : 'This member';
-            // Removal revokes the person's keys for this project on the server.
-            const keys = state.apiKeys.filter(k => !k.revoked_at && k.creator?.id === uid);
-            const lines = [
-              `${who} will lose access to this project.`,
-              keys.length
-                ? `Their ${plural(keys.length, 'active API key')} for this project (${keys.map(k => k.name || 'default').join(', ')}) will be revoked.`
-                : 'They have no active API keys in this project.',
-              'Runs they created stay in the project.',
-            ];
-            if (window.QymShell && window.QymShell.openConfirmDialog) {
-              const confirmation = await window.QymShell.openConfirmDialog({
-                title: 'Remove member?',
-                description: lines,
-                confirmLabel: 'Remove member',
-                confirmClass: 'shell-btn-danger',
-              });
-              if (!confirmation || !confirmation.confirmed) return;
-            } else if (!confirm(lines.join('\n'))) {
-              return;
-            }
-            await fetchJson(`v1/projects/${state.project.id}/members/${uid}`, { method: 'DELETE' });
-            await load();
-          });
+          btn.addEventListener('click', () => openRemoveMemberDialog(btn.dataset.memberRemove));
         });
 
         // API Keys tab: revoking stays possible while the project is archived.
@@ -1087,6 +1065,170 @@
           toast('Could not add the member: ' + (err.message || 'Unknown error'), 'error');
         }
       });
+
+      // ── Remove member (C072) ──
+      // Lists the runs the member owns in this project and offers to transfer
+      // them to another active member in the same request
+      // (DELETE …/members/{id}?transfer_runs_to=). Removing without a transfer
+      // stays possible. Shell modal recipe, page-local because of the picker;
+      // a destructive confirm, so it opens on Cancel.
+      function ownedRunsText(who, preview) {
+        const live = Number(preview.owned_runs) || 0;
+        const deleted = Number(preview.owned_deleted_runs) || 0;
+        const total = live + deleted;
+        if (!total) return `${who} owns no runs in this project.`;
+        return `${who} owns ${plural(total, 'run')} in this project`
+          + (deleted ? `, ${deleted} of them in Deleted Runs.` : '.');
+      }
+
+      function openRemoveMemberDialog(uid) {
+        const member = state.members.find(m => m.user_id === uid);
+        const who = member ? (member.display_name || member.email) : 'This member';
+        // Removal revokes the person's keys for this project on the server.
+        const keys = state.apiKeys.filter(k => !k.revoked_at && k.creator?.id === uid);
+        // A disabled account keeps its membership but cannot own runs.
+        const takers = state.members.filter(m => m.user_id !== uid && m.is_active !== false);
+        const make = (tag, className, text) => {
+          const node = document.createElement(tag);
+          if (className) node.className = className;
+          if (text != null) node.textContent = text;
+          return node;
+        };
+
+        document.getElementById('remove-member-dialog')?.remove();
+        const backdrop = make('div', 'shell-modal-backdrop');
+        backdrop.id = 'remove-member-dialog';
+        const modal = make('div', 'shell-modal remove-member-modal');
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.setAttribute('aria-labelledby', 'remove-member-title');
+        modal.setAttribute('aria-describedby', 'remove-member-summary');
+        const header = make('div', 'shell-modal-header');
+        const title = make('div', 'shell-modal-title', 'Remove member?');
+        title.id = 'remove-member-title';
+        const closeBtn = make('button', 'shell-modal-close qym-icon-action', '×');
+        closeBtn.type = 'button';
+        closeBtn.setAttribute('aria-label', 'Close');
+        header.append(title, closeBtn);
+
+        const body = make('div', 'shell-modal-body');
+        const summary = make('div');
+        summary.id = 'remove-member-summary';
+        summary.append(
+          make('p', 'shell-modal-description', `${who} will lose access to this project.`),
+          make('p', 'shell-modal-description', keys.length
+            ? `Their ${plural(keys.length, 'active API key')} for this project (${keys.map(k => k.name || 'default').join(', ')}) will be revoked.`
+            : 'They have no active API keys in this project.'),
+        );
+        const runsLine = make('p', 'shell-modal-description', `Checking the runs ${who} owns…`);
+        runsLine.id = 'remove-member-runs';
+        runsLine.setAttribute('aria-live', 'polite');
+        summary.append(runsLine);
+        const transferGroup = make('div', 'shell-form-group remove-member-transfer');
+        transferGroup.hidden = true;
+        const label = make('label', 'shell-form-label', 'Their runs');
+        label.htmlFor = 'remove-member-transfer';
+        const select = make('select', 'shell-form-input');
+        select.id = 'remove-member-transfer';
+        select.append(new Option(`Keep them with ${who}`, ''));
+        takers.forEach(m => select.append(new Option(
+          `Transfer to ${m.display_name || m.email}${m.display_name ? ` (${m.email})` : ''}`, m.user_id)));
+        transferGroup.append(label, select);
+        const note = make('p', 'shell-modal-note', 'Runs they created stay in the project.');
+        note.id = 'remove-member-note';
+        const error = make('div', 'shell-form-error');
+        error.setAttribute('role', 'alert');
+        body.append(summary, transferGroup, note, error);
+
+        const footer = make('div', 'shell-modal-footer');
+        const cancelBtn = make('button', 'shell-btn shell-btn-secondary', 'Cancel');
+        cancelBtn.type = 'button';
+        const confirmBtn = make('button', 'shell-btn shell-btn-danger', 'Remove member');
+        confirmBtn.type = 'button';
+        confirmBtn.id = 'remove-member-confirm';
+        footer.append(cancelBtn, confirmBtn);
+        modal.append(header, body, footer);
+        backdrop.append(modal);
+        document.body.append(backdrop);
+
+        let preview = null;
+        let busy = false;
+        function sync() {
+          const total = preview ? (Number(preview.owned_runs) || 0) + (Number(preview.owned_deleted_runs) || 0) : 0;
+          const target = takers.find(m => m.user_id === select.value);
+          confirmBtn.textContent = busy ? 'Removing…' : target
+            ? `Transfer ${plural(total, 'run')} and remove`
+            : 'Remove member';
+          if (!preview) return;
+          if (!total) note.textContent = '';
+          else if (isReadOnly()) note.textContent = `Runs can be transferred after the project is unarchived; until then they stay owned by ${who}.`;
+          else if (!takers.length) note.textContent = `No other active member can take them, so they stay owned by ${who}.`;
+          else if (target) note.textContent = `${target.display_name || target.email} becomes their owner and can submit and delete them. Their results and review history stay as they are.`;
+          else note.textContent = `They stay in the project, owned by ${who}; a manager can still submit or transfer them later.`;
+        }
+        let closed = false;
+        function close() {
+          if (closed) return;
+          closed = true;
+          if (window.QymUIComponents) window.QymUIComponents.releaseDialog(modal);
+          backdrop.remove();
+        }
+        async function confirmRemoval() {
+          if (busy) return;
+          busy = true;
+          confirmBtn.disabled = true;
+          cancelBtn.disabled = true;
+          error.textContent = '';
+          sync();
+          const target = takers.find(m => m.user_id === select.value);
+          const query = target ? `?transfer_runs_to=${encodeURIComponent(target.user_id)}` : '';
+          try {
+            const result = await fetchJson(
+              `v1/projects/${encodeURIComponent(state.project.id)}/members/${encodeURIComponent(uid)}${query}`,
+              { method: 'DELETE' });
+            if (!result) return;
+            close();
+            const moved = Number(result.transferred_runs) || 0;
+            toast(target && moved
+              ? `${who} was removed. ${plural(moved, 'run')} now ${moved === 1 ? 'belongs' : 'belong'} to ${target.display_name || target.email}.`
+              : `${who} was removed.`, 'success');
+            await load();
+          } catch (err) {
+            busy = false;
+            confirmBtn.disabled = false;
+            cancelBtn.disabled = false;
+            error.textContent = err.message || 'Could not remove the member.';
+            sync();
+          }
+        }
+        closeBtn.addEventListener('click', () => { if (!busy) close(); });
+        cancelBtn.addEventListener('click', close);
+        confirmBtn.addEventListener('click', confirmRemoval);
+        select.addEventListener('change', sync);
+        backdrop.addEventListener('click', event => { if (event.target === backdrop && !busy) close(); });
+        // Leaving the page (shell navigation) takes the dialog with it.
+        if (pageSignal) pageSignal.addEventListener('abort', close, { once: true });
+        if (window.QymUIComponents) {
+          window.QymUIComponents.openDialog(modal, { initialFocus: cancelBtn, onEscape: () => { if (!busy) close(); } });
+        } else {
+          cancelBtn.focus();
+        }
+
+        fetchJson(`v1/projects/${encodeURIComponent(state.project.id)}/members/${encodeURIComponent(uid)}/removal-preview`)
+          .then(data => {
+            if (!data || !backdrop.isConnected) return;
+            preview = data;
+            runsLine.textContent = ownedRunsText(who, data);
+            const total = (Number(data.owned_runs) || 0) + (Number(data.owned_deleted_runs) || 0);
+            transferGroup.hidden = !total || !takers.length || isReadOnly();
+            sync();
+          })
+          .catch(() => {
+            if (!backdrop.isConnected) return;
+            // Removal still works; only the transfer offer needs the count.
+            runsLine.textContent = `Could not check the runs ${who} owns. Removing keeps them in the project, owned by ${who}.`;
+          });
+      }
 
       // ── New-key modal ──
       // Shared modal focus contract: focus moves to Copy, Tab stays inside,

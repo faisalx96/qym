@@ -66,7 +66,7 @@ from qym_platform.services.retention import resume_purge_clocks
 from qym_platform.services.root_cause_categories import DEFAULT_ROOT_CAUSE_TAXONOMY
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 router = APIRouter()
 
@@ -1028,17 +1028,8 @@ def update_project_member(
     return _serialize_member(member, user)
 
 
-@router.delete("/v1/projects/{project_id}/members/{user_id}")
-def remove_project_member(
-    project_id: str,
-    user_id: str,
-    db: Session = Depends(get_db),
-    principal: Principal = Depends(require_ui_principal),
-) -> Dict[str, Any]:
-    _require_project_access(db, principal, project_id)
-    if not can_manage_project_members(db, principal, project_id):
-        raise HTTPException(status_code=403, detail="Manager only")
-    member = (
+def _membership(db: Session, project_id: str, user_id: str) -> Optional[ProjectMembership]:
+    return (
         db.query(ProjectMembership)
         .filter(
             ProjectMembership.project_id == project_id,
@@ -1046,9 +1037,105 @@ def remove_project_member(
         )
         .first()
     )
+
+
+@router.get("/v1/projects/{project_id}/members/{user_id}/removal-preview")
+def member_removal_preview(
+    project_id: str,
+    user_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """What removing a member leaves behind: the runs they own (C072).
+
+    The member-removal dialog shows the counts and offers to transfer the
+    runs (``DELETE .../members/{user_id}?transfer_runs_to=``).
+    """
+    _require_project_access(db, principal, project_id)
+    if not can_manage_project_members(db, principal, project_id):
+        raise HTTPException(status_code=403, detail="Manager only")
+    if _membership(db, project_id, user_id) is None:
+        raise HTTPException(status_code=404, detail="Membership not found")
+    owned = (
+        db.query(Run.deleted_at.is_(None), func.count(Run.id))
+        .filter(Run.project_id == project_id, Run.owner_user_id == user_id)
+        .group_by(Run.deleted_at.is_(None))
+        .all()
+    )
+    counts = {bool(live): int(count) for live, count in owned}
+    return {
+        "project_id": project_id,
+        "user_id": user_id,
+        "owned_runs": counts.get(True, 0),
+        "owned_deleted_runs": counts.get(False, 0),
+    }
+
+
+def _transfer_member_runs(
+    db: Session, principal: Principal, project_id: str, user_id: str, new_owner_id: str
+) -> int:
+    """Give every run ``user_id`` owns in the project (Trash included) to
+    another active member; one ``run.owner_transferred`` audit row per run."""
+    require_project_writable(db, project_id)
+    if new_owner_id == user_id:
+        raise HTTPException(status_code=400, detail="Choose another member to take the runs")
+    new_owner = db.get(User, new_owner_id)
+    if new_owner is None or not new_owner.is_active or _membership(db, project_id, new_owner_id) is None:
+        raise HTTPException(
+            status_code=400, detail="The new owner must be an active member of the project"
+        )
+    # Lock in id order, like bulk submit, so concurrent run actions queue.
+    runs = (
+        db.query(Run)
+        .options(load_only(Run.id, Run.project_id, Run.owner_user_id, Run.deleted_at))
+        .filter(Run.project_id == project_id, Run.owner_user_id == user_id)
+        .order_by(Run.id)
+        .with_for_update()
+        .all()
+    )
+    actor_id = principal.user.id if principal.auth_type != "none" else None
+    for run in runs:
+        # An ORM change, so the runs list and dashboards pick up the owner.
+        run.owner_user_id = new_owner_id
+    db.add_all(
+        [
+            AuditLog(
+                actor_user_id=actor_id,
+                action="run.owner_transferred",
+                entity_type="run",
+                entity_id=run.id,
+                before={"owner_user_id": user_id},
+                after={"owner_user_id": new_owner_id, "reason": "member_removed"},
+            )
+            for run in runs
+        ]
+    )
+    return len(runs)
+
+
+@router.delete("/v1/projects/{project_id}/members/{user_id}")
+def remove_project_member(
+    project_id: str,
+    user_id: str,
+    transfer_runs_to: Optional[str] = Query(
+        default=None,
+        description="Active member who takes over every run the removed member owns in the project",
+    ),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    _require_project_access(db, principal, project_id)
+    if not can_manage_project_members(db, principal, project_id):
+        raise HTTPException(status_code=403, detail="Manager only")
+    member = _membership(db, project_id, user_id)
     if not member:
         raise HTTPException(status_code=404, detail="Membership not found")
     _ensure_not_last_manager(db, project_id, user_id, None)
+    # Removal stays possible in an archived project; moving runs does not.
+    target = (transfer_runs_to or "").strip()
+    transferred = (
+        _transfer_member_runs(db, principal, project_id, user_id, target) if target else 0
+    )
     # The person's keys for this project stop working with their membership.
     now = utc_now_naive()
     keys = (
@@ -1062,6 +1149,9 @@ def remove_project_member(
     )
     for key in keys:
         key.revoked_at = now
+    after: Dict[str, Any] = {"revoked_api_key_ids": [key.id for key in keys]}
+    if target:
+        after.update(runs_transferred_to=target, transferred_runs=transferred)
     db.add(
         AuditLog(
             actor_user_id=principal.user.id,
@@ -1069,7 +1159,7 @@ def remove_project_member(
             entity_type="project_membership",
             entity_id=f"{project_id}:{user_id}",
             before={"role": member.role.value},
-            after={"revoked_api_key_ids": [key.id for key in keys]},
+            after=after,
         )
     )
     db.delete(member)
@@ -1079,6 +1169,8 @@ def remove_project_member(
         "project_id": project_id,
         "user_id": user_id,
         "revoked_api_keys": len(keys),
+        "transferred_runs": transferred,
+        "runs_transferred_to": target or None,
     }
 
 
