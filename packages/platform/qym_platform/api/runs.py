@@ -69,6 +69,7 @@ from qym_platform.services.correction_rules import require_correction_decision
 from qym_platform.services.issue_reviews import (
     change_metric_issue,
     correction_issue_id,
+    issue_json_says_decided,
     issue_review_statuses,
     reconcile_issue_edits,
 )
@@ -3804,9 +3805,13 @@ def _build_run_data(
             return {}
         result = {}
         for metric_name, analysis in analyses.items():
-            statuses = issue_review_statuses(
-                analysis, issue_reviews.get((item_id, metric_name, number), ())
-            )
+            active = issue_reviews.get((item_id, metric_name, number), ())
+            # Without a review row every issue is pending to the Approve
+            # route; the page reads that from the JSON already unless the
+            # JSON says decided. Most analysed items have no review row.
+            if not active and not issue_json_says_decided(analysis):
+                continue
+            statuses = issue_review_statuses(analysis, active)
             if statuses:
                 result[metric_name] = statuses
         return result

@@ -290,6 +290,26 @@ def issue_review_statuses(
     return statuses
 
 
+def issue_json_says_decided(analysis: Any) -> bool:
+    """Whether the run page's JSON reading calls any issue approved or rejected.
+
+    It reads an issue's ``review_status``, else the analysis's. With no review
+    row every issue is pending to the Approve route, so the page needs
+    ``issue_review_statuses`` for such an analysis only when this is true.
+    """
+    if not isinstance(analysis, dict):
+        return False
+    default = str(analysis.get("review_status") or "").strip().lower()
+    issues = analysis.get("root_cause_issues")
+    if not isinstance(issues, list):
+        return default not in ("", "pending")
+    return any(
+        str(issue.get("review_status") or default).strip().lower() not in ("", "pending")
+        for issue in issues
+        if isinstance(issue, dict)
+    )
+
+
 def apply_issue_review(issue: dict[str, Any], correction: ReviewCorrection) -> None:
     issue["review_status"] = correction.status.value
     for key in REVIEW_FIELDS[1:]:

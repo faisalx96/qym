@@ -421,6 +421,22 @@ def test_run_payload_gives_each_issue_its_correction_status(db_session):
     runs_api.update_root_cause_issue(_issue_request(item, 0), db=db_session, principal=principal)
 
 
+def test_run_payload_sends_statuses_only_where_the_json_reading_differs(db_session):
+    """Without a review row every issue is pending to the Approve route. The
+    payload leaves such an analysis out while its JSON reads pending too (most
+    analysed items), and names pending when the JSON says decided."""
+    _, run, item, principal = setup(db_session)
+    assert _row(db_session, run, item.item_id)["review_issue_statuses"] == {}
+    metadata = deepcopy(item.item_metadata)
+    metadata["metric_analyses"]["accuracy"]["review_status"] = "approved"
+    item.item_metadata = metadata
+    db_session.commit()
+    statuses = _row(db_session, run, item.item_id)["review_issue_statuses"]["accuracy"]
+    assert [entry["status"] for entry in statuses] == ["pending", "pending"]
+    # The Approve route agrees.
+    runs_api.update_root_cause_issue(_issue_request(item, 0, by_id=False), db=db_session, principal=principal)
+
+
 @pytest.mark.parametrize("status", [CorrectionStatus.APPROVED, CorrectionStatus.REJECTED])
 def test_run_payload_gives_a_legacy_grouped_issue_its_review_status(client, session_factory, status):
     with session_factory() as db:
@@ -453,7 +469,8 @@ def test_pass_payload_gives_each_pass_issue_its_correction_status(db_session):
 
     statuses = _row(db_session, run, item.item_id)["pass_review_issue_statuses"]["accuracy"]
     assert [entry["status"] for entry in statuses[1]] == ["approved", "pending"]
-    assert [entry["status"] for entry in statuses[0]] == ["pending", "pending"]
+    # Pass 1 has no review row and its JSON reads pending: nothing to send.
+    assert statuses[0] is None
 
 
 def test_run_page_offers_approve_by_the_issue_review_status():
