@@ -19,7 +19,7 @@ Fixes the P1 issues of the September design review: a run page you can read and 
 - Submitting a run asks for confirmation with an optional comment; several runs submit in one request; managers and admins submit on behalf of the owner and can transfer a run to another active member, or all of a member's runs from the member-removal dialog.
 - Datasets: indexed search over IDs, inputs, outputs and metadata; stored lineage counts; compare ordered by time with timestamps and paged diffs; Deleted datasets with restore.
 - Runs list: keyed rows, stable menus, a run search (served by a trigram index), a custom date range; Deleted Runs lists every deleted run, page by page.
-- Runs list: runs checked for Compare stay checked after Back and on return to Runs until you clear them; frozen columns that would cover more than about half the table scroll with it until they fit (date first, never the run name), and the Columns menu names them; your saved choice is kept.
+- Runs list: runs checked for Compare stay checked after Back and on return to Runs until you clear them, and the pager stays beside the selection actions; frozen columns that would cover more than about half the table scroll with it until they fit (date first, never the run name), and the Columns menu names them; your saved choice is kept.
 - Runs, Charts and Models: the project overview is aggregated in the database from each run's stored inputs and shared by every web process and pod, once per published change, with the same numbers as before.
 - Admin: confirm-and-undo when disabling users, never zero active admins, no self-disable or self-demotion.
 - Compare and Models: a baseline with noise bands, short labels, server-side model stats.

@@ -8694,6 +8694,19 @@
     });
     state._runsTableResizeObserver.observe(runsTableScroll);
   }
+  // The table's scrollbar mirror rests on the status bar. A selection in a
+  // narrow bar puts the pager on a second row there (dashboard.css), so the
+  // mirror follows the bar's real height instead of the one-row height.
+  const statusBar = document.querySelector('.status-bar');
+  const runsScrollMirror = document.querySelector('[data-qym-scroll-mirror-for="runs-table-scroll"]');
+  if (statusBar && runsScrollMirror && typeof ResizeObserver === 'function') {
+    state._statusBarResizeObserver = new ResizeObserver(() => {
+      if (!dashboardActive) return;
+      const height = statusBar.offsetHeight;
+      runsScrollMirror.style.bottom = height > 0 ? height + 'px' : '';
+    });
+    state._statusBarResizeObserver.observe(statusBar);
+  }
 
   // Compare actions
   el('compare-view')?.addEventListener('click', openComparison);
@@ -9229,6 +9242,7 @@
     for (const controller of dashboardRequests) controller.abort();
     state.chartHistoryObserver?.disconnect();
     state._runsTableResizeObserver?.disconnect();
+    state._statusBarResizeObserver?.disconnect();
     for (const entry of state.chartHistory.values()) entry.controller?.abort();
     state.chartHistoryQueue.length = 0;
     state._savingOnTeardown = true;

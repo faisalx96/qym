@@ -423,3 +423,107 @@ def test_a_cohort_a_pass_pick_drops_out_when_the_runs_passes_changed(browser):  
     finally:
         view.close()
 
+
+# The pager with a kept selection (P1 round 2 leftover) -----------------------
+
+STATUS_BAR_GEOMETRY = """() => {
+  const box = node => {
+    if (!node || getComputedStyle(node).display === 'none') return null;
+    const rect = node.getBoundingClientRect();
+    return {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom};
+  };
+  const bar = document.querySelector('.status-bar');
+  const left = document.querySelector('.status-left');
+  const mirror = document.querySelector('.qym-scroll-mirror');
+  return {
+    bar: box(bar),
+    actions: box(document.getElementById('compare-panel')),
+    actionsHidden: left.scrollWidth - left.clientWidth,
+    pager: box(document.getElementById('table-pagination')),
+    status: box(document.querySelector('.status-updated')),
+    mirror: mirror && !mirror.hidden ? box(mirror) : null,
+    pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  };
+}"""
+
+
+def _apart(first, second):
+    return (
+        first["right"] <= second["left"] + 0.5 or second["right"] <= first["left"] + 0.5
+        or first["bottom"] <= second["top"] + 0.5 or second["bottom"] <= first["top"] + 0.5
+    )
+
+
+def _inside(inner, outer):
+    return (
+        inner["left"] >= outer["left"] - 0.5 and inner["right"] <= outer["right"] + 0.5
+        and inner["top"] >= outer["top"] - 0.5 and inner["bottom"] <= outer["bottom"] + 0.5
+    )
+
+
+@pytest.mark.parametrize("width", [1280, 1440])
+def test_the_pager_stays_usable_with_a_kept_selection(app, width):
+    """C043 keeps the selection across navigation, but the status bar hid the
+    pager while a selection was active, so a reader who came back to Runs
+    could not page until they cleared it. The pager now stays, in one row
+    with the selection actions and the status, all in full."""
+    app.page.set_viewport_size({"width": width, "height": 900})
+    page = app.goto("/projects/pa")
+    _runs_ready(page)
+    _select(page, "run-001", "run-003")
+    _wait_for_count(page, "2 executions selected")
+    # Away and back: the kept selection comes back with the pager.
+    _nav(page, "overview")
+    page.wait_for_url("**/projects/pa/overview")
+    _nav(page, "runs")
+    page.wait_for_function("() => location.pathname === '/projects/pa' && !location.search")
+    _runs_ready(page)
+    _wait_for_count(page, "2 executions selected")
+
+    geometry = page.evaluate(STATUS_BAR_GEOMETRY)
+    bar, actions, pager, status = (geometry[key] for key in ("bar", "actions", "pager", "status"))
+    assert pager and actions and status, geometry
+    for part in (actions, pager, status):
+        assert _inside(part, bar), geometry
+    assert _apart(actions, pager) and _apart(pager, status) and _apart(actions, status), geometry
+    assert actions["right"] <= pager["left"] and pager["right"] <= status["left"], geometry
+    assert geometry["actionsHidden"] == 0, geometry  # every action in view, none scrolled away
+    assert round(bar["bottom"] - bar["top"]) == 38, geometry  # still one row
+    assert geometry["pageOverflow"] == 0, geometry
+
+    next_page = page.locator('#table-pagination [aria-label="Next page"]')
+    assert next_page.is_visible() and next_page.is_enabled()
+    next_page.click()
+    page.wait_for_function("() => new URLSearchParams(location.search).get('page') === '2'")
+    _runs_ready(page)
+    _wait_for_count(page, "2 executions selected")
+    assert page.locator("#table-pagination .qym-pagination__input").input_value() == "2"
+
+
+def test_a_narrow_bar_puts_the_pager_under_the_selection(app):
+    """Where one row cannot hold the actions and the pager, the pager takes a
+    second row; the table's scrollbar mirror stays above the taller bar."""
+    app.page.set_viewport_size({"width": 1024, "height": 900})
+    page = app.goto("/projects/pa")
+    _runs_ready(page)
+    _select(page, "run-001")
+    _wait_for_count(page, "1 execution selected")
+    page.wait_for_timeout(200)
+    geometry = page.evaluate(STATUS_BAR_GEOMETRY)
+    bar, actions, pager = geometry["bar"], geometry["actions"], geometry["pager"]
+    assert pager and _inside(actions, bar) and _inside(pager, bar), geometry
+    assert pager["top"] >= actions["bottom"], geometry
+    assert geometry["actionsHidden"] == 0 and geometry["pageOverflow"] == 0, geometry
+    assert geometry["mirror"] and abs(geometry["mirror"]["bottom"] - bar["top"]) <= 1, geometry
+    page.locator('#table-pagination [aria-label="Next page"]').click()
+    page.wait_for_function("() => new URLSearchParams(location.search).get('page') === '2'")
+
+    # Clearing the selection gives the bar its own layout back, and the
+    # mirror follows the bar's height.
+    page.locator("#compare-clear").click()
+    page.wait_for_function("() => !document.querySelector('.status-bar').classList.contains('selection-active')")
+    page.wait_for_timeout(200)
+    geometry = page.evaluate(STATUS_BAR_GEOMETRY)
+    assert geometry["actions"] is None, geometry
+    assert geometry["mirror"] and abs(geometry["mirror"]["bottom"] - geometry["bar"]["top"]) <= 1, geometry
+

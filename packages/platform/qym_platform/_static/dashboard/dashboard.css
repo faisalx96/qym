@@ -4078,6 +4078,9 @@ button.legend-item {
   color: var(--text-muted);
   min-height: var(--status-bar-height);
   flex-shrink: 0;
+  /* The Runs selection layout below follows the bar's own width, which the
+     sidebar (expanded or collapsed) changes as much as the window does. */
+  container: runs-status / inline-size;
 }
 
 .status-left, .status-right {
@@ -4086,8 +4089,14 @@ button.legend-item {
   gap: var(--space-md);
 }
 
+/* A selection keeps the pager (C043): the selection now stays across
+   navigation, so a reader who comes back to Runs with one still pages.
+   Order of priority: the selection actions at full width, then the pager
+   (range summary and controls together), then the status, which truncates
+   if it must. The list summary returns where the bar has room for it; the
+   pager's range summary already gives the count. */
 .status-bar.selection-active {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: max-content auto minmax(0, 1fr);
 }
 
 .status-bar.selection-active .status-left {
@@ -4097,8 +4106,61 @@ button.legend-item {
   scrollbar-width: thin;
 }
 
-.status-bar.selection-active .status-center {
+.status-bar.selection-active #status-filter,
+.status-bar.selection-active #selection-status-separator {
   display: none;
+}
+
+.status-bar.selection-active .status-right {
+  min-width: 0;
+}
+
+.status-bar.selection-active .status-updated {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@container runs-status (min-width: 1300px) {
+  .status-bar.selection-active #status-filter,
+  .status-bar.selection-active #selection-status-separator {
+    display: revert;
+  }
+
+  .status-bar.selection-active #status-filter {
+    max-width: 40ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* Shortcuts stay on "?"; the button makes room for the pager. */
+@container runs-status (max-width: 1049px) {
+  .status-bar.selection-active .status-right .sep,
+  .status-bar.selection-active .status-right .help-trigger {
+    display: none;
+  }
+}
+
+/* A narrow bar: the pager takes its own row under the selection actions. */
+@container runs-status (max-width: 939px) {
+  .status-bar.selection-active .status-left {
+    grid-column: 1 / -2;
+    margin-top: var(--space-xs);
+  }
+
+  .status-bar.selection-active .status-right {
+    grid-column: -2 / -1;
+    margin-top: var(--space-xs);
+  }
+
+  .status-bar.selection-active .status-center {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin-bottom: var(--space-xs);
+  }
 }
 
 .status-center {
