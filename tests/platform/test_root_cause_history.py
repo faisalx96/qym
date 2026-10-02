@@ -575,6 +575,8 @@ def test_delete_request_rejects_and_removes_active_candidate(
     _delete_active_candidate(
         db_session,
         correction=candidate,
+        principal=Principal(user=reviewer, auth_type="none"),
+        project_id=None,
         reviewer_id=reviewer.id,
         comment="Rejected automatically after deletion request.",
         reviewed_at=rejected_at,
@@ -665,6 +667,8 @@ def test_deleting_metric_reviews_retargets_then_clears_legacy_summary(
     _delete_active_candidate(
         db_session,
         correction=candidates[0],
+        principal=Principal(user=reviewer, auth_type="none"),
+        project_id=None,
         reviewer_id=reviewer.id,
         comment="Delete accuracy review.",
         reviewed_at=datetime.utcnow(),
@@ -681,6 +685,8 @@ def test_deleting_metric_reviews_retargets_then_clears_legacy_summary(
     _delete_active_candidate(
         db_session,
         correction=candidates[1],
+        principal=Principal(user=reviewer, auth_type="none"),
+        project_id=None,
         reviewer_id=reviewer.id,
         comment="Delete format review.",
         reviewed_at=datetime.utcnow(),
@@ -731,6 +737,8 @@ def test_deleting_metric_review_preserves_independent_human_item_summary(
     _delete_active_candidate(
         db_session,
         correction=candidate,
+        principal=Principal(user=reviewer, auth_type="none"),
+        project_id=None,
         reviewer_id=reviewer.id,
         comment="Delete metric review.",
         reviewed_at=datetime.utcnow(),

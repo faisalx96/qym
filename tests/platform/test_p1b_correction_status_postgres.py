@@ -3,8 +3,9 @@
 Approve, reject and reset lock the correction row (SELECT ... FOR UPDATE) and
 check its status again after the lock. When another reviewer's decision is
 committed while the request waits, the request reads that decision and answers
-409 instead of overwriting it. Only Postgres has these row locks, so the tests
-need QYM_TEST_POSTGRES_URL.
+409 instead of overwriting it. Delete checks its right (an author may withdraw
+only a PENDING correction) on the locked row too. Only Postgres has these row
+locks, so the tests need QYM_TEST_POSTGRES_URL.
 """
 
 from __future__ import annotations
@@ -48,6 +49,7 @@ from qym_platform.db.models import (  # noqa: E402
 from qym_platform.deps import get_db  # noqa: E402
 
 HEADERS = {"X-User-Email": "reviewer@example.com", "Origin": "http://localhost:8000"}
+AUTHOR = {"X-User-Email": "author@example.com", "Origin": "http://localhost:8000"}
 DECIDED_AT = datetime(2026, 9, 2)
 
 
@@ -71,6 +73,7 @@ def pg(monkeypatch):
                 [
                     User(id="reviewer-1", email="reviewer@example.com", role=UserRole.MEMBER),
                     User(id="other-1", email="other@example.com", role=UserRole.MEMBER),
+                    User(id="author-1", email="author@example.com", role=UserRole.MEMBER),
                 ]
             )
             db.flush()
@@ -78,6 +81,7 @@ def pg(monkeypatch):
             db.flush()
             db.add(ProjectMembership(project_id="p1", user_id="reviewer-1", role=ProjectRole.MANAGER))
             db.add(ProjectMembership(project_id="p1", user_id="other-1", role=ProjectRole.MANAGER))
+            db.add(ProjectMembership(project_id="p1", user_id="author-1", role=ProjectRole.MEMBER))
             for run_id in ("r1", "r2"):
                 db.add(
                     Run(
@@ -109,14 +113,14 @@ def pg(monkeypatch):
         admin.dispose()
 
 
-def _correction(sessions, run_id, *, metadata=None):
+def _correction(sessions, run_id, *, metadata=None, author="other-1"):
     with sessions() as db:
         if metadata is not None:
             db.query(RunItem).filter_by(run_id=run_id).one().item_metadata = metadata
         row = ReviewCorrection(
             run_id=run_id, item_id="item-1", metric_name=None, task="t", ai_root_cause="",
             human_root_cause="Retrieval miss", human_root_causes=["Retrieval miss"],
-            corrected_by_user_id="other-1", is_active=True, status=CorrectionStatus.PENDING,
+            corrected_by_user_id=author, is_active=True, status=CorrectionStatus.PENDING,
             created_at=datetime(2026, 9, 1),
         )
         db.add(row)
@@ -136,11 +140,14 @@ def _waiting_on_a_lock(engine) -> bool:
         )
 
 
-def _race(client, sessions, engine, correction_ids, request):
+def _race(client, sessions, engine, correction_ids, request, headers=HEADERS):
     """Another reviewer approves the corrections and holds the row locks
-    while ``request`` runs; it commits once the request waits on them."""
+    while ``request`` runs; it commits once the request waits on them. Like
+    the approve routes, it locks each correction's item first."""
     other = sessions()
     for correction_id in correction_ids:
+        run_id = other.get(ReviewCorrection, correction_id).run_id
+        other.query(RunItem).filter_by(run_id=run_id, item_id="item-1").with_for_update().one()
         row = (
             other.query(ReviewCorrection)
             .filter_by(id=correction_id)
@@ -155,7 +162,7 @@ def _race(client, sessions, engine, correction_ids, request):
 
     def send():
         method, path, body = request
-        results["response"] = client.request(method, path, json=body, headers=HEADERS)
+        results["response"] = client.request(method, path, json=body, headers=headers)
 
     worker = threading.Thread(target=send)
     worker.start()
@@ -232,3 +239,43 @@ def test_run_page_issue_approval_reads_the_decision_committed_while_it_waited(pg
     assert response.status_code == 409, response.text
     assert "This issue is approved" in response.json()["detail"]
     assert _state(sessions, target) == (CorrectionStatus.APPROVED, "other-1")
+
+
+def _managers_decide(sessions):
+    with sessions() as db:
+        db.get(Project, "p1").correction_approvers = "managers"
+        db.commit()
+
+
+def test_author_cannot_delete_a_correction_once_a_manager_approved_it(pg):
+    client, sessions, engine = pg
+    _managers_decide(sessions)
+    cid = _correction(sessions, "r1", author="author-1")
+    approved = client.post(f"/api/corrections/{cid}/approve", json={}, headers=HEADERS)
+    assert approved.status_code == 200, approved.text
+    refused = client.delete(f"/api/corrections/{cid}", headers=AUTHOR)
+    assert refused.status_code == 403, refused.text
+    assert _state(sessions, cid) == (CorrectionStatus.APPROVED, "reviewer-1")
+
+
+@pytest.mark.parametrize("route", ["single", "bulk"])
+def test_author_delete_reads_the_approval_committed_while_it_waited(pg, route):
+    """The author may withdraw a PENDING correction. A manager's approval
+    committed while the delete waits makes it APPROVED, which only a
+    reviewer with the reset right may delete: the delete answers 403 and the
+    approval stays."""
+    client, sessions, engine = pg
+    _managers_decide(sessions)
+    cid = _correction(sessions, "r1", author="author-1")
+    request = (
+        ("DELETE", f"/api/corrections/{cid}", None)
+        if route == "single"
+        else ("POST", "/api/corrections/bulk", {"ids": [cid], "action": "delete", "expected_count": 1})
+    )
+    response = _race(client, sessions, engine, [cid], request, headers=AUTHOR)
+    assert response.status_code == 403, response.text
+    with sessions() as db:
+        row = db.get(ReviewCorrection, cid)
+        assert (row.status, row.is_active, row.reviewed_by_user_id) == (
+            CorrectionStatus.APPROVED, True, "other-1",
+        )

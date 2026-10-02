@@ -8798,11 +8798,23 @@ def _delete_active_candidate(
     db: Session,
     *,
     correction: ReviewCorrection,
+    principal: Principal,
+    project_id: Any,
     reviewer_id: Optional[str],
     comment: str,
     reviewed_at: datetime,
 ) -> None:
-    """Remove a candidate from reviews while retaining a rejected audit record."""
+    """Remove a candidate from reviews while retaining a rejected audit record.
+
+    The delete right depends on the status (an author may withdraw only a
+    PENDING correction), so it is checked again on the locked, reloaded row:
+    a decision another reviewer committed while this request waited is read
+    here, not overwritten.
+    """
+    _require_active_candidate(correction)
+    lock_issue_correction(db, correction)
+    _require_active_candidate(correction)
+    require_correction_delete(db, principal, project_id, correction)
     before = correction_review_state(correction)
     _remove_active_candidate(
         db,
@@ -9911,6 +9923,12 @@ def bulk_correction_action(
     # as they are now, not as they were when the selection was loaded.
     for candidate in sorted(corrections, key=lambda row: (row.run_id, row.item_id, row.id)):
         lock_issue_correction(db, candidate)
+    if request.action == "delete":
+        # Who may delete depends on the status: check it as it is now.
+        for correction in corrections:
+            require_correction_delete(
+                db, principal, runs_by_id[correction.run_id].project_id, correction
+            )
     if expected_status is not None:
         changed = sum(1 for c in corrections if c.status != expected_status)
         if changed:
@@ -9958,6 +9976,8 @@ def bulk_correction_action(
             _delete_active_candidate(
                 db,
                 correction=c,
+                principal=principal,
+                project_id=runs_by_id[c.run_id].project_id,
                 reviewer_id=reviewer_id,
                 comment=request.comment
                 or "Rejected automatically after deletion request.",
@@ -9998,6 +10018,8 @@ def delete_correction(
     _delete_active_candidate(
         db,
         correction=c,
+        principal=principal,
+        project_id=run.project_id,
         reviewer_id=principal.user.id if principal.auth_type != "none" else None,
         comment="Rejected automatically after deletion request.",
         reviewed_at=utc_now_naive(),
