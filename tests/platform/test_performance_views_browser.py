@@ -337,7 +337,11 @@ class ViewFixture:
                 if self.kind == "compare"
                 else "      loadRunData();"
             )
-            helpers = "openItemComparisonModal, render," if self.kind == "compare" else ""
+            helpers = (
+                "openItemComparisonModal, render, calculateComparisonStatsForMetric,"
+                if self.kind == "compare"
+                else ""
+            )
             source = source.replace(
                 init,
                 "window.__viewTest = {state, renderItems, getFilteredItems, "

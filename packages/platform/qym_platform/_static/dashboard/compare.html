@@ -8458,6 +8458,7 @@
           itemsWithMultipleRuns: 0, // Count of items with K > 1 for consistency
           itemsWithAtLeastOnePass: 0, // Count of items where at least one run passed (for reliability)
           maxAtK: 0, // Sum of max scores across all items (best possible if you pick best run per item)
+          itemsWithBest: 0, // Items that add a best score to maxAtK (its denominator)
           failedCount: 0, // Task or metric errors, counted once per item/run execution
           correctDistribution: [], // How many items had 0, 1, 2, ... N runs correct
           overallAvgScore: 0,
@@ -8555,6 +8556,7 @@
           // Max@K: track the best score for this item across all runs (not affected by threshold)
           if (validScores.length > 0 && direction) {
             stats.maxAtK += direction === 'minimize' ? Math.min(...validScores) : Math.max(...validScores);
+            stats.itemsWithBest++;
           }
 
           // Count distribution for ALL items (even those with missing data)
@@ -9362,9 +9364,10 @@
         // For numeric metrics, show avg/max instead of pass@K/consistency
         const avgScoreDisplay = window.QymMetrics.formatMetricValue(stats.overallAvgScore, overviewMType);
         const avgScoreColor = metricColorClassFor(overviewMetric, stats.overallAvgScore, overviewMType);
-        const maxAtKVal = stats.totalCompared > 0 ? stats.maxAtK / stats.totalCompared : 0;
-        const maxAtKDisplay = window.QymMetrics.formatMetricValue(maxAtKVal, overviewMType);
-        const maxAtKColor = metricColorClassFor(overviewMetric, maxAtKVal, overviewMType);
+        // Average only the items with a best score: an item whose every
+        // run errored on a lower-is-better metric has none (metrics.js).
+        const maxAtKVal = stats.itemsWithBest > 0 ? stats.maxAtK / stats.itemsWithBest : null;
+        const maxAtKColor = maxAtKVal === null ? '' : metricColorClassFor(overviewMetric, maxAtKVal, overviewMType);
 
         const fmtN = window.QymMetrics.formatNumericValue;
         const fmtValue = isNumeric ? fmtN : (value => window.QymMetrics.formatMetricValue(value, overviewMType));
@@ -9417,7 +9420,7 @@
 
             <div class="stat-box qym-stat-strip__item">
               <div class="stat-title qym-stat-strip__label">${lowerIsBetter ? 'Min' : 'Max'}@${K} ${infoIcon(tooltips.maxAtK)}</div>
-              <div class="stat-main qym-stat-strip__value qym-score-value ${maxAtKColor}">${formatPercent(stats.maxAtK / stats.totalCompared)}</div>
+              <div class="stat-main qym-stat-strip__value qym-score-value ${maxAtKColor}">${formatPercent(maxAtKVal)}</div>
             </div>
 
             <div class="stat-box qym-stat-strip__item">

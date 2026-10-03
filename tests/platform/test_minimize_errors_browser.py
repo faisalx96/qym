@@ -115,6 +115,65 @@ def test_compare_leaves_errors_out_and_never_counts_them_as_passes(browser):
         fixture.close()
 
 
+def _best_scores(fixture, scores):
+    """accuracy is a lower-is-better percentage that passes at or below 0.7;
+    ``scores`` maps an item index to its run-1 and run-2 scores, None for a
+    scorer error."""
+    for run_index, data in enumerate(fixture.data.values()):
+        data["snapshot"]["metric_specs"] = {
+            "accuracy": {
+                "score_type": "percentage",
+                "direction": "minimize",
+                "pass_threshold": 0.7,
+                "schema_version": 2,
+            },
+            "count": MINIMIZE["count"],
+        }
+        for row in data["snapshot"]["rows"]:
+            row["status"], row["error"] = "completed", ""
+            score = scores[row["index"]][run_index]
+            row["metric_values"][0] = 0 if score is None else score
+            row["metric_meta"]["accuracy"] = (
+                {"status": "error", "error": "judge 429"} if score is None else {}
+            )
+
+
+def _stat(page, label):
+    tile = page.locator("#stats-grid .qym-stat-strip__item").filter(has_text=label)
+    return tile.locator(".qym-stat-strip__value").inner_text()
+
+
+@pytest.mark.parametrize(
+    "measured, best",
+    [((0.6, 0.8), "60.0%"), ((0.0, 0.8), "0.0%")],
+    ids=["measured", "genuine-zero"],
+)
+def test_compare_averages_min_at_k_over_items_with_a_best_score(browser, measured, best):
+    fixture = ViewFixture(browser, "compare", count=2)
+    # Item 1 errored in both runs: it has no best score, but still fails.
+    _best_scores(fixture, {0: measured, 1: (None, None)})
+    try:
+        fixture.goto()
+        page = fixture.page
+        page.wait_for_function("__viewTest.state.metricThresholds.accuracy === 0.7")
+        page.wait_for_selector("#stats-grid .qym-stat-strip__item")
+        assert _stat(page, "Min@2") == best
+        # The errored item still counts in the pass-rate denominators.
+        assert _stat(page, "Pass@2") == "50.0%"
+        assert _stat(page, "Pass^2") == "0.0%"
+        stats = page.evaluate("__viewTest.state.comparisonStats.accuracy")
+        assert (stats["totalCompared"], stats["itemsWithBest"]) == (2, 1)
+        # Only the errored item: no best score to average, so no zero.
+        errored = page.evaluate(
+            "__viewTest.calculateComparisonStatsForMetric('accuracy', ['aligned-1'])"
+        )
+        assert (errored["totalCompared"], errored["itemsWithBest"], errored["maxAtK"]) == (1, 0, 0)
+        assert errored["correctDistribution"] == [1, 0, 0]
+        assert fixture.errors == []
+    finally:
+        fixture.close()
+
+
 def test_run_page_histogram_keeps_errors_out_of_the_best_bucket(browser):
     fixture = ViewFixture(browser, "run", count=10)
     specs = {
