@@ -157,6 +157,25 @@ def _get_project(db: Session, project_id: str) -> Project:
     return project
 
 
+def _get_project_for_update(db: Session, project_id: str) -> Project:
+    """Lock the project row and read its current lifecycle state.
+
+    PATCH, archive and unarchive read is_active and archived_at and then
+    credit purge clocks and write an audit row. With the lock, concurrent
+    requests take turns, so one archive interval is credited only once.
+    """
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id)
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
 def _get_project_by_slug(db: Session, slug: str) -> Project:
     project = db.query(Project).filter(Project.slug == slug).first()
     if not project:
@@ -1118,7 +1137,8 @@ def update_project(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_admin(principal)
-    project = _get_project(db, project_id)
+    project = _get_project_for_update(db, project_id)
+    previous_slug = project.slug
     changes: Dict[str, Any] = {}
     if req.name is not None and req.name.strip() != project.name:
         changes["name"] = req.name.strip()
@@ -1148,6 +1168,10 @@ def update_project(
         _set_project_archived(db, project, not req.is_active)
     db.commit()
     db.refresh(project)
+    if req.is_active is False:
+        # Same as POST .../archive. Jobs started before a rename in this same
+        # request run under the old slug's scope.
+        _stop_project_jobs(db, project, previous_slug=previous_slug)
     return _project_payload(db, project, principal)
 
 
@@ -1364,20 +1388,25 @@ def archive_project(
 ) -> Dict[str, Any]:
     """Hide a project and pause its API keys. Never deletes anything."""
     _require_admin(principal)
-    project = _get_project(db, project_id)
+    project = _get_project_for_update(db, project_id)
     if project.is_active:
         _audit_project(db, principal, project, "project.archived", {"is_active": False})
         _set_project_archived(db, project, True)
-        db.commit()
+    # Also ends the transaction of a repeated request, releasing the row lock.
+    db.commit()
     _stop_project_jobs(db, project)
     return {"ok": True, "project_id": project.id, "archived": True}
 
 
-def _stop_project_jobs(db: Session, project: Project) -> None:
+def _stop_project_jobs(
+    db: Session, project: Project, *, previous_slug: Optional[str] = None
+) -> None:
     """Stop the work this process runs for an archived project.
 
     Nothing those jobs produce can be saved once the project is read-only, and
     the product-eval stop routes only take the project's (now refused) API key.
+    ``previous_slug`` is the slug before a rename in the same request: project
+    analyses run under a scope named after the slug they started with.
     """
     from qym_platform.api.analysis import _project_analysis_scope_key
     from qym_platform.api.product_evals import stop_project_product_evals
@@ -1387,10 +1416,14 @@ def _stop_project_jobs(db: Session, project: Project) -> None:
     )
 
     stop_project_product_evals(db, project.id)
-    project_scope = _project_analysis_scope_key(project.slug)
+    project_scopes = {
+        _project_analysis_scope_key(slug) for slug in (project.slug, previous_slug) if slug
+    }
     for manager in (analysis_job_manager, rule_inference_job_manager):
-        run_ids = sorted(scope for scope in manager.active_scope_ids() if scope != project_scope)
-        scopes = {project_scope}
+        run_ids = sorted(
+            scope for scope in manager.active_scope_ids() if scope not in project_scopes
+        )
+        scopes = set(project_scopes)
         if run_ids:
             scopes.update(
                 row[0]
@@ -1406,12 +1439,12 @@ def unarchive_project(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_admin(principal)
-    project = _get_project(db, project_id)
+    project = _get_project_for_update(db, project_id)
     if not project.is_active:
         _audit_project(db, principal, project, "project.unarchived", {"is_active": True})
         _set_project_archived(db, project, False)
-        db.commit()
-        db.refresh(project)
+    db.commit()
+    db.refresh(project)
     return _project_payload(db, project, principal)
 
 
