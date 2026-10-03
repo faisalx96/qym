@@ -6134,6 +6134,9 @@
       }
 
       function renderSweepDelta(value, noise, direction = 'maximize') {
+        if (value === null || value === undefined || Number.isNaN(Number(value))) {
+          return '<span class="sweep-delta-pill neutral">—</span>';
+        }
         const deltaClass = getNoiseDeltaClass(value, noise, direction);
         const rounded = Math.abs(value) < 0.0005 ? 0 : value;
         const prefix = rounded > 0 ? '+' : '';
@@ -6657,7 +6660,7 @@
           left: {
             passAtK: 0,
             passHatK: 0,
-            avgAtK: 0,
+            avgAtK: null,
             consistency: null,
             reliability: null,
             avgAttempts: 0,
@@ -6665,7 +6668,7 @@
           right: {
             passAtK: 0,
             passHatK: 0,
-            avgAtK: 0,
+            avgAtK: null,
             consistency: null,
             reliability: null,
             avgAttempts: 0,
@@ -6673,7 +6676,7 @@
           deltas: {
             passAtK: 0,
             passHatK: 0,
-            avgAtK: 0,
+            avgAtK: null,
             consistency: 0,
             reliability: 0,
           },
@@ -6735,7 +6738,9 @@
           return {
             passAtK: items.length ? agg.passAtKSum / items.length : 0,
             passHatK: items.length ? agg.passHatKSum / items.length : 0,
-            avgAtK: agg.totalScoreCount ? agg.totalScoreSum / agg.totalScoreCount : 0,
+            // No score on this side (every entry errored on a lower-is-better
+            // metric, or none is left after filters): no average, not 0.
+            avgAtK: agg.totalScoreCount ? agg.totalScoreSum / agg.totalScoreCount : null,
             consistency: agg.itemsWithMultipleRuns ? agg.totalConsistencySum / agg.itemsWithMultipleRuns : null,
             reliability: agg.itemsWithAtLeastOnePass ? agg.totalReliabilitySum / agg.itemsWithAtLeastOnePass : null,
             avgAttempts: agg.totalAttemptsCount ? agg.totalAttemptsSum / agg.totalAttemptsCount : 0,
@@ -6747,7 +6752,9 @@
         summary.deltas = {
           passAtK: summary.right.passAtK - summary.left.passAtK,
           passHatK: summary.right.passHatK - summary.left.passHatK,
-          avgAtK: summary.right.avgAtK - summary.left.avgAtK,
+          avgAtK: summary.left.avgAtK === null || summary.right.avgAtK === null
+            ? null
+            : summary.right.avgAtK - summary.left.avgAtK,
           consistency: (summary.right.consistency ?? 0) - (summary.left.consistency ?? 0),
           reliability: (summary.right.reliability ?? 0) - (summary.left.reliability ?? 0),
         };

@@ -388,6 +388,103 @@ def test_sweep_counts_errored_items_and_passes_as_failures():
     assert result["repeatScores"] == [0.1]
 
 
+EMPTY_AVERAGES = """
+const run = (id, values) => ({ run: { run_id: id, samples: 1 }, snapshot: { metric_names: ['h'],
+  rows: values.map((value, i) => ({ item_id: 'item-' + i, status: 'completed',
+    metric_values: [value === null ? 0 : value],
+    metric_meta: value === null ? { h: { status: 'error' } } : {} })) } });
+const runs = [run('E', [null, null]), run('M', [0.6, 0.1]), run('Z', [0, 0])];
+const cohort = (left, right, direction) => {
+  const result = m.calculateGroupedCohortComparison({
+    runsData: runs, leftRunIds: [left], rightRunIds: [right],
+    threshold: 0.2, direction, isBoolean: false, metricName: 'h',
+    getMetricIndex: () => 0, getItemId: row => row.item_id, getRunId: data => data.run.run_id });
+  return [result.left.avgAtK, result.right.avgAtK, result.deltas.avgAtK,
+    result.left.passAtK, result.right.passAtK];
+};
+process.stdout.write(JSON.stringify({
+  left: cohort('E', 'M', 'minimize'),
+  right: cohort('M', 'E', 'minimize'),
+  both: cohort('E', 'E', 'minimize'),
+  zero: cohort('Z', 'M', 'minimize'),
+  maximize: cohort('E', 'M', 'maximize'),
+}));
+"""
+
+
+def test_sweep_cohort_without_a_score_has_no_average_and_no_delta():
+    result = _node(EMPTY_AVERAGES, {})
+    # [left avg, right avg, avg delta, left Pass@k, right Pass@k]. Every h
+    # entry of run E errored: no average and no delta, never 0.0 -> 0.35;
+    # its errors still fail in the pass rates.
+    assert result["left"] == [None, pytest.approx(0.35), None, 0, 0.5]
+    assert result["right"] == [pytest.approx(0.35), None, None, 0.5, 0]
+    assert result["both"] == [None, None, None, 0, 0]
+    # Measured zeros are scores.
+    assert result["zero"] == [0, pytest.approx(0.35), pytest.approx(0.35), 1, 0.5]
+    # Higher is better: errors still count as 0.
+    assert result["maximize"] == [0, pytest.approx(0.35), pytest.approx(0.35), 0, 0.5]
+
+
+def test_compare_sweep_shows_no_average_and_no_verdict_for_a_side_without_scores():
+    from test_metric_semantics import _compare_functions, run_metrics_js
+
+    functions = _compare_functions(
+        "sweepPassAtK", "sweepPassHatK", "sweepBinomPmf", "sweepLutMoments",
+        "sweepPassMetricLuts", "normalCdf", "SWEEP_Z_95", "computeSweepNoise",
+        "summarizeSweepItems", "escapeHtml", "getDeltaClass", "getNoiseDeltaClass",
+        "renderSweepDelta", "formatSweepMetricValue", "renderSweepStatCard",
+        "formatSweepCompactMetricValue", "formatSweepCompactDelta",
+        "renderSweepMetadataMetricCell",
+    )
+    run_metrics_js(
+        "const document = {createElement: () => ({set textContent(v) { this.v = String(v); }, get innerHTML() { return this.v; }})};\n"
+        "var state = {selectedOverviewMetric: 'h'};\n"
+        "function metricDirectionFor() { return 'minimize'; }\n"
+        + functions
+        + r"""
+    // h is lower-is-better (pass at <= 0.2). Item a errored on the left (no
+    // score, a fail); item b passed on both sides.
+    const entry = (left, right) => ({
+      leftScores: left === null ? [] : [left], rightScores: [right],
+      leftPasses: [left !== null && left <= 0.2], rightPasses: [right <= 0.2],
+      leftAttempts: [1], rightAttempts: [1], move: 0,
+    });
+    const a = entry(null, 0.6), b = entry(0.1, 0.1);
+    const all = summarizeSweepItems([a, b], 1, 1, null);
+    assert.equal(all.left.avgAtK, 0.1);
+    assert.ok(Math.abs(all.deltas.avgAtK - 0.25) < 1e-9);
+    // A filter that leaves only item a: no left average, delta or verdict.
+    const only = summarizeSweepItems([a], 1, 1, null);
+    assert.equal(only.left.avgAtK, null);
+    assert.equal(only.right.avgAtK, 0.6);
+    assert.equal(only.deltas.avgAtK, null);
+    assert.equal(only.noise.avgAtK, null);
+    assert.ok(only.noise.passAtK);
+    assert.deepEqual([only.left.passAtK, only.right.passAtK], [0, 0]);
+    assert.equal(summarizeSweepItems([], 1, 1, null).left.avgAtK, null);
+    // A measured zero is a score.
+    const zero = summarizeSweepItems([entry(0, 0.6)], 1, 1, null);
+    assert.equal(zero.left.avgAtK, 0);
+    assert.equal(zero.deltas.avgAtK, 0.6);
+
+    const card = renderSweepStatCard('Avg@1', only.left.avgAtK, only.right.avgAtK,
+      only.deltas.avgAtK, only.noise.avgAtK, 'minimize');
+    assert.match(card, /sweep-stat-card qym-stat-strip__item neutral/);
+    assert.match(card, /sweep-stat-from">—</);
+    assert.match(card, /sweep-stat-to">60.0%</);
+    assert.match(card, /sweep-delta-pill neutral">—</);
+    const cell = renderSweepMetadataMetricCell(only.left.avgAtK, only.right.avgAtK,
+      only.deltas.avgAtK, 'minimize');
+    assert.match(cell, /class="from">—</);
+    assert.match(cell, /sweep-metadata-delta neutral">—</);
+    // The zero side still compares (a regression for lower-is-better).
+    assert.match(renderSweepStatCard('Avg@1', 0, 0.6, 0.6, null, 'minimize'),
+      /sweep-delta-pill negative">\+60.0%</);
+    """
+    )
+
+
 def _repeat(db, run_id="rr"):
     """Three passes; h lower-is-better (primary), q higher-is-better.
 

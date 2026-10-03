@@ -750,7 +750,7 @@ function calculateGroupedCohortComparison(options) {
     left: {
       passAtK: 0,
       passHatK: 0,
-      avgAtK: 0,
+      avgAtK: null,
       consistency: null,
       reliability: null,
       avgAttempts: 0,
@@ -758,7 +758,7 @@ function calculateGroupedCohortComparison(options) {
     right: {
       passAtK: 0,
       passHatK: 0,
-      avgAtK: 0,
+      avgAtK: null,
       consistency: null,
       reliability: null,
       avgAttempts: 0,
@@ -766,7 +766,7 @@ function calculateGroupedCohortComparison(options) {
     deltas: {
       passAtK: 0,
       passHatK: 0,
-      avgAtK: 0,
+      avgAtK: null,
       consistency: 0,
       reliability: 0,
     },
@@ -844,7 +844,9 @@ function calculateGroupedCohortComparison(options) {
     return {
       passAtK: result.eligibleItems > 0 ? agg.passAtKCount / result.eligibleItems : 0,
       passHatK: result.eligibleItems > 0 ? agg.passHatKCount / result.eligibleItems : 0,
-      avgAtK: agg.totalScoreCount > 0 ? agg.totalScoreSum / agg.totalScoreCount : 0,
+      // No score on this side (every entry errored on a lower-is-better
+      // metric): no average, not 0, and so no average delta.
+      avgAtK: agg.totalScoreCount > 0 ? agg.totalScoreSum / agg.totalScoreCount : null,
       consistency: agg.itemsWithMultipleRuns > 0 ? agg.totalConsistencySum / agg.itemsWithMultipleRuns : null,
       reliability: agg.itemsWithAtLeastOnePass > 0 ? agg.totalReliabilitySum / agg.itemsWithAtLeastOnePass : null,
       avgAttempts: agg.totalAttemptsCount > 0 ? agg.totalAttemptsSum / agg.totalAttemptsCount : 0,
@@ -1010,7 +1012,9 @@ function calculateGroupedCohortComparison(options) {
   result.deltas = {
     passAtK: result.right.passAtK - result.left.passAtK,
     passHatK: result.right.passHatK - result.left.passHatK,
-    avgAtK: result.right.avgAtK - result.left.avgAtK,
+    avgAtK: result.left.avgAtK === null || result.right.avgAtK === null
+      ? null
+      : result.right.avgAtK - result.left.avgAtK,
     consistency: (result.right.consistency ?? 0) - (result.left.consistency ?? 0),
     reliability: (result.right.reliability ?? 0) - (result.left.reliability ?? 0),
   };
