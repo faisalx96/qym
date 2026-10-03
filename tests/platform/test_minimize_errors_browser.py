@@ -336,6 +336,52 @@ def test_run_page_pass_distribution_filter_counts_errored_passes_as_fails(browse
             fixture.close()
 
 
+def _pass_tooltips(page):
+    """The repeat section's Pass@K and Pass^K help texts, by tile title."""
+    return page.evaluate(
+        """() => Object.fromEntries(
+          Array.from(document.querySelectorAll(
+            '#samples-analysis-section .model-stat-box'
+          ))
+            .map(box => [
+              box.querySelector('.stat-title').firstChild.textContent.trim(),
+              box.querySelector('.stat-info-tooltip')?.textContent || '',
+            ])
+            .filter(([title]) => title.startsWith('Pass'))
+        )"""
+    )
+
+
+def test_run_page_pass_tooltips_follow_the_metric_direction(browser):
+    """Pass@K and Pass^K say which scores pass: at or below the threshold for
+    the lower-is-better h, at or above it for q."""
+    from test_minimize_errors import _repeat
+
+    with _runs_api(lambda db: _repeat(db, "run-1")) as client:
+        fixture = ViewFixture(browser, "run", count=4, samples=3)
+        fixture.api_client = client
+        try:
+            fixture.goto()
+            page = fixture.page
+            page.locator("#samples-analysis-section .model-stat-box").first.wait_for()
+            at_least = "Percentage of items where at least one of the 3 runs scored "
+            every = "Percentage of items where all 3 runs scored "
+            assert _pass_tooltips(page) == {
+                "Pass@3": at_least + "≤30%.",
+                "Pass^3": every + "≤30%.",
+            }
+            page.locator('.samples-metric-tab[data-samples-metric="q"]').click()
+            page.locator(
+                '.samples-metric-tab[data-samples-metric="q"][aria-pressed="true"]'
+            ).wait_for()
+            assert _pass_tooltips(page) == {
+                "Pass@3": at_least + "≥80%.",
+                "Pass^3": every + "≥80%.",
+            }
+        finally:
+            fixture.close()
+
+
 def _percent(text):
     # "33.3%", or a plain number where the runs' specs differ (Compare then
     # shows the metric neutrally).

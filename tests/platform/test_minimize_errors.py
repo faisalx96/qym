@@ -426,6 +426,58 @@ def test_sweep_cohort_without_a_score_has_no_average_and_no_delta():
     assert result["maximize"] == [0, pytest.approx(0.35), pytest.approx(0.35), 0, 0.5]
 
 
+PASS_TOOLTIPS = """
+const out = {};
+for (const [name, args] of Object.entries(input)) {
+  const tips = m.getMetricTooltips(...args);
+  out[name] = [tips.passAtK, tips.passHatK, tips.maxAtK, tips.failedCount];
+}
+process.stdout.write(JSON.stringify(out));
+"""
+
+
+def test_pass_tooltips_follow_the_metric_direction():
+    """getMetricTooltips (the repeat run page): lower is better passes at or
+    below the threshold, its boolean best is 0%, and its errors are left out.
+    Callers without a direction keep the higher-is-better wording."""
+    tips = _node(
+        PASS_TOOLTIPS,
+        {
+            "maximize": [3, False, 80, "maximize"],
+            "minimize": [3, False, 20, "minimize"],
+            "boolean maximize": [3, True, 80, "maximize"],
+            "boolean minimize": [3, True, 20, "minimize"],
+            "omitted": [3, False, 80],
+            "undeclared": [3, False, 80, None],
+        },
+    )
+    at_least = "Percentage of items where at least one of the 3 runs "
+    every = "Percentage of items where all 3 runs "
+    best = "Average of the best score across all 3 runs for each item"
+    zero = (
+        "Item evaluations that returned a task or scorer error, across all "
+        "passes of the selected runs. Errors are scored as 0%."
+    )
+    maximize = [at_least + "scored ≥80%.", every + "scored ≥80%.", best + ".", zero]
+    assert tips["maximize"] == tips["omitted"] == tips["undeclared"] == maximize
+    assert tips["minimize"] == [
+        at_least + "scored ≤20%.",
+        every + "scored ≤20%.",
+        best + " (the lowest, since lower is better).",
+        "Item evaluations that returned a task or scorer error, across all "
+        "passes of the selected runs. Lower is better for this metric, so "
+        "errors are left out of its scores and count as fails.",
+    ]
+    assert tips["boolean maximize"][:2] == [
+        at_least + "achieved a perfect score (100%).",
+        every + "achieved a perfect score (100%).",
+    ]
+    assert tips["boolean minimize"][:2] == [
+        at_least + "achieved the best score (0%).",
+        every + "achieved the best score (0%).",
+    ]
+
+
 def test_compare_sweep_shows_no_average_and_no_verdict_for_a_side_without_scores():
     from test_metric_semantics import _compare_functions, run_metrics_js
 

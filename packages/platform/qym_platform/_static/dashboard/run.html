@@ -7642,12 +7642,12 @@
         const groupMetric = group.metric || metricName;
         const thresholdPct = Math.round((group.threshold != null ? group.threshold : 0.8) * 100);
         const isBool = !!state.metricIsBoolean[groupMetric];
-        const tooltips = window.QymMetrics.getMetricTooltips(samplesCount, isBool, thresholdPct);
+        const groupDirection = metricDirectionOf(groupMetric);
+        const tooltips = window.QymMetrics.getMetricTooltips(samplesCount, isBool, thresholdPct, groupDirection);
         const fp = v => (typeof v === 'number' ? window.QymMetrics.formatPercent(v) : 'NA');
         const mTypeOf = m => state.metricTypes[m] || 'score';
         const fmtMetric = (v, m) => window.QymMetrics.formatMetricValue(v, mTypeOf(m));
         const groupMetricType = mTypeOf(groupMetric);
-        const groupDirection = metricDirectionOf(groupMetric);
         const passBased = groupMetricType !== 'numeric' && Boolean(groupDirection);
         const groupMetricLabel = String(groupMetric || 'Metric')
           .replace(/[_-]+/g, ' ')

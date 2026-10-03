@@ -1077,22 +1077,30 @@ function getScoreColorClass(score) {
  * @param {number} K - Number of runs
  * @param {boolean} isBoolean - Whether metric is boolean (0/1)
  * @param {number} threshold - Threshold percentage (0-100)
+ * @param {'maximize'|'minimize'|null} [direction='maximize'] - Declared
+ *   direction (metricDirection). Lower is better passes at or below the
+ *   threshold, and a boolean's best score is 0%. Same wording as the Models
+ *   and Compare tooltips.
  * @returns {Object} Tooltip definitions
  */
-function getMetricTooltips(K, isBoolean, threshold) {
-  const correctDef = isBoolean ? '100%' : `≥${threshold}%`;
+function getMetricTooltips(K, isBoolean, threshold, direction = 'maximize') {
+  const lowerIsBetter = direction === 'minimize';
+  const passRule = lowerIsBetter ? `≤${threshold}%` : `≥${threshold}%`;
+  const perfectScore = lowerIsBetter ? 'the best score (0%)' : 'a perfect score (100%)';
 
   return {
     passAtK: isBoolean
-      ? `Percentage of items where at least one of the ${K} runs achieved a perfect score (100%).`
-      : `Percentage of items where at least one of the ${K} runs scored ≥${threshold}%.`,
+      ? `Percentage of items where at least one of the ${K} runs achieved ${perfectScore}.`
+      : `Percentage of items where at least one of the ${K} runs scored ${passRule}.`,
     passHatK: isBoolean
-      ? `Percentage of items where all ${K} runs achieved a perfect score (100%).`
-      : `Percentage of items where all ${K} runs scored ≥${threshold}%.`,
-    maxAtK: `Average of the best score across all ${K} runs for each item.`,
+      ? `Percentage of items where all ${K} runs achieved ${perfectScore}.`
+      : `Percentage of items where all ${K} runs scored ${passRule}.`,
+    maxAtK: `Average of the best score across all ${K} runs for each item${lowerIsBetter ? ' (the lowest, since lower is better)' : ''}.`,
     consistency: `Measures how often runs agree on pass/fail across ${K} runs. 100% = all runs agree, 0% = 50/50 split.`,
     reliability: `When an item CAN be solved, how often is it? Only includes items with at least one passing run.`,
-    failedCount: `Item evaluations that returned a task or scorer error, across all passes of the selected runs. Errors are scored as 0%.`,
+    failedCount: lowerIsBetter
+      ? `Item evaluations that returned a task or scorer error, across all passes of the selected runs. Lower is better for this metric, so errors are left out of its scores and count as fails.`
+      : `Item evaluations that returned a task or scorer error, across all passes of the selected runs. Errors are scored as 0%.`,
     avgScore: `The mean score across all items and all runs.`,
     avgLatency: `The mean response time across all items and all runs.`,
     medianLatency: `The median response time across all items and all runs. Less sensitive to outliers than the mean.`
