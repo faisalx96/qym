@@ -1265,12 +1265,9 @@
         }
       }
 
-      document.getElementById('archive-project-btn').addEventListener('click', async () => {
-        if (!state.project) return;
-        if (isReadOnly()) {
-          await unarchiveProject();
-          return;
-        }
+      // The Archive button and the delete dialog's "Archive instead" both come
+      // here, so both show the running-run warning first.
+      async function confirmAndArchiveProject() {
         const name = state.project.name;
         if (window.QymShell && window.QymShell.confirmArchiveProject) {
           // Lists runs still in progress: archiving loses their remaining results.
@@ -1288,6 +1285,15 @@
         } catch (err) {
           showProjectRemovalError(err);
         }
+      }
+
+      document.getElementById('archive-project-btn').addEventListener('click', async () => {
+        if (!state.project) return;
+        if (isReadOnly()) {
+          await unarchiveProject();
+          return;
+        }
+        await confirmAndArchiveProject();
       });
 
       document.getElementById('delete-project-btn').addEventListener('click', async () => {
@@ -1331,11 +1337,7 @@
             archiveInstead = confirm(`${preview.blocked_reason}\n\nArchive the project instead?`);
           }
           if (!archiveInstead) return;
-          try {
-            await archiveProject();
-          } catch (err) {
-            showProjectRemovalError(err);
-          }
+          await confirmAndArchiveProject();
           return;
         }
         const summary = deletionSummary(name, preview.counts || {});

@@ -956,7 +956,10 @@
           close({ confirmed: false, value: null });
           return;
         }
-        if (e.key === 'Enter' && (!input || document.activeElement === input)) {
+        // A focused Cancel, Close or alternate button handles Enter itself.
+        var active = document.activeElement;
+        if (active && (active === cancelBtn || active === altBtn || active === closeBtn)) return;
+        if (e.key === 'Enter' && (!input || active === input)) {
           e.preventDefault();
           submit();
         }

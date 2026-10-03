@@ -235,6 +235,23 @@ def test_settings_archive_dialog_lists_runs_in_progress(app, factory):
     assert app.errors == []
 
 
+def test_archive_instead_shows_the_running_run_warning_too(app, factory):
+    _add_running_runs(factory, 1)
+    page = app.goto("/projects/pa/settings")
+    page.locator("#settings-tab-danger").click()
+    for confirm in (False, True):
+        page.locator("#delete-project-btn").click()
+        page.locator("#shell-confirm-submit", has_text="Archive instead").click()
+        warning = page.locator("#shell-confirm-dialog .shell-modal-warning")
+        warning.wait_for()
+        assert "1 run is still in progress." in warning.inner_text()
+        page.locator("#shell-confirm-submit" if confirm else "#shell-confirm-cancel").click()
+        page.wait_for_function("() => !document.getElementById('shell-confirm-dialog')")
+        page.wait_for_timeout(300)
+        assert _is_active(factory) is (not confirm)
+    assert app.errors == []
+
+
 def test_settings_archive_dialog_without_running_runs_stays_as_it_was(app, factory):
     _page, dialog = _open_settings_archive(app)
     assert dialog.locator(".shell-modal-warning").count() == 0
@@ -626,12 +643,18 @@ def test_unarchive_names_the_keys_that_start_working_again(app, factory):
     assert "Deleted runs of the project in Trash resume their purge countdown" in dialog.inner_text()
     assert dialog.locator("#shell-confirm-submit").inner_text() == "Unarchive anyway"
     app.shot("unarchive-dialog")
-    dialog.locator("#shell-confirm-cancel").click()
+    # Enter on a focused Cancel cancels; it does not confirm.
+    dialog.locator("#shell-confirm-cancel").focus()
+    page.keyboard.press("Enter")
+    page.wait_for_function("() => !document.getElementById('shell-confirm-dialog')")
+    page.wait_for_timeout(200)
     assert _is_active(factory) is False
 
-    # "Revoke keys first" opens the project's API keys, still archived.
+    # "Revoke keys first" opens the project's API keys, still archived. Enter
+    # on it does the same.
     page.locator('[data-project-unarchive="pa"]').click()
-    page.locator("#shell-confirm-alt").click()
+    page.locator("#shell-confirm-alt").focus()
+    page.keyboard.press("Enter")
     page.wait_for_function("() => location.pathname === '/projects/pa/settings'")
     page.wait_for_function("() => document.getElementById('settings-tab-apikeys').classList.contains('active')")
     assert "tab=apikeys" in page.url
