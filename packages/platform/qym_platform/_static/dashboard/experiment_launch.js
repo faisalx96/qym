@@ -96,8 +96,8 @@
   const STYLESHEETS = [
     'static/eval_environments.css?v=eval-environments-20260929-1',
     'static/eval_temporary_model.css?v=eval-temporary-model-20260930-1',
-    'static/experiment_launch.css?v=experiment-launch-20261003-1',
-    'static/experiment_launch_json.css?v=experiment-launch-json-20261003-1',
+    'static/experiment_launch.css?v=experiment-launch-20261003-2',
+    'static/experiment_launch_json.css?v=experiment-launch-json-20261003-2',
     'static/experiment_launch_advanced.css?v=experiment-launch-advanced-20260930-1',
     'static/experiment_launch_sweeps.css?v=experiment-launch-sweeps-20260930-1',
     'static/experiment_launch_best_run.css?v=experiment-launch-best-run-20261002-scope',
@@ -403,6 +403,7 @@
       rawJson: {}, // env_overrides pointer → true: a JSON setting shown as raw text
       extraEndpoints: [], // LLM endpoints added for this experiment only (endpoint:<name> slots)
       advancedOpen: false, // the "Advanced configuration" disclosure
+      refreshingSchema: {}, // environment id → true while its schema refresh runs
       search: '',
       changedOnly: false,
       priority: '',
@@ -1611,16 +1612,56 @@
           if (env.model_slots && env.model_slots.needs_confirmation) tags.push(tag('Needs LLM grouping', 'warning'));
           tags.push(tag('max ' + env.max_priority, null, 'Highest priority allowed on this environment'));
           if (hasOfficial(env)) tags.push(tag('official v' + env.official_preset_version, 'version', 'Published official defaults'));
+          const refreshing = !!st.refreshingSchema[env.id];
+          // Managers re-read the service's override schema without leaving the form.
+          const refresh = isManager ? el('button', {
+            type: 'button', className: 'qym-inline-action qym-inline-action--neutral xl-env-refresh', 'data-xl-env-refresh': env.id,
+            disabled: refreshing, text: refreshing ? 'Refreshing…' : 'Refresh schema',
+            title: 'Fetch the latest settings schema from this environment',
+            onClick: (e) => { e.preventDefault(); e.stopPropagation(); refreshEnvSchema(env); },
+          }) : null;
           return el('label', { className: 'xl-env-option' + (selected ? ' xl-env-option--selected' : '') }, [
             el('input', { type: 'checkbox', checked: selected, 'data-xl-env': env.id, onChange: (e) => toggleEnv(env.id, e.target.checked) }),
-            el('span', null, [
+            el('span', { className: 'xl-env-main' }, [
               el('div', { className: 'xl-env-name', text: env.name }),
               el('div', { className: 'xl-env-sub' }, tags),
             ]),
+            refresh,
           ]);
         })));
       }
       body.replaceChildren.apply(body, children);
+    }
+
+    /** POST …/schema/refresh, then reload the environment's form and slots if selected. */
+    async function refreshEnvSchema(env) {
+      if (st.refreshingSchema[env.id]) return;
+      st.refreshingSchema[env.id] = true;
+      renderEnvironments();
+      const res = await request(envPath(env.id, '/schema/refresh'), { method: 'POST' });
+      if (!st.active) return;
+      delete st.refreshingSchema[env.id];
+      if (!res.ok) {
+        const message = errorMessage(res.data, 'Schema refresh failed');
+        env.health_status = 'error';
+        env.health_error = message;
+        renderEnvironments();
+        toast(message, 'error');
+        return;
+      }
+      const data = res.data || {};
+      env.health_status = 'ok';
+      env.schema_hash = data.schema_hash || env.schema_hash;
+      env.model_slots = Object.assign({}, env.model_slots, { needs_confirmation: !!data.needs_confirmation });
+      renderEnvironments();
+      const added = (data.added || []).length;
+      const removed = (data.removed || []).length;
+      toast(data.changed
+        ? 'Schema updated for ' + env.name + ' (' + added + ' added, ' + removed + ' removed)'
+        : 'Schema for ' + env.name + ' is up to date', 'success');
+      if (!data.changed || st.selected.indexOf(env.id) < 0) return;
+      delete st.envData[env.id];
+      await loadSelectedEnvData();
     }
 
     // ── Section: dataset ────────────────────────────────────────────────

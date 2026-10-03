@@ -51,6 +51,8 @@
 .xl-env-option input { margin-top: 2px; accent-color: var(--accent-primary); }
 .xl-env-name { font-size: var(--font-md); font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
 .xl-env-sub { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-top: var(--space-xs); }
+.xl-env-main { flex: 1; min-width: 0; }
+.xl-env-refresh { flex: none; }
 
 /* Model cards */
 .xl-models { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-sm); }
