@@ -293,6 +293,10 @@ def test_status_bar_names_filtered_models_like_the_dropdown(browser):
             " t.state.filterModels = new Set(['openai/gpt-4.1-mini|||plain',"
             " 'anthropic/claude-sonnet-5|||reasoning']); t.render(); }"
         )
+        # A changed model filter refetches; the footer updates after that.
+        page.wait_for_function(
+            "document.querySelector('#status-filter').textContent.includes('model:')"
+        )
         text = page.locator("#status-filter").inner_text()
         assert "|||" not in text
         assert "model: gpt-4.1-mini, claude-sonnet-5 (reasoning)" in text
