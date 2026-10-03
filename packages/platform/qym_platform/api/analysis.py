@@ -11,7 +11,7 @@ import math
 from functools import partial
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, Iterable, List, Literal, Optional, Union
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
@@ -53,8 +53,12 @@ from qym_platform.permissions import (
     can_delete_run,
     can_review_run,
     can_view_run,
+    can_view_run_items,
     has_project_access,
+    hidden_item_run_ids,
     is_project_manager,
+    redact_item_content,
+    require_run_items_visible,
 )
 from qym_platform.secrets import resolve_llm_api_key
 from qym_platform.services.analysis_aggregation import (
@@ -4452,6 +4456,7 @@ async def start_analysis_job(
         raise HTTPException(status_code=404, detail="Run not found")
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_run_items_visible(db, principal, run)
     _require_selected_pass_for_repeat_run(run, request.pass_number)
     _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
 
@@ -4523,6 +4528,9 @@ def get_active_analysis_job(
         raise HTTPException(status_code=404, detail="Run not found")
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    if not can_view_run_items(db, principal, run):
+        # Polled on page load; a private test set simply has nothing to resume.
+        return {"job": None}
     return {
         "job": _analysis_job_payload(
             analysis_job_manager.active_for_run(run.id, pass_number)
@@ -4543,6 +4551,7 @@ def get_analysis_job(
         raise HTTPException(status_code=404, detail="Run not found")
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_run_items_visible(db, principal, run)
     job = analysis_job_manager.get(job_id)
     if job is None or job.run_id != run.id:
         raise HTTPException(status_code=404, detail="Analysis job not found")
@@ -4562,6 +4571,7 @@ def cancel_analysis_job(
         raise HTTPException(status_code=404, detail="Run not found")
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_run_items_visible(db, principal, run)
     job = analysis_job_manager.get(job_id)
     if job is None or job.run_id != run.id:
         raise HTTPException(status_code=404, detail="Analysis job not found")
@@ -4582,6 +4592,7 @@ async def analyze_run_items(
         raise HTTPException(status_code=404, detail="Run not found")
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_run_items_visible(db, principal, run)
     _require_selected_pass_for_repeat_run(run, request.pass_number)
     _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
     llm_config = _get_llm_config(db, run.project_id, request.connection_id)
@@ -4781,6 +4792,7 @@ async def analyze_run_items_stream(
         raise HTTPException(status_code=404, detail="Run not found")
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_run_items_visible(db, principal, run)
     _require_selected_pass_for_repeat_run(run, request.pass_number)
     _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
     llm_config = _get_llm_config(db, run.project_id, request.connection_id)
@@ -5708,11 +5720,17 @@ def _list_analysis_examples(
     users_by_id = _load_users_map(db, user_ids)
     first = (page - 1) * page_size
     page_rows = matching[first : first + page_size]
+    hidden_runs = _hidden_item_run_ids_for(
+        db, principal, {correction.run_id for correction in page_rows}
+    )
     rows = [
-        _analysis_example_row(
-            correction,
-            run=runs_by_id.get(correction.run_id),
-            users_by_id=users_by_id,
+        _redact_if(
+            correction.run_id in hidden_runs,
+            _analysis_example_row(
+                correction,
+                run=runs_by_id.get(correction.run_id),
+                users_by_id=users_by_id,
+            ),
         )
         for correction in page_rows
     ]
@@ -5935,6 +5953,23 @@ async def _infer_project_analysis_rules_impl(
                     "available_count": len(available_approved_examples),
                 },
             )
+    hidden_example_runs = _hidden_item_run_ids_for(
+        db,
+        principal,
+        {example.run_id for example in available_approved_examples + approved_examples},
+    )
+    if hidden_example_runs:
+        # Private test set examples never reach a non-admin's rule writer.
+        available_approved_examples = [
+            example
+            for example in available_approved_examples
+            if example.run_id not in hidden_example_runs
+        ]
+        approved_examples = [
+            example
+            for example in approved_examples
+            if example.run_id not in hidden_example_runs
+        ]
     corrections = approved_examples if request.include_examples else []
     if not selected_documents and not corrections:
         action = "generated"
@@ -6896,6 +6931,7 @@ def analyze_preview(
         raise HTTPException(status_code=404, detail="Run not found")
     if not can_view_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_run_items_visible(db, principal, run)
     _require_selected_pass_for_repeat_run(run, request.pass_number)
     _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
 
@@ -6988,6 +7024,7 @@ async def analyze_test(
         raise HTTPException(status_code=404, detail="Run not found")
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_run_items_visible(db, principal, run)
     _require_selected_pass_for_repeat_run(run, request.pass_number)
     _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
     llm_config = _get_llm_config(db, run.project_id, request.connection_id)
@@ -7201,9 +7238,10 @@ def get_corrections(
         .all()
     )
 
+    hidden_runs = _hidden_item_run_ids_for(db, principal, {c.run_id for c in corrections})
     return {
         "corrections": [
-            {
+            _redact_if(c.run_id in hidden_runs, {
                 "id": c.id,
                 "item_id": c.item_id,
                 "human_root_cause": c.human_root_cause,
@@ -7251,7 +7289,7 @@ def get_corrections(
                     else (c.status or "pending")
                 ),
                 "created_at": to_api_timestamp(c.created_at),
-            }
+            })
             for c in corrections
         ]
     }
@@ -7329,6 +7367,9 @@ def get_analysis_config(
     correction_runs = _load_runs_map(
         db, {correction.run_id for correction in approved_corrections}
     )
+    hidden_example_runs = _hidden_item_run_ids_for(
+        db, principal, {correction.run_id for correction in approved_corrections}
+    )
     category_examples: Dict[str, List[Dict[str, Any]]] = {
         category: [] for category in all_categories
     }
@@ -7344,7 +7385,7 @@ def get_analysis_config(
             ]
             primary_issue = category_issues[0]
             category_examples.setdefault(category, []).append(
-                {
+                _redact_if(correction.run_id in hidden_example_runs, {
                     "id": correction.id,
                     "item_id": correction.item_id,
                     "metric_name": correction.metric_name,
@@ -7370,7 +7411,7 @@ def get_analysis_config(
                     ),
                     "output": _normalize_snapshot_value(correction.output_snapshot),
                     "created_at": to_api_timestamp(correction.created_at),
-                }
+                })
             )
     active_rule_version = (
         _active_analysis_rule_version(db, project.id) if project else None
@@ -8118,6 +8159,21 @@ def _run_display_name(run: Optional[Run]) -> str:
     return str(run.external_run_id or run.id or "").strip()
 
 
+def _hidden_item_run_ids_for(
+    db: Session, principal: Principal, run_ids: Iterable[Optional[str]]
+) -> set[str]:
+    """Ids among ``run_ids`` (soft-deleted included) on a private test set the
+    principal may not read items of."""
+    ids = sorted({run_id for run_id in run_ids if run_id})
+    if not ids:
+        return set()
+    return hidden_item_run_ids(db, principal, db.query(Run).filter(Run.id.in_(ids)).all())
+
+
+def _redact_if(hidden: bool, row: Dict[str, Any]) -> Dict[str, Any]:
+    return redact_item_content(row) if hidden else row
+
+
 def _load_runs_map(db: Session, run_ids: set[str]) -> Dict[str, Run]:
     if not run_ids:
         return {}
@@ -8407,22 +8463,27 @@ def _serialize_correction(
 
 def _serialize_corrections_with_history(
     db: Session,
+    principal: Principal,
     corrections: List[ReviewCorrection],
 ) -> List[Dict[str, Any]]:
     history_map, users_by_id = _build_history_map(db, corrections)
     runs_by_id = _load_runs_map(db, {correction.run_id for correction in corrections})
+    hidden_runs = _hidden_item_run_ids_for(
+        db, principal, {correction.run_id for correction in corrections}
+    )
     serialized: List[Dict[str, Any]] = []
     for correction in corrections:
-        serialized.append(
-            _serialize_correction(
-                correction,
-                users_by_id=users_by_id,
-                runs_by_id=runs_by_id,
-                history=history_map.get(
-                    (correction.run_id, correction.item_id, correction.metric_name), []
-                ),
-            )
+        row = _serialize_correction(
+            correction,
+            users_by_id=users_by_id,
+            runs_by_id=runs_by_id,
+            history=history_map.get(
+                (correction.run_id, correction.item_id, correction.metric_name), []
+            ),
         )
+        if correction.run_id in hidden_runs:
+            redact_item_content(row)
+        serialized.append(row)
     return serialized
 
 
@@ -8972,7 +9033,7 @@ def list_corrections(
     )
 
     return {
-        "corrections": _serialize_corrections_with_history(db, corrections),
+        "corrections": _serialize_corrections_with_history(db, principal, corrections),
         "total": filtered_total,
         "stats": stats,
         "tasks": tasks,
@@ -9001,7 +9062,7 @@ def get_correction(
     run = Run.active(db).filter(Run.id == c.run_id).first()
     if not run or not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
-    return _serialize_corrections_with_history(db, [c])[0]
+    return _serialize_corrections_with_history(db, principal, [c])[0]
 
 
 @router.put("/api/corrections/{correction_id}")
@@ -9091,7 +9152,7 @@ def update_correction(
             ReviewCorrection.pass_number == c.pass_number,
         ).all()
         target = next((row for row in targets if correction_issue_id(row) == correction_issue_id(c)), c)
-        return _serialize_corrections_with_history(db, [target])[0]
+        return _serialize_corrections_with_history(db, principal, [target])[0]
 
     if c.metric_name:
         from qym_platform.api.runs import _apply_metric_analysis_patch
@@ -9130,8 +9191,8 @@ def update_correction(
         )
         db.commit()
         if target is None:
-            return _serialize_corrections_with_history(db, [c])[0]
-        return _serialize_corrections_with_history(db, [target])[0]
+            return _serialize_corrections_with_history(db, principal, [c])[0]
+        return _serialize_corrections_with_history(db, principal, [target])[0]
 
     result = apply_root_cause_change(
         db,
@@ -9156,7 +9217,7 @@ def update_correction(
         )
         or c
     )
-    return _serialize_corrections_with_history(db, [target])[0]
+    return _serialize_corrections_with_history(db, principal, [target])[0]
 
 
 @router.post("/api/corrections/{correction_id}/approve")
@@ -9225,7 +9286,7 @@ def approve_correction(
     )
 
     db.commit()
-    return _serialize_corrections_with_history(db, [target])[0]
+    return _serialize_corrections_with_history(db, principal, [target])[0]
 
 
 @router.post("/api/corrections/approve-metric-analysis")
@@ -9374,7 +9435,7 @@ def approve_metric_analysis(
         reviewed_at=utc_now_naive(),
     )
     db.commit()
-    return _serialize_corrections_with_history(db, [candidate])[0]
+    return _serialize_corrections_with_history(db, principal, [candidate])[0]
 
 
 @router.post("/api/corrections/{correction_id}/reject")
@@ -9402,7 +9463,7 @@ def reject_correction(
     )
 
     db.commit()
-    return _serialize_corrections_with_history(db, [c])[0]
+    return _serialize_corrections_with_history(db, principal, [c])[0]
 
 
 @router.post("/api/corrections/{correction_id}/reset")
@@ -9428,7 +9489,7 @@ def reset_correction(
     sync_correction_issue_metadata(db, c)
 
     db.commit()
-    return _serialize_corrections_with_history(db, [c])[0]
+    return _serialize_corrections_with_history(db, principal, [c])[0]
 
 
 class BulkActionRequest(BaseModel):

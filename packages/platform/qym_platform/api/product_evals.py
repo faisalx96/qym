@@ -24,6 +24,7 @@ from qym_platform.db.models import (
     RunWorkflowStatus,
 )
 from qym_platform.deps import get_db
+from qym_platform.permissions import can_view_run_items, redact_item_content
 from qym_platform.services.product_evals import (
     ProductEvalError,
     ProductEvalJob,
@@ -821,4 +822,7 @@ def get_product_eval(
         return _ok(_db_eval_payload(db, identifier, runs))
 
     run = _require_run_access(db, principal, identifier)
-    return _ok(build_product_eval_run_payload(db, run, include_items=include_items))
+    payload = build_product_eval_run_payload(db, run, include_items=include_items)
+    if payload.get("items") and not can_view_run_items(db, principal, run):
+        redact_item_content(payload["items"])
+    return _ok(payload)

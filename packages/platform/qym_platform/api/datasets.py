@@ -36,7 +36,12 @@ from qym_platform.db.models import (
 )
 from qym_platform.deps import get_db
 from qym_platform.item_identity import build_identity_fingerprint
-from qym_platform.permissions import has_project_access
+from qym_platform.permissions import (
+    PRIVATE_TEST_SET_DETAIL,
+    can_view_dataset_items,
+    has_project_access,
+    is_platform_admin,
+)
 from qym_platform.security import api_key_prefix, verify_api_key
 from qym_platform.services.dataset_search import filter_dataset_item_search
 
@@ -154,6 +159,16 @@ def _get_dataset(db: Session, project: Project, ref: str) -> Dataset:
     if not dataset:
         raise HTTPException(status_code=404, detail="Dataset not found")
     return dataset
+
+
+def _require_items_visible(principal: Principal, dataset: Dataset) -> None:
+    if not can_view_dataset_items(principal, dataset):
+        raise HTTPException(status_code=403, detail=PRIVATE_TEST_SET_DETAIL)
+
+
+def _require_admin_for_private_flag(principal: Principal) -> None:
+    if not is_platform_admin(principal):
+        raise HTTPException(status_code=403, detail="Only admins can change whether a dataset is a private test set")
 
 
 def _free_slug_from_deleted(db: Session, project: Project, slug: str) -> None:
@@ -298,7 +313,7 @@ def _version_payload(db: Session, version: DatasetVersion, *, include_aliases: b
     }
 
 
-def _dataset_payload(db: Session, dataset: Dataset) -> Dict[str, Any]:
+def _dataset_payload(db: Session, dataset: Dataset, principal: Optional[Principal] = None) -> Dict[str, Any]:
     aliases = {
         row.alias: row.dataset_version_id
         for row in db.query(DatasetAlias).filter(DatasetAlias.dataset_id == dataset.id).all()
@@ -320,6 +335,11 @@ def _dataset_payload(db: Session, dataset: Dataset) -> Dict[str, Any]:
         "slug": dataset.slug,
         "description": dataset.description,
         "tags": dataset.tags or [],
+        "private_test_set": bool(dataset.private_test_set),
+        # Viewer-specific: whether this caller may read item contents and
+        # toggle the private flag (admins only).
+        "items_visible": principal is None or can_view_dataset_items(principal, dataset),
+        "can_set_private_test_set": principal is not None and is_platform_admin(principal),
         "created_by_user_id": dataset.created_by_user_id,
         "created_by": _user_payload(_user_map(db, [dataset.created_by_user_id]).get(dataset.created_by_user_id)),
         "created_at": to_api_timestamp(dataset.created_at),
@@ -822,6 +842,7 @@ class CreateDatasetRequest(BaseModel):
     description: str = ""
     tags: list[str] = Field(default_factory=list)
     project_slug: Optional[str] = None
+    private_test_set: bool = False
 
 
 class UpdateDatasetRequest(BaseModel):
@@ -829,6 +850,7 @@ class UpdateDatasetRequest(BaseModel):
     slug: Optional[str] = None
     description: Optional[str] = None
     tags: Optional[list[str]] = None
+    private_test_set: Optional[bool] = None
 
 
 class CreateVersionRequest(BaseModel):
@@ -889,7 +911,7 @@ def list_datasets(
         .order_by(Dataset.name)
         .all()
     )
-    return {"project": {"id": project.id, "slug": project.slug, "name": project.name}, "datasets": [_dataset_payload(db, ds) for ds in datasets]}
+    return {"project": {"id": project.id, "slug": project.slug, "name": project.name}, "datasets": [_dataset_payload(db, ds, principal) for ds in datasets]}
 
 
 @router.post("/v1/datasets")
@@ -899,6 +921,8 @@ def create_dataset(
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
+    if req.private_test_set:
+        _require_admin_for_private_flag(principal)
     project = _project_for_request(db, principal, req.project_slug)
     slug = _slugify(req.slug or req.name)
     _free_slug_from_deleted(db, project, slug)
@@ -909,6 +933,7 @@ def create_dataset(
         slug=slug,
         description=req.description,
         tags=_labels(req.tags),
+        private_test_set=req.private_test_set,
         created_by_user_id=principal.user.id,
         created_at=utc_now_naive(),
         updated_at=utc_now_naive(),
@@ -919,7 +944,7 @@ def create_dataset(
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail="Dataset slug already exists in this project") from exc
-    return {"dataset": _dataset_payload(db, dataset)}
+    return {"dataset": _dataset_payload(db, dataset, principal)}
 
 
 @router.get("/v1/datasets/{dataset_ref}")
@@ -932,7 +957,7 @@ def get_dataset(
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
-    return {"dataset": _dataset_payload(db, dataset)}
+    return {"dataset": _dataset_payload(db, dataset, principal)}
 
 
 @router.patch("/v1/datasets/{dataset_ref}")
@@ -954,9 +979,12 @@ def update_dataset(
         dataset.description = req.description
     if req.tags is not None:
         dataset.tags = _labels(req.tags)
+    if req.private_test_set is not None and req.private_test_set != bool(dataset.private_test_set):
+        _require_admin_for_private_flag(principal)
+        dataset.private_test_set = req.private_test_set
     dataset.updated_at = utc_now_naive()
     db.commit()
-    return {"dataset": _dataset_payload(db, dataset)}
+    return {"dataset": _dataset_payload(db, dataset, principal)}
 
 
 @router.delete("/v1/datasets/{dataset_ref}")
@@ -990,7 +1018,7 @@ def list_versions(
         .order_by(DatasetVersion.created_at.desc())
         .all()
     )
-    return {"dataset": _dataset_payload(db, dataset), "versions": [_version_payload(db, version) for version in versions]}
+    return {"dataset": _dataset_payload(db, dataset, principal), "versions": [_version_payload(db, version) for version in versions]}
 
 
 @router.get("/v1/datasets/{dataset_ref}/runs")
@@ -1315,7 +1343,7 @@ def get_lineage(
         payload["change_counts"] = _version_delta_summary(db, version)
         version_payloads.append(payload)
     return {
-        "dataset": _dataset_payload(db, dataset),
+        "dataset": _dataset_payload(db, dataset, principal),
         "versions": version_payloads,
         "changes": [
             {
@@ -1346,6 +1374,7 @@ def list_items(
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     query = db.query(DatasetItem).filter(DatasetItem.dataset_version_id == version.id)
     query = filter_dataset_item_search(db, query, search)
@@ -1424,7 +1453,7 @@ def list_items(
         edit_counts = _item_edit_counts(db, version, items)
     metric_names = _version_metric_names(db, version)
     return {
-        "dataset": _dataset_payload(db, dataset),
+        "dataset": _dataset_payload(db, dataset, principal),
         "version": _version_payload(db, version),
         "items": [
             _item_payload(
@@ -1453,6 +1482,7 @@ def create_item(
     _require_scope(principal, "datasets:write")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
     input_value = _json_safe(req.input)
@@ -1509,6 +1539,7 @@ def get_item(
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     item = (
         db.query(DatasetItem)
@@ -1534,6 +1565,7 @@ def update_item(
     _require_scope(principal, "datasets:write")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
     item = (
@@ -1571,6 +1603,7 @@ def delete_item(
     _require_scope(principal, "datasets:write")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
     item = (
@@ -1602,6 +1635,7 @@ def bulk_items(
     _require_scope(principal, "datasets:write")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
 
@@ -1713,6 +1747,7 @@ def item_runs(
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     item = (
         db.query(DatasetItem)
@@ -1841,6 +1876,7 @@ def item_neighbors(
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     query = db.query(DatasetItem).filter(DatasetItem.dataset_version_id == version.id)
     query = filter_dataset_item_search(db, query, search)
@@ -1882,6 +1918,7 @@ def item_lineage(
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     versions_by_id = {
         row.id: row
@@ -1967,6 +2004,7 @@ def compare_versions(
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset)
     target = _resolve_version(db, dataset, version_ref)
     base_version = _resolve_version(db, dataset, base)
     base_items = {item.item_id: item for item in db.query(DatasetItem).filter(DatasetItem.dataset_version_id == base_version.id).all()}
@@ -2084,6 +2122,7 @@ async def upload_dataset(
     id_col: Optional[str] = Form(default=None),
     metadata_cols: str = Form(default=""),
     label_cols: str = Form(default=""),
+    private_test_set: bool = Form(default=False),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     principal: Principal = Depends(dataset_principal),
@@ -2096,9 +2135,15 @@ async def upload_dataset(
         .filter(Dataset.project_id == project.id, Dataset.slug == slug, Dataset.deleted_at.is_(None))
         .first()
     )
-    if not dataset:
+    if private_test_set:
+        _require_admin_for_private_flag(principal)
+    if dataset:
+        _require_items_visible(principal, dataset)
+        if private_test_set:
+            dataset.private_test_set = True
+    else:
         _free_slug_from_deleted(db, project, slug)
-        dataset = Dataset(id=str(uuid4()), project_id=project.id, name=name, slug=slug, description=description, tags=_labels(tags), created_by_user_id=principal.user.id, created_at=utc_now_naive(), updated_at=utc_now_naive())
+        dataset = Dataset(id=str(uuid4()), project_id=project.id, name=name, slug=slug, description=description, tags=_labels(tags), private_test_set=private_test_set, created_by_user_id=principal.user.id, created_at=utc_now_naive(), updated_at=utc_now_naive())
         db.add(dataset)
         db.flush()
     # New-style callers (the dashboard) send the multi-column params input_cols/expected_cols,
@@ -2154,7 +2199,7 @@ async def upload_dataset(
         if set_alias:
             _set_alias(db, dataset, set_alias, version_row, principal.user.id)
     db.commit()
-    return {"dataset": _dataset_payload(db, dataset), "version": _version_payload(db, version_row)}
+    return {"dataset": _dataset_payload(db, dataset, principal), "version": _version_payload(db, version_row)}
 
 
 @router.get("/v1/datasets/{dataset_ref}/versions/{version_ref}:download")
@@ -2168,6 +2213,7 @@ def download_version(
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     items = db.query(DatasetItem).filter(DatasetItem.dataset_version_id == version.id).order_by(DatasetItem.index).all()
     lines = [
@@ -2203,7 +2249,7 @@ def get_version(
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
     version = _resolve_version(db, dataset, version_ref)
-    return {"dataset": _dataset_payload(db, dataset), "version": _version_payload(db, version)}
+    return {"dataset": _dataset_payload(db, dataset, principal), "version": _version_payload(db, version)}
 
 
 @router.get("/api/datasets/{dataset_ref}/versions/{version_ref}/items/{item_id}/revisions")
@@ -2218,6 +2264,7 @@ def item_revisions(
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
+    _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     item = db.query(DatasetItem).filter(DatasetItem.dataset_version_id == version.id, DatasetItem.item_id == item_id).first()
     if not item:

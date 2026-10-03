@@ -58,8 +58,10 @@ from qym_platform.permissions import (
     can_modify_run,
     can_review_run,
     can_view_run,
+    can_view_run_items,
     has_project_access,
     is_project_manager,
+    redact_item_content,
 )
 from qym_platform.services.eval_run_scores import sync_run_scores
 from qym_platform.services.issue_reviews import change_metric_issue, reconcile_issue_edits
@@ -3883,7 +3885,7 @@ def export_run_html(
     if not can_view_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
 
-    data = _build_run_data(db, run)
+    data = _with_item_visibility(db, principal, run, _build_run_data(db, run))
     dashboard_dir = _platform_static_dir() / "dashboard"
 
     # Read source files
@@ -4513,6 +4515,25 @@ def run_group_metrics(
     }
 
 
+def _with_item_visibility(
+    db: Session, principal: Principal, run: Run, data: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Redact item contents of a run evaluated on a private test set unless
+    ``principal`` is an admin. Handles run payloads and single-row payloads."""
+    if can_view_run_items(db, principal, run):
+        return data
+    snapshot = data.get("snapshot")
+    if isinstance(snapshot, dict):
+        redact_item_content(snapshot.get("rows") or [])
+    if isinstance(data.get("rows"), list):
+        redact_item_content(data["rows"])
+    if isinstance(data.get("row"), dict):
+        redact_item_content(data["row"])
+    if isinstance(data.get("run"), dict):
+        data["run"]["items_restricted"] = True
+    return data
+
+
 def _detail_run(db: Session, principal: Principal, run_id: str) -> Run:
     run = Run.active(db).filter(Run.id == run_id).first()
     if not run:
@@ -4540,10 +4561,15 @@ def run_item_details(
         row.pop("compare_alignment_source", None)
         row["__details_loaded"] = True
     present = {row["item_id"] for row in rows}
-    return {
-        "rows": rows,
-        "missing_item_ids": [iid for iid in ids if iid not in present],
-    }
+    return _with_item_visibility(
+        db,
+        principal,
+        run,
+        {
+            "rows": rows,
+            "missing_item_ids": [iid for iid in ids if iid not in present],
+        },
+    )
 
 
 @router.post("/api/runs/{run_id}/items/search")
@@ -4565,6 +4591,16 @@ def search_run_items(
             raise HTTPException(422, "pass_number must identify an existing pass")
 
     matches: Dict[str, List[str]] = {condition["id"]: [] for condition in conditions}
+    if not can_view_run_items(db, principal, run):
+        # Private test set: only item ids are searchable.
+        for (item_id,) in (
+            db.query(RunItem.item_id).filter(RunItem.run_id == run.id).yield_per(1000)
+        ):
+            lowered_id = str(item_id or "").lower()
+            for condition in conditions:
+                if condition["field"] == "all" and condition["value"] in lowered_id:
+                    matches[condition["id"]].append(item_id)
+        return {"matches": matches}
     # Search is deliberately explicit: the initial index never transfers large
     # bodies. Streaming selected columns bounds aggregate-mode server memory.
     if pass_number is None:
@@ -4656,8 +4692,11 @@ def legacy_run_data(
 
     if view not in (None, "full", "compact"):
         raise HTTPException(422, "view must be full or compact")
-    return _build_run_data(
-        db, run, compact=view == "compact", principal=principal
+    return _with_item_visibility(
+        db,
+        principal,
+        run,
+        _build_run_data(db, run, compact=view == "compact", principal=principal),
     )
 
 
@@ -5004,7 +5043,7 @@ def update_metric(
         "pass_attempts": pass_attempts,
     }
 
-    return {"ok": True, "row": row}
+    return _with_item_visibility(db, principal, run, {"ok": True, "row": row})
 
 
 @router.post("/api/runs/update_root_cause_issue")
@@ -5069,7 +5108,7 @@ def update_root_cause_issue(
         item.item_metadata = meta
     db.commit()
     rows = _build_run_data(db, run).get("snapshot", {}).get("rows", [])
-    return {"ok": True, "row": next((row for row in rows if row.get("item_id") == item_id), None)}
+    return _with_item_visibility(db, principal, run, {"ok": True, "row": next((row for row in rows if row.get("item_id") == item_id), None)})
 
 
 @router.post("/api/runs/update_root_cause")
@@ -5232,7 +5271,7 @@ def update_root_cause(
             (row for row in updated_rows if row.get("item_id") == item.item_id),
             None,
         )
-        return {"ok": True, "row": updated_row}
+        return _with_item_visibility(db, principal, run, {"ok": True, "row": updated_row})
 
     raw_metric_name = request.get("metric_name")
     if raw_metric_name is not None:
@@ -5313,7 +5352,7 @@ def update_root_cause(
             (row for row in updated_rows if row.get("item_id") == item.item_id),
             None,
         )
-        return {"ok": True, "row": updated_row}
+        return _with_item_visibility(db, principal, run, {"ok": True, "row": updated_row})
 
     apply_root_cause_change(
         db,
@@ -5333,7 +5372,7 @@ def update_root_cause(
     updated_row = next(
         (row for row in updated_rows if row.get("item_id") == item.item_id), None
     )
-    return {"ok": True, "row": updated_row}
+    return _with_item_visibility(db, principal, run, {"ok": True, "row": updated_row})
 
 
 @router.post("/api/runs/{run_id}/force-stop")
@@ -5654,7 +5693,10 @@ def get_run_spans(
         .order_by(Span.start_time_ns.asc().nullslast())
         .all()
     )
-    return {"spans": [_serialize_span(s) for s in spans]}
+    payload = {"spans": [_serialize_span(s) for s in spans]}
+    if not can_view_run_items(db, principal, run):
+        redact_item_content(payload["spans"])
+    return payload
 
 
 @router.get("/api/runs/{run_id}/items/{item_id}/spans")
@@ -5684,7 +5726,10 @@ def get_item_spans(
         .order_by(Span.start_time_ns.asc().nullslast())
         .all()
     )
-    return {"spans": [_serialize_span(s) for s in spans]}
+    payload = {"spans": [_serialize_span(s) for s in spans]}
+    if not can_view_run_items(db, principal, run):
+        redact_item_content(payload["spans"])
+    return payload
 
 
 @router.get("/api/runs/{run_id}/items/{item_id}/trace")
@@ -5811,9 +5856,12 @@ def get_item_trace(
             pass_retry_count = max(
                 0, int(attempt_dicts[-1].get("attempt_number") or 1) - 1
             )
-    return _build_item_trace_payload(
+    payload = _build_item_trace_payload(
         item,
         attempt_dicts,
         retry_count_override=pass_retry_count,
         fallback_to_item_trace=pass_number is None,
     )
+    if not can_view_run_items(db, principal, run):
+        redact_item_content(payload)
+    return payload

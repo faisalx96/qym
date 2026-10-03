@@ -517,6 +517,8 @@
     .dsx-settings { max-width: 640px; display: flex; flex-direction: column; gap: var(--space-lg); }
     .dsx-settings-card { background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 10px; padding: var(--space-lg); display: flex; flex-direction: column; gap: var(--space-md); }
     .dsx-settings-card h3 { margin: 0; font-size: var(--font-md); font-weight: 650; color: var(--text-primary); }
+    .dsx-settings-note { margin: 0; font-size: var(--font-base); color: var(--text-muted); line-height: 1.5; }
+    .dsx-settings-check { display: inline-flex; align-items: center; gap: var(--space-sm); cursor: pointer; font-size: var(--font-md); color: var(--text-secondary); }
     .dsx-settings-card.danger { border-color: rgba(239,68,68,0.30); background: rgba(239,68,68,0.04); }
     .dsx-settings-card.danger h3 { color: var(--error); }
 
@@ -1458,6 +1460,7 @@
         const latest = d.latest_version;
         const head = el('div');
         head.appendChild(el('h3', { className: 'dsx-card-title' }, d.name || d.slug));
+        if (d.private_test_set) head.appendChild(privateTestSetTag());
         const stateLine = el('div', { className: 'dsx-card-state' });
         if (prod) {
           stateLine.appendChild(el('span', { className: 'prod' }, prod.version + ' prod'));
@@ -2171,6 +2174,7 @@
       nameEl.appendChild(document.createTextNode(state.dataset.name));
       nameEl.appendChild(el('span', { className: 'dsx-name-edit', title: 'Rename', onclick: renameDatasetFlow }, '✎'));
       titleRow.appendChild(nameEl);
+      if (state.dataset.private_test_set) titleRow.appendChild(privateTestSetTag());
       idCol.appendChild(titleRow);
 
       if (state.dataset.description) {
@@ -2325,8 +2329,30 @@
     // -------------------------------------------------------------
     // ITEMS TAB
     // -------------------------------------------------------------
+    // Private test sets: item contents are admin-only (server-enforced; the
+    // payload's items_visible tells the UI to show a locked state instead).
+    function itemsHidden(){
+      return !!(state.dataset && state.dataset.items_visible === false);
+    }
+
+    function privateTestSetTag(){
+      return el('span', { className: 'qym-tag qym-tag--warning', title: 'Item contents are visible to admins only' }, 'Private test set');
+    }
+
+    function privateItemsEmptyState(){
+      const e = el('div', { className: 'dsx-empty' });
+      e.appendChild(el('div', { className: 'icon', 'aria-hidden': 'true' }, '🔒'));
+      e.appendChild(el('h3', null, 'Items are private'));
+      e.appendChild(el('p', null, 'This dataset is a private test set. Its items, and the inputs, expected outputs, and outputs of runs evaluated on it, are visible to admins only. Versions, run history, and scores stay available.'));
+      return e;
+    }
+
     async function renderItemsTab(host){
       const v = state.activeVersion;
+      if (itemsHidden()) {
+        host.appendChild(privateItemsEmptyState());
+        return;
+      }
       if (!v) {
         const e = el('div', { className: 'dsx-empty' });
         e.appendChild(el('h3', null, 'No versions yet'));
@@ -2752,7 +2778,7 @@
       }
       normalizeActiveVersionUrl();
       const v = state.activeVersion;
-      if (!v || !state.itemId) {
+      if (!v || !state.itemId || itemsHidden()) {
         navigate({ item: null, tab: 'items' }, { replace: true });
         return;
       }
@@ -3208,7 +3234,7 @@
     // ITEM DRAWER
     // -------------------------------------------------------------
     async function openItemDrawerImpl(itemId){
-      const v = state.activeVersion; if (!v) return;
+      const v = state.activeVersion; if (!v || itemsHidden()) return;
       const isDraft = v.status === 'draft';
       // Update URL
       if (state.itemId !== itemId) { history.replaceState({}, '', buildUrl({ item: itemId })); state.itemId = itemId; }
@@ -3884,6 +3910,33 @@
       } }, 'Save changes');
       card.appendChild(saveBtn);
       wrap.appendChild(card);
+
+      if (state.dataset.can_set_private_test_set) {
+        const vis = el('div', { className: 'dsx-settings-card' });
+        vis.appendChild(el('h3', null, 'Visibility'));
+        vis.appendChild(el('p', { className: 'dsx-settings-note' }, 'A private test set hides its items from everyone except admins, including the inputs, expected outputs, outputs, and traces of runs evaluated on it. Members still see versions, run history, and scores.'));
+        const visLabel = el('label', { className: 'dsx-settings-check' });
+        const visCb = el('input', { type: 'checkbox' });
+        visCb.checked = !!state.dataset.private_test_set;
+        visCb.addEventListener('change', async () => {
+          visCb.disabled = true;
+          try {
+            const upd = await apiFetch('/v1/datasets/' + encodeURIComponent(state.datasetRef) + '?project_slug=' + encodeURIComponent(state.slug), { method: 'PATCH', body: { private_test_set: visCb.checked } });
+            state.dataset = upd.dataset || upd;
+            Shell.toast(visCb.checked ? 'Marked as private test set' : 'No longer a private test set', 'success');
+            refreshDetailView({ force: true });
+          } catch(e) {
+            visCb.checked = !visCb.checked;
+            Shell.toast(e.message || 'Update failed', 'error');
+          } finally {
+            visCb.disabled = false;
+          }
+        });
+        visLabel.appendChild(visCb);
+        visLabel.appendChild(document.createTextNode('Private test set (admins only)'));
+        vis.appendChild(visLabel);
+        wrap.appendChild(vis);
+      }
 
       const danger = el('div', { className: 'dsx-settings-card danger' });
       danger.appendChild(el('h3', null, 'Danger zone'));
