@@ -9,7 +9,7 @@ importing this module must not change that order.
 from contextlib import contextmanager
 from copy import deepcopy
 
-from sqlalchemy import create_engine
+from sqlalchemy import Column, MetaData, Table, create_engine, inspect
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -44,6 +44,31 @@ def sqlite_session_factory():
         yield SessionLocal
     finally:
         engine.dispose()
+
+
+def insert_at_revision(connection, model, /, **values):
+    """Insert one ``model`` row into a schema migrated to an older revision.
+
+    An ORM insert names every column of the current model, so a table that
+    predates a later migration rejects it. Insert only the columns the live
+    table has, with the model's types and Python-side defaults.
+    """
+    live = {column["name"] for column in inspect(connection).get_columns(model.__tablename__)}
+    unknown = set(values) - live
+    assert not unknown, f"{model.__tablename__} has no {sorted(unknown)} at this revision"
+    columns = [column for column in model.__table__.columns if column.name in live]
+    row = dict(values)
+    for column in columns:
+        default = column.default
+        if column.name in row or default is None:
+            continue
+        row[column.name] = default.arg(None) if default.is_callable else default.arg
+    table = Table(
+        model.__tablename__,
+        MetaData(),
+        *(Column(column.name, column.type, primary_key=column.primary_key) for column in columns),
+    )
+    connection.execute(table.insert().values(row))
 
 
 @contextmanager
