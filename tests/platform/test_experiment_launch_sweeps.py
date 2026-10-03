@@ -182,8 +182,12 @@ def test_swept_values_live_in_the_form_state():
     # Links of values that stop being swept are dropped; base switches keep them.
     assert "const groups = cleanLinks(st.links, sweptSet());" in MODULE
     assert "st.clone.linkedGroups) : links;" in LAUNCH
-    # A sweep editor writes the state itself; the leaf listener only re-marks.
-    assert "if (!control.hasAttribute('data-xs-sweep'))" in LAUNCH
+    # A sweep editor (or the structured JSON editor) writes the state itself; the
+    # leaf listener only re-marks.
+    assert (
+        "if (!control.hasAttribute('data-xs-sweep') && "
+        "!control.hasAttribute('data-xl-structured'))" in LAUNCH
+    )
 
 
 def test_widgets():

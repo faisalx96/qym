@@ -6,12 +6,16 @@
  *   window.QymExperimentLaunch.mount({ root, project, me, slug, onLaunched, onCancel })
  *     → { teardown }
  *
- * One page with a sticky preview: environments ("+ New environment" opens the
- * QymEvalEnvironments add dialog inline), dataset (project dataset + version or
- * alias, or a custom string), "Start from" (official defaults, a saved preset,
- * blank or a clone; see below), one model card per confirmed slot (project model, temporary model via QymTemporaryModel, or
- * Inherit), the generated grouped settings form (search, "changed only"),
- * priority (HIGH is gated) and name. The preview runs a debounced dry run of
+ * One page with a sticky preview: name and priority (HIGH is gated) first, then
+ * environments ("+ New environment" opens the QymEvalEnvironments add dialog
+ * inline), dataset (project dataset + version or alias, or a custom string),
+ * "Start from" (official defaults, a saved preset, blank or a clone; see below)
+ * and one model card per confirmed slot (project model, temporary model via
+ * QymTemporaryModel, or Inherit). A collapsed "Advanced configuration" holds the
+ * generated grouped env_overrides form (search, "changed only"), sweeps and the
+ * Advanced panel. JSON settings (objects, lists, and strings holding JSON text)
+ * are edited as fields through experiment_launch_json.js (window.QymLaunchJson);
+ * "Edit as JSON" keeps the raw text (st.rawJson). The preview runs a debounced dry run of
  * POST /v1/projects/{pid}/experiments and lists every validation error; each
  * error focuses its field. Launch posts the same body without dry_run.
  *
@@ -89,7 +93,8 @@
   const STYLESHEETS = [
     'static/eval_environments.css?v=eval-environments-20260929-1',
     'static/eval_temporary_model.css?v=eval-temporary-model-20260930-1',
-    'static/experiment_launch.css?v=experiment-launch-20260930-6',
+    'static/experiment_launch.css?v=experiment-launch-20261003-1',
+    'static/experiment_launch_json.css?v=experiment-launch-json-20261003-1',
     'static/experiment_launch_advanced.css?v=experiment-launch-advanced-20260930-1',
     'static/experiment_launch_sweeps.css?v=experiment-launch-sweeps-20260930-1',
     'static/experiment_launch_best_run.css?v=experiment-launch-best-run-20261002-scope',
@@ -388,6 +393,8 @@
       values: {}, // env_overrides pointer → value
       invalid: {}, // env_overrides pointer → {message, raw}: a value that did not parse
       addedKeys: {}, // collection pointer → [keys]
+      rawJson: {}, // env_overrides pointer → true: a JSON setting shown as raw text
+      advancedOpen: false, // the "Advanced configuration" disclosure
       search: '',
       changedOnly: false,
       priority: '',
@@ -1662,6 +1669,11 @@
     }
 
     // ── Section: models ─────────────────────────────────────────────────
+    /** Where env_overrides are edited: the launch form keeps them under Advanced configuration. */
+    function overridesLocation() {
+      return editor ? 'Settings' : 'Advanced configuration › Environment overrides';
+    }
+
     function renderModels() {
       const host = hosts.models;
       if (!host) return;
@@ -1672,7 +1684,7 @@
         const banner = el('div', { className: 'xl-callout xl-callout--warning', role: 'note', 'data-xl-group-banner': '1' }, [
           el('div', null, [
             el('strong', { text: 'Group LLM settings to pick project models' }),
-            el('div', { text: 'On ' + pending.map(envName).join(', ') + ', LLM fields stay raw inputs under Settings until their grouping is confirmed.' }),
+            el('div', { text: 'On ' + pending.map(envName).join(', ') + ', LLM fields stay raw inputs under ' + overridesLocation() + ' until their grouping is confirmed.' }),
           ]),
         ]);
         if (isManager && window.QymEvalEnvironments && window.QymEvalEnvironments.openEnvironmentDrawer) {
@@ -1692,7 +1704,7 @@
       } else if (st.selected.some((id) => !st.envData[id] || st.envData[id].loading)) {
         children.push(el('div', { className: 'xl-hint', text: 'Loading model slots…' }));
       } else if (!slots.length) {
-        children.push(el('div', { className: 'xl-hint', text: 'No confirmed model slots. LLM fields are edited under Settings.' }));
+        children.push(el('div', { className: 'xl-hint', text: 'No confirmed model slots. LLM fields are edited under ' + overridesLocation() + '.' }));
       } else {
         st.selected.forEach((id) => {
           const err = st.envData[id] && st.envData[id].optionsError;
@@ -1896,8 +1908,8 @@
     }
 
     function onLeafInput(entry, pointer, control, wrapper) {
-      // A sweep editor (#34) already wrote {"sweep": [...]} into st.values.
-      if (!control.hasAttribute('data-xs-sweep')) {
+      // A sweep editor (#34) or the structured JSON editor already wrote st.values.
+      if (!control.hasAttribute('data-xs-sweep') && !control.hasAttribute('data-xl-structured')) {
         const parsed = parseInput(entry, control.value);
         delete st.invalid[pointer];
         if (parsed.unset) delete st.values[pointer];
@@ -1910,7 +1922,67 @@
       schedulePreview();
     }
 
-    function leafControl(entry, pointer, fields, bound, label) {
+    // ── JSON settings as fields (experiment_launch_json.js) ─────────────
+    /** 'json' for object/list settings, 'string' for string settings that may hold JSON text. */
+    function jsonEncoding(entry) {
+      if (!window.QymLaunchJson || entry.secret || entry.widget === 'secret') return null;
+      if (entry.type === 'json' || entry.type === 'array' || entry.type === 'object') return 'json';
+      return entry.type === 'string' && entry.widget === 'text' ? 'string' : null;
+    }
+
+    /** What "Edit as fields" starts from: the value, else the default, else an empty list/object. */
+    function fieldsStartValue(entry, pointer) {
+      const encoding = jsonEncoding(entry);
+      const api = window.QymLaunchJson;
+      if (has(st.values, pointer)) return api.container(st.values[pointer], encoding) ? st.values[pointer] : undefined;
+      if (entry.has_default && api.container(entry.default, encoding)) return deepCopy(entry.default);
+      if (encoding !== 'json') return undefined;
+      return entry.type === 'array' ? [] : {};
+    }
+
+    function structuredControl(entry, pointer, current, common) {
+      const encoding = jsonEncoding(entry);
+      if (!encoding || st.rawJson[pointer] || has(st.invalid, pointer)) return null;
+      const value = window.QymLaunchJson.container(current, encoding);
+      if (!value) return null;
+      return window.QymLaunchJson.editor({
+        el, value, label: common['aria-label'],
+        attrs: { 'data-xl-pointer': common['data-xl-pointer'] },
+        onChange: (next) => {
+          delete st.invalid[pointer];
+          st.values[pointer] = encoding === 'string' ? JSON.stringify(next) : next;
+        },
+        onRaw: () => { st.rawJson[pointer] = true; renderSettings(); },
+      });
+    }
+
+    /** Raw view of a JSON setting: "Edit as fields", and a switch once valid JSON is committed. */
+    function rawJsonActions(entry, pointer, control) {
+      if (!jsonEncoding(entry) || control.disabled || control.hasAttribute('data-xl-structured')) return null;
+      const toFields = () => {
+        const start = fieldsStartValue(entry, pointer);
+        if (start === undefined) return;
+        delete st.rawJson[pointer];
+        delete st.invalid[pointer];
+        st.values[pointer] = start;
+        renderSettings();
+        updateChangedCount();
+        renderPreviewSoon();
+        schedulePreview();
+      };
+      // Pasted or typed JSON becomes fields when committed, unless "Edit as JSON" was chosen.
+      control.addEventListener('change', () => {
+        if (!st.rawJson[pointer] && has(st.values, pointer) && window.QymLaunchJson.container(st.values[pointer], jsonEncoding(entry))) renderSettings();
+      });
+      if (fieldsStartValue(entry, pointer) === undefined) return null;
+      return el('div', { className: 'xl-row' }, [el('button', {
+        type: 'button', className: 'xl-link-btn', text: 'Edit as fields',
+        title: has(st.values, pointer) ? 'Edit this JSON as fields' : 'Start from ' + (entry.has_default ? 'the default' : 'an empty value') + ' and edit it as fields',
+        onClick: toFields,
+      })]);
+    }
+
+    function leafControl(entry, pointer, fields, bound, label, structured) {
       const docPointer = '/env_overrides' + pointer;
       const current = has(st.values, pointer) ? st.values[pointer] : undefined;
       const placeholder = bound ? 'Set by ' + bound
@@ -1934,6 +2006,10 @@
         }));
         control.value = 'Sweep: ' + current.sweep.map(formatValue).join(', ');
         return control;
+      }
+      if (structured && !bound) {
+        const node = structuredControl(entry, pointer, current, common);
+        if (node) return node;
       }
       if (entry.secret || entry.widget === 'secret') {
         control = el('input', Object.assign({}, common, {
@@ -2035,7 +2111,7 @@
       const missing = missingFrom(model, template);
       const label = (context ? context + ' · ' : '') + (entry.label || entry.name);
       const wrapper = el('div', { className: 'xl-field', 'data-xl-leaf': pointer });
-      const control = leafControl(entry, pointer, model.fields, bound[pointer], label);
+      const control = leafControl(entry, pointer, model.fields, bound[pointer], label, true);
       const handler = () => onLeafInput(entry, pointer, control, wrapper);
       control.addEventListener(control.tagName === 'SELECT' ? 'change' : 'input', handler);
       const reset = el('button', {
@@ -2067,6 +2143,9 @@
       const hint = hintText(entry);
       wrapper.appendChild(head);
       wrapper.appendChild(control);
+      const jsonActions = isSweepValue(st.values[pointer]) ? null : rawJsonActions(entry, pointer, control);
+      if (jsonActions) wrapper.appendChild(jsonActions);
+      if (control.hasAttribute('data-xl-structured')) wrapper.classList.add('xl-field--structured');
       if (hint) wrapper.appendChild(el('div', { className: 'xl-hint', text: hint }));
       wrapper.setAttribute('data-xl-search', [label, entry.name, pointer, entry.description || ''].join(' ').toLowerCase());
       markChanged(wrapper, pointer);
@@ -2200,7 +2279,17 @@
     function updateChangedCount() {
       const node = root.querySelector('[data-xl-changed-count]');
       if (node) node.textContent = countChanged() + ' changed';
+      updateAdvancedCount();
       updateBaseMeta();
+    }
+
+    /** "N changed" on the collapsed Advanced configuration summary. */
+    function updateAdvancedCount() {
+      const summary = root.querySelector('[data-xl-advanced-count]');
+      if (!summary) return;
+      const changed = countChanged();
+      summary.hidden = !changed;
+      summary.textContent = changed + ' changed';
     }
 
     function applyFilters() {
@@ -2305,6 +2394,7 @@
       children.push(el('div', { className: 'xl-empty', 'data-xl-filter-empty': '1', hidden: true, text: 'No settings match.' }));
       body.replaceChildren.apply(body, children);
       applyFilters();
+      updateAdvancedCount();
     }
 
     // ── Section: priority & name ────────────────────────────────────────
@@ -2564,16 +2654,30 @@
         ? el('button', { type: 'button', className: 'qym-inline-action qym-inline-action--neutral', 'data-xl-new-env': '1', text: '+ New environment', onClick: openNewEnvironment })
         : null;
       if (editor) { renderEditorLayout(); return; }
+      // Environment overrides, sweeps and the Advanced panel sit in one collapsed
+      // disclosure below the essentials; focusError() opens it for a field inside.
+      const advancedConfig = el('details', { className: 'xl-advanced-config', 'data-xl-advanced-config': '1' }, [
+        el('summary', null, [
+          el('span', { className: 'xl-advanced-config-title', text: 'Advanced configuration' }),
+          el('span', { className: 'qym-tag qym-tag--count', 'data-xl-advanced-count': '1', hidden: true }),
+          el('span', { className: 'xl-hint', text: 'Environment overrides, sweeps, evaluation inputs and raw JSON.' }),
+        ]),
+        el('div', { className: 'xl-advanced-config-body' }, [
+          section('settings', 6, 'Environment overrides', 'Generated from the environment schema. Only changed values are sent.'),
+          // Extension points: sweeps (#34) and the Advanced panel (#24) mount here.
+          el('div', { 'data-xl-sweeps': '1', hidden: true }),
+          el('div', { 'data-xl-advanced': '1', hidden: true }),
+        ]),
+      ]);
+      advancedConfig.open = st.advancedOpen;
+      advancedConfig.addEventListener('toggle', () => { st.advancedOpen = advancedConfig.open; });
       const main = el('div', { className: 'xl-main' }, [
-        section('environments', 1, 'Environments', 'Where the jobs run. Each selected environment gets one job.', newEnvButton),
-        section('dataset', 2, 'Dataset', 'A project dataset (optionally pinned to a version or alias) or a custom dataset string.'),
-        section('base', 3, 'Start from', 'The base configuration your edits are layered on.'),
-        section('models', 4, 'Models', 'Bind each LLM slot to a project model, a temporary model, or leave it to the environment.'),
-        section('settings', 5, 'Settings', 'Generated from the environment schema. Only changed values are sent.'),
-        // Extension points: sweeps (#34) and the Advanced panel (#24) mount here.
-        el('div', { 'data-xl-sweeps': '1', hidden: true }),
-        el('div', { 'data-xl-advanced': '1', hidden: true }),
-        section('run', 6, 'Priority and name', 'HIGH preempts other users\' jobs and needs a project manager.'),
+        section('run', 1, 'Name and priority', 'HIGH preempts other users\' jobs and needs a project manager.'),
+        section('environments', 2, 'Environments', 'Where the jobs run. Each selected environment gets one job.', newEnvButton),
+        section('dataset', 3, 'Dataset', 'A project dataset (optionally pinned to a version or alias) or a custom dataset string.'),
+        section('base', 4, 'Start from', 'The base configuration your edits are layered on.'),
+        section('models', 5, 'Models', 'Bind each LLM slot to a project model, a temporary model, or leave it to the environment.'),
+        advancedConfig,
       ]);
       const preview = el('aside', { className: 'xl-preview', 'aria-label': 'Preview' }, [
         el('div', { className: 'xl-card-header' }, [el('div', null, [

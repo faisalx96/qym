@@ -383,3 +383,57 @@ def test_high_priority_needs_a_manager_and_an_acknowledgement(
         )
         assert ok.status_code == 200, ok.text
         assert ok.json()["priority"] == "HIGH"
+
+
+# --------------------------------------------------------------------------- layout & JSON fields
+
+JSON_MODULE = (DASHBOARD / "experiment_launch_json.js").read_text(encoding="utf-8")
+JSON_STYLES = (DASHBOARD / "experiment_launch_json.css").read_text(encoding="utf-8")
+SETTINGS_PAGE = (DASHBOARD / "project_settings.html").read_text(encoding="utf-8")
+
+
+def test_name_and_priority_first_and_overrides_under_advanced_configuration():
+    layout = MODULE[MODULE.index("    function render() {") :]
+    layout = layout[: layout.index("    function renderEditorLayout()")]
+    order = [
+        layout.index(f"section('{key}'")
+        for key in ("run", "environments", "dataset", "base", "models")
+    ]
+    assert order == sorted(order)
+    assert "section('run', 1, 'Name and priority'" in layout
+    # env_overrides, sweeps and the Advanced panel live in one collapsed disclosure.
+    disclosure = layout[layout.index("const advancedConfig") : layout.index("const main")]
+    for host in ("section('settings'", "'data-xl-sweeps': '1'", "'data-xl-advanced': '1'"):
+        assert host in disclosure, host
+    assert "'Advanced configuration'" in disclosure
+    assert "advancedConfig.open = st.advancedOpen;" in layout
+    assert "summary.textContent = changed + ' changed';" in MODULE
+
+
+def test_json_settings_are_edited_as_fields():
+    for page in (PAGE, SETTINGS_PAGE):
+        assert page.index("experiment_launch_json.js") < page.index(
+            "experiment_launch.js?"
+        )
+    assert "'static/experiment_launch_json.css?v=" in MODULE
+    assert "window.QymLaunchJson.editor({" in MODULE
+    # Only the settings form gets fields; role-table cells stay compact.
+    assert "leafControl(entry, pointer, model.fields, bound[pointer], label, true)" in MODULE
+    assert "st.values[pointer] = encoding === 'string' ? JSON.stringify(next) : next;" in MODULE
+    assert "text: 'Edit as fields'" in MODULE and "'Edit as JSON'" in JSON_MODULE
+    assert "window.QymLaunchJson = { container, uniformKeys, editor };" in JSON_MODULE
+    assert "text: 'All items'" in JSON_MODULE
+    for banned in ("innerHTML", "insertAdjacentHTML", "localStorage", "console."):
+        assert banned not in JSON_MODULE, banned
+
+
+def test_json_styles_follow_the_design_language():
+    assert not re.search(r"font-size:\s*\d", JSON_STYLES)
+    assert not re.search(r"#[0-9a-fA-F]{3,6}\b", JSON_STYLES)
+    assert "var(--text-dim)" not in JSON_STYLES
+    body = re.sub(r"/\*.*?\*/", "", JSON_STYLES, flags=re.S)
+    for selector in re.findall(r"(?:^|\})\s*([^{}]+?)\s*\{", body):
+        for part in selector.split(","):
+            classes = re.findall(r"\.([\w-]+)", part)
+            assert classes and all(c.startswith("xlj-") for c in classes), part.strip()
+

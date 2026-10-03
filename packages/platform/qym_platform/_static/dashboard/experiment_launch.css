@@ -118,3 +118,12 @@
 /* Sweeps (#34): a role-table cell with its "+ values" affordance */
 .xl-cell-sweep { display: flex; align-items: center; gap: var(--space-xs); }
 .xl-cell-sweep > :first-child { flex: 1; min-width: 0; }
+/* Advanced configuration: environment overrides, sweeps and the Advanced panel, collapsed. */
+.xl-advanced-config { margin-bottom: var(--space-lg); border: 1px solid var(--border-default); border-radius: 8px; background: var(--bg-surface); }
+.xl-advanced-config > summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); padding: var(--space-md) var(--space-lg); cursor: pointer; list-style: none; }
+.xl-advanced-config > summary::-webkit-details-marker { display: none; }
+.xl-advanced-config > summary::before { content: "▶"; color: var(--text-dim); font-size: var(--font-sm); transition: transform 0.15s ease; }
+.xl-advanced-config[open] > summary::before { transform: rotate(90deg); }
+.xl-advanced-config-title { font-size: var(--font-lg); font-weight: 600; color: var(--text-primary); }
+.xl-advanced-config-body { padding: 0 var(--space-lg) var(--space-xs); }
+.xl-field--structured { grid-column: 1 / -1; }
