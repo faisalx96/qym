@@ -1200,6 +1200,7 @@
       dsxDisposed = true;
       document.removeEventListener('qym:popstate', handleShellPopstate);
       document.removeEventListener('qym:before-navigate', cleanupDatasetPageEvents);
+      document.removeEventListener('qym:shell-ready', reconcileLateShellProject);
     }
     document.addEventListener('qym:popstate', handleShellPopstate);
     document.addEventListener('qym:before-navigate', cleanupDatasetPageEvents);
@@ -1247,6 +1248,18 @@
         setTimeout(finish, 250);
       });
     }
+    // A slow shell load fires qym:shell-ready after ensureShellReady stopped
+    // waiting, so the page rendered with a placeholder project. Take the real
+    // project then, and redraw if that makes the page read-only (or not).
+    function reconcileLateShellProject(){
+      if (dsxDisposed) return;
+      const project = resolveProjectFromShell();
+      if (!project || project.slug !== state.slug || project === state.project) return;
+      const wasReadOnly = projectReadOnly();
+      state.project = project;
+      if (projectReadOnly() !== wasReadOnly) route();
+    }
+    document.addEventListener('qym:shell-ready', reconcileLateShellProject);
     async function route(){
       const p = parsePath();
       if (p.mode === 'unknown') {

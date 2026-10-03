@@ -593,6 +593,26 @@ def test_archived_project_opens_read_only_for_a_manager(browser, factory, monkey
         app.close()
 
 
+def test_archived_datasets_turn_read_only_when_the_shell_loads_late(app, factory):
+    """The page stops waiting for the shell after 250 ms; when the shell then
+    says the project is archived, the create controls go away."""
+    assert app.client.post("/v1/admin/projects/pa/archive").status_code == 200
+    app.page.add_init_script(
+        """(() => {
+      const realFetch = window.fetch;
+      window.fetch = (url, options) => String(url).includes('v1/me')
+        ? new Promise(resolve => setTimeout(resolve, 800)).then(() => realFetch(url, options))
+        : realFetch(url, options);
+    })()"""
+    )
+    page = app.goto("/projects/pa/datasets")
+    # Drawn before the shell answers, with the placeholder project.
+    page.get_by_text("+ New dataset").first.wait_for(state="attached")
+    _archived_notice(page)
+    page.wait_for_function("() => ![...document.querySelectorAll('button')].some(b => b.textContent.includes('New dataset'))")
+    assert app.errors == []
+
+
 def test_archived_project_datasets_are_read_only(app, factory):
     upload = app.client.post(
         "/v1/datasets:upload",
