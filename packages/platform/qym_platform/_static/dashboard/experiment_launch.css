@@ -127,3 +127,5 @@
 .xl-advanced-config-title { font-size: var(--font-lg); font-weight: 600; color: var(--text-primary); }
 .xl-advanced-config-body { padding: 0 var(--space-lg) var(--space-xs); }
 .xl-field--structured { grid-column: 1 / -1; }
+/* "+ Add LLM endpoint" under the model cards (endpoints for this experiment only). */
+.xl-add-endpoint { display: grid; gap: var(--space-xs); padding-top: var(--space-sm); border-top: 1px solid var(--border-subtle); }

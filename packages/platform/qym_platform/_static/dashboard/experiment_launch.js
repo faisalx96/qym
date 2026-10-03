@@ -15,7 +15,10 @@
  * generated grouped env_overrides form (search, "changed only"), sweeps and the
  * Advanced panel. JSON settings (objects, lists, and strings holding JSON text)
  * are edited as fields through experiment_launch_json.js (window.QymLaunchJson);
- * "Edit as JSON" keeps the raw text (st.rawJson). The preview runs a debounced dry run of
+ * "Edit as JSON" keeps the raw text (st.rawJson). "+ Add LLM endpoint" under the
+ * model cards adds an endpoint:<name> slot for this experiment only (st.extraEndpoints,
+ * previewed by GET …/model-slots?propose_endpoint=); managers get "Edit groupings" to
+ * change the environment's saved slots. The preview runs a debounced dry run of
  * POST /v1/projects/{pid}/experiments and lists every validation error; each
  * error focuses its field. Launch posts the same body without dry_run.
  *
@@ -116,6 +119,8 @@
   ];
   const CLONE_OPTION = { kind: 'clone', label: 'Clone', available: true };
   const ROLE_LABELS = { model: 'model', base_url: 'base URL', api_key: 'API key' };
+  // New LLM endpoint names when the schema gives no propertyNames pattern.
+  const ENDPOINT_NAME_PATTERN = '^[A-Za-z0-9][A-Za-z0-9_.-]*$';
 
   // ── Utilities ──────────────────────────────────────────────────────────
   function el(tag, attrs, children) {
@@ -394,6 +399,7 @@
       invalid: {}, // env_overrides pointer → {message, raw}: a value that did not parse
       addedKeys: {}, // collection pointer → [keys]
       rawJson: {}, // env_overrides pointer → true: a JSON setting shown as raw text
+      extraEndpoints: [], // LLM endpoints added for this experiment only (endpoint:<name> slots)
       advancedOpen: false, // the "Advanced configuration" disclosure
       search: '',
       changedOnly: false,
@@ -458,10 +464,11 @@
     async function loadEnvData(id, force) {
       if (st.envData[id] && !force) return;
       st.envData[id] = { loading: true };
-      const [form, slots, models] = await Promise.all([
+      const [form, slots, models, extra] = await Promise.all([
         request(envPath(id, '/form')),
         request(envPath(id, '/model-slots')),
         request(envPath(id, '/model-options')),
+        loadExtraSlots(id, st.extraEndpoints.slice()),
       ]);
       if (!st.active) return;
       const slotRows = slots.ok ? (slots.data.slots || []) : [];
@@ -473,6 +480,7 @@
         needsConfirmation: slots.ok ? !!slots.data.needs_confirmation : false,
         options: models.ok ? models.data : null,
         optionsError: models.ok ? '' : errorMessage(models.data, 'Failed to load project models'),
+        extra, // endpoint name → its proposed slot (null: this environment cannot add it)
       };
     }
 
@@ -560,27 +568,145 @@
       return { fields, presence, groups, envs };
     }
 
-    /** Confirmed slots across the selected environments, keyed by slot_key. */
+    /**
+     * Confirmed slots across the selected environments, keyed by slot_key, plus the
+     * LLM endpoints added for this experiment (`extra: true`, see addExtraEndpoint).
+     */
     function unionSlots() {
       const slots = [];
       const index = {};
+      const merge = (id, slot, extra) => {
+        if (!index[slot.slot_key]) {
+          index[slot.slot_key] = { slot_key: slot.slot_key, label: slot.label || slot.slot_key, kind: slot.kind, required: !!slot.required, field_map: {}, envs: [], extra };
+          slots.push(index[slot.slot_key]);
+        }
+        const merged = index[slot.slot_key];
+        if (merged.envs.indexOf(id) < 0) merged.envs.push(id);
+        merged.extra = merged.extra && extra; // confirmed on any environment wins
+        merged.required = merged.required || !!slot.required;
+        Object.keys(slot.field_map || {}).forEach((role) => {
+          if (slot.field_map[role]) merged.field_map[role] = slot.field_map[role];
+        });
+      };
       st.selected.forEach((id) => {
         const data = st.envData[id];
-        (data && data.slots || []).forEach((slot) => {
-          if (!index[slot.slot_key]) {
-            index[slot.slot_key] = { slot_key: slot.slot_key, label: slot.label || slot.slot_key, kind: slot.kind, required: !!slot.required, field_map: {}, envs: [] };
-            slots.push(index[slot.slot_key]);
-          }
-          const merged = index[slot.slot_key];
-          merged.envs.push(id);
-          merged.required = merged.required || !!slot.required;
-          Object.keys(slot.field_map || {}).forEach((role) => {
-            if (slot.field_map[role]) merged.field_map[role] = slot.field_map[role];
-          });
-        });
+        (data && data.slots || []).forEach((slot) => merge(id, slot, false));
       });
+      st.extraEndpoints.forEach((name) => st.selected.forEach((id) => {
+        const slot = st.envData[id] && st.envData[id].extra && st.envData[id].extra[name];
+        if (slot) merge(id, slot, true);
+      }));
       slots.sort((a, b) => (a.slot_key === 'endpoint:primary' ? -1 : b.slot_key === 'endpoint:primary' ? 1 : 0));
       return slots;
+    }
+
+    // ── Extra LLM endpoints (this experiment only) ──────────────────────
+    // An endpoint:<name> slot needs no confirmation: the server derives it from the
+    // schema's LLM_OVERRIDES.endpoints collection (eval_config._slot_for), so binding
+    // a model to it here adds the endpoint to this experiment's spec. Nothing is
+    // saved on the environment; "Edit groupings" (managers) does that.
+    async function proposeEndpoint(envId, name) {
+      const res = await request(envPath(envId, '/model-slots?propose_endpoint=' + encodeURIComponent(name)));
+      return res.ok && res.data && res.data.proposal ? res.data.proposal : null;
+    }
+
+    async function loadExtraSlots(envId, names) {
+      const found = await Promise.all(names.map((name) => proposeEndpoint(envId, name)));
+      const out = {};
+      names.forEach((name, i) => { out[name] = found[i]; });
+      return out;
+    }
+
+    /** The endpoints collection of the selected environments' settings, if any. */
+    function endpointsCollection() {
+      const fields = union().fields;
+      return Object.keys(fields).map((p) => fields[p]).find((entry) => entry.kind === 'collection' && entry.key_param === 'endpoint') || null;
+    }
+
+    /** endpoint:<name> bindings of a config that no selected environment has confirmed. */
+    function unconfirmedEndpoints(config) {
+      const raw = config && isPlainObject(config.slot_bindings) ? config.slot_bindings : {};
+      return Object.keys(raw).map((key) => /^endpoint:(.+)$/.exec(key)).filter(Boolean).map((m) => m[1])
+        .filter((name) => !st.selected.some((id) => ((st.envData[id] && st.envData[id].slots) || []).some((s) => s.slot_key === 'endpoint:' + name)));
+    }
+
+    /** Fetch and add extra endpoints; returns the names at least one environment can add. */
+    async function ensureExtraEndpoints(names) {
+      const fresh = names.filter((name, i) => names.indexOf(name) === i && st.extraEndpoints.indexOf(name) < 0);
+      if (!fresh.length) return [];
+      await Promise.all(st.selected.map(async (id) => {
+        const data = st.envData[id];
+        if (!data || data.loading) return;
+        data.extra = Object.assign({}, data.extra, await loadExtraSlots(id, fresh));
+      }));
+      if (!st.active) return [];
+      const added = fresh.filter((name) => st.selected.some((id) => st.envData[id] && st.envData[id].extra && st.envData[id].extra[name]));
+      added.forEach((name) => st.extraEndpoints.push(name));
+      return added;
+    }
+
+    function removeExtraEndpoint(name) {
+      st.extraEndpoints = st.extraEndpoints.filter((n) => n !== name);
+      clearBinding('endpoint:' + name);
+      renderModels();
+      renderSettings();
+      updateBaseMeta();
+      renderPreviewSoon();
+      schedulePreview();
+    }
+
+    /** "+ Add LLM endpoint" under the model cards (and "Edit groupings" for managers). */
+    function addEndpointControls() {
+      const collection = endpointsCollection();
+      const input = el('input', {
+        className: 'qym-control qym-input xl-mono', type: 'text', maxlength: '100', placeholder: 'endpoint name, e.g. fast',
+        'aria-label': 'New LLM endpoint name', 'data-xl-new-endpoint': '1', disabled: !collection,
+      });
+      const error = el('span', { className: 'xl-error-text', role: 'alert' });
+      const button = el('button', {
+        type: 'button', className: 'qym-inline-action qym-inline-action--neutral', text: '+ Add LLM endpoint',
+        'data-xl-add-endpoint': '1', disabled: !collection,
+      });
+      const add = async () => {
+        const name = input.value.trim();
+        error.textContent = '';
+        if (!name) { error.textContent = 'Enter a name.'; return; }
+        // The schema's propertyNames pattern when it has one; otherwise a plain identifier.
+        if (!(new RegExp(collection.key_pattern || ENDPOINT_NAME_PATTERN)).test(name)) {
+          error.textContent = collection.key_pattern ? 'Invalid name.' : 'Use letters, digits, ".", "_" or "-".';
+          return;
+        }
+        if (unionSlots().some((s) => s.slot_key === 'endpoint:' + name)) { error.textContent = 'Already present.'; return; }
+        button.disabled = true;
+        const added = await ensureExtraEndpoints([name]);
+        if (!st.active) return;
+        button.disabled = false;
+        if (!added.length) { error.textContent = 'None of the selected environments can add this endpoint.'; return; }
+        renderModels();
+        renderSettings();
+        renderPreviewSoon();
+        schedulePreview();
+        const select = Array.from(root.querySelectorAll('[data-xl-slot]')).find((n) => n.getAttribute('data-xl-slot') === 'endpoint:' + name);
+        if (select) select.focus();
+      };
+      button.addEventListener('click', add);
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+      const manage = isManager && window.QymEvalEnvironments && window.QymEvalEnvironments.openEnvironmentDrawer
+        ? selectedEnvs().map((env) => el('button', {
+          type: 'button', className: 'xl-link-btn', text: 'Edit groupings' + (st.selected.length > 1 ? ' · ' + env.name : ''),
+          title: 'Change the saved LLM groupings of ' + env.name + ' (every experiment on it)',
+          onClick: () => window.QymEvalEnvironments.openEnvironmentDrawer({
+            projectId: project.id, env, canManage: true,
+            onChange: () => { if (!st.active) return; delete st.envData[env.id]; loadEnvironments(); },
+          }),
+        }))
+        : [];
+      return el('div', { className: 'xl-add-endpoint', 'data-xl-endpoint-controls': '1' }, [
+        el('div', { className: 'xl-row' }, [input, button, error, el('span', { className: 'xl-spacer' })].concat(manage)),
+        el('div', { className: 'xl-hint', text: collection
+          ? 'Adds an LLM endpoint to this experiment only: bind a model to it, then point roles at it under Role overrides.'
+          : 'The selected environments have no LLM endpoints to add to.' }),
+      ]);
     }
 
     /** Pointers filled by a bound slot → the slot label (those inputs are locked). */
@@ -1059,6 +1185,8 @@
       }
       await st.datasetsReady; // a base dataset maps onto the project picker
       if (!st.active || generation !== st.baseGeneration) return null;
+      await ensureExtraEndpoints(unconfirmedEndpoints(config)); // e.g. endpoint:fast of a clone
+      if (!st.active || generation !== st.baseGeneration) return null;
       const base = baselineFrom(config);
       info.notes = info.notes.concat(base.notes);
       return { base, info };
@@ -1140,6 +1268,8 @@
       if (!(await setBase('editor')) || !st.active) return;
       editor.baseDoc = stableJson(editorConfig());
       if (opts.initialConfig) {
+        await ensureExtraEndpoints(unconfirmedEndpoints(opts.initialConfig));
+        if (!st.active) return;
         const draft = baselineFrom(opts.initialConfig);
         st.values = draft.values;
         st.invalid = {};
@@ -1712,6 +1842,7 @@
         });
         children.push(el('div', { className: 'xl-models' }, slots.map(modelCard)));
       }
+      if (st.selected.length && !st.selected.some((id) => !st.envData[id] || st.envData[id].loading)) children.push(addEndpointControls());
       body.replaceChildren.apply(body, children);
     }
 
@@ -1753,8 +1884,14 @@
         el('span', { className: 'xl-model-title', text: slot.label }),
         tag(slot.slot_key, 'data'),
         slot.required ? tag('required', 'role') : null,
-      ].concat(missing.map((id) => tag('not in ' + envName(id), 'warning'))).concat(changed ? [
+        slot.extra ? tag('this experiment', 'accent', 'Added on this page; not saved on the environment') : null,
+      ].concat(missing.map((id) => tag('not in ' + envName(id), 'warning'))).concat(changed || slot.extra ? [
         el('span', { className: 'xl-spacer' }),
+        slot.extra ? el('button', {
+          type: 'button', className: 'xl-link-btn', text: 'Remove', 'aria-label': 'Remove ' + slot.label,
+          'data-xl-remove-endpoint': slot.slot_key, onClick: () => removeExtraEndpoint(slot.slot_key.slice('endpoint:'.length)),
+        }) : null,
+      ] : []).concat(changed ? [
         el('button', {
           type: 'button', className: 'xl-link-btn', text: 'Reset', 'aria-label': 'Reset ' + slot.label + ' to the base model',
           onClick: () => {

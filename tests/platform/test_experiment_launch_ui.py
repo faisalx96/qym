@@ -437,3 +437,59 @@ def test_json_styles_follow_the_design_language():
             classes = re.findall(r"\.([\w-]+)", part)
             assert classes and all(c.startswith("xlj-") for c in classes), part.strip()
 
+
+# --------------------------------------------------------------------------- extra LLM endpoints
+
+
+def test_add_llm_endpoint_controls_and_unconfirmed_slots():
+    # "+ Add LLM endpoint" previews endpoint:<name> through model-slots?propose_endpoint
+    # and keeps it on this experiment only (never PUT model-slots from the form).
+    assert "'/model-slots?propose_endpoint=' + encodeURIComponent(name)" in MODULE
+    assert "text: '+ Add LLM endpoint'" in MODULE
+    assert "st.extraEndpoints.forEach((name) => st.selected.forEach((id) => {" in MODULE
+    assert "tag('this experiment', 'accent'" in MODULE
+    assert "removeExtraEndpoint(slot.slot_key.slice('endpoint:'.length))" in MODULE
+    assert "sendJson('PUT'" not in MODULE and "method: 'PUT'" not in MODULE
+    # Bases and clones bring their unconfirmed endpoint bindings back as extra slots.
+    assert MODULE.count("await ensureExtraEndpoints(unconfirmedEndpoints(") == 2
+    # Managers can still edit the environment's saved groupings from here.
+    assert "text: 'Edit groupings'" in MODULE
+
+
+def test_slot_preview_for_a_new_endpoint(client, env):
+    url = f"/v1/projects/{P1}/eval-environments/{env.id}/model-slots"
+    res = client.get(url, headers=_headers(MEMBER), params={"propose_endpoint": "fast"})
+    assert res.status_code == 200, res.text
+    proposal = res.json()["proposal"]
+    assert proposal["slot_key"] == "endpoint:fast"
+    assert proposal["field_map"]["model"] == "/LLM_OVERRIDES/endpoints/fast/model"
+
+
+def test_form_launch_binds_a_project_model_to_an_added_endpoint(
+    client, session_factory, env, conn
+):
+    # The body buildRequest() sends after "+ Add LLM endpoint" → fast → a project model.
+    body = _form_body(env.id, conn.id)
+    body["spec"]["slot_bindings"]["endpoint:fast"] = {"connection_id": conn.id}
+    preview = client.post(_url(), headers=_headers(MEMBER), json=dict(body, dry_run=True))
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["errors"] == []
+
+    res = client.post(_url(), headers=_headers(MEMBER), json=body)
+    assert res.status_code == 200, res.text
+    (job,) = _jobs(session_factory, res.json()["id"])
+    with session_factory() as s:
+        environment = s.get(EvalEnvironment, env.id)
+        schema = s.get(EvalEnvironmentSchema, job.schema_id)
+        prep = prepare_dispatch(
+            s,
+            environment,
+            body=job.request_body,
+            slot_bindings=job.params["slot_bindings"],
+            slots=list_model_slots(s, schema.id),
+            descriptor=descriptor_for_schema(schema),
+        )
+    assert not prep.problems
+    fast = prep.body["env_overrides"]["LLM_OVERRIDES"]["endpoints"]["fast"]
+    assert fast["model"] == "gpt-4o"
+    assert fast["api_key"] == CONN_KEY
