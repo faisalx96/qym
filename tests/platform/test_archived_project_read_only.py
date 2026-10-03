@@ -22,7 +22,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi import HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -581,15 +581,53 @@ def _ids(rows):
     return [f"{row[0]} {row[1]}" for row in rows]
 
 
+def _write_routes(routes, prefix=""):
+    """Every (method, path) write route, inside included routers too.
+
+    Older FastAPI (0.110) copies included routes into ``app.routes`` as
+    APIRoute objects; newer FastAPI (0.142) keeps each included router as one
+    entry that holds ``original_router`` and its include prefix.
+    """
+    found = set()
+    for route in routes:
+        if isinstance(route, APIRoute):
+            found.update(
+                (method, prefix + route.path)
+                for method in route.methods - {"GET", "HEAD", "OPTIONS"}
+            )
+        elif hasattr(route, "original_router"):
+            context = getattr(route, "include_context", None)
+            found |= _write_routes(
+                route.original_router.routes,
+                prefix + getattr(context, "prefix", ""),
+            )
+    return found
+
+
+def test_route_inventory_finds_included_and_hidden_write_routes():
+    """The guard below is only as good as this inventory."""
+    inner = APIRouter()
+    inner.add_api_route("/hidden", lambda: None, methods=["DELETE"], include_in_schema=False)
+    outer = APIRouter()
+    outer.add_api_route("/write", lambda: None, methods=["POST", "PUT"])
+    outer.add_api_route("/read", lambda: None, methods=["GET"])
+    outer.include_router(inner, prefix="/inner")
+    app = FastAPI()
+    app.include_router(outer, prefix="/api")
+
+    assert _write_routes(app.routes) == {
+        ("POST", "/api/write"),
+        ("PUT", "/api/write"),
+        ("DELETE", "/api/inner/hidden"),
+    }
+
+
 def test_every_write_route_is_classified():
     """A new write route must be listed as refused, key-only or allowed."""
-    app = create_app()
-    routes = {
-        (method, route.path)
-        for route in app.routes
-        if isinstance(route, APIRoute)
-        for method in route.methods - {"GET", "HEAD", "OPTIONS"}
-    }
+    routes = _write_routes(create_app().routes)
+    # An empty inventory would report every listed route as stale and hide
+    # any new, unclassified one.
+    assert len(routes) > 100, len(routes)
     classified = [
         *((m, t) for m, t, *_ in REFUSED),
         *((m, t) for m, t, *_ in KEY_ONLY),
