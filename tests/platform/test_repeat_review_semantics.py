@@ -4,6 +4,8 @@ Final review of the P0 series (C008, C015, C009, C011, C024):
 
 - a reviewer's item-level score on a repeat run reaches every mean (it was
   accepted, marked Edited, and then re-derived from the passes);
+- so do the run page's Category Performance groups, with the item's pass
+  weight;
 - a pass whose metric was scored before its task was cancelled is a failed
   task in the source rows too, as in the published projection;
 - a pass slice keeps a reviewer's score on a failed task;
@@ -14,6 +16,9 @@ Final review of the P0 series (C008, C015, C009, C011, C024):
 """
 
 from __future__ import annotations
+
+import re
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -137,6 +142,112 @@ def test_item_level_edit_on_a_repeat_item_reaches_every_mean(database):
     expected["h"] = (0.4 + 0.2 + 0.5 + 0.2) / 4
     for name, payload in _means_everywhere(database).items():
         assert payload["metric_averages"]["h"] == pytest.approx(expected["h"]), name
+
+
+RUN_HTML = Path(__file__).resolve().parents[2] / "packages/platform/qym_platform/_static/dashboard/run.html"
+
+
+def _run_page_functions(*names):
+    source = RUN_HTML.read_text()
+    chunks = []
+    for name in names:
+        match = re.search(rf"^      function {name}\([^\n]*\n.*?^      }}$", source, re.M | re.S)
+        assert match, f"Missing production function: {name}"
+        chunks.append(match.group())
+    return "\n".join(chunks)
+
+
+# The run page's Category Performance groups (run.html getCategoryGroupStats).
+JS_CATEGORIES = (
+    "const window = ctx.window;\n"
+    + _run_page_functions(
+        "metricDirectionOf", "metricPassesFor", "rowScoreFor", "errorsLeftOutFor",
+        "passValuesFor", "passVectorFor", "getCategoryMetricScores",
+        "isListCategoryKey", "getMetadataCategoryValues", "getCategoryGroupStats",
+    )
+    + """
+const parseMetaList = raw => (Array.isArray(raw) ? raw : [raw]);
+const state = {
+  viewPass: input.viewPass || null, domainFilter: null, categoryBreakdownSort: 'name',
+  metricDirections: { h: 'minimize', q: 'maximize' },
+  metricThresholds: { h: 0.3, q: 0.8 }, metricIsBoolean: {},
+};
+const ids = new Set(input.rows.map(row => row.item_id || String(row.index)));
+const out = {};
+for (const key of ['topic', 'complexity']) {
+  out[key] = {};
+  ['h', 'q'].forEach((metric, index) => {
+    for (const stat of getCategoryGroupStats(key, input.rows, ids, metric, index, null, true)) {
+      out[key][stat.groupVal + ':' + metric] = [stat.avgScore, stat.passRate];
+    }
+  });
+}
+process.stdout.write(JSON.stringify(out));
+"""
+)
+
+
+def _categories(engine, view_pass=None):
+    """Item a alone is "easy", b-d "hard"; every item is topic "all"."""
+    rows = _rows(engine, "rr")["rows"]
+    for row in rows:
+        row["item_metadata"] = {
+            "complexity": "easy" if row["item_id"] == "a" else "hard",
+            "topic": "all",
+        }
+    if view_pass:
+        # The pass view's rows (run.html scopeRowToPass): the pass's own
+        # values and metadata.
+        rows = [
+            {
+                **row,
+                "metric_values": [row["pass_scores"][name][view_pass - 1] for name in ("h", "q")],
+                "metric_meta": {},
+                "pass_metric_meta": None,
+            }
+            for row in rows
+            if row["item_id"] == "a"
+        ]
+    return _node(JS_CATEGORIES, {"rows": rows, "viewPass": view_pass})
+
+
+def test_item_level_edit_on_a_repeat_item_reaches_the_category_means(database):
+    """Category Performance read an edited repeat item's passes, so a 0.9
+    item over passes it scored lower showed their mean, not 0.9."""
+    with Session(database) as db:
+        _repeat(db)
+        _edit(db, 0, "h", "0.9")
+        _edit(db, 0, "q", "0.1")
+    # Item a's passes: h [0.2, scorer error, 0.4], q [1, 0 (error), 1].
+    # Its reviewer value fills each of its 3 pass slots, like every other
+    # item's passes: h b [0.1, 0.3] + 1 error, c [0.5] * 3, d [0.2, 0.2]
+    # + 1 error; q b [1, 0, 0.5], c [0.5] * 3, d [1, 1, 0].
+    assert _categories(database) == {
+        "topic": {
+            "all:h": pytest.approx([(0.9 * 3 + 0.4 + 1.5 + 0.4) / 10, 4 / 12]),
+            "all:q": pytest.approx([(0.1 * 3 + 1.5 + 1.5 + 2) / 12, 3 / 12]),
+        },
+        "complexity": {
+            "easy:h": pytest.approx([0.9, 0]),
+            "hard:h": pytest.approx([2.3 / 7, 4 / 9]),
+            "easy:q": pytest.approx([0.1, 0]),
+            "hard:q": pytest.approx([5 / 9, 3 / 9]),
+        },
+    }
+    # The pass view shows that pass's own value, not the item's.
+    assert _categories(database, view_pass=3)["complexity"] == {
+        "easy:h": pytest.approx([0.4, 0]),
+        "easy:q": pytest.approx([1.0, 1]),
+    }
+
+    # A pass edit makes the item its passes again (the server drops
+    # item_edit), so h of item a is [0.2, 0.6] + 1 error.
+    with Session(database) as db:
+        _edit(db, 0, "h", "0.6", pass_number=3)
+    out = _categories(database)
+    assert out["complexity"]["easy:h"] == pytest.approx([0.4, 1 / 3])
+    assert out["topic"]["all:h"] == pytest.approx([(0.8 + 0.4 + 1.5 + 0.4) / 9, 5 / 12])
+    assert out["complexity"]["easy:q"] == pytest.approx([0.1, 0])
 
 
 def test_metric_scored_before_a_cancel_is_a_failed_task_in_every_view():

@@ -10312,15 +10312,25 @@
       // and counts them as fails in the pass rate.
       function getCategoryMetricScores(row, metric, metricIndex) {
         if (!state.viewPass && row.pass_scores && Array.isArray(row.pass_scores[metric])) {
+          let passes = null;
           if (errorsLeftOutFor(metric)) {
             const vector = passVectorFor(row, metric);
-            if (vector.values.length || vector.errors) return { scores: vector.values, errors: vector.errors };
+            if (vector.values.length || vector.errors) passes = { scores: vector.values, errors: vector.errors };
           } else {
             const passValues = row.pass_scores[metric]
               .map(value => window.QymMetrics.parseScoreValue(value))
               .filter(value => value !== null);
-            if (passValues.length > 0) return { scores: passValues, errors: 0 };
+            if (passValues.length > 0) passes = { scores: passValues, errors: 0 };
           }
+          // A repeat item a reviewer scored as a whole keeps that value in
+          // every mean (getRowScore). It fills each of the item's pass
+          // slots, so the item keeps its weight in the group.
+          if (passes && window.QymMetrics.isItemEdit(row.metric_meta?.[metric])) {
+            const { score } = rowScoreFor(row, metricIndex, metric);
+            const slots = passes.scores.length + passes.errors;
+            return { scores: score === null ? [] : new Array(slots).fill(score), errors: 0 };
+          }
+          if (passes) return passes;
         }
         const { score, isError } = rowScoreFor(row, metricIndex, metric);
         if (score === null) return { scores: [], errors: isError ? 1 : 0 };
