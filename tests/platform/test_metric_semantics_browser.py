@@ -284,3 +284,65 @@ def test_run_page_boolean_segments_match_their_filters_with_errors(browser):
         }
     finally:
         fixture.close()
+
+
+def _model_tiles(page, model):
+    card = page.locator(".model-card").filter(has_text=model).first
+    return card.evaluate(
+        """card => Object.fromEntries([...card.querySelectorAll('.model-stat-item')].map(tile => [
+             tile.querySelector('.stat-label').firstChild.textContent.trim(),
+             tile.querySelector('.stat-value').textContent.trim()]))"""
+    )
+
+
+def test_models_cards_show_no_average_for_a_model_without_scores(browser):
+    """accuracy is a lower-is-better percentage. Every beta item errored, so
+    beta has no average or best score; alpha's m0 runs measured 0."""
+    fixture = ModelsFixture(browser)
+    for row in fixture.rows:
+        row["metric_specs"] = {
+            "accuracy": {"score_type": "percentage", "direction": "minimize"},
+            "count": {"score_type": "number", "direction": "maximize"},
+        }
+    detail = fixture.detail
+
+    def scored(run_id):
+        data = detail(run_id)
+        for row in data["snapshot"]["rows"]:
+            row["status"] = "completed"
+            if run_id.startswith("m1-"):
+                row["metric_meta"] = {"accuracy": {"status": "error", "error": "judge 429"}}
+            elif run_id.startswith("m0-"):
+                row["metric_values"][0] = 0
+                if "pass_scores" in row:
+                    row["pass_scores"]["accuracy"] = [0, 0, 0]
+        return data
+
+    fixture.detail = scored
+    try:
+        fixture.open()
+        page = fixture.page
+        page.locator("#models-ranking h3").wait_for()
+        stats = fixture.stats()
+        beta = next(stats[key] for key in stats if key.startswith("beta"))
+        assert (beta["avgScore"], beta["maxAtK"]) == (None, None)
+        tiles = _model_tiles(page, "beta")
+        min_at_k = next(label for label in tiles if label.startswith("Min@"))
+        assert (tiles["Avg Score"], tiles[min_at_k]) == ("—", "—")
+        assert tiles["Errors"] != "0"
+        # Measured zeros still read as 0%.
+        alpha = [stats[key] for key in stats if key.startswith("alpha")]
+        assert any(model["avgScore"] == 0 for model in alpha)
+        zero = page.locator(".model-card").filter(has_text="alpha").evaluate_all(
+            """cards => cards.map(card => [...card.querySelectorAll('.model-stat-item')]
+                 .find(tile => tile.textContent.includes('Avg Score'))
+                 .querySelector('.stat-value').textContent.trim())"""
+        )
+        assert "0%" in zero
+        # The model without a score is ranked last.
+        ranked = page.evaluate(
+            "[...document.querySelectorAll('#models-ranking .ranking-item')].map(el => el.textContent)"
+        )
+        assert "beta" in ranked[-1]
+    finally:
+        fixture.close()
