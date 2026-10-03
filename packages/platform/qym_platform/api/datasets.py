@@ -9,6 +9,7 @@ import unicodedata
 from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict, Iterable, Optional
+from urllib.parse import quote
 from uuid import uuid4
 
 from fastapi import APIRouter, Body, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
@@ -71,6 +72,23 @@ def _slugify(value: str) -> str:
             chars.append("-")
     slug = "".join(chars)[:_MAX_SLUG_LENGTH].strip("-")
     return slug or f"dataset-{uuid4().hex[:8]}"
+
+
+def _ascii_name(value: str, default: str) -> str:
+    """ASCII letters, digits, ".", "_" and "-" from value (accents folded)."""
+    folded = unicodedata.normalize("NFKD", value or "").encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", folded).strip("-._") or default
+
+
+def _attachment_disposition(filename: str, fallback: str) -> str:
+    """Content-Disposition for a file name in any script (RFC 6266).
+
+    Header values are Latin-1, so a Unicode name goes in ``filename*`` as UTF-8.
+    ``filename`` keeps an ASCII fallback for clients that ignore ``filename*``.
+    """
+    if filename == fallback:
+        return f'attachment; filename="{filename}"'
+    return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(filename, safe='')}"
 
 
 def _labels(value: Any) -> list[str]:
@@ -2528,10 +2546,11 @@ def download_version(
         for item in items
     ]
     filename = f"{dataset.slug}-{version.version}.jsonl"
+    fallback = f"{_ascii_name(dataset.slug, 'dataset')}-{_ascii_name(version.version, 'version')}.jsonl"
     return Response(
         "\n".join(lines) + ("\n" if lines else ""),
         media_type="application/x-ndjson",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": _attachment_disposition(filename, fallback)},
     )
 
 

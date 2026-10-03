@@ -6,10 +6,11 @@ upload intents, JSON/JSONL validation, and legacy CSV encoding detection.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 import pytest
 from cryptography.fernet import Fernet
@@ -305,6 +306,38 @@ def test_two_arabic_uploads_do_not_merge_or_move_production(client_and_session):
     assert second.json()["version"]["version"] == "v1"
     first_items = _items(client, first.json()["dataset"]["slug"], "production")
     assert [row["input"] for row in first_items] == ["ما هي عاصمة السعودية؟"]
+
+
+@pytest.mark.parametrize(
+    "name, slug, fallback",
+    [
+        ("بيانات التقييم", "بيانات-التقييم", "dataset-v1.jsonl"),
+        ("评估数据", "评估数据", "dataset-v1.jsonl"),
+        ("Café crème", "café-crème", "cafe-creme-v1.jsonl"),
+        ("Plain Name", "plain-name", None),
+    ],
+)
+def test_version_download_names_the_file_in_any_script(client_and_session, name, slug, fallback):
+    """A Unicode slug in the Latin-1 Content-Disposition header returned 500."""
+    client, SessionLocal = client_and_session
+    content = "question,answer\nما هي عاصمة السعودية؟,الرياض\n".encode("utf-8")
+    uploaded = _upload(
+        client, name=name, content=content, input_cols="question", expected_cols="answer", publish="true"
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    assert uploaded.json()["dataset"]["slug"] == slug
+
+    resp = client.get(f"/v1/datasets/{_ref(slug)}/versions/v1:download", headers=AUTH)
+    assert resp.status_code == 200, resp.text
+    assert [json.loads(line)["input"] for line in resp.text.splitlines()] == ["ما هي عاصمة السعودية؟"]
+    disposition = resp.headers["content-disposition"]
+    if fallback is None:
+        # ASCII names keep the header they had before.
+        assert disposition == f'attachment; filename="{slug}-v1.jsonl"'
+    else:
+        plain, _, encoded = disposition.partition("; filename*=UTF-8''")
+        assert plain == f'attachment; filename="{fallback}"'
+        assert unquote(encoded) == f"{slug}-v1.jsonl"
 
 
 def test_upload_never_merges_into_a_dataset_with_a_different_name(client_and_session):
