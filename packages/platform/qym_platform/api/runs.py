@@ -4607,14 +4607,18 @@ def run_group_metrics(
     # A pass whose scorer or task failed scores 0. A lower-is-better metric
     # would read that 0 as its best value, so there an errored pass is None:
     # never a pass, and left out of averages and the best score
-    # (services/run_means.py). Only then are the pass metadata read.
+    # (services/run_means.py). At a threshold of 0 or below the 0 of a
+    # failed pass would pass: ``eligible`` keeps it a failed pass. Only in
+    # those two cases are the pass metadata read; elsewhere a failed pass's
+    # 0 is below the threshold.
     left_out = errors_left_out(direction)
+    read_meta = left_out or threshold <= 0
     columns = [
         RunItemPassScore.item_id,
         RunItemPassScore.pass_number,
         RunItemPassScore.score_numeric,
     ]
-    if left_out:
+    if read_meta:
         columns += [
             RunItemPassScore.meta,
             RunItemPassScore.label,
@@ -4629,13 +4633,22 @@ def run_group_metrics(
         .order_by(RunItemPassScore.item_id, RunItemPassScore.pass_number)
         .all()
     )
+    eligible: Dict[str, list] = {}
     score_rows = []
     for row in rows:
         item_id, pass_number, score_numeric = row[:3]
-        if left_out:
+        errored = False
+        if read_meta:
             meta, label, explanation = row[3:]
-            if is_metric_error(meta) or is_task_error_pass(label, meta, explanation):
-                numeric = None
+            errored = is_metric_error(meta) or is_task_error_pass(
+                label, meta, explanation
+            )
+            if errored:
+                numeric = (
+                    None
+                    if left_out
+                    else float(score_numeric) if score_numeric is not None else 0.0
+                )
             elif score_numeric is None:
                 continue
             else:
@@ -4643,7 +4656,8 @@ def run_group_metrics(
         else:
             numeric = float(score_numeric) if score_numeric is not None else 0.0
         items_scores.setdefault(item_id, []).append(numeric)
-        score_rows.append((str(item_id), int(pass_number), numeric))
+        eligible.setdefault(item_id, []).append(not errored)
+        score_rows.append((str(item_id), int(pass_number), numeric, errored))
 
     run_config = run.run_config if isinstance(run.run_config, dict) else {}
     raw_report_k = run_config.get("report_k")
@@ -4658,8 +4672,9 @@ def run_group_metrics(
         k=samples,
         report_k=report_k,
         direction=direction or "maximize",
+        eligible=eligible,
     )
-    if left_out and all(score is None for _, _, score in score_rows):
+    if left_out and all(row[2] is None for row in score_rows):
         # Every pass errored: no average or best score, as the run mean (0
         # would read as this lower-is-better metric's best value).
         stats["avg_at_k"] = stats["max_at_k"] = None
@@ -4671,6 +4686,7 @@ def run_group_metrics(
         samples=samples,
         rows=score_rows,
         items_scores=items_scores,
+        eligible=eligible,
         direction=direction or "maximize",
     )
     return {

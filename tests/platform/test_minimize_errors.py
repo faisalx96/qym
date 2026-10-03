@@ -22,6 +22,7 @@ from qym_platform.api import runs as runs_api
 from qym_platform.auth import Principal
 from qym_platform.db.dashboard_models import DashboardRunSummary as Summary
 from qym_platform.db.models import (
+    Run,
     RunItemAttempt,
     RunItemPassScore,
     RunItemScore,
@@ -851,6 +852,129 @@ def test_root_cause_dashboard_and_insight_verdicts_follow_the_rule(database):
             items["r", "c"], scores["r", "c", "h"], specs["r", "h"]
         )
         assert result == "fail"
+
+
+def test_repeat_items_whose_every_pass_failed_never_pass_a_zero_threshold(database):
+    """A higher-is-better metric at a declared threshold of 0: an item whose
+    passes all failed stores 0 and read as a pass on Insights and the
+    root-cause dashboard. A mixed item stays a real measurement."""
+    from qym_platform.db.models import RunItem
+    from qym_platform.services import insights_engine
+    from qym_platform.services.root_cause_dashboard import (
+        DashboardFilters,
+        _load_snapshot,
+        _score_outcome,
+    )
+    from qym_platform.services.run_means import errored_repeat_items
+
+    with Session(database) as db:
+        run(
+            db,
+            run_id="zt",
+            metrics=["q"],
+            samples=2,
+            status=RunWorkflowStatus.COMPLETED,
+            run_metadata={"total_items": 4},
+        )
+        db.add(_spec("zt", "q", 0, "maximize", score_type="number", pass_threshold=0.0))
+        task, scorer, ok = ({}, "error"), ({"status": "error"}, None), ({}, None)
+        passes = {
+            "tasks": [task, task],
+            "scorer": [scorer, scorer],
+            "mixed": [task, ok],
+            "zero": [ok, ok],
+        }
+        for index, (item_id, outcomes) in enumerate(passes.items()):
+            item(db, item_id=item_id, run_id="zt", index=index)
+            for number, (meta, label) in enumerate(outcomes, start=1):
+                db.add(
+                    RunItemPassScore(
+                        run_id="zt",
+                        item_id=item_id,
+                        metric_name="q",
+                        pass_number=number,
+                        score_numeric=0.0,
+                        meta=dict(meta),
+                        label=label,
+                    )
+                )
+            db.add(
+                RunItemScore(
+                    run_id="zt",
+                    item_id=item_id,
+                    metric_name="q",
+                    score_numeric=0.0,
+                    score_raw=0.0,
+                    meta={"sample_reducer": "mean", "samples_observed": 2},
+                )
+            )
+        db.commit()
+
+        specs = db.query(RunMetricSpec).filter_by(run_id="zt").all()
+        assert errored_repeat_items(db, specs) == {
+            ("zt", "tasks", "q"),
+            ("zt", "scorer", "q"),
+        }
+        snapshot = _load_snapshot(db, "p", DashboardFilters(), include_changes=False)
+        assert snapshot.errored_passes == {("zt", "tasks", "q"), ("zt", "scorer", "q")}
+        items = {row.item_id: row for row in db.query(RunItem).filter_by(run_id="zt")}
+        scores = {
+            row.item_id: row for row in db.query(RunItemScore).filter_by(run_id="zt")
+        }
+        zt = db.get(Run, "zt")
+        verdicts = {
+            item_id: (
+                _score_outcome(
+                    items[item_id],
+                    scores[item_id],
+                    specs[0],
+                    ("zt", item_id, "q") in snapshot.errored_passes,
+                    zt,
+                ),
+                insights_engine._metric_result(
+                    items[item_id],
+                    scores[item_id],
+                    specs[0],
+                    zt,
+                    ("zt", item_id, "q") in snapshot.errored_passes,
+                ),
+            )
+            for item_id in passes
+        }
+        assert verdicts == {
+            "tasks": ("failed", "fail"),
+            "scorer": ("failed", "fail"),
+            "mixed": ("passed", "success"),
+            "zero": ("passed", "success"),
+        }
+        assert {("zt", "tasks"), ("zt", "scorer")} <= snapshot.failed_pairs
+        assert ("zt", "mixed") not in snapshot.failed_pairs
+
+        group = runs_api.run_group_metrics(
+            "zt", metric=None, threshold=None, db=db, principal=_principal(db)
+        )
+    # Only the scored zeros pass: mixed once, zero twice.
+    assert group["group"]["pass_at_k"] == pytest.approx(2 / 4)
+    assert group["group"]["pass_hat_k"] == pytest.approx(1 / 4)
+    assert group["group"]["avg_at_k"] == 0.0
+    assert group["distribution"] == [2, 1, 1]
+
+
+def test_repeat_analysis_cache_signature_holds_each_pass_error():
+    from qym_platform.services.repeat_analysis import (
+        METHOD_VERSION,
+        score_signature,
+    )
+
+    assert METHOD_VERSION == 2
+    scored = score_signature([("a", 1, 0.0, False)])
+    assert scored != score_signature([("a", 1, 0.0, True)])
+    assert build_repeat_analysis(
+        {"a": [0.0, 0.0]},
+        threshold=0.0,
+        samples=2,
+        eligible={"a": [False, True]},
+    )["distribution"] == [0, 1, 0]
 
 
 def test_scorer_label_error_and_reviewed_task_failures_are_scores():

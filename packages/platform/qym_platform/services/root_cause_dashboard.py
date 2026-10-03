@@ -28,7 +28,7 @@ from qym_platform.db.models import (
 )
 from qym_platform.services.approved_diagnoses import load_approved_diagnoses
 from qym_platform.services.run_means import (
-    errored_pass_items,
+    errored_repeat_items,
     is_metric_error,
     item_not_received,
     mean_task_errors,
@@ -194,6 +194,10 @@ def _score_outcome(
         return "unscored"
     if _task_failed(item, run) or _errored_for_minimize(score, spec, pass_errored):
         return "error"
+    if pass_errored:
+        # Every pass errored (errored_repeat_items): the stored 0 is no
+        # measurement and fails, also at a threshold of 0 or below.
+        return "failed"
     if score is None or score.score_numeric is None:
         return "unscored"
     value = float(score.score_numeric)
@@ -427,12 +431,11 @@ def _load_snapshot(
     }
     spec_rows = db.query(RunMetricSpec).filter(RunMetricSpec.run_id.in_(run_ids)).all()
     snapshot.metric_specs = {(row.run_id, row.metric_name): row for row in spec_rows}
-    # Only lower-is-better metrics judge an item by its errored passes.
-    minimize_specs = [row for row in spec_rows if _direction(row) == "minimize"]
-    snapshot.errored_passes = errored_pass_items(
-        db,
-        sorted({row.run_id for row in minimize_specs}),
-        metrics={row.metric_name for row in minimize_specs},
+    repeat_run_ids = {run.id for run in runs if int(run.samples or 1) > 1}
+    snapshot.errored_passes = set(
+        errored_repeat_items(
+            db, [row for row in spec_rows if row.run_id in repeat_run_ids]
+        )
     )
     review_statuses = _latest_review_statuses(db, run_ids)
     approved_diagnoses = load_approved_diagnoses(db, run_ids, item_rows)

@@ -414,7 +414,7 @@ def test_detail_passes_and_group_metrics_endpoints():
             "bootstrap_iterations": 2000,
             "minimum_items": 20,
             "method": "item_bootstrap",
-            "method_version": 1,
+            "method_version": 2,
         }
 
 

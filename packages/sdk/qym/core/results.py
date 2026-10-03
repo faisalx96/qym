@@ -355,20 +355,32 @@ class EvaluationResult:
         lower-is-better metric: never a pass, and left out of averages and
         the best score. A pass with no score is skipped.
         """
+        return self._item_pass_slots(metric_name)[0]
+
+    def _item_pass_slots(
+        self, metric_name: Optional[str] = None
+    ) -> Tuple[Dict[str, List[Optional[float]]], Dict[str, List[bool]]]:
+        """:meth:`item_pass_scores` plus one success flag per score.
+
+        A failed pass is never a success, also where its 0.0 meets a
+        threshold of 0 or below; the flag keeps that apart from its numeric
+        value. Both maps have the same items and lengths.
+        """
         metric = metric_name or (self.metrics[0] if self.metrics else None)
         if metric is None:
-            return {}
+            return {}, {}
         error_value = None if self.errors_left_out(metric) else 0.0
-        out: Dict[str, List[Optional[float]]] = {}
+        scores_out: Dict[str, List[Optional[float]]] = {}
+        eligible_out: Dict[str, List[bool]] = {}
         for item_id, outcomes in self._metric_outcomes(metric).items():
-            scores = [
-                value if kind == "scored" else error_value
-                for value, kind in outcomes
-                if kind != "unscored"
-            ]
-            if scores:
-                out[item_id] = scores
-        return out
+            counted = [(value, kind) for value, kind in outcomes if kind != "unscored"]
+            if counted:
+                scores_out[item_id] = [
+                    value if kind == "scored" else error_value
+                    for value, kind in counted
+                ]
+                eligible_out[item_id] = [kind == "scored" for _, kind in counted]
+        return scores_out, eligible_out
 
     def pass_at(
         self,
@@ -386,11 +398,13 @@ class EvaluationResult:
         if k > max(self.samples, 1):
             raise ValueError(f"k ({k}) cannot exceed samples ({self.samples})")
         metric = metric or (self.metrics[0] if self.metrics else None)
+        items_scores, eligible = self._item_pass_slots(metric)
         return estimate_pass_at(
-            self.item_pass_scores(metric),
+            items_scores,
             k,
             threshold=self._pass_threshold(metric, threshold),
             direction=self.metric_direction(metric) or "maximize",
+            eligible=eligible,
         )
 
     def pass_hat(
@@ -405,11 +419,13 @@ class EvaluationResult:
         if k > max(self.samples, 1):
             raise ValueError(f"k ({k}) cannot exceed samples ({self.samples})")
         metric = metric or (self.metrics[0] if self.metrics else None)
+        items_scores, eligible = self._item_pass_slots(metric)
         return estimate_pass_hat(
-            self.item_pass_scores(metric),
+            items_scores,
             k,
             threshold=self._pass_threshold(metric, threshold),
             direction=self.metric_direction(metric) or "maximize",
+            eligible=eligible,
         )
 
     def group_stats(
@@ -443,13 +459,14 @@ class EvaluationResult:
             )
         metric = metric or (self.metrics[0] if self.metrics else None)
         direction = self.metric_direction(metric)
-        items_scores = self.item_pass_scores(metric)
+        items_scores, eligible = self._item_pass_slots(metric)
         stats: Dict[str, Any] = _group_stats(
             items_scores,
             threshold=self._pass_threshold(metric, threshold),
             k=max(self.samples, 1),
             report_k=report_k,
             direction=direction or "maximize",
+            eligible=eligible,
         )
         if self.errors_left_out(metric) and all(
             score is None for scores in items_scores.values() for score in scores

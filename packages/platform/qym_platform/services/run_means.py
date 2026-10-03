@@ -672,12 +672,17 @@ def _repeat_pass_outcomes(db, run_id, affected):
     ]
 
 
-def errored_pass_items(db, run_ids, metrics=None) -> set:
+def errored_pass_items(db, run_ids, metrics=None, *, every_pass=False) -> set:
     """``(run_id, item_id, metric)`` of repeat items with an errored pass.
 
     A pass whose scorer or task failed. Item-level verdicts of a
     lower-is-better metric treat such an item as errored (never a pass),
     like ``metrics.js`` ``getRowScore``. ``metrics`` limits the metrics read.
+
+    ``every_pass`` keeps only the items whose every counted pass errored (a
+    pass not scored yet does not count). A higher-is-better item value is
+    then only the 0s of failed passes, which a threshold of 0 or below would
+    read as a pass.
     """
     from qym_platform.db.models import RunItemPassScore
 
@@ -704,6 +709,8 @@ def errored_pass_items(db, run_ids, metrics=None) -> set:
     for run_id, item_id, metric, meta, label, explanation in query:
         if is_metric_error(meta) or is_task_error_pass(label, meta, explanation):
             errored.add((run_id, item_id, metric))
+    if errored and every_pass:
+        errored -= _items_with_a_healthy_pass(db, errored)
     if errored:
         # An item a reviewer scored as a whole is judged by that score.
         from qym_platform.db.models import RunItemScore
@@ -724,6 +731,71 @@ def errored_pass_items(db, run_ids, metrics=None) -> set:
                 if is_item_edit({ITEM_EDIT_KEY: item_edit}):
                     errored.discard((run_id, item_id, metric))
     return errored
+
+
+def _items_with_a_healthy_pass(db, keys) -> set:
+    """The ``(run_id, item_id, metric)`` keys with a scored pass that did not
+    error."""
+    from qym_platform.db.models import RunItemPassScore
+
+    healthy = set()
+    keys = sorted(keys)
+    for start in range(0, len(keys), 400):
+        chunk = set(keys[start : start + 400])
+        for run_id, item_id, metric, meta, label, explanation in db.query(
+            RunItemPassScore.run_id,
+            RunItemPassScore.item_id,
+            RunItemPassScore.metric_name,
+            RunItemPassScore.meta,
+            RunItemPassScore.label,
+            RunItemPassScore.explanation,
+        ).filter(
+            RunItemPassScore.run_id.in_({key[0] for key in chunk}),
+            RunItemPassScore.item_id.in_({key[1] for key in chunk}),
+            RunItemPassScore.metric_name.in_({key[2] for key in chunk}),
+            RunItemPassScore.score_numeric.isnot(None),
+        ):
+            key = (run_id, item_id, metric)
+            if (
+                key in chunk
+                and not is_metric_error(meta)
+                and not is_task_error_pass(label, meta, explanation)
+            ):
+                healthy.add(key)
+    return healthy
+
+
+def errored_repeat_items(db, specs) -> frozenset:
+    """``(run_id, item_id, metric)`` of repeat items an item verdict reads
+    as an error, never a pass.
+
+    ``specs`` are the runs' ``RunMetricSpec`` rows. A lower-is-better item
+    with any errored pass is errored (its errors are left out of its value).
+    Any other item is errored only when every counted pass errored: a mixed
+    item's value is a real measurement in which failed passes count as 0.
+    Those are read only where that 0 meets the threshold, a declared
+    ``pass_threshold`` of 0 or below; elsewhere the item fails anyway.
+    """
+    minimize, others = set(), set()
+    for spec in specs:
+        key = (spec.run_id, spec.metric_name)
+        direction = str(spec.direction or "").strip().lower()
+        if direction in {"minimize", "lower", "lower_is_better"}:
+            minimize.add(key)
+        elif spec.pass_threshold is not None and float(spec.pass_threshold) <= 0:
+            others.add(key)
+    errored = set()
+    for pairs, every_pass in ((minimize, False), (others, True)):
+        if not pairs:
+            continue
+        found = errored_pass_items(
+            db,
+            sorted({run_id for run_id, _ in pairs}),
+            metrics={metric for _, metric in pairs},
+            every_pass=every_pass,
+        )
+        errored.update(key for key in found if (key[0], key[2]) in pairs)
+    return frozenset(errored)
 
 
 def pass_metric_totals(db, run_ids) -> Dict[str, Dict[Tuple[int, str], MetricTotals]]:

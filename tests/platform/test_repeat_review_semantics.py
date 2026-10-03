@@ -302,14 +302,23 @@ def test_item_without_a_stored_completion_is_marked_in_the_run_payload(database)
 def test_group_metrics_read_pass_metadata_only_for_lower_is_better_metrics(database):
     with Session(database) as db:
         _repeat(db)
-    for metric, reads_meta in (("q", False), ("h", True)):
+    # A failed pass's 0 passes a threshold of 0 or below: only there does a
+    # higher-is-better metric need the error verdicts.
+    for metric, threshold, reads_meta in (
+        ("q", None, False),
+        ("h", None, True),
+        ("q", 0.0, True),
+    ):
         with Session(database) as db, _Statements(database) as sql:
             runs_api.run_group_metrics(
-                "rr", metric=metric, threshold=None, db=db, principal=_principal(db)
+                "rr", metric=metric, threshold=threshold, db=db, principal=_principal(db)
             )
         pass_reads = [s for s in sql if "from run_item_pass_scores" in s]
         assert pass_reads, metric
-        assert any("run_item_pass_scores.meta" in s for s in pass_reads) is reads_meta, metric
+        assert any("run_item_pass_scores.meta" in s for s in pass_reads) is reads_meta, (
+            metric,
+            threshold,
+        )
 
 
 def test_source_and_projection_reads_stay_within_the_run(database):

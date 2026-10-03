@@ -13,7 +13,7 @@ from qym_platform.db.models import Run, RunItem, RunItemScore, RunMetricSpec, Sp
 from qym_platform.services.approved_diagnoses import load_approved_diagnoses
 from qym_platform.services.insights_data import InsightData, RootCauseData
 from qym_platform.services.run_means import (
-    errored_pass_items,
+    errored_repeat_items,
     is_metric_error,
     item_not_received,
 )
@@ -126,12 +126,17 @@ def _metric_result(
     ):
         return None
     direction = _clean_label(spec.direction).lower() if spec is not None else ""
+    if pass_errored:
+        # A repeat item whose passes errored (errored_repeat_items): any of
+        # them for a lower-is-better metric, every one otherwise. Its stored
+        # value is no measurement and would read as a pass at a threshold
+        # of 0 or below.
+        return "fail"
     if direction in {"minimize", "lower", "lower_is_better"} and (
-        pass_errored or (score is not None and is_metric_error(score.meta))
+        score is not None and is_metric_error(score.meta)
     ):
-        # A lower-is-better metric leaves scorer errors (and a repeat item's
-        # errored passes) out of its mean; its stored 0 would otherwise read
-        # as a pass (services/run_means.py).
+        # A lower-is-better metric leaves scorer errors out of its mean; its
+        # stored 0 would otherwise read as a pass (services/run_means.py).
         return "fail"
     if score is None or score.score_numeric is None:
         return None
@@ -370,19 +375,9 @@ def build_insight_data(
         db.query(RunMetricSpec).filter(RunMetricSpec.run_id.in_(loaded_run_ids)).all()
     )
     specs = {(spec.run_id, spec.metric_name): spec for spec in spec_rows}
-    # Only lower-is-better metrics judge a repeat item by its errored passes.
-    minimize_specs = [
-        spec
-        for spec in spec_rows
-        if _clean_label(spec.direction).lower()
-        in {"minimize", "lower", "lower_is_better"}
-    ]
-    errored_passes = frozenset(
-        errored_pass_items(
-            db,
-            sorted({spec.run_id for spec in minimize_specs}),
-            metrics={spec.metric_name for spec in minimize_specs},
-        )
+    repeat_run_ids = {run.id for run in runs if int(run.samples or 1) > 1}
+    errored_passes = errored_repeat_items(
+        db, [spec for spec in spec_rows if spec.run_id in repeat_run_ids]
     )
     trace_keys = {
         (item.run_id, item.trace_id)

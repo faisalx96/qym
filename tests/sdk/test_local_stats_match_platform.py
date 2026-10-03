@@ -440,3 +440,61 @@ async def test_a_metric_reporting_its_own_error_status_counts_as_zero_on_both_si
     judged_group = result.group_stats("judged")
     assert judged_group["pass_at_k"] == pytest.approx(4 / 5)
     assert judged_group["pass_hat_k"] == pytest.approx(2 / 5)
+
+
+@pytest.mark.parametrize("threshold", [0.0, -1.0])
+@pytest.mark.asyncio
+async def test_failed_passes_never_pass_at_a_zero_or_negative_threshold_on_both_sides(
+    platform, tmp_path, threshold
+):
+    """A declared threshold of 0 or below: every failed pass still counts as
+    0 in the mean, and is still never a pass. Only scored zeros pass (both
+    sides read Pass@2, Pass^2 and Reliability 1.0 before)."""
+    engine, client = platform
+    calls = {}
+
+    def task(value):
+        # item-3 fails both passes, item-1 fails pass 1.
+        n = calls[value] = calls.get(value, 0) + 1
+        if value == "3" or (value == "1" and n == 1):
+            raise RuntimeError("task failed")
+        return f"{value}:{n}"
+
+    def zero(output, expected=None):
+        if output == "2:2":
+            raise RuntimeError("cannot judge")
+        return 0.0
+
+    evaluator = Evaluator(
+        task,
+        _dataset(),
+        [
+            Metric(
+                zero, score_type="number", direction="maximize", pass_threshold=threshold
+            )
+        ],
+        samples=2,
+        config=_config(tmp_path, "zero-threshold"),
+    )
+    result = await evaluator.arun(show_tui=False, auto_save=False)
+    run_id = _run_id(engine)
+
+    body = client.get(f"/api/runs/{run_id}/group-metrics", headers=UI).json()
+    group, mine = body["group"], result.group_stats("zero")
+    assert body["threshold"] == mine["threshold"] == threshold
+    expected = {
+        "pass_at_k": 4 / 5,  # all but item-3
+        "pass_hat_k": 2 / 5,  # item-0 and item-4
+        "reliability": (1 + 0.5 + 0.5 + 1) / 4,
+        "consistency": (1 + 0 + 0 + 1 + 1) / 5,
+        "avg_at_k": 0.0,
+        "max_at_k": 0.0,
+    }
+    for key, value in expected.items():
+        assert mine[key] == pytest.approx(value), key
+        assert group[key] == pytest.approx(value), key
+    assert body["band"]["2"]["pass_at_k"] == pytest.approx(4 / 5)
+    assert body["band"]["1"]["pass_at_k"] == pytest.approx(result.pass_at(1))
+    assert body["distribution"] == [1, 2, 2]
+    # The public score lists keep each failed pass at 0.0.
+    assert result.item_pass_scores("zero")["item-3"] == [0.0, 0.0]
