@@ -469,11 +469,14 @@ def test_maintenance_job_repairs_runs_whose_item_failed_events_were_never_projec
 ):
     """Runs ingested before live events were projected: the upgrade job finds
     passes that failed only through item_failed and rebuilds just those runs."""
+    from unittest.mock import patch
+
     from sqlalchemy import insert
+    from sqlalchemy.exc import OperationalError
     from sqlalchemy.orm import sessionmaker
 
     from qym_platform.db.maintenance_models import MaintenanceJob
-    from qym_platform.services import maintenance
+    from qym_platform.services import dashboard_summaries, maintenance
 
     def seed(db, run_id, *, failed_attempt=False, bulk=True):
         _repeat_run(db, run_id)
@@ -513,10 +516,25 @@ def test_maintenance_job_repairs_runs_whose_item_failed_events_were_never_projec
         job = maintenance.enqueue(db, "project_item_failure_events", {"window": 1})
         db.commit()
         job_id = job.id
+    # Each run's repair commits alone, and a deadlock with the worker retries.
+    real_repair = dashboard_summaries.request_dashboard_repair
+    calls = []
+
+    def flaky_repair(db, run_id, **kwargs):
+        calls.append(run_id)
+        if len(calls) == 1:
+            raise OperationalError("SELECT ... FOR UPDATE", {}, Exception("deadlock detected"))
+        return real_repair(db, run_id, **kwargs)
+
     worker = maintenance.MaintenanceWorker(factory, database)
-    assert worker.tick() == "succeeded"
+    with patch.object(dashboard_summaries, "request_dashboard_repair", flaky_repair), patch.object(
+        maintenance.time, "sleep", lambda _seconds: None
+    ):
+        assert worker.tick() == "succeeded"
+    assert calls == ["missed", "missed"]
     with factory() as db:
         row = db.get(MaintenanceJob, job_id)
+        assert "retrying after" in (row.log or "")
         assert row.progress["phase"] == "done"
         # Only the run whose failure was never projected is rebuilt.
         assert row.progress["runs"] == ["missed"]

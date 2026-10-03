@@ -930,6 +930,7 @@ def _project_item_failure_events(ctx: JobContext) -> bool:
     window = max(1, int(ctx.params.get("window", 200)))
     cursor = str(ctx.progress.get("cursor") or "")
     repaired = set(ctx.progress.get("runs") or [])
+    affected = set()
     with ctx.session() as db:
         run_ids = list(
             db.scalars(
@@ -991,10 +992,13 @@ def _project_item_failure_events(ctx: JobContext) -> bool:
                 if (run_id, item_id, pass_number) not in failed
                 and (run_id, "legacy_event:" + event_id) not in projected
             }
-            for run_id in sorted(affected - repaired):
-                if request_dashboard_repair(db, run_id, publish=False):
-                    repaired.add(run_id)
-        db.commit()
+    # Each repair commits alone: holding one run's dashboard locks while
+    # requesting the next can deadlock with the worker publishing that run.
+    for run_id in sorted(affected - repaired):
+        if _in_own_transaction(
+            ctx, lambda db, run_id=run_id: request_dashboard_repair(db, run_id, publish=False)
+        ):
+            repaired.add(run_id)
     ctx.progress["runs"] = sorted(repaired)
     ctx.progress["runs_repaired"] = len(repaired)
     if len(run_ids) < window:
