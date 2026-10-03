@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -29,6 +30,7 @@ from qym_platform.db.models import (
     Run,
     RunItem,
     RunItemScore,
+    RunMetricSpec,
     User,
     UserRole,
 )
@@ -611,6 +613,97 @@ def test_dataset_runs_endpoint(client_and_session):
     # Version filter that does not exist returns 404 from version resolution.
     missing = client.get("/v1/datasets/runs-ds/runs?version=v9", headers=_bearer())
     assert missing.status_code == 404
+
+
+def test_dataset_score_payloads_carry_the_declared_metric_directions(client_and_session):
+    """Each score the datasets page colours comes with its metric's direction.
+
+    A row of one run carries that run's declared directions. A value that spans
+    runs carries a direction only when every run that scored it declares the
+    same one; a run that declares none, or runs that disagree, leave it None.
+    """
+    client, SessionLocal = client_and_session
+    created = client.post("/v1/datasets", headers=_bearer(), json={"name": "Dir DS", "slug": "dir-ds"})
+    assert created.status_code == 200
+    dataset_id = created.json()["dataset"]["id"]
+    assert client.post("/v1/datasets/dir-ds/versions", headers=_bearer(), json={"version": "v1"}).status_code == 200
+    item = client.post(
+        "/v1/datasets/dir-ds/versions/v1/items",
+        headers=_bearer(),
+        json={"item_id": "case-1", "input": "q", "expected_output": "a"},
+    )
+    assert item.status_code == 200
+    published = client.post("/v1/datasets/dir-ds/versions/v1:publish", headers=_bearer(), json={})
+    assert published.status_code == 200
+    version_id = published.json()["version"]["id"]
+
+    declared = {
+        "run-a": {"acc": "maximize", "lat": "minimize", "mix": "maximize", "tone": None, "old": "maximize"},
+        "run-b": {"acc": "maximize", "lat": "minimize", "mix": "minimize"},
+        # Declares acc the other way but never scores it, so acc keeps its direction.
+        "run-c": {"acc": "minimize"},
+        # A deleted run is not on the page, so its directions do not count.
+        "run-deleted": {"acc": "minimize", "lat": "maximize"},
+    }
+    scored = {
+        "run-a": ["acc", "lat", "mix", "tone", "old"],
+        "run-b": ["acc", "lat", "mix"],
+        # Scores old with no spec at all: a run that declares no direction.
+        "run-c": ["old"],
+        "run-deleted": ["acc", "lat"],
+    }
+    with SessionLocal() as session:
+        for run_id, metrics in scored.items():
+            session.add(
+                Run(
+                    id=run_id,
+                    project_id="project-1",
+                    created_by_user_id="user-1",
+                    owner_user_id="user-1",
+                    task="task",
+                    dataset="Dir DS",
+                    dataset_id=dataset_id,
+                    dataset_version_id=version_id,
+                    model="gpt-test",
+                    metrics=metrics,
+                    run_metadata={},
+                    run_config={},
+                    deleted_at=datetime(2026, 1, 1) if run_id == "run-deleted" else None,
+                )
+            )
+            session.flush()
+            for position, (metric, direction) in enumerate(declared[run_id].items()):
+                session.add(
+                    RunMetricSpec(
+                        run_id=run_id,
+                        metric_name=metric,
+                        position=position,
+                        schema_version=2,
+                        score_type="percentage",
+                        direction=direction,
+                    )
+                )
+            session.add(RunItem(run_id=run_id, item_id="case-1", index=0, input="q", expected="a", item_metadata={}))
+            for metric in metrics:
+                session.add(RunItemScore(run_id=run_id, item_id="case-1", metric_name=metric, score_numeric=0.25))
+        session.commit()
+
+    shared = {"acc": "maximize", "lat": "minimize", "mix": None, "tone": None, "old": None}
+
+    items = client.get("/v1/datasets/dir-ds/versions/v1/items", headers=_bearer())
+    assert items.status_code == 200, items.text
+    assert items.json()["metric_directions"] == shared
+
+    runs = client.get(f"/v1/datasets/dir-ds/versions/v1/items/{item.json()['item']['item_id']}/runs", headers=_bearer())
+    assert runs.status_code == 200, runs.text
+    assert runs.json()["aggregates"]["metric_directions"] == shared
+    by_run = {row["run_id"]: row["metric_directions"] for row in runs.json()["runs"]}
+    assert by_run == {run_id: declared[run_id] for run_id in ("run-a", "run-b", "run-c")}
+
+    listed = client.get("/v1/datasets/dir-ds/runs", headers=_bearer())
+    assert listed.status_code == 200, listed.text
+    by_run = {row["id"]: row["metric_directions"] for row in listed.json()["runs"]}
+    assert by_run == {run_id: declared[run_id] for run_id in ("run-a", "run-b", "run-c")}
 
 
 def test_arabic_search_pagination_and_neighbors_share_matching_rules(
