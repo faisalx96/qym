@@ -8547,8 +8547,7 @@ def _delete_active_candidate(
     reviewed_at: datetime,
 ) -> None:
     """Remove a candidate from reviews while retaining a rejected audit record."""
-    before = correction_review_state(correction)
-    _remove_active_candidate(
+    before = _remove_active_candidate(
         db,
         correction=correction,
         reviewer_id=reviewer_id,
@@ -8567,7 +8566,8 @@ def _remove_active_candidate(
     reviewer_id: Optional[str],
     comment: str,
     reviewed_at: datetime,
-) -> None:
+) -> Dict[str, Any]:
+    """Deactivate the candidate; return its review state from under the lock."""
     _require_active_candidate(correction)
     run = Run.active(db).filter(Run.id == correction.run_id).first()
     if not run:
@@ -8585,6 +8585,7 @@ def _remove_active_candidate(
     item = lock_run_item(db, run=run, item=item)
     db.refresh(correction)
     _require_active_candidate(correction)
+    before = correction_review_state(correction)
 
     if correction_issue_id(correction):
         sync_correction_issue_metadata(db, correction, remove=True)
@@ -8593,7 +8594,7 @@ def _remove_active_candidate(
         correction.reviewed_by_user_id = reviewer_id
         correction.reviewed_at = reviewed_at
         correction.review_comment = comment
-        return
+        return before
 
     if correction.metric_name:
         meta = dict(item.item_metadata) if isinstance(item.item_metadata, dict) else {}
@@ -8614,7 +8615,7 @@ def _remove_active_candidate(
         correction.reviewed_by_user_id = reviewer_id
         correction.reviewed_at = reviewed_at
         correction.review_comment = comment
-        return
+        return before
 
     apply_root_cause_change(
         db,
@@ -8634,6 +8635,7 @@ def _remove_active_candidate(
     correction.reviewed_by_user_id = reviewer_id
     correction.reviewed_at = reviewed_at
     correction.review_comment = comment
+    return before
 
 
 @router.get("/api/corrections")
