@@ -344,6 +344,55 @@ def test_conflicting_metric_spec_rejects_only_run_started(api):
         assert db.query(RunMetricSpec).one().score_type == "percentage"
 
 
+@pytest.mark.parametrize(
+    "resent",
+    [
+        # The same SDK resent its declaration.
+        {"score_type": "percentage", "direction": "maximize"},
+        # A schema 2 SDK sends no default direction and may name a primary.
+        {"schema_version": 2, "score_type": "percentage", "primary": True},
+    ],
+)
+def test_compatible_resent_metric_spec_is_applied(api, resent):
+    """The pre-check compared raw values and refused specs the store accepts."""
+    engine, run_id, post = api
+    with Session(engine) as db:
+        # A row stored before 0063: schema 1, "maximize", no primary flag.
+        db.add(
+            RunMetricSpec(
+                run_id=run_id,
+                metric_name="score",
+                position=0,
+                schema_version=1,
+                score_type="percentage",
+                direction="maximize",
+                is_primary=None,
+            )
+        )
+        db.commit()
+    started = _event(
+        run_id,
+        1,
+        "run_started",
+        {
+            "task": "t",
+            "dataset": "d",
+            "metrics": ["score"],
+            "metric_specs": {"score": resent},
+            "run_metadata": {"total_items": 1},
+            "started_at": "2026-09-05T00:00:00Z",
+        },
+    )
+    body = post([started, _started(run_id, 2, 0)]).json()
+    assert (body["applied"], body["rejected"]) == (2, 0), body
+    with Session(engine) as db:
+        spec = db.query(RunMetricSpec).one()
+        assert (spec.schema_version, spec.direction, spec.is_primary) == (1, "maximize", None)
+        run = db.get(Run, run_id)
+        assert run.started_at is not None
+        assert "ingest_incomplete" not in (run.run_metadata or {})
+
+
 def test_rejection_details_are_capped_but_the_count_is_exact(api):
     _, run_id, post = api
     lines = ["{bad"] * (ingest.MAX_REJECTION_DETAILS + 5) + [_started(run_id, 1, 0)]

@@ -1309,9 +1309,7 @@ def _ingest_events_sync(
             except (TypeError, ValueError) as exc:
                 raise _EventRejected(f"Invalid metric spec for {name}: {exc}")
             current = metric_spec_cache.get(name)
-            if current and {
-                key: getattr(current, key) for key in normalized
-            } != normalized:
+            if current and not _metric_spec_unchanged(current, normalized):
                 raise _EventRejected(f"Metric spec changed during run: {name}")
 
     accepted = []
