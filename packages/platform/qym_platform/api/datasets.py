@@ -793,9 +793,10 @@ _LEGACY_CSV_ENCODINGS = ("windows-1252", "windows-1256", "iso-8859-6")
 _ENCODING_SAMPLE_CHARS = 262144
 _CSV_ENCODING_HELP = "Save the file as 'CSV UTF-8' (Excel: File > Save As > CSV UTF-8) and upload it again."
 # Non-letter characters that are normal in real text in any of the legacy encodings.
+# "\u00d7" and "\u00ac" are Arabic letters in ISO-8859-6, so they are no evidence either way.
 _NEUTRAL_TEXT_CHARS = frozenset(
     "\u00a0\u00ab\u00bb\u201c\u201d\u2018\u2019\u201e\u2013\u2014\u2026\u2022\u20ac\u00a3\u00a5"
-    "\u00b0\u00a9\u00ae\u2122\u00a7\u00b7\u00bf\u00a1\u060c\u061b\u061f\u066a\u066b\u066c"
+    "\u00b0\u00a9\u00ae\u2122\u00a7\u00b7\u00bf\u00a1\u00d7\u00ac\u060c\u061b\u061f\u066a\u066b\u066c"
 )
 
 
@@ -811,6 +812,10 @@ def _legacy_text_score(text: str) -> int:
     run of accented Latin letters, and Latin text read as Windows-1256 mixes Arabic
     letters into Latin words. Real text has words in one script, with accented
     letters in the minority for Latin words.
+
+    A one-letter word is no evidence: French "à" is a lone Arabic letter in
+    ISO-8859-6. Text whose only non-ASCII words are lone Arabic letters therefore
+    keeps Windows-1252; such a file needs an explicit encoding.
     """
     total = 0
     word: list[str] = []
@@ -818,7 +823,7 @@ def _legacy_text_score(text: str) -> int:
     def flush() -> None:
         nonlocal total
         non_ascii = [ch for ch in word if ord(ch) > 0x7F]
-        if non_ascii:
+        if non_ascii and len(word) > 1:
             arabic = any(_is_arabic_char(ch) for ch in word)
             latin = any(ord(ch) < 0x0250 for ch in word)
             other = any(ord(ch) >= 0x0250 and not _is_arabic_char(ch) for ch in word)

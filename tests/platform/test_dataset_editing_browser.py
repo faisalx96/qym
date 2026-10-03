@@ -23,7 +23,7 @@ for src in (ROOT / "packages" / "platform", ROOT / "packages" / "sdk"):
 STATIC = ROOT / "packages/platform/qym_platform/_static/dashboard"
 EXPORTS = (
     "openUploadWizard, renderItemsTab, renderItemPageDetails, saveItemPageItem, "
-    "historyDiffBody, diffValueTexts, detectCSVEncoding, slugifyDatasetName, overflowMenuButton, "
+    "historyDiffBody, diffValueTexts, detectCSVEncoding, legacyTextScore, slugifyDatasetName, overflowMenuButton, "
 )
 
 SETUP_JS = """() => {
@@ -505,6 +505,11 @@ def test_new_dataset_upload_sends_the_chosen_encoding(page):
         ("question;answer\nCafé?;Crème brûlée\nÇa va?;Très bien\n", "cp1252"),
         ("q,a\nGrüße aus der Straße,Schön\n", "cp1252"),
         ("q,a\nSeñor, ¿cómo está?,Muy bien\n", "cp1252"),
+        ("q,a\nIl habite à Londres.,Oui\n", "cp1252"),
+        ("q,a\nElle va à l'école à pied.,Oui\n", "cp1252"),
+        ("q,a\n2 × 3,6\n", "cp1252"),
+        ("q,a\n¬P,vrai\n", "cp1252"),
+        ("q,a\nالشاي و القهوة,نعم\n", "cp1256"),
         ("q,a\nplain ascii,only\n", "utf-8"),
     ],
 )
@@ -515,3 +520,10 @@ def test_browser_encoding_detection_matches_the_server(page, text, encoding):
     _, server_label = _decode_csv(raw)
     browser_label = page.evaluate("bytes => __dsx.detectCSVEncoding(new Uint8Array(bytes))", list(raw))
     assert browser_label == server_label
+    assert raw.decode(encoding) == text and server_label == {"cp1256": "windows-1256", "cp1252": "windows-1252"}.get(encoding, encoding)
+    # The preview warns only about text that looks mis-decoded.
+    suspicious = page.evaluate(
+        "([bytes, label]) => __dsx.legacyTextScore(new TextDecoder(label).decode(new Uint8Array(bytes))) < 0",
+        [list(raw), server_label],
+    )
+    assert suspicious is False

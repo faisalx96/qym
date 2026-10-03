@@ -1607,7 +1607,7 @@
     // Tried in this order when a file is not UTF-8; ties keep the historic Windows-1252.
     const LEGACY_CSV_ENCODINGS = ['windows-1252', 'windows-1256', 'iso-8859-6'];
     const ENCODING_SAMPLE_CHARS = 262144;
-    const NEUTRAL_TEXT_CHARS = new Set(Array.from('\u00a0\u00ab\u00bb\u201c\u201d\u2018\u2019\u201e\u2013\u2014\u2026\u2022\u20ac\u00a3\u00a5\u00b0\u00a9\u00ae\u2122\u00a7\u00b7\u00bf\u00a1\u060c\u061b\u061f\u066a\u066b\u066c'));
+    const NEUTRAL_TEXT_CHARS = new Set(Array.from('\u00a0\u00ab\u00bb\u201c\u201d\u2018\u2019\u201e\u2013\u2014\u2026\u2022\u20ac\u00a3\u00a5\u00b0\u00a9\u00ae\u2122\u00a7\u00b7\u00bf\u00a1\u00d7\u00ac\u060c\u061b\u061f\u066a\u066b\u066c'));
     // Keys the importer reads from a JSON/JSONL record (same aliases as the server).
     const JSON_ITEM_KEYS = ['item_id', 'id', 'input', 'expected_output', 'expected', 'metadata', 'labels'];
     function encodingLabel(encoding){
@@ -1621,12 +1621,13 @@
     // Mirrors _legacy_text_score in api/datasets.py. Arabic read with the wrong code page
     // becomes words made of accented Latin letters; Latin read as Arabic mixes scripts
     // inside a word. Real text keeps one script per word, so it scores higher.
+    // A one-letter word is no evidence (French "à" is an Arabic letter in ISO-8859-6).
     function legacyTextScore(text){
       let total = 0;
       let word = [];
       const flush = () => {
         const nonAscii = word.filter(ch => ch.codePointAt(0) > 0x7f);
-        if (nonAscii.length) {
+        if (nonAscii.length && word.length > 1) {
           const arabic = word.some(ch => isArabicCodePoint(ch.codePointAt(0)));
           const latin = word.some(ch => ch.codePointAt(0) < 0x250);
           const other = word.some(ch => { const cp = ch.codePointAt(0); return cp >= 0x250 && !isArabicCodePoint(cp); });

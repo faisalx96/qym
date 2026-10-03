@@ -549,12 +549,24 @@ def test_decode_csv_detects_windows_1256_arabic():
         "q,a\nGrüße aus der Straße,Schön\nÄpfel und Öl,Übung\n",
         "q,a\nNão, obrigado,Coração\n",
         "q,a\n£100,€5\n",
+        # A lone accented letter or a math sign is not Arabic evidence.
+        "q,a\nIl habite à Londres.,Oui\n",
+        "q,a\nElle va à l'école à pied.,Oui\n",
+        "q,a\n2 × 3,6\n",
+        "q,a\n¬P,vrai\n",
     ],
 )
 def test_decode_csv_keeps_windows_1252_for_latin_text(text):
     decoded, encoding = _decode_csv(text.encode("cp1252"))
     assert decoded == text
     assert encoding == "windows-1252"
+
+
+def test_decode_csv_keeps_arabic_with_a_separate_conjunction():
+    text = "q,a\nالشاي و القهوة,نعم\n"
+    decoded, encoding = _decode_csv(text.encode("cp1256"))
+    assert decoded == text
+    assert encoding == "windows-1256"
 
 
 def test_decode_csv_handles_persian_letters_undefined_in_1252():
