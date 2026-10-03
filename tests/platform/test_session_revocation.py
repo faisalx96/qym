@@ -11,6 +11,8 @@ import hashlib
 import json
 import os
 import sys
+import threading
+import time
 from base64 import b64encode
 from contextlib import contextmanager
 from datetime import datetime, timedelta
@@ -20,7 +22,7 @@ from unittest.mock import MagicMock
 import itsdangerous
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -241,6 +243,75 @@ def test_disabling_a_user_ends_sessions_even_after_re_enable(app, session_factor
             )
             assert response.status_code == 200
     assert _me_status(app, cookie) == 401
+
+
+@pytest.mark.parametrize("change", [{"role": "MEMBER"}, {"is_active": False}])
+def test_concurrent_demotions_leave_one_active_admin_on_postgres(monkeypatch, change):
+    """Two admins demote each other at once: one wins, the other gets 409."""
+    from uuid import uuid4
+
+    from sqlalchemy.engine import make_url
+
+    url = os.environ.get("QYM_TEST_POSTGRES_URL")
+    if not url:
+        pytest.skip("QYM_TEST_POSTGRES_URL not configured")
+    monkeypatch.setenv("QYM_AUTH_MODE", "proxy_headers")
+    monkeypatch.setenv("QYM_AUTH_LOCAL_ENABLED", "false")
+    schema = "qym_admins_" + uuid4().hex
+    admin_engine = create_engine(url)
+    with admin_engine.begin() as conn:
+        conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+    engine = create_engine(make_url(url).update_query_dict({"options": f"-csearch_path={schema}"}))
+    try:
+        Base.metadata.create_all(engine)
+        sessions = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+        with sessions() as db:
+            db.add(User(id="admin-1", email="one@example.com", role=UserRole.ADMIN))
+            db.add(User(id="admin-2", email="two@example.com", role=UserRole.ADMIN))
+            db.commit()
+        application = create_app()
+
+        def override_get_db():
+            db = sessions()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        application.dependency_overrides[get_db] = override_get_db
+        results = {}
+        with TestClient(application) as client:
+
+            def demote(actor, target):
+                headers = {**ORIGIN, "X-User-Email": f"{actor}@example.com"}
+                results[target] = client.put(f"/v1/admin/users/{target}", json=change, headers=headers)
+
+            # Both requests start while another transaction holds both admin
+            # rows, so neither can finish before the other has started.
+            holder = engine.connect()
+            transaction = holder.begin()
+            holder.execute(text("SELECT id FROM users ORDER BY id FOR UPDATE"))
+            threads = [
+                threading.Thread(target=demote, args=("one", "admin-2")),
+                threading.Thread(target=demote, args=("two", "admin-1")),
+            ]
+            for thread in threads:
+                thread.start()
+            time.sleep(1.0)
+            assert results == {}, "a demotion did not wait for the admin rows"
+            transaction.commit()
+            holder.close()
+            for thread in threads:
+                thread.join(30)
+        assert sorted(response.status_code for response in results.values()) == [200, 409]
+        with sessions() as db:
+            active = db.query(User).filter_by(role=UserRole.ADMIN, is_active=True).count()
+            assert active == 1
+    finally:
+        engine.dispose()
+        with admin_engine.begin() as conn:
+            conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        admin_engine.dispose()
 
 
 def test_admin_cannot_disable_themselves_or_the_last_admin(app, session_factory):
