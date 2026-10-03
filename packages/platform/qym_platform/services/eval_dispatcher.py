@@ -8,11 +8,11 @@ process when ``QYM_ROLE=all``, that mirrors ``MaintenanceWorker``. Each tick:
    candidate rows are selected ``FOR UPDATE SKIP LOCKED``. Every dialect then takes the
    lease with a compare-and-set ``UPDATE … WHERE lease is free``, so SQLite (no row
    locks) is correct too, and two workers never hold the same job.
-2. **Submit** a ``QUEUED`` job while the environment has fewer than
-   ``max_inflight_jobs`` jobs in flight. The ``QUEUED → SUBMITTING`` transition is one
-   conditional ``UPDATE`` that re-counts the in-flight jobs. On Postgres it runs under a
-   lock on the environment row, and on SQLite a single statement is serialized anyway.
-   ``SUBMITTING`` is committed *before* ``POST /evals``. It is the crash-safety marker.
+2. **Submit** a ``QUEUED`` job. There is no platform-side in-flight cap: the
+   Evaluation Service limits concurrent runs and queues the rest itself. The
+   ``QUEUED → SUBMITTING`` transition is one conditional ``UPDATE`` (still ``QUEUED``,
+   leased by this worker, no cancel requested). ``SUBMITTING`` is committed *before*
+   ``POST /evals``. It is the crash-safety marker.
 3. **Reconcile** a ``SUBMITTING`` job whose lease expired (a crash or a timeout
    mid-submit). The worker lists ``GET /evals?user_id=…`` and matches
    ``eval_input.config.run_metadata.qym_launch.job_id``. It adopts the remote job if
@@ -28,10 +28,9 @@ process when ``QYM_ROLE=all``, that mirrors ``MaintenanceWorker``. Each tick:
 
 Stale remote jobs: a job that is terminal locally (``TIMED_OUT`` after a failed
 cancel, or ``CANCELLED`` by the ``CANCELLING`` give-up) may still be ``PENDING`` or
-``RUNNING`` on the service. Those ids, read from the environment's stored remote
-snapshot (``stale_remote_job_ids``, no service call), count toward
-``max_inflight_jobs`` in the submit cap check, and managers can cancel them from the
-queue (``eval_queue.cancel_remote_orphans``).
+``RUNNING`` on the service. Those ids are read from the environment's stored remote
+snapshot (``stale_remote_job_ids``, no service call), and managers can cancel them
+from the queue (``eval_queue.cancel_remote_orphans``).
 
 Submit outcomes: ``202`` → ``SUBMITTED``. A ``409`` while a HIGH job is active →
 back to ``QUEUED`` with a 30s → 5m backoff. ``422`` → ``BLOCKED``. ``401`` →
@@ -122,7 +121,7 @@ from uuid import uuid4
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from ..datetime_utils import utc_now_naive
@@ -193,7 +192,7 @@ HIGH_BACKOFF_MIN = 30.0
 HIGH_BACKOFF_MAX = 300.0
 RETRY_BACKOFF_MIN = 15.0
 RETRY_BACKOFF_MAX = 300.0
-CAP_RECHECK_SECONDS = 10.0
+SUBMIT_RECHECK_SECONDS = 10.0
 ENV_PAUSE_RECHECK_SECONDS = 60.0
 ENV_PROBE_INTERVAL_SECONDS = 300.0
 POLL_SCHEDULE: Tuple[Tuple[float, float], ...] = (
@@ -214,7 +213,7 @@ RECONCILE_CLOCK_SKEW = timedelta(minutes=10)
 ENV_AUTH_ERROR = "Evaluation service rejected the environment API key"
 TIMEOUT_ERROR = "No progress from the evaluation service or the linked run for 2h15m"
 
-# Occupies an in-flight slot on its environment.
+# Submitted (or being submitted) and not finished yet.
 INFLIGHT_JOB_STATUSES = ACTIVE_JOB_STATUSES
 # Statuses this dispatcher claims.
 CLAIMABLE_JOB_STATUSES = (
@@ -912,39 +911,20 @@ class EvalDispatcher:
         env: EvalEnvironment,
         *,
         first: bool,
-        stale_remote: int = 0,
     ) -> bool:
-        """Take the SUBMITTING marker. For a first submit, only below the inflight cap.
+        """Take the SUBMITTING marker (a first submit only from QUEUED, uncancelled).
 
-        ``stale_remote`` remote jobs (see :func:`stale_remote_job_ids`) occupy slots
-        of the cap next to our own in-flight jobs.
+        No in-flight cap: the Evaluation Service bounds concurrent runs and queues
+        the rest, so every queued job is submitted as soon as it is ready.
         """
         now = self.clock()
         table = EvalExperimentJob
         conditions = [table.id == job.id, table.lease_owner == self.owner]
         if first:
-            if _is_postgres(db):
-                # Serializes cap checks per environment across workers.
-                db.execute(
-                    select(EvalEnvironment.id)
-                    .where(EvalEnvironment.id == env.id)
-                    .with_for_update()
-                )
-            other = aliased(EvalExperimentJob)
-            inflight = (
-                select(func.count())
-                .select_from(other)
-                .where(
-                    other.environment_id == env.id,
-                    other.status.in_(INFLIGHT_JOB_STATUSES),
-                )
-                .scalar_subquery()
-            )
             conditions += [
                 table.status == EvalJobStatus.QUEUED,
                 # A cancel that landed after this worker read the job wins.
                 table.cancel_requested_at.is_(None),
-                inflight < env.max_inflight_jobs - stale_remote,
             ]
         else:
             conditions.append(table.status == EvalJobStatus.SUBMITTING)
@@ -964,26 +944,6 @@ class EvalDispatcher:
             .execution_options(synchronize_session=False)
         )
         return _rowcount(result) == 1
-
-    def _inflight_count(self, db: Session, env_id: str) -> int:
-        return int(
-            db.scalar(
-                select(func.count())
-                .select_from(EvalExperimentJob)
-                .where(
-                    EvalExperimentJob.environment_id == env_id,
-                    EvalExperimentJob.status.in_(INFLIGHT_JOB_STATUSES),
-                )
-            )
-            or 0
-        )
-
-    def _cap_reason(self, db: Session, env: EvalEnvironment, stale_remote: int) -> str:
-        used = self._inflight_count(db, env.id) + stale_remote
-        reason = f"Inflight cap {used}/{env.max_inflight_jobs}"
-        if stale_remote:
-            reason += f" ({stale_remote} stale on the service)"
-        return reason
 
     def _step_queued(self, job_id: str) -> None:
         self._try_submit(job_id, first=True)
@@ -1017,20 +977,6 @@ class EvalDispatcher:
                     recompute_experiment_status(db, experiment.id)
                     db.commit()
                     return
-                stale_remote = 0
-                if first:
-                    # Remote jobs qym no longer tracks but the service still runs
-                    # count toward the cap too (from the stored snapshot only).
-                    stale_remote = len(stale_remote_job_ids(db, env.id))
-                    inflight = self._inflight_count(db, env.id) + stale_remote
-                    if inflight >= env.max_inflight_jobs:
-                        self._defer(
-                            job,
-                            CAP_RECHECK_SECONDS,
-                            self._cap_reason(db, env, stale_remote),
-                        )
-                        db.commit()
-                        return
                 access = self._env_access(db, env)
                 if access.client is None:
                     self._defer(job, ENV_PAUSE_RECHECK_SECONDS, access.paused_reason)
@@ -1074,9 +1020,7 @@ class EvalDispatcher:
                     return
                 del prep
                 db.flush()
-                if not self._begin_submit(
-                    db, job, env, first=first, stale_remote=stale_remote
-                ):
+                if not self._begin_submit(db, job, env, first=first):
                     db.rollback()
                     job = self._locked_job(db, job_id)
                     # Still QUEUED: nothing was sent, so a pending cancel is local.
@@ -1095,8 +1039,8 @@ class EvalDispatcher:
                         return
                     self._defer(
                         job,
-                        CAP_RECHECK_SECONDS,
-                        self._cap_reason(db, env, stale_remote),
+                        SUBMIT_RECHECK_SECONDS,
+                        "Waiting to submit to the evaluation service",
                     )
                     db.commit()
                     return
@@ -1568,8 +1512,7 @@ class EvalDispatcher:
         and once the job is terminal locally the queue cancel no longer reaches it.
         Whatever the cancel answers, the job becomes ``TIMED_OUT`` and the outcome is
         appended to its ``error``. If the cancel failed, the remote job shows as
-        *stale* in the Queue page's remote queue, where a manager can cancel it, and
-        it keeps counting toward the environment's inflight cap meanwhile.
+        *stale* in the Queue page's remote queue, where a manager can cancel it.
         """
         client: Optional[EvalServiceClient] = None
         kind = "none"  # none | paused | cancelled | not_found | terminal | auth | retry
@@ -1673,8 +1616,7 @@ class EvalDispatcher:
             job.next_attempt_at = now
             self._save(job, changed=True)
         elif now - (job.cancel_requested_at or now) >= JOB_TIMEOUT:
-            # Past the service's hard limit the remote job has ended either way: stop
-            # holding an inflight slot for it.
+            # Past the service's hard limit the remote job has ended either way.
             if kind == "auth":
                 self._mark_env_unauthorized(db, job.environment_id)
             self._set_status(

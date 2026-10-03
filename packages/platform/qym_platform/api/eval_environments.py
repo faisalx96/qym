@@ -104,7 +104,6 @@ class EnvironmentCreateRequest(BaseModel):
     api_key: str = Field(..., min_length=1, max_length=4096)
     default_priority: EvalPriority = EvalPriority.NORMAL
     max_priority: EvalPriority = EvalPriority.NORMAL
-    max_inflight_jobs: int = Field(default=5, ge=1, le=1000)
     allow_connection_keys: bool = False
     ranking_metric: Optional[str] = Field(default=None, max_length=200)
     ranking_k: Optional[int] = Field(default=None, ge=1, le=1000)
@@ -119,7 +118,6 @@ class EnvironmentUpdateRequest(BaseModel):
     api_key: Optional[str] = Field(default=None, max_length=4096)
     default_priority: Optional[EvalPriority] = None
     max_priority: Optional[EvalPriority] = None
-    max_inflight_jobs: Optional[int] = Field(default=None, ge=1, le=1000)
     allow_connection_keys: Optional[bool] = None
     ranking_metric: Optional[str] = Field(default=None, max_length=200)
     ranking_k: Optional[int] = Field(default=None, ge=1, le=1000)
@@ -496,7 +494,6 @@ def _serialize_environment(
         "api_key_hint": _key_hint(env.api_key_last4),
         "default_priority": env.default_priority.value,
         "max_priority": env.max_priority.value,
-        "max_inflight_jobs": env.max_inflight_jobs,
         "allow_connection_keys": bool(env.allow_connection_keys),
         "ranking_metric": env.ranking_metric,
         "ranking_k": env.ranking_k,
@@ -639,7 +636,6 @@ async def create_environment(
         base_url=base_url,
         default_priority=req.default_priority,
         max_priority=req.max_priority,
-        max_inflight_jobs=req.max_inflight_jobs,
         allow_connection_keys=req.allow_connection_keys,
         ranking_metric=(req.ranking_metric or "").strip() or None,
         ranking_k=req.ranking_k,
@@ -727,8 +723,6 @@ def update_environment(
     if req.max_priority is not None:
         env.max_priority = req.max_priority
     _check_priorities(env)
-    if req.max_inflight_jobs is not None:
-        env.max_inflight_jobs = req.max_inflight_jobs
     if req.allow_connection_keys is not None:
         env.allow_connection_keys = req.allow_connection_keys
     elif url_changed:

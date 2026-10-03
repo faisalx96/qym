@@ -9,13 +9,13 @@ Read side (``api/eval_queue.py`` serializes it):
   stable). The dispatcher does not order by priority: priority is enforced by the
   Evaluation Service (HIGH preempts), so the queue shows what qym will send next.
 - ``queue_positions``: 1-based position of each ``QUEUED`` job within its environment
-  (only jobs of one environment compete for its in-flight slots).
+  (jobs are dispatched per environment).
 - ``linked_runs`` / ``run_progress``: the job's run (``job.run_id``, else the run whose
   ``experiment_job_id`` points at the job, as the dispatcher finds it) and its progress,
   ``items_done`` (received ``run_items``) over ``items_total``
   (``run_metadata.total_items``, when the SDK sent it).
-- ``environment_summaries``: per environment, in-flight/queued/blocked counts against
-  ``max_inflight_jobs``, health, and whether a ``HIGH`` job is active (a local in-flight
+- ``environment_summaries``: per environment, in-flight/queued/blocked counts,
+  health, and whether a ``HIGH`` job is active (a local in-flight
   job, or a ``HIGH`` item in the remote snapshot).
 - ``remote_view``: the stored snapshot (``eval_remote_queue.read_snapshot``) with each
   remote job matched to a local job by ``remote_job_id`` (any status) or flagged as an
@@ -270,9 +270,8 @@ def environment_summaries(
                 "is_active": bool(env.is_active),
                 "health_status": env.health_status,
                 "health_error": env.health_error,
-                "max_inflight_jobs": env.max_inflight_jobs,
                 "inflight": inflight,
-                # Stale remote jobs also take slots of the cap (dispatcher §13).
+                # Finished locally but maybe still running on the service (§13).
                 "stale_remote": len(stale_remote_job_ids(db, env.id)),
                 "queued": by_status.get(EvalJobStatus.QUEUED.value, 0),
                 "blocked": by_status.get(EvalJobStatus.BLOCKED.value, 0),

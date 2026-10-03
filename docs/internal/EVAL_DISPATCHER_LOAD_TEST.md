@@ -3,6 +3,11 @@
 Plan references: §13 (dispatcher and status model), §13.1 (cancel from the queue),
 §16 P6 (hardening). Run on 2026-09-30 on branch `feat/eval-issue-40-multipod-tests`.
 
+> **Update (2026-10-03).** The platform's per-environment in-flight cap
+> (`max_inflight_jobs`) has been removed: the Evaluation Service limits and queues
+> runs itself (see `EVAL_OPEN_QUESTIONS.md` B16). The harness no longer seeds or
+> checks a cap. The cap results below are kept as a historical record.
+
 ## What was tested
 
 Several `EvalDispatcher` instances ("pods") ran against one database. Each had its own

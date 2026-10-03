@@ -289,8 +289,10 @@ links as **official**. Procedure:
    only) and the run is stored as **local**.
 
 Per-environment settings (**Project Settings → Environments → Policies**, manager only):
-`max_inflight_jobs` (default 5), `default_priority` and `max_priority` (default
-`NORMAL`), `allow_connection_keys` (default off; reset when the URL changes).
+`default_priority` and `max_priority` (default `NORMAL`), `allow_connection_keys`
+(default off; reset when the URL changes). There is no per-environment in-flight cap:
+the Evaluation Service limits concurrent runs and queues the rest itself (migration
+`0068` drops the former `max_inflight_jobs` column).
 
 ### Deploying the release
 
@@ -408,17 +410,12 @@ then `created_at`, then `combo_index`; the Queue page shows jobs in exactly this
 qym does not order by priority, because the service enforces priority. The lease lasts
 `LEASE_SECONDS` = 120s and is renewed before each step.
 
-**Inflight cap.** A job occupies a slot on its environment while it is `SUBMITTING`,
-`SUBMITTED`, `RUNNING` or `CANCELLING`. `QUEUED → SUBMITTING` is one conditional
-`UPDATE` that re-counts the slots (under a lock on the environment row on PostgreSQL),
-so several pods never exceed `max_inflight_jobs`. A job over the cap waits with
-`Inflight cap n/cap` and is rechecked every 10s. The cap counts qym's own jobs plus
-**stale remote jobs**: ids in the environment's latest remote snapshot that are still
-`PENDING`/`RUNNING` on the service although their qym job is already terminal (see
-"Stale remote jobs" below). The count comes from the stored snapshot, not from a
-service call, so it can lag by up to 30s; while it is non-zero the wait reason reads
-`Inflight cap n/cap (k stale on the service)`. Orphans (remote jobs that match no qym
-job) are not counted (D8).
+**No in-flight cap.** qym submits every queued job as soon as a dispatcher claims it:
+the Evaluation Service bounds how many runs execute at once and queues the rest
+(they show as `PENDING` remotely and `SUBMITTED` here). `QUEUED → SUBMITTING` is one
+conditional `UPDATE` (still `QUEUED`, leased by this worker, no cancel requested), so
+two pods never submit the same job. A job that loses that race waits with
+`Waiting to submit to the evaluation service` and is rechecked after 10s.
 
 **Submit.** `SUBMITTING` is committed before `POST /evals`, as the crash-safety marker.
 Keys are decrypted in memory only. Outcomes:
@@ -543,7 +540,7 @@ usually a worker that died.
    freed; nothing more to do.
 3. Otherwise (`… not cancelled: …`), check the Queue page's **Remote queue**. If the
    remote job is still listed there, it carries a **Stale** badge: it still holds a
-   service worker and counts toward the environment's inflight cap. The queue cancel
+   service worker. The queue cancel
    no longer applies (the job is terminal, so it answers `already_terminal`); a
    project manager selects the stale job and uses **Cancel selected remote jobs**
    (or `POST /v1/projects/{pid}/eval-queue/remote/cancel` with its
@@ -559,7 +556,7 @@ cancel (`… gave up after 2h15m`): if the service still lists it, it is stale.
 | `wait_reason` | Meaning | Action |
 |---|---|---|
 | empty on a `QUEUED` job | No dispatcher has claimed it | Check that a process with `QYM_ROLE=all` or `worker` runs, and its logs for `eval dispatcher tick failed` |
-| `Inflight cap n/cap` / `Inflight cap n/cap (k stale on the service)` | The environment has `max_inflight_jobs` jobs in flight, counting stale remote jobs | Wait, cancel something (stale jobs from the remote queue, as a manager), or raise the cap |
+| `Waiting to submit to the evaluation service` | Another dispatcher pod took the job first, or it was cancelled meanwhile | None; rechecked after 10s |
 | `HIGH job <id> active` | The service refused a submit while a HIGH job runs | Wait; retried with backoff up to every 5 minutes |
 | `Environment unhealthy: API key rejected` / `Environment unhealthy` / `Environment has no API key` / `Environment API key cannot be decrypted` / `Environment unavailable: …` | The environment is paused or unusable | See "Environment health"; fix the key or URL |
 | `Launch tokens need QYM_LLM_CONFIG_ENCRYPTION_KEY` | The dispatcher's process has no encryption key | Set it on that process |
@@ -588,7 +585,7 @@ already terminal (`TIMED_OUT`, `CANCELLED`, `FAILED` or `SUCCEEDED`) is **stale*
 (`stale: true` with the local job in `match`, a **Stale** badge on the page): qym has
 stopped tracking it, usually after a timeout whose remote cancel failed or a
 `CANCELLING` give-up. A job that finished locally in the last 30s can show as stale
-until the next snapshot. Stale jobs count toward the inflight cap. Common causes of
+until the next snapshot. Stale jobs still occupy service workers. Common causes of
 orphans:
 
 - a job whose `POST /evals` answer was lost is `SUBMITTING` without a `remote_job_id`
@@ -621,8 +618,7 @@ cancel every job. qym relies on being the **only** caller of each environment:
 
 - the remote snapshot filters by status only, not by `user_id`, so every remote job is
   shown and any job qym doesn't know is an orphan that a manager may cancel;
-- the inflight cap counts qym's jobs (including stale ones) only, so other callers'
-  jobs make the service slower without qym backing off;
+- other callers' jobs share the service's own concurrency limit and queue with qym's;
 - another caller's `HIGH` job preempts qym's running jobs.
 
 Do not share an environment's `EVAL_API_KEY` with other clients. A deployment that has
@@ -658,8 +654,8 @@ The full verification, with the enforcing code and tests, is in
 [`EVAL_DISPATCHER_LOAD_TEST.md`](EVAL_DISPATCHER_LOAD_TEST.md) records the multi-pod
 lease test and the 64-job load test on SQLite and PostgreSQL 16 (4 to 32 pods, with
 injected timeouts, 5xx, HIGH conflicts and pod crashes): no double submit, no double
-cancel, and the inflight cap held in every run. On PostgreSQL, pod count barely changes
-drain time because the inflight caps are the bottleneck. Reproduce with
+cancel. (Those runs predate the removal of the platform in-flight cap; the
+harness no longer seeds or checks one.) Reproduce with
 `python tests/platform/eval_dispatch_loadtest.py --workers 8 --faults` (set
 `QYM_TEST_POSTGRES_URL` for PostgreSQL). The experiment status recompute is shared by
 the API (cancel, retry) and the dispatcher and locks the experiment row on PostgreSQL,

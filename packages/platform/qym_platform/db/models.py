@@ -525,9 +525,6 @@ class EvalEnvironment(Base):
         server_default=EvalPriority.NORMAL.value,
         nullable=False,
     )
-    max_inflight_jobs: Mapped[int] = mapped_column(
-        Integer, default=5, server_default="5", nullable=False
-    )
     # Opt-in to send decrypted ProjectLlmConnection keys to this environment.
     allow_connection_keys: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
@@ -569,9 +566,6 @@ class EvalEnvironment(Base):
             unique=True,
             postgresql_where=text("is_active"),
             sqlite_where=text("is_active"),
-        ),
-        CheckConstraint(
-            "max_inflight_jobs >= 1", name="ck_eval_environments_max_inflight_jobs"
         ),
         CheckConstraint(
             "default_priority IN ('LOW', 'NORMAL', 'HIGH')",
@@ -826,7 +820,7 @@ class EvalExperimentJob(Base):
     submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_polled_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    # Why a non-terminal job isn't progressing, e.g. "inflight cap 5/5".
+    # Why a non-terminal job isn't progressing, e.g. "Environment is disabled".
     wait_reason: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     cancel_requested_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     cancelled_by_user_id: Mapped[Optional[str]] = mapped_column(

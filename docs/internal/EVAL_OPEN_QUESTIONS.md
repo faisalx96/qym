@@ -307,6 +307,28 @@ should the user choose what "best" means, and what happens when they choose noth
 To prefill the dataset from the form, initialise the picker's `draft` from
 `api.target()`.
 
+### B16. No platform-side in-flight cap (Implemented)
+
+**Decision.** The dispatcher no longer limits in-flight jobs per environment. Every
+queued job is submitted as soon as a dispatcher claims it, and the Evaluation Service
+limits concurrent runs and queues the rest (`PENDING` remotely, `SUBMITTED` in qym).
+`max_inflight_jobs` is gone from the API, the environment drawer, the environments
+table and the Queue page header, and migration `0068` drops the column. Old clients
+that still send `max_inflight_jobs` have it ignored. Stale remote jobs are still shown,
+and managers can still cancel them, but they no longer hold back submissions.
+
+**Why.** The user asked for it: the Evaluation Service already enforces its own
+maximum and queue, so a second cap on the platform only delayed jobs.
+
+**Trade-offs.** One large sweep now sends all of its jobs to the service at once, so
+the service's queue holds them instead of qym's. Cancelling a queued job now usually
+means a remote cancel, not a local one. Other callers of the same service share its
+limit with qym, as they already did.
+
+**To reverse.** Downgrade migration `0068` (it restores the column with a default of
+5), then restore the cap check in `EvalDispatcher._try_submit` / `_begin_submit` and
+the field in the API and UI from the commit that removed them.
+
 ---
 
 ## C. Operational follow-ups (not blocking)

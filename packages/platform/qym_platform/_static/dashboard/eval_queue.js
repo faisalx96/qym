@@ -710,10 +710,7 @@
       return;
     }
     host.replaceChildren.apply(host, envs.map((env) => {
-      const cap = env.max_inflight_jobs;
       const staleRemote = env.stale_remote || 0;
-      const used = (env.inflight || 0) + staleRemote;
-      const full = cap && used >= cap;
       const health = env.health_status === 'ok'
         ? el('span', { className: 'qym-badge qym-badge--success', text: 'Healthy' })
         : env.health_status === 'error'
@@ -729,7 +726,7 @@
           el('span', { className: 'exq-env-badges' }, [env.is_active ? null : tag('Disabled', 'warning'), health]),
         ]),
         el('div', { className: 'exq-env-stats' }, [
-          stat('In flight', used + '/' + (cap == null ? '∞' : cap), full ? ' exq-env-value--full' : ''),
+          stat('In flight', String(env.inflight || 0)),
           stat('Queued', String(env.queued || 0)),
           stat('Blocked', String(env.blocked || 0)),
         ]),
@@ -737,9 +734,8 @@
           ? el('p', { className: 'exq-env-note exq-env-note--error', text: 'Dispatch is paused until the health check passes' + (env.health_error ? ': ' + env.health_error : '.') })
           : null,
         staleRemote
-          ? el('p', { className: 'exq-env-note', 'data-exq-stale-remote': String(staleRemote), text: 'Includes ' + plural(staleRemote, 'stale job') + ' that the service still runs although qym finished them. A manager can cancel them in the remote queue.' })
+          ? el('p', { className: 'exq-env-note', 'data-exq-stale-remote': String(staleRemote), text: plural(staleRemote, 'stale job') + ' still running on the service although qym finished them. A manager can cancel them in the remote queue.' })
           : null,
-        full ? el('p', { className: 'exq-env-note', text: 'At capacity: queued jobs start as running ones finish.' }) : null,
         env.high_active
           ? el('div', { className: 'exq-high', role: 'status', 'data-exq-high': '1', text: 'A HIGH-priority job is active on ' + env.name + '. Other jobs wait until it finishes.' })
           : null,
@@ -1020,7 +1016,7 @@
               ? el('span', {
                 className: 'qym-badge qym-badge--warning',
                 'data-exq-stale': item.remote_job_id,
-                title: 'The qym job is finished, but the service still runs it. It counts toward the inflight cap until it ends.',
+                title: 'The qym job is finished, but the service still runs it. Cancel it from the remote queue if it should stop.',
                 text: 'Stale',
               })
               : null,

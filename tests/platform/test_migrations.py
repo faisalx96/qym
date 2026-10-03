@@ -42,7 +42,7 @@ def test_alembic_has_one_upgrade_head() -> None:
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["0067"]
+    assert heads == ["0068"]
 
 
 def test_subcategory_taxonomy_migration_preserves_rows_and_defaults_json(
@@ -371,12 +371,13 @@ def test_eval_environments_migration_sqlite_upgrade_and_downgrade(
 def test_eval_environments_migration_matches_models(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The ORM models and migration 0060 describe the same schema."""
+    """The ORM models and migrations 0060 + 0068 describe the same schema."""
     from alembic.autogenerate import compare_metadata
     from qym_platform.db import models
     from qym_platform.db.base import Base
 
     migration = _load_migration("0060_eval_environments.py")
+    drop_cap = _load_migration("0068_drop_eval_inflight_cap.py")
     engine = sa.create_engine("sqlite://")
     _eval_environment_prerequisites(engine)
 
@@ -385,10 +386,11 @@ def test_eval_environments_migration_matches_models(
         return table is not None and table.name in EVAL_TABLES
 
     with engine.begin() as connection:
-        monkeypatch.setattr(
-            migration, "op", Operations(MigrationContext.configure(connection))
-        )
+        ops = Operations(MigrationContext.configure(connection))
+        monkeypatch.setattr(migration, "op", ops)
+        monkeypatch.setattr(drop_cap, "op", ops)
         migration.upgrade()
+        drop_cap.upgrade()
         context = MigrationContext.configure(
             connection,
             opts={"compare_type": True, "include_object": include_object},
@@ -472,10 +474,17 @@ RUN_EXPERIMENT_COLUMNS = {"origin", "experiment_job_id"}
 RUN_EXPERIMENT_INDEXES = {"ix_runs_origin", "ix_runs_experiment_job_id"}
 SCORE_TABLES = frozenset({"eval_run_scores"})  # 0064
 # Revisions after 0061 that change its tables: (table, column they add, file).
+# (table, marker column, revision, whether the revision adds the marker or drops it)
 LATER_REVISIONS = (
-    ("eval_experiment_jobs", "attempt", "0063_eval_job_attempts.py"),
-    ("eval_experiment_jobs", "run_linked_at", "0064_eval_run_scores.py"),
-    ("eval_experiments", "qym_api_key_id", "0065_eval_experiment_qym_api_key.py"),
+    ("eval_experiment_jobs", "attempt", "0063_eval_job_attempts.py", True),
+    ("eval_experiment_jobs", "run_linked_at", "0064_eval_run_scores.py", True),
+    (
+        "eval_experiments",
+        "qym_api_key_id",
+        "0065_eval_experiment_qym_api_key.py",
+        True,
+    ),
+    ("eval_environments", "max_inflight_jobs", "0068_drop_eval_inflight_cap.py", False),
 )
 
 
@@ -778,13 +787,13 @@ def _eval_experiment_model_diffs(
     inspector = sa.inspect(connection)
     columns = {
         table: {column["name"] for column in inspector.get_columns(table)}
-        for table in {table for table, _, _ in LATER_REVISIONS}
+        for table in {table for table, _, _, _ in LATER_REVISIONS}
     }
     # The models describe the schema at head: apply the later revisions missing here.
     pending = [
         filename
-        for table, marker, filename in LATER_REVISIONS
-        if marker not in columns[table]
+        for table, marker, filename, adds in LATER_REVISIONS
+        if (marker in columns[table]) != adds
     ]
     if not pending:
         return diffs()
@@ -1607,3 +1616,32 @@ def test_eval_qym_api_key_migration_postgres_upgrade_and_downgrade(
         )
         assert fk["referred_table"] == "api_keys"
         assert fk["options"].get("ondelete") == "SET NULL"
+
+
+def test_drop_eval_inflight_cap_round_trips(monkeypatch: pytest.MonkeyPatch) -> None:
+    """0068 drops max_inflight_jobs (keeping rows); downgrade restores it at 5."""
+    migration = _load_migration("0060_eval_environments.py")
+    drop_cap = _load_migration("0068_drop_eval_inflight_cap.py")
+    engine = sa.create_engine("sqlite://")
+    _eval_environment_prerequisites(engine)
+    with engine.begin() as connection:
+        ops = Operations(MigrationContext.configure(connection))
+        monkeypatch.setattr(migration, "op", ops)
+        monkeypatch.setattr(drop_cap, "op", ops)
+        migration.upgrade()
+        _insert_environment(connection, "e1", max_inflight_jobs=2)
+        drop_cap.upgrade()
+        columns = {
+            c["name"] for c in sa.inspect(connection).get_columns("eval_environments")
+        }
+        assert "max_inflight_jobs" not in columns
+        assert (
+            connection.execute(sa.text("SELECT id FROM eval_environments")).scalar_one()
+            == "e1"
+        )
+        drop_cap.downgrade()
+        cap = connection.execute(
+            sa.text("SELECT max_inflight_jobs FROM eval_environments")
+        )
+        assert cap.scalar_one() == 5
+    engine.dispose()

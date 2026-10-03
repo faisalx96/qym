@@ -115,7 +115,7 @@ type already used in `db/models.py`.
 | `base_url` str(500) | full prefix incl. `EVAL_SERVER_PREFIX`, **without** `/evals`; normalized (no trailing `/`) |
 | `api_key_encrypted`, `api_key_last4` | `EVAL_API_KEY` via `secrets.py`; never returned |
 | `default_priority`, `max_priority` | enum `LOW/NORMAL/HIGH`; defaults `NORMAL` / `NORMAL`. Raising `max_priority` to `HIGH` requires manager |
-| `max_inflight_jobs` int | dispatcher throttle, default 5 |
+| ~~`max_inflight_jobs` int~~ | removed (migration 0068): the Evaluation Service limits and queues runs itself |
 | `allow_connection_keys` bool | default `false`; opt-in to send decrypted `ProjectLlmConnection` keys to this env (D1) |
 | `current_schema_id` FK → `eval_environment_schemas` | |
 | `ranking_metric`, `ranking_k` | default metric and k for best-run ranking (§10); nullable → project default |
@@ -205,7 +205,7 @@ to the exact defaults it was launched from.
 | `status` | platform status (§13) |
 | `run_id` FK nullable (`ON DELETE SET NULL`) | set at ingest link |
 | `error`, `submit_attempts`, `next_attempt_at`, `lease_owner`, `lease_until`, `submitted_at`, `last_polled_at`, `finished_at` | |
-| `wait_reason` | why a non-terminal job isn't progressing (`inflight cap 5/5`, `HIGH job <id> active`, `env unhealthy`, `model missing`); shown in the queue |
+| `wait_reason` | why a non-terminal job isn't progressing (`HIGH job <id> active`, `env unhealthy`, `model missing`); shown in the queue |
 | `cancel_requested_at`, `cancelled_by_user_id`, `cancel_reason` | set by the queue's cancel action (§13.1) |
 
 Index `(status, next_attempt_at)` for the dispatcher; `(environment_id, status)` for the queue view.
@@ -641,7 +641,7 @@ distinct.
 ### 12.1 Project Settings → new **Environments** tab (`project_settings.html`)
 
 - Table: name, URL, health dot, schema hash + fetched time, slot status
-  (✓ grouped / ⚠ needs grouping), official preset version, priority cap, inflight cap,
+  (✓ grouped / ⚠ needs grouping), official preset version, priority cap,
   actions.
 - **Add environment** dialog, three steps:
   1. **Connect:** name, base URL (hint: include `EVAL_SERVER_PREFIX`), API key, "Test".
@@ -652,7 +652,7 @@ distinct.
   another project.
 - Environment detail drawer: Official defaults (edit/publish/history), saved presets,
   refresh schema (with diff), ranking metric, policies (`max_priority`,
-  `allow_connection_keys`, `max_inflight_jobs`).
+  `allow_connection_keys`).
 
 ### 12.2 **Experiments** page (new `experiments.html` + `experiments.js`, route `/projects/{slug}/experiments` following the `project_models` route pattern in `api/runs.py:2026`)
 
@@ -726,7 +726,7 @@ QUEUED ─submit─► SUBMITTED ─remote RUNNING or run linked─► RUNNING �
   └──► CANCELLED        SUBMITTED/RUNNING ─queue cancel─► CANCELLING ─► CANCELLED
 ```
 
-- **Submit** while env inflight `< max_inflight_jobs`. Secrets are decrypted in memory only.
+- **Submit** every queued job (no platform in-flight cap since migration 0068; the service queues). Secrets are decrypted in memory only.
   - `202` → `SUBMITTED` and store `remote_job_id`.
   - `409 HIGH active` → backoff (30s → 5m).
   - `422` → `BLOCKED`, with `loc` mapped back to form pointers.
@@ -841,7 +841,7 @@ Rate limit experiment creation per user.
 - `test_eval_best_run.py`: eligibility (origin, dataset, status, error ratio), direction,
   tie-breakers, legacy `versioning_metadata` fallback.
 - `test_eval_service_client.py`: `httpx.MockTransport` for 202/401/404/409 (both kinds)/422/5xx.
-- `test_eval_dispatcher.py`: inflight cap, HIGH backoff, poll backoff, merge with run
+- `test_eval_dispatcher.py`: no in-flight cap, HIGH backoff, poll backoff, merge with run
   status, TIMED_OUT, cancel, crash-mid-submit reconcile, two workers never double-submit.
 - `test_eval_queue.py`: ordering and `wait_reason`, permissions (creator vs manager vs
   other member), bulk cancel with mixed statuses, cancel racing a submit (lease held →

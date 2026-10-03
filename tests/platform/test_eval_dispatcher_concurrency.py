@@ -8,8 +8,6 @@ Evaluation Service that injects latency, timeouts after the service accepted the
 
 - exactly one remote job per qym job (no double submit), however the POSTs failed;
 - no remote cancel of a job that is already cancelled (no double cancel);
-- the per-environment in-flight cap is never exceeded, neither remotely (checked by the
-  fake on every change) nor in the database (sampled while the pods run);
 - every job ends terminal and the experiment's aggregate status is settled.
 
 SQLite runs with 4 pods (writers are serialized by the database lock, so more threads
@@ -126,9 +124,9 @@ def clock(monkeypatch):
     return clock
 
 
-def _sweep(backend, clock, *, envs=2, jobs_per_env=8, cap=3, faults=None, seed=40):
-    setup = seed_sweep(backend.sessions, envs=envs, jobs_per_env=jobs_per_env, cap=cap)
-    service = LoadTestService(clock, setup["caps"], faults=faults, seed=seed)
+def _sweep(backend, clock, *, envs=2, jobs_per_env=8, faults=None, seed=40):
+    setup = seed_sweep(backend.sessions, envs=envs, jobs_per_env=jobs_per_env)
+    service = LoadTestService(clock, faults=faults, seed=seed)
     return setup, service
 
 
@@ -140,20 +138,13 @@ def _run(backend, clock, setup, service, **kwargs):
         service,
         clock,
         setup["job_ids"],
-        caps_by_env_id={env_id: service.caps[url] for env_id, url in _env_urls(setup)},
         **kwargs,
     )
-
-
-def _env_urls(setup):
-    return list(zip(setup["env_ids"], setup["caps"]))
 
 
 def _assert_safe(setup, service, result):
     assert result.worker_errors == []
     assert duplicate_submissions(service) == {}
-    assert service.stats.cap_violations == []
-    assert result.db_cap_violations == []
     assert service.stats.double_cancels == []
     assert result.all_terminal, result.final_status
 
@@ -161,7 +152,7 @@ def _assert_safe(setup, service, result):
 # --------------------------------------------------------------------------- submit
 
 
-def test_pods_never_double_submit_and_never_exceed_the_cap(backend, clock):
+def test_pods_never_double_submit(backend, clock):
     """Timeouts after accept, 5xx and 409 HIGH, with latency, across several pods."""
     faults = Faults(
         timeout_after_accept=0.15,
@@ -182,9 +173,6 @@ def test_pods_never_double_submit_and_never_exceed_the_cap(backend, clock):
     for fault in ("timeout", "5xx", "high"):
         assert stats.outcomes[fault] > 0, stats.outcomes
     assert stats.list_calls > 0  # ambiguous POSTs were reconciled, not resubmitted
-    # The caps were reached (the test is meaningful) and never exceeded.
-    assert set(result.db_max_inflight.values()) == {3}
-    assert max(stats.max_occupied.values()) <= 3
     # Work was spread over the pods.
     assert len([n for n in result.claims_by_worker.values() if n]) > 1
     rows = job_rows(backend.sessions, setup["job_ids"])
@@ -309,7 +297,7 @@ def test_sibling_jobs_settling_at_once_complete_the_experiment(backend, clock):
     """Regression (#40): two pods settle the last two jobs in overlapping
     transactions. On Postgres each used to read the other's job as still running
     (READ COMMITTED) and the experiment stayed RUNNING with every job SUCCEEDED."""
-    setup = seed_sweep(backend.sessions, envs=1, jobs_per_env=2, cap=2)
+    setup = seed_sweep(backend.sessions, envs=1, jobs_per_env=2)
     first, second = setup["job_ids"]
     with backend.sessions() as db:
         for job in db.query(EvalExperimentJob):
@@ -363,7 +351,7 @@ def test_queue_cancel_racing_a_dispatcher_settle_settles_the_experiment(
     transaction settling the last running one. ``cancel_jobs`` recomputed without the
     experiment row lock, so on Postgres each side read the other's job as still
     active and the experiment stayed ``RUNNING`` with every job settled."""
-    setup = seed_sweep(backend.sessions, envs=1, jobs_per_env=2, cap=2)
+    setup = seed_sweep(backend.sessions, envs=1, jobs_per_env=2)
     running, queued = setup["job_ids"]
     with backend.sessions() as db:
         db.get(EvalExperimentJob, running).status = EvalJobStatus.RUNNING
@@ -430,7 +418,7 @@ def test_queue_cancel_racing_a_dispatcher_settle_settles_the_experiment(
 @pytest.mark.slow
 @pytest.mark.skipif(not os.environ.get("QYM_TEST_SLOW"), reason="QYM_TEST_SLOW not set")
 def test_64_job_sweep_across_two_environments(backend, clock, faulty):
-    """The issue's load test: 2 environments × 32 combos, cap 4 each, all pods."""
+    """The issue's load test: 2 environments × 32 combos, all pods."""
     faults = Faults(latency=(0.0, 0.005))
     if faulty:
         faults = Faults(
@@ -442,15 +430,13 @@ def test_64_job_sweep_across_two_environments(backend, clock, faulty):
             list_5xx=0.05,
             latency=(0.0, 0.005),
         )
-    setup, service = _sweep(backend, clock, jobs_per_env=32, cap=4, faults=faults)
+    setup, service = _sweep(backend, clock, jobs_per_env=32, faults=faults)
     workers = 16 if backend.name == "postgres" else 8
     result = _run(backend, clock, setup, service, workers=workers, batch=4)
 
     _assert_safe(setup, service, result)
     assert len(service.stats.created) == 64
     assert set(service.stats.created.values()) == {1}
-    assert set(result.db_max_inflight.values()) == {4}
-    assert max(service.stats.max_occupied.values()) <= 4
     assert result.final_status == {"SUCCEEDED": 64}
     assert experiment_status_of(backend.sessions, setup["experiment_id"]) == (
         "COMPLETED"

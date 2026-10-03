@@ -58,9 +58,10 @@ def test_settings_page_has_environments_tab_and_panel():
         "LLM slots",
         "Official preset",
         "Priority cap",
-        "In-flight cap",
     ):
         assert f">{column}</th>" in SETTINGS, column
+    # No platform in-flight cap: the Evaluation Service queues runs itself.
+    assert "In-flight cap" not in SETTINGS
 
 
 def test_settings_page_loads_module_and_gates_writes_on_manager_role():
@@ -140,11 +141,10 @@ def test_drawer_has_refresh_diff_ranking_k_and_policies():
         "ranking_k",
         'id="env-drawer-max-priority"',
         'id="env-drawer-connection-keys"',
-        'id="env-drawer-inflight"',
         "allow_connection_keys",
-        "max_inflight_jobs",
     ):
         assert hook in MODULE, hook
+    assert "max_inflight_jobs" not in MODULE and "env-drawer-inflight" not in MODULE
     # Official preset version: rendered as an empty state until presets exist.
     assert "function officialPresetVersionHtml" in MODULE
     assert "official_preset_version" in MODULE
@@ -260,10 +260,10 @@ def test_p1_exit_register_two_envs_review_forms_confirm_slots(client):
             "schema_fetched_at",
             "model_slots",
             "max_priority",
-            "max_inflight_jobs",
             "api_key_hint",
         ):
             assert key in env, key
+        assert "max_inflight_jobs" not in env
         assert env["model_slots"]["needs_confirmation"] is True
         assert KEY not in str(env)
 
@@ -356,14 +356,14 @@ def test_drawer_save_payload_round_trips(client):
         "ranking_k": 3,
         "max_priority": "HIGH",
         "default_priority": "NORMAL",
-        "max_inflight_jobs": 7,
+        "max_inflight_jobs": 7,  # removed: ignored when an old client still sends it
         "allow_connection_keys": True,
     }
     res = client.put(_url(suffix=f"/{env_id}"), headers=_headers(MANAGER), json=body)
     assert res.status_code == 200, res.text
     env = res.json()
     assert env["ranking_metric"] == "exact_match" and env["ranking_k"] == 3
-    assert env["max_priority"] == "HIGH" and env["max_inflight_jobs"] == 7
+    assert env["max_priority"] == "HIGH" and "max_inflight_jobs" not in env
     assert env["allow_connection_keys"] is True
     assert env["api_key_hint"] == "••••" + KEY[-4:]
     # Clearing the metric and k (blank inputs) sends nulls.

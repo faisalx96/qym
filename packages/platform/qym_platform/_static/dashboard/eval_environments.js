@@ -302,7 +302,6 @@
           <td>${slotStatusHtml(env)}</td>
           <td>${officialPresetVersionHtml(env)}</td>
           <td><span class="qym-tag qym-tag--data">${esc(env.max_priority || '—')}</span></td>
-          <td class="env-num">${esc(env.max_inflight_jobs == null ? '—' : env.max_inflight_jobs)}</td>
           <td class="env-actions-cell">
             <div class="env-row-actions">
               ${canRunOfficial(env) ? `<button class="btn btn-secondary env-btn-sm" type="button" data-env-run-official="${id}" title="${esc(`Launch a 1-job experiment with official defaults v${env.official_preset_version}`)}">Run official defaults</button>` : ''}
@@ -1188,10 +1187,6 @@
               <label class="shell-form-label" for="env-drawer-default-priority">Default priority</label>
               <select class="shell-form-input" id="env-drawer-default-priority"${disabled}>${priorityOptions(env.default_priority)}</select>
             </div>
-            <div class="shell-form-group">
-              <label class="shell-form-label" for="env-drawer-inflight">Max in-flight jobs</label>
-              <input class="shell-form-input env-mono-input" id="env-drawer-inflight" type="number" min="1" max="1000" step="1" value="${esc(env.max_inflight_jobs)}"${disabled}>
-            </div>
           </div>
           <div data-drawer-high-warning>${highWarningHtml(env.max_priority)}</div>
           <label class="shell-form-checkbox" for="env-drawer-connection-keys">
@@ -1321,9 +1316,7 @@
     async function save(button) {
       const q = (id) => drawer.body.querySelector(id);
       const k = readInt('#env-drawer-k', 'k');
-      const inflight = readInt('#env-drawer-inflight', 'Max in-flight jobs');
-      if (k.error || inflight.error) { setError(k.error || inflight.error); return; }
-      if (inflight.value == null) { setError('Max in-flight jobs is required.'); return; }
+      if (k.error) { setError(k.error); return; }
       const name = q('#env-drawer-name').value.trim();
       const baseUrl = q('#env-drawer-url').value.trim();
       if (!name || !baseUrl) { setError('Name and base URL are required.'); return; }
@@ -1334,7 +1327,6 @@
         ranking_k: k.value,
         max_priority: q('#env-drawer-max-priority').value,
         default_priority: q('#env-drawer-default-priority').value,
-        max_inflight_jobs: inflight.value,
       };
       // A moved URL without an explicit re-opt-in omits the flag, so the backend
       // turns connection keys off for the new host.

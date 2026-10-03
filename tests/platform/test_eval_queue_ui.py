@@ -166,11 +166,11 @@ def test_module_consumes_the_queue_api():
         "query.set('mine', 'true')",
     ):
         assert needle in MODULE, needle
-    # Header per environment: in-flight n/cap (stale remote jobs included, as in
-    # the dispatcher's cap check), queued, health, HIGH banner.
+    # Header per environment: in-flight count (no platform cap: the service queues),
+    # stale remote jobs, queued, health, HIGH banner.
+    assert "max_inflight_jobs" not in MODULE and "At capacity" not in MODULE
     for needle in (
-        "const used = (env.inflight || 0) + staleRemote;",
-        "used + '/'",
+        "stat('In flight', String(env.inflight || 0))",
         "data-exq-stale-remote",
         "env.queued",
         "env.health_status",

@@ -299,7 +299,7 @@ def _body(user_id, experiment_id, job_id):
     }
 
 
-def _seed(sessions, *, jobs=1, cap=5, schema_json=None, allow_keys=False):
+def _seed(sessions, *, jobs=1, schema_json=None, allow_keys=False):
     """User, project, environment, schema, one experiment with ``jobs`` QUEUED jobs."""
     with sessions() as db:
         user = User(email=f"{uuid4().hex[:8]}@example.com")
@@ -316,7 +316,6 @@ def _seed(sessions, *, jobs=1, cap=5, schema_json=None, allow_keys=False):
             name="staging",
             base_url="https://staging.example",
             api_key_encrypted=encrypt_llm_api_key(ENV_KEY),
-            max_inflight_jobs=cap,
             allow_connection_keys=allow_keys,
             health_status="ok",
         )
@@ -468,31 +467,17 @@ def test_submit_accepted_stores_remote_id_and_recomputes_experiment(
     assert d.tick() == 0
 
 
-def test_inflight_cap_limits_submissions_and_sets_wait_reason(sessions, service, clock):
-    seed = _seed(sessions, jobs=4, cap=2)
+def test_no_platform_inflight_cap_every_queued_job_is_submitted(
+    sessions, service, clock
+):
+    """The Evaluation Service bounds concurrent runs and queues the rest itself."""
+    seed = _seed(sessions, jobs=8)
     d = _dispatcher(sessions, service, clock)
     d.tick()
     statuses = _statuses(sessions, seed["job_ids"])
-    assert statuses.count(EvalJobStatus.SUBMITTED) == 2
-    assert statuses.count(EvalJobStatus.QUEUED) == 2
-    waiting = [_job(sessions, j) for j in seed["job_ids"][2:]]
-    assert {j.wait_reason for j in waiting} == {"Inflight cap 2/2"}
-    assert all(j.next_attempt_at == clock() + timedelta(seconds=10) for j in waiting)
-    assert service.max_active == 2
-
-    # Still full after the recheck interval.
-    clock.advance(10)
-    d.tick()
-    assert len(service.submitted_job_ids) == 2
-
-    # One finishes remotely: its poll frees a slot, and a queued job takes it.
-    first = _job(sessions, seed["job_ids"][0])
-    service.set_status(first.remote_job_id, "SUCCEEDED", result={"run_name": "x"})
-    clock.advance(10)
-    d.tick()
-    d.tick()
-    assert len(service.submitted_job_ids) == 3
-    assert service.max_active == 2
+    assert statuses == [EvalJobStatus.SUBMITTED] * 8
+    assert sorted(service.submitted_job_ids) == sorted(seed["job_ids"])
+    assert service.max_active == 8
 
 
 def test_high_priority_conflict_backs_off_30s_to_5m(sessions, service, clock):
@@ -1248,7 +1233,7 @@ def test_stale_candidates_cannot_steal_a_lease_or_submit(sessions, service, cloc
 
 @pytest.mark.parametrize("rounds", [6])
 def test_two_workers_never_double_submit(sessions, service, clock, rounds):
-    seed = _seed(sessions, jobs=12, cap=5)
+    seed = _seed(sessions, jobs=12)
     service.submit_delay = 0.005  # widen the window between claim and record
     workers = [
         _dispatcher(sessions, service, clock, owner=f"w{i}", batch=4) for i in range(2)
@@ -1270,7 +1255,6 @@ def test_two_workers_never_double_submit(sessions, service, clock, rounds):
         for t in threads:
             t.join(timeout=60)
         assert not errors
-        assert service.max_active <= 5
         # Finish whatever is running so the queue drains.
         for rid, remote in list(service.jobs.items()):
             if remote["status"] == "PENDING":
@@ -1286,7 +1270,6 @@ def test_two_workers_never_double_submit(sessions, service, clock, rounds):
 
     assert len(service.submitted_job_ids) == len(set(service.submitted_job_ids))
     assert sorted(service.submitted_job_ids) == sorted(seed["job_ids"])
-    assert service.max_active <= 5
     assert set(_statuses(sessions, seed["job_ids"])) == {EvalJobStatus.SUCCEEDED}
     assert (
         _experiment_status(sessions, seed["experiment_id"])
@@ -1296,9 +1279,9 @@ def test_two_workers_never_double_submit(sessions, service, clock, rounds):
         w.close()
 
 
-def test_concurrent_submitters_respect_cap_under_contention(sessions, service, clock):
-    """Many workers race for the last in-flight slots of one environment."""
-    seed = _seed(sessions, jobs=10, cap=3)
+def test_concurrent_submitters_never_double_submit(sessions, service, clock):
+    """Many workers race for the queued jobs of one environment."""
+    seed = _seed(sessions, jobs=10)
     service.submit_delay = 0.01
     workers = [
         _dispatcher(sessions, service, clock, owner=f"w{i}", batch=1) for i in range(5)
@@ -1314,16 +1297,13 @@ def test_concurrent_submitters_respect_cap_under_contention(sessions, service, c
         t.start()
     for t in threads:
         t.join(timeout=60)
-    assert service.max_active <= 3
+    assert service.submitted_job_ids
     assert len(service.submitted_job_ids) == len(set(service.submitted_job_ids))
-    with sessions() as db:
-        inflight = db.execute(
-            text(
-                "SELECT count(*) FROM eval_experiment_jobs WHERE status IN "
-                "('SUBMITTING','SUBMITTED','RUNNING')"
-            )
-        ).scalar()
-    assert inflight <= 3
+    # Without a cap the rest go out on the next ticks, each exactly once.
+    for _ in range(10):
+        for w in workers:
+            w.tick()
+    assert sorted(service.submitted_job_ids) == sorted(seed["job_ids"])
     for w in workers:
         w.close()
 

@@ -749,7 +749,7 @@ def test_queue_lists_jobs_in_dispatch_order_with_wait_reason(
     (env,) = body["environments"]
     assert env["id"] == seed["env_id"]
     assert (env["inflight"], env["queued"], env["blocked"]) == (1, 2, 1)
-    assert env["max_inflight_jobs"] == 5 and env["high_active"] is False
+    assert "max_inflight_jobs" not in env and env["high_active"] is False
 
     # The dispatcher claims the claimable ones in exactly this order.
     clock.advance(120)
@@ -1207,11 +1207,11 @@ def test_timeout_with_a_rejected_key_pauses_the_environment(sessions, service, c
         assert db.get(EvalEnvironment, seed["env_id"]).health_status == "error"
 
 
-def test_stale_remote_jobs_count_toward_the_inflight_cap(sessions, service, clock):
-    from qym_platform.db.models import EvalRemoteQueueSnapshot
+def test_stale_remote_jobs_do_not_hold_back_submissions(sessions, service, clock):
+    """No platform cap: stale remote jobs are reported, never waited on."""
     from qym_platform.services.eval_dispatcher import stale_remote_job_ids
 
-    seed = _seed(sessions, jobs=3, cap=2)
+    seed = _seed(sessions, jobs=3)
     stale, first, second = seed["job_ids"]
     _update_job(
         sessions, stale, status=EvalJobStatus.TIMED_OUT, remote_job_id="r-stale"
@@ -1220,28 +1220,15 @@ def test_stale_remote_jobs_count_toward_the_inflight_cap(sessions, service, cloc
         sessions,
         seed["env_id"],
         [
-            _remote_item("r-stale"),  # ours, finished locally: counts
-            _remote_item("r-orphan"),  # not ours: does not count (D8)
+            _remote_item("r-stale"),  # ours, finished locally: stale
+            _remote_item("r-orphan"),  # not ours: an orphan, not stale (D8)
         ],
     )
     with sessions() as db:
         assert stale_remote_job_ids(db, seed["env_id"]) == {"r-stale"}
     d = _dispatcher(sessions, service, clock)
-    assert d.tick() == 2
-    assert _job(sessions, first).status == EvalJobStatus.SUBMITTED
-    waiting = _job(sessions, second)
-    assert waiting.status == EvalJobStatus.QUEUED
-    assert waiting.wait_reason == "Inflight cap 2/2 (1 stale on the service)"
-    assert service.calls["submit"] == 1
-
-    # The stale job ends on the service: the next snapshot frees the slot.
-    with sessions() as db:
-        db.get(EvalRemoteQueueSnapshot, seed["env_id"]).items = [
-            _remote_item("r-orphan")
-        ]
-        db.commit()
-    clock.advance(10)
     d.tick()
+    assert _job(sessions, first).status == EvalJobStatus.SUBMITTED
     assert _job(sessions, second).status == EvalJobStatus.SUBMITTED
     assert service.calls["submit"] == 2
 
@@ -1306,7 +1293,7 @@ def test_remote_queue_flags_stale_jobs(api, sessions, service, clock):
     assert items["r-ours"]["stale"] is False and items["r-ours"]["orphan"] is False
     assert items["r-orphan"]["stale"] is False and items["r-orphan"]["orphan"] is True
     assert env["stale_count"] == 1 and env["orphan_count"] == 1
-    # The queue header counts it against the cap next to our own RUNNING job.
+    # The queue header reports it next to our own RUNNING job.
     queue = api.get(_queue_url(seed), headers=_as(sessions, member)).json()
     assert queue["environments"][0]["stale_remote"] == 1
     assert queue["environments"][0]["inflight"] == 1
@@ -1363,7 +1350,7 @@ def test_manager_cancels_a_stale_remote_job_with_audit(api, sessions, service, c
         "job_id": done,
         "job_status": "TIMED_OUT",
     }
-    # It leaves the snapshot at once, so it no longer counts toward the cap.
+    # It leaves the snapshot at once.
     remote = api.get(_queue_url(seed, "/remote"), headers=_as(sessions, manager))
     ids = [i["remote_job_id"] for i in remote.json()["environments"][0]["items"]]
     assert "r-stale" not in ids

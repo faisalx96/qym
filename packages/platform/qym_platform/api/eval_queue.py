@@ -33,8 +33,8 @@ checked **per job**. Cancelling an orphan remote job needs a project manager.
           "limit",
           "environments": [{           # queue headers (the filtered env, or all active)
             "id", "name", "is_active", "health_status", "health_error",
-            "max_inflight_jobs", "inflight", "queued", "blocked",
-            "stale_remote",            # stale remote jobs; they count toward the cap
+            "inflight", "queued", "blocked",
+            "stale_remote",            # finished locally, maybe still running remotely
             "counts": {status: n}, "high_active"
           }]
         }

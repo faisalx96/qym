@@ -129,7 +129,6 @@ class ServiceStats:
     cancel_calls: List[Tuple[str, str]] = field(default_factory=list)  # (rid, result)
     double_cancels: List[str] = field(default_factory=list)
     max_occupied: Counter = field(default_factory=Counter)  # env -> max seen
-    cap_violations: List[Tuple[str, int]] = field(default_factory=list)
     max_concurrent_posts: int = 0
 
 
@@ -137,21 +136,18 @@ class LoadTestService:
     """Thread-safe fake Evaluation Service, one remote queue per environment URL.
 
     ``occupied(env)`` = remote jobs ``PENDING``/``RUNNING`` + ``POST /evals`` calls in
-    progress. The dispatcher counts every one of those as in flight (``SUBMITTING``,
-    ``SUBMITTED``, ``RUNNING``, ``CANCELLING``), so it must never exceed the cap.
-    It is checked on every change, which is "at any instant" for this fake.
+    progress, recorded on every change ("at any instant" for this fake). The
+    platform has no in-flight cap: the real service bounds and queues runs itself.
     """
 
     def __init__(
         self,
         clock: FakeClock,
-        caps: Dict[str, int],
         *,
         faults: Optional[Faults] = None,
         seed: int = 40,
     ) -> None:
         self.clock = clock
-        self.caps = dict(caps)
         self.faults = faults or Faults()
         self.rng = random.Random(seed)
         self.lock = threading.Lock()
@@ -174,12 +170,10 @@ class LoadTestService:
         )
         return active + self.posts_in_progress[env]
 
-    def _check_cap(self, env: str) -> None:
+    def _track_occupied(self, env: str) -> None:
         occupied = self._occupied(env)
         if occupied > self.stats.max_occupied[env]:
             self.stats.max_occupied[env] = occupied
-        if occupied > self.caps[env]:
-            self.stats.cap_violations.append((env, occupied))
 
     def _latency(self) -> float:
         low, high = self.faults.latency
@@ -194,7 +188,7 @@ class LoadTestService:
             self.stats.max_concurrent_posts = max(
                 self.stats.max_concurrent_posts, sum(self.posts_in_progress.values())
             )
-            self._check_cap(env)
+            self._track_occupied(env)
             delay = self._latency()
             f = self.faults
             forced = f.first_submits
@@ -243,7 +237,7 @@ class LoadTestService:
                 self.order.insert(0, rid)
                 self.stats.created[launch_job_id(job)] += 1
                 self.posts_in_progress[env] -= 1
-                self._check_cap(env)
+                self._track_occupied(env)
                 if fault == "timeout":
                     raise RetryableError("Evaluation service request timed out")
                 if fault == "crash_after_accept":
@@ -310,7 +304,7 @@ class LoadTestService:
                 )
             self.stats.cancel_calls.append((rid, "200"))
             job.update(status="CANCELLED", cancelled_by_user_id=user_id)
-            self._check_cap(env)
+            self._track_occupied(env)
             return copy.deepcopy(job)
 
     # -- remote progress (called by the driver between rounds) -------------------
@@ -414,7 +408,7 @@ def _body(user_id: str, experiment_id: str, job_id: str, combo: int) -> Dict[str
 
 
 def seed_sweep(
-    sessions: Callable[[], Any], *, envs: int = 2, jobs_per_env: int = 32, cap: int = 4
+    sessions: Callable[[], Any], *, envs: int = 2, jobs_per_env: int = 32
 ) -> Dict[str, Any]:
     """One experiment: ``envs`` environments × ``jobs_per_env`` QUEUED combos.
 
@@ -438,7 +432,6 @@ def seed_sweep(
                 name=f"env-{index}",
                 base_url=f"https://env-{index}.example",
                 api_key_encrypted=encrypt_llm_api_key(ENV_KEY),
-                max_inflight_jobs=cap,
                 health_status="ok",
             )
             db.add(env)
@@ -485,7 +478,6 @@ def seed_sweep(
             "project_id": project.id,
             "experiment_id": experiment.id,
             "env_ids": [env.id for env, _ in env_rows],
-            "caps": {env.base_url: cap for env, _ in env_rows},
             "job_ids": job_ids,
         }
 
@@ -531,7 +523,6 @@ class SweepResult:
     restarts: int
     worker_errors: List[str]
     db_max_inflight: Dict[str, int]
-    db_cap_violations: List[Tuple[str, int]]
     final_status: Counter
     all_terminal: bool
 
@@ -587,7 +578,6 @@ def run_sweep(
     batch: int = 4,
     advance_seconds: float = 15.0,
     max_rounds: int = 400,
-    caps_by_env_id: Optional[Dict[str, int]] = None,
     during_round: Optional[Dict[int, Callable[[], Any]]] = None,
     sample_db: bool = True,
 ) -> SweepResult:
@@ -610,7 +600,6 @@ def run_sweep(
     crashes = restarts = 0
     tick_seconds: List[float] = []
     db_max: Counter = Counter()
-    db_violations: List[Tuple[str, int]] = []
     state_lock = threading.Lock()
     start_barrier = threading.Barrier(workers + 1)
     end_barrier = threading.Barrier(workers + 1)
@@ -645,9 +634,6 @@ def run_sweep(
                 continue
             for env_id, count in counts.items():
                 db_max[env_id] = max(db_max[env_id], count)
-                cap = (caps_by_env_id or {}).get(env_id)
-                if cap is not None and count > cap:
-                    db_violations.append((env_id, count))
             done.wait(0.002)
 
     threads = [
@@ -705,7 +691,6 @@ def run_sweep(
         restarts=restarts,
         worker_errors=errors,
         db_max_inflight=dict(db_max),
-        db_cap_violations=db_violations,
         final_status=final,
         all_terminal=all_terminal,
     )
@@ -732,7 +717,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--batch", type=int, default=4)
     parser.add_argument("--envs", type=int, default=2)
     parser.add_argument("--jobs-per-env", type=int, default=32)
-    parser.add_argument("--cap", type=int, default=4)
     parser.add_argument("--advance", type=float, default=15.0)
     parser.add_argument("--latency-ms", type=float, default=5.0)
     parser.add_argument("--faults", action="store_true", help="inject failures")
@@ -777,11 +761,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         setup = make_engine()
         Base.metadata.create_all(setup)
         sessions = sessionmaker(bind=setup, autoflush=False)
-        seed = seed_sweep(
-            sessions, envs=args.envs, jobs_per_env=args.jobs_per_env, cap=args.cap
-        )
+        seed = seed_sweep(sessions, envs=args.envs, jobs_per_env=args.jobs_per_env)
         clock = FakeClock()
-        service = LoadTestService(clock, seed["caps"], faults=faults, seed=args.seed)
+        service = LoadTestService(clock, faults=faults, seed=args.seed)
         result = run_sweep(
             make_engine,
             service,
@@ -790,7 +772,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             workers=args.workers,
             batch=args.batch,
             advance_seconds=args.advance,
-            caps_by_env_id={env_id: args.cap for env_id in seed["env_ids"]},
         )
         rows = job_rows(sessions, seed["job_ids"])
         experiment_status = experiment_status_of(sessions, seed["experiment_id"])
@@ -808,7 +789,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "batch": args.batch,
         "jobs": len(seed["job_ids"]),
         "envs": args.envs,
-        "cap_per_env": args.cap,
         "faults": args.faults,
         "rounds": result.rounds,
         "simulated_seconds": result.rounds * args.advance,
@@ -826,9 +806,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "list_calls": stats.list_calls,
         "crashes": result.crashes,
         "remote_max_occupied": dict(stats.max_occupied),
-        "remote_cap_violations": len(stats.cap_violations),
         "db_max_inflight": sorted(result.db_max_inflight.values()),
-        "db_cap_violations": len(result.db_cap_violations),
         "max_concurrent_posts": stats.max_concurrent_posts,
         "worker_errors": result.worker_errors,
         "final_status": dict(result.final_status),
@@ -838,8 +816,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ok = (
         result.all_terminal
         and not report["duplicate_submissions"]
-        and not stats.cap_violations
-        and not result.db_cap_violations
         and not result.worker_errors
         and experiment_status == "COMPLETED"
     )

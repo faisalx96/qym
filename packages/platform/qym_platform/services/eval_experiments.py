@@ -115,7 +115,7 @@ RETRYABLE_STATUSES = frozenset(
         EvalJobStatus.BLOCKED,
     }
 )
-# In flight: occupies a slot on its environment (the dispatcher's inflight cap).
+# In flight: submitted (or being submitted) to the Evaluation Service, not finished.
 ACTIVE_JOB_STATUSES = frozenset(
     {
         EvalJobStatus.SUBMITTING,
