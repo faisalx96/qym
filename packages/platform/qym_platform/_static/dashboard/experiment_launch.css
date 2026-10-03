@@ -129,3 +129,7 @@
 .xl-field--structured { grid-column: 1 / -1; }
 /* "+ Add LLM endpoint" under the model cards (endpoints for this experiment only). */
 .xl-add-endpoint { display: grid; gap: var(--space-xs); padding-top: var(--space-sm); border-top: 1px solid var(--border-subtle); }
+/* "All …" rows and blocks: one value written to every item of a list. */
+.xl-all-row td { background: var(--bg-elevated); }
+.xl-all-label { font-family: var(--font-sans); font-size: var(--font-sm); font-weight: 600; color: var(--text-muted); }
+.xl-all-block { background: var(--bg-elevated); border-radius: var(--control-radius); }

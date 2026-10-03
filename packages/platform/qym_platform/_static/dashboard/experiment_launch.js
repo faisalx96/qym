@@ -121,6 +121,8 @@
   const ROLE_LABELS = { model: 'model', base_url: 'base URL', api_key: 'API key' };
   // New LLM endpoint names when the schema gives no propertyNames pattern.
   const ENDPOINT_NAME_PATTERN = '^[A-Za-z0-9][A-Za-z0-9_.-]*$';
+  // The "Mixed" option of an "All …" select (its targets hold different values).
+  const ALL_MIXED = '\u0000mixed';
 
   // ── Utilities ──────────────────────────────────────────────────────────
   function el(tag, attrs, children) {
@@ -2215,6 +2217,107 @@
       td.appendChild(el('div', { className: 'xl-cell-sweep' }, [control, toggle]));
     }
 
+    // ── "All …" values: one setting written to every item of a list ─────
+    /**
+     * A control that sets one setting on every item of a list (role table rows,
+     * collection entries). `pointers` are the unbound targets; `shown` (optional)
+     * narrows them when the value is applied, e.g. to the rows a search shows.
+     * It displays the value the targets share, else "Mixed". A committed value
+     * (pick, blur or Enter; Enter on an empty input clears) is written to every
+     * target, then onApplied() re-renders.
+     */
+    function allItemsControl(entry, fields, pointers, label, shown, onApplied) {
+      const values = pointers.map((p) => (has(st.values, p) ? JSON.stringify(st.values[p]) : undefined));
+      const same = pointers.length > 0 && values.every((v) => v === values[0])
+        && !pointers.some((p) => has(st.invalid, p) || isSweepValue(st.values[p]));
+      const control = leafControl(entry, same ? pointers[0] : '\u0000all', fields, null, label);
+      control.removeAttribute('data-xl-pointer');
+      control.setAttribute('data-xl-all', '1');
+      control.title = 'A value set here is written to every item';
+      if (!pointers.length) { control.disabled = true; return control; }
+      if (!same && control.tagName === 'SELECT') {
+        control.insertBefore(el('option', { value: ALL_MIXED, text: 'Mixed' }), control.firstChild);
+        control.value = ALL_MIXED;
+      } else if (!same) control.placeholder = 'Mixed';
+      let applied = false;
+      const apply = () => {
+        if (applied || control.value === ALL_MIXED) return;
+        const parsed = parseInput(entry, control.value);
+        if (parsed.error) { control.setAttribute('aria-invalid', 'true'); control.title = parsed.error; return; }
+        applied = true;
+        pointers.filter((p) => !shown || shown(p)).forEach((p) => {
+          delete st.invalid[p];
+          if (parsed.unset) delete st.values[p];
+          else st.values[p] = deepCopy(parsed.value);
+        });
+        onApplied();
+        updateChangedCount();
+        renderPreviewSoon();
+        schedulePreview();
+      };
+      control.addEventListener('change', apply);
+      // Enter applies even an unchanged value, e.g. an empty "Mixed" input clears every item.
+      if (control.tagName === 'INPUT') control.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); apply(); } });
+      return control;
+    }
+
+    /** Whether an "All …" control can set this setting (secrets come from model slots). */
+    function allItemsEditable(entry) {
+      return !!entry && entry.kind === 'field' && !entry.secret && entry.widget !== 'secret';
+    }
+
+    /**
+     * The "All roles" row of a role table: one control per column, written to every
+     * unbound row that `rowShown(row)` keeps (rows hidden by a filter are skipped).
+     */
+    function roleAllRow(model, table, cols, bound, rowShown, onApplied) {
+      const rows = table.rows || [];
+      const noun = (table.row_param || 'role') + 's';
+      const cells = [el('td', { className: 'xl-role-name xl-all-label', text: 'All ' + noun, title: 'A value set here is written to every ' + (table.row_param || 'role') + ' shown' })];
+      cols.forEach((col) => {
+        const entry = model.fields[col.template];
+        const td = el('td');
+        if (!allItemsEditable(entry)) { td.appendChild(el('span', { className: 'xl-hint', text: '—' })); cells.push(td); return; }
+        const rowOf = {};
+        const pointers = [];
+        rows.forEach((row) => {
+          const pointer = childPointer(table.pointer, row.pointer, col.template);
+          if (bound[pointer]) return;
+          rowOf[pointer] = row;
+          pointers.push(pointer);
+        });
+        td.appendChild(allItemsControl(entry, model.fields, pointers, 'All ' + noun + ' · ' + col.label, (p) => rowShown(rowOf[p]), onApplied));
+        cells.push(td);
+      });
+      return el('tr', { className: 'xl-all-row', 'data-xl-all-row': '1' }, cells);
+    }
+
+    /** "All <entries>" over a collection: the item's direct settings, written to every entry. */
+    function collectionAllBlock(model, entry, item, pointer, keys, bound) {
+      const noun = (entry.key_param || 'entry') + (entry.key_param ? 's' : '');
+      const fieldsNodes = [];
+      (item.children || []).forEach((childTemplate) => {
+        const child = model.fields[childTemplate];
+        if (!allItemsEditable(child)) return;
+        const pointers = keys.map((key) => childPointer(entry.item_pointer, pointer + '/' + escSeg(key), childTemplate)).filter((p) => !bound[p]);
+        if (!pointers.length) return;
+        const label = 'All ' + noun + ' · ' + (child.label || child.name);
+        const control = allItemsControl(child, model.fields, pointers, label, null, renderSettings);
+        const id = 'xl-f-' + Math.random().toString(36).slice(2, 10);
+        control.id = id;
+        fieldsNodes.push(el('div', { className: 'xl-field' }, [
+          el('div', { className: 'xl-field-head' }, [el('label', { className: 'xl-field-label', for: id, text: child.label || child.name })]),
+          control,
+        ]));
+      });
+      if (!fieldsNodes.length) return null;
+      return el('div', { className: 'xl-object xl-all-block', 'data-xl-all-block': '1' }, [
+        el('div', { className: 'xl-object-title' }, [el('span', { text: 'All ' + noun }), tag(String(keys.length), 'count')]),
+        el('div', { className: 'xl-hint', text: 'A value set here is written to every ' + (entry.key_param || 'entry') + ' below.' }),
+        el('div', { className: 'xl-fields' }, fieldsNodes),
+      ]);
+    }
+
     /** After a field starts or stops sweeping: re-render the views that show it. */
     function refreshSweeps() {
       renderSettings();
@@ -2309,6 +2412,7 @@
       if (advanced) return advanced.roleTableSummary(model, table);
       const cols = roleColumns(model, table);
       const head = el('tr', null, [el('th', { text: table.row_param || 'role' })].concat(cols.map((c) => el('th', { className: 'xl-mono', text: c.label }))));
+      const trs = {}; // row key → tr (the "All roles" row skips filtered rows)
       const rows = (table.rows || []).map((row) => {
         const absent = model.envs.length > 1 ? envsMissing(row.pointer) : [];
         const name = absent.length ? el('span', { className: 'xl-row' }, [el('span', { text: row.key })].concat(absent.map((id) => tag('not in ' + envName(id), 'warning')))) : row.key;
@@ -2328,12 +2432,14 @@
         const tr = el('tr', { 'data-xl-row': row.key, 'data-xl-pointer': '/env_overrides' + row.pointer }, cells);
         tr.setAttribute('data-xl-search', [row.key, row.label || '', row.description || ''].concat(cols.map((c) => c.label)).join(' ').toLowerCase());
         tr._xlPointers = pointers;
+        trs[row.key] = tr;
         return tr;
       });
+      const allRow = roleAllRow(model, table, cols, bound, (row) => !trs[row.key].hidden, renderSettings);
       return el('div', { className: 'xl-object', 'data-xl-container': '1' }, [
         el('div', { className: 'xl-object-title' }, [el('span', { text: 'Roles' }), tag(String(rows.length), 'count')]),
-        el('div', { className: 'xl-hint', text: 'One row per role; leave a cell on Inherit to keep the environment value.' }),
-        el('div', { className: 'xl-table-wrap' }, [el('table', { className: 'xl-role-table' }, [el('thead', null, [head]), el('tbody', null, rows)])]),
+        el('div', { className: 'xl-hint', text: 'One row per role; leave a cell on Inherit to keep the environment value. "All roles" sets a column on every role shown.' }),
+        el('div', { className: 'xl-table-wrap' }, [el('table', { className: 'xl-role-table' }, [el('thead', null, [head]), el('tbody', null, [allRow].concat(rows))])]),
       ]);
     }
 
@@ -2374,8 +2480,10 @@
           renderSettings();
         },
       }), addError]);
+      const all = item && keys.length > 1 ? collectionAllBlock(model, entry, item, pointer, keys, bound) : null;
       return el('div', { className: 'xl-object', 'data-xl-container': '1', 'data-xl-pointer': '/env_overrides' + pointer }, [
         el('div', { className: 'xl-object-title' }, [el('span', { text: entry.label || entry.name }), el('span', { className: 'xl-field-name', text: entry.name })]),
+        all,
       ].concat(blocks).concat([add]));
     }
 
@@ -3007,7 +3115,7 @@
         el, tag, request, projectPath, has, escSeg, splitPointer, childPointer,
         state: st,
         mode: editor ? 'editor' : 'launch', // 'editor' (#30): one config, no sweeps
-        union, unionSlots, boundPointers, roleColumns, leafControl, onLeafInput, markChanged,
+        union, unionSlots, boundPointers, roleColumns, roleAllRow, leafControl, onLeafInput, markChanged,
         buildSpec, bindingSummary, clearBinding, pruneSecrets, loadVersions, fillCell,
         rerender: () => { renderDataset(); renderModels(); renderSettings(); renderRun(); renderPreview(); },
         renderDataset, renderPreview, schedulePreview, updateChangedCount,

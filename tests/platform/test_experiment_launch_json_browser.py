@@ -6,7 +6,6 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import pytest
-
 from test_dashboard_paging_browser import browser  # noqa: F401
 
 STATIC = (
@@ -131,7 +130,9 @@ def test_same_key_objects_are_a_table_with_an_all_items_row(harness):
     assert page.get_by_label("SETTING · 0 · weight", exact=True).input_value() == "5"
     assert page.get_by_label("SETTING · 1 · weight", exact=True).input_value() == "5"
     # Booleans: the "All items" select applies to every item.
-    page.get_by_label("SETTING · * · enabled (all items)", exact=True).select_option("false")
+    page.get_by_label("SETTING · * · enabled (all items)", exact=True).select_option(
+        "false"
+    )
     assert [item["enabled"] for item in harness.last()] == [False, False]
     # One cell edit; the global name cell then shows "Mixed" again.
     page.get_by_label("SETTING · 1 · name", exact=True).fill("c")
@@ -200,3 +201,46 @@ def test_values_are_text_never_html(harness):
     harness.mount([{payload: payload}])
     assert page.locator("#host img").count() == 0
     assert page.evaluate("window.pwned") is None
+
+
+def test_mixed_key_objects_get_an_all_items_block(harness):
+    page = harness.page
+    harness.mount([{"role": "a", "temperature": 0.2}, {"role": "b", "top_p": 1}])
+    assert page.locator("table.xlj-table").count() == 0
+    # One field per scalar key any item has; a value is committed on change.
+    all_temperature = page.get_by_label(
+        "SETTING · * · temperature (all items)", exact=True
+    )
+    assert all_temperature.input_value() == ""  # absent from item 2: mixed
+    assert all_temperature.get_attribute("placeholder") == "Mixed"
+    all_temperature.fill("0.7")
+    all_temperature.press("Enter")
+    assert harness.last() == [
+        {"role": "a", "temperature": 0.7},
+        {"role": "b", "top_p": 1, "temperature": 0.7},
+    ]
+    # Re-rendered: the item cards and the block show the shared value.
+    assert (
+        page.get_by_label("SETTING · 1 · temperature", exact=True).input_value()
+        == "0.7"
+    )
+    assert (
+        page.get_by_label(
+            "SETTING · * · temperature (all items)", exact=True
+        ).input_value()
+        == "0.7"
+    )
+
+
+def test_scalar_lists_get_an_all_input(harness):
+    page = harness.page
+    harness.mount({"models": ["x", "y", "z"]})
+    all_models = page.get_by_label("SETTING · models · * (all items)", exact=True)
+    all_models.fill("gpt")
+    all_models.press("Enter")
+    assert harness.last() == {"models": ["gpt", "gpt", "gpt"]}
+    # A single item has nothing to apply to all.
+    harness.mount({"models": ["x"]})
+    assert (
+        page.get_by_label("SETTING · models · * (all items)", exact=True).count() == 0
+    )

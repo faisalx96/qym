@@ -344,7 +344,7 @@
             },
           }),
         ]));
-        children.push(el('div', { className: 'xl-hint', text: 'Rows are the roles in the environment schema; an empty cell keeps the service default. Endpoints list the endpoint slots and entries defined in this form.' }));
+        children.push(el('div', { className: 'xl-hint', text: 'Rows are the roles in the environment schema; an empty cell keeps the service default. "All roles" sets a column on every role shown. Endpoints list the endpoint slots and entries defined in this form.' }));
         const bound = api.boundPointers();
         tables.forEach((table) => children.push(renderRoleTable(model, table, bound)));
         children.push(el('div', { className: 'xl-empty', 'data-xa-roles-empty': '1', hidden: true, text: 'No roles match.' }));
@@ -356,6 +356,7 @@
     function renderRoleTable(model, table, bound) {
       const cols = api.roleColumns(model, table);
       const head = el('tr', null, [el('th', { text: table.row_param || 'role' })].concat(cols.map((c) => el('th', { className: 'xl-mono', text: c.label }))));
+      const trs = {}; // row key → tr
       const rows = (table.rows || []).map((row) => {
         const cells = [el('td', { className: 'xl-role-name', title: row.description || null, text: row.key })];
         cols.forEach((col) => {
@@ -374,10 +375,13 @@
         const tr = el('tr', { 'data-xa-row': row.key, 'data-xl-pointer': '/env_overrides' + row.pointer }, cells);
         tr.setAttribute('data-xa-search', [row.key, row.label || '', row.description || ''].join(' ').toLowerCase());
         tr._xaRow = row;
+        trs[row.key] = tr;
         return tr;
       });
+      // "All roles": a column value written to every role the search and filter show.
+      const allRow = api.roleAllRow(model, table, cols, bound, (row) => !trs[row.key].hidden, () => { renderRoles(); updateCounts(); });
       return el('div', { className: 'xa-role-block', 'data-xa-table': table.pointer }, [
-        el('div', { className: 'xl-table-wrap xa-role-wrap' }, [el('table', { className: 'xl-role-table' }, [el('thead', null, [head]), el('tbody', null, rows)])]),
+        el('div', { className: 'xl-table-wrap xa-role-wrap' }, [el('table', { className: 'xl-role-table' }, [el('thead', null, [head]), el('tbody', null, [allRow].concat(rows))])]),
       ]);
     }
 

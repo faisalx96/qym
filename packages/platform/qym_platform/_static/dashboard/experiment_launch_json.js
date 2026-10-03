@@ -7,10 +7,13 @@
  * The form descriptor only says "array"/"object"/"json" for these settings (no item
  * schema), so fields are inferred from the value itself:
  *   - object → one input per key (nested objects and lists recurse), "+ Add key";
- *   - list of scalars → one input per item, "+ Add item";
+ *   - list of scalars → one input per item, "+ Add item" (see below for "All");
  *   - list of objects sharing the same keys → a table with one row per item and an
  *     "All items" row: a value typed there is written into every item;
- *   - any other list → one card per item.
+ *   - any other list of objects → one card per item, under an "All items" block over
+ *     every scalar key (a value set there is written into every item, added where
+ *     missing);
+ *   - list of scalars → one input per item and an "All" input that sets every item.
  * `encoding: 'string'` covers string settings whose value is JSON text: container()
  * parses it, and the form serializes edits back to a string.
  *
@@ -217,18 +220,103 @@
       let body;
       if (keys) body = renderTable(path, list, keys, depth, removeItem);
       else if (list.every(isScalar)) {
-        body = el('div', { className: 'xlj-items' }, list.map((item, i) => el('div', { className: 'xlj-item-row' }, [
+        const rows = list.map((item, i) => el('div', { className: 'xlj-item-row' }, [
           el('span', { className: 'xlj-index', text: String(i + 1) }),
           scalarControl(kindOf(item), item, labelFor(path.concat([i])), (v) => { setAt(path.concat([i]), v); commit(); }),
           removeItem(i),
-        ])));
+        ]));
+        if (list.length > 1) {
+          rows.unshift(el('div', { className: 'xlj-item-row xlj-all-item' }, [
+            el('span', { className: 'xlj-all-label', text: 'All' }),
+            allControl(path, null, listKind(list), shared(list), labelFor(path.concat(['*'])) + ' (all items)'),
+            el('span'),
+          ]));
+        }
+        body = el('div', { className: 'xlj-items' }, rows);
       } else {
-        body = el('div', { className: 'xlj-items' }, list.map((item, i) => el('div', { className: 'xlj-nested' }, [
+        const cards = list.map((item, i) => el('div', { className: 'xlj-nested' }, [
           el('div', { className: 'xlj-key' }, [el('span', { className: 'xlj-key-name', text: 'Item ' + (i + 1) }), el('span', { className: 'xl-spacer' }), removeItem(i)]),
           valueControl(path.concat([i]), item, depth + 1),
-        ])));
+        ]));
+        const all = list.length > 1 && list.every(isObject) ? renderAllFields(path, list) : null;
+        body = el('div', { className: 'xlj-items' }, [all].concat(cards));
       }
       return el('div', { className: 'xlj-list' }, [head, body, el('div', { className: 'xl-row' }, [addItem])]);
+    }
+
+    // ── "All items": one value written to every item of a list ──────────
+    /** The control kind for values of mixed items: their shared scalar kind, else 'auto'. */
+    function listKind(values) {
+      const kinds = values.map(kindOf);
+      const first = kinds[0];
+      return kinds.every((k) => k === first) && (first === 'string' || first === 'number' || first === 'boolean') ? first : 'auto';
+    }
+    /** {value} when every value is the same (absent counts as different), else null. */
+    function shared(values) {
+      if (!values.length || values.some((v) => v === undefined)) return null;
+      const first = JSON.stringify(values[0]);
+      return values.every((v) => JSON.stringify(v) === first) ? { value: values[0] } : null;
+    }
+
+    /**
+     * A committed "All items" control (pick, blur or Enter): writes the value into
+     * every item of the list at `path` — as the item itself (key null) or as its
+     * `key`, added where missing — then re-renders. Shows the shared value, else "Mixed".
+     */
+    function allControl(path, key, kind, common, label) {
+      const apply = (v) => {
+        const items = getAt(path);
+        items.forEach((item, i) => {
+          if (key === null) items[i] = copy(v);
+          else if (isObject(item)) item[key] = copy(v);
+        });
+        restructure();
+      };
+      if (kind === 'boolean') {
+        const select = el('select', { className: 'qym-control qym-select xlj-control', 'aria-label': label, 'data-xlj-all': '1' }, [
+          el('option', { value: '', text: common ? 'Same: ' + String(common.value) : 'Mixed' }),
+          el('option', { value: 'true', text: 'true' }),
+          el('option', { value: 'false', text: 'false' }),
+        ]);
+        select.addEventListener('change', () => { if (select.value) apply(select.value === 'true'); });
+        return select;
+      }
+      const mono = kind !== 'string';
+      const input = el('input', {
+        className: 'qym-control qym-input xlj-control' + (mono ? ' xl-mono' : ''), type: 'text', spellcheck: 'false',
+        'aria-label': label, placeholder: common ? null : 'Mixed', 'data-xlj-all': '1',
+        title: 'A value set here is written into every item',
+      });
+      input.value = common ? (typeof common.value === 'string' ? common.value : JSON.stringify(common.value)) : '';
+      const initial = input.value;
+      input.addEventListener('change', () => {
+        if (input.value === initial) return;
+        const parsed = parseText(kind, input.value);
+        input.classList.toggle('xlj-invalid', !!parsed.error);
+        if (parsed.error) { input.setAttribute('aria-invalid', 'true'); input.title = parsed.error; return; }
+        apply(parsed.value);
+      });
+      return input;
+    }
+
+    /** Objects with different keys: an "All items" block over every scalar key any item has. */
+    function renderAllFields(path, list) {
+      const keys = [];
+      list.forEach((item) => Object.keys(item).forEach((k) => { if (keys.indexOf(k) < 0) keys.push(k); }));
+      const scalarKeys = keys.filter((k) => list.every((item) => !(k in item) || isScalar(item[k])));
+      if (!scalarKeys.length) return null;
+      const fields = scalarKeys.map((k) => {
+        const values = list.map((item) => item[k]);
+        const present = values.filter((v) => v !== undefined);
+        return el('div', { className: 'xlj-entry' }, [
+          el('div', { className: 'xlj-key' }, [el('span', { className: 'xlj-key-name', text: k })]),
+          allControl(path, k, listKind(present), shared(values), labelFor(path.concat(['*', k])) + ' (all items)'),
+        ]);
+      });
+      return el('div', { className: 'xlj-nested xlj-all-block' }, [
+        el('div', { className: 'xlj-key' }, [el('span', { className: 'xlj-all-label', text: 'All items', title: 'A value set here is written into every item (and added where missing)' })]),
+        el('div', { className: 'xlj-fields' }, fields),
+      ]);
     }
 
     /** Same-key objects: one row per item, plus "All items" for global values. */

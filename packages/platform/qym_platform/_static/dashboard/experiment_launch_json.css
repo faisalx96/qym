@@ -18,3 +18,4 @@
 .xlj-table td { padding: var(--space-xs) var(--space-sm); border-top: 1px solid var(--border-subtle); font-size: var(--font-base); color: var(--text-secondary); vertical-align: middle; }
 .xlj-all-row td { background: var(--bg-elevated); }
 .xlj-all-label { font-size: var(--font-sm); font-weight: 600; color: var(--text-muted); white-space: nowrap; }
+.xlj-all-block, .xlj-all-item { padding: var(--space-xs) var(--space-sm); border-radius: var(--control-radius); background: var(--bg-elevated); }
