@@ -1195,5 +1195,10 @@ def test_docs_describe_archived_projects_as_decided() -> None:
         assert "signs the user out of every browser" in text
         assert "read-only" in text
     operations = (ROOT / "docs" / "internal" / "OPERATIONS.md").read_text(encoding="utf-8")
-    assert "alembic stamp 0058 && alembic upgrade head" in operations
+    assert (
+        "--entrypoint /bin/sh api -ec \\\n"
+        "  'alembic -c packages/platform/qym_platform/migrations/alembic.ini stamp 0058"
+        " && alembic -c packages/platform/qym_platform/migrations/alembic.ini upgrade head'"
+    ) in operations
+    assert "before this version's API or\nworker starts against it" in operations
     assert "Production never ran the pre-release branch" in operations

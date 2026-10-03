@@ -106,15 +106,22 @@ The rebase onto #52 reused revision ids: the pre-release branch's `0059`
 (run means) is not this release's `0059` (`local_auth_credentials.must_change_password`).
 Alembic tracks only the id, so a database stamped with the old `0059` would
 upgrade to head without an error and never get that column; password sign-in,
-sign-up, password change and admin reset then fail with `UndefinedColumn`. Before
-starting this version against such a database, run from the new image:
+sign-up, password change and admin reset then fail with `UndefinedColumn`.
+
+Recover only a database still at the old `0059`, before this version's API or
+worker starts against it: their entrypoint runs `alembic upgrade head` first,
+and stamping `0058` back after that upgrade makes the replay fail. With the new
+image built, the database running and the API and worker stopped, run from the
+repository root:
 
 ```bash
-alembic stamp 0058 && alembic upgrade head
+docker compose -f docker/docker-compose.yml run --rm --no-deps --entrypoint /bin/sh api -ec \
+  'alembic -c packages/platform/qym_platform/migrations/alembic.ini stamp 0058 && alembic -c packages/platform/qym_platform/migrations/alembic.ini upgrade head'
 ```
 
-This re-applies `0059` onward; `0060` only re-queues dashboard summaries, so
-running it again is harmless. Production never ran the pre-release branch, so
+The `/bin/sh` entrypoint skips the startup migration. This re-applies `0059`
+onward; `0060` only re-queues dashboard summaries, so running it again is
+harmless. Production never ran the pre-release branch, so
 this applies only to development and perf-lab databases (for example the dev
 compose `docker-db-1` and `qym-db-perf`). A database at the old `0060`–`0062`
 stops the upgrade with a duplicate table or column error instead of skipping
