@@ -1135,17 +1135,31 @@ def test_trash_reports_each_runs_purge_date(
 def test_capped_trash_list_keeps_the_runs_closest_to_purge(
     client, session_factory, monkeypatch, grace_days
 ):
-    """With more deleted runs than the list shows, none near purge is hidden."""
+    """With more deleted runs than the list shows, none near purge is hidden.
+
+    Purge is paused for the 200 oldest deletions (their project is archived),
+    so with purge on the active project's run leads and they fill the rest.
+    """
     monkeypatch.setenv("QYM_DELETED_RUN_GRACE_DAYS", str(grace_days))
     with session_factory() as db:
         template_id = _seed(db)
         template = db.get(Run, template_id)
+        db.add(
+            Project(
+                id="archived-project",
+                name="Archived",
+                slug="archived-project",
+                created_by_user_id=template.owner_user_id,
+                is_active=False,
+            )
+        )
+        db.flush()
         now = utc_now_naive()
         for index in range(201):
             db.add(
                 Run(
                     id=f"deleted-{index:03d}",
-                    project_id=template.project_id,
+                    project_id=template.project_id if index == 200 else "archived-project",
                     created_by_user_id=template.owner_user_id,
                     owner_user_id=template.owner_user_id,
                     task="task",
@@ -1164,8 +1178,8 @@ def test_capped_trash_list_keeps_the_runs_closest_to_purge(
     ids = [row["id"] for row in _ok(response)]
     assert len(ids) == 200
     if grace_days:
-        assert ids[0] == "deleted-000"
-        assert "deleted-200" not in ids
+        assert ids[:2] == ["deleted-200", "deleted-000"]
+        assert "deleted-199" not in ids
     else:
         assert ids[0] == "deleted-200"
         assert "deleted-000" not in ids

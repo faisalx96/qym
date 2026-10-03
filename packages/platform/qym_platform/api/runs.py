@@ -4137,15 +4137,21 @@ def list_deleted_runs(
     response.headers["X-Qym-Deleted-Run-Grace-Days"] = str(grace_days)
 
     # The list is capped, so with purge on it keeps the runs closest to their
-    # purge date (earliest purge clocks); otherwise the newest deletions.
+    # purge date (earliest purge clocks), and paused runs of archived projects
+    # only fill the space left; otherwise the newest deletions.
+    order_by = (
+        [
+            case((Project.is_active.is_(False), 1), else_=0),
+            func.coalesce(Run.purge_clock_started_at, Run.deleted_at).asc(),
+        ]
+        if grace_days > 0
+        else [Run.deleted_at.desc()]
+    )
     deleted_runs = (
         db.query(Run)
+        .outerjoin(Project, Project.id == Run.project_id)
         .filter(Run.deleted_at.isnot(None))
-        .order_by(
-            func.coalesce(Run.purge_clock_started_at, Run.deleted_at).asc()
-            if grace_days > 0
-            else Run.deleted_at.desc()
-        )
+        .order_by(*order_by, Run.id)
         .limit(200)
         .all()
     )
