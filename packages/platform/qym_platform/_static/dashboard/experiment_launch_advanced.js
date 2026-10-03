@@ -18,7 +18,8 @@
  * and model slots become chips and multi-selects, and "links" becomes st.links.
  * Without it (a form mounted with `sweeps: false`) sweeps are refused here.
  *
- * Collapsed by default, three tabs:
+ * Collapsed by default (its own disclosure, or, in the launch form, the
+ * "Advanced configuration" disclosure it is mounted in), three tabs:
  *   1. Evaluation inputs: the static EvaluatorRequestConfig descriptor from
  *      GET /v1/projects/{pid}/experiments/evaluator-config (D5), a run_metadata
  *      key/value editor (qym_* reserved), the custom dataset string (the same
@@ -163,6 +164,9 @@
       errors: [],
     };
     const nodes = {};
+    // Inside the launch form's "Advanced configuration" disclosure the panel is a
+    // plain card that follows that disclosure, so there is one collapsible only.
+    const nested = host.parentElement ? host.parentElement.closest('details') : null;
 
     // ── Descriptor ─────────────────────────────────────────────────────────
     async function loadPanel() {
@@ -269,7 +273,7 @@
     function summaryText(table) {
       const rows = table.rows || [];
       const count = rows.filter(rowOverridden).length;
-      return count + ' of ' + rows.length + ' roles overridden. Roles are edited in Advanced › Role overrides.';
+      return count + ' of ' + rows.length + ' roles overridden. Roles are edited in ' + (nested ? 'Advanced configuration' : 'Advanced') + ' › Role overrides.';
     }
 
     function roleTableSummary(model, table) {
@@ -1093,7 +1097,7 @@
 
     function open(tab, focus) {
       adv.open = true;
-      nodes.details.open = true;
+      (nested || nodes.details).open = true;
       selectTab(tab || adv.tab);
       if (focus) {
         nodes.details.scrollIntoView({ block: 'start', behavior: 'smooth' });
@@ -1165,24 +1169,37 @@
         tablist.appendChild(button);
         nodes.panels[tab.id] = el('div', { className: 'xa-tab-panel', role: 'tabpanel', id: panelId, 'aria-labelledby': tabId, 'data-xa-panel': tab.id, hidden: tab.id !== adv.tab });
       });
-      nodes.details = el('details', { className: 'xl-card xa-panel', 'data-xa-advanced': '1' }, [
-        el('summary', { className: 'xa-summary' }, [
-          el('div', null, [
-            el('h2', { className: 'xl-section-title', text: 'Advanced' }),
-            el('p', { className: 'xl-section-description', text: 'Evaluation inputs, per-role LLM overrides and the raw JSON document.' }),
-          ]),
-        ]),
-        el('div', { className: 'xl-card-body' }, [tablist].concat(TABS.map((tab) => nodes.panels[tab.id]))),
+      const heading = el('div', null, [
+        el('h2', { className: 'xl-section-title', text: nested ? 'Evaluation inputs and role overrides' : 'Advanced' }),
+        el('p', { className: 'xl-section-description', text: 'Evaluation inputs, per-role LLM overrides and the raw JSON document.' }),
       ]);
-      nodes.details.addEventListener('toggle', () => {
+      const body = el('div', { className: 'xl-card-body' }, [tablist].concat(TABS.map((tab) => nodes.panels[tab.id])));
+      // The disclosure that shows the panel: its own, or the launch form's around it.
+      let disclosure;
+      if (nested) {
+        nodes.details = el('section', { className: 'xl-card xa-panel', 'data-xa-advanced': '1', tabindex: '-1' }, [
+          el('div', { className: 'xl-card-header' }, [heading]),
+          body,
+        ]);
+        disclosure = nested;
+      } else {
+        nodes.details = el('details', { className: 'xl-card xa-panel', 'data-xa-advanced': '1' }, [
+          el('summary', { className: 'xa-summary' }, [heading]),
+          body,
+        ]);
+        disclosure = nodes.details;
+      }
+      disclosure.addEventListener('toggle', () => {
+        if (!adv.active) return; // a torn-down panel whose host disclosure survived
         // open() sets adv.open first: re-rendering here would drop the focus it set.
         const wasOpen = adv.open;
-        adv.open = nodes.details.open;
+        adv.open = disclosure.open;
         if (adv.open && !wasOpen) selectTab(adv.tab);
       });
       host.className = 'xa-host';
       host.replaceChildren(nodes.details);
       updateCounts();
+      if (nested && nested.open) open(adv.tab);
     }
 
     function teardown() {
