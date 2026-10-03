@@ -53,6 +53,17 @@ function metricMetaDisplayKey(key, meta) {
 }
 
 /**
+ * Metadata keys the platform adds beside a scorer's own: a reviewer's edit
+ * flags, and the task_error flag of an "error"-labeled pass
+ * (isTaskErrorPass). They are not metric fields and are not shown as judge
+ * output.
+ */
+const INTERNAL_META_KEYS = new Set(['modified', 'original_score', 'task_error']);
+function isInternalMetaKey(key) {
+  return INTERNAL_META_KEYS.has(key);
+}
+
+/**
  * Check current and per-pass metric metadata for a metric execution error.
  */
 function hasMetricError(row, metricName = null) {
@@ -222,7 +233,10 @@ function errorsLeftOut(direction) {
 /**
  * A repeat-run pass whose task failed. Ingest stores 0 with the label
  * "error" for its metrics and marks them "task_error"; the row's pass
- * attempt is an error. Same rule as services/run_means.py (is_task_error_pass).
+ * attempt is an error. The run payload sends task_error, true or false, with
+ * every "error"-labeled pass, classified by services/run_means.py
+ * (is_task_error_pass) before the index dropped the explanation and long
+ * metadata. Only rows without the flag fall back to the metadata left.
  */
 function isTaskErrorPass(row, metricName, passIndex) {
   const meta = row?.pass_metric_meta?.[metricName]?.[passIndex];
@@ -231,7 +245,8 @@ function isTaskErrorPass(row, metricName, passIndex) {
     // A reviewer's score replaces what the failed task left behind.
     if (String(meta.modified || '').toLowerCase() === 'true') return false;
     if (String(meta.label || '').trim().toLowerCase() === 'error') {
-      if (meta.task_error === true) return true;
+      // The server's verdict, made before compaction dropped the evidence.
+      if (typeof meta.task_error === 'boolean') return meta.task_error;
       // Unmarked (older) rows: ingest's zero-fill carried only the "error"
       // label. A scorer's own "error" label comes with its metadata; then
       // the pass attempt decides.
@@ -1366,6 +1381,7 @@ if (typeof window !== 'undefined') {
     hasTaskError,
     isMetricErrorMeta,
     metricMetaDisplayKey,
+    isInternalMetaKey,
     hasMetricError,
     isErrorRow,
     errorsLeftOut,

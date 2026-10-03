@@ -7280,7 +7280,7 @@
         ];
         for (const keys of schemaKeys) {
           for (const k of keys || []) {
-            if (!['modified', 'original_score'].includes(k)) mmKeySet.add(k);
+            if (!window.QymMetrics.isInternalMetaKey(k)) mmKeySet.add(k);
           }
         }
         for (const row of (snap.rows || [])) {
@@ -7288,7 +7288,7 @@
           for (const metricName of Object.keys(mm)) {
             const meta = mm[metricName] || {};
             for (const k of Object.keys(meta)) {
-              if (!['modified', 'original_score'].includes(k)) mmKeySet.add(k);
+              if (!window.QymMetrics.isInternalMetaKey(k)) mmKeySet.add(k);
             }
           }
         }
@@ -11648,7 +11648,7 @@
             const passMetricMeta = metaFor(name, att.pass_number);
             const hasMetricExecutionError = window.QymMetrics.isMetricErrorMeta(passMetricMeta);
             const hasMeta = Object.keys(passMetricMeta).some(key =>
-              !['modified', 'original_score'].includes(key)
+              !window.QymMetrics.isInternalMetaKey(key)
               && state.visibleMetricMetaFields[key] !== false
               && passMetricMeta[key] !== undefined
               && passMetricMeta[key] !== null
@@ -11699,7 +11699,7 @@
           const detailForMeta = (meta) => {
             const detail = {};
             Object.keys(meta || {}).forEach(key => {
-              if (!['modified', 'original_score'].includes(key)
+              if (!window.QymMetrics.isInternalMetaKey(key)
                   && state.visibleMetricMetaFields[key] !== false
                   && meta[key] !== undefined && meta[key] !== null && meta[key] !== '') {
                 detail[window.QymMetrics.metricMetaDisplayKey(key, meta)] = _parseMetaDeep(meta[key]);
@@ -11752,7 +11752,7 @@
         const blocks = state.allMetrics.map((name, i) => {
           const meta = metricMeta[name] || {};
           const metaKeys = Object.keys(meta).filter(k =>
-            !['modified', 'original_score'].includes(k)
+            !window.QymMetrics.isInternalMetaKey(k)
             && state.visibleMetricMetaFields[k] !== false
             && meta[k] !== undefined && meta[k] !== null && meta[k] !== '');
           if (!metaKeys.length) return '';
@@ -11794,7 +11794,7 @@
           const fullMetricMeta = (fullMeta || {})[name] || {};
           const hasMetricExecutionError = window.QymMetrics.isMetricErrorMeta(fullMetricMeta);
           const metaKeys = Object.keys(meta).filter(k =>
-            !['modified', 'original_score'].includes(k)
+            !window.QymMetrics.isInternalMetaKey(k)
             && state.visibleMetricMetaFields[k] !== false
             && meta[k] !== undefined && meta[k] !== null && meta[k] !== '');
           const rawValue = ((metricVals || [])[i] == null || (metricVals || [])[i] === '') ? '' : String((metricVals || [])[i]);
@@ -14506,7 +14506,7 @@
           for (var m of state.allMetrics) {
             var meta = mm[m] || {};
             for (var k of Object.keys(meta)) {
-              if (!['modified', 'original_score'].includes(k)) metricMetaKeys[m].add(k);
+              if (!window.QymMetrics.isInternalMetaKey(k)) metricMetaKeys[m].add(k);
             }
           }
         }

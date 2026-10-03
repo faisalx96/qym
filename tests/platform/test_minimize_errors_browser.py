@@ -373,3 +373,71 @@ def test_runs_list_run_page_and_compare_show_the_same_means(browser):
     finally:
         for fixture in fixtures:
             fixture.close()
+
+
+def _metric_cards(page):
+    return page.evaluate(
+        """() => Object.fromEntries(Array.from(
+          document.querySelectorAll('.metric-card'),
+          card => [card.querySelector('.metric-card-name')?.textContent,
+                   card.textContent.replace(/\\s+/g, ' ').trim()],
+        ).filter(([name]) => name))"""
+    )
+
+
+def test_error_labeled_passes_read_the_same_in_full_compact_and_released_rows(browser):
+    """A scorer's own "error" label with a long reason, nested metadata or
+    only an explanation is a judged pass; a failed task is not. Full rows,
+    index rows, loaded and then released rows give the runs list's mean,
+    and the platform's task_error flag is never offered as a metric field."""
+    from test_minimize_errors import LABELED_H, _labeled
+
+    shown = {}
+    with _runs_api(lambda db: _labeled(db, "run-1")) as client:
+        assert _listed_means(client)["run-1"]["h"] == pytest.approx(LABELED_H)
+        for compact in (False, True):
+            fixture = ViewFixture(browser, "run", compact=compact, count=9, samples=3)
+            fixture.api_client = client
+            try:
+                assert _run_page_means(fixture) == _approx({"h": LABELED_H})
+                page = fixture.page
+                assert "task_error" not in page.evaluate(
+                    "__viewTest.state.allMetricMetaKeys"
+                )
+                shown[compact, "index"] = _metric_cards(page)
+                if compact:
+                    # The CSV export loads every row; closing it releases
+                    # them back to the index form.
+                    page.evaluate("document.getElementById('export-filtered-btn').click()")
+                    page.locator("#export-modal-cancel").wait_for()
+                    assert page.evaluate(
+                        "__viewTest.state.snapshot.rows.every(row => row.__details_loaded)"
+                    )
+                    page.evaluate("__viewTest.renderItems()")
+                    fixture.settled()
+                    shown[compact, "loaded"] = _metric_cards(page)
+                    page.locator("#export-modal-cancel").click()
+                    page.wait_for_function(
+                        "__viewTest.state.snapshot.rows.every(row => !row.__details_loaded)"
+                    )
+                    page.evaluate("__viewTest.renderItems()")
+                    fixture.settled()
+                    shown[compact, "released"] = _metric_cards(page)
+                    flags = page.evaluate(
+                        "__viewTest.state.snapshot.rows.map(row => "
+                        "[row.item_id, row.pass_metric_meta?.h?.[0]?.task_error ?? null])"
+                    )
+                    assert dict(flags) == {
+                        "long_reason": False,
+                        "nested": False,
+                        "explained": False,
+                        "verdict_marked": False,
+                        "failed": True,
+                        "legacy_zero_fill": True,
+                        "reviewed": False,
+                        "scorer_error": False,
+                        "imported": False,
+                    }
+            finally:
+                fixture.close()
+    assert len({str(cards) for cards in shown.values()}) == 1, shown

@@ -35,6 +35,8 @@ from qym_platform.services.repeat_analysis import build_repeat_analysis
 from qym_platform.services.run_means import (
     MetricTotals,
     apply_repeat_pass_errors,
+    is_metric_error,
+    is_task_error_pass,
     mean_without_metric_errors,
     metric_mean_fields,
     reduce_pass_scores,
@@ -525,7 +527,7 @@ def test_models_payload_judges_repeat_items_without_their_errored_passes(databas
     # markers), so Models keeps one entry per item.
     assert sorted(rows["a"]["pass_scores"]) == ["h", "q"]
     assert rows["a"]["pass_metric_meta"]["h"][1] == {"status": "error"}
-    assert rows["b"]["pass_metric_meta"]["h"][1] == {"label": "error"}
+    assert rows["b"]["pass_metric_meta"]["h"][1] == {"label": "error", "task_error": True}
     assert "pass_scores" not in rows["c"]
     assert models["snapshot"]["pass_scores_scope"] == "errored"
     verdicts = _node(PASS_VERDICTS, {"run": models})
@@ -891,6 +893,212 @@ def test_scorer_label_error_and_reviewed_task_failures_are_scores():
         {"score": pytest.approx(0.3), "isError": False},
         {"score": pytest.approx(0.3), "isError": False},
     ]
+
+
+@pytest.mark.parametrize(
+    "label, meta, explanation, expected",
+    [
+        # A scorer error keeps its own status, even under the marker.
+        ("error", {"status": "error", "task_error": True}, None, False),
+        # A reviewer's edit replaces the zero-fill.
+        ("error", {"task_error": True, "modified": "true"}, None, False),
+        # The marker decides before the explanation and the metadata.
+        ("error", {"task_error": True, "reason": "judged"}, "judged", True),
+        ("error", {"task_error": False}, None, False),
+        # Unmarked rows: an explanation or scorer metadata is a verdict; a
+        # pass diagnosis is not scorer metadata.
+        ("error", None, "Off topic", False),
+        ("error", {"details": {"tone": "rude"}}, None, False),
+        ("error", {"root_cause_analysis": {"cause": "x"}}, None, True),
+        (" Error ", None, None, True),
+        ("pass", {"task_error": True}, None, False),
+    ],
+)
+def test_error_labeled_pass_classification_order(label, meta, explanation, expected):
+    assert is_task_error_pass(label, meta, explanation) is expected
+
+
+# Pass rows as stored: (label column, meta, explanation, final attempt).
+_LABELED_PASSES = {
+    "long_reason": ("error", {"reason": "r" * 500}, None, "completed"),
+    "nested": ("error", {"details": {"tone": {"score": 2}}}, None, "completed"),
+    "explained": ("error", None, "Off topic " * 40, "completed"),
+    "verdict_marked": ("error", {"task_error": False}, None, "completed"),
+    "failed": ("error", {"task_error": True, "reason": "partial"}, "partial", "error"),
+    "legacy_zero_fill": ("error", None, None, "error"),
+    "reviewed": ("error", {"task_error": True, "modified": "true"}, None, "error"),
+    "scorer_error": ("error", {"status": "timeout"}, None, "completed"),
+    # An imported run keeps the label in the metadata only.
+    "imported": (None, {"label": "error", "reason": "judged"}, "Off topic", "completed"),
+}
+
+
+def _labeled(db, run_id="lp"):
+    """A lower-is-better h over three passes: pass 1 of each item is a
+    _LABELED_PASSES case (0.2 when judged, 0 when it failed), passes 2 and 3
+    score 0.4 and 0.6. Judged items mean 0.4; failed ones 0.5."""
+    run(
+        db,
+        run_id=run_id,
+        metrics=["h"],
+        samples=3,
+        status=RunWorkflowStatus.COMPLETED,
+        run_metadata={"total_items": len(_LABELED_PASSES), "last_completed_pass": 3},
+    )
+    db.add(_spec(run_id, "h", 0, "minimize", is_primary=True))
+    for index, (item_id, case) in enumerate(_LABELED_PASSES.items()):
+        label, meta, explanation, attempt = case
+        item(db, item_id=item_id, run_id=run_id, index=index)
+        errored = is_metric_error(meta) or is_task_error_pass(label, meta, explanation)
+        rows = [
+            RunItemPassScore(
+                run_id=run_id,
+                item_id=item_id,
+                metric_name="h",
+                pass_number=1,
+                score_numeric=0.0 if errored else 0.2,
+                label=label,
+                meta=dict(meta) if meta is not None else None,
+                explanation=explanation,
+            )
+        ] + [
+            RunItemPassScore(
+                run_id=run_id,
+                item_id=item_id,
+                metric_name="h",
+                pass_number=number,
+                score_numeric=score,
+                meta={},
+            )
+            for number, score in ((2, 0.4), (3, 0.6))
+        ]
+        db.add_all(rows)
+        reduced, observed = reduce_pass_scores(rows, "minimize")
+        db.add(
+            RunItemScore(
+                run_id=run_id,
+                item_id=item_id,
+                metric_name="h",
+                score_numeric=reduced,
+                score_raw=reduced,
+                meta={"sample_reducer": "mean", "samples_observed": observed},
+            )
+        )
+        for number in (1, 2, 3):
+            failed = number == 1 and attempt == "error"
+            db.add(
+                RunItemAttempt(
+                    run_id=run_id,
+                    item_id=item_id,
+                    pass_number=number,
+                    attempt_number=1,
+                    status="failed" if failed else "completed",
+                    error="boom" if failed else None,
+                    is_last_attempt=True,
+                    latency_ms=10.0,
+                    output=None if failed else "answer",
+                )
+            )
+    db.commit()
+
+
+# Six judged items at 0.4; the failed, zero-filled and scorer-error items 0.5.
+LABELED_H = (6 * 0.4 + 3 * 0.5) / 9
+
+
+def test_run_payload_flag_keeps_the_classification_through_compaction():
+    """The page reads the server's verdict, not what the index leaves of the
+    evidence: full rows, index rows and released rows agree with the means."""
+    from qym_platform.services.run_payloads import compact_row
+
+    rows, expected = [], []
+    for label, meta, explanation, attempt in _LABELED_PASSES.values():
+        # As _build_run_data builds the pass metadata.
+        payload_meta = dict(meta) if meta else {}
+        runs_api._set_task_error_flag(payload_meta, label, meta, explanation)
+        if label:
+            payload_meta.setdefault("label", label)
+        if explanation:
+            payload_meta.setdefault("explanation", explanation)
+        rows.append(
+            {
+                "status": "completed",
+                "metric_values": [0.4],
+                "metric_meta": {},
+                "pass_scores": {"h": [0.2]},
+                "pass_metric_meta": {"h": [payload_meta]},
+                "pass_attempts": [{"status": attempt, "output": "answer"}],
+            }
+        )
+        expected.append(
+            is_metric_error(meta) or is_task_error_pass(label, meta, explanation)
+        )
+    compact = [compact_row(row) for row in rows]
+    for row in compact:
+        meta = row["pass_metric_meta"]["h"][0]
+        assert "explanation" not in meta and "details" not in meta
+    script = (
+        "process.stdout.write(JSON.stringify(input.rows.map(r => [\n"
+        "  m.isTaskErrorPass(r, 'h', 0) || m.isMetricErrorMeta(r.pass_metric_meta.h[0]),\n"
+        "  m.getRowScore(r, 0, 'h', 'minimize').isError,\n"
+        "])));"
+    )
+    for view in (rows, compact):
+        out = _node(script, {"rows": view})
+        assert dict(zip(_LABELED_PASSES, (verdict for verdict, _ in out))) == dict(
+            zip(_LABELED_PASSES, expected)
+        )
+    assert dict(zip(_LABELED_PASSES, expected)) == {
+        "long_reason": False,
+        "nested": False,
+        "explained": False,
+        "verdict_marked": False,
+        "failed": True,
+        "legacy_zero_fill": True,
+        "reviewed": False,
+        "scorer_error": True,
+        "imported": False,
+    }
+    # The flag is the platform's, never a scorer field.
+    hidden = _node(
+        "process.stdout.write(JSON.stringify(['task_error', 'modified', "
+        "'original_score', 'reason'].map(m.isInternalMetaKey)));",
+        {},
+    )
+    assert hidden == [True, True, True, False]
+
+
+def test_ingest_stores_a_scorer_error_label_as_a_verdict():
+    """A scorer may label its own verdict "error" with no metadata or
+    explanation. Ingest marks it, so it is not read as a failed task: the
+    lower-is-better item keeps every pass, (0.2 + 0.4 + 0.6) / 3."""
+    app, SessionLocal = _ingest_env(3)
+    lines = [
+        _event(1, "item_started", {"item_id": "item-1", "index": 0, "pass_number": 1}),
+        _event(
+            2,
+            "metric_scored",
+            {
+                "item_id": "item-1",
+                "pass_number": 1,
+                "metric_name": "h",
+                "score_numeric": 0.2,
+                "label": "error",
+            },
+        ),
+        _scored(3, 2, 0.4),
+        _scored(4, 3, 0.6),
+    ]
+    with TestClient(app) as client:
+        _ingest(client, "\n".join(lines) + "\n", "test-token")
+    with SessionLocal() as session:
+        first = session.query(RunItemPassScore).filter_by(pass_number=1).one()
+        assert first.label == "error"
+        assert first.meta == {"task_error": False}
+        assert not is_task_error_pass(first.label, first.meta, first.explanation)
+        score = session.query(RunItemScore).one()
+        assert score.score_numeric == pytest.approx(0.4)
+        assert score.meta["samples_observed"] == 3
 
 
 def test_editing_a_task_failed_pass_counts_the_reviewer_score(database):

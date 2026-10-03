@@ -19,8 +19,10 @@ MAX_SEARCH_CONDITIONS = 32
 # run_details.js applies the same rule when it releases a hydrated row.
 COMPACT_META_TEXT_LIMIT = 200
 # Error flags drive task/metric error filters and buckets for every item, so
-# they stay in the index at full length.
-_COMPACT_META_ALWAYS_KEPT = frozenset({"error", "status"})
+# they stay in the index at full length. task_error decides whether an
+# "error"-labeled pass is a failed task or a scorer's verdict, and must give
+# the same answer once the explanation is dropped.
+_COMPACT_META_ALWAYS_KEPT = frozenset({"error", "status", "task_error"})
 INPUT_PREVIEW_CHARS = 300
 
 MetaKeyIndex = Dict[str, Dict[str, Set[str]]]

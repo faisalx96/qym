@@ -80,6 +80,7 @@ from qym_platform.services.run_means import (
     errors_left_out,
     is_task_error_pass,
     reduce_pass_scores,
+    scored_pass_meta,
     task_error_pass_meta,
 )
 from qym_platform.services.ingest_completeness import (
@@ -1714,7 +1715,8 @@ def _ingest_events_sync(
             ]
             # item_failed may have stored the pass as a failed task already.
             if failed and not all(
-                row is not None and is_task_error_pass(row.label, row.meta)
+                row is not None
+                and is_task_error_pass(row.label, row.meta, row.explanation)
                 for row in passes
             ):
                 _record_failed_pass(payload.item_id, payload.pass_number)
@@ -2011,7 +2013,9 @@ def _ingest_events_sync(
                         pass_number=payload.pass_number,
                         score_numeric=payload.score_numeric,
                         label=payload.label,
-                        meta=_sanitize_for_json(payload.meta),
+                        meta=scored_pass_meta(
+                            payload.label, _sanitize_for_json(payload.meta)
+                        ),
                         explanation=payload.explanation,
                     )
                     _remember_pass_score(pass_score)
@@ -2019,7 +2023,9 @@ def _ingest_events_sync(
                 else:
                     pass_score.score_numeric = payload.score_numeric
                     pass_score.label = payload.label
-                    pass_score.meta = _sanitize_for_json(payload.meta)
+                    pass_score.meta = scored_pass_meta(
+                        payload.label, _sanitize_for_json(payload.meta)
+                    )
                     pass_score.explanation = payload.explanation
                 reduced_numeric, reduced_observations = _reduce_pass_scores(
                     payload.item_id, payload.metric_name

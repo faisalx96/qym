@@ -104,6 +104,7 @@ from qym_platform.services.score_edits import (
 from qym_platform.services.run_means import (
     ITEM_EDIT_KEY,
     METRIC_ERROR_STATUSES,
+    TASK_ERROR_PASS_LABEL,
     TASK_ERROR_PASS_MARKER,
     errored_pass_items,
     errors_left_out,
@@ -188,6 +189,23 @@ def _metric_specs_for_runs(
 
 _EXECUTION_ERROR_STATUSES = set(METRIC_ERROR_STATUSES)
 _is_metric_execution_error = is_metric_error
+
+
+def _set_task_error_flag(
+    payload_meta: Dict[str, Any], label: Any, meta: Any, explanation: Any
+) -> None:
+    """Send an "error"-labeled pass's classification as ``task_error``.
+
+    The index drops the explanation and long metadata that show a scorer's
+    own "error" verdict, so the page reads this flag (metrics.js
+    isTaskErrorPass) instead of re-deriving it from what is left. A label
+    only in the metadata (an imported run) gets the flag too, as the means
+    count it. Other passes carry no flag.
+    """
+    payload_meta.pop(TASK_ERROR_PASS_MARKER, None)
+    shown_label = label or payload_meta.get("label")
+    if str(shown_label or "").strip().lower() == TASK_ERROR_PASS_LABEL:
+        payload_meta[TASK_ERROR_PASS_MARKER] = is_task_error_pass(label, meta, explanation)
 
 
 def _execution_error_pairs_for_runs(
@@ -3092,7 +3110,7 @@ def _models_errored_passes(
     items = sorted({(run_id, item_id) for run_id, item_id, _ in affected})
     for start in range(0, len(items), 400):
         chunk = items[start : start + 400]
-        for run_id, item_id, metric_name, number, score, meta, label in (
+        for run_id, item_id, metric_name, number, score, meta, label, explanation in (
             db.query(
                 RunItemPassScore.run_id,
                 RunItemPassScore.item_id,
@@ -3101,6 +3119,7 @@ def _models_errored_passes(
                 RunItemPassScore.score_numeric,
                 RunItemPassScore.meta,
                 RunItemPassScore.label,
+                RunItemPassScore.explanation,
             )
             .filter(
                 RunItemPassScore.run_id.in_({run_id for run_id, _ in chunk}),
@@ -3120,8 +3139,8 @@ def _models_errored_passes(
             scores[index] = score
             if is_metric_error(meta):
                 metas[index] = {"status": meta.get("status")}
-            elif is_task_error_pass(label, meta):
-                metas[index] = {"label": "error"}
+            elif is_task_error_pass(label, meta, explanation):
+                metas[index] = {"label": "error", TASK_ERROR_PASS_MARKER: True}
     return result
 
 
@@ -3487,9 +3506,7 @@ def _build_run_data(
             )[int(ps.pass_number)] = ps.score_numeric
             # Per-pass judge output, same shape as row-level metric_meta.
             ps_meta: dict[str, Any] = dict(ps.meta) if ps.meta else {}
-            # Internal: the page tells a failed task by the "error" label and
-            # the pass's failed attempt (metrics.js isTaskErrorPass).
-            ps_meta.pop(TASK_ERROR_PASS_MARKER, None)
+            _set_task_error_flag(ps_meta, ps.label, ps.meta, ps.explanation)
             pass_analysis = ps_meta.pop(PASS_ANALYSIS_META_KEY, None)
             if isinstance(pass_analysis, dict):
                 pass_analysis_by_item.setdefault(ps.item_id, {}).setdefault(
@@ -4598,7 +4615,11 @@ def run_group_metrics(
         RunItemPassScore.score_numeric,
     ]
     if left_out:
-        columns += [RunItemPassScore.meta, RunItemPassScore.label]
+        columns += [
+            RunItemPassScore.meta,
+            RunItemPassScore.label,
+            RunItemPassScore.explanation,
+        ]
     rows = (
         db.query(*columns)
         .filter(
@@ -4612,8 +4633,8 @@ def run_group_metrics(
     for row in rows:
         item_id, pass_number, score_numeric = row[:3]
         if left_out:
-            meta, label = row[3:]
-            if is_metric_error(meta) or is_task_error_pass(label, meta):
+            meta, label, explanation = row[3:]
+            if is_metric_error(meta) or is_task_error_pass(label, meta, explanation):
                 numeric = None
             elif score_numeric is None:
                 continue
@@ -5097,7 +5118,7 @@ def update_metric(
                 int(ps.pass_number)
             ] = ps.score_numeric
             ps_meta = dict(ps.meta) if ps.meta else {}
-            ps_meta.pop(TASK_ERROR_PASS_MARKER, None)
+            _set_task_error_flag(ps_meta, ps.label, ps.meta, ps.explanation)
             pass_analysis = ps_meta.pop(PASS_ANALYSIS_META_KEY, None)
             if isinstance(pass_analysis, dict):
                 by_metric_analysis.setdefault(ps.metric_name, {})[

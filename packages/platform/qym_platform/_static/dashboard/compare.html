@@ -8180,7 +8180,7 @@
               : Object.values(snapshot.pass_metric_meta_keys || {}));
           for (const keys of schema) {
             for (const k of keys || []) {
-              if (!['modified', 'original_score'].includes(k)) mmKeySet.add(k);
+              if (!window.QymMetrics.isInternalMetaKey(k)) mmKeySet.add(k);
             }
           }
           for (const row of (run?.snapshot?.rows || [])) {
@@ -8188,7 +8188,7 @@
             for (const metricName of Object.keys(mm)) {
               const meta = mm[metricName] || {};
               for (const k of Object.keys(meta)) {
-                if (!['modified', 'original_score'].includes(k)) mmKeySet.add(k);
+                if (!window.QymMetrics.isInternalMetaKey(k)) mmKeySet.add(k);
               }
             }
           }
@@ -11406,7 +11406,7 @@
         const blocks = metricNames.map((name, i) => {
           const meta = metricMeta[name] || {};
           const metaKeys = Object.keys(meta).filter(k =>
-            !['modified', 'original_score'].includes(k)
+            !window.QymMetrics.isInternalMetaKey(k)
             && state.visibleMetricMetaFields[k] !== false
             && meta[k] !== undefined && meta[k] !== null && meta[k] !== '');
           if (!metaKeys.length) return '';
@@ -11572,7 +11572,7 @@
           const buttons = state.allMetrics.map(name => {
             const score = scoreData(row, runIdx, name);
             const hasMeta = Object.keys(score.meta).some(key =>
-              !['modified', 'original_score'].includes(key)
+              !window.QymMetrics.isInternalMetaKey(key)
               && state.visibleMetricMetaFields[key] !== false
               && score.meta[key] !== undefined && score.meta[key] !== null && score.meta[key] !== '');
             const hasMetricExecutionError = window.QymMetrics.hasMetricError(row, name);
@@ -11649,7 +11649,7 @@
             const score = scoreData(row, runIdx, name);
             const detail = {};
             Object.keys(score.meta).forEach(key => {
-              if (!['modified', 'original_score'].includes(key)
+              if (!window.QymMetrics.isInternalMetaKey(key)
                   && state.visibleMetricMetaFields[key] !== false
                   && score.meta[key] !== undefined && score.meta[key] !== null && score.meta[key] !== '') {
                 detail[window.QymMetrics.metricMetaDisplayKey(key, score.meta)] = _parseMetaDeep(score.meta[key]);
@@ -14534,7 +14534,7 @@
             for (const m of metricNames) {
               const meta = mm[m] || {};
               for (const k of Object.keys(meta)) {
-                if (!['modified', 'original_score'].includes(k)) metricMetaKeys[m].add(k);
+                if (!window.QymMetrics.isInternalMetaKey(k)) metricMetaKeys[m].add(k);
               }
             }
           }

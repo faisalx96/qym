@@ -42,6 +42,8 @@ TASK_ERROR_PASS_LABEL = "error"
 # ...and marks them with this metadata key, which also covers a pass whose
 # metric was scored before the task failed (a cancel mid-scoring): the
 # scorer's metadata stays on the row but no longer reads as a scored pass.
+# A scorer's own "error" verdict is marked False, and run payloads send the
+# key, True or False, with every "error"-labeled pass.
 TASK_ERROR_PASS_MARKER = "task_error"
 # A reviewer's item-level score on a repeat run (update_metric without a
 # pass): the item keeps that value in every mean instead of being re-derived
@@ -167,27 +169,47 @@ def task_error_pass_meta(meta: Any) -> Dict[str, Any]:
     return marked
 
 
-def is_task_error_pass(label: Any, meta: Any) -> bool:
+def scored_pass_meta(label: Any, meta: Any) -> Any:
+    """Metadata ingest stores with a scorer's pass score.
+
+    A scorer's own "error" label is a verdict, not a failed task, so it is
+    marked False: without metadata or an explanation it would read as an
+    unmarked zero-fill (``is_task_error_pass``).
+    """
+    if str(label or "").strip().lower() != TASK_ERROR_PASS_LABEL or is_metric_error(meta):
+        return meta
+    marked = dict(meta) if isinstance(meta, dict) else {}
+    marked[TASK_ERROR_PASS_MARKER] = False
+    return marked
+
+
+def is_task_error_pass(label: Any, meta: Any, explanation: Any = None) -> bool:
     """Return whether a repeat-run pass score stands for a failed task.
 
     Ingest stores 0 with the label "error" for every metric of a pass whose
-    task failed, marked with ``TASK_ERROR_PASS_MARKER``. A scorer error keeps
-    its own status and is not a task error; a reviewer's edit ("modified")
-    replaces it. The run page applies the same rule in ``metrics.js``
-    (``isTaskErrorPass``).
+    task failed, marked with ``TASK_ERROR_PASS_MARKER``. In this order: a
+    scorer error keeps its own status and is not a task error; a reviewer's
+    edit ("modified") replaces it; the marker, True or False, decides; then
+    an explanation or scorer metadata shows a scorer's verdict. The run page
+    applies the same rule in ``metrics.js`` (``isTaskErrorPass``) to the
+    marker the run payload sends.
     """
     if str(label or "").strip().lower() != TASK_ERROR_PASS_LABEL or is_metric_error(meta):
         return False
+    if isinstance(meta, dict):
+        if str(meta.get("modified") or "").strip().lower() == "true":
+            return False
+        marker = meta.get(TASK_ERROR_PASS_MARKER)
+        if isinstance(marker, bool):
+            return marker
+    # Unmarked rows (stored before the marker): ingest's zero-fill carried no
+    # explanation or metadata, while a scorer's own "error" label comes with
+    # them. A pass diagnosis is stored beside the score and says nothing about
+    # it (the run payload moves it out of the pass metadata).
+    if str(explanation or "").strip():
+        return False
     if not isinstance(meta, dict):
         return True
-    if str(meta.get("modified") or "").strip().lower() == "true":
-        return False
-    if meta.get(TASK_ERROR_PASS_MARKER) is True:
-        return True
-    # Unmarked rows (stored before the marker): ingest's zero-fill carried no
-    # metadata, while a scorer's own "error" label comes with its metadata. A
-    # pass diagnosis is stored beside the score and says nothing about it
-    # (the run payload moves it out of the pass metadata).
     return not any(
         value not in (None, "")
         for key, value in meta.items()
@@ -229,7 +251,9 @@ def reduce_pass_scores(
             for row in passes
             if row.score_numeric is not None
             and not is_metric_error(row.meta)
-            and not is_task_error_pass(getattr(row, "label", None), row.meta)
+            and not is_task_error_pass(
+                getattr(row, "label", None), row.meta, getattr(row, "explanation", None)
+            )
         ]
     else:
         values = [
@@ -609,18 +633,23 @@ def _repeat_pass_outcomes(db, run_id, affected):
     edited = set()
     for start in range(0, len(item_ids), 400):
         chunk = item_ids[start : start + 400]
-        for item_id, metric, score, meta, label in db.query(
+        for item_id, metric, score, meta, label, explanation in db.query(
             RunItemPassScore.item_id,
             RunItemPassScore.metric_name,
             RunItemPassScore.score_numeric,
             RunItemPassScore.meta,
             RunItemPassScore.label,
+            RunItemPassScore.explanation,
         ).filter(
             RunItemPassScore.run_id == run_id, RunItemPassScore.item_id.in_(chunk)
         ):
             if (item_id, metric) in affected:
                 passes.setdefault((item_id, metric), []).append(
-                    (score, is_metric_error(meta), is_task_error_pass(label, meta))
+                    (
+                        score,
+                        is_metric_error(meta),
+                        is_task_error_pass(label, meta, explanation),
+                    )
                 )
         for item_id, metric, score, item_edit in db.query(
             RunItemScore.item_id,
@@ -661,6 +690,7 @@ def errored_pass_items(db, run_ids, metrics=None) -> set:
         RunItemPassScore.metric_name,
         RunItemPassScore.meta,
         RunItemPassScore.label,
+        RunItemPassScore.explanation,
     ).filter(
         RunItemPassScore.run_id.in_(run_ids),
         or_(
@@ -671,8 +701,8 @@ def errored_pass_items(db, run_ids, metrics=None) -> set:
     if metrics is not None:
         query = query.filter(RunItemPassScore.metric_name.in_(sorted(metrics)))
     errored = set()
-    for run_id, item_id, metric, meta, label in query:
-        if is_metric_error(meta) or is_task_error_pass(label, meta):
+    for run_id, item_id, metric, meta, label, explanation in query:
+        if is_metric_error(meta) or is_task_error_pass(label, meta, explanation):
             errored.add((run_id, item_id, metric))
     if errored:
         # An item a reviewer scored as a whole is judged by that score.
@@ -727,7 +757,7 @@ def pass_metric_totals(db, run_ids) -> Dict[str, Dict[Tuple[int, str], MetricTot
         totals.setdefault(run_id, {})[(int(pass_number), metric)] = MetricTotals(
             score_sum=float(score_sum or 0.0), score_count=int(score_count or 0)
         )
-    for run_id, pass_number, metric, score, meta, label in (
+    for run_id, pass_number, metric, score, meta, label, explanation in (
         db.query(
             RunItemPassScore.run_id,
             RunItemPassScore.pass_number,
@@ -735,6 +765,7 @@ def pass_metric_totals(db, run_ids) -> Dict[str, Dict[Tuple[int, str], MetricTot
             RunItemPassScore.score_numeric,
             RunItemPassScore.meta,
             RunItemPassScore.label,
+            RunItemPassScore.explanation,
         )
         .filter(
             RunItemPassScore.run_id.in_(run_ids),
@@ -754,7 +785,7 @@ def pass_metric_totals(db, run_ids) -> Dict[str, Dict[Tuple[int, str], MetricTot
             else:
                 metric_totals.error_score_sum += float(score)
                 metric_totals.error_score_count += 1
-        elif is_task_error_pass(label, meta) and score is not None:
+        elif is_task_error_pass(label, meta, explanation) and score is not None:
             metric_totals.task_error_score_sum += float(score)
             metric_totals.task_error_score_count += 1
     directions = metric_directions(db, run_ids)

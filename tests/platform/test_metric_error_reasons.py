@@ -216,3 +216,89 @@ def test_maintenance_job_marks_task_failed_passes_that_kept_scorer_metadata(data
         assert not is_task_error_pass(rows["b"].label, rows["b"].meta)
         job = db.query(MaintenanceJob).one()
         assert job.progress["passes_marked"] == 1
+
+
+def test_maintenance_job_reads_the_explanation_and_item_failed_events(database):
+    """A zero-filled pass that kept only the scorer's explanation, or whose
+    failure came as an item_failed event (older SDKs sent no final attempt),
+    is a failed task. The same explanation on a completed pass is a judged
+    score, and the job leaves it unmarked."""
+    from datetime import datetime
+
+    from qym_platform.db.models import RunEvent, RunItemAttempt
+    from qym_platform.services.run_means import is_task_error_pass
+
+    with Session(database) as db:
+        run(db, run_id="rep", samples=2, status=RunWorkflowStatus.COMPLETED)
+        for item_id in "abcd":
+            item(db, item_id=item_id, run_id="rep")
+        for item_id, label, meta in (
+            ("a", "error", None),
+            ("b", "error", {}),
+            ("c", " Error ", None),
+            ("d", "error", None),
+        ):
+            db.add(
+                RunItemPassScore(
+                    run_id="rep",
+                    item_id=item_id,
+                    metric_name="score",
+                    pass_number=2,
+                    score_numeric=0.0,
+                    label=label,
+                    meta=meta,
+                    explanation="judge says 0.9",
+                )
+            )
+        # a: the failed final attempt. b, c: item_failed events for pass 2
+        # (c's pass number sent as text). d: completed, its own verdict.
+        db.add(
+            RunItemAttempt(
+                run_id="rep",
+                item_id="a",
+                pass_number=2,
+                attempt_number=1,
+                status="failed",
+                is_last_attempt=True,
+            )
+        )
+        for sequence, (item_id, pass_number) in enumerate((("b", 2), ("c", "2")), start=1):
+            db.add(
+                RunEvent(
+                    run_id="rep",
+                    event_id=f"failed-{item_id}",
+                    sequence=sequence,
+                    type="item_failed",
+                    sent_at=datetime(2026, 1, 1),
+                    payload={"item_id": item_id, "pass_number": pass_number, "error": "boom"},
+                )
+            )
+        db.add(
+            RunItemAttempt(
+                run_id="rep",
+                item_id="d",
+                pass_number=2,
+                attempt_number=1,
+                status="completed",
+                is_last_attempt=True,
+            )
+        )
+        db.commit()
+        for row in db.query(RunItemPassScore).filter_by(run_id="rep"):
+            assert not is_task_error_pass(row.label, row.meta, row.explanation)
+    factory = sessionmaker(bind=database, autoflush=False)
+    with factory() as db:
+        maintenance.enqueue(db, "reclassify_metric_errors", {"window": 50})
+        db.commit()
+    assert maintenance.MaintenanceWorker(factory, database).tick() == "succeeded"
+    with factory() as db:
+        rows = {row.item_id: row for row in db.query(RunItemPassScore).filter_by(run_id="rep")}
+        for item_id in "abc":
+            assert rows[item_id].meta == {"task_error": True}, item_id
+            assert is_task_error_pass(
+                rows[item_id].label, rows[item_id].meta, rows[item_id].explanation
+            )
+            assert rows[item_id].explanation == "judge says 0.9"
+        assert rows["d"].meta is None
+        assert not is_task_error_pass(rows["d"].label, rows["d"].meta, rows["d"].explanation)
+        assert db.query(MaintenanceJob).one().progress["passes_marked"] == 3

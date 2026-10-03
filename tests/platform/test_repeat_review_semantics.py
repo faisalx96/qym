@@ -182,8 +182,13 @@ def test_metric_scored_before_a_cancel_is_a_failed_task_in_every_view():
         assert group["group"]["pass_at_k"] == 1.0
         data = runs_api.legacy_run_data(RUN_ID, db=db, principal=principal, view="compact")
     [row] = data["snapshot"]["rows"]
-    # The marker is internal: the page reads the failed pass attempt.
-    assert row["pass_metric_meta"]["h"][0] == {"reasoning": "judge says 0.9", "label": "error"}
+    # The page reads the server's classification (task_error), which the
+    # index keeps once it drops the reasoning.
+    assert row["pass_metric_meta"]["h"][0] == {
+        "reasoning": "judge says 0.9",
+        "task_error": True,
+        "label": "error",
+    }
     js = _node(JS_MEANS, {"rows": [row], "metrics": ["h"], "specs": data["snapshot"]["metric_specs"]})
     assert js == _approx({"h": 0.3})
     drain(engine)

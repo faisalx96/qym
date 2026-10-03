@@ -13,7 +13,7 @@
   // Mirrors services/run_payloads.py: the index keeps error flags and short
   // scalar metadata only. Released rows return to exactly that shape.
   const META_TEXT_LIMIT = 200;
-  const META_ALWAYS_KEPT = new Set(['error', 'status']);
+  const META_ALWAYS_KEPT = new Set(['error', 'status', 'task_error']);
   const INDEX_FIELDS = ['output_digest', '__has_output', '__execution_error', 'input_preview'];
 
   async function withRequestSlot(request) {
