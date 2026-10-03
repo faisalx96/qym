@@ -350,7 +350,8 @@ def test_detail_passes_and_group_metrics_endpoints():
             "accuracy": [
                 {"verdict": "correct"},
                 {"verdict": "incorrect"},
-                {"label": "error"},
+                # The payload names a failed task's zero-filled pass.
+                {"label": "error", "task_error": True},
             ]
         }
         assert row["metric_meta"]["accuracy"] == {
