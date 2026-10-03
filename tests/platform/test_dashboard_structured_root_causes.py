@@ -25,7 +25,6 @@ from test_dashboard_durable_summaries import (
     Dimension,
     Summary,
     assert_legacy_parity,
-    database,
     drain,
     item,
     projected,

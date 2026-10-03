@@ -5,19 +5,12 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.browser
+
 STATIC = (
     Path(__file__).resolve().parents[2]
     / "packages/platform/qym_platform/_static/dashboard"
 )
-
-
-@pytest.fixture(scope="module")
-def browser():
-    api = pytest.importorskip("playwright.sync_api")
-    with api.sync_playwright() as playwright:
-        instance = playwright.chromium.launch()
-        yield instance
-        instance.close()
 
 
 @pytest.fixture()

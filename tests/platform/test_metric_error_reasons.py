@@ -16,7 +16,7 @@ from qym_platform.db.models import RunItemPassScore, RunItemScore, RunWorkflowSt
 from qym_platform.services import dashboard_outbox, maintenance
 from qym_platform.services.run_means import is_metric_error
 from sqlalchemy.orm import Session, sessionmaker
-from test_dashboard_durable_summaries import database, drain, item, projected, run
+from test_dashboard_durable_summaries import drain, item, projected, run
 
 
 @pytest.mark.parametrize(

@@ -92,7 +92,6 @@ def test_analysis_prompt_includes_taxonomy_and_new_category_contract() -> None:
     messages = build_analysis_prompt(
         _item(),
         {"accuracy": _score()},
-        [],
         config={
             "root_cause_categories": ["Novel Failure"],
             "category_taxonomy": {
@@ -129,7 +128,6 @@ def test_analysis_prompt_omits_guidance_for_categories_without_taxonomy() -> Non
     messages = build_analysis_prompt(
         _item(),
         {"accuracy": _score()},
-        [],
         config={
             "root_cause_categories": ["Novel Failure"],
             "category_taxonomy": {

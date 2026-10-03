@@ -22,8 +22,7 @@ from qym_platform.services.ingest_completeness import (
     record_rejected_events,
     runs_list_ingest_flag,
 )
-from test_dashboard_durable_summaries import (  # noqa: F401
-    database,
+from test_dashboard_durable_summaries import (
     drain,
     item,
     projected,

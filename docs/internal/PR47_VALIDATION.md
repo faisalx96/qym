@@ -82,7 +82,8 @@ missing or unexpected cases. Later fixes reran their affected cases. Earlier
 phase failures remain visible in each coverage report.
 
 The expected 14 skips are 12 SQLite concurrency cases with passing PostgreSQL
-counterparts and two optional SDK tests requiring `traceloop-sdk`.
+counterparts and two optional SDK tests requiring `traceloop-sdk`. The later
+test audit removed those two Traceloop tests.
 
 ## Packaging and deployment checks
 

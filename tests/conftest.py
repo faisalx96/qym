@@ -1,3 +1,4 @@
+import os
 import pytest
 from unittest.mock import MagicMock, AsyncMock
 import sys
@@ -9,6 +10,37 @@ platform_root = repo_root / "packages" / "platform"
 for p in (str(sdk_root), str(platform_root), str(repo_root)):
     if p not in sys.path:
         sys.path.insert(0, p)
+
+# PlatformSettings reads ``.env`` from the working directory. Keep a developer's
+# repo-root .env (auth mode, secrets, database) out of the suite so local runs
+# match CI, and give modules that build settings at import the CI defaults.
+os.environ.setdefault("QYM_DATABASE_URL", "sqlite://")
+os.environ.setdefault("QYM_ENVIRONMENT", "test")
+try:
+    from qym_platform import settings as _platform_settings
+except ImportError:  # SDK-only environment without the platform's dependencies
+    _platform_settings = None
+if _platform_settings is not None:
+    for _settings_cls in (_platform_settings.PlatformSettings, _platform_settings.ProductEvalSettings):
+        _settings_cls.model_config["env_file"] = None
+
+# ``import qym`` loads the cwd .env, and a path-less load_dotenv() (Alembic's
+# env.py, insightor_eval.py) walks up from its own file; both reach the repo
+# .env. Tests that write their own .env in tmp_path still load it.
+try:
+    import dotenv
+except ImportError:
+    dotenv = None
+if dotenv is not None:
+    _repo_dotenv = repo_root / ".env"
+    _load_dotenv = dotenv.load_dotenv
+
+    def _load_dotenv_outside_repo(dotenv_path=None, stream=None, *args, **kwargs):
+        if stream is None and (dotenv_path is None or Path(dotenv_path).resolve() == _repo_dotenv):
+            return False
+        return _load_dotenv(dotenv_path, stream, *args, **kwargs)
+
+    dotenv.load_dotenv = _load_dotenv_outside_repo
 
 mock_langfuse_pkg = MagicMock()
 mock_langfuse_pkg.__path__ = []

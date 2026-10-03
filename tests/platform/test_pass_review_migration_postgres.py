@@ -23,7 +23,6 @@ from qym_platform.services.root_cause_changes import PASS_ANALYSIS_META_KEY
 from sqlalchemy import inspect, select, text
 from sqlalchemy.orm import Session
 from test_migrations import _load_migration
-from test_p1_migrations_lifecycle import postgres
 
 
 def test_populated_0050_upgrade_recovers_approvals_and_retains_tombstones(postgres):

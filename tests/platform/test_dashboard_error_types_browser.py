@@ -2,7 +2,7 @@
 
 import pytest
 
-from test_dashboard_paging_browser import DashboardFixture, browser, make_runs
+from test_dashboard_paging_browser import DashboardFixture, make_runs
 
 pytestmark = pytest.mark.browser
 

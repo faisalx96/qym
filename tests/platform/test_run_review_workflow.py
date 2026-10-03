@@ -52,8 +52,7 @@ from qym_platform.security import api_key_prefix, hash_api_key
 from test_root_cause_issue_persistence import (
     ISSUES,
     _seed_run,
-    db_session,
-)  # noqa: F401
+)
 
 TOKEN = "review-token"
 ENDED_AT = datetime(2026, 9, 1, 12, 0, 0)
@@ -1277,7 +1276,7 @@ def test_review_history_migration_is_quick_ddl_and_reversible(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_reviews_page_decisions_are_audited(db_session):  # noqa: F811
+def test_reviews_page_decisions_are_audited(db_session):
     from copy import deepcopy
 
     from qym_platform.api import analysis as analysis_api

@@ -30,7 +30,7 @@ from test_minimize_errors_browser import (  # noqa: E402
     _run_page_means,
     _runs_api,
 )
-from test_performance_views_browser import ViewFixture, browser  # noqa: E402,F401
+from test_performance_views_browser import ViewFixture  # noqa: E402
 
 pytestmark = pytest.mark.browser
 

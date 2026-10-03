@@ -11,9 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.orm import Session
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
 ROOT = Path(__file__).resolve().parents[2]
@@ -23,7 +21,6 @@ if str(PLATFORM_SRC) not in sys.path:
 if "openai" not in sys.modules:
     sys.modules["openai"] = MagicMock()
 
-from qym_platform.app import create_app
 from qym_platform.api import analysis as analysis_api
 from qym_platform.api.runs import (
     _build_run_data,
@@ -39,7 +36,6 @@ from qym_platform.api.analysis import (
     approve_metric_analysis,
 )
 from qym_platform.auth import Principal
-from qym_platform.db.base import Base
 from qym_platform.db.models import (
     ApiKey,
     Project,
@@ -56,9 +52,9 @@ from qym_platform.db.models import (
     User,
     UserRole,
 )
-from qym_platform.deps import get_db
 from qym_platform.security import api_key_prefix, hash_api_key
 from qym_platform.services.llm_analyzer import AnalysisResult
+from _helpers import _make_env
 
 
 @pytest.fixture(autouse=True)
@@ -67,27 +63,6 @@ def _auth_mode(monkeypatch):
 
 
 RUN_ID = "00000000-0000-0000-0000-00000000ab01"
-
-
-def _make_env():
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    app = create_app()
-
-    def override_get_db():
-        db = SessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    return app, SessionLocal
 
 
 def _seed(session: Session, *, token: str, samples: int) -> tuple[User, Project, Run]:

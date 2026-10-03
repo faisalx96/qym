@@ -7,44 +7,9 @@ from unittest.mock import patch
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite://")
 os.environ.setdefault("QYM_ENVIRONMENT", "test")
 
-import pytest
-from alembic import command
-from alembic.config import Config
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import event, text
 
 from qym_platform.services import retention
-
-REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-
-@pytest.fixture
-def migrated_postgres(monkeypatch):
-    """A schema built by the real Alembic chain (partitioned spans, cascades)."""
-    from uuid import uuid4
-
-    url = os.environ.get("QYM_TEST_POSTGRES_URL")
-    if not url:
-        pytest.skip("QYM_TEST_POSTGRES_URL not configured")
-    schema = "qym_ret_" + uuid4().hex
-    admin = create_engine(url)
-    with admin.begin() as conn:
-        conn.execute(text(f'CREATE SCHEMA "{schema}"'))
-    from sqlalchemy.engine import make_url
-
-    scoped = make_url(url).update_query_dict({"options": f"-csearch_path={schema}"})
-    monkeypatch.setenv("QYM_DATABASE_URL", scoped.render_as_string(hide_password=False))
-    monkeypatch.setenv("PYTHON_DOTENV_DISABLED", "1")
-    config = Config()
-    config.set_main_option("script_location", os.path.join(REPO, "packages", "platform", "qym_platform", "migrations"))
-    command.upgrade(config, "head")
-    engine = create_engine(scoped)
-    try:
-        yield engine
-    finally:
-        engine.dispose()
-        with admin.begin() as conn:
-            conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
-        admin.dispose()
 
 
 def _seed_run(conn, run_id, created_at, deleted_at=None):
@@ -64,6 +29,18 @@ def _seed_run(conn, run_id, created_at, deleted_at=None):
     )
 
 
+def _span_partitions(engine):
+    with engine.connect() as conn:
+        return {
+            row[0]
+            for row in conn.execute(
+                text(
+                    "SELECT c.relname FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid WHERE i.inhparent = 'spans'::regclass"
+                )
+            )
+        }
+
+
 def test_partitions_are_created_ahead_and_dropped_after_retention(migrated_postgres):
     engine = migrated_postgres
     now = datetime(2026, 9, 14, 12, 0, 0)
@@ -80,14 +57,20 @@ def test_partitions_are_created_ahead_and_dropped_after_retention(migrated_postg
         placed = conn.execute(text("SELECT tableoid::regclass::text FROM spans WHERE run_id = 'old'")).scalar()
         assert placed.startswith("spans_y") and "default" not in placed
 
+    # The migration pre-creates partitions from the wall clock. Remove the two
+    # months after `now` so the create path always runs; September already
+    # exists from ensure_month_partitions_between(old, now) above.
+    with engine.begin() as conn:
+        for name in ("spans_y2026m10", "spans_y2026m11"):
+            conn.execute(text(f"DROP TABLE IF EXISTS {name}"))
     created = retention.ensure_span_partitions(engine, months_ahead=2, now=now)
-    assert "spans_y2026m11" in created or not created  # idempotent when already present
-    with engine.connect() as conn:
-        names = {r[0] for r in conn.execute(text("SELECT c.relname FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid WHERE i.inhparent = 'spans'::regclass"))}
-    assert {"spans_y2026m10", "spans_y2026m11"} <= names
+    assert created == ["spans_y2026m10", "spans_y2026m11"]
+    assert {"spans_y2026m09", "spans_y2026m10", "spans_y2026m11"} <= _span_partitions(engine)
+    assert retention.ensure_span_partitions(engine, months_ahead=2, now=now) == []
 
+    # 60 days before 2026-09-14 is 2026-07-16: only May and June end before it.
     dropped = retention.drop_expired_span_partitions(engine, retention_days=60, now=now)
-    assert dropped and all(name < "spans_y2026m07" or name == "spans_y2026m06" for name in dropped)
+    assert sorted(dropped) == ["spans_y2026m05", "spans_y2026m06"]
     with engine.connect() as conn:
         assert conn.execute(text("SELECT count(*) FROM spans WHERE run_id = 'old'")).scalar() == 0
         assert conn.execute(text("SELECT count(*) FROM spans WHERE run_id = 'recent'")).scalar() == 1

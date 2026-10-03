@@ -21,7 +21,6 @@ from qym_platform.db.models import (
     User,
 )
 from test_dashboard_durable_summaries import (
-    database,
     drain,
     item,
     legacy,

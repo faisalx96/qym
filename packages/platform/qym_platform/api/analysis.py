@@ -4,7 +4,6 @@ import ast
 import asyncio
 import copy
 import hashlib
-import inspect
 import json
 import logging
 import math
@@ -1218,86 +1217,6 @@ def _playground_config_to_analyzer(
     if pg.custom_variable_mapping is not None:
         cfg["custom_variable_mapping"] = pg.custom_variable_mapping
     return cfg if cfg else None
-
-
-def _supports_metric_name_arg(func: Any) -> bool:
-    """Return True when the callable accepts metric_name."""
-    try:
-        return "metric_name" in inspect.signature(func).parameters
-    except (TypeError, ValueError):
-        return False
-
-
-def _supports_callable_arg(func: Any, argument: str) -> bool:
-    """Return True when a callable exposes an optional compatibility argument."""
-    try:
-        return argument in inspect.signature(func).parameters
-    except (TypeError, ValueError):
-        return False
-
-
-def _rewrite_legacy_metric_metadata_source(source: str) -> str:
-    """Map metric_metadata.* sources onto item_metadata.* for legacy analyzers."""
-    if source == "metric_metadata":
-        return "item_metadata"
-    if source.startswith("metric_metadata."):
-        return "item_metadata." + source[len("metric_metadata.") :]
-    return source
-
-
-def _rewrite_legacy_mapping_source(source: Any) -> Any:
-    if isinstance(source, list):
-        return [_rewrite_legacy_metric_metadata_source(str(value)) for value in source]
-    return _rewrite_legacy_metric_metadata_source(str(source))
-
-
-def _adapt_legacy_analyzer_inputs(
-    item: RunItem,
-    scores: dict[str, RunItemScore],
-    analyzer_config: dict[str, Any] | None,
-    metric_name: str | None,
-) -> tuple[RunItem, dict[str, Any] | None]:
-    """Shim metric metadata into item metadata for older analyzer code paths."""
-    if not metric_name:
-        return item, analyzer_config
-
-    metric_score = scores.get(metric_name)
-    metric_meta = (
-        metric_score.meta
-        if metric_score and isinstance(metric_score.meta, dict)
-        else {}
-    )
-
-    adapted_item = copy.copy(item)
-    adapted_item.item_metadata = metric_meta
-
-    if analyzer_config is None:
-        return adapted_item, None
-
-    adapted_config = dict(analyzer_config)
-
-    field_mapping = adapted_config.get("field_mapping")
-    if isinstance(field_mapping, dict):
-        adapted_config["field_mapping"] = {
-            key: _rewrite_legacy_mapping_source(source)
-            for key, source in field_mapping.items()
-        }
-
-    custom_variable_mapping = adapted_config.get("custom_variable_mapping")
-    if isinstance(custom_variable_mapping, dict):
-        adapted_config["custom_variable_mapping"] = {
-            key: _rewrite_legacy_mapping_source(source)
-            for key, source in custom_variable_mapping.items()
-        }
-
-    metadata_fields = adapted_config.get("metadata_fields")
-    if isinstance(metadata_fields, list):
-        adapted_config["metadata_fields"] = [
-            _rewrite_legacy_metric_metadata_source(str(source))
-            for source in metadata_fields
-        ]
-
-    return adapted_item, adapted_config
 
 
 def _load_run_items_and_scores(
@@ -4143,7 +4062,6 @@ async def _run_analysis_job(
             model=model,
             targets=analysis_targets,
             scores_by_item=scores_by_item,
-            corrections=[],
             concurrency=_analysis_request_concurrency(request.concurrency),
             config=analyzer_config,
             temperature=request.config.temperature if request.config else None,
@@ -4317,7 +4235,6 @@ async def _analyze_targets_batch(
     model: str,
     targets: list[tuple[RunItem, str]],
     scores_by_item: dict[str, dict[str, RunItemScore]],
-    corrections: list[ReviewCorrection],
     concurrency: int,
     config: dict[str, Any] | None,
     temperature: float | None,
@@ -4328,67 +4245,22 @@ async def _analyze_targets_batch(
     retry_callback: Any = None,
 ) -> list[AnalysisResult]:
     """Run the existing analyzer once for every item-metric target."""
-    if _supports_metric_name_arg(analyze_items_batch):
-        batch_kwargs = dict(
-            client=client,
-            model=model,
-            items=[
-                (item, scores_by_item.get(item.item_id, {}), metric_name)
-                for item, metric_name in targets
-            ],
-            corrections=corrections,
-            concurrency=concurrency,
-            config=config,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            progress_callback=progress_callback,
-        )
-        if _supports_callable_arg(analyze_items_batch, "request_timeout_seconds"):
-            batch_kwargs["request_timeout_seconds"] = request_timeout_seconds
-        if _supports_callable_arg(analyze_items_batch, "max_timeout_retries"):
-            batch_kwargs["max_timeout_retries"] = max_timeout_retries
-        if _supports_callable_arg(analyze_items_batch, "retry_callback"):
-            batch_kwargs["retry_callback"] = retry_callback
-        return await analyze_items_batch(**batch_kwargs)
-
-    # Compatibility for deployments that still provide the older analyzer
-    # callable: adapt and invoke one target at a time so metric context is not
-    # accidentally shared between targets.
-    results: list[AnalysisResult] = []
-    for completed, (item, metric_name) in enumerate(targets, start=1):
-        item_scores = scores_by_item.get(item.item_id, {})
-        adapted_item, adapted_config = _adapt_legacy_analyzer_inputs(
-            item,
-            item_scores,
-            config,
-            metric_name,
-        )
-        batch_kwargs = dict(
-            client=client,
-            model=model,
-            items=[(adapted_item, item_scores)],
-            corrections=corrections,
-            concurrency=1,
-            config=adapted_config,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        if _supports_callable_arg(analyze_items_batch, "request_timeout_seconds"):
-            batch_kwargs["request_timeout_seconds"] = request_timeout_seconds
-        if _supports_callable_arg(analyze_items_batch, "max_timeout_retries"):
-            batch_kwargs["max_timeout_retries"] = max_timeout_retries
-        if _supports_callable_arg(analyze_items_batch, "retry_callback"):
-            batch_kwargs["retry_callback"] = retry_callback
-        batch_results = await analyze_items_batch(**batch_kwargs)
-        for result in batch_results:
-            result.item_id = item.item_id
-            result.metric_name = metric_name
-            results.append(result)
-            if progress_callback is not None:
-                callback_result = progress_callback(result, completed, len(targets))
-                if asyncio.iscoroutine(callback_result):
-                    await callback_result
-    return results
+    return await analyze_items_batch(
+        client=client,
+        model=model,
+        items=[
+            (item, scores_by_item.get(item.item_id, {}), metric_name)
+            for item, metric_name in targets
+        ],
+        concurrency=concurrency,
+        config=config,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        request_timeout_seconds=request_timeout_seconds,
+        max_timeout_retries=max_timeout_retries,
+        progress_callback=progress_callback,
+        retry_callback=retry_callback,
+    )
 
 
 @router.post("/api/runs/{run_id:path}/aggregate-analysis")
@@ -4721,7 +4593,6 @@ async def analyze_run_items(
         model=model,
         targets=analysis_targets,
         scores_by_item=scores_by_item,
-        corrections=[],
         concurrency=_analysis_request_concurrency(request.concurrency),
         config=analyzer_config,
         temperature=request.config.temperature if request.config else None,
@@ -5023,7 +4894,6 @@ async def analyze_run_items_stream(
                     model=model,
                     targets=analysis_targets,
                     scores_by_item=scores_by_item,
-                    corrections=[],
                     concurrency=_analysis_request_concurrency(request.concurrency),
                     config=analyzer_config,
                     temperature=request.config.temperature if request.config else None,
@@ -7029,17 +6899,9 @@ def analyze_preview(
         analyzer_config,
         request.category_catalog_version_id,
     )
-    prompt_item = item
-    prompt_config = analyzer_config
-    prompt_kwargs = dict(config=prompt_config)
-    if _supports_metric_name_arg(build_analysis_prompt):
-        prompt_kwargs["metric_name"] = preview_metric
-    else:
-        prompt_item, prompt_config = _adapt_legacy_analyzer_inputs(
-            item, scores, analyzer_config, preview_metric
-        )
-        prompt_kwargs["config"] = prompt_config
-    messages = build_analysis_prompt(prompt_item, scores, [], **prompt_kwargs)
+    messages = build_analysis_prompt(
+        item, scores, config=analyzer_config, metric_name=preview_metric
+    )
 
     prompt_characters = prompt_character_count(messages)
     return {
@@ -7126,43 +6988,22 @@ async def analyze_test(
         item_scores = scores_by_item.get(item.item_id, {})
 
         # Build prompt messages so we can return the inputs alongside the result
-        prompt_item = item
-        prompt_config = analyzer_config
-        prompt_kwargs = dict(config=prompt_config)
-        if _supports_metric_name_arg(build_analysis_prompt):
-            prompt_kwargs["metric_name"] = metric_name
-        else:
-            prompt_item, prompt_config = _adapt_legacy_analyzer_inputs(
-                item, item_scores, analyzer_config, metric_name
-            )
-            prompt_kwargs["config"] = prompt_config
         messages = build_analysis_prompt(
-            prompt_item, item_scores, [], **prompt_kwargs
+            item, item_scores, config=analyzer_config, metric_name=metric_name
         )
 
-        single_kwargs = dict(
+        result = await analyze_single_item(
             client=client,
             model=model,
             item=item,
             scores=item_scores,
-            corrections=[],
             config=analyzer_config,
+            metric_name=metric_name,
             temperature=request.config.temperature if request.config else None,
             max_tokens=request.config.max_tokens if request.config else None,
+            request_timeout_seconds=request.timeout_seconds,
+            max_timeout_retries=_analysis_max_retries(),
         )
-        if _supports_callable_arg(analyze_single_item, "request_timeout_seconds"):
-            single_kwargs["request_timeout_seconds"] = request.timeout_seconds
-        if _supports_callable_arg(analyze_single_item, "max_timeout_retries"):
-            single_kwargs["max_timeout_retries"] = _analysis_max_retries()
-        if _supports_metric_name_arg(analyze_single_item):
-            single_kwargs["metric_name"] = metric_name
-        else:
-            legacy_item, legacy_config = _adapt_legacy_analyzer_inputs(
-                item, item_scores, analyzer_config, metric_name
-            )
-            single_kwargs["item"] = legacy_item
-            single_kwargs["config"] = legacy_config
-        result = await analyze_single_item(**single_kwargs)
         result.metric_name = metric_name
         analyzed_results.append(result)
         messages_by_result.append(messages)

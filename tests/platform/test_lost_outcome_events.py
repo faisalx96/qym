@@ -43,8 +43,7 @@ from qym_platform.db.models import (
 )
 from qym_platform.deps import get_db
 from qym_platform.services.run_means import item_not_received
-from test_dashboard_durable_summaries import (  # noqa: F401
-    database,
+from test_dashboard_durable_summaries import (
     drain,
     legacy,
     projected,

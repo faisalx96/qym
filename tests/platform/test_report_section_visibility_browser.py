@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 
 import pytest
 
-from test_performance_views_browser import ViewFixture, browser
+from test_performance_views_browser import ViewFixture
 
 pytestmark = pytest.mark.browser
 

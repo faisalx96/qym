@@ -7,7 +7,7 @@ import pytest
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite://")
 
 from test_models_paging_browser import ModelsFixture  # noqa: E402
-from test_performance_views_browser import ViewFixture, browser  # noqa: E402,F401
+from test_performance_views_browser import ViewFixture  # noqa: E402
 
 
 def _reorder_metrics(fixture):

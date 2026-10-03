@@ -35,8 +35,7 @@ from qym_platform.services.run_means import (
 )
 from sqlalchemy import event
 from sqlalchemy.orm import Session
-from test_dashboard_durable_summaries import (  # noqa: F401
-    database,
+from test_dashboard_durable_summaries import (
     drain,
     item,
     legacy,

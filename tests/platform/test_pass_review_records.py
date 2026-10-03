@@ -19,74 +19,8 @@ from qym_platform.db.models import (
 )
 from qym_platform.services.root_cause_changes import PASS_ANALYSIS_META_KEY
 from qym_platform.services.llm_analyzer import AnalysisResult
-from test_issue_reviews import setup, act
-from test_root_cause_issue_persistence import db_session
+from test_issue_reviews import act
 from test_migrations import _load_migration
-
-
-@pytest.fixture
-def repeat(db_session):
-    # Match SessionLocal, not SQLAlchemy's default autoflush=True.
-    db_session.autoflush = False
-    _, run, item, principal = setup(db_session)
-    run.samples = 2
-    original = deepcopy(item.item_metadata)
-    analysis = {
-        "source": "ai",
-        "confidence": 0.9,
-        "root_cause": "New approved category",
-        "root_cause_issues": [
-            {
-                "issue_id": "shared-issue-1",
-                "category": "New approved category",
-                "subcategory": "Approved detail",
-                "finding": "First finding",
-            },
-            {
-                "issue_id": "shared-issue-2",
-                "category": "Unapproved category",
-                "subcategory": "Unapproved detail",
-                "finding": "Second finding",
-            },
-        ],
-        "category_taxonomy": {
-            "New approved category": {
-                "description": "Reviewed failure.",
-                "when_to_use": "When observed.",
-            },
-            "Unapproved category": {
-                "description": "Pending failure.",
-                "when_to_use": "Unreviewed.",
-            },
-        },
-    }
-    for number in (1, 2):
-        db_session.add(
-            RunItemPassScore(
-                run_id=run.id,
-                item_id=item.item_id,
-                metric_name="accuracy",
-                pass_number=number,
-                score_numeric=number / 10,
-                meta={
-                    PASS_ANALYSIS_META_KEY: deepcopy(analysis),
-                    "reason": "Judge reason",
-                },
-            )
-        )
-        db_session.add(
-            RunItemAttempt(
-                run_id=run.id,
-                item_id=item.item_id,
-                pass_number=number,
-                attempt_number=1,
-                status="completed",
-                is_last_attempt=True,
-                output={"answer": f"Pass {number}"},
-            )
-        )
-    db_session.commit()
-    return run, item, principal, original
 
 
 def score(db, run, number):

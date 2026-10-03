@@ -12,19 +12,12 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+pytestmark = pytest.mark.browser
+
 STATIC = (
     Path(__file__).resolve().parents[2]
     / "packages/platform/qym_platform/_static/dashboard"
 )
-
-
-@pytest.fixture(scope="module")
-def browser():
-    api = pytest.importorskip("playwright.sync_api")
-    with api.sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
-        yield browser
-        browser.close()
 
 
 def nested(rows):

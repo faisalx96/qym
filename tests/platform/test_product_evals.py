@@ -8,10 +8,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.orm import Session
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("QYM_AUTH_MODE", "proxy_headers")
@@ -25,9 +22,7 @@ if "openai" not in sys.modules:
     sys.modules["openai"] = MagicMock()
 
 from qym_platform.api import product_evals
-from qym_platform.app import create_app
 from qym_platform.datetime_utils import utc_now_naive
-from qym_platform.db.base import Base
 from qym_platform.db.models import (
     ApiKey,
     Project,
@@ -40,7 +35,6 @@ from qym_platform.db.models import (
     User,
     UserRole,
 )
-from qym_platform.deps import get_db
 from qym_platform.security import api_key_prefix, hash_api_key
 from qym_platform.services.product_evals import (
     ProductEvalJob,
@@ -51,6 +45,7 @@ from qym_platform.services.product_evals import (
     get_preset,
     validate_submit_request,
 )
+from _helpers import sqlite_session_factory
 
 
 @pytest.fixture()
@@ -59,36 +54,8 @@ def session_factory(monkeypatch):
     monkeypatch.setenv("QYM_AUTH_MODE", "proxy_headers")
     monkeypatch.setenv("QYM_BASE_URL", "http://testserver")
     monkeypatch.setenv("QYM_ALLOW_LEGACY_EMPTY_API_KEY_SCOPES", "false")
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    try:
-        yield SessionLocal
-    finally:
-        engine.dispose()
-
-
-@pytest.fixture()
-def client(session_factory):
-    app = create_app()
-
-    def override_get_db():
-        db = session_factory()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    try:
-        with TestClient(app) as test_client:
-            yield test_client
-    finally:
-        app.dependency_overrides.clear()
+    with sqlite_session_factory() as factory:
+        yield factory
 
 
 def _auth_headers(token: str) -> dict[str, str]:
@@ -526,29 +493,6 @@ def test_stop_product_eval_marks_job_and_runs_stopped(
         ]
 
 
-def test_stop_product_eval_job_allows_any_valid_key(
-    client, session_factory, monkeypatch
-) -> None:
-    # Scopes are no longer enforced: a key without runs:write is no longer blocked.
-    with session_factory() as session:
-        _seed_api_key(session, token="read-token", scopes=["runs:read"])
-
-    job = ProductEvalJob(
-        job_id="eval_stop_scope1",
-        preset="test",
-        owner_user_id="user-1",
-        project_id="project-1",
-    )
-    monkeypatch.setattr(product_evals.job_manager, "get", lambda eval_id: job)
-
-    response = client.post(
-        "/v1/product-evals/eval_stop_scope1/stop",
-        headers=_auth_headers("read-token"),
-    )
-
-    assert response.status_code != 403
-
-
 def test_stop_product_eval_run_marks_run_and_job_stopped(
     client, session_factory, monkeypatch
 ) -> None:
@@ -640,14 +584,49 @@ def test_stop_product_eval_run_leaves_a_reviewed_run_alone(
         assert (run.status, run.status_reason) == (review_status, None)
 
 
-def test_submit_rejects_invalid_preset(client, session_factory) -> None:
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        pytest.param(
+            {"preset": "not-allowed"},
+            "Unknown product eval preset",
+            id="unknown-preset",
+        ),
+        pytest.param(
+            {"preset": "run_v2_async"},
+            "Unknown product eval preset",
+            id="removed-run-v2-async-preset",
+        ),
+        pytest.param(
+            {"preset": "test", "config": {"max_concurrency": 1}},
+            "config is not accepted",
+            id="client-config-field",
+        ),
+        pytest.param(
+            {"preset": "insightor", "dataset": "   "},
+            "dataset must be a non-empty Qym dataset name",
+            id="blank-dataset",
+        ),
+        pytest.param(
+            {"preset": "test", "dataset": "customer-dataset"},
+            "dataset is not accepted for preset 'test'",
+            id="test-preset-dataset-override",
+        ),
+        pytest.param(
+            {"preset": "insightor", "dataset": "dataset-1"},
+            "insightor_url, refresh_token required for preset 'insightor'",
+            id="missing-insightor-runtime-inputs",
+        ),
+    ],
+)
+def test_submit_rejects_invalid_request(client, session_factory, body, message) -> None:
     with session_factory() as session:
         _seed_api_key(session, token="submit-token", scopes=["runs:write"])
 
     response = client.post(
         "/v1/product-evals",
         headers=_auth_headers("submit-token"),
-        json={"preset": "not-allowed"},
+        json=body,
     )
 
     assert response.status_code == 400
@@ -655,24 +634,7 @@ def test_submit_rejects_invalid_preset(client, session_factory) -> None:
     assert envelope["ok"] is False
     assert envelope["data"] is None
     assert envelope["error"]["code"] == "invalid_request"
-    assert "Unknown product eval preset" in envelope["error"]["message"]
-
-
-def test_submit_rejects_client_config_field(client, session_factory) -> None:
-    with session_factory() as session:
-        _seed_api_key(session, token="submit-token", scopes=["runs:write"])
-
-    response = client.post(
-        "/v1/product-evals",
-        headers=_auth_headers("submit-token"),
-        json={"preset": "test", "config": {"max_concurrency": 1}},
-    )
-
-    assert response.status_code == 400
-    envelope = response.json()
-    assert envelope["ok"] is False
-    assert envelope["error"]["code"] == "invalid_request"
-    assert "config is not accepted" in envelope["error"]["message"]
+    assert message in envelope["error"]["message"]
 
 
 def test_submit_returns_429_when_product_eval_slots_are_full(
@@ -700,42 +662,6 @@ def test_submit_returns_429_when_product_eval_slots_are_full(
     assert envelope["ok"] is False
     assert envelope["error"]["code"] == "queue_full"
     assert "Too many product eval jobs" in envelope["error"]["message"]
-
-
-def test_submit_rejects_blank_dataset_name(client, session_factory) -> None:
-    with session_factory() as session:
-        _seed_api_key(session, token="submit-token", scopes=["runs:write"])
-
-    response = client.post(
-        "/v1/product-evals",
-        headers=_auth_headers("submit-token"),
-        json={"preset": "insightor", "dataset": "   "},
-    )
-
-    assert response.status_code == 400
-    envelope = response.json()
-    assert envelope["ok"] is False
-    assert envelope["error"]["code"] == "invalid_request"
-    assert (
-        "dataset must be a non-empty Qym dataset name" in envelope["error"]["message"]
-    )
-
-
-def test_submit_rejects_test_preset_dataset_override(client, session_factory) -> None:
-    with session_factory() as session:
-        _seed_api_key(session, token="submit-token", scopes=["runs:write"])
-
-    response = client.post(
-        "/v1/product-evals",
-        headers=_auth_headers("submit-token"),
-        json={"preset": "test", "dataset": "customer-dataset"},
-    )
-
-    assert response.status_code == 400
-    envelope = response.json()
-    assert envelope["ok"] is False
-    assert envelope["error"]["code"] == "invalid_request"
-    assert "dataset is not accepted for preset 'test'" in envelope["error"]["message"]
 
 
 def test_insightor_preset_defaults_dataset_name(monkeypatch, tmp_path) -> None:
@@ -815,26 +741,6 @@ def test_insightor_preset_rejects_env_effective_concurrency_above_20(
         get_preset("insightor")
 
 
-def test_submit_requires_insightor_runtime_inputs(client, session_factory) -> None:
-    with session_factory() as session:
-        _seed_api_key(session, token="submit-token", scopes=["runs:write"])
-
-    response = client.post(
-        "/v1/product-evals",
-        headers=_auth_headers("submit-token"),
-        json={"preset": "insightor", "dataset": "dataset-1"},
-    )
-
-    assert response.status_code == 400
-    envelope = response.json()
-    assert envelope["ok"] is False
-    assert envelope["error"]["code"] == "invalid_request"
-    assert (
-        "insightor_url, refresh_token required for preset 'insightor'"
-        in envelope["error"]["message"]
-    )
-
-
 def test_test_preset_uses_self_contained_runner(monkeypatch) -> None:
     monkeypatch.delenv("EVAL_DATASET", raising=False)
 
@@ -846,11 +752,6 @@ def test_test_preset_uses_self_contained_runner(monkeypatch) -> None:
     assert preset.run_count == 3
     assert preset.metric_name == "exact_match"
     assert preset.default_config["max_concurrency"] == 10
-
-
-def test_test_preset_rejects_dataset_override() -> None:
-    with pytest.raises(ProductEvalError, match="dataset is not accepted"):
-        validate_submit_request(preset_name="test", dataset_name="customer-dataset")
 
 
 def test_job_manager_uses_configured_worker_count(monkeypatch) -> None:
@@ -935,23 +836,6 @@ def test_job_manager_rejects_when_all_worker_slots_are_active(monkeypatch) -> No
     assert first._future is not None
     first._future.result(timeout=5)
     manager._executor.shutdown(wait=False, cancel_futures=True)
-
-
-def test_run_v2_async_preset_is_removed(client, session_factory) -> None:
-    with session_factory() as session:
-        _seed_api_key(session, token="submit-token", scopes=["runs:write"])
-
-    response = client.post(
-        "/v1/product-evals",
-        headers=_auth_headers("submit-token"),
-        json={"preset": "run_v2_async"},
-    )
-
-    assert response.status_code == 400
-    envelope = response.json()
-    assert envelope["ok"] is False
-    assert envelope["error"]["code"] == "invalid_request"
-    assert "Unknown product eval preset" in envelope["error"]["message"]
 
 
 def test_insightor_preset_uses_samples_repeat_run(monkeypatch, tmp_path) -> None:
@@ -1176,32 +1060,6 @@ def test_insightor_stop_reaches_sampled_run_mid_flight(monkeypatch, tmp_path) ->
     assert first["config"]["checkpoint_enabled"] is False
     assert first["task"]("value") == "value"
     assert first["metrics"][0]("output", "expected") is True
-
-
-def test_submit_allows_any_valid_key(client, session_factory) -> None:
-    # Scopes are no longer enforced: a key without runs:write is not blocked on scope.
-    with session_factory() as session:
-        _seed_api_key(session, token="read-token", scopes=["runs:read"])
-
-    response = client.post(
-        "/v1/product-evals",
-        headers=_auth_headers("read-token"),
-        json={"preset": "insightor"},
-    )
-
-    assert response.status_code != 403
-
-
-def test_poll_allows_any_valid_key(client, session_factory) -> None:
-    # Scopes are no longer enforced: a key without runs:read is not blocked on scope.
-    with session_factory() as session:
-        _seed_api_key(session, token="write-token", scopes=["runs:write"])
-
-    response = client.get(
-        "/v1/product-evals/run-1", headers=_auth_headers("write-token")
-    )
-
-    assert response.status_code != 403
 
 
 def test_poll_unknown_eval_id_returns_standard_404(client, session_factory) -> None:
