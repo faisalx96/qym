@@ -35,10 +35,10 @@ from qym_platform.services.dashboard_outbox import (
 from qym_platform.services.ingest_completeness import runs_list_ingest_flag
 from qym_platform.services.metric_semantics import declared_direction, primary_metric
 from qym_platform.services.run_means import (
-    COMPLETED_RUN_STATUSES,
     MetricTotals,
     apply_repeat_pass_errors,
     errors_left_out,
+    execution_outcomes,
     mean_task_errors,
     metric_mean_fields,
     run_metric_mean,
@@ -1094,12 +1094,13 @@ def _task_failed_passes(run_id):
     )
 
 
-def _item_not_received(record, run):
+def _item_not_received(record, run, outcome):
     """``run_means.item_not_received`` over item records: a classic item of a
     completed run with no error, no output and no latency. None when the run
-    has no such items to find (repeat, or not completed)."""
-    status = str(getattr(run.status, "value", run.status) or "").upper()
-    if int(run.samples or 1) > 1 or status not in COMPLETED_RUN_STATUSES:
+    has no such items to find (repeat, or ``outcome``, how it ran, is not
+    completed)."""
+    status = str(getattr(outcome, "value", outcome) or "").upper()
+    if int(run.samples or 1) > 1 or status != "COMPLETED":
         return None
     return and_(
         record.record_kind == "item",
@@ -1241,7 +1242,9 @@ def refresh_run_summary(db, run_id, version):
     repeat = int(run.samples or 1) > 1
     # Items never received are counted apart: neither successes nor executions,
     # and left out of the means (services/run_means.py).
-    not_received_rule = _item_not_received(Record, run)
+    # How the run ran: a failed run in review is still a failed run.
+    outcome = execution_outcomes(db, [run])[run.id]
+    not_received_rule = _item_not_received(Record, run, outcome)
     not_received = (
         int(
             db.scalar(
@@ -1268,7 +1271,7 @@ def refresh_run_summary(db, run_id, version):
         # carries the pass that arrived last).
         counted_items.append(item_alias.error == 0)
     if not_received:
-        counted_items.append(~_item_not_received(item_alias, run))
+        counted_items.append(~_item_not_received(item_alias, run, outcome))
     metric_rows = db.execute(
         select(
             Record.metric_key,

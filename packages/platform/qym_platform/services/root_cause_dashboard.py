@@ -29,6 +29,7 @@ from qym_platform.db.models import (
 from qym_platform.services.approved_diagnoses import load_approved_diagnoses
 from qym_platform.services.run_means import (
     errored_repeat_items,
+    execution_outcomes,
     is_metric_error,
     item_not_received,
     mean_task_errors,
@@ -176,10 +177,18 @@ def _task_failed(item: RunItem, run: Run | None = None) -> bool:
     return bool(item.error) and (run is None or int(run.samples or 1) <= 1)
 
 
-def _not_received(item: RunItem, run: Run | None) -> bool:
-    """A completed run's item whose outcome never arrived (run_means)."""
+def _not_received(item: RunItem, run: Run | None, ran: Any = None) -> bool:
+    """A completed run's item whose outcome never arrived (run_means).
+
+    ``ran`` is how the run ran (``execution_outcomes``), by default its
+    status: a failed run in review is still a failed run.
+    """
     return run is not None and item_not_received(
-        run.status, run.samples, item.error, item.output, item.latency_ms
+        run.status if ran is None else ran,
+        run.samples,
+        item.error,
+        item.output,
+        item.latency_ms,
     )
 
 
@@ -189,8 +198,9 @@ def _score_outcome(
     spec: RunMetricSpec | None,
     pass_errored: bool = False,
     run: Run | None = None,
+    ran: Any = None,
 ) -> str:
-    if _not_received(item, run):
+    if _not_received(item, run, ran):
         return "unscored"
     if _task_failed(item, run) or _errored_for_minimize(score, spec, pass_errored):
         return "error"
@@ -213,10 +223,11 @@ def _score_value(
     score: RunItemScore | None,
     spec: RunMetricSpec | None = None,
     run: Run | None = None,
+    ran: Any = None,
 ) -> float | None:
     task_failed = _task_failed(item, run)
     if (
-        _not_received(item, run)
+        _not_received(item, run, ran)
         or _errored_for_minimize(score, spec, False)
         or (task_failed and _direction(spec) == "minimize")
     ):
@@ -440,11 +451,13 @@ def _load_snapshot(
     review_statuses = _latest_review_statuses(db, run_ids)
     approved_diagnoses = load_approved_diagnoses(db, run_ids, item_rows)
     runs_by_id = {run.id: run for run in runs}
+    outcomes = execution_outcomes(db, runs)
     items_by_run: dict[str, list[RunItem]] = defaultdict(list)
     for item in item_rows:
         items_by_run[item.run_id].append(item)
 
     for run in runs:
+        ran = outcomes[run.id]
         metrics = list(run.metrics or [])
         for item in items_by_run.get(run.id, []):
             for metric in metrics:
@@ -455,7 +468,7 @@ def _load_snapshot(
                     item.item_id,
                     str(metric),
                 ) in snapshot.errored_passes
-                if _score_outcome(item, score, spec, pass_errored, run) in {
+                if _score_outcome(item, score, spec, pass_errored, run, ran) in {
                     "failed",
                     "error",
                 }:
@@ -470,7 +483,7 @@ def _load_snapshot(
                 elif (
                     score is not None
                     and score.score_numeric is not None
-                    and not _not_received(item, run)
+                    and not _not_received(item, run, ran)
                 ):
                     stat["sum"] += float(score.score_numeric)
                     stat["scored_count"] += 1
@@ -506,6 +519,7 @@ def _load_snapshot(
                     spec,
                     (run.id, item.item_id, metric_name) in snapshot.errored_passes,
                     run,
+                    ran,
                 )
                 source = (
                     str(entry.get("source") or "unknown").strip().lower() or "unknown"
@@ -545,7 +559,7 @@ def _load_snapshot(
                         "source": source,
                         "review_status": review_status,
                         "outcome": outcome,
-                        "score": _score_value(item, score, spec, run),
+                        "score": _score_value(item, score, spec, run, ran),
                     }
                 )
 

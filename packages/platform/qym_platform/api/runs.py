@@ -106,8 +106,10 @@ from qym_platform.services.run_means import (
     METRIC_ERROR_STATUSES,
     TASK_ERROR_PASS_LABEL,
     TASK_ERROR_PASS_MARKER,
+    completed_review_runs,
     errored_pass_items,
     errors_left_out,
+    execution_outcomes,
     is_metric_error,
     is_task_error_pass,
     item_not_received,
@@ -1745,8 +1747,9 @@ def _compute_run_summary(db: Session, run: Run) -> Dict[str, Any]:
             total_retries = int(repeat_summary["total_retries"] or 0)
         repeat_executions = repeat_execution_counts(db, [run.id]).get(run.id)
     # Items whose outcome never arrived are neither successes nor executions.
+    outcome = execution_outcomes(db, [run])[run.id]
     not_received_count = sum(
-        item_not_received(run.status, run.samples, it.error, it.output, it.latency_ms)
+        item_not_received(outcome, run.samples, it.error, it.output, it.latency_ms)
         for it in items
     )
     success_count = total_items - error_count - not_received_count
@@ -2468,9 +2471,16 @@ def legacy_list_runs(
             ).label("completed"),
             func.coalesce(func.sum(RunItem.retry_count), 0).label("total_retries"),
             func.avg(RunItem.latency_ms).label("avg_latency"),
-            func.count(case((not_received_clause(RunItem, Run), 1))).label(
-                "not_received"
-            ),
+            func.count(
+                case(
+                    (
+                        not_received_clause(
+                            RunItem, Run, completed_review_runs(db, run_ids)
+                        ),
+                        1,
+                    )
+                )
+            ).label("not_received"),
         )
         .join(Run, Run.id == RunItem.run_id)
         .filter(RunItem.run_id.in_(run_ids))
@@ -3238,10 +3248,11 @@ def _build_models_runs_data(db: Session, runs: list[Run]) -> list[dict[str, Any]
     )
     # Outputs stay unread here: the few items never received come from SQL,
     # and only for the runs with a candidate (no error and no latency).
+    outcomes = execution_outcomes(db, runs)
     candidate_runs = {
         run.id
         for run in runs
-        if item_not_received(run.status, run.samples, None, None, None)
+        if item_not_received(outcomes[run.id], run.samples, None, None, None)
     }
     not_received = not_received_items(
         db,
@@ -3674,12 +3685,13 @@ def _build_run_data(
         "not_received": 0,
     }
     duplicate_counts: Dict[str, int] = {}
+    outcome = execution_outcomes(db, [run])[run.id]
     for it in items:
         is_error = bool(it.error)
         # A completed run's item whose outcome never arrived: neither a
         # success nor an error, and left out of the means (run_means).
         not_received = not is_error and item_not_received(
-            run.status, run_samples, it.error, it.output, it.latency_ms
+            outcome, run_samples, it.error, it.output, it.latency_ms
         )
         status = (
             "error" if is_error else "not_received" if not_received else "completed"
@@ -5213,7 +5225,11 @@ def update_metric(
         if is_error
         else "not_received"
         if item_not_received(
-            run.status, run_samples, item.error, item.output, item.latency_ms
+            execution_outcomes(db, [run])[run.id],
+            run_samples,
+            item.error,
+            item.output,
+            item.latency_ms,
         )
         else "completed"
     )

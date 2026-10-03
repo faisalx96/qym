@@ -66,12 +66,8 @@ def mean_task_errors(samples: Any, task_errors: Any) -> int:
     return int(task_errors or 0) if int(samples or 1) <= 1 else 0
 
 
-# A completed run, also while it is in review (its data stays as it completed).
-COMPLETED_RUN_STATUSES = ("COMPLETED", "SUBMITTED", "APPROVED", "REJECTED")
-
-
 def item_not_received(
-    run_status: Any, samples: Any, error: Any, output: Any, latency_ms: Any
+    outcome: Any, samples: Any, error: Any, output: Any, latency_ms: Any
 ) -> bool:
     """A classic item of a completed run whose outcome never reached the platform.
 
@@ -81,12 +77,14 @@ def item_not_received(
     It shows as not received and is left out of Execution success and of the
     means; it is neither a success nor a task error. Items of a run still in
     progress, stopped or failed are not judged, and a repeat run's items are
-    judged per pass. ``not_received_clause`` is the same rule in SQL, and
-    ``metrics.js`` (``isNotReceivedRow``) reads the row state it produces.
+    judged per pass. ``outcome`` is how the run ran (``execution_outcomes``),
+    not its review state: a failed run in review is still a failed run.
+    ``not_received_clause`` is the same rule in SQL, and ``metrics.js``
+    (``isNotReceivedRow``) reads the row state it produces.
     """
-    status = str(getattr(run_status, "value", run_status) or "").upper()
+    status = str(getattr(outcome, "value", outcome) or "").upper()
     return (
-        status in COMPLETED_RUN_STATUSES
+        status == "COMPLETED"
         and int(samples or 1) <= 1
         and error is None
         and output is None
@@ -94,14 +92,50 @@ def item_not_received(
     )
 
 
-def not_received_clause(item_model, run_model):
-    """``item_not_received`` in SQL, for item rows joined to their run."""
+def execution_outcomes(db, runs) -> Dict[str, Any]:
+    """Each run's execution outcome, the status ``item_not_received`` reads
+    (run_review.execution_outcomes)."""
+    from qym_platform.services.run_review import execution_outcomes as resolve
+
+    return resolve(db, runs)
+
+
+def completed_review_runs(db, run_ids) -> frozenset:
+    """The runs in review among ``run_ids`` whose execution completed: the
+    ``completed_in_review`` of ``not_received_clause``."""
+    from qym_platform.db.models import Run, RunWorkflowStatus
+    from qym_platform.services.run_review import REVIEW_STATUSES
+
+    run_ids = list(run_ids)
+    review = []
+    for start in range(0, len(run_ids), 400):
+        review.extend(
+            db.query(Run.id, Run.status).filter(
+                Run.id.in_(run_ids[start : start + 400]),
+                Run.status.in_(REVIEW_STATUSES),
+            )
+        )
+    return frozenset(
+        run_id
+        for run_id, outcome in execution_outcomes(db, review).items()
+        if outcome == RunWorkflowStatus.COMPLETED
+    )
+
+
+def not_received_clause(item_model, run_model, completed_in_review):
+    """``item_not_received`` in SQL, for item rows joined to their run.
+
+    ``completed_in_review`` holds the runs in review that completed
+    (``completed_review_runs``): their status shows the review, so SQL
+    cannot tell them from a failed run in review.
+    """
     from qym_platform.db.models import RunWorkflowStatus
 
+    completed = run_model.status == RunWorkflowStatus.COMPLETED
+    if completed_in_review:
+        completed = or_(completed, run_model.id.in_(sorted(completed_in_review)))
     return and_(
-        run_model.status.in_(
-            [RunWorkflowStatus(status) for status in COMPLETED_RUN_STATUSES]
-        ),
+        completed,
         func.coalesce(run_model.samples, 1) <= 1,
         item_model.error.is_(None),
         item_model.latency_ms.is_(None),
@@ -115,6 +149,7 @@ def not_received_items(db, run_ids) -> Dict[str, set]:
     from qym_platform.db.models import Run, RunItem
 
     run_ids = list(run_ids)
+    completed_in_review = completed_review_runs(db, run_ids)
     found: Dict[str, set] = {}
     for start in range(0, len(run_ids), 400):
         for run_id, item_id in (
@@ -122,7 +157,7 @@ def not_received_items(db, run_ids) -> Dict[str, set]:
             .join(Run, Run.id == RunItem.run_id)
             .filter(
                 RunItem.run_id.in_(run_ids[start : start + 400]),
-                not_received_clause(RunItem, Run),
+                not_received_clause(RunItem, Run, completed_in_review),
             )
         ):
             found.setdefault(run_id, set()).add(item_id)
@@ -503,7 +538,7 @@ def raw_metric_totals(
     counted = and_(
         # A repeat run's RunItem error is only its last pass's outcome.
         or_(Run.samples > 1, RunItem.error.is_(None)),
-        ~not_received_clause(RunItem, Run),
+        ~not_received_clause(RunItem, Run, completed_review_runs(db, run_ids)),
     )
     totals: Dict[str, Dict[str, MetricTotals]] = {}
     for run_id, metric, score_sum, score_count in (
