@@ -135,6 +135,13 @@ def world(monkeypatch):
                         metric_name="exact_match",
                         score_numeric=1.0,
                         explanation=f"matched {SECRET_EXPECTED}",
+                        meta={
+                            "judge_prompt": SECRET_INPUT,
+                            "reference": {"answer": SECRET_EXPECTED},
+                            "candidates": [SECRET_OUTPUT],
+                            "tokens": 12,
+                            "status": "ok",
+                        },
                     ),
                     Span(
                         run_id=run.id,
@@ -188,7 +195,19 @@ def test_redact_item_content_recurses_and_marks_payload():
         "output": "o",
         "error": "",
         "item_metadata": {"k": 1},
-        "metric_meta": {"m": {"explanation": "x", "label": "ok"}},
+        "metric_meta": {
+            "m": {
+                "explanation": "x",
+                "label": "ok",
+                "judge_prompt": "q",
+                "trace": {"input": "q"},
+                "tokens": 7,
+                "passed": True,
+                "error": "judge saw q",
+            }
+        },
+        "pass_metric_meta": {"m": [{"prompt": "q", "status": "ok"}, None]},
+        "scores_snapshot": {"m": 1.0, "n": {"value": 0.5, "raw": "q"}},
         "pass_attempts": [{"output": "o", "latency_ms": 3}, None],
     }
     redact_item_content(row)
@@ -196,7 +215,15 @@ def test_redact_item_content_recurses_and_marks_payload():
     assert row["output"] == PRIVATE_TEST_SET_PLACEHOLDER
     assert row["error"] == ""
     assert row["item_metadata"] == {}
-    assert row["metric_meta"]["m"] == {"explanation": PRIVATE_TEST_SET_PLACEHOLDER, "label": "ok"}
+    # Metric metadata keeps only numbers/booleans and known UI flags.
+    assert row["metric_meta"]["m"] == {
+        "label": "ok",
+        "tokens": 7,
+        "passed": True,
+        "error": PRIVATE_TEST_SET_PLACEHOLDER,
+    }
+    assert row["pass_metric_meta"]["m"] == [{"status": "ok"}, None]
+    assert row["scores_snapshot"] == {"m": 1.0, "n": {"value": 0.5}}
     assert row["pass_attempts"][0] == {"output": PRIVATE_TEST_SET_PLACEHOLDER, "latency_ms": 3}
     assert row["content_restricted"] is True
 
@@ -276,6 +303,7 @@ def test_member_run_views_redact_private_items(world):
         row = body["snapshot"]["rows"][0]
         assert row["content_restricted"] is True
         assert row["metric_values"] == [1.0]
+        assert row["metric_meta"]["exact_match"] == {"tokens": 12, "status": "ok"}
 
     details = client.post("/api/runs/run-secret/items/details", json={"item_ids": ["item-1"]}, headers=MEMBER)
     assert details.status_code == 200 and not _leaks(details)
@@ -309,6 +337,7 @@ def test_admin_and_public_run_views_unchanged(world):
     client, _ = world
     data = client.get("/api/runs/run-secret", headers=ADMIN).json()
     assert data["snapshot"]["rows"][0]["input"] == SECRET_INPUT
+    assert data["snapshot"]["rows"][0]["metric_meta"]["exact_match"]["judge_prompt"] == SECRET_INPUT
     assert "items_restricted" not in data["run"]
 
     data = client.get("/api/runs/run-open", headers=MEMBER).json()

@@ -232,6 +232,36 @@ def _is_content_key(key: str) -> bool:
     return any(key == suffix or key.endswith("_" + suffix) for suffix in _FREE_TEXT_SUFFIXES)
 
 
+# Per-metric metadata (``{metric: meta}`` or ``{metric: [meta per pass]}``)
+# is free-form and metrics routinely stash the prompt, the judged output or
+# the reference answer there. Keep only numbers/booleans and the few string
+# flags the UI renders; drop everything else.
+_METRIC_META_KEYS = frozenset(
+    {"metric_meta", "pass_metric_meta", "metric_metadata", "scores_snapshot"}
+)
+_METRIC_META_SAFE_STRINGS = frozenset(
+    {"label", "status", "sample_reducer", "modified"}
+)
+
+
+def _redact_metric_meta(meta: Any) -> Any:
+    if isinstance(meta, list):
+        return [_redact_metric_meta(entry) for entry in meta]
+    if not isinstance(meta, dict):
+        # A bare score value (``scores_snapshot``) or a missing pass.
+        return meta if meta is None or isinstance(meta, (bool, int, float, str)) else None
+    safe: dict[str, Any] = {}
+    for key, value in meta.items():
+        if value is None or isinstance(value, (bool, int, float)):
+            safe[key] = value
+        elif key == "error" and value:
+            # Truthiness drives the metric-error state in the UI.
+            safe[key] = PRIVATE_TEST_SET_PLACEHOLDER
+        elif key in _METRIC_META_SAFE_STRINGS and isinstance(value, str):
+            safe[key] = value
+    return safe
+
+
 def _redact(value: Any) -> None:
     if isinstance(value, list):
         for entry in value:
@@ -241,7 +271,11 @@ def _redact(value: Any) -> None:
         return
     for key in list(value.keys()):
         entry = value[key]
-        if isinstance(key, str) and _is_content_key(key):
+        if key in _METRIC_META_KEYS and isinstance(entry, dict):
+            value[key] = {
+                metric: _redact_metric_meta(meta) for metric, meta in entry.items()
+            }
+        elif isinstance(key, str) and _is_content_key(key):
             if entry not in (None, "", [], {}):
                 value[key] = PRIVATE_TEST_SET_PLACEHOLDER
         elif key in _ITEM_CONTENT_CLEARED_KEYS:
