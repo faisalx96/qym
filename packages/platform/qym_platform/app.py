@@ -105,6 +105,10 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
 
     # Run lists and detail payloads are large JSON; gzip cuts them ~5-10x.
     app.add_middleware(GZipMiddleware, minimum_size=1024)
+    # Oversized uploads are refused before Starlette spools them to /tmp.
+    from qym_platform.uploads import UploadLimitMiddleware
+
+    app.add_middleware(UploadLimitMiddleware, max_upload_bytes=settings.max_upload_bytes)
 
     if settings.request_timing:
         from qym_platform.db.session import engine as _engine

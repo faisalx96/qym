@@ -37,6 +37,33 @@ sure one process runs a given job.
 | `QYM_DB_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement guard on API connections |
 | `QYM_DB_LOCK_TIMEOUT_MS` | `5000` | Lock-wait guard (all roles) |
 | `QYM_REQUEST_TIMING` | `false` | `Server-Timing` header + per-request log line |
+| `QYM_MAX_UPLOAD_BYTES` | `104857600` (100 MB) | Largest file a dataset or run upload may carry. Larger multipart bodies get 413 before they are parsed (so they never reach `/tmp`); a multipart request without `Content-Length` gets 411 |
+| `QYM_PLATFORM_EVENT_SPILL_BYTES` | `0` in the image (SDK default 256 MB) | Disk overflow for run-event streams. `0` never spills: events wait in memory (16 MB) instead of being written to `/tmp` |
+| `INSIGHTOR_TIMINGS_FILE` | unset | Opt-in JSONL file for `insightor_eval.py` timings. Unset, timings are DEBUG log lines; point it at a mounted volume if you need the file |
+
+## Container filesystem (read-only)
+
+The image runs as an unprivileged user (`qym`, uid 10001) and never writes into
+its own filesystem: everything durable is in Postgres, logs go to stdout. Run it
+with a **read-only root filesystem** and a small **tmpfs at `/tmp`** (multipart
+upload parsing and `HOME` use it). `docker/docker-compose.yml` does this for
+`api` and `worker`. On Kubernetes:
+
+```yaml
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+volumeMounts:
+  - { name: tmp, mountPath: /tmp }
+volumes:
+  - name: tmp
+    emptyDir: { medium: Memory, sizeLimit: 512Mi }   # keep it above QYM_MAX_UPLOAD_BYTES
+```
+
+A component that tries to write anywhere else now fails loudly
+(`Read-only file system`) instead of filling the container layer.
 
 ## Storage model after this release
 
@@ -184,6 +211,10 @@ spec:
             - { name: QYM_ROLE, value: "worker" }
             - { name: QYM_SKIP_MIGRATIONS, value: "1" }
           resources: { requests: { cpu: "250m", memory: "512Mi" }, limits: { memory: "1Gi" } }
+          # Read-only root and a /tmp emptyDir, as for the API ("Container filesystem").
+          securityContext: { runAsNonRoot: true, readOnlyRootFilesystem: true, allowPrivilegeEscalation: false }
+          volumeMounts: [{ name: tmp, mountPath: /tmp }]
+      volumes: [{ name: tmp, emptyDir: { medium: Memory, sizeLimit: 256Mi } }]
 ```
 
 And on the API Deployment set `QYM_ROLE=api` so it no longer runs the background

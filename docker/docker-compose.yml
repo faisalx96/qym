@@ -52,6 +52,13 @@ services:
       QYM_CA_BUNDLE: ${QYM_CA_BUNDLE:-}
       QYM_SSL_VERIFY: ${QYM_SSL_VERIFY:-}
       QYM_PRODUCT_EVAL_RUN_COUNT: ${QYM_PRODUCT_EVAL_RUN_COUNT:-3}
+      QYM_MAX_UPLOAD_BYTES: ${QYM_MAX_UPLOAD_BYTES:-104857600}
+    # Nothing is written into the container: read-only root filesystem, and a
+    # bounded tmpfs for /tmp (multipart parsing, HOME). Keep the tmpfs above
+    # QYM_MAX_UPLOAD_BYTES.
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
     ports:
       - "8000:8000"
     depends_on:
@@ -98,6 +105,9 @@ services:
       QYM_EVENT_LOG_MODE: ${QYM_EVENT_LOG_MODE:-full}
       QYM_SPAN_RETENTION_DAYS: ${QYM_SPAN_RETENTION_DAYS:-60}
       QYM_DELETED_RUN_GRACE_DAYS: ${QYM_DELETED_RUN_GRACE_DAYS:-30}
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
     depends_on:
       api:
         condition: service_healthy

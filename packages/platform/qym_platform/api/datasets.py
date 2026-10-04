@@ -11,6 +11,8 @@ from typing import Any, Dict, Iterable, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Body, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
+
+from qym_platform.uploads import read_upload
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import String, cast, func
@@ -2128,6 +2130,8 @@ async def upload_dataset(
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
+    # Bounded read before any database work: an oversized file is a 413.
+    raw = await read_upload(file)
     project = _project_for_request(db, principal, project_slug)
     slug = _slugify(name)
     dataset = (
@@ -2155,7 +2159,6 @@ async def upload_dataset(
     else:
         input_columns = [input_col] if input_col else []
         expected_columns = [expected_col] if expected_col else []
-    raw = await file.read()
     filename = file.filename or ""
     if filename.lower().endswith(".jsonl"):
         source_type = "jsonl"

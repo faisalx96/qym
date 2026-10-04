@@ -33,6 +33,20 @@ if _DEBUG and _DEBUG.lower() not in ("0", "false", "no", ""):
             _DEBUG_FILE = sys.stderr
 
 
+def _spill_limit(client: Any) -> int:
+    """Disk spill allowance: QYM_PLATFORM_EVENT_SPILL_BYTES, else the class default."""
+    raw = os.environ.get("QYM_PLATFORM_EVENT_SPILL_BYTES", "").strip()
+    if raw:
+        try:
+            value = int(raw)
+        except ValueError:
+            value = -1
+        if value >= 0:
+            return value
+        _debug(f"ignoring invalid QYM_PLATFORM_EVENT_SPILL_BYTES={raw!r}")
+    return client.MAX_PENDING_DISK_BYTES
+
+
 def _debug(msg: str) -> None:
     if _DEBUG_FILE:
         ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
@@ -156,6 +170,8 @@ class PlatformEventStream:
     RETRY_BACKOFF_BASE = 0.5
     RETRY_BACKOFF_MAX = 10.0
     MAX_PENDING_MEMORY_BYTES = 16 * 1024 * 1024
+    # Overflow spool in the temp dir; QYM_PLATFORM_EVENT_SPILL_BYTES overrides it
+    # (0 = never spill: the platform image sets that, events wait in memory).
     MAX_PENDING_DISK_BYTES = 256 * 1024 * 1024
 
     def __init__(self, platform_url: str, api_key: str, run_id: str) -> None:
@@ -170,9 +186,7 @@ class PlatformEventStream:
         self._seq = 0
         self._seq_lock = threading.Lock()
         self._state_lock = threading.Lock()
-        self._q = EventBacklog(
-            self.MAX_PENDING_MEMORY_BYTES, self.MAX_PENDING_DISK_BYTES
-        )
+        self._q = EventBacklog(self.MAX_PENDING_MEMORY_BYTES, _spill_limit(self))
         self._active_emitters = 0
         self._accepting = True
         self._delivery_error: Optional[BaseException] = None

@@ -110,6 +110,9 @@ class PlatformSettings(BaseSettings):
         description="Emit Server-Timing headers and per-request timing logs",
     )
     request_timing_slow_ms: float = Field(default=1000.0, ge=0)
+    # Largest file a multipart upload may carry (datasets, run results). Bigger
+    # bodies are refused before parsing, so they are never spooled to /tmp.
+    max_upload_bytes: int = Field(default=100 * 1024 * 1024, ge=1)
 
     # Maintenance window: ingest answers 503 + Retry-After (SDKs buffer and
     # retry), the UI stays readable, admin endpoints keep working.

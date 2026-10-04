@@ -26,6 +26,8 @@ def _sanitize_for_json(obj: Any) -> Any:
 logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+
+from qym_platform.uploads import read_upload
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import func, insert, inspect
@@ -1921,7 +1923,7 @@ async def upload_run(
     if not principal.project_id:
         raise HTTPException(status_code=403, detail="API key is not bound to a project")
     filename = (file.filename or "").lower()
-    raw = await file.read()
+    raw = await read_upload(file)
     if not raw:
         raise HTTPException(status_code=400, detail="Empty upload")
 
