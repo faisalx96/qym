@@ -5,12 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Runs</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=error-types-20260922">
-  <link rel="stylesheet" href="/static/shell.css">
-  <script src="/static/auth.js"></script>
-  <script src="/static/shell.js?v=ui-consistency-20260730-15"></script>
-  <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60">
-  <script defer src="/static/ui_components.js?v=ui-consistency-20260803-28"></script>
+  <link rel="stylesheet" href="/static/dashboard.css?v=p0-20260930">
+  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
+  <script src="/static/qym_safe.js?v=p0-20260930"></script>
+  <script src="/static/auth.js?v=p0-20260930"></script>
+  <script src="/static/shell.js?v=p0-20260930-3"></script>
+  <script src="/static/kpis.js?v=p0-20260930"></script>
+  <link rel="stylesheet" href="/static/ui_components.css?v=p0-20260930">
+  <script defer src="/static/ui_components.js?v=p0-20260930-2"></script>
 </head>
 <body>
   <!-- Command Bar -->
@@ -79,7 +81,7 @@
     <!-- Table View -->
     <div id="table-view" class="table-container" style="display:none;">
       <div class="table-scroll" id="runs-table-scroll">
-        <table class="runs-table">
+        <table class="runs-table" data-frozen-columns="run status task model dataset owner time" data-frozen-edges="time">
           <thead>
             <tr id="table-header-row">
               <th class="col-run sortable" data-sort="run">
@@ -154,7 +156,7 @@
       <div class="modal-body">
         <p id="delete-modal-description">Are you sure you want to delete this run?</p>
         <p class="delete-run-name" id="delete-run-name"></p>
-        <p class="warning-text">This action cannot be undone.</p>
+        <p class="warning-text" id="delete-modal-warning" style="display:none;"></p>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="document.getElementById('delete-modal').style.display='none'">Cancel</button>
@@ -214,8 +216,8 @@
   </div>
 
   <script>window.__QYM_INITIAL_VIEW__ = 'table';</script>
-  <script src="/static/metrics.js?v=metric-errors-20260914-1"></script>
+  <script src="/static/metrics.js?v=p0-20260930-3"></script>
   <script src="/static/qym_table.js"></script>
-  <script src="/static/dashboard.js?v=runs-performance-error-types-20260922"></script>
+  <script src="/static/dashboard.js?v=p0-20260930-3"></script>
 </body>
 </html>

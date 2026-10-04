@@ -108,6 +108,13 @@
     } catch {}
   }
 
+  // An archived project opens read-only: its runs, charts and models stay
+  // readable, every change answers 409, so no write control is offered.
+  function isProjectReadOnly() {
+    if (state.currentProject && state.currentProject.is_active === false) return true;
+    return !!(window.QymShell && window.QymShell.isProjectArchived && window.QymShell.isProjectArchived());
+  }
+
   function projectUrl(slug, suffix = '') {
     const encoded = encodeURIComponent(slug || '');
     const cleanSuffix = String(suffix || '').replace(/^\/+/, '');
@@ -204,6 +211,7 @@
     chartFirstColWidth: 320,
     allMetrics: [],   // All unique metric names across runs
     visibleMetrics: null, // null = all visible; Set of visible metric names
+    runsFrozenColumns: null, // Runs identity columns frozen on scroll; null = not loaded yet
     allModels: [],    // All unique model names
     currentUser: null,
     availableProjects: [],
@@ -215,6 +223,7 @@
       selectedMetric: '',
       globalK: 5,
       threshold: 0.8,
+      thresholdByMetric: {},  // metric -> pass threshold the user chose
       metricIsBoolean: false,
       metricIsNumeric: false,
       visibleStatKeys: null,  // null = all visible; [] = none; otherwise explicit keys
@@ -365,6 +374,23 @@
     });
   }
 
+  // Metric semantics (C008): a metric's declared direction in a run's spec
+  // decides colors, "best" and ranking; without one it is shown neutrally.
+  function runMetricDirection(run, metric) {
+    return window.QymMetrics.metricDirection(run?.metric_specs?.[metric]);
+  }
+
+  // One direction for a set of runs: the one they declare, null if none or
+  // if runs disagree.
+  function runsMetricDirection(runs, metric) {
+    const directions = new Set();
+    for (const run of runs || []) {
+      const direction = runMetricDirection(run, metric);
+      if (direction) directions.add(direction);
+    }
+    return directions.size === 1 ? Array.from(directions)[0] : null;
+  }
+
   function getTraceMetricConfig(metricKey) {
     return TRACE_METRICS.find(tm => tm.key === metricKey) || null;
   }
@@ -378,7 +404,7 @@
       return '<td class="col-trace-metric-value">—</td>';
     }
     if (traceMetric.key === 'tool_success_rate') {
-      const metricClass = window.QymMetrics.getMetricColorClass(value, 'score');
+      const metricClass = window.QymMetrics.getMetricColorClass(value, 'score', 'maximize');
       return `<td class="col-trace-metric-value"><span class="metric-score ${metricClass}">${traceMetric.fmt(value)}</span></td>`;
     }
     return `<td class="col-trace-metric-value">${traceMetric.fmt(value)}</td>`;
@@ -415,14 +441,9 @@
     };
   }
 
+  // One shared escaping rule (qym_safe.js): & < > " ' so it is attribute-safe.
   function escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+    return QymSafe.escapeHtml(str || '');
   }
 
   const MODEL_REASONING_BADGE_TITLE = 'Reasoning model';
@@ -600,8 +621,8 @@
   }
 
   function truncateText(text, maxLen = null) {
-    // No truncation - return full text
-    return text || '';
+    // No truncation (CSS clips long names); the result is escaped HTML text.
+    return escapeHtml(text || '');
   }
 
   function getInitials(name) {
@@ -798,7 +819,7 @@
 
     let html = '';
     if (showSearch) {
-      html += `<div class="model-search-box qym-dropdown__search"><input type="text" class="model-search-input qym-control qym-search" placeholder="${searchPlaceholder || 'Search...'}" value="${escapeHtml(searchValue)}" /></div>`;
+      html += `<div class="model-search-box qym-dropdown__search"><input type="text" class="model-search-input qym-control qym-search" placeholder="${escapeHtml(searchPlaceholder || 'Search...')}" value="${escapeHtml(searchValue)}" /></div>`;
     }
     html += '<div class="ms-actions qym-dropdown__actions"><button class="ms-action-btn qym-dropdown__action" data-action="all">Select All</button><button class="ms-action-btn qym-dropdown__action" data-action="none">None</button></div>';
     html += values.map((v, idx) => {
@@ -1055,6 +1076,12 @@
     const visibleMetrics = new Set(getVisibleMetrics(metricOptions));
     const allVisible = visibleMetrics.size === metricOptions.length;
     const searchValue = dropdown.querySelector('.model-search-input')?.value || '';
+    // A refresh that rebuilds the list keeps keyboard focus on a Frozen
+    // columns control (they change the table without re-rendering).
+    const focusedFrozen = dropdown.contains(document.activeElement) ? document.activeElement : null;
+    const restoreFrozenFocus = focusedFrozen?.dataset?.frozenColumn
+      ? `input[data-frozen-column="${focusedFrozen.dataset.frozenColumn}"]`
+      : (focusedFrozen?.id === 'mv-frozen-reset' ? '#mv-frozen-reset' : '');
     dropdown.innerHTML =
       '<div class="model-search-box qym-dropdown__search"><input type="text" class="model-search-input qym-control qym-search" placeholder="Search columns..." value="' + escapeHtml(searchValue) + '" /></div>' +
       '<div class="ms-actions qym-dropdown__actions">' +
@@ -1086,7 +1113,8 @@
           const checked = allVisible || visibleMetrics.has(tm.key) ? 'checked' : '';
           const hidden = searchValue && !tm.label.toLowerCase().includes(searchValue.toLowerCase()) ? ' style="display:none"' : '';
           return `<label class="multi-select-option qym-dropdown__option"${hidden}><input type="checkbox" ${checked} data-mv-metric="${escapeHtml(tm.key)}" /><span>${escapeHtml(tm.label)}</span></label>`;
-        }).join('') : '');
+        }).join('') : '') +
+      renderRunsFrozenColumnsSection(searchValue);
 
     // Update button text
     updateMetricVisibilityBtn(metricOptions);
@@ -1098,16 +1126,22 @@
         const q = e.target.value.toLowerCase();
         dropdown.querySelectorAll('.multi-select-option').forEach(opt => {
           const metricCb = opt.querySelector('input[data-mv-metric]');
-          if (!metricCb) return;
-          const m = metricCb.dataset.mvMetric || '';
-          opt.style.display = getMetricDisplayName(m).toLowerCase().includes(q) ? '' : 'none';
+          const frozenCb = opt.querySelector('input[data-frozen-column]');
+          if (!metricCb && !frozenCb) return;
+          const label = metricCb
+            ? getMetricDisplayName(metricCb.dataset.mvMetric || '')
+            : opt.textContent.trim();
+          opt.style.display = label.toLowerCase().includes(q) ? '' : 'none';
         });
       });
       mvSearchInput.addEventListener('click', (e) => e.stopPropagation());
       mvSearchInput.addEventListener('keydown', (e) => e.stopPropagation());
     }
 
-    dropdown.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    wireRunsFrozenColumnControls(dropdown);
+    if (restoreFrozenFocus) dropdown.querySelector(restoreFrozenFocus)?.focus({ preventScroll: true });
+
+    dropdown.querySelectorAll('input[data-mv-metric]').forEach(cb => {
       cb.addEventListener('change', () => {
         const metric = cb.dataset.mvMetric;
         applyMetricVisibilityFromCheckboxes(metricOptions);
@@ -1203,7 +1237,8 @@
         case 'passHatK':
           return { key, label: `Pass^${K}` };
         case 'maxAtK':
-          return { key, label: `Max@${K}` };
+          // The best value per item follows the metric's direction.
+          return { key, label: `${mvs.metricDirection === 'minimize' ? 'Min' : 'Max'}@${K}` };
         case 'consistency':
           return { key, label: 'Consistency' };
         case 'reliability':
@@ -1416,7 +1451,11 @@
   // DATA PROCESSING
   // ═══════════════════════════════════════════════════
 
-  function renderExecutionErrors(run, scope = '', onlyMetric = null) {
+  // `scoredDisplay` is the metric's mean without its scorer errors, shown in
+  // the tooltip so readers can see how far counting errors as 0 moved it.
+  // `direction` overrides the metric direction read from `run` (pass rows
+  // carry no metric specs of their own).
+  function renderExecutionErrors(run, scope = '', onlyMetric = null, scoredDisplay = null, direction = undefined) {
     const known = run.task_error_count != null && run.metric_error_count != null;
     if (!known) {
       const count = Number(run.execution_error_count ?? run.error_count ?? 0);
@@ -1424,16 +1463,47 @@
         ? `<span class="status-errors status-errors-pending" title="${count} execution errors${scope}; task/metric breakdown is updating">${count}⚠</span>`
         : '';
     }
+    // A lower-is-better metric leaves task and scorer errors out of its mean
+    // (services/run_means.py): its cell says how many were left out.
+    const metricDirection = direction === undefined && onlyMetric ? runMetricDirection(run, onlyMetric) : direction;
+    if (onlyMetric && window.QymMetrics.errorsLeftOut(metricDirection)) {
+      const scorer = Number(run.metric_error_counts?.[onlyMetric] || 0);
+      const task = Number(run.task_error_count || 0);
+      const count = scorer + task;
+      if (!count) return '';
+      const plural = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
+      // Task errors are the run's: a failed task that a reviewer then scored
+      // counts in the mean at that score, so they are not a count of what
+      // this mean left out.
+      const label = [
+        scorer ? `${plural(scorer, 'scorer error')}${scope} ${scorer === 1 ? 'is' : 'are'} not counted in the ${onlyMetric} mean (lower is better).` : '',
+        task && scorer ? `The run also has ${plural(task, 'task error')}${scope}, left out too unless a reviewer scored them.` : '',
+        task && !scorer ? `The run has ${plural(task, 'task error')}${scope}. Lower is better for ${onlyMetric}, so they are left out of its mean unless a reviewer scored them.` : '',
+      ].filter(Boolean).join(' ');
+      const details = { kind: 'metric', count, scope, leftOut: true, metric: onlyMetric, task, metrics: { [onlyMetric]: scorer } };
+      return `<button type="button" class="status-errors status-error-detail status-metric-errors metric-error-indicator" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" data-execution-errors="${escapeHtml(JSON.stringify(details))}">⚠</button>`;
+    }
     return (onlyMetric ? ['metric'] : ['task', 'metric']).map(kind => {
       const count = Number(onlyMetric
         ? run.metric_error_counts?.[onlyMetric] || 0
         : run[`${kind}_error_count`] || 0);
       if (!count) return '';
-      const label = `${count} ${kind} error${count === 1 ? '' : 's'}${onlyMetric ? ` in ${onlyMetric}` : ''}${scope}`;
+      const label = onlyMetric
+        ? `${count} ${onlyMetric} scorer error${count === 1 ? '' : 's'}${scope}, counted as 0%${scoredDisplay ? `. Mean without ${count === 1 ? 'it' : 'them'}: ${scoredDisplay}` : ''}`
+        : `${count} ${kind} error${count === 1 ? '' : 's'}${scope}`;
       const details = { kind, count, scope, metrics: onlyMetric
         ? { [onlyMetric]: count } : run.metric_error_counts || {} };
       return `<button type="button" class="status-errors status-error-detail${kind === 'metric' ? ' status-metric-errors' : ''}${onlyMetric ? ' metric-error-indicator' : ''}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" data-execution-errors="${escapeHtml(JSON.stringify(details))}">${onlyMetric ? '' : count}⚠</button>`;
     }).join('');
+  }
+
+  // A finished run whose items did not all arrive, or whose events the
+  // platform rejected, is flagged; the run page lists the details.
+  function renderIngestIncomplete(run) {
+    const flag = run.ingest_incomplete;
+    if (!flag || typeof flag !== 'object') return '';
+    const label = `Incomplete data. ${flag.reason || 'Not all of this run reached the platform.'}`;
+    return `<span class="status-incomplete qym-tag qym-tag--warning" style="display: flex; width: fit-content; margin-top: var(--space-xs);" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">Incomplete</span>`;
   }
 
   function showExecutionErrorDetails(button) {
@@ -1447,7 +1517,10 @@
     modal.setAttribute('role', 'dialog');
     modal.setAttribute('aria-modal', 'true');
     modal.setAttribute('aria-labelledby', 'execution-error-title');
-    modal.innerHTML = `<div class="modal-content modal-small"><div class="modal-header"><h2 id="execution-error-title">${task ? 'Task' : 'Metric'} errors</h2><button class="modal-close qym-icon-action" aria-label="Close error details">×</button></div><div class="modal-body"><p>${details.count} ${task ? 'task execution' : 'metric check'}${details.count === 1 ? '' : 's'} failed${escapeHtml(details.scope)}.</p>${task ? '' : `<dl class="execution-error-breakdown">${Object.entries(details.metrics).map(([name, count]) => `<div><dt>${escapeHtml(name)}</dt><dd>${Number(count)}</dd></div>`).join('')}</dl>`}<p class="execution-error-note">${task ? 'Metrics skipped after a task failure are not metric errors.' : 'Task outputs are available. Each failed metric check is counted once per item and pass.'}</p></div></div>`;
+    modal.innerHTML = details.leftOut
+      // A lower-is-better metric: its task and scorer errors are left out.
+      ? `<div class="modal-content modal-small"><div class="modal-header"><h2 id="execution-error-title">${escapeHtml(details.metric)} errors</h2><button class="modal-close qym-icon-action" aria-label="Close error details">×</button></div><div class="modal-body"><p>Errors${escapeHtml(details.scope)} are not counted in the ${escapeHtml(details.metric)} mean.</p><dl class="execution-error-breakdown"><div><dt>Scorer errors</dt><dd>${Number(details.metrics?.[details.metric] || 0)}</dd></div><div><dt>Task errors in the run</dt><dd>${Number(details.task || 0)}</dd></div></dl><p class="execution-error-note">Lower is better for this metric, so an error counted as 0 would read as its best score. Errors are left out of its mean and count as fails in pass rates. Each is counted once per item and pass; a failed task that a reviewer scored counts at that score.</p></div></div>`
+      : `<div class="modal-content modal-small"><div class="modal-header"><h2 id="execution-error-title">${task ? 'Task' : 'Metric'} errors</h2><button class="modal-close qym-icon-action" aria-label="Close error details">×</button></div><div class="modal-body"><p>${details.count} ${task ? 'task execution' : 'metric check'}${details.count === 1 ? '' : 's'} failed${escapeHtml(details.scope)}.</p>${task ? '' : `<dl class="execution-error-breakdown">${Object.entries(details.metrics).map(([name, count]) => `<div><dt>${escapeHtml(name)}</dt><dd>${Number(count)}</dd></div>`).join('')}</dl>`}<p class="execution-error-note">${task ? 'Metrics skipped after a task failure are not metric errors.' : 'Task outputs are available. Each failed metric check is counted once per item and pass, and counts as 0% in the run mean.'}</p></div></div>`;
     document.body.appendChild(modal);
     const close = () => { modal.remove(); if (button.isConnected) button.focus(); };
     const closeButton = modal.querySelector('button');
@@ -1853,11 +1926,16 @@
         runs.sort((a, b) => b.execution_error_count - a.execution_error_count);
         break;
       case 'run-asc':
-        runs.sort((a, b) => a.run_id.localeCompare(b.run_id));
+      case 'run-desc': {
+        // Same key as the server and the Run cell: external id, else run id.
+        const runLabel = run => String(run.external_run_id || run.run_id || '');
+        const sign = state.sortKey === 'run-desc' ? -1 : 1;
+        runs.sort((a, b) => sign * (
+          runLabel(a).localeCompare(runLabel(b), undefined, { sensitivity: 'base' })
+          || String(a.run_id || '').localeCompare(String(b.run_id || ''))
+        ));
         break;
-      case 'run-desc':
-        runs.sort((a, b) => b.run_id.localeCompare(a.run_id));
-        break;
+      }
       case 'latency-desc':
         runs.sort((a, b) => (b.avg_latency_ms || 0) - (a.avg_latency_ms || 0));
         break;
@@ -1906,18 +1984,9 @@
   // ═══════════════════════════════════════════════════
 
   function renderStatsBar() {
-    const agg = state.aggregations;
-    if (!agg) return;
-
-    // Push stats to the shell topbar
-    if (window.QymShell) {
-      window.QymShell.setTopbarStats([
-        { label: 'runs', value: formatNumber(agg.totalRuns), color: 'var(--accent-primary)' },
-        { label: 'success', value: formatPercent(agg.avgSuccess), color: 'var(--success)' },
-        { label: 'models', value: formatNumber(agg.totalModels), color: 'var(--accent-secondary)' },
-        { label: 'items', value: formatNumber(agg.totalItems), color: 'var(--accent-tertiary)' },
-      ]);
-    }
+    // Server KPIs for the active filter (or the whole project), rendered with
+    // the Overview's labels. Never derive headline numbers from loaded rows.
+    window.QymKpis?.renderTopbar(state.dashboardOverview?.kpis || null);
   }
 
   function isLatencyLikeMetric(metricName) {
@@ -1952,12 +2021,12 @@
     const width = value === null || value === undefined ? 0 : Math.max(safeRatio * 100, 2);
     const aggregateClass = isAggregate && !Number.isInteger(modelIdx) ? ' aggregate' : '';
     const modelAttr = Number.isInteger(modelIdx) ? ` data-model-idx="${modelIdx}"` : '';
-    const titleAttr = title ? ` title="${title}"` : '';
+    const titleAttr = title ? ` title="${escapeHtml(title)}"` : '';
     return `
-      <div class="${cellClass}"${titleAttr}>
+      <div class="${escapeHtml(cellClass)}"${titleAttr}>
         <div class="chart-mini-bar-track">
           <div class="chart-mini-bar-fill${aggregateClass}"${modelAttr} style="width:${width}%">
-            <span class="chart-mini-bar-label">${label}</span>
+            <span class="chart-mini-bar-label">${escapeHtml(label)}</span>
           </div>
         </div>
       </div>
@@ -1988,6 +2057,11 @@
   // ═══════════════════════════════════════════════════
 
   function renderChartsView() {
+    // A column's first sort direction: names A-Z, numbers highest first. The
+    // header click handlers below use it too, outside each card's render.
+    function getChartSortDirection(key) {
+      return key === 'model' ? 'asc' : 'desc';
+    }
     const chartData = state.chartData;
     const visibleSystemColumns = _visibleSystemColumns();
     
@@ -2019,7 +2093,7 @@
     legendEl.innerHTML = state.allModels.map((model, idx) => {
       const isActive = state.filterModels.size === 0 || state.filterModels.has(model);
       return `
-        <div class="legend-item ${isActive ? '' : 'inactive'}" data-model="${model}" title="${getModelFilterOptionLabel(model)}">
+        <div class="legend-item ${isActive ? '' : 'inactive'}" data-model="${escapeHtml(model)}" title="${escapeHtml(getModelFilterOptionLabel(model))}">
           <span class="legend-color" style="background:${CHART_COLORS[idx % CHART_COLORS.length]}"></span>
           ${renderModelLabelForModelName(model)}
         </div>
@@ -2063,10 +2137,10 @@
 
       // Dataset tabs HTML
       const datasetTabsHtml = `
-        <div class="chart-dataset-tabs qym-tabs" id="${chartTabsetId}" role="tablist" aria-label="Datasets for ${taskName}">
+        <div class="chart-dataset-tabs qym-tabs" id="${chartTabsetId}" role="tablist" aria-label="Datasets for ${escapeHtml(taskName)}">
           ${datasets.map((d, datasetIndex) => `
-            <button type="button" role="tab" id="${chartTabsetId}-tab-${datasetIndex}" aria-controls="${chartPanelId}" class="chart-dataset-tab qym-tabs__tab ${d.dataset === combo.dataset ? 'active' : ''}" data-task="${taskName}" data-dataset="${d.dataset}" aria-selected="${d.dataset === combo.dataset}">
-              ${d.dataset} <span class="tab-count qym-tag qym-tag--count">${d.totalRuns}</span>
+            <button type="button" role="tab" id="${chartTabsetId}-tab-${datasetIndex}" aria-controls="${chartPanelId}" class="chart-dataset-tab qym-tabs__tab ${d.dataset === combo.dataset ? 'active' : ''}" data-task="${escapeHtml(taskName)}" data-dataset="${escapeHtml(d.dataset)}" aria-selected="${d.dataset === combo.dataset}">
+              ${escapeHtml(d.dataset)} <span class="tab-count qym-tag qym-tag--count">${Number(d.totalRuns) || 0}</span>
             </button>
           `).join('')}
         </div>
@@ -2110,6 +2184,8 @@
             file_path: run.file_path,
             timestamp: run.timestamp,
             metric_averages: run.metric_averages || {},
+            metric_specs: run.metric_specs || {},
+            metrics: run.metrics || [],
             trace_stats: run.trace_stats || null,
             latency: run.avg_latency_ms || 0,
             median_latency: run.median_latency_ms || 0,
@@ -2121,7 +2197,16 @@
       }
 
       const visibleTraceMetrics = _visibleTraceMetrics(allRuns);
-      const groupMetricName = allComboMetrics.find(metric => (state._metricTypes?.[metric] || 'score') !== 'numeric') || '';
+      // Group Pass@K uses the newest run's declared primary metric when it is
+      // a score, else the first score metric; it needs a declared direction.
+      const newestComboRun = allRuns.slice().sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))[0];
+      const declaredGroupMetric = newestComboRun
+        ? window.QymMetrics.defaultMetricName(newestComboRun.metrics, newestComboRun.metric_specs)
+        : null;
+      const isScoreMetric = metric => (state._metricTypes?.[metric] || 'score') !== 'numeric';
+      const groupMetricName = (declaredGroupMetric && allComboMetrics.includes(declaredGroupMetric) && isScoreMetric(declaredGroupMetric)
+        ? declaredGroupMetric
+        : allComboMetrics.find(isScoreMetric)) || '';
 
       // Generate unique card ID for sorting state
       const cardId = getChartCardId(combo.task, combo.dataset);
@@ -2149,7 +2234,7 @@
         return `
           <div class="chart-task-section">
             <div class="chart-task-header">
-              <span class="chart-task-name">${taskName}</span>
+              <span class="chart-task-name">${escapeHtml(taskName)}</span>
               <span class="chart-task-meta">${totalTaskRuns} runs \u00b7 ${allTaskModels.size} models</span>
             </div>
             <div class="chart-card">
@@ -2168,10 +2253,6 @@
         state.chartSortState[cardId] = { key: metrics[0] || visibleTraceMetrics[0]?.key || 'latency', dir: 'desc' };
       }
       const sortState = state.chartSortState[cardId];
-
-      function getChartSortDirection(key) {
-        return key === 'model' ? 'asc' : 'desc';
-      }
 
       function isGroupStatSortKey(key) {
         return key === GROUP_PASS_AT_K_COLUMN_KEY
@@ -2300,7 +2381,7 @@
         const isActive = sortState.key === key;
         const arrow = isActive ? (sortState.dir === 'desc' ? '\u2193' : '\u2191') : '';
         const title = `${label} for grouped runs`;
-        return `<span class="chart-col-header chart-group-stat-header sortable-col ${isActive ? 'active' : ''}" data-card="${cardId}" data-sort="${key}" title="${title}"><span class="chart-col-header-label">${label}</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
+        return `<span class="chart-col-header chart-group-stat-header sortable-col ${isActive ? 'active' : ''}" data-card="${cardId}" data-sort="${escapeHtml(key)}" title="${escapeHtml(title)}"><span class="chart-col-header-label">${escapeHtml(label)}</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
       }).join('');
       const headerCells = displayColumns.map(column => {
         if (column === AVG_LATENCY_COLUMN_KEY) {
@@ -2316,7 +2397,7 @@
         const label = getMetricDisplayName(column);
         const isActive = sortState.key === column;
         const arrow = isActive ? (sortState.dir === 'desc' ? '\u2193' : '\u2191') : '';
-        return `<span class="chart-col-header sortable-col ${isActive ? 'active' : ''}" data-card="${cardId}" data-sort="${column}" title="${label}"><span class="chart-col-header-label">${label}</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
+        return `<span class="chart-col-header sortable-col ${isActive ? 'active' : ''}" data-card="${cardId}" data-sort="${escapeHtml(column)}" title="${escapeHtml(label)}"><span class="chart-col-header-label">${escapeHtml(label)}</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
       }).join('');
 
       function renderMetricValueCell(metricName, value, modelIdx, isAggregate = false) {
@@ -2326,7 +2407,7 @@
         const chartMType = state._metricTypes?.[metricName] || window.QymMetrics.detectMetricTypeFromAvg(value);
         if (!prefersBarChartMetric(metricName, chartMType)) {
           const display = window.QymMetrics.formatNumericValue(value);
-          return `<div class="chart-metric-cell"><span class="chart-numeric-value${isAggregate ? ' aggregate' : ''}">${display}</span></div>`;
+          return `<div class="chart-metric-cell"><span class="chart-numeric-value${isAggregate ? ' aggregate' : ''}">${escapeHtml(display)}</span></div>`;
         }
         if (chartMType === 'numeric') {
           const scaleMax = metricScaleMax[metricName] || value || 1;
@@ -2409,7 +2490,7 @@
           displayHtml = `${displayModel}<span class="run-timestamp">${dt.date} \u00b7 ${dt.time}</span>`;
         }
         const versionStr = runData.git_commit ? (runData.git_branch ? `${runData.git_branch}/${runData.git_commit}` : runData.git_commit) : '';
-        const versionTag = versionStr ? `<span class="chart-version-tag qym-tag">${versionStr}</span>` : '';
+        const versionTag = versionStr ? `<span class="chart-version-tag qym-tag">${escapeHtml(versionStr)}</span>` : '';
         const tooltipText = `Run name: ${hoverRunName}${versionStr ? `\nVersion: ${versionStr}` : ''}`;
         const dataCells = displayColumns.map(column => {
           if (column === AVG_LATENCY_COLUMN_KEY) {
@@ -2426,8 +2507,8 @@
         return `
           <div class="chart-table-row">
             <span class="chart-bar-label clickable-run ${isMultiRun ? 'multi-run' : ''}"
-                  data-file="${file_path}"
-                  title="${tooltipText}">${displayHtml}${versionTag}</span>
+                  data-file="${escapeHtml(file_path)}"
+                  title="${escapeHtml(tooltipText)}">${displayHtml}${versionTag}</span>
             ${dataCells}
           </div>
         `;
@@ -2498,7 +2579,8 @@
       }
 
       function getChartGroupMetricThreshold(runs, metricName) {
-        return isChartGroupMetricBoolean(runs, metricName) ? 0.9999 : 0.8;
+        if (isChartGroupMetricBoolean(runs, metricName)) return 0.9999;
+        return window.QymMetrics.defaultPassThreshold(null, runsMetricDirection(runs, metricName));
       }
 
       function scheduleChartGroupMetricStats(runs, metricName, threshold, isBoolean) {
@@ -2512,7 +2594,7 @@
         const paths = Array.from(new Set(runs.map(run => run.file_path).filter(Boolean)));
         fetchModelRunsData(paths).then((payload) => {
           const detailedRuns = payload && Array.isArray(payload.runs) ? payload.runs : [];
-          const stats = calculateModelStatsFromItems(detailedRuns, metricName, threshold, isBoolean);
+          const stats = calculateModelStatsFromItems(detailedRuns, metricName, threshold, isBoolean, runsMetricDirection(runs, metricName));
           state.chartGroupMetricStats[cacheKey] = { status: 'ready', K: stats.K || runs.length, stats };
           if (state.currentView === 'charts') renderChartsView();
         }).catch(() => {
@@ -2531,7 +2613,7 @@
 
       function renderGroupStatBar(value, label, title, modelIdx) {
         if (value === undefined || value === null) {
-          return `<div class="chart-metric-cell chart-group-stat-cell" title="${title}"><span class="metric-na">\u2014</span></div>`;
+          return `<div class="chart-metric-cell chart-group-stat-cell" title="${escapeHtml(title)}"><span class="metric-na">\u2014</span></div>`;
         }
         return renderMiniBarCell({
           value,
@@ -2548,18 +2630,20 @@
         if (!showGroupStatColumns) return '';
         const emptyCells = renderEmptyGroupStatCells();
         if (!groupMetricName || !Array.isArray(runs) || runs.length === 0) return emptyCells;
+        // Pass rates need a declared direction (C008).
+        if (!runsMetricDirection(runs, groupMetricName)) return emptyCells;
         const isBoolean = isChartGroupMetricBoolean(runs, groupMetricName);
         const threshold = getChartGroupMetricThreshold(runs, groupMetricName);
         const entry = scheduleChartGroupMetricStats(runs, groupMetricName, threshold, isBoolean);
         const K = entry?.K || runs.length;
         if (!entry || entry.status === 'loading') {
           const loadingTitles = {
-            [GROUP_PASS_AT_K_COLUMN_KEY]: `Loading Pass@${K} for ${escapeHtml(groupMetricName)}`,
-            [GROUP_CONSISTENCY_COLUMN_KEY]: `Loading consistency for ${escapeHtml(groupMetricName)}`,
-            [GROUP_RELIABILITY_COLUMN_KEY]: `Loading reliability for ${escapeHtml(groupMetricName)}`,
+            [GROUP_PASS_AT_K_COLUMN_KEY]: `Loading Pass@${K} for ${groupMetricName}`,
+            [GROUP_CONSISTENCY_COLUMN_KEY]: `Loading consistency for ${groupMetricName}`,
+            [GROUP_RELIABILITY_COLUMN_KEY]: `Loading reliability for ${groupMetricName}`,
           };
           return visibleGroupStatColumns
-            .map(col => `<div class="chart-metric-cell chart-group-stat-cell is-loading" title="${loadingTitles[col.key]}"><span class="metric-na">\u2014</span></div>`)
+            .map(col => `<div class="chart-metric-cell chart-group-stat-cell is-loading" title="${escapeHtml(loadingTitles[col.key])}"><span class="metric-na">\u2014</span></div>`)
             .join('');
         }
         if (entry.status !== 'ready' || !entry.stats) {
@@ -2840,7 +2924,7 @@
       return `
           <div class="chart-task-section">
             <div class="chart-task-header">
-              <span class="chart-task-name">${taskName}</span>
+              <span class="chart-task-name">${escapeHtml(taskName)}</span>
               <span class="chart-task-meta">${totalTaskRuns} runs \u00b7 ${allTaskModels.size} models \u00b7 ${metrics.length + visibleTraceMetrics.length} metrics</span>
             </div>
           <div class="chart-card">
@@ -2884,13 +2968,9 @@
         if (!cardId || !sortKey) return;
 
         const currentSort = state.chartSortState[cardId] || { key: sortKey, dir: 'desc' };
-        if (currentSort.key === sortKey) {
-          currentSort.dir = currentSort.dir === 'desc' ? 'asc' : 'desc';
-        } else {
-          currentSort.key = sortKey;
-          currentSort.dir = getChartSortDirection(sortKey);
-        }
-        state.chartSortState[cardId] = currentSort;
+        state.chartSortState[cardId] = currentSort.key === sortKey
+          ? { key: sortKey, dir: currentSort.dir === 'desc' ? 'asc' : 'desc' }
+          : { key: sortKey, dir: getChartSortDirection(sortKey) };
         renderChartsView();
       });
     });
@@ -3035,13 +3115,18 @@
     const causeCount = isPassScoped
       ? Number(analysisCauseCount || 0)
       : Number(run.analysis_cause_count || 0);
+    if (isProjectReadOnly()) {
+      if (causeCount <= 0) return '<span class="metric-na">—</span>';
+      const count = `${causeCount} cause${causeCount === 1 ? '' : 's'}`;
+      return `<span style="color:var(--text-muted);font-size:var(--font-sm)" title="${count} found">${count}</span>`;
+    }
     const analyzerHref = analyzerUrlForRun(run, passNumber);
     if (causeCount > 0) {
       const label = `${causeCount} cause${causeCount === 1 ? '' : 's'}`;
-      return `<a class="run-analysis-chip" href="${analyzerHref}" title="${label} found — open auto-analysis" aria-label="${label} found — open auto-analysis">${ANALYSIS_SPARK_ICON}${label}</a>`;
+      return `<a class="run-analysis-chip" href="${escapeHtml(analyzerHref)}" title="${label} found — open auto-analysis" aria-label="${label} found — open auto-analysis">${ANALYSIS_SPARK_ICON}${label}</a>`;
     }
     if (status !== 'RUNNING' && status !== 'PENDING') {
-      return `<a class="run-analysis-start" href="${analyzerHref}" title="Run auto-analysis" aria-label="Run auto-analysis">${ANALYSIS_SPARK_ICON}Analyze</a>`;
+      return `<a class="run-analysis-start" href="${escapeHtml(analyzerHref)}" title="Run auto-analysis" aria-label="Run auto-analysis">${ANALYSIS_SPARK_ICON}Analyze</a>`;
     }
     return '<span class="metric-na">—</span>';
   }
@@ -3154,7 +3239,10 @@
     (runsData || []).forEach(rd => {
       const samples = parseInt(rd?.run?.samples, 10) || 1;
       const rows = rd?.snapshot?.rows || [];
-      const hasPassData = samples > 1 && rows.some(r => r && r.pass_scores);
+      // A snapshot whose errored items alone carry passes (the Models
+      // payload) stays one entry per item.
+      const hasPassData = samples > 1 && rd?.snapshot?.pass_scores_scope !== 'errored'
+        && rows.some(r => r && r.pass_scores);
       if (!hasPassData) { out.push(rd); return; }
       const metricNames = rd.snapshot.metric_names || rd.run.metric_names || [];
       for (let p = 0; p < samples; p++) {
@@ -3164,7 +3252,31 @@
             if (Array.isArray(ps)) return (ps[p] == null ? '' : ps[p]);
             return row.metric_values ? row.metric_values[i] : '';
           });
-          return Object.assign({}, row, { metric_values: mv });
+          // The pass's own task outcome, never the item's status (the pass
+          // that arrived last): a failed pass is a task error, and a row
+          // whose last pass failed reads as completed on its other passes.
+          const attempt = Array.isArray(row.pass_attempts) ? row.pass_attempts[p] : null;
+          const passFailed = (!!attempt && window.QymMetrics.isTaskErrorRow(attempt))
+            || metricNames.some(m => window.QymMetrics.isTaskErrorPass(row, m, p));
+          const scoped = {
+            metric_values: mv,
+            status: passFailed ? 'error' : (window.QymMetrics.isTaskErrorRow(row) ? 'completed' : row.status),
+            __pass_scope: true,
+          };
+          if (!row.pass_metric_meta) return Object.assign({}, row, scoped);
+          // The pass's own metric metadata, so a scorer or task error of this
+          // pass follows the metric's error rule (metrics.js getRowScore)
+          // instead of the item's other passes.
+          const meta = {};
+          metricNames.forEach(m => {
+            const values = row.pass_metric_meta[m];
+            const value = Array.isArray(values) ? values[p] : null;
+            if (value && typeof value === 'object') meta[m] = value;
+          });
+          return Object.assign({}, row, scoped, {
+            metric_meta: meta,
+            pass_metric_meta: null,
+          });
         });
         out.push({ run: rd.run, snapshot: Object.assign({}, rd.snapshot, { rows: passRows }) });
       }
@@ -3172,45 +3284,236 @@
     return out;
   }
 
-  const RUNS_STICKY_COLUMN_LIMITS = [
+  // Runs identity columns in table order. Each one sizes to its visible values
+  // (clamped by the CSS min/max vars) and can be frozen on horizontal scroll.
+  const RUNS_IDENTITY_COLUMNS = [
     {
-      selector: '.col-status',
-      widthVar: '--runs-col-status-width',
-      minVar: '--runs-col-status-min-width',
-      maxVar: '--runs-col-status-max-width',
-    },
-    {
+      key: 'run',
+      label: 'Run name',
       selector: '.col-run',
       widthVar: '--runs-col-run-width',
       minVar: '--runs-col-run-min-width',
       maxVar: '--runs-col-run-max-width',
     },
     {
+      key: 'status',
+      label: 'Status',
+      selector: '.col-status',
+      widthVar: '--runs-col-status-width',
+      minVar: '--runs-col-status-min-width',
+      maxVar: '--runs-col-status-max-width',
+    },
+    {
+      key: 'task',
+      label: 'Task',
       selector: '.col-task',
       widthVar: '--runs-col-task-width',
       minVar: '--runs-col-task-min-width',
     },
     {
+      key: 'model',
+      label: 'Model',
       selector: '.col-model',
       widthVar: '--runs-col-model-width',
       minVar: '--runs-col-model-min-width',
     },
     {
+      key: 'dataset',
+      label: 'Dataset',
       selector: '.col-dataset',
       widthVar: '--runs-col-dataset-width',
       minVar: '--runs-col-dataset-min-width',
     },
     {
+      key: 'owner',
+      label: 'Owner',
       selector: '.col-owner',
       widthVar: '--runs-col-owner-width',
       minVar: '--runs-col-owner-min-width',
     },
     {
+      key: 'time',
+      label: 'Date',
       selector: '.col-time',
       widthVar: '--runs-col-time-width',
       minVar: '--runs-col-time-min-width',
     },
   ];
+
+  // Frozen columns (Display > Columns > Frozen columns). All identity columns
+  // are frozen by default; a reader's choice is remembered in this browser.
+  const RUNS_FROZEN_COLUMNS_STORAGE_KEY = 'qym:runs-frozen-columns';
+
+  function getRunsFrozenColumns() {
+    if (!state.runsFrozenColumns) {
+      let saved = null;
+      try {
+        saved = JSON.parse(window.localStorage.getItem(RUNS_FROZEN_COLUMNS_STORAGE_KEY) || 'null');
+      } catch {}
+      state.runsFrozenColumns = RUNS_IDENTITY_COLUMNS
+        .map(column => column.key)
+        .filter(key => !Array.isArray(saved) || saved.includes(key));
+    }
+    return state.runsFrozenColumns;
+  }
+
+  function isDefaultRunsFrozenColumns() {
+    return getRunsFrozenColumns().length === RUNS_IDENTITY_COLUMNS.length;
+  }
+
+  function setRunsFrozenColumns(keys) {
+    const chosen = new Set(keys);
+    state.runsFrozenColumns = RUNS_IDENTITY_COLUMNS
+      .map(column => column.key)
+      .filter(key => chosen.has(key));
+    try {
+      if (isDefaultRunsFrozenColumns()) {
+        window.localStorage.removeItem(RUNS_FROZEN_COLUMNS_STORAGE_KEY);
+      } else {
+        window.localStorage.setItem(RUNS_FROZEN_COLUMNS_STORAGE_KEY, JSON.stringify(state.runsFrozenColumns));
+      }
+    } catch {}
+    syncRunsFrozenColumnControls();
+    scheduleRunsStickyColumnSizing();
+  }
+
+  // The Frozen columns section of the Columns dropdown (Runs table only).
+  function renderRunsFrozenColumnsSection(searchValue) {
+    if (state.currentView !== 'table') return '';
+    const frozen = new Set(getRunsFrozenColumns());
+    const query = String(searchValue || '').toLowerCase();
+    return '<div class="mv-trace-separator"></div>' +
+      '<div class="mv-frozen-header">' +
+        '<div class="mv-trace-label" id="mv-frozen-label">Frozen columns</div>' +
+        '<button type="button" class="qym-dropdown__action mv-frozen-reset" id="mv-frozen-reset">Reset to default</button>' +
+      '</div>' +
+      '<div role="group" aria-labelledby="mv-frozen-label">' +
+      RUNS_IDENTITY_COLUMNS.map(column => {
+        const hidden = query && !column.label.toLowerCase().includes(query) ? ' style="display:none"' : '';
+        return `<label class="multi-select-option qym-dropdown__option"${hidden}><input type="checkbox" ${frozen.has(column.key) ? 'checked' : ''} data-frozen-column="${escapeHtml(column.key)}" /><span>${escapeHtml(column.label)}</span></label>`;
+      }).join('') +
+      '</div>';
+  }
+
+  function wireRunsFrozenColumnControls(dropdown) {
+    dropdown.querySelectorAll('input[data-frozen-column]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        setRunsFrozenColumns(Array.from(dropdown.querySelectorAll('input[data-frozen-column]'))
+          .filter(input => input.checked)
+          .map(input => input.dataset.frozenColumn));
+      });
+    });
+    dropdown.querySelector('#mv-frozen-reset')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!isDefaultRunsFrozenColumns()) setRunsFrozenColumns(RUNS_IDENTITY_COLUMNS.map(column => column.key));
+    });
+    syncRunsFrozenColumnControls();
+  }
+
+  function syncRunsFrozenColumnControls() {
+    const dropdown = el('metric-visibility-dropdown');
+    if (!dropdown) return;
+    const frozen = new Set(getRunsFrozenColumns());
+    dropdown.querySelectorAll('input[data-frozen-column]').forEach(cb => {
+      cb.checked = frozen.has(cb.dataset.frozenColumn);
+    });
+    // aria-disabled, not disabled: focus stays on the button after a reset.
+    const reset = dropdown.querySelector('#mv-frozen-reset');
+    if (reset) {
+      const isDefault = isDefaultRunsFrozenColumns();
+      reset.setAttribute('aria-disabled', isDefault ? 'true' : 'false');
+      reset.title = isDefault ? 'Default: all seven columns frozen' : 'Freeze all seven columns again';
+    }
+  }
+
+  // Marks the frozen columns on the table and writes each one's left offset:
+  // the measured width of the frozen columns before it. A frozen column with
+  // a scrolling column (or the table's data) to its right is an edge and
+  // casts the separator shadow.
+  function applyRunsFrozenColumns(table, widths) {
+    const frozen = new Set(getRunsFrozenColumns());
+    const edges = [];
+    let left = 0;
+    RUNS_IDENTITY_COLUMNS.forEach((column, index) => {
+      if (!frozen.has(column.key)) {
+        table.style.removeProperty(`--runs-col-${column.key}-left`);
+        return;
+      }
+      table.style.setProperty(`--runs-col-${column.key}-left`, `${left}px`);
+      left += widths[column.key] || 0;
+      const next = RUNS_IDENTITY_COLUMNS[index + 1];
+      if (!next || !frozen.has(next.key)) edges.push(column.key);
+    });
+    table.dataset.frozenColumns = getRunsFrozenColumns().join(' ');
+    table.dataset.frozenEdges = edges.join(' ');
+  }
+
+  // Frozen (horizontally sticky) cells of the runs table.
+  function isRunsFrozenCell(cell) {
+    const style = cell ? getComputedStyle(cell) : null;
+    return !!style && style.position === 'sticky' && style.left !== 'auto';
+  }
+
+  // Width of the frozen block once it is stuck: the right edge of the
+  // rightmost frozen column at its sticky offset. Frozen columns need not be
+  // adjacent (Run name and Date), so this is not where a frozen header sits
+  // right now, which can be further right until the table scrolls.
+  function runsFrozenWidth(scroller) {
+    return Array.from(scroller.querySelectorAll('.runs-table thead th'))
+      .filter(isRunsFrozenCell)
+      .reduce((width, th) => Math.max(
+        width,
+        (Number.parseFloat(getComputedStyle(th).left) || 0) + th.getBoundingClientRect().width,
+      ), 0);
+  }
+
+  function isRunsTableAtEnd(scroller) {
+    return scroller.scrollLeft > 0
+      && scroller.scrollLeft >= scroller.scrollWidth - scroller.clientWidth - 1;
+  }
+
+  // Keyboard focus must not land under the frozen columns (WCAG 2.4.11).
+  // Chromium scrolls a newly focused control into view before `focusin`, so
+  // this moves the table until the control clears the frozen edge, and keeps
+  // that edge as scroll padding so the next focus scroll already stops there.
+  // Frozen cells clear the padding, so focusing them never jumps the table.
+  // Pointer focus is left alone: moving the table under a pressed mouse
+  // button would drop the click on whatever slid beneath it.
+  const RUNS_FOCUS_CLEARANCE_PX = 12; // frozen-edge shadow plus focus ring
+  function isKeyboardFocus(target) {
+    try {
+      return target.matches(':focus-visible');
+    } catch {
+      return true;
+    }
+  }
+
+  function keepRunsFocusClearOfFrozenColumns(target) {
+    const scroller = el('runs-table-scroll');
+    if (!scroller) return;
+    const cell = target instanceof Element ? target.closest('td, th') : null;
+    if (!cell || !scroller.contains(cell) || isRunsFrozenCell(cell) || !isKeyboardFocus(target)) {
+      scroller.style.scrollPaddingLeft = '';
+      return;
+    }
+    const frozenWidth = runsFrozenWidth(scroller);
+    const view = scroller.getBoundingClientRect();
+    const portLeft = view.left + scroller.clientLeft;
+    const box = target.getBoundingClientRect();
+    // A window narrower than the control keeps its right part in view. With
+    // nothing frozen this only completes a control cut by the table's edge.
+    const padding = frozenWidth > 0
+      ? Math.max(0, Math.floor(Math.min(
+        frozenWidth + RUNS_FOCUS_CLEARANCE_PX, scroller.clientWidth - box.width
+      )))
+      : 0;
+    scroller.style.scrollPaddingLeft = padding ? `${padding}px` : '';
+    const visibleLeft = portLeft + padding;
+    const visibleRight = portLeft + scroller.clientWidth;
+    if (box.left < visibleLeft) scroller.scrollLeft -= visibleLeft - box.left;
+    else if (box.right > visibleRight) scroller.scrollLeft += box.right - visibleRight;
+  }
 
   function scheduleRunsStickyColumnSizing() {
     const table = document.querySelector('.runs-table');
@@ -3222,11 +3525,19 @@
       state._runsStickyColumnFrame = null;
       if (!table.isConnected || state.currentView !== 'table') return;
 
+      // Measuring releases the column caps for one layout, which can clamp the
+      // scroll position, and a re-render can widen the table. Keep a reader who
+      // was at the end (where the Actions column is) at the end, and anyone
+      // else exactly where they were.
+      const scroller = table.closest('.table-scroll');
+      const scrollLeft = scroller ? scroller.scrollLeft : 0;
+      const keepEnd = !!scroller && (state._runsTableAtEnd === true || state._runsKeepTableEnd === true);
+      state._runsKeepTableEnd = false;
       table.classList.add('runs-table--measuring-sticky-columns');
       const computed = getComputedStyle(table);
       const measured = [];
       try {
-        RUNS_STICKY_COLUMN_LIMITS.forEach(config => {
+        RUNS_IDENTITY_COLUMNS.forEach(config => {
           const header = table.querySelector(`thead ${config.selector}`);
           if (!header) return;
           const naturalWidth = Math.ceil(header.getBoundingClientRect().width);
@@ -3235,6 +3546,7 @@
             ? Number.parseFloat(computed.getPropertyValue(config.maxVar))
             : Infinity;
           measured.push({
+            key: config.key,
             widthVar: config.widthVar,
             width: Math.min(maxWidth, Math.max(minWidth, naturalWidth)),
           });
@@ -3242,15 +3554,28 @@
       } finally {
         table.classList.remove('runs-table--measuring-sticky-columns');
       }
-      measured.forEach(({ widthVar, width }) => {
+      const widths = {};
+      measured.forEach(({ key, widthVar, width }) => {
         table.style.setProperty(widthVar, `${width}px`);
+        widths[key] = width;
       });
+      applyRunsFrozenColumns(table, widths);
+      if (scroller) {
+        scroller.scrollLeft = keepEnd ? scroller.scrollWidth : scrollLeft;
+        state._runsTableAtEnd = keepEnd || isRunsTableAtEnd(scroller);
+      }
     });
   }
 
   function renderTableView() {
     const allRuns = state.filteredRuns;
     const tbody = el('runs-tbody');
+    // Note a reader at the table's end before the new rows change its width.
+    const tableScroll = el('runs-table-scroll');
+    if (tableScroll) {
+      state._runsTableAtEnd = isRunsTableAtEnd(tableScroll);
+      if (state._runsTableAtEnd) state._runsKeepTableEnd = true;
+    }
     const availableMetrics = getAvailableMetricsForRuns(allRuns);
     const metricsToShow = getVisibleMetrics(availableMetrics);
     const visibleTraceMetrics = _visibleTraceMetrics(allRuns);
@@ -3358,7 +3683,7 @@
           return `<td class="col-metric-value"><span class="metric-na">—</span>${renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : '', metric)}</td>`;
         }
         const mType = state._metricTypes?.[metric] || window.QymMetrics.detectMetricTypeFromAvg(value);
-        const metricClass = window.QymMetrics.getMetricColorClass(value, mType);
+        const metricClass = window.QymMetrics.getMetricColorClass(value, mType, runMetricDirection(run, metric));
         const peerValues = usesDashboardPage()
           ? (run.metric_neighbor_values?.[metric] || [])
           : getRunComboPeerValues(allRuns, run, candidate => candidate.metric_averages?.[metric]);
@@ -3370,7 +3695,11 @@
         const noiseHtml = lowSamples
           ? `<button type="button" class="metric-noise-warn qym-help-marker" aria-label="Explain high-noise estimate" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">${escapeHtml(noiseCopy)}</span></button>`
           : '';
-        return `<td class="col-metric-value"><span class="metric-score ${metricClass}">${display}</span>${renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : '', metric)}${noiseHtml}</td>`;
+        const scoredValue = run.metric_scored_averages?.[metric];
+        const scoredDisplay = scoredValue === undefined || scoredValue === null
+          ? null
+          : window.QymMetrics.formatMetricValueSmart(scoredValue, mType, peerValues);
+        return `<td class="col-metric-value"><span class="metric-score ${metricClass}">${display}</span>${renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : '', metric, scoredDisplay)}${noiseHtml}</td>`;
       }).join('');
 
       const status = run.status || '';
@@ -3381,11 +3710,12 @@
       const projectRole = (state.currentProject && state.currentProject.role) || '';
       const isOwner = !!(state.currentUser && run.owner && run.owner.id === state.currentUser.id);
       const isProjectManager = globalRole === 'ADMIN' || projectRole === 'MANAGER';
-      const canApprove = isProjectManager && status === 'SUBMITTED';
-      const canUnapprove = isProjectManager && status === 'APPROVED';
-      const canUnreject = isProjectManager && status === 'REJECTED';
-      const canSubmit = isOwner && (status === 'COMPLETED' || status === 'FAILED' || status === 'REJECTED');
-      const canDelete = globalRole === 'ADMIN' || isProjectManager || isOwner;
+      const writable = !isProjectReadOnly();
+      const canApprove = writable && isProjectManager && status === 'SUBMITTED';
+      const canUnapprove = writable && isProjectManager && status === 'APPROVED';
+      const canUnreject = writable && isProjectManager && status === 'REJECTED';
+      const canSubmit = writable && isOwner && (status === 'COMPLETED' || status === 'FAILED' || status === 'REJECTED');
+      const canDelete = writable && (globalRole === 'ADMIN' || isProjectManager || isOwner);
       const progressText = (status === 'RUNNING' && run.progress_total)
         ? `${run.progress_completed || 0}/${run.progress_total}`
         : (status === 'RUNNING' ? `${run.progress_completed || 0}` : '');
@@ -3400,9 +3730,10 @@
         ? ` • pass ${Math.min((run.last_completed_pass || 0) + 1, run.samples)}/${run.samples}`
         : '';
 
-      // Build status tooltip with approval info
+      // Build status tooltip with approval info. The approval keeps the last
+      // decision after it is withdrawn; attribute only a decision in effect.
       let statusTooltip = status;
-      if (approval && approval.decision_by) {
+      if (approval && approval.decision_by && approval.decision === status) {
         statusTooltip = `${status} by ${approval.decision_by.display_name || approval.decision_by.email}`;
         if (approval.comment) {
           statusTooltip += `\n"${approval.comment}"`;
@@ -3422,51 +3753,51 @@
                 <span class="checkmark"></span>
               </label>
               ${run.samples > 1 ? `<button type="button" class="samples-toggle qym-icon-action${samplesOpen ? ' open' : ''}"
-                data-run-id="${run.run_id}" data-panel-id="${samplesPanelId}"
-                data-count="${run.samples}"
+                data-run-id="${escapeHtml(run.run_id)}" data-panel-id="${samplesPanelId}"
+                data-count="${escapeHtml(run.samples)}"
                 data-status="${escapeHtml(status)}"
                 data-live="${status === 'RUNNING' || status === 'PENDING' ? 'true' : 'false'}"
                 aria-expanded="${samplesOpen ? 'true' : 'false'}" aria-controls="${samplesPanelId}"
                 aria-label="${samplesOpen ? 'Collapse' : 'Expand'} ${run.samples} pass results"
                 title="${samplesOpen ? 'Collapse' : 'Expand'} ${run.samples} pass results"><svg class="samples-toggle-chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m4 6 4 4 4-4"></path></svg></button>`
                 : (anyRepeatRows ? '<span class="samples-toggle-spacer" aria-hidden="true"></span>' : '')}
-              <span class="run-id" title="${run.run_id}">${run.external_run_id ? truncateText(run.external_run_id, 30) : run.run_id.substring(0, 8)}</span>
+              <span class="run-id" title="${escapeHtml(run.run_id)}">${run.external_run_id ? truncateText(run.external_run_id, 30) : escapeHtml(run.run_id.substring(0, 8))}</span>
               ${run.samples > 1 ? `<span class="run-pass-count">x${run.samples}</span>` : ''}
             </div>
           </td>
           <td class="col-status">
-            ${status ? `<span class="status-badge qym-badge status-${status}" title="${escapeHtml(statusTooltip)}">${status}${passText}${parentProgressText}</span>` : ''}${status !== 'RUNNING' && status !== 'PENDING' ? renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : ' across all items') : ''}${(run.total_retries > 0 && status !== 'RUNNING' && status !== 'PENDING') ? `<span class="status-retries" title="${run.total_retries} total retr${run.total_retries === 1 ? 'y' : 'ies'}${retryScope}">${run.total_retries}↻</span>` : ''}
+            ${status ? `<span class="status-badge qym-badge status-${escapeHtml(status)}" title="${escapeHtml(statusTooltip)}">${escapeHtml(status)}${passText}${parentProgressText}</span>` : ''}${status !== 'RUNNING' && status !== 'PENDING' ? renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : ' across all items') : ''}${(run.total_retries > 0 && status !== 'RUNNING' && status !== 'PENDING') ? `<span class="status-retries" title="${run.total_retries} total retr${run.total_retries === 1 ? 'y' : 'ies'}${retryScope}">${run.total_retries}↻</span>` : ''}${renderIngestIncomplete(run)}
           </td>
           <td class="col-task">
             <span class="tag qym-tag task" title="${escapeHtml(run.task_name || '')}">${run.task_name ? escapeHtml(run.task_name) : '—'}</span>
           </td>
           <td class="col-model">
-            <span class="tag qym-tag model" title="${run.model_name}">
+            <span class="tag qym-tag model" title="${escapeHtml(run.model_name)}">
               <span class="model-color-dot" style="background:${CHART_COLORS[state.allModels.indexOf(getRunModelKey(run)) % CHART_COLORS.length]}"></span>
               ${renderModelLabelForRun(run)}
             </span>
           </td>
           <td class="col-dataset">
-            <span class="tag qym-tag runs-dataset-tag" title="${run.dataset_name}">${truncateText(run.dataset_name, 25)}${window.QymShell ? QymShell.datasetVersionInline(run.dataset_version) + QymShell.datasetAliasTags(run.dataset_aliases) : ''}</span>
+            <span class="tag qym-tag runs-dataset-tag" title="${escapeHtml(run.dataset_name)}">${truncateText(run.dataset_name, 25)}${window.QymShell ? QymShell.datasetVersionInline(run.dataset_version) + QymShell.datasetAliasTags(run.dataset_aliases) : ''}</span>
           </td>
           <td class="col-owner">
             ${run.owner ? `
-              <span class="owner-name" title="${run.owner.email}">
-                <span class="owner-avatar">${getInitials(run.owner.display_name)}</span>
+              <span class="owner-name" title="${escapeHtml(run.owner.email)}">
+                <span class="owner-avatar">${escapeHtml(getInitials(run.owner.display_name))}</span>
                 ${truncateText(run.owner.display_name, 15)}
               </span>
             ` : '<span style="color:var(--text-muted)">—</span>'}
           </td>
           <td class="col-time">
             <span class="timestamp" title="${escapeHtml(dt.full)}">
-              <span class="date">${dt.date}</span>
+              <span class="date">${escapeHtml(dt.date)}</span>
               <span class="timestamp-sep">·</span>
-              <span class="time">${dt.time}</span>
+              <span class="time">${escapeHtml(dt.time)}</span>
             </span>
           </td>
           <td class="col-analysis" onclick="event.stopPropagation()">${renderAnalysisCell(run, status)}</td>
           <td class="col-version">
-            ${run.git_commit ? `<span class="version-badge qym-tag" title="${run.git_branch ? run.git_branch + '/' : ''}${run.git_commit}">${run.git_branch ? run.git_branch + '/' : ''}${run.git_commit}</span>` : '<span style="color:var(--text-muted)">—</span>'}
+            ${run.git_commit ? `<span class="version-badge qym-tag" title="${escapeHtml((run.git_branch ? run.git_branch + '/' : '') + run.git_commit)}">${escapeHtml((run.git_branch ? run.git_branch + '/' : '') + run.git_commit)}</span>` : '<span style="color:var(--text-muted)">—</span>'}
           </td>
           ${metricCells}${visibleTraceMetrics.length > 0 ? '<td class="col-trace-separator"></td>' : ''}
           ${visibleSystemColumns.has('latency') ? `<td class="col-latency">
@@ -3627,7 +3958,7 @@
         e.preventDefault();
         e.stopPropagation();
         closeDropdown();
-        showWorkflowModal('approve', run.run_id, run.task_name);
+        showWorkflowModal('approve', run.run_id, getRunDisplayName(run));
       });
 
       const rejectBtn = tr.querySelector('.reject-run');
@@ -3635,7 +3966,7 @@
         e.preventDefault();
         e.stopPropagation();
         closeDropdown();
-        showWorkflowModal('reject', run.run_id, run.task_name);
+        showWorkflowModal('reject', run.run_id, getRunDisplayName(run));
       });
 
       const unapproveBtn = tr.querySelector('.unapprove-run');
@@ -3643,7 +3974,7 @@
         e.preventDefault();
         e.stopPropagation();
         closeDropdown();
-        showWorkflowModal('unapprove', run.run_id, run.task_name);
+        showWorkflowModal('unapprove', run.run_id, getRunDisplayName(run));
       });
 
       const unrejectBtn = tr.querySelector('.unreject-run');
@@ -3651,7 +3982,7 @@
         e.preventDefault();
         e.stopPropagation();
         closeDropdown();
-        showWorkflowModal('unreject', run.run_id, run.task_name);
+        showWorkflowModal('unreject', run.run_id, getRunDisplayName(run));
       });
 
       const deleteBtn = tr.querySelector('.delete-run');
@@ -3715,7 +4046,19 @@
         // then fills values in place — same geometry, no loading flicker.
         const listRun = runs.find(r => r.run_id === runId);
         const summaries = (listRun && Array.isArray(listRun.pass_summaries)) ? listRun.pass_summaries : [];
-        const primary = listRun ? (listRun.metrics || [])[0] : null;
+        const primary = listRun ? window.QymMetrics.defaultMetricName(listRun.metrics || [], listRun.metric_specs || {}) : null;
+        // primary_score belongs to the metric the server names; summaries
+        // published before it named one used the first metric.
+        const scoredMetric = (summaries.find(s => s && s.primary_metric) || {}).primary_metric
+          || (listRun && (listRun.metrics || [])[0]) || null;
+        // Same default the server's group metrics use, so the rule does not
+        // change when the fetch lands.
+        const primaryThreshold = primary
+          ? window.QymMetrics.defaultPassThreshold(
+            (listRun.metric_specs || {})[primary],
+            runMetricDirection(listRun, primary)
+          )
+          : undefined;
         if (summaries.length) {
           data = {
             _optimistic: true,
@@ -3725,8 +4068,8 @@
               passes: summaries.map(s => ({
                 pass_number: s.pass_number,
                 status: s.status,
-                metric_means: (primary && typeof s.primary_score === 'number')
-                  ? { [primary]: s.primary_score }
+                metric_means: (scoredMetric && typeof s.primary_score === 'number')
+                  ? { [scoredMetric]: s.primary_score }
                   : {},
                 items_scored: null,
                 error_count: s.error_count,
@@ -3737,7 +4080,7 @@
                 analysis_cause_count: s.analysis_cause_count,
               })),
             },
-            group: { metric: primary },
+            group: { metric: primary, threshold: primaryThreshold },
           };
         } else {
           return `<tr ${detailAttrs}>
@@ -3785,7 +4128,16 @@
       const passHatLabel = estLabel('^', reportK);
       const threshold = groupPayload.threshold != null ? groupPayload.threshold : 0.8;
       const thrPct = Math.round(threshold * 100);
-      const groupMetric = groupPayload.metric || (passes.metrics || [])[0] || 'primary metric';
+      const listRunForGroup = runs.find(candidate => candidate.run_id === runId) || {};
+      const groupMetric = groupPayload.metric
+        || window.QymMetrics.defaultMetricName(passes.metrics || [], listRunForGroup.metric_specs || {})
+        || 'primary metric';
+      // Pass rates need a declared direction; lower-is-better passes at or
+      // below the threshold (the server applies the same rule).
+      const groupDirection = groupPayload.direction !== undefined
+        ? window.QymMetrics.metricDirection({ direction: groupPayload.direction })
+        : runMetricDirection(listRunForGroup, groupMetric);
+      const passRule = groupDirection === 'minimize' ? '≤' : '≥';
       const metricOptions = (passes.metrics || []).map(metric =>
         `<option value="${escapeHtml(metric)}"${metric === groupMetric ? ' selected' : ''}>${escapeHtml(metric)}</option>`
       ).join('');
@@ -3800,9 +4152,10 @@
         ? `across ${k} independent passes.`
         : `from ${finished} of ${k} completed passes.`;
 
-      const stat = (label, v, tooltip) => {
+      const stat = (label, v, tooltip, direction = 'maximize') => {
+        if (!groupDirection && direction === 'maximize') return '';
         const isNum = typeof v === 'number';
-        const cls = isNum ? window.QymMetrics.getMetricColorClass(v, 'score') : '';
+        const cls = isNum ? window.QymMetrics.getMetricColorClass(v, 'score', direction) : '';
         const text = isNum ? window.QymMetrics.formatMetricValue(v, 'score') : pendingText('—');
         return `<span class="samples-summary-stat" title="${escapeHtml(tooltip)}">` +
           `<span class="samples-summary-label">${label}</span>` +
@@ -3845,6 +4198,8 @@
       // Best-in-column chips across sibling passes (same dialect as the run
       // page's pass sweep): max wins for metrics, min wins for latencies.
       const winnersFor = (valueOf, direction) => {
+        // Metric columns pass their declared direction; none = no best.
+        if (direction !== 'max' && direction !== 'min') return new Set();
         const entries = peerPasses
           .map(p => ({ pass: Number(p.pass_number), value: valueOf(p) }))
           .filter(entry => typeof entry.value === 'number' && Number.isFinite(entry.value));
@@ -3861,7 +4216,10 @@
       };
       const metricWinners = Object.fromEntries(metricsToShow.map(metric => [
         metric,
-        winnersFor(p => (p.metric_means || {})[metric], 'max'),
+        winnersFor(
+          p => (p.metric_means || {})[metric],
+          { maximize: 'max', minimize: 'min' }[runMetricDirection(parentRun, metric)] || null,
+        ),
       ]));
       const avgLatencyWinners = winnersFor(p => p.avg_latency_ms, 'min');
       const medianLatencyWinners = winnersFor(p => p.median_latency_ms, 'min');
@@ -3909,14 +4267,14 @@
         const metricCells = metricsToShow.map(metric => {
           const value = (pass.metric_means || {})[metric];
           if (typeof value !== 'number') {
-            return `<td class="col-metric-value">${pass._queued ? '<span class="metric-na">—</span>' : pendingText('<span class="metric-na">—</span>')}${renderExecutionErrors(pass, ' in this pass', metric)}</td>`;
+            return `<td class="col-metric-value">${pass._queued ? '<span class="metric-na">—</span>' : pendingText('<span class="metric-na">—</span>')}${renderExecutionErrors(pass, ' in this pass', metric, null, runMetricDirection(parentRun, metric))}</td>`;
           }
           const metricType = state._metricTypes?.[metric] || window.QymMetrics.detectMetricTypeFromAvg(value);
           const peers = peerPasses.map(sibling => (sibling.metric_means || {})[metric]);
           const display = window.QymMetrics.formatMetricValueSmart(value, metricType, peers);
-          const metricClass = window.QymMetrics.getMetricColorClass(value, metricType);
+          const metricClass = window.QymMetrics.getMetricColorClass(value, metricType, runMetricDirection(parentRun, metric));
           const chip = chipAttrs(metricWinners[metric], firstPass);
-          return `<td class="col-metric-value"><span class="metric-score ${metricClass}${chip.cls}"${chip.title}>${display}</span>${renderExecutionErrors(pass, ' in this pass', metric)}</td>`;
+          return `<td class="col-metric-value"><span class="metric-score ${metricClass}${chip.cls}"${chip.title}>${display}</span>${renderExecutionErrors(pass, ' in this pass', metric, null, runMetricDirection(parentRun, metric))}</td>`;
         }).join('');
         const latencyCell = (cls, v, winners) => {
           const chip = chipAttrs(winners, firstPass);
@@ -3939,8 +4297,8 @@
             ? `<label class="custom-checkbox run-select-control" onclick="event.stopPropagation()"><input type="checkbox" class="pass-checkbox" data-pass-ref="${escapeHtml(passRef)}" ${passSelected ? 'checked' : ''} /><span class="checkmark"></span></label>`
             : ''}<span class="pass-indent"></span><span class="pass-member-id">${passLabel}</span>${passMeta ? `<span class="pass-member-items">${passMeta}</span>` : ''}</td>
           <td class="col-status">${badgeClass
-            ? `<span class="status-badge qym-badge status-${badgeClass}">${statusLabel}${progressLabel}</span>`
-            : `<span class="pass-member-status">${statusLabel}</span>`}${renderExecutionErrors(pass, ' in this pass')}${retries
+            ? `<span class="status-badge qym-badge status-${badgeClass}">${escapeHtml(statusLabel)}${progressLabel}</span>`
+            : `<span class="pass-member-status">${escapeHtml(statusLabel)}</span>`}${renderExecutionErrors(pass, ' in this pass')}${retries
             ? `<span class="status-retries" title="${retries} retr${retries === 1 ? 'y' : 'ies'} in this pass">${retries}↻</span>`
             : ''}</td>
           ${inherit('col-task')}
@@ -3948,7 +4306,7 @@
           ${inherit('col-dataset')}
           ${inherit('col-owner')}
           <td class="col-time">${passDate
-            ? `<span class="timestamp" title="${escapeHtml(passDate.full)}"><span class="date">${passDate.date}</span><span class="timestamp-sep">·</span><span class="time">${passDate.time}</span></span>`
+            ? `<span class="timestamp" title="${escapeHtml(passDate.full)}"><span class="date">${escapeHtml(passDate.date)}</span><span class="timestamp-sep">·</span><span class="time">${escapeHtml(passDate.time)}</span></span>`
             : '<span class="metric-na">—</span>'}</td>
           <td class="col-analysis" onclick="event.stopPropagation()">${renderAnalysisCell(parentRun, runStatus, firstPass, pass.analysis_cause_count)}</td>
           ${inherit('col-version')}
@@ -3972,20 +4330,20 @@
                 <span>Metric</span>
                 <select class="samples-metric-select" aria-label="Group metric">${metricOptions}</select>
               </label>` : ''}
-              <span class="samples-threshold" title="An item passes when its score meets or exceeds this threshold.">
-                <span>Pass if ≥</span>
+              ${groupDirection ? `<span class="samples-threshold" title="${groupDirection === 'minimize' ? 'An item passes when its score is at or below this threshold.' : 'An item passes when its score meets or exceeds this threshold.'}">
+                <span>Pass if ${passRule}</span>
                 <input type="range" class="threshold-slider-inline samples-threshold-slider"
                   min="0" max="100" step="5" value="${thrPct}" aria-label="Pass threshold">
                 <span class="threshold-value">${thrPct}%</span>
-              </span>
+              </span>` : `<span class="samples-threshold" title="${escapeHtml(window.QymMetrics.metricDirectionLabel(null))}">No direction declared</span>`}
               <div class="samples-summary-grid">
               ${stat(passAtLabel, group.pass_at_k, reportK
-                ? `Estimated chance that at least one of ${reportK} attempts scores ≥${thrPct}% — the unbiased pass@${reportK} computed from all ${k} stored passes.`
-                : `% of items where at least one of the ${k} passes scored ≥${thrPct}%.`)}
+                ? `Estimated chance that at least one of ${reportK} attempts scores ${passRule}${thrPct}% — the unbiased pass@${reportK} computed from all ${k} stored passes.`
+                : `% of items where at least one of the ${k} passes scored ${passRule}${thrPct}%.`)}
               ${stat(passHatLabel, group.pass_hat_k, reportK
-                ? `Estimated chance that all ${reportK} attempts score ≥${thrPct}% — the unbiased pass^${reportK} computed from all ${k} stored passes.`
-                : `% of items where all ${k} passes scored ≥${thrPct}%.`)}
-              ${stat(`Avg@${k}`, group.avg_at_k, `Mean score across all items and all ${k} passes.`)}
+                ? `Estimated chance that all ${reportK} attempts score ${passRule}${thrPct}% — the unbiased pass^${reportK} computed from all ${k} stored passes.`
+                : `% of items where all ${k} passes scored ${passRule}${thrPct}%.`)}
+              ${stat(`Avg@${k}`, group.avg_at_k, `Mean score across all items and all ${k} passes.`, groupDirection)}
               ${stat('Consistency', group.consistency, 'How often passes agree on pass/fail for the same item. 100% = all passes agree.')}
               ${stat('Reliability', group.reliability, 'Of the items solved at least once, the share of attempts that solve them.')}
               ${latencyStat}
@@ -4374,20 +4732,20 @@
     return `
         <div class="grid-card ${isSelected ? 'selected' : ''}" data-file="${encodeURIComponent(run.file_path)}">
           <div class="grid-card-header">
-            <span class="grid-card-title" title="${run.run_id}">${stripProviderFromRunId(run.run_id)}</span>
-            <span class="grid-card-success ${successClass}">${formatPercent(run.success_rate)}</span>
+            <span class="grid-card-title" title="${escapeHtml(run.run_id)}">${escapeHtml(stripProviderFromRunId(run.run_id))}</span>
+            <span class="grid-card-success ${successClass}">${escapeHtml(formatPercent(run.success_rate))}</span>
           </div>
           <div class="grid-card-meta">
-            <span class="tag task">${run.task_name}</span>
-            <span class="tag model" title="${run.model_name}">${renderModelLabelForRun(run)}</span>
+            <span class="tag task">${escapeHtml(run.task_name)}</span>
+            <span class="tag model" title="${escapeHtml(run.model_name)}">${renderModelLabelForRun(run)}</span>
         </div>
           <div class="grid-card-bar">
             <div class="segment success" style="width:${successPct}%"></div>
             <div class="segment error" style="width:${errorPct}%"></div>
           </div>
           <div class="grid-card-footer">
-            <span>${run.total_items} items</span>
-            <span>${dt.date} ${dt.time}</span>
+            <span>${escapeHtml(run.total_items)} items</span>
+            <span>${escapeHtml(dt.date)} ${escapeHtml(dt.time)}</span>
           </div>
         </div>
       `;
@@ -4429,20 +4787,20 @@
 
       return `
         <div class="timeline-day">
-          <div class="timeline-date">${dateLabel}</div>
+          <div class="timeline-date">${escapeHtml(dateLabel)}</div>
           <div class="timeline-runs">
             ${dayRuns.map(run => {
               const dt = formatDate(run.timestamp);
               const successClass = getSuccessClass(run.success_rate);
               return `
                 <div class="timeline-run" data-file="${encodeURIComponent(run.file_path)}">
-                  <span class="timeline-time">${dt.time}</span>
+                  <span class="timeline-time">${escapeHtml(dt.time)}</span>
                   <div class="timeline-info">
-                    <span class="tag task">${run.task_name}</span>
-                    <span class="tag model" title="${run.model_name}">${renderModelLabelForRun(run)}</span>
-                    <span style="color:var(--text-muted);font-size:var(--font-sm);">${run.total_items} items</span>
+                    <span class="tag task">${escapeHtml(run.task_name)}</span>
+                    <span class="tag model" title="${escapeHtml(run.model_name)}">${renderModelLabelForRun(run)}</span>
+                    <span style="color:var(--text-muted);font-size:var(--font-sm);">${escapeHtml(run.total_items)} items</span>
                   </div>
-                  <span class="timeline-success ${successClass}">${formatPercent(run.success_rate)}</span>
+                  <span class="timeline-success ${successClass}">${escapeHtml(formatPercent(run.success_rate))}</span>
                 </div>
               `;
             }).join('')}
@@ -4489,7 +4847,14 @@
         parts.push(`dataset: ${summarizeFilterSelection(state.filterDatasets, getDatasetFilterLabel)}`);
       }
       if (state.filterModels.size > 0 && !state.filterModels.has('__none__')) {
-        parts.push(`model: ${summarizeFilterSelection(state.filterModels, stripModelProvider)}`);
+        // Same names as the dropdown: model keys carry an internal
+        // "|||plain"/"|||reasoning" suffix, shown as a "(reasoning)" marker.
+        const models = [...state.filterModels].map(value => {
+          const name = getModelFilterOptionLabel(value);
+          const short = name.length > 20 ? name.slice(0, 20) + '...' : name;
+          return parseModelVariantKey(value).hasReasoning ? `${short} (reasoning)` : short;
+        });
+        parts.push(`model: ${models.join(', ')}`);
       } else if (state.filterModels.has('__none__')) {
         parts.push('model: none');
       }
@@ -4603,7 +4968,7 @@
           return (canManageProject || ownsRun) && passIsDeletable;
         });
       const hasSelectedPasses = selectedRefs.some(isPassRef);
-      deleteBtn.style.display = isCohortMode ? 'none' : 'inline-flex';
+      deleteBtn.style.display = isCohortMode || isProjectReadOnly() ? 'none' : 'inline-flex';
       deleteBtn.disabled = !allDeletable;
       deleteBtn.title = allDeletable
         ? (hasSelectedPasses ? 'Delete selected runs and passes' : 'Delete selected runs')
@@ -4619,7 +4984,7 @@
         const isOwner = !!(currentUserId && r.owner && r.owner.id === currentUserId);
         return isOwner && (status === 'COMPLETED' || status === 'FAILED' || status === 'REJECTED');
       });
-      publishBtn.style.display = (allSubmittable && !isCohortMode) ? 'inline-flex' : 'none';
+      publishBtn.style.display = (allSubmittable && !isCohortMode && !isProjectReadOnly()) ? 'inline-flex' : 'none';
       publishBtn.textContent = 'Submit';
     }
   }
@@ -4925,15 +5290,30 @@
       }
     }
 
-    // Detect if metric is boolean
+    // Detect if metric is boolean, and its declared direction (C008)
     detectModelsViewMetricType(matchingRuns, mvs.selectedMetric);
+    mvs.metricDirection = runsMetricDirection(matchingRuns, mvs.selectedMetric);
+    // Pass threshold: the one chosen for this metric, else the metric's own
+    // default (spec pass_threshold, else 80%, or 20% when lower is better),
+    // as on Compare and the run page. A fixed 80% made "Pass ≤ 80%" pass
+    // nearly every item of a lower-is-better metric.
+    const thresholdSpec = matchingRuns
+      .map(run => run?.metric_specs?.[mvs.selectedMetric])
+      .find(spec => spec && typeof spec === 'object') || null;
+    const chosenThreshold = (mvs.thresholdByMetric || {})[mvs.selectedMetric];
+    mvs.threshold = chosenThreshold != null
+      ? chosenThreshold
+      : window.QymMetrics.defaultPassThreshold(thresholdSpec, mvs.metricDirection);
+    syncModelsThresholdSlider();
     const globalMetric = candidates?.metric_summary?.[mvs.selectedMetric];
     if (globalMetric) {
       mvs.metricIsBoolean = !!globalMetric.is_boolean;
       mvs.metricIsNumeric = !!globalMetric.is_numeric;
       const thresholdRow = el('models-threshold-row');
-      if (thresholdRow) thresholdRow.style.display = (mvs.metricIsBoolean || mvs.metricIsNumeric) ? 'none' : 'inline-flex';
+      if (thresholdRow) thresholdRow.style.display = (mvs.metricIsBoolean || mvs.metricIsNumeric || !mvs.metricDirection) ? 'none' : 'inline-flex';
     }
+    const thresholdLabel = el('models-threshold-row')?.querySelector('.filter-label');
+    if (thresholdLabel) thresholdLabel.textContent = mvs.metricDirection === 'minimize' ? 'Pass ≤' : 'Pass ≥';
     populateModelsStatVisibility(matchingRuns);
 
     const models = Object.keys(runsByModel);
@@ -4951,6 +5331,7 @@
       mvs.selectedMetric,
       String(mvs.threshold),
       String(mvs.metricIsBoolean),
+      String(mvs.metricDirection),
       String(globalK),
       ...modelSelections
         .map(({ model, selectedPaths }) => `${model}:${selectedPaths.slice().sort().join(',')}`)
@@ -5010,7 +5391,7 @@
     mvs.modelStats = {};
     modelSelections.forEach(({ model, selectedPaths, selectedRuns }) => {
       const detailedData = selectedPaths.map((path) => runsDataById.get(path)).filter(Boolean);
-      mvs.modelStats[model] = calculateModelStatsFromItems(detailedData, mvs.selectedMetric, mvs.threshold, mvs.metricIsBoolean);
+      mvs.modelStats[model] = calculateModelStatsFromItems(detailedData, mvs.selectedMetric, mvs.threshold, mvs.metricIsBoolean, mvs.metricDirection);
       mvs.modelStats[model].traceAverages = calculateModelTraceStats(selectedRuns);
       mvs.modelStats[model].totalRetries = selectedRuns.reduce((sum, run) => sum + Number(run.total_retries || 0), 0);
       mvs.modelStats[model].totalAvailable = candidates?.totals?.[model] ?? runsByModel[model].length;
@@ -5044,25 +5425,33 @@
       if (!currentDataset && uniqueDatasets.size === 1) currentDataset = [...uniqueDatasets][0];
     }
 
-    // Get metrics for selected task+dataset
+    // Get metrics for selected task+dataset, in spec position order (newest
+    // run first), never alphabetical (C008).
     const runsForCombo = currentTask && currentDataset
       ? state.filteredRuns.filter(r => r.task_name === currentTask && getRunDatasetKey(r) === currentDataset)
       : [];
-    const metricsSet = new Set(currentTask && currentDataset && candidates ? candidates.metrics : []);
-    for (const run of runsForCombo) {
-      if (run.metrics) {
-        run.metrics.forEach(m => metricsSet.add(m));
-      }
-    }
-    const metrics = [...metricsSet].sort();
+    const comboRuns = currentTask && currentDataset && candidates
+      ? (candidates.rows || []).filter(r => r.task_name === currentTask && getRunDatasetKey(r) === currentDataset)
+      : [];
+    const orderedRuns = [...comboRuns, ...runsForCombo]
+      .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+    const metrics = window.QymMetrics.mergeMetricNames([
+      ...orderedRuns.map(run => run.metrics || []),
+      currentTask && currentDataset && candidates ? (candidates.metrics || []) : [],
+    ]);
     const currentMetric = state.modelsViewState.selectedMetric;
     metricSelect.innerHTML = '<option value="">Select a metric...</option>' +
       metrics.map(m => `<option value="${escapeHtml(m)}" ${m === currentMetric ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('');
 
-    // Auto-select first metric if none selected or current metric not in list
+    // Default to the newest run's declared primary metric, else its first.
     if ((!currentMetric || !metrics.includes(currentMetric)) && metrics.length > 0) {
-      state.modelsViewState.selectedMetric = metrics[0];
-      metricSelect.value = metrics[0];
+      const newest = orderedRuns[0];
+      const preferred = newest
+        ? window.QymMetrics.defaultMetricName(newest.metrics || [], newest.metric_specs || {})
+        : null;
+      const defaultMetric = preferred && metrics.includes(preferred) ? preferred : metrics[0];
+      state.modelsViewState.selectedMetric = defaultMetric;
+      metricSelect.value = defaultMetric;
     }
 
     // K input value
@@ -5070,7 +5459,10 @@
       kInput.value = state.modelsViewState.globalK;
     }
 
-    // Threshold slider value
+    syncModelsThresholdSlider();
+  }
+
+  function syncModelsThresholdSlider() {
     const thresholdSlider = el('models-threshold-slider');
     const thresholdValue = el('models-threshold-value');
     if (thresholdSlider) {
@@ -5156,7 +5548,7 @@
     return entry.promise;
   }
 
-  function calculateModelStatsFromItems(runsData, metricName, threshold, isBoolean) {
+  function calculateModelStatsFromItems(runsData, metricName, threshold, isBoolean, direction = null) {
     // Get run names before delegating to shared function
     const runNames = (runsData || []).map((r, i) => r?.run?.run_name || `Run ${i + 1}`);
     const K = runsData?.length || 0;
@@ -5170,6 +5562,7 @@
     }
 
     const effectiveThreshold = isBoolean ? 0.9999 : threshold;
+    // Pass/fail and the best score follow the declared direction (C008).
 
     // Use shared metrics calculation. Repeat runs pool their ATTEMPTS: a ×k
     // run contributes k per-pass entries, so Pass@K math runs over the pooled
@@ -5178,6 +5571,8 @@
       runsData: expandSampledRunsData(runsData),
       metricName,
       threshold: effectiveThreshold,
+      direction,
+      isBoolean: !!isBoolean,
       getMetricIndex: (runData) => {
         const metricNames = runData?.snapshot?.metric_names || runData?.run?.metric_names || [];
         return metricNames.indexOf(metricName);
@@ -5186,20 +5581,23 @@
       trackDistribution: true
     });
 
+    // A lower-is-better metric leaves errors out: a model with no score left
+    // has no average (its 0 would read as the best value and rank first).
+    const noScore = metrics.totalScoreCount === 0 && window.QymMetrics.errorsLeftOut(direction);
     return {
       passAtK: metrics.passAtK,
       passHatK: metrics.passHatK,
-      maxAtK: metrics.maxAtK,
+      maxAtK: noScore ? null : metrics.maxAtK,
       consistency: metrics.consistency,
       reliability: metrics.reliability,
-      avgScore: metrics.avgScore,
+      avgScore: noScore ? null : metrics.avgScore,
       avgLatency: metrics.avgLatency,
       medianLatency: metrics.medianLatency,
       totalItems: metrics.totalItems,
       failedCount: metrics.failedCount,
       totalScoreSum: metrics.totalScoreSum,
       totalScoreCount: metrics.totalScoreCount,
-      minScore: metrics.minScore,
+      minScore: noScore ? null : metrics.minScore,
       stddevScore: metrics.stddevScore,
       K: metrics.K,
       correctDistribution: metrics.correctDistribution || new Array(K + 1).fill(0),
@@ -5251,7 +5649,8 @@
     // Show/hide threshold control (inline) — hide for boolean and numeric
     const thresholdRow = el('models-threshold-row');
     if (thresholdRow) {
-      thresholdRow.style.display = (allBoolean || isNumeric) ? 'none' : 'inline-flex';
+      const direction = runsMetricDirection(runs, metricName);
+      thresholdRow.style.display = (allBoolean || isNumeric || !direction) ? 'none' : 'inline-flex';
     }
   }
 
@@ -5291,12 +5690,21 @@
     const visibleTraceMetrics = mvs.visibleTraceMetrics || [];
     const availableStatOptions = getModelsViewStatOptions();
     const visibleStatKeys = new Set(getVisibleModelsViewStatKeys(availableStatOptions));
+    // No declared direction: values only, no pass rates or colors (C008).
+    const direction = mvs.metricDirection || null;
+    const isNeutral = !isNumeric && !direction;
+    const passRule = direction === 'minimize' ? '≤' : '≥';
+    const scoreClassFor = value => (value === null || value === undefined
+      ? '' : window.QymMetrics.getMetricColorClass(value, mType, direction));
 
     const models = Object.keys(runsByModel).sort((a, b) => {
-      // Sort by avg score descending
-      const scoreA = mvs.modelStats[a]?.avgScore || 0;
-      const scoreB = mvs.modelStats[b]?.avgScore || 0;
-      return scoreB - scoreA;
+      // Best average first when a direction is declared, else by name; a
+      // model without an average comes last.
+      const scoreA = mvs.modelStats[a]?.avgScore ?? null;
+      const scoreB = mvs.modelStats[b]?.avgScore ?? null;
+      if ((scoreA === null) !== (scoreB === null)) return scoreA === null ? 1 : -1;
+      const better = window.QymMetrics.compareMetricValues(scoreA || 0, scoreB || 0, direction);
+      return better ? -better : String(a).localeCompare(String(b));
     });
 
     container.innerHTML = models.map((model, idx) => {
@@ -5309,17 +5717,17 @@
       const correctDef = isBoolean ? '100%' : `≥${threshold}%`;
       const tooltips = {
         passAtK: isBoolean
-          ? `% of items where at least one of the ${K} runs achieved 100%`
-          : `% of items where at least one of the ${K} runs scored ≥${threshold}%`,
+          ? `% of items where at least one of the ${K} runs achieved ${direction === 'minimize' ? 'the best score (0%)' : '100%'}`
+          : `% of items where at least one of the ${K} runs scored ${passRule}${threshold}%`,
         passHatK: isBoolean
-          ? `% of items where ALL ${K} runs achieved 100%`
-          : `% of items where ALL ${K} runs scored ≥${threshold}%`,
-        maxAtK: isNumeric
-          ? `Average of the best value per item across all ${K} runs`
-          : `Average of the best score per item across all ${K} runs`,
+          ? `% of items where ALL ${K} runs achieved ${direction === 'minimize' ? 'the best score (0%)' : '100%'}`
+          : `% of items where ALL ${K} runs scored ${passRule}${threshold}%`,
+        maxAtK: `Average of the best ${isNumeric ? 'value' : 'score'} per item across all ${K} runs${direction === 'minimize' ? ' (the lowest, since lower is better)' : ''}`,
         consistency: `How often runs agree on pass/fail across ${K} runs. 100% = all agree, 0% = 50/50 split.`,
         reliability: `When an item CAN be solved, how often is it? Only includes items with ≥1 passing run.`,
-        failedCount: `Number of runs that threw an error (across all items). Errors are scored as 0%.`,
+        failedCount: direction === 'minimize'
+          ? `Item evaluations that returned a task or scorer error, across all passes of the selected runs. Lower is better for this metric, so errors are left out of its scores and count as fails.`
+          : `Item evaluations that returned a task or scorer error, across all passes of the selected runs. Errors are scored as 0%.`,
         totalRetries: `Total retries across all items in the selected runs. This sums per-item retry counts, not distinct items that retried.`,
         avgScore: isNumeric
           ? `Mean value across all items and all ${K} runs`
@@ -5327,22 +5735,22 @@
         avgLatency: `Average response time across all runs`,
         medianLatency: `Median response time across all items and all ${K} runs. Less sensitive to outliers than the mean.`,
         correctDist: isBoolean
-          ? `How many runs got each item correct (100%). "0" = no run solved it, "${K}" = all runs solved it.`
-          : `How many runs scored ≥${threshold}% for each item.`
+          ? `How many runs got each item correct. "0" = no run solved it, "${K}" = all runs solved it.`
+          : `How many runs scored ${passRule}${threshold}% for each item.`
       };
 
-      const distBar = isNumeric ? '' : buildModelDistributionBar(stats);
+      const distBar = isNumeric || isNeutral ? '' : buildModelDistributionBar(stats);
 
       // Helper to create info icon with tooltip (same as compare view)
       function infoIcon(tooltip) {
-        return `<button type="button" class="stat-info-icon qym-help-marker" aria-label="More information" aria-expanded="false">i<span class="stat-info-tooltip qym-help-tooltip" role="tooltip">${tooltip}</span></button>`;
+        return `<button type="button" class="stat-info-icon qym-help-marker" aria-label="More information" aria-expanded="false">i<span class="stat-info-tooltip qym-help-tooltip" role="tooltip">${escapeHtml(tooltip)}</span></button>`;
       }
 
       function renderModelStatTile(title, value, valueClass = '', tooltip = '') {
         return `
           <div class="model-stat-item">
-            <div class="stat-label">${title}${tooltip ? ` ${infoIcon(tooltip)}` : ''}</div>
-            <div class="stat-value ${valueClass}">${value}</div>
+            <div class="stat-label">${escapeHtml(title)}${tooltip ? ` ${infoIcon(tooltip)}` : ''}</div>
+            <div class="stat-value ${valueClass}">${escapeHtml(value)}</div>
           </div>
         `;
       }
@@ -5353,10 +5761,19 @@
         if (!visibleStatKeys.has(key)) return;
         statTiles.push(renderModelStatTile(title, value, valueClass, tooltip));
       }
-      if (isNumeric) {
+      if (isNeutral) {
+        const fmtScore = value => window.QymMetrics.formatMetricValue(value, mType);
+        addStatTile('avgScore', 'Avg Score', fmtScore(stats.avgScore), '', tooltips.avgScore);
+        addStatTile('minScore', 'Min', fmtScore(stats.minScore), '', 'Minimum value across all items and runs.');
+        addStatTile('stddevScore', 'StdDev', fmtScore(stats.stddevScore), '', 'Standard deviation across all items and runs.');
+        addStatTile('failedCount', 'Errors', String(stats.failedCount), stats.failedCount > 0 ? 'failed-count' : '', tooltips.failedCount);
+        addStatTile('totalRetries', 'Retries', String(stats.totalRetries || 0), stats.totalRetries > 0 ? 'retry-count' : '', tooltips.totalRetries);
+        addStatTile('avgLatency', '⚡ Avg Latency', formatLatency(stats.avgLatency), '', tooltips.avgLatency);
+        addStatTile('medianLatency', '⚡ Median Latency', formatLatency(stats.medianLatency), '', tooltips.medianLatency);
+      } else if (isNumeric) {
         addStatTile('avgScore', 'Avg', fmtN(stats.avgScore), '', tooltips.avgScore);
         addStatTile('minScore', 'Min', fmtN(stats.minScore), '', 'Minimum value across all items and runs.');
-        addStatTile('maxAtK', `Max@${K}`, fmtN(stats.maxAtK), '', tooltips.maxAtK);
+        addStatTile('maxAtK', `${direction === 'minimize' ? 'Min' : 'Max'}@${K}`, fmtN(stats.maxAtK), '', tooltips.maxAtK);
         addStatTile('stddevScore', 'StdDev', fmtN(stats.stddevScore), '', 'Standard deviation across all items and runs. Lower = more consistent.');
         addStatTile('totalScoreSum', 'Total', fmtN(stats.totalScoreSum), 'accent-value', 'Sum of all values across all items and runs.');
         addStatTile('failedCount', 'Errors', String(stats.failedCount), stats.failedCount > 0 ? 'failed-count' : '', tooltips.failedCount);
@@ -5364,12 +5781,15 @@
         addStatTile('avgLatency', '⚡ Avg Latency', formatLatency(stats.avgLatency), '', tooltips.avgLatency);
         addStatTile('medianLatency', '⚡ Median Latency', formatLatency(stats.medianLatency), '', tooltips.medianLatency);
       } else {
+        // A lower-is-better metric with no score left (every item errored)
+        // has no average or best score: "—", not 0% (the best value).
+        const fmtScore = value => (value === null || value === undefined ? '—' : formatPercent(value));
         addStatTile('passAtK', `Pass@${K}`, formatPercent(stats.passAtK), getSuccessClass(stats.passAtK), tooltips.passAtK);
         addStatTile('passHatK', `Pass^${K}`, formatPercent(stats.passHatK), getSuccessClass(stats.passHatK), tooltips.passHatK);
-        addStatTile('maxAtK', `Max@${K}`, formatPercent(stats.maxAtK), getSuccessClass(stats.maxAtK), tooltips.maxAtK);
+        addStatTile('maxAtK', `${direction === 'minimize' ? 'Min' : 'Max'}@${K}`, fmtScore(stats.maxAtK), scoreClassFor(stats.maxAtK), tooltips.maxAtK);
         addStatTile('consistency', 'Consistency', stats.consistency !== null ? formatPercent(stats.consistency) : 'NA', stats.consistency !== null ? getSuccessClass(stats.consistency) : '', tooltips.consistency);
         addStatTile('reliability', 'Reliability', stats.reliability !== null ? formatPercent(stats.reliability) : 'NA', stats.reliability !== null ? getSuccessClass(stats.reliability) : '', tooltips.reliability);
-        addStatTile('avgScore', 'Avg Score', formatPercent(stats.avgScore), getSuccessClass(stats.avgScore), tooltips.avgScore);
+        addStatTile('avgScore', 'Avg Score', fmtScore(stats.avgScore), scoreClassFor(stats.avgScore), tooltips.avgScore);
         addStatTile('failedCount', 'Errors', String(stats.failedCount), stats.failedCount > 0 ? 'failed-count' : '', tooltips.failedCount);
         addStatTile('totalRetries', 'Retries', String(stats.totalRetries || 0), stats.totalRetries > 0 ? 'retry-count' : '', tooltips.totalRetries);
         addStatTile('avgLatency', '⚡ Avg Latency', formatLatency(stats.avgLatency), '', tooltips.avgLatency);
@@ -5385,22 +5805,22 @@
         statTiles.push(renderModelStatTile(traceMetric.modelsLabel || traceMetric.label, traceMetric.fmt(traceValue), traceClass));
       });
 
-      const showDistribution = !isNumeric && visibleStatKeys.has('correctDistribution');
+      const showDistribution = !isNumeric && !isNeutral && visibleStatKeys.has('correctDistribution');
       const statsGridHtml = statTiles.length > 0
         ? `<div class="model-stats-grid">${statTiles.join('')}</div>`
         : '<div class="model-stats-empty">No summary metrics selected.</div>';
 
       return `
-        <div class="model-card" data-model="${model}">
+        <div class="model-card" data-model="${escapeHtml(model)}">
           <div class="model-card-header">
-            <div class="model-card-title" title="${getModelFilterOptionLabel(model)}">
+            <div class="model-card-title" title="${escapeHtml(getModelFilterOptionLabel(model))}">
               <span class="model-color-dot" style="background: ${color}"></span>
               ${renderModelLabelForModelName(model)}
             </div>
             <div class="model-card-runs">
               <span class="runs-count">${stats.selectedCount}/${globalK} runs</span>
               ${hasWarning ? `<span class="runs-warning" title="Only ${stats.totalAvailable} runs available (requested ${globalK})">⚠️</span>` : ''}
-              <button class="customize-btn" data-model="${model}" title="Customize run selection">Edit</button>
+              <button class="customize-btn" data-model="${escapeHtml(model)}" title="Customize run selection">Edit</button>
             </div>
           </div>
 
@@ -5418,7 +5838,7 @@
 
           <div class="model-card-footer">
             <span class="latency">${stats.totalItems} items</span>
-            <a href="#" class="compare-link" data-model="${model}">See item-by-item comparison →</a>
+            <a href="#" class="compare-link" data-model="${escapeHtml(model)}">See item-by-item comparison →</a>
           </div>
         </div>
       `;
@@ -5460,29 +5880,41 @@
       return;
     }
 
-    // Sort by avg score descending
+    // Rank by the metric's declared direction (C008). Without one there is
+    // no "better": list models by name, with no medals or colors.
+    const direction = mvs.metricDirection || null;
     const ranked = models
-      .map(m => ({ model: m, score: mvs.modelStats[m]?.avgScore || 0 }))
-      .sort((a, b) => b.score - a.score);
+      .map(m => ({ model: m, score: mvs.modelStats[m]?.avgScore ?? null }))
+      .sort((a, b) => {
+        // A model without an average (every item errored on a
+        // lower-is-better metric) is never ranked above one with a score.
+        if ((a.score === null) !== (b.score === null)) return a.score === null ? 1 : -1;
+        const better = window.QymMetrics.compareMetricValues(a.score || 0, b.score || 0, direction);
+        return better ? -better : String(a.model).localeCompare(String(b.model));
+      });
 
     const rankEmojis = ['🥇', '🥈', '🥉'];
 
     const isNumeric = mvs.metricIsNumeric;
     const rankMType = isNumeric ? 'numeric' : 'score';
+    const byLabel = isNumeric ? 'Avg Value' : 'Avg Score';
+    const title = !direction
+      ? `Models (${byLabel}; ${mvs.selectedMetric || 'metric'} declares no direction, so there is no ranking)`
+      : `Ranking (by ${byLabel}${direction === 'minimize' ? ', lower is better' : ''})`;
 
     container.style.display = 'block';
     container.innerHTML = `
-      <h3>Ranking (by ${isNumeric ? 'Avg Value' : 'Avg Score'})</h3>
+      <h3>${escapeHtml(title)}</h3>
       <div class="ranking-list">
         ${ranked.map((item, idx) => {
-          const rank = idx < 3 ? rankEmojis[idx] : `#${idx + 1}`;
-          const scoreClass = window.QymMetrics.getMetricColorClass(item.score, rankMType);
+          const rank = !direction || item.score === null ? '' : (idx < 3 ? rankEmojis[idx] : `#${idx + 1}`);
+          const scoreClass = item.score === null ? '' : window.QymMetrics.getMetricColorClass(item.score, rankMType, direction);
           const display = window.QymMetrics.formatMetricValue(item.score, rankMType);
           return `
             <div class="ranking-item">
               <span class="rank">${rank}</span>
               ${renderModelLabelForModelName(item.model)}
-              <span class="score ${scoreClass}">(${display})</span>
+              <span class="score ${scoreClass}">(${escapeHtml(display)})</span>
             </div>
           `;
         }).join('')}
@@ -5553,23 +5985,23 @@
           if (groupCount > 1 && key !== '__ungrouped__') {
             const group = groupSummaries.get(key);
             const label = group?.label || getRunDisplayName(groupRuns[0]);
-            html += `<div style="padding:6px 8px;font-size:var(--font-sm);color:var(--accent-primary);font-weight:600;border-bottom:1px solid var(--border-default);">${escapeHtml(label)} (${group?.total_runs ?? groupRuns.length} runs)</div>`;
+            html += `<div style="padding:6px 8px;font-size:var(--font-sm);color:var(--accent-primary);font-weight:600;border-bottom:1px solid var(--border-default);">${escapeHtml(label)} (${escapeHtml(group?.total_runs ?? groupRuns.length)} runs)</div>`;
           }
           for (const run of groupRuns) {
             const isSelected = selected.has(run.file_path);
             const score = run.metric_averages?.[mvs.selectedMetric];
             const metricType = mvs.metricIsNumeric ? 'numeric' : 'score';
-            const scoreClass = score !== undefined ? window.QymMetrics.getMetricColorClass(score, metricType) : '';
+            const scoreClass = score !== undefined ? window.QymMetrics.getMetricColorClass(score, metricType, runMetricDirection(run, mvs.selectedMetric)) : '';
             const scoreDisplay = score !== undefined ? window.QymMetrics.formatMetricValue(score, metricType) : '';
             const runDisplayName = getRunDisplayName(run);
             html += `<label class="run-selection-item ${isSelected ? 'selected' : ''}">
               <input type="checkbox" data-file="${escapeHtml(run.file_path)}" ${isSelected ? 'checked' : ''} />
-              <div class="run-info"><div class="run-name" title="${escapeHtml(runDisplayName)}">${escapeHtml(runDisplayName)}</div><div class="run-date">${formatDate(run.timestamp).full}</div></div>
-              ${score !== undefined ? `<span class="run-score ${scoreClass}">${scoreDisplay}</span>` : ''}
+              <div class="run-info"><div class="run-name" title="${escapeHtml(runDisplayName)}">${escapeHtml(runDisplayName)}</div><div class="run-date">${escapeHtml(formatDate(run.timestamp).full)}</div></div>
+              ${score !== undefined ? `<span class="run-score ${scoreClass}">${escapeHtml(scoreDisplay)}</span>` : ''}
             </label>`;
           }
         }
-        listEl.innerHTML = `<div class="run-selection-header"><span class="selection-counter"><span id="selection-count">${selected.size}</span> / ${globalK} selected</span>${groupCount > 1 ? `<span>${groupCount} config groups</span>` : ''}<span data-selection-offpage></span></div><div class="run-selection-items">${html || '<p>No runs match these filters.</p>'}</div><div data-selection-pagination></div>`;
+        listEl.innerHTML = `<div class="run-selection-header"><span class="selection-counter"><span id="selection-count">${selected.size}</span> / ${escapeHtml(globalK)} selected</span>${groupCount > 1 ? `<span>${groupCount} config groups</span>` : ''}<span data-selection-offpage></span></div><div class="run-selection-items">${html || '<p>No runs match these filters.</p>'}</div><div data-selection-pagination></div>`;
         listEl.querySelectorAll('input[type="checkbox"]').forEach(checkbox => checkbox.addEventListener('change', () => {
           if (checkbox.checked && selected.size >= globalK) { checkbox.checked = false; return; }
           if (checkbox.checked) selected.add(checkbox.dataset.file);
@@ -5646,18 +6078,18 @@
         const metric = mvs.selectedMetric;
         const score = run.metric_averages?.[metric];
         const selMType = mvs.metricIsNumeric ? 'numeric' : 'score';
-        const scoreClass = score !== undefined ? window.QymMetrics.getMetricColorClass(score, selMType) : '';
+        const scoreClass = score !== undefined ? window.QymMetrics.getMetricColorClass(score, selMType, runMetricDirection(run, metric)) : '';
         const scoreDisplay = score !== undefined ? window.QymMetrics.formatMetricValue(score, selMType) : '';
         const runDisplayName = getRunDisplayName(run);
 
         runListHtml += `
           <label class="run-selection-item ${isSelected ? 'selected' : ''}">
-            <input type="checkbox" data-file="${run.file_path}" ${isSelected ? 'checked' : ''} />
+            <input type="checkbox" data-file="${escapeHtml(run.file_path)}" ${isSelected ? 'checked' : ''} />
             <div class="run-info">
               <div class="run-name" title="${escapeHtml(runDisplayName)}">${escapeHtml(runDisplayName)}</div>
-              <div class="run-date">${dt.full}</div>
+              <div class="run-date">${escapeHtml(dt.full)}</div>
             </div>
-            ${score !== undefined ? `<span class="run-score ${scoreClass}">${scoreDisplay}</span>` : ''}
+            ${score !== undefined ? `<span class="run-score ${scoreClass}">${escapeHtml(scoreDisplay)}</span>` : ''}
           </label>
         `;
       }
@@ -6001,6 +6433,21 @@
     openUrl(apiUrl('compare?' + params.toString()), e);
   }
 
+  // Only pass deletions are permanent; whole runs go to Deleted Runs.
+  function setDeleteWarning(text) {
+    const warningEl = el('delete-modal-warning');
+    if (!warningEl) return;
+    warningEl.textContent = text;
+    warningEl.style.display = text ? '' : 'none';
+  }
+
+  function restoreWindowCopy(graceDays, plural) {
+    if (!(graceDays > 0)) return '';
+    return plural
+      ? `An admin can restore deleted runs for ${graceDays} day${graceDays === 1 ? '' : 's'}; then they are permanently removed.`
+      : `An admin can restore it for ${graceDays} day${graceDays === 1 ? '' : 's'}; then it is permanently removed.`;
+  }
+
   function confirmDeleteRun(filePath, runId) {
     const modal = el('delete-modal');
     const titleEl = el('delete-modal-title');
@@ -6009,7 +6456,9 @@
     const confirmBtn = el('confirm-delete-btn');
 
     if (titleEl) titleEl.textContent = 'Delete run';
-    if (descriptionEl) descriptionEl.textContent = 'Are you sure you want to delete this run?';
+    if (descriptionEl) descriptionEl.textContent = 'Are you sure you want to delete this run? An admin can restore it from Deleted Runs until retention permanently removes it.';
+    // A deleted run can be restored, so no "cannot be undone" warning.
+    setDeleteWarning('');
     runNameEl.textContent = runId;
     modal.style.display = 'flex';
 
@@ -6029,10 +6478,14 @@
         });
 
         if (response.ok) {
+          const result = await response.json().catch(() => ({}));
+          const graceDays = Number(result.purge_after_days) || 0;
           modal.style.display = 'none';
           // Remove from selection if selected
           state.selectedRuns.delete(filePath);
-          showToast('success', 'Run deleted', 'The run was moved to the trash.');
+          showToast('success', 'Run deleted', graceDays > 0
+            ? `The run was moved to the trash. ${restoreWindowCopy(graceDays, false)}`
+            : 'The run was moved to the trash.');
           // Refresh data
           await fetchRuns({ refreshAllPages: true });
         } else {
@@ -6083,7 +6536,11 @@
     if (passRefs.length) selectionParts.push(`${passRefs.length} pass${passRefs.length === 1 ? '' : 'es'}`);
 
     if (titleEl) titleEl.textContent = 'Delete selection';
-    if (descriptionEl) descriptionEl.textContent = `Are you sure you want to delete the selected ${selectionParts.join(' and ')}?`;
+    if (descriptionEl) descriptionEl.textContent = `Are you sure you want to delete the selected ${selectionParts.join(' and ')}?`
+      + (runRefs.length ? ' An admin can restore deleted runs from Deleted Runs until retention permanently removes them.' : '');
+    setDeleteWarning(passRefs.length
+      ? `Deleted passes cannot be restored.${runRefs.length ? ' Deleted runs can.' : ''}`
+      : '');
     runNameEl.textContent = `${selectionParts.join(' and ')} selected`;
     modal.style.display = 'flex';
 
@@ -6096,6 +6553,8 @@
       newConfirmBtn.textContent = 'Deleting...';
 
       let successCount = 0;
+      let deletedRunCount = 0;
+      let graceDays = 0;
       let errorCount = selectionErrors.length;
       const errors = [...selectionErrors];
 
@@ -6128,7 +6587,10 @@
           });
 
           if (response.ok) {
+            const result = await response.json().catch(() => ({}));
+            graceDays = Math.max(graceDays, Number(result.purge_after_days) || 0);
             successCount++;
+            deletedRunCount++;
             state.selectedRuns.delete(filePath);
           } else {
             errorCount++;
@@ -6151,12 +6613,13 @@
       if (errorCount > 0) {
         showToast('error', 'Selection partially deleted', `Deleted ${successCount}; failed ${errorCount}. ${errors[0] || ''}`);
       } else {
-        showToast('success', 'Selection deleted', `Deleted ${successCount} selected item${successCount === 1 ? '' : 's'}.`);
+        const restore = deletedRunCount ? restoreWindowCopy(graceDays, true) : '';
+        showToast('success', 'Selection deleted', `Deleted ${successCount} selected item${successCount === 1 ? '' : 's'}.${restore ? ' ' + restore : ''}`);
       }
     });
   }
 
-  function showWorkflowModal(action, runId, taskName) {
+  function showWorkflowModal(action, runId, runName) {
     const modal = el('workflow-modal');
     const titleEl = el('workflow-modal-title');
     const descEl = el('workflow-modal-description');
@@ -6171,13 +6634,14 @@
       ? 'Unapprove Run'
       : (isUnreject ? 'Unreject Run' : (isApprove ? 'Approve Run' : 'Reject Run'));
     descEl.textContent = isUnapprove
-      ? 'Clear this approval and return the run to completed.'
+      ? 'Withdraw this approval. The run returns to its execution result and the approval stays in its review history.'
       : (isUnreject
-        ? 'Clear this rejection and return the run to completed.'
+        ? 'Withdraw this rejection. The run returns to its execution result and the rejection stays in its review history.'
       : (isApprove
-        ? 'Approve this run to make it visible to leadership.'
+        ? 'Approve this run. The decision and your comment are kept in its review history.'
         : 'Reject this run and send it back for review.'));
-    runNameEl.textContent = `${taskName} (${runId.substring(0, 8)}...)`;
+    // The same name the runs table and the delete dialog use.
+    runNameEl.textContent = runName || runId;
     commentEl.value = '';
     modal.style.display = 'flex';
 
@@ -6202,16 +6666,21 @@
         });
 
         if (response.ok) {
+          const result = await response.json().catch(() => ({}));
+          const restored = String(result.status || 'completed').toLowerCase();
           modal.style.display = 'none';
           await fetchRuns({ refreshAllPages: true });
           showToast(
             'success',
             isUnapprove ? 'Unapproved' : (isUnreject ? 'Unrejected' : (isApprove ? 'Approved' : 'Rejected')),
-            (isUnapprove || isUnreject) ? 'Run returned to completed' : (isApprove ? 'Run approved' : 'Run rejected'),
+            (isUnapprove || isUnreject) ? `Run returned to ${restored}` : (isApprove ? 'Run approved' : 'Run rejected'),
           );
         } else {
-          const data = await response.json();
+          const data = await response.json().catch(() => ({}));
           showToast('error', `${isUnapprove ? 'Unapprove' : (isUnreject ? 'Unreject' : (isApprove ? 'Approve' : 'Reject'))} Failed`, data.detail || 'Unknown error');
+          // A 409 means the row showed an old review state; refresh it so it
+          // stops offering the action.
+          if (response.status === 409) fetchRuns({ refreshAllPages: true }).catch(() => {});
         }
       } catch (err) {
         showToast('error', `${isUnapprove ? 'Unapprove' : (isUnreject ? 'Unreject' : (isApprove ? 'Approve' : 'Reject'))} Failed`, err.message || 'Unknown error');
@@ -6393,8 +6862,10 @@
     showDashboardChrome();
     state.runs = data;
     if (data && data.project) {
-      state.currentProject = data.project;
-      if (state.currentProject && state.currentProject.slug) {
+      // Keep what the list payload does not carry (role, is_active).
+      const known = state.currentProject && state.currentProject.slug === data.project.slug ? state.currentProject : {};
+      state.currentProject = { ...known, ...data.project };
+      if (state.currentProject.slug && !isProjectReadOnly()) {
         storeProjectSlug(state.currentProject.slug);
       }
     }
@@ -6637,10 +7108,13 @@
 
     const currentSlug = getProjectSlugFromPath();
     if (currentSlug) {
-      const current = projects.find(project => project.slug === currentSlug) || null;
+      // An archived project is not in me.projects: the shell loads it from the URL.
+      const shellProject = window.QymShell && window.QymShell.getProject ? window.QymShell.getProject() : null;
+      const current = projects.find(project => project.slug === currentSlug)
+        || (shellProject && shellProject.slug === currentSlug ? shellProject : null);
       state.currentProject = current || (me?.role === 'ADMIN' ? { slug: currentSlug, name: currentSlug, role: 'ADMIN' } : null);
       if (state.currentProject) {
-        storeProjectSlug(state.currentProject.slug);
+        if (!isProjectReadOnly()) storeProjectSlug(state.currentProject.slug);
         hideProjectChooser();
         return true;
       }
@@ -6880,9 +7354,12 @@
     const retained = [...retainedIds];
     // The overview (catalog + facets) is the expensive half of a poll; only ask
     // for it again when the projection revision moved or the filter changed.
+    // A page that was still publishing (e.g. right after a review action)
+    // means the cached overview's facets and KPIs are behind too.
     const overviewStale = !state.dashboardOverview
       || state.dashboardOverviewFilterKey !== filterKey
       || state.dashboardOverview?.freshness?.updating
+      || state.dashboardPage?.freshness?.updating
       || (Date.now() - (state._overviewFetchedAt || 0)) > 60000;
     const payload = {
       project_slug: state.currentProject?.slug || getProjectSlugFromPath() || '',
@@ -7206,7 +7683,7 @@
     wrapper.style.display = '';
     trigger.textContent = state.currentProject && state.currentProject.name ? state.currentProject.name : 'Choose Project';
     menu.innerHTML = projects.map(project => `
-      <a class="project-switcher-item${state.currentProject && state.currentProject.slug === project.slug ? ' active' : ''}" data-project-switch="${escapeHtml(project.slug)}" href="${projectUrl(project.slug)}">
+      <a class="project-switcher-item${state.currentProject && state.currentProject.slug === project.slug ? ' active' : ''}" data-project-switch="${escapeHtml(project.slug)}" href="${escapeHtml(projectUrl(project.slug))}">
         <span>${escapeHtml(project.name)}</span>
         <span>${escapeHtml(project.role || '')}</span>
       </a>
@@ -7461,6 +7938,8 @@
     const value = parseFloat(e.target.value);
     if (!isNaN(value) && value >= 0 && value <= 100) {
       state.modelsViewState.threshold = value / 100;
+      const mvs = state.modelsViewState;
+      mvs.thresholdByMetric = { ...(mvs.thresholdByMetric || {}), [mvs.selectedMetric]: value / 100 };
       // Clear stats cache so they get recalculated with new threshold
       state.modelsViewState.modelStats = {};
       renderModelsView();
@@ -7489,6 +7968,15 @@
     event.stopPropagation();
     showExecutionErrorDetails(button);
   }, true);
+  // Frozen columns: keep focused controls and the table's end in view.
+  const runsTableScroll = el('runs-table-scroll');
+  runsTableScroll?.addEventListener('focusin', event => keepRunsFocusClearOfFrozenColumns(event.target));
+  runsTableScroll?.addEventListener('focusout', event => {
+    if (!runsTableScroll.contains(event.relatedTarget)) keepRunsFocusClearOfFrozenColumns(null);
+  });
+  runsTableScroll?.addEventListener('scroll', () => {
+    state._runsTableAtEnd = isRunsTableAtEnd(runsTableScroll);
+  }, { passive: true });
 
   // Compare actions
   el('compare-view')?.addEventListener('click', openComparison);
@@ -7628,8 +8116,8 @@
     toast.innerHTML = `
       <div class="toast-icon">${icon}</div>
       <div class="toast-content">
-        <div class="toast-title">${title}</div>
-        ${message ? `<div class="toast-message">${message}</div>` : ''}
+        <div class="toast-title">${escapeHtml(title)}</div>
+        ${message ? `<div class="toast-message">${escapeHtml(message)}</div>` : ''}
       </div>
       <button class="toast-close qym-icon-action" type="button" aria-label="Close notification">×</button>
     `;
@@ -7876,7 +8364,10 @@
     try {
       // While the summary worker is publishing, back off 2s -> 4s -> 8s -> 15s
       // instead of hammering the server every 2s for the whole backfill.
-      const updating = !!state.dashboardOverview?.freshness?.updating;
+      // The page reports it too: after a review action only the page is
+      // re-requested, and the cached overview still says "not updating".
+      const updating = !!(state.dashboardPage?.freshness?.updating
+        || state.dashboardOverview?.freshness?.updating);
       if (updating) {
         state._updatingPolls = (state._updatingPolls || 0) + 1;
       } else {

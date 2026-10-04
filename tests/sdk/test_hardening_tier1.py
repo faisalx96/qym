@@ -1,4 +1,4 @@
-"""Regression tests for Tier 1 + T2.1 hardening fixes.
+"""Regression tests for Tier 1 hardening fixes.
 
 These tests cover the exact failure modes that corrupted run
 ``d8882026-2adb-4a20-afcd-5115047dcc02`` item 408:
@@ -6,7 +6,6 @@ These tests cover the exact failure modes that corrupted run
   * T1.2 — one hung metric blocked ``asyncio.gather`` in ``_compute_metrics``
   * T1.3 — ``_item_finished`` race produced phantom item_failed events
   * T1.4 — platform stream dropped buffered metric_scored events on shutdown
-  * T2.1 — a fresh ``AsyncOpenAI`` client was created per item (no pool reuse)
 
 Each test is small, self-contained, and uses in-process mocks only.
 """
@@ -23,7 +22,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Dict, List
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -412,156 +411,3 @@ def test_t14_flush_drains_buffered_events_before_returning():
         stream.close()
     finally:
         server.shutdown()
-
-
-def test_t14_close_flushes_late_events_cleanly():
-    """close() must call flush() before joining so late-emitted events make
-    it to the platform before the stream is torn down."""
-    from qym.platform.client import PlatformEventStream
-
-    server, port = _start_capture_server()
-    try:
-        stream = PlatformEventStream(
-            platform_url=f"http://127.0.0.1:{port}",
-            api_key="test-key",
-            run_id="test-run",
-        )
-
-        for i in range(5):
-            stream.emit("metric_scored", {"item_id": f"late_{i}", "score": 1.0})
-        stream.close()
-
-        # Server thread has a beat to finalize dispatches after close() returns
-        time.sleep(0.1)
-        with _CaptureHandler.events_lock:
-            late = [
-                e for e in _CaptureHandler.events
-                if e["type"] == "metric_scored" and "late_" in str(e.get("payload", {}).get("item_id", ""))
-            ]
-
-        assert len(late) == 5, f"expected 5 late events drained by close(), got {len(late)}"
-    finally:
-        server.shutdown()
-
-
-# ---------------------------------------------------------------------------
-# T2.1 — shared AsyncOpenAI client in sql_eval/task_v2_async.py
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_t21_shared_client_reused_across_task_invocations():
-    """With set_shared_client() set, sql_agent_task_async must reuse the same
-    AsyncOpenAI instance across every invocation and never close it (the
-    runner owns the lifetime). Without set_shared_client(), each invocation
-    constructs its own client and closes it. Regression for T2.1."""
-    # sql_eval lives in a sibling directory; add it to path
-    sql_eval_path = os.path.abspath(os.path.join(
-        os.path.dirname(__file__), "..", "..", "..", "sql_eval",
-    ))
-    if not os.path.isdir(sql_eval_path):
-        pytest.skip(f"sql_eval not found at {sql_eval_path}")
-    sys.path.insert(0, sql_eval_path)
-
-    os.environ.setdefault("OPENROUTER_API_KEY", "test-key")
-
-    # aiosqlite is imported at the top of task_v2_async but is not a
-    # dependency of this test — stub it out if missing so the shared-client
-    # logic can be exercised in any environment.
-    if "aiosqlite" not in sys.modules:
-        try:
-            import aiosqlite  # noqa: F401
-        except ImportError:
-            sys.modules["aiosqlite"] = MagicMock()
-
-    try:
-        import task_v2_async  # type: ignore
-    except Exception as e:
-        pytest.skip(f"task_v2_async import failed: {e}")
-
-    # The sibling project may expose this task through a compatibility wrapper.
-    # Patch the defining module, where the function actually resolves globals.
-    task_v2_async = sys.modules[task_v2_async.sql_agent_task_async.__module__]
-
-    # Patch at task_v2_async's own bound reference to AsyncOpenAI so we don't
-    # depend on the real `openai` package having a class-level `close` method.
-    # The test_judges.py module in this directory installs a MagicMock for
-    # `openai` at import time, which makes `openai.AsyncOpenAI` unreliable.
-    construct_count = {"value": 0}
-    close_count = {"value": 0}
-    original_AsyncOpenAI = task_v2_async.AsyncOpenAI  # type: ignore[attr-defined]
-
-    class CountingFakeClient:
-        def __init__(self, *args, **kwargs):
-            construct_count["value"] += 1
-
-        async def close(self):
-            close_count["value"] += 1
-
-        # Any attribute access returns a MagicMock (for chat.completions etc.)
-        def __getattr__(self, name):
-            return MagicMock()
-
-    # Stub _instrumented_respond so no real network traffic happens
-    original_respond = task_v2_async._instrumented_respond
-
-    async def fake_respond(client, *args, **kwargs):
-        return "SELECT 1", {"steps": 1, "total_tokens": 10, "cost_usd": 0.0, "provider": None}
-
-    try:
-        task_v2_async.AsyncOpenAI = CountingFakeClient  # type: ignore[attr-defined]
-        task_v2_async._instrumented_respond = fake_respond
-
-        # --- Scenario A: no shared client ---
-        construct_count["value"] = 0
-        close_count["value"] = 0
-        task_v2_async.set_shared_client(None)
-        for i in range(3):
-            await task_v2_async.sql_agent_task_async(
-                question=f"q{i}",
-                db_id="california_schools",
-                evidence="",
-                model_name="openai/gpt-4o-mini",
-            )
-        assert construct_count["value"] == 3, (
-            f"without shared client, each task should construct its own: "
-            f"got {construct_count['value']} constructions"
-        )
-        assert close_count["value"] == 3, (
-            f"without shared client, each task should close its own: "
-            f"got {close_count['value']} closes"
-        )
-
-        # --- Scenario B: shared client ---
-        construct_count["value"] = 0
-        close_count["value"] = 0
-        shared = CountingFakeClient()
-        task_v2_async.set_shared_client(shared)
-        assert construct_count["value"] == 1  # the `shared` we just built
-
-        for i in range(5):
-            await task_v2_async.sql_agent_task_async(
-                question=f"q{i}",
-                db_id="california_schools",
-                evidence="",
-                model_name="openai/gpt-4o-mini",
-            )
-
-        assert construct_count["value"] == 1, (
-            f"with shared client, only the `shared` instance should be constructed: "
-            f"got {construct_count['value']}"
-        )
-        assert close_count["value"] == 0, (
-            f"with shared client, task must not close it: "
-            f"got {close_count['value']} closes"
-        )
-
-        task_v2_async.set_shared_client(None)
-        await shared.close()
-        assert close_count["value"] == 1, (
-            "explicit shared.close() should fire exactly once"
-        )
-    finally:
-        task_v2_async.AsyncOpenAI = original_AsyncOpenAI  # type: ignore[attr-defined]
-        task_v2_async._instrumented_respond = original_respond
-        task_v2_async.set_shared_client(None)

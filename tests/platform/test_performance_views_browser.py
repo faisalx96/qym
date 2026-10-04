@@ -12,19 +12,16 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from qym_platform.services.run_payloads import compact_row
+from qym_platform.services.run_payloads import (
+    compact_row,
+    meta_key_schema,
+    new_meta_key_index,
+)
+
+pytestmark = pytest.mark.browser
 
 ROOT = Path(__file__).resolve().parents[2]
 STATIC = ROOT / "packages/platform/qym_platform/_static/dashboard"
-
-
-@pytest.fixture(scope="module")
-def browser():
-    api = pytest.importorskip("playwright.sync_api")
-    with api.sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
-        yield browser
-        browser.close()
 
 
 def payload(run_id="run-1", count=260, samples=1):
@@ -172,20 +169,27 @@ class ViewFixture:
         if pathname == "/api/runs/step-latency":
             self.requests.append(("step-latency", "summary", query))
             refs = query["run_ids"][0].split(",")
-            route.fulfill(json={
-                "run_ids": refs,
-                "passes": [],
-                "trace_count": len(refs),
-                "groups": [{
+
+            def groups(count):
+                return [{
                     "phase": "task", "kind": "TOOL",
                     "step_type": "tool" if query.get("rollup") == ["kind"] else "lookup",
-                    "n": len(refs), "error_count": 0,
+                    "n": count, "error_count": 0,
                     "mean_ms": 100, "median_ms": 100, "std_ms": 0,
                     "p5_ms": 100, "p25_ms": 100, "p75_ms": 100, "p95_ms": 100,
                     "min_ms": 100, "max_ms": 100, "cv": 0,
                     "tokens_total": 0, "tokens_prompt": 0, "tokens_completion": 0,
-                }],
-            })
+                }]
+
+            data = {
+                "run_ids": refs,
+                "passes": [],
+                "trace_count": len(refs),
+                "groups": groups(len(refs)),
+            }
+            if query.get("group_by") == ["ref"]:
+                data["groups_by_ref"] = {ref: groups(1) for ref in refs}
+            route.fulfill(json=data)
             return
         if self.api_client is not None and (
             pathname == "/api/compare" or pathname.startswith("/api/runs/")
@@ -257,32 +261,39 @@ class ViewFixture:
             if pathname.endswith("/items/search"):
                 body = request.post_data_json
                 self.requests.append((run_id, "search", body))
-                matches = {}
-                for condition in body["conditions"]:
-                    ids = []
-                    for row in data["snapshot"]["rows"]:
-                        output = row["output_full"]
-                        if body.get("pass_number"):
-                            output = row["pass_attempts"][body["pass_number"] - 1][
-                                "output"
+
+                def search(pass_number):
+                    matches = {}
+                    for condition in body["conditions"]:
+                        ids = []
+                        for row in data["snapshot"]["rows"]:
+                            output = row["output_full"]
+                            if pass_number:
+                                output = row["pass_attempts"][pass_number - 1]["output"]
+                            values = [
+                                row["item_id"],
+                                row["input_full"],
+                                row["expected_full"],
+                                output,
                             ]
-                        values = [
-                            row["item_id"],
-                            row["input_full"],
-                            row["expected_full"],
-                            output,
-                        ]
-                        if condition["field"] == "output":
-                            values = values[-1:]
-                        elif condition["field"] == "content":
-                            values = values[1:]
-                        if any(
-                            condition["value"].lower() in value.lower()
-                            for value in values
-                        ):
-                            ids.append(row["item_id"])
-                    matches[condition["id"]] = ids
-                route.fulfill(json={"matches": matches})
+                            if condition["field"] == "output":
+                                values = values[-1:]
+                            elif condition["field"] == "content":
+                                values = values[1:]
+                            if any(
+                                condition["value"].lower() in value.lower()
+                                for value in values
+                            ):
+                                ids.append(row["item_id"])
+                        matches[condition["id"]] = ids
+                    return matches
+
+                if "pass_numbers" in body:
+                    route.fulfill(json={"matches_by_pass": {
+                        str(number): search(number) for number in body["pass_numbers"]
+                    }})
+                else:
+                    route.fulfill(json={"matches": search(body.get("pass_number"))})
                 return
             if pathname.endswith("/passes"):
                 route.fulfill(
@@ -326,7 +337,11 @@ class ViewFixture:
                 if self.kind == "compare"
                 else "      loadRunData();"
             )
-            helpers = "openItemComparisonModal, render," if self.kind == "compare" else ""
+            helpers = (
+                "openItemComparisonModal, render, calculateComparisonStatsForMetric,"
+                if self.kind == "compare"
+                else ""
+            )
             source = source.replace(
                 init,
                 "window.__viewTest = {state, renderItems, getFilteredItems, "
@@ -341,10 +356,12 @@ class ViewFixture:
     def snapshot(self, run_id):
         data = copy.deepcopy(self.data[run_id])
         if self.compact:
+            keys = new_meta_key_index()
             data["snapshot"]["rows"] = [
-                compact_row(row) for row in data["snapshot"]["rows"]
+                compact_row(row, keys) for row in data["snapshot"]["rows"]
             ]
             data["snapshot"]["detail_mode"] = "lazy"
+            data["snapshot"].update(meta_key_schema(keys))
         return data
 
     def goto(self, suffix=""):
@@ -627,16 +644,21 @@ def test_source_api_preserves_repeated_offpage_details_search_edit_and_csv(
             page = fixture.page
             # Editing must reach the real pass score and re-reduced run score,
             # then keep its body and logical identity after the response patch.
+            # accuracy is a boolean spec, so 0.25 is edited on the numeric
+            # count metric; score edits are validated by type (C009).
             page.locator("#items-grid .item-header-expand").first.click()
-            page.locator("#items-grid .metric-edit-open").first.click()
-            editor = page.locator("#items-grid .metric-edit-input:visible").first
+            chip = page.locator("#items-grid .metric-compare-row").filter(
+                has_text="count"
+            ).first
+            chip.locator(".metric-edit-open").click()
+            editor = chip.locator(".metric-edit-input")
             editor.fill("0.25")
             with page.expect_response("**/api/runs/update_metric") as edited:
                 editor.press("Enter")
             assert edited.value.status == 200
             editor.wait_for(state="hidden")
             updated = client.get("/api/runs/run-1").json()["snapshot"]["rows"][60]
-            assert 0.25 in updated["pass_scores"]["accuracy"]
+            assert 0.25 in updated["pass_scores"]["count"]
             assert any(verb == "details" for _, verb, _ in fixture.requests)
             assert any(verb == "search" for _, verb, _ in fixture.requests)
             assert all(
@@ -685,6 +707,8 @@ def test_source_issue_records_keep_full_compact_pass_filter_export_and_edit_pari
                 fixture.settled()
                 assert len(fixture.state_result()["ids"]) == 1
                 page.locator("#items-grid .item-header-expand").first.click()
+                # An opened item loads its bodies before its body renders.
+                page.locator("#items-grid .item-input-row").first.wait_for()
                 visible = page.locator("#items-grid").inner_text()
                 assert "pass-2 first finding 60" in visible
                 assert "pass-2 second finding 60" in visible
@@ -851,12 +875,15 @@ def test_repeat_pass_search_hydration_and_deep_link(browser):
         )
         fixture.settled()
         assert fixture.state_result()["ids"] == ["item-259"]
+        # Opening the item loads its pass-scoped bodies and judge output.
+        fixture.page.locator("#items-grid .item-card.item-collapsed").click()
+        fixture.page.locator("#items-grid .item-card .item-input-row").wait_for()
         row = fixture.page.evaluate("__viewTest.getFilteredItems()[0].row")
         assert row["output"] == "pass-2 output 259"
         assert row["metric_values"] == [1, 260]
         assert row["metric_meta"]["accuracy"]["explanation"] == "pass-2 judge 259"
         assert any(
-            body.get("pass_number") == 2
+            body.get("pass_numbers") == [2]
             for _, verb, body in fixture.requests
             if verb == "search"
         )
@@ -869,8 +896,16 @@ def test_run_hydration_retry_and_resident_body_bound(browser):
     fixture.fail_details = True
     try:
         fixture.page.goto("http://qym.test/run/run-1")
-        fixture.page.locator("#items-grid button").get_by_text("Retry").click()
         fixture.ready()
+        # The list renders from the index; only an opened item loads, and a
+        # failed load stays on that card with its own retry.
+        assert not any(verb == "details" for _, verb, _ in fixture.requests)
+        fixture.page.locator("#items-grid .item-card.item-collapsed").first.click()
+        card = fixture.page.locator('#items-grid .item-card[data-item-id="item-0"]')
+        card.get_by_text("Item details could not be loaded").wait_for()
+        assert fixture.page.locator("#items-grid .item-card").count() == 20
+        card.get_by_role("button", name="Retry").click()
+        card.locator(".item-input-row").wait_for()
         for number in range(2, 14):
             fixture.page.locator('#pagination [aria-label="Page number"]').fill(
                 str(number)
@@ -885,6 +920,10 @@ def test_run_hydration_retry_and_resident_body_bound(browser):
         assert resident <= 200
         fixture.page.locator('#pagination [aria-label="First page"]').click()
         fixture.settled()
+        # The opened item is still open and reloads its body on return.
+        fixture.page.locator(
+            '#items-grid .item-card[data-item-id="item-0"] .item-input-row'
+        ).wait_for()
         assert (
             fixture.page.evaluate("__viewTest.state.snapshot.rows[0].output")
             == fixture.data["run-1"]["snapshot"]["rows"][0]["output"]
@@ -959,9 +998,12 @@ def test_compare_latency_tracks_expanded_passes_and_removed_cards(browser):
         page.wait_for_function("document.querySelectorAll('.sl-run-chip').length === 6")
         page.wait_for_load_state("networkidle")
         refs = [f"run-{run}::pass{number}" for run in (1, 2) for number in (1, 2, 3)]
-        assert set(fixture.latency_selections()) == {tuple(refs)} | {
-            (ref,) for ref in refs
-        }
+        # Every pass lane arrives with the pooled request (group_by=ref).
+        assert fixture.latency_selections() == [tuple(refs)]
+        assert [
+            query.get("group_by") for run_id, _, query in fixture.requests
+            if run_id == "step-latency"
+        ] == [["ref"]]
         assert page.locator(".sl-run-chip").all_text_contents() == (
             page.locator(".compare-run-title").all_text_contents()
         )
@@ -976,7 +1018,7 @@ def test_compare_latency_tracks_expanded_passes_and_removed_cards(browser):
         page.wait_for_function("document.querySelectorAll('.sl-run-chip').length === 5")
         page.wait_for_load_state("networkidle")
         next_selections = fixture.latency_selections()[initial_requests:]
-        assert set(next_selections) == {tuple(refs)} | {(ref,) for ref in refs}
+        assert next_selections == [tuple(refs)]
         assert all(removed not in selection for selection in next_selections)
         assert parse_qs(urlparse(page.url).query)["runs"] == refs
         assert page.evaluate("JSON.parse(sessionStorage.getItem('compareRuns'))") == refs
@@ -1057,6 +1099,7 @@ def test_compare_html_export_contains_every_body_and_opens_offline(browser, tmp_
         assert "needle-259" in exported
         assert "Judge explanation 259" in exported
         assert not re.search(r"<script\s+src=", exported)
+        assert not re.search(r'<link\s+rel="stylesheet"\s+href=', exported)
         offline = browser.new_context(offline=True)
         page = offline.new_page()
         errors = []
@@ -1110,5 +1153,125 @@ def test_slow_old_search_cannot_replace_new_results(browser, kind):
         fixture.settled()
         assert fixture.state_result() == before
         assert "Question 259" in fixture.page.locator("#items-grid").inner_text()
+    finally:
+        fixture.close()
+
+
+@pytest.mark.parametrize("kind", ["run", "compare"])
+def test_index_renders_the_list_and_an_opened_item_loads_once_per_run(browser, kind):
+    """The first paint needs only the index. Opening an item loads its bodies
+    and judge output once per run, however many pass columns show it."""
+    fixture = ViewFixture(browser, kind, samples=3, count=60)
+    try:
+        fixture.goto()
+        page = fixture.page
+        page.wait_for_load_state("networkidle")
+        assert not any(verb == "details" for _, verb, _ in fixture.requests)
+        assert page.locator("#items-grid .item-title").first.inner_text() == "Question 0"
+        latency_requests = len(fixture.latency_selections())
+        page.locator("#items-grid .item-collapsed").first.click()
+        page.locator("#items-grid .item-input-row").first.wait_for()
+        page.wait_for_load_state("networkidle")
+        # Opening an item re-renders the items only: no panel reloads.
+        assert len(fixture.latency_selections()) == latency_requests
+        details = [
+            (run_id, body) for run_id, verb, body in fixture.requests if verb == "details"
+        ]
+        expected_runs = ["run-1", "run-2"] if kind == "compare" else ["run-1"]
+        assert sorted(run_id for run_id, _ in details) == expected_runs
+        assert all(body["item_ids"] == ["item-0"] for _, body in details)
+        text = page.locator("#items-grid").text_content()
+        for number in (1, 2, 3):
+            assert f"pass-{number} output 0" in text
+            assert f"pass-{number} judge 0" in text
+        # Collapsing and reopening reuses the loaded item.
+        page.locator("#items-grid .item-header-expand").first.click()
+        page.locator("#items-grid .item-collapsed").first.click()
+        page.locator("#items-grid .item-input-row").first.wait_for()
+        assert len([1 for _, verb, _ in fixture.requests if verb == "details"]) == len(
+            expected_runs
+        )
+    finally:
+        fixture.close()
+
+
+@pytest.mark.parametrize("kind", ["run", "compare"])
+def test_metric_field_chooser_lists_keys_the_index_omits(browser, kind):
+    fixtures = [ViewFixture(browser, kind, compact=value) for value in (False, True)]
+    try:
+        keys = []
+        for fixture in fixtures:
+            meta = fixture.data["run-1"]["snapshot"]["rows"][3]["metric_meta"]
+            meta["accuracy"]["llm_result"] = {"verdict": "x" * 5000}
+            fixture.goto()
+            keys.append(fixture.page.evaluate("__viewTest.state.allMetricMetaKeys"))
+        assert keys[0] == keys[1]
+        assert {"explanation", "llm_result"} <= set(keys[1])
+        compact_row = fixtures[1].page.evaluate(
+            "(__viewTest.state.snapshot?.rows || __viewTest.state.runs[0].snapshot.rows)[3]"
+        )
+        assert compact_row["metric_meta"]["accuracy"] == {"modified": False}
+    finally:
+        for fixture in fixtures:
+            fixture.close()
+
+
+@pytest.mark.parametrize("kind", ["run", "compare"])
+def test_single_pass_field_chooser_lists_only_that_pass_keys(browser, kind):
+    """A pass view offers the fields of that pass, as with full rows: an
+    error flag or judge payload seen only in another pass is not offered."""
+    for view_pass, expected in ((2, {"explanation"}), (1, None)):
+        fixtures = [
+            ViewFixture(browser, kind, compact=value, samples=3, count=12)
+            for value in (False, True)
+        ]
+        try:
+            keys = []
+            for fixture in fixtures:
+                for run_id in ("run-1", "run-2"):
+                    rows = fixture.data[run_id]["snapshot"]["rows"]
+                    rows[3]["pass_metric_meta"]["accuracy"][0].update(
+                        status="error", error="judge timeout"
+                    )
+                    rows[4]["pass_metric_meta"]["accuracy"][0]["llm_result"] = {
+                        "verdict": "x" * 5000
+                    }
+                if kind == "run":
+                    fixture.goto(f"?pass={view_pass}")
+                else:
+                    fixture.page.goto(
+                        "http://qym.test/compare?runs=run-1%3A%3Apass{0}"
+                        "&runs=run-2%3A%3Apass{0}".format(view_pass)
+                    )
+                    fixture.ready()
+                keys.append(
+                    fixture.page.evaluate("__viewTest.state.allMetricMetaKeys")
+                )
+            assert keys[1] == keys[0], view_pass
+            if expected is not None:
+                assert set(keys[1]) == expected
+            else:
+                assert {"error", "status", "llm_result"} <= set(keys[1])
+        finally:
+            for fixture in fixtures:
+                fixture.close()
+
+
+def test_compare_searches_every_pass_column_of_a_run_in_one_request(browser):
+    fixture = ViewFixture(browser, "compare", samples=3, count=40)
+    try:
+        fixture.goto()
+        fixture.page.locator("#items-search").fill("pass-2 output 39")
+        fixture.page.wait_for_function(
+            "__viewTest.state.searchQuery === 'pass-2 output 39'"
+        )
+        fixture.settled()
+        assert fixture.state_result()["ids"] == ["aligned-39"]
+        searches = [
+            (run_id, body) for run_id, verb, body in fixture.requests if verb == "search"
+        ]
+        # Six pass columns, two runs: one request per run, not per column.
+        assert sorted(run_id for run_id, _ in searches) == ["run-1", "run-2"]
+        assert all(body["pass_numbers"] == [1, 2, 3] for _, body in searches)
     finally:
         fixture.close()

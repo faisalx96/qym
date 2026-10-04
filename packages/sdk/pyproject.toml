@@ -21,6 +21,7 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
     "pydantic>=2.0.0",
@@ -61,4 +62,4 @@ include = ["qym", "qym.*"]
 version = {attr = "qym._version.__version__"}
 
 [tool.setuptools.package-data]
-qym = ["_static/ui/*", "_static/dashboard/*"]
+qym = ["_static/ui/*"]

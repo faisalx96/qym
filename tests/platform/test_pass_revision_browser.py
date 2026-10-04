@@ -14,7 +14,7 @@ from test_auto_analysis_release_gate_browser import (
     _url,
     _wait_ready,
 )
-from test_performance_views_browser import ViewFixture, browser, source_run_api
+from test_performance_views_browser import ViewFixture, source_run_api
 
 
 @pytest.fixture
@@ -90,16 +90,18 @@ def test_remaining_pass_is_reachable_and_stale_edits_are_rejected(browser):
             fresh.ready()
             assert fresh.page.evaluate("__viewTest.state.viewPass") == 1
             assert (
-                fresh.page.evaluate("__viewTest.state.snapshot.rows[0].output")
-                == "pass-2 output 0"
-            )
-            assert (
                 fresh.page.evaluate(
                     "__viewTest.state.snapshot.rows[0].metric_values[0]"
                 )
                 == 1
             )
+            # Opening the item loads the remaining pass's own output.
             fresh.page.locator("#items-grid .item-header-expand").first.click()
+            fresh.page.locator("#items-grid .item-input-row").first.wait_for()
+            assert (
+                fresh.page.evaluate("__viewTest.state.snapshot.rows[0].output")
+                == "pass-2 output 0"
+            )
             fresh.page.locator("#items-grid .metric-edit-open").first.click()
             editor = fresh.page.locator("#items-grid .metric-edit-input:visible").first
             editor.fill("0")
@@ -219,8 +221,13 @@ def test_compare_edits_use_loaded_pass_version_after_deletion(browser):
             )
             assert response.status_code == 200, response.text
 
+            def open_first(fixture):
+                if not fixture.page.locator("#items-grid .item-input-row").count():
+                    fixture.page.locator("#items-grid .item-header-expand").first.click()
+                fixture.page.locator("#items-grid .item-input-row").first.wait_for()
+
             def edit_first(fixture):
-                fixture.page.locator("#items-grid .item-header-expand").first.click()
+                open_first(fixture)
                 fixture.page.locator("#items-grid .metric-edit-open").first.click()
                 editor = fixture.page.locator(
                     "#items-grid .metric-edit-input:visible"
@@ -248,6 +255,8 @@ def test_compare_edits_use_loaded_pass_version_after_deletion(browser):
                 fresh.page.evaluate("__viewTest.state.runs[0].run.file_path")
                 == "run-1::pass1"
             )
+            # Opening the item loads the remaining pass's own output.
+            open_first(fresh)
             assert (
                 fresh.page.evaluate("__viewTest.state.runs[0].snapshot.rows[0].output")
                 == "pass-2 output 0"

@@ -23,7 +23,6 @@ from qym_platform.db.models import (
 )
 from qym_platform.deps import get_db
 from test_repeat_pass_deletion import HEADERS, RUN_ID, _seed
-from test_retention import migrated_postgres  # noqa: F401
 
 
 @pytest.fixture(params=["json", "jsonb"])

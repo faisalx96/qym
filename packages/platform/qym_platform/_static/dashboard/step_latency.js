@@ -15,9 +15,7 @@
     return Math.max(1, Math.round(ms * 1000)) + "\u00b5s";
   };
 
-  const esc = (s) => String(s == null ? "" : s)
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+  const esc = (s) => QymSafe.escapeHtml(s == null ? "" : String(s));
 
   // Row annotation: "mean 2.1s · n=12 · err=3". annPlain() drives the gutter
   // width math, annMarkup() renders it (err in the danger color) — one source
@@ -217,6 +215,12 @@
     return "/api/runs/step-latency?" + q.toString();
   }
 
+  // Compare lanes that are single runs or passes come back with the pooled
+  // request (group_by=ref) instead of one request per lane.
+  function lanesFromPooled() {
+    return state.pooled && state.series.every((s) => s.refs.length === 1);
+  }
+
   async function loadGroups(rollup, seq) {
     if (state.cache[rollup]) {
       return { groups: state.cache[rollup], passes: state.passes,
@@ -224,7 +228,9 @@
     }
     const pending = state.pending;
     if (!pending[rollup]) pending[rollup] = (async () => {
-      const resp = await fetch(apiUrl({ rollup: rollup }), {
+      const lanes = lanesFromPooled();
+      const params = lanes ? { rollup: rollup, group_by: "ref" } : { rollup: rollup };
+      const resp = await fetch(apiUrl(params), {
         headers: { Accept: "application/json" },
         credentials: "same-origin",
       });
@@ -232,6 +238,13 @@
       const payload = await resp.json();
       if (seq !== state.seq) return null;
       payload.groups = (payload.groups || []).filter(hasGroupData);
+      const byRef = payload.groups_by_ref;
+      if (lanes && byRef && typeof byRef === "object") {
+        const bucket = state.runData[rollup] || (state.runData[rollup] = {});
+        state.series.forEach((s) => {
+          bucket[s.key] = (byRef[s.refs[0]] || []).filter(hasGroupData);
+        });
+      }
       state.cache[rollup] = payload.groups;
       state.passes = payload.passes || [];
       state.traceCount = payload.trace_count || 0;
@@ -264,6 +277,10 @@
 
   async function ensureRunData(seq = state.seq) {
     const rollup = state.rollup;
+    // Filled by the pooled request; a server without group_by leaves the
+    // lanes empty and they fall back to their own requests below.
+    if (lanesFromPooled()) await loadGroups(rollup, seq);
+    if (seq !== state.seq) return;
     const bucket = state.runData[rollup] || (state.runData[rollup] = {});
     const pending = state.runPending[rollup] || (state.runPending[rollup] = {});
     const missing = state.activeSeries.filter((key) => !bucket[key]);
@@ -474,7 +491,7 @@
       if (g.n > 0) {
         const p5 = scale.x(g.p5_ms), p25 = scale.x(g.p25_ms), p75 = scale.x(g.p75_ms),
           p95 = scale.x(g.p95_ms), med = scale.x(g.median_ms), mean = scale.x(g.mean_ms);
-        const title = "<title>" + esc(g.step_type) + " (" + g.phase + ")\n" +
+        const title = "<title>" + esc(g.step_type) + " (" + esc(g.phase) + ")\n" +
           "n=" + g.n + ", err=" + g.error_count + "\n" +
           "p5 " + FMT(g.p5_ms) + " \u00b7 p25 " + FMT(g.p25_ms) +
           " \u00b7 median " + FMT(g.median_ms) + " \u00b7 p75 " + FMT(g.p75_ms) +
@@ -574,7 +591,7 @@
         }
         const p5 = scale.x(g.p5_ms), p25 = scale.x(g.p25_ms), p75 = scale.x(g.p75_ms),
           p95 = scale.x(g.p95_ms), medX = scale.x(g.median_ms), meanX = scale.x(g.mean_ms);
-        const title = "<title>" + esc(r.step_type) + " (" + r.phase + ") \u2014 " +
+        const title = "<title>" + esc(r.step_type) + " (" + esc(r.phase) + ") \u2014 " +
           esc(seriesLabel(state.activeSeries[li])) + "\nn=" + g.n + ", err=" + g.error_count +
           "\nmedian " + FMT(g.median_ms) + " \u00b7 mean " + FMT(g.mean_ms) +
           "\np5 " + FMT(g.p5_ms) + " \u00b7 p95 " + FMT(g.p95_ms) + "</title>";

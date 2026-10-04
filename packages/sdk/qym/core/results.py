@@ -2,11 +2,12 @@
 
 import csv
 import json
+import math
 import os
 import statistics
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 import re
 
 from rich import box
@@ -21,24 +22,96 @@ from rich.text import Text
 
 console = Console()
 
+# ``metadata.status`` values that mark a scorer error (the SDK sets them when a
+# metric raises, times out or returns an ``error`` key; the platform reads the
+# same values: qym_platform.services.run_means.METRIC_ERROR_STATUSES).
+METRIC_ERROR_STATUSES = ("error", "failed", "timeout")
+
+
+def _finite(value: Any) -> Optional[float]:
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    if isinstance(value, (int, float)) and math.isfinite(float(value)):
+        return float(value)
+    return None
+
+
+def score_outcome(score: Any) -> Tuple[Optional[float], bool]:
+    """Read one stored metric score as the platform does.
+
+    Returns ``(value, scorer_error)``. A scorer error is a score dict with a
+    non-empty ``error`` key, or a score (dict or ``MetricResult``) whose
+    ``metadata.status`` is error, failed or timeout; a resumed checkpoint
+    stores it as ``"ERROR: ..."``. Its value is ``None``: the error rule, not
+    the stored 0, decides how it counts. ``(None, False)`` is a value that was
+    not scored.
+    """
+    if score is None:
+        return None, False
+    if isinstance(score, dict):
+        error = score.get("error")
+        meta = score.get("metadata")
+        if (error is not None and str(error).strip()) or (
+            isinstance(meta, dict)
+            and str(meta.get("status") or "").strip().lower() in METRIC_ERROR_STATUSES
+        ):
+            return None, True
+        return score_outcome(score.get("score"))
+    if isinstance(score, str):
+        # Only the checkpoint's own marker; a label such as "Errorless" is not one.
+        return None, score.strip().startswith("ERROR:")
+    value = _finite(score)
+    if value is not None:
+        return value, False
+    if hasattr(score, "score") and hasattr(score, "metadata"):  # MetricResult
+        meta = getattr(score, "metadata", None)
+        if (
+            isinstance(meta, dict)
+            and str(meta.get("status") or "").strip().lower() in METRIC_ERROR_STATUSES
+        ):
+            return None, True
+        return _finite(getattr(score, "score", None)), False
+    return None, False
+
 
 class EvaluationResult:
-    """Container for evaluation results with analysis capabilities."""
-    
-    def __init__(self, dataset_name: str, run_name: str, metrics: List[str], run_metadata: Optional[Dict[str, Any]] = None, run_config: Optional[Dict[str, Any]] = None):
+    """Container for evaluation results with analysis capabilities.
+
+    Metric stats follow the platform's error rule (one rule for a run's
+    mean): a task error or scorer error counts as 0 for a higher-is-better
+    metric or one that declares no direction, and is left out of the mean
+    (and counted beside it) for a lower-is-better metric
+    (``direction="minimize"``), whose best value 0 would otherwise reward
+    it. Repeat runs judge each pass the same way; an errored pass is never a
+    pass in Pass@k / Pass^k.
+    """
+
+    def __init__(
+        self,
+        dataset_name: str,
+        run_name: str,
+        metrics: List[str],
+        run_metadata: Optional[Dict[str, Any]] = None,
+        run_config: Optional[Dict[str, Any]] = None,
+        metric_specs: Optional[Dict[str, Any]] = None,
+    ):
         """
         Initialize results container.
-        
+
         Args:
             dataset_name: Name of the evaluated dataset
             run_name: Name of this evaluation run
             metrics: List of metric names used
+            metric_specs: Metric name -> ``MetricSpec`` (or its dict form).
+                The declared ``direction`` decides how errors count, and
+                ``pass_threshold`` the default Pass@k threshold.
         """
         self.dataset_name = dataset_name
         self.run_name = run_name
         self.metrics = metrics
         self.run_metadata = run_metadata or {}
         self.run_config = run_config or {}
+        self._metric_specs: Dict[str, Any] = dict(metric_specs or {})
         self.start_time = datetime.now()
         self.end_time = None
         self.last_saved_path: Optional[str] = None
@@ -91,20 +164,97 @@ class EvaluationResult:
             "time": time_seconds,
         }
     
-    # ── Repeat runs (samples=k) ──────────────────────────────────────
+    # ── Error rule (the platform's, services/run_means.py) ───────────
+
+    @property
+    def metric_specs(self) -> Dict[str, Any]:
+        """Metric name -> ``MetricSpec`` (or its dict form) of this run."""
+        return self._metric_specs
+
+    @metric_specs.setter
+    def metric_specs(self, specs: Optional[Dict[str, Any]]) -> None:
+        self._metric_specs = dict(specs or {})
+        # The reduced per-item view depends on each metric's direction.
+        for item_id in list(self.passes):
+            self._reduce_item(item_id)
+
+    def _spec_field(self, metric_name: Optional[str], field: str) -> Any:
+        spec = self._metric_specs.get(metric_name) if metric_name else None
+        if isinstance(spec, dict):
+            return spec.get(field)
+        return getattr(spec, field, None)
+
+    def metric_direction(self, metric_name: Optional[str]) -> Optional[str]:
+        """The metric's declared direction: "maximize", "minimize" or None."""
+        direction = (
+            str(self._spec_field(metric_name, "direction") or "").strip().lower()
+        )
+        return direction if direction in ("maximize", "minimize") else None
+
+    def errors_left_out(self, metric_name: Optional[str]) -> bool:
+        """Whether errors are left out of this metric's mean instead of
+        counting as 0: only for a lower-is-better metric, whose best value is
+        0."""
+        return self.metric_direction(metric_name) == "minimize"
+
+    def _pass_threshold(
+        self, metric_name: Optional[str], threshold: Optional[float]
+    ) -> float:
+        """An explicit threshold, else the metric's ``pass_threshold``, else
+        0.2 for a lower-is-better metric and 0.8 otherwise (as the platform)."""
+        if threshold is not None:
+            return float(threshold)
+        declared = self._spec_field(metric_name, "pass_threshold")
+        if declared is not None:
+            return float(declared)
+        return 0.2 if self.errors_left_out(metric_name) else 0.8
 
     @staticmethod
-    def _main_numeric_score(score: Any) -> Optional[float]:
-        """Extract the numeric main score from a stored metric value."""
-        if isinstance(score, dict):
-            if "error" in score:
-                return 0.0
-            score = score.get("score")
-        if isinstance(score, bool):
-            return 1.0 if score else 0.0
-        if isinstance(score, (int, float)):
-            return float(score)
-        return None
+    def _outcome(
+        entry: Dict[str, Any], metric: str, *, pass_entry: bool
+    ) -> Tuple[Optional[float], str]:
+        """One item (or pass) of a metric: ``(value, kind)`` with kind
+        "scored", "scorer_error", "task_error" or "unscored"."""
+        if pass_entry and "error" in entry:
+            return None, "task_error"
+        value, scorer_error = score_outcome((entry.get("scores") or {}).get(metric))
+        if scorer_error:
+            return None, "scorer_error"
+        return value, "scored" if value is not None else "unscored"
+
+    def _metric_outcomes(
+        self, metric: str
+    ) -> Dict[str, List[Tuple[Optional[float], str]]]:
+        """Per item, the outcome of each pass (one for a single run)."""
+        out: Dict[str, List[Tuple[Optional[float], str]]] = {}
+        if self.passes:
+            for item_id, entries in self.passes.items():
+                out[item_id] = [
+                    self._outcome(entries[p], metric, pass_entry=True)
+                    for p in sorted(entries)
+                ]
+            return out
+        for item_id, result in self.results.items():
+            out[item_id] = [self._outcome(result, metric, pass_entry=False)]
+        for item_id in self.errors:
+            out.setdefault(item_id, [(None, "task_error")])
+        return out
+
+    @staticmethod
+    def _counted(
+        outcomes: Sequence[Tuple[Optional[float], str]], left_out: bool
+    ) -> List[float]:
+        """The values an item's outcomes put in the mean: a scored value, and
+        an error as 0 unless errors are left out. Unscored ones are skipped."""
+        values: List[float] = []
+        for value, kind in outcomes:
+            if kind == "scored" and value is not None:
+                values.append(value)
+            elif kind in ("scorer_error", "task_error") and not left_out:
+                values.append(0.0)
+        return values
+
+    # ── Repeat runs (samples=k) ──────────────────────────────────────
 
     def add_pass_result(self, item_id: str, pass_number: int, result: Dict[str, Any]):
         """Record one pass's successful result and refresh the reduced view."""
@@ -120,7 +270,11 @@ class EvaluationResult:
         task_started_at_ms: Optional[int] = None,
         time_seconds: Optional[float] = None,
     ):
-        """Record one pass's failure (scores 0 in reductions) and refresh."""
+        """Record one pass's failure and refresh.
+
+        The failed pass counts as 0, or is left out for a lower-is-better
+        metric (the class docstring's error rule).
+        """
         self.passes.setdefault(item_id, {})[int(pass_number)] = {
             "error": error,
             "trace_id": trace_id,
@@ -148,16 +302,13 @@ class EvaluationResult:
         reduced = dict(successes[-1])  # representative fields: last success
         mean_scores: Dict[str, Any] = {}
         for metric in self.metrics:
-            values: List[float] = []
-            for entry in ordered:
-                if "error" in entry:
-                    values.append(0.0)  # failed pass scores 0 (platform rule)
-                    continue
-                val = self._main_numeric_score(
-                    (entry.get("scores") or {}).get(metric)
-                )
-                if val is not None:
-                    values.append(val)
+            # The item's value is the mean over its passes; a pass whose task
+            # or scorer failed counts as 0, or is left out when lower is
+            # better (the platform's reduce_pass_scores).
+            values = self._counted(
+                [self._outcome(entry, metric, pass_entry=True) for entry in ordered],
+                self.errors_left_out(metric),
+            )
             if values:
                 mean_scores[metric] = sum(values) / len(values)
             else:
@@ -174,75 +325,126 @@ class EvaluationResult:
         self.errors.pop(item_id, None)
         self.results[item_id] = reduced
 
+    def pass_means(self, pass_number: int) -> Dict[str, float]:
+        """Each metric's mean over one pass, by the error rule (a failed task
+        or scorer counts as 0, or is left out when lower is better). A metric
+        with nothing to average in that pass is omitted."""
+        means: Dict[str, float] = {}
+        for metric in self.metrics:
+            left_out = self.errors_left_out(metric)
+            values: List[float] = []
+            for entries in self.passes.values():
+                entry = entries.get(int(pass_number))
+                if entry is not None:
+                    values.extend(
+                        self._counted(
+                            [self._outcome(entry, metric, pass_entry=True)], left_out
+                        )
+                    )
+            if values:
+                means[metric] = sum(values) / len(values)
+        return means
+
     def item_pass_scores(
         self, metric_name: Optional[str] = None
-    ) -> Dict[str, List[float]]:
-        """Per-item list of numeric per-pass scores (failed pass -> 0.0)."""
+    ) -> Dict[str, List[Optional[float]]]:
+        """Per-item list of numeric per-pass scores (one per item for a
+        single run).
+
+        A pass whose task or scorer failed is 0.0, or ``None`` for a
+        lower-is-better metric: never a pass, and left out of averages and
+        the best score. A pass with no score is skipped.
+        """
+        return self._item_pass_slots(metric_name)[0]
+
+    def _item_pass_slots(
+        self, metric_name: Optional[str] = None
+    ) -> Tuple[Dict[str, List[Optional[float]]], Dict[str, List[bool]]]:
+        """:meth:`item_pass_scores` plus one success flag per score.
+
+        A failed pass is never a success, also where its 0.0 meets a
+        threshold of 0 or below; the flag keeps that apart from its numeric
+        value. Both maps have the same items and lengths.
+        """
         metric = metric_name or (self.metrics[0] if self.metrics else None)
         if metric is None:
-            return {}
-        out: Dict[str, List[float]] = {}
-        if self.passes:
-            for item_id, entries in self.passes.items():
-                scores: List[float] = []
-                for p in sorted(entries):
-                    entry = entries[p]
-                    if "error" in entry:
-                        scores.append(0.0)
-                        continue
-                    val = self._main_numeric_score(
-                        (entry.get("scores") or {}).get(metric)
-                    )
-                    scores.append(val if val is not None else 0.0)
-                if scores:
-                    out[item_id] = scores
-            return out
-        # Single runs: one score per item; errors score 0.
-        for item_id, result in self.results.items():
-            val = self._main_numeric_score((result.get("scores") or {}).get(metric))
-            out[item_id] = [val if val is not None else 0.0]
-        for item_id in self.errors:
-            out.setdefault(item_id, [0.0])
-        return out
+            return {}, {}
+        error_value = None if self.errors_left_out(metric) else 0.0
+        scores_out: Dict[str, List[Optional[float]]] = {}
+        eligible_out: Dict[str, List[bool]] = {}
+        for item_id, outcomes in self._metric_outcomes(metric).items():
+            counted = [(value, kind) for value, kind in outcomes if kind != "unscored"]
+            if counted:
+                scores_out[item_id] = [
+                    value if kind == "scored" else error_value
+                    for value, kind in counted
+                ]
+                eligible_out[item_id] = [kind == "scored" for _, kind in counted]
+        return scores_out, eligible_out
 
     def pass_at(
         self,
         k: int,
         metric: Optional[str] = None,
-        threshold: float = 0.8,
+        threshold: Optional[float] = None,
     ) -> float:
-        """Unbiased Pass@k over the stored passes (any k <= samples)."""
+        """Unbiased Pass@k over the stored passes (any k <= samples).
+
+        Passing follows the metric's direction (``<= threshold`` when lower
+        is better); ``threshold`` defaults as in :meth:`group_stats`.
+        """
         from .reducers import estimate_pass_at
 
         if k > max(self.samples, 1):
             raise ValueError(f"k ({k}) cannot exceed samples ({self.samples})")
+        metric = metric or (self.metrics[0] if self.metrics else None)
+        items_scores, eligible = self._item_pass_slots(metric)
         return estimate_pass_at(
-            self.item_pass_scores(metric), k, threshold=threshold
+            items_scores,
+            k,
+            threshold=self._pass_threshold(metric, threshold),
+            direction=self.metric_direction(metric) or "maximize",
+            eligible=eligible,
         )
 
     def pass_hat(
         self,
         k: int,
         metric: Optional[str] = None,
-        threshold: float = 0.8,
+        threshold: Optional[float] = None,
     ) -> float:
         """Unbiased Pass^k (all k pass) over the stored passes."""
         from .reducers import estimate_pass_hat
 
         if k > max(self.samples, 1):
             raise ValueError(f"k ({k}) cannot exceed samples ({self.samples})")
+        metric = metric or (self.metrics[0] if self.metrics else None)
+        items_scores, eligible = self._item_pass_slots(metric)
         return estimate_pass_hat(
-            self.item_pass_scores(metric), k, threshold=threshold
+            items_scores,
+            k,
+            threshold=self._pass_threshold(metric, threshold),
+            direction=self.metric_direction(metric) or "maximize",
+            eligible=eligible,
         )
 
     def group_stats(
         self,
         metric: Optional[str] = None,
-        threshold: float = 0.8,
+        threshold: Optional[float] = None,
         report_k: Optional[int] = None,
-    ) -> Dict[str, Optional[float]]:
+    ) -> Dict[str, Any]:
         """The reported group set (Pass@k, Pass^k, Avg@k, Max@k, Consistency,
         Reliability) with k = samples. Key names match analyze_group_runs.
+
+        The metric's declared direction applies, as on the platform: for a
+        lower-is-better metric a pass is ``<= threshold`` and ``max_at_k`` is
+        the mean of each item's lowest (best) score. An errored pass is never
+        a pass; it counts as 0 in ``avg_at_k``/``max_at_k``, or is left out of
+        them for a lower-is-better metric (``None`` when every pass errored).
+        ``threshold`` defaults to the metric's ``pass_threshold``, else 0.2
+        when lower is better and 0.8 otherwise. The result also carries the
+        ``direction`` used.
 
         ``report_k`` publishes pass@k below the sampled count via the
         unbiased subset estimator (run 9 passes, report pass@3); it defaults
@@ -255,12 +457,24 @@ class EvaluationResult:
             raise ValueError(
                 f"report_k ({report_k}) cannot exceed samples ({self.samples})"
             )
-        return _group_stats(
-            self.item_pass_scores(metric),
-            threshold=threshold,
+        metric = metric or (self.metrics[0] if self.metrics else None)
+        direction = self.metric_direction(metric)
+        items_scores, eligible = self._item_pass_slots(metric)
+        stats: Dict[str, Any] = _group_stats(
+            items_scores,
+            threshold=self._pass_threshold(metric, threshold),
             k=max(self.samples, 1),
             report_k=report_k,
+            direction=direction or "maximize",
+            eligible=eligible,
         )
+        if self.errors_left_out(metric) and all(
+            score is None for scores in items_scores.values() for score in scores
+        ):
+            # No score to average: 0 would read as this metric's best value.
+            stats["avg_at_k"] = stats["max_at_k"] = None
+        stats["direction"] = direction
+        return stats
 
     def finish(self):
         """Mark evaluation as finished."""
@@ -285,73 +499,83 @@ class EvaluationResult:
             return (self.end_time - self.start_time).total_seconds()
         return None
     
-    def get_metric_stats(self, metric_name: str) -> Dict[str, float]:
+    def get_metric_stats(self, metric_name: str) -> Dict[str, Any]:
         """
-        Get statistics for a specific metric.
+        Get statistics for a specific metric, by the platform's error rule.
 
-        Returns dict with: mean, std, min, max, success_rate.
-        For repeat runs (samples > 1) the stats are computed over ALL
-        per-pass scores (failed pass -> 0.0) — "mean per attempt" — and the
-        dict gains ci_low/ci_high (bootstrap 95% CI on the mean). The
-        bootstrap resamples items, keeping each item's passes together:
-        passes of the same item are correlated, so a flat resample would
-        understate the interval.
+        Returns dict with: mean, std, min, max, success_rate, plus
+        ``count`` (items in the mean), ``error_count`` (``task_error_count``
+        + ``metric_error_count``), ``errors_left_out`` and ``direction``.
+
+        A task error or scorer error counts as 0 in the mean, or, for a
+        lower-is-better metric (``direction="minimize"``), is left out of it
+        and only counted in ``error_count``. Such a metric has no mean when
+        every item errored: mean, std, min and max are then ``None`` (0 would
+        read as its best value). ``success_rate`` is the share of scored
+        items whose scorer did not fail (the run's task success rate for
+        repeat runs).
+
+        Repeat runs (samples > 1) judge every pass that way. Each item's
+        value is the mean over its counted passes and ``mean`` is the mean
+        over items, as the platform's run mean; with every pass counted this
+        is the mean score per attempt. std/min/max cover the counted passes,
+        the error counts count passes, and the dict gains ci_low/ci_high
+        (bootstrap 95% CI on the mean). The bootstrap resamples items,
+        keeping each item's passes together: passes of the same item are
+        correlated, so a flat resample would understate the interval.
         """
-        if self.samples > 1 and self.passes:
-            from .reducers import clustered_mean_ci
+        direction = self.metric_direction(metric_name)
+        left_out = self.errors_left_out(metric_name)
+        repeat = self.samples > 1 and bool(self.passes)
+        item_values: List[float] = []
+        counted: List[float] = []
+        kinds = {"scored": 0, "scorer_error": 0, "task_error": 0, "unscored": 0}
+        for outcomes in self._metric_outcomes(metric_name).values():
+            for _, kind in outcomes:
+                kinds[kind] += 1
+            values = self._counted(outcomes, left_out)
+            if values:
+                item_values.append(sum(values) / len(values))
+                counted.extend(values)
 
-            groups = list(self.item_pass_scores(metric_name).values())
-            flat = [score for scores_list in groups for score in scores_list]
-            if not flat:
-                return {
-                    'mean': 0.0, 'std': 0.0, 'min': 0.0, 'max': 0.0,
-                    'success_rate': 0.0, 'ci_low': 0.0, 'ci_high': 0.0,
-                }
-            ci = clustered_mean_ci(groups)
-            return {
-                'mean': ci['mean'],
-                'std': statistics.stdev(flat) if len(flat) > 1 else 0.0,
-                'min': min(flat),
-                'max': max(flat),
-                'success_rate': self.success_rate,
-                'ci_low': ci['ci_low'],
-                'ci_high': ci['ci_high'],
-            }
-
-        scores = []
-        errors = 0
-
-        for result in self.results.values():
-            if 'scores' in result and metric_name in result['scores']:
-                score = result['scores'][metric_name]
-                if isinstance(score, dict):
-                    if 'error' in score:
-                        errors += 1
-                        continue
-                    if 'score' in score and isinstance(score['score'], (int, float)):
-                        scores.append(float(score['score']))
-                        continue
-                if isinstance(score, (int, float)):
-                    scores.append(float(score))
-                elif isinstance(score, bool):
-                    scores.append(1.0 if score else 0.0)
-        
-        if not scores:
-            return {
-                'mean': 0.0,
-                'std': 0.0,
-                'min': 0.0,
-                'max': 0.0,
-                'success_rate': 0.0
-            }
-        
-        return {
-            'mean': statistics.mean(scores),
-            'std': statistics.stdev(scores) if len(scores) > 1 else 0.0,
-            'min': min(scores),
-            'max': max(scores),
-            'success_rate': len(scores) / (len(scores) + errors)
+        checked = kinds["scored"] + kinds["scorer_error"]
+        stats: Dict[str, Any] = {
+            'mean': 0.0,
+            'std': 0.0,
+            'min': 0.0,
+            'max': 0.0,
+            'success_rate': (
+                self.success_rate
+                if repeat
+                else (kinds["scored"] / checked if checked else 0.0)
+            ),
         }
+        if item_values:
+            stats.update(
+                mean=sum(item_values) / len(item_values),
+                std=statistics.stdev(counted) if len(counted) > 1 else 0.0,
+                min=min(counted),
+                max=max(counted),
+            )
+        elif left_out:
+            stats.update(mean=None, std=None, min=None, max=None)
+        stats.update(
+            count=len(item_values),
+            error_count=kinds["task_error"] + kinds["scorer_error"],
+            task_error_count=kinds["task_error"],
+            metric_error_count=kinds["scorer_error"],
+            errors_left_out=left_out,
+            direction=direction,
+        )
+        if repeat:
+            from .reducers import mean_ci
+
+            if item_values:
+                ci = mean_ci(item_values)
+                stats.update(ci_low=ci['ci_low'], ci_high=ci['ci_high'])
+            else:
+                stats.update(ci_low=stats['mean'], ci_high=stats['mean'])
+        return stats
     
     def get_timing_stats(self) -> Dict[str, float]:
         """
@@ -394,13 +618,19 @@ class EvaluationResult:
             lines.append(f"Duration: {self.duration:.1f}s")
         
         lines.append("\nMetric Results:")
+        repeat = self.samples > 1 and bool(self.passes)
         for metric in self.metrics:
             stats = self.get_metric_stats(metric)
             lines.append(f"  {metric}:")
-            lines.append(f"    Mean: {stats['mean']:.3f}")
-            lines.append(f"    Std:  {stats['std']:.3f}")
-            lines.append(f"    Range: [{stats['min']:.3f}, {stats['max']:.3f}]")
-        
+            lines.append(f"    Mean: {_fmt_stat(stats['mean'])}")
+            lines.append(f"    Std:  {_fmt_stat(stats['std'])}")
+            lines.append(
+                f"    Range: [{_fmt_stat(stats['min'])}, {_fmt_stat(stats['max'])}]"
+            )
+            note = metric_error_note(stats, repeat=repeat)
+            if note:
+                lines.append(f"    Errors: {note}")
+
         if self.errors:
             lines.append(f"\nErrors: {len(self.errors)} items failed")
             # Show all errors
@@ -431,10 +661,15 @@ class EvaluationResult:
     def to_dict(self) -> Dict[str, Any]:
         """Convert results to dictionary format."""
         metric_stats = {
-            metric: self.get_metric_stats(metric) 
+            metric: self.get_metric_stats(metric)
             for metric in self.metrics
         }
-        
+        metric_specs = {
+            name: spec.to_dict() if hasattr(spec, "to_dict") else dict(spec)
+            for name, spec in self._metric_specs.items()
+            if hasattr(spec, "to_dict") or isinstance(spec, dict)
+        }
+
         return {
             'dataset_name': self.dataset_name,
             'run_name': self.run_name,
@@ -444,6 +679,7 @@ class EvaluationResult:
             'total_items': self.total_items,
             'success_rate': self.success_rate,
             'metrics': self.metrics,
+            'metric_specs': metric_specs,
             'metric_stats': metric_stats,
             'langfuse_url': self.langfuse_url,
             'inputs': self.inputs,
@@ -980,38 +1216,55 @@ def _build_metric_section(results: Sequence[EvaluationResult]):
             header_style="bold",
             padding=(0, 1),
         )
-        metric_table.add_column("Metric", style="cyan", ratio=2)
-        metric_table.add_column("Mean", justify="right", width=10)
-        metric_table.add_column("Std", justify="right", width=10)
-        metric_table.add_column("Min", justify="right", width=10)
-        metric_table.add_column("Max", justify="right", width=10)
-        metric_table.add_column("Success", justify="right", width=10)
+        # The stat columns take their content's width, so the metric name
+        # keeps its room on a narrow terminal next to the Errors column.
+        metric_table.add_column("Metric", style="cyan", ratio=1, min_width=12)
+        for heading in ("Mean", "Std", "Min", "Max", "Errors", "Success"):
+            metric_table.add_column(heading, justify="right", no_wrap=True)
 
+        repeat = getattr(result, "samples", 1) > 1 and bool(getattr(result, "passes", None))
+        notes: List[str] = []
         if not result.metrics:
-            metric_table.add_row("-", "-", "-", "-", "-", "-")
+            metric_table.add_row("-", "-", "-", "-", "-", "-", "-")
         else:
             for metric in result.metrics:
                 stats = result.get_metric_stats(metric)
+                errors = int(stats.get("error_count") or 0)
+                if errors:
+                    errors_cell = f"{errors} " + (
+                        "left out" if stats.get("errors_left_out") else "as 0"
+                    )
+                    notes.append(f"{metric}: {metric_error_note(stats, repeat=repeat)}")
+                else:
+                    errors_cell = "0"
                 metric_table.add_row(
-                    metric,
-                    f"{stats['mean']:.3f}",
-                    f"{stats['std']:.3f}",
-                    f"{stats['min']:.3f}",
-                    f"{stats['max']:.3f}",
+                    Text(metric),  # a name is text, never Rich markup
+                    _fmt_stat(stats['mean']),
+                    _fmt_stat(stats['std']),
+                    _fmt_stat(stats['min']),
+                    _fmt_stat(stats['max']),
+                    errors_cell,
                     f"{stats['success_rate'] * 100:.1f}%",
                 )
+        if notes:
+            # Task and scorer errors count as 0, or are left out of a
+            # lower-is-better metric's mean: the platform's rule.
+            metric_table.caption = Text("; ".join(notes))
 
         panel_title = f"{result.run_name} Metrics" if len(results) > 1 else "Metric Details"
         panel_body: Any = metric_table
-        if getattr(result, "samples", 1) > 1 and getattr(result, "passes", None):
+        if repeat:
             gs = result.group_stats()
             k = gs.get("k") or result.samples
+            best = "Min" if gs.get("direction") == "minimize" else "Max"
             parts = [
                 f"Pass@{k} {gs['pass_at_k']:.2f}",
                 f"Pass^{k} {gs['pass_hat_k']:.2f}",
-                f"Avg@{k} {gs['avg_at_k']:.2f}",
-                f"Max@{k} {gs['max_at_k']:.2f}",
+                f"Avg@{k} {_fmt_stat(gs['avg_at_k'], 2)}",
+                f"{best}@{k} {_fmt_stat(gs['max_at_k'], 2)}",
             ]
+            if result.metrics:
+                parts[0] = f"{result.metrics[0]}: {parts[0]}"
             if gs.get("consistency") is not None:
                 parts.append(f"Consistency {gs['consistency']:.2f}")
             if gs.get("reliability") is not None:
@@ -1051,6 +1304,25 @@ def _build_error_panel(results: Sequence[EvaluationResult]) -> Optional[Panel]:
         border_style="red",
         padding=(0, 1),
     )
+
+
+def _fmt_stat(value: Optional[float], digits: int = 3) -> str:
+    """A stat for display; ``None`` (no mean) reads as "n/a"."""
+    return "n/a" if value is None else f"{value:.{digits}f}"
+
+
+def metric_error_note(stats: Dict[str, Any], *, repeat: bool = False) -> Optional[str]:
+    """How a metric's errors entered its mean, e.g. "1 item errored, counted
+    as 0" (``None`` without errors). ``stats`` is ``get_metric_stats``."""
+    count = int(stats.get("error_count") or 0)
+    if not count:
+        return None
+    unit = "pass" if repeat else "item"
+    if count != 1:
+        unit += "es" if repeat else "s"
+    if stats.get("errors_left_out"):
+        return f"{count} {unit} errored, left out of the mean (lower is better)"
+    return f"{count} {unit} errored, counted as 0"
 
 
 def _human_duration(seconds: Optional[float]) -> str:

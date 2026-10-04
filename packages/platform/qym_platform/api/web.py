@@ -4,11 +4,12 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
+from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from qym_platform.auth import Principal, require_ui_principal
-from qym_platform.auth_oidc import local_auth_enabled
+from qym_platform.auth_oidc import end_user_sessions, local_auth_enabled
 from qym_platform.api.projects import serialize_project_payloads
 from qym_platform.db.models import (
     AuditLog,
@@ -160,7 +161,12 @@ def admin_update_user(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_admin(principal)
-    user = db.query(User).filter(User.id == user_id).first()
+    # Lock the target and the active admins in id order before reading them,
+    # so two concurrent demotions cannot both count the other admin as active.
+    db.query(User.id).filter(
+        or_(User.id == user_id, and_(User.role == UserRole.ADMIN, User.is_active.is_(True)))
+    ).order_by(User.id).with_for_update().all()
+    user = db.query(User).filter(User.id == user_id).populate_existing().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -172,10 +178,28 @@ def admin_update_user(
         user.email = next_email
     if req.display_name is not None:
         user.display_name = req.display_name.strip()
+    if req.is_active is False and user.id == principal.user.id:
+        raise HTTPException(status_code=400, detail="You cannot disable your own account")
+    will_be_admin = (req.role if req.role is not None else user.role) == UserRole.ADMIN and (
+        req.is_active if req.is_active is not None else user.is_active
+    )
+    if user.role == UserRole.ADMIN and user.is_active and not will_be_admin:
+        other_admins = (
+            db.query(User.id)
+            .filter(User.role == UserRole.ADMIN, User.is_active.is_(True), User.id != user.id)
+            .count()
+        )
+        if not other_admins:
+            # Nobody could sign in to undo this: the bootstrap token only
+            # works while there are no users at all.
+            raise HTTPException(status_code=409, detail="At least one active admin must remain")
     if req.role is not None:
         user.role = req.role
     if req.is_active is not None:
         user.is_active = req.is_active
+        if not req.is_active:
+            # A later re-enable must not revive sessions from before the disable.
+            end_user_sessions(db, user.id)
 
     db.commit()
     db.refresh(user)
@@ -191,6 +215,9 @@ def _store_temporary_password(db: Session, user: User, actor_id: str, password_h
         db.add(credential)
     credential.password_hash = password_hash
     credential.must_change_password = True
+    # A new credential is an INSERT, which the password hook does not see; a
+    # reset always signs the user out everywhere.
+    end_user_sessions(db, user.id)
 
     has_identity = (
         db.query(UserIdentity.id)

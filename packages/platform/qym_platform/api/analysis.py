@@ -4,7 +4,6 @@ import ast
 import asyncio
 import copy
 import hashlib
-import inspect
 import json
 import logging
 import math
@@ -43,18 +42,26 @@ from qym_platform.db.models import (
     UserRole,
 )
 from qym_platform.db.session import SessionLocal
+from qym_platform.services.run_review import (
+    audit_correction_review,
+    correction_review_state,
+)
 from qym_platform.deps import get_db
 from qym_platform.llm_endpoint_security import (
     LlmEndpointValidationError,
     validate_llm_base_url,
 )
 from qym_platform.permissions import (
+    ARCHIVED_PROJECT_DETAIL,
     apply_reviewable_run_filter,
     can_delete_run,
     can_review_run,
     can_view_run,
     has_project_access,
+    is_project_archived,
     is_project_manager,
+    project_for_read_by_slug,
+    require_project_writable,
 )
 from qym_platform.secrets import resolve_llm_api_key
 from qym_platform.services.analysis_aggregation import (
@@ -181,6 +188,9 @@ class _ProjectAnalysisScope:
 
 def _can_operate_analyzer(db: Session, principal: Principal, run: Run) -> bool:
     """Allow analyzer spending/mutation to the run owner or project managers."""
+    # Ownership counts only while the owner is still a project member.
+    if not has_project_access(db, principal, run.project_id):
+        return False
     return run.owner_user_id == principal.user.id or is_project_manager(
         db, principal, run.project_id
     )
@@ -200,15 +210,11 @@ def _resolve_analysis_scope(
     """Resolve either a run or an explicitly project-scoped analyzer context."""
     if scope_id.startswith(_PROJECT_ANALYSIS_SCOPE_PREFIX):
         project_slug = scope_id[len(_PROJECT_ANALYSIS_SCOPE_PREFIX) :].strip()
-        project = (
-            db.query(Project)
-            .filter(Project.slug == project_slug, Project.is_active.is_(True))
-            .first()
-        )
-        if project is None:
-            raise HTTPException(status_code=404, detail="Project not found")
-        if not has_project_access(db, principal, project.id):
-            raise HTTPException(status_code=403, detail="Access denied")
+        # An archived project's catalog and rules stay readable to its members
+        # (the run page reads its category catalog). ``modify`` also guards
+        # manager-only reads, so each write checks require_project_writable
+        # itself, as it does for a run scope.
+        project = project_for_read_by_slug(db, principal, project_slug)
         if modify and not is_project_manager(db, principal, project.id):
             raise HTTPException(
                 status_code=403, detail="Project manager access required"
@@ -1213,86 +1219,6 @@ def _playground_config_to_analyzer(
     return cfg if cfg else None
 
 
-def _supports_metric_name_arg(func: Any) -> bool:
-    """Return True when the callable accepts metric_name."""
-    try:
-        return "metric_name" in inspect.signature(func).parameters
-    except (TypeError, ValueError):
-        return False
-
-
-def _supports_callable_arg(func: Any, argument: str) -> bool:
-    """Return True when a callable exposes an optional compatibility argument."""
-    try:
-        return argument in inspect.signature(func).parameters
-    except (TypeError, ValueError):
-        return False
-
-
-def _rewrite_legacy_metric_metadata_source(source: str) -> str:
-    """Map metric_metadata.* sources onto item_metadata.* for legacy analyzers."""
-    if source == "metric_metadata":
-        return "item_metadata"
-    if source.startswith("metric_metadata."):
-        return "item_metadata." + source[len("metric_metadata.") :]
-    return source
-
-
-def _rewrite_legacy_mapping_source(source: Any) -> Any:
-    if isinstance(source, list):
-        return [_rewrite_legacy_metric_metadata_source(str(value)) for value in source]
-    return _rewrite_legacy_metric_metadata_source(str(source))
-
-
-def _adapt_legacy_analyzer_inputs(
-    item: RunItem,
-    scores: dict[str, RunItemScore],
-    analyzer_config: dict[str, Any] | None,
-    metric_name: str | None,
-) -> tuple[RunItem, dict[str, Any] | None]:
-    """Shim metric metadata into item metadata for older analyzer code paths."""
-    if not metric_name:
-        return item, analyzer_config
-
-    metric_score = scores.get(metric_name)
-    metric_meta = (
-        metric_score.meta
-        if metric_score and isinstance(metric_score.meta, dict)
-        else {}
-    )
-
-    adapted_item = copy.copy(item)
-    adapted_item.item_metadata = metric_meta
-
-    if analyzer_config is None:
-        return adapted_item, None
-
-    adapted_config = dict(analyzer_config)
-
-    field_mapping = adapted_config.get("field_mapping")
-    if isinstance(field_mapping, dict):
-        adapted_config["field_mapping"] = {
-            key: _rewrite_legacy_mapping_source(source)
-            for key, source in field_mapping.items()
-        }
-
-    custom_variable_mapping = adapted_config.get("custom_variable_mapping")
-    if isinstance(custom_variable_mapping, dict):
-        adapted_config["custom_variable_mapping"] = {
-            key: _rewrite_legacy_mapping_source(source)
-            for key, source in custom_variable_mapping.items()
-        }
-
-    metadata_fields = adapted_config.get("metadata_fields")
-    if isinstance(metadata_fields, list):
-        adapted_config["metadata_fields"] = [
-            _rewrite_legacy_metric_metadata_source(str(source))
-            for source in metadata_fields
-        ]
-
-    return adapted_item, adapted_config
-
-
 def _load_run_items_and_scores(
     db: Session, run: Run, pass_number: int | None = None
 ) -> tuple[list[RunItem], dict[str, dict[str, Any]]]:
@@ -1469,10 +1395,9 @@ def _check_pass_version(db: Session, run: Run, selected_pass: int | None,
     except (TypeError, ValueError) as exc:
         raise HTTPException(400, "Invalid pass_number") from exc
     if lock:
-        try:
-            run = lock_repeat_run(db, run.id)
-        except RepeatPassDeletionError as exc:
-            raise HTTPException(exc.status_code, exc.detail) from exc
+        # The pass save phase: like every save lock, it also refuses a project
+        # that was archived while the model ran.
+        run = _lock_run_for_save(db, run)
     if not pass_revision_matches(run, expected):
         raise HTTPException(409, "Pass numbers changed. Reload before editing this pass.")
     _require_selected_pass_for_repeat_run(run, selected_pass)
@@ -2805,6 +2730,43 @@ def _persist_aggregated_bindings(
     return len(changed)
 
 
+def _release_transaction_for_llm(db: Session) -> None:
+    """End the open DB transaction before awaiting a model call.
+
+    The API engine terminates a connection that stays idle in a transaction
+    for longer than ``db_idle_in_transaction_timeout_ms`` (60 s by default),
+    and one model call may take minutes. Every LLM phase is therefore split:
+    reads finish and commit here, which returns the connection to the pool;
+    the model runs with no transaction open; the save phase starts a new
+    short transaction and re-locks every row it writes.
+
+    Loaded rows are kept, not expired, so the model phase reads them without
+    silently reopening a transaction.
+    """
+    expire_on_commit = db.expire_on_commit
+    db.expire_on_commit = False
+    try:
+        db.commit()
+    finally:
+        db.expire_on_commit = expire_on_commit
+
+
+def _lock_run_for_save(db: Session, run: Run) -> Run:
+    """Start a save phase: re-read the run row under FOR UPDATE.
+
+    Serializes saves for one run (in the Run -> item lock order used by
+    ingest and review) and makes run-level writes build on current state
+    instead of the snapshot loaded before the model call. A project archived
+    while the model ran is read-only by now, so the save is refused.
+    """
+    try:
+        locked = lock_repeat_run(db, run.id)
+    except RepeatPassDeletionError as exc:
+        raise HTTPException(exc.status_code, exc.detail) from exc
+    require_project_writable(db, locked.project_id)
+    return locked
+
+
 async def _aggregate_pass_analysis_results(
     *,
     db: Session,
@@ -2879,6 +2841,7 @@ async def _aggregate_pass_analysis_results(
     if not bindings:
         return {}, 0
 
+    _release_transaction_for_llm(db)
     try:
         categories = await aggregate_analysis_categories(
             client,
@@ -3079,6 +3042,7 @@ async def _aggregate_run_analysis_results(
         )
         for result in combined_results
     ]
+    _release_transaction_for_llm(db)
     try:
         categories = await aggregate_analysis_categories(
             client,
@@ -3125,6 +3089,7 @@ async def _aggregate_run_analysis_results(
         != before
         for result, before in zip(aggregatable_new_results, labels_before)
     )
+    run = _lock_run_for_save(db, run)
     changed_saved_results = _persist_aggregated_bindings(
         db,
         run,
@@ -3194,6 +3159,7 @@ def _save_analysis_results(
 ) -> tuple[list[Dict[str, Any]], int]:
     response_results: list[Dict[str, Any]] = []
     error_count = 0
+    run = _lock_run_for_save(db, run)
 
     results_by_item: dict[str, list[AnalysisResult]] = {}
     for result in results:
@@ -3673,23 +3639,16 @@ def _metric_passed(
     return score.score_numeric >= threshold
 
 
-_EXECUTION_ERROR_STATUSES = {"error", "failed", "timeout"}
-
-
 def _metric_score_has_execution_error(score: Any) -> bool:
     """Return whether a metric score represents an exception, not a bad answer."""
     if score is None:
         return False
-    # Labels are judge verdicts. Only explicit execution metadata identifies
-    # an exception; task failures are filtered using the item's error field.
-    meta = getattr(score, "meta", None)
-    if not isinstance(meta, dict):
-        return False
-    status = str(meta.get("status") or "").strip().lower()
-    if status in _EXECUTION_ERROR_STATUSES:
-        return True
-    error = meta.get("error")
-    return bool(error.strip()) if isinstance(error, str) else bool(error)
+    # Labels and verdict reasons are judge output. Only explicit execution
+    # metadata identifies an exception; task failures are filtered using the
+    # item's error field.
+    from qym_platform.services.run_means import is_metric_error
+
+    return is_metric_error(getattr(score, "meta", None))
 
 
 def _analysis_metric_names(
@@ -3937,6 +3896,8 @@ async def _run_analysis_job(
         principal = Principal(user=user, auth_type=job.auth_type)
         if not _can_operate_analyzer(db, principal, run):
             raise RuntimeError("Analysis access is no longer available.")
+        if is_project_archived(db, run.project_id):
+            raise RuntimeError(ARCHIVED_PROJECT_DETAIL)
 
         _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
         llm_config = _get_llm_config(db, run.project_id, request.connection_id)
@@ -4094,12 +4055,13 @@ async def _run_analysis_job(
                 metric_name=result.metric_name,
             )
 
+        # Reads are done: no transaction may stay open across the model calls.
+        _release_transaction_for_llm(db)
         results = await _analyze_targets_batch(
             client=client,
             model=model,
             targets=analysis_targets,
             scores_by_item=scores_by_item,
-            corrections=[],
             concurrency=_analysis_request_concurrency(request.concurrency),
             config=analyzer_config,
             temperature=request.config.temperature if request.config else None,
@@ -4140,6 +4102,7 @@ async def _run_analysis_job(
                 )
             except AnalysisAggregationError as exc:
                 db.rollback()
+                _lock_run_for_save(db, run)
                 _record_run_aggregation_status(
                     run,
                     status="failed",
@@ -4272,7 +4235,6 @@ async def _analyze_targets_batch(
     model: str,
     targets: list[tuple[RunItem, str]],
     scores_by_item: dict[str, dict[str, RunItemScore]],
-    corrections: list[ReviewCorrection],
     concurrency: int,
     config: dict[str, Any] | None,
     temperature: float | None,
@@ -4283,67 +4245,22 @@ async def _analyze_targets_batch(
     retry_callback: Any = None,
 ) -> list[AnalysisResult]:
     """Run the existing analyzer once for every item-metric target."""
-    if _supports_metric_name_arg(analyze_items_batch):
-        batch_kwargs = dict(
-            client=client,
-            model=model,
-            items=[
-                (item, scores_by_item.get(item.item_id, {}), metric_name)
-                for item, metric_name in targets
-            ],
-            corrections=corrections,
-            concurrency=concurrency,
-            config=config,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            progress_callback=progress_callback,
-        )
-        if _supports_callable_arg(analyze_items_batch, "request_timeout_seconds"):
-            batch_kwargs["request_timeout_seconds"] = request_timeout_seconds
-        if _supports_callable_arg(analyze_items_batch, "max_timeout_retries"):
-            batch_kwargs["max_timeout_retries"] = max_timeout_retries
-        if _supports_callable_arg(analyze_items_batch, "retry_callback"):
-            batch_kwargs["retry_callback"] = retry_callback
-        return await analyze_items_batch(**batch_kwargs)
-
-    # Compatibility for deployments that still provide the older analyzer
-    # callable: adapt and invoke one target at a time so metric context is not
-    # accidentally shared between targets.
-    results: list[AnalysisResult] = []
-    for completed, (item, metric_name) in enumerate(targets, start=1):
-        item_scores = scores_by_item.get(item.item_id, {})
-        adapted_item, adapted_config = _adapt_legacy_analyzer_inputs(
-            item,
-            item_scores,
-            config,
-            metric_name,
-        )
-        batch_kwargs = dict(
-            client=client,
-            model=model,
-            items=[(adapted_item, item_scores)],
-            corrections=corrections,
-            concurrency=1,
-            config=adapted_config,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        if _supports_callable_arg(analyze_items_batch, "request_timeout_seconds"):
-            batch_kwargs["request_timeout_seconds"] = request_timeout_seconds
-        if _supports_callable_arg(analyze_items_batch, "max_timeout_retries"):
-            batch_kwargs["max_timeout_retries"] = max_timeout_retries
-        if _supports_callable_arg(analyze_items_batch, "retry_callback"):
-            batch_kwargs["retry_callback"] = retry_callback
-        batch_results = await analyze_items_batch(**batch_kwargs)
-        for result in batch_results:
-            result.item_id = item.item_id
-            result.metric_name = metric_name
-            results.append(result)
-            if progress_callback is not None:
-                callback_result = progress_callback(result, completed, len(targets))
-                if asyncio.iscoroutine(callback_result):
-                    await callback_result
-    return results
+    return await analyze_items_batch(
+        client=client,
+        model=model,
+        items=[
+            (item, scores_by_item.get(item.item_id, {}), metric_name)
+            for item, metric_name in targets
+        ],
+        concurrency=concurrency,
+        config=config,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        request_timeout_seconds=request_timeout_seconds,
+        max_timeout_retries=max_timeout_retries,
+        progress_callback=progress_callback,
+        retry_callback=retry_callback,
+    )
 
 
 @router.post("/api/runs/{run_id:path}/aggregate-analysis")
@@ -4359,6 +4276,7 @@ async def aggregate_saved_analysis_results(
         raise HTTPException(status_code=404, detail="Run not found")
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
     _require_selected_pass_for_repeat_run(run, request.pass_number)
     _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
 
@@ -4411,6 +4329,7 @@ async def aggregate_saved_analysis_results(
     except AnalysisAggregationError as exc:
         db.rollback()
         if request.pass_number is None:
+            _lock_run_for_save(db, run)
             aggregation_status = _record_run_aggregation_status(
                 run,
                 status="failed",
@@ -4452,6 +4371,7 @@ async def start_analysis_job(
         raise HTTPException(status_code=404, detail="Run not found")
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
     _require_selected_pass_for_repeat_run(run, request.pass_number)
     _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
 
@@ -4582,6 +4502,7 @@ async def analyze_run_items(
         raise HTTPException(status_code=404, detail="Run not found")
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
     _require_selected_pass_for_repeat_run(run, request.pass_number)
     _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
     llm_config = _get_llm_config(db, run.project_id, request.connection_id)
@@ -4665,13 +4586,13 @@ async def analyze_run_items(
             **_persistence_totals([]),
         }
 
-    # Run async LLM analysis
+    # Run async LLM analysis with no transaction open.
+    _release_transaction_for_llm(db)
     results = await _analyze_targets_batch(
         client=client,
         model=model,
         targets=analysis_targets,
         scores_by_item=scores_by_item,
-        corrections=[],
         concurrency=_analysis_request_concurrency(request.concurrency),
         config=analyzer_config,
         temperature=request.config.temperature if request.config else None,
@@ -4699,6 +4620,7 @@ async def analyze_run_items(
             )
         except AnalysisAggregationError as exc:
             db.rollback()
+            _lock_run_for_save(db, run)
             _record_run_aggregation_status(
                 run,
                 status="failed",
@@ -4781,6 +4703,7 @@ async def analyze_run_items_stream(
         raise HTTPException(status_code=404, detail="Run not found")
     if not _can_operate_analyzer(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
     _require_selected_pass_for_repeat_run(run, request.pass_number)
     _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
     llm_config = _get_llm_config(db, run.project_id, request.connection_id)
@@ -4971,7 +4894,6 @@ async def analyze_run_items_stream(
                     model=model,
                     targets=analysis_targets,
                     scores_by_item=scores_by_item,
-                    corrections=[],
                     concurrency=_analysis_request_concurrency(request.concurrency),
                     config=analyzer_config,
                     temperature=request.config.temperature if request.config else None,
@@ -4986,6 +4908,7 @@ async def analyze_run_items_stream(
                 logger_msg = f"Analysis stream failed for run {run_id}: {exc}"
                 await queue.put({"type": "error", "message": logger_msg})
 
+        _release_transaction_for_llm(db)
         batch_task = asyncio.create_task(run_batch())
         try:
             while True:
@@ -5021,6 +4944,7 @@ async def analyze_run_items_stream(
                             )
                         except AnalysisAggregationError as exc:
                             db.rollback()
+                            _lock_run_for_save(db, run)
                             _record_run_aggregation_status(
                                 run,
                                 status="failed",
@@ -5178,6 +5102,7 @@ async def upload_analysis_document(
 ) -> Dict[str, Any]:
     """Extract and save retained document text without analyzer shortening."""
     run = _document_library_run(db, principal, run_id, modify=True)
+    require_project_writable(db, run.project_id)
     action = large_document_action if isinstance(large_document_action, str) else "ask"
     if action == "truncate":
         raise HTTPException(
@@ -5266,6 +5191,7 @@ def select_analysis_document(
 ) -> Dict[str, Any]:
     """Persist whether a project document is available to analyzer prompts."""
     run = _document_library_run(db, principal, run_id, modify=True)
+    require_project_writable(db, run.project_id)
     document = (
         db.query(AnalyzerDocument)
         .filter(
@@ -5308,6 +5234,7 @@ def delete_analysis_document(
             status_code=403,
             detail="Only the uploader or a project manager can delete this document",
         )
+    require_project_writable(db, run.project_id)
     db.delete(document)
     db.commit()
     return {"ok": True, "document_id": document_id}
@@ -5825,6 +5752,7 @@ def update_analysis_context(
     run = _resolve_analysis_scope(db, principal, run_id)
     if not is_project_manager(db, principal, run.project_id):
         raise HTTPException(status_code=403, detail="Project manager access required")
+    require_project_writable(db, run.project_id)
     project = db.get(Project, run.project_id)
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -5876,6 +5804,7 @@ async def _infer_project_analysis_rules_impl(
         raise HTTPException(
             status_code=403, detail="Project manager access required"
         )
+    require_project_writable(db, run.project_id)
     project = db.get(Project, run.project_id)
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -6017,6 +5946,7 @@ async def _infer_project_analysis_rules_impl(
         }
         if progress_job is not None:
             inference_args["progress_callback"] = update_rule_progress
+        _release_transaction_for_llm(db)
         # ``mode=update`` is accepted for old clients, but generation is now
         # the only operation: it can append rules and can never revise the
         # existing ruleset.
@@ -6058,6 +5988,14 @@ async def _infer_project_analysis_rules_impl(
         if progress_job.cancel_requested:
             raise asyncio.CancelledError()
 
+    # The project may have been archived while the rule writer ran; it is
+    # read-only now, so nothing is saved.
+    require_project_writable(db, project.id)
+    if target_version is not None:
+        # Save phase: the target may have been edited or published while the
+        # rule writer ran. Re-read it under lock and append to current rules.
+        db.refresh(target_version, with_for_update=True)
+        existing_rules = copy.deepcopy(list(target_version.rules or []))
     new_rules = _new_analysis_rules(existing_rules, generated_rules)
     if not new_rules and target_version is None:
         raise HTTPException(
@@ -6206,6 +6144,7 @@ async def _start_rule_inference_job(
 ) -> JSONResponse:
     """Validate access and enqueue one project rule-generation job."""
     scope = _require_rule_inference_scope(db, principal, scope_id)
+    require_project_writable(db, scope.project_id)
     if not (request.include_documents or request.include_examples):
         raise HTTPException(
             status_code=422,
@@ -6357,6 +6296,7 @@ def create_project_analysis_rule_version(
         raise HTTPException(
             status_code=403, detail="Project manager access required"
         )
+    require_project_writable(db, run.project_id)
     parent = None
     if request.from_version:
         parent = _resolve_analysis_rule_version(
@@ -6399,6 +6339,7 @@ def publish_project_analysis_rule_version(
         raise HTTPException(
             status_code=403, detail="Project manager access required"
         )
+    require_project_writable(db, run.project_id)
     version = _resolve_analysis_rule_version(db, run.project_id, version_ref)
     if _rule_status(version) != AnalysisRuleVersionStatus.DRAFT.value:
         raise HTTPException(
@@ -6449,6 +6390,7 @@ def set_project_analysis_rule_alias(
         raise HTTPException(
             status_code=403, detail="Project manager access required"
         )
+    require_project_writable(db, run.project_id)
     version = _resolve_analysis_rule_version(db, run.project_id, request.version)
     alias = _set_analysis_rule_alias(
         db,
@@ -6539,6 +6481,7 @@ def merge_project_analysis_rule_versions(
         raise HTTPException(
             status_code=403, detail="Project manager access required"
         )
+    require_project_writable(db, run.project_id)
     target = _resolve_analysis_rule_version(db, run.project_id, target_ref)
     source = _resolve_analysis_rule_version(
         db, run.project_id, request.source_version
@@ -6630,6 +6573,7 @@ def activate_project_analysis_rule_version(
         raise HTTPException(
             status_code=403, detail="Project manager access required"
         )
+    require_project_writable(db, run.project_id)
     version = (
         db.query(ProjectAnalysisRuleVersion)
         .filter(
@@ -6677,6 +6621,7 @@ def delete_project_analysis_rule_version(
             status_code=403,
             detail="Run owner or project manager access required",
         )
+    require_project_writable(db, run.project_id)
     version = (
         db.query(ProjectAnalysisRuleVersion)
         .filter(
@@ -6774,6 +6719,7 @@ def restore_project_analysis_rule_version(
     run = _resolve_analysis_scope(db, principal, run_id)
     if principal.user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Admin only")
+    require_project_writable(db, run.project_id)
     version = (
         db.query(ProjectAnalysisRuleVersion)
         .filter(
@@ -6813,6 +6759,7 @@ def permanently_delete_project_analysis_rule_version(
     run = _resolve_analysis_scope(db, principal, run_id)
     if principal.user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Admin only")
+    require_project_writable(db, run.project_id)
     version = (
         db.query(ProjectAnalysisRuleVersion)
         .filter(
@@ -6952,17 +6899,9 @@ def analyze_preview(
         analyzer_config,
         request.category_catalog_version_id,
     )
-    prompt_item = item
-    prompt_config = analyzer_config
-    prompt_kwargs = dict(config=prompt_config)
-    if _supports_metric_name_arg(build_analysis_prompt):
-        prompt_kwargs["metric_name"] = preview_metric
-    else:
-        prompt_item, prompt_config = _adapt_legacy_analyzer_inputs(
-            item, scores, analyzer_config, preview_metric
-        )
-        prompt_kwargs["config"] = prompt_config
-    messages = build_analysis_prompt(prompt_item, scores, [], **prompt_kwargs)
+    messages = build_analysis_prompt(
+        item, scores, config=analyzer_config, metric_name=preview_metric
+    )
 
     prompt_characters = prompt_character_count(messages)
     return {
@@ -7044,47 +6983,27 @@ async def analyze_test(
 
     analyzed_results: list[AnalysisResult] = []
     messages_by_result: list[list[dict[str, Any]]] = []
+    _release_transaction_for_llm(db)
     for item, metric_name in targets:
         item_scores = scores_by_item.get(item.item_id, {})
 
         # Build prompt messages so we can return the inputs alongside the result
-        prompt_item = item
-        prompt_config = analyzer_config
-        prompt_kwargs = dict(config=prompt_config)
-        if _supports_metric_name_arg(build_analysis_prompt):
-            prompt_kwargs["metric_name"] = metric_name
-        else:
-            prompt_item, prompt_config = _adapt_legacy_analyzer_inputs(
-                item, item_scores, analyzer_config, metric_name
-            )
-            prompt_kwargs["config"] = prompt_config
         messages = build_analysis_prompt(
-            prompt_item, item_scores, [], **prompt_kwargs
+            item, item_scores, config=analyzer_config, metric_name=metric_name
         )
 
-        single_kwargs = dict(
+        result = await analyze_single_item(
             client=client,
             model=model,
             item=item,
             scores=item_scores,
-            corrections=[],
             config=analyzer_config,
+            metric_name=metric_name,
             temperature=request.config.temperature if request.config else None,
             max_tokens=request.config.max_tokens if request.config else None,
+            request_timeout_seconds=request.timeout_seconds,
+            max_timeout_retries=_analysis_max_retries(),
         )
-        if _supports_callable_arg(analyze_single_item, "request_timeout_seconds"):
-            single_kwargs["request_timeout_seconds"] = request.timeout_seconds
-        if _supports_callable_arg(analyze_single_item, "max_timeout_retries"):
-            single_kwargs["max_timeout_retries"] = _analysis_max_retries()
-        if _supports_metric_name_arg(analyze_single_item):
-            single_kwargs["metric_name"] = metric_name
-        else:
-            legacy_item, legacy_config = _adapt_legacy_analyzer_inputs(
-                item, item_scores, analyzer_config, metric_name
-            )
-            single_kwargs["item"] = legacy_item
-            single_kwargs["config"] = legacy_config
-        result = await analyze_single_item(**single_kwargs)
         result.metric_name = metric_name
         analyzed_results.append(result)
         messages_by_result.append(messages)
@@ -7484,6 +7403,8 @@ def _project_category_catalog_scope(
     )
     if modify:
         db.query(Project.id).filter(Project.id == scope.project_id).with_for_update().one()
+        # Only writes pass modify here; an archived project's catalog is read-only.
+        require_project_writable(db, scope.project_id)
     return scope.project_id, is_project_manager(db, principal, scope.project_id)
 
 
@@ -8443,6 +8364,7 @@ def _approve_candidate(
 ) -> None:
     lock_issue_correction(db, correction)
     _require_active_candidate(correction)
+    before = correction_review_state(correction)
 
     has_human_label = any(
         str(value or "").strip()
@@ -8507,6 +8429,9 @@ def _approve_candidate(
     sync_correction_issue_metadata(db, correction)
     run = db.get(Run, correction.run_id)
     publish_approved_categories(db, run.project_id, [correction], reviewer_id)
+    audit_correction_review(
+        db, correction=correction, action="approved", actor_user_id=reviewer_id, before=before
+    )
 
 
 def _reject_candidate(
@@ -8520,11 +8445,30 @@ def _reject_candidate(
     """Reject a review candidate while preserving its full audit history."""
     lock_issue_correction(db, correction)
     _require_active_candidate(correction)
+    before = correction_review_state(correction)
     correction.status = CorrectionStatus.REJECTED
     correction.reviewed_by_user_id = reviewer_id
     correction.reviewed_at = reviewed_at
     correction.review_comment = comment
     sync_correction_issue_metadata(db, correction)
+    audit_correction_review(
+        db, correction=correction, action="rejected", actor_user_id=reviewer_id, before=before
+    )
+
+
+def _reset_candidate(
+    db: Session, *, correction: ReviewCorrection, actor_user_id: Optional[str]
+) -> None:
+    """Return a candidate to pending; the audit row keeps the cleared decision."""
+    before = correction_review_state(correction)
+    correction.status = CorrectionStatus.PENDING
+    correction.reviewed_by_user_id = None
+    correction.reviewed_at = None
+    correction.review_comment = ""
+    sync_correction_issue_metadata(db, correction)
+    audit_correction_review(
+        db, correction=correction, action="reset", actor_user_id=actor_user_id, before=before
+    )
 
 
 def _sync_legacy_summary_after_metric_deletion(
@@ -8603,6 +8547,27 @@ def _delete_active_candidate(
     reviewed_at: datetime,
 ) -> None:
     """Remove a candidate from reviews while retaining a rejected audit record."""
+    before = _remove_active_candidate(
+        db,
+        correction=correction,
+        reviewer_id=reviewer_id,
+        comment=comment,
+        reviewed_at=reviewed_at,
+    )
+    audit_correction_review(
+        db, correction=correction, action="deleted", actor_user_id=reviewer_id, before=before
+    )
+
+
+def _remove_active_candidate(
+    db: Session,
+    *,
+    correction: ReviewCorrection,
+    reviewer_id: Optional[str],
+    comment: str,
+    reviewed_at: datetime,
+) -> Dict[str, Any]:
+    """Deactivate the candidate; return its review state from under the lock."""
     _require_active_candidate(correction)
     run = Run.active(db).filter(Run.id == correction.run_id).first()
     if not run:
@@ -8620,6 +8585,7 @@ def _delete_active_candidate(
     item = lock_run_item(db, run=run, item=item)
     db.refresh(correction)
     _require_active_candidate(correction)
+    before = correction_review_state(correction)
 
     if correction_issue_id(correction):
         sync_correction_issue_metadata(db, correction, remove=True)
@@ -8628,7 +8594,7 @@ def _delete_active_candidate(
         correction.reviewed_by_user_id = reviewer_id
         correction.reviewed_at = reviewed_at
         correction.review_comment = comment
-        return
+        return before
 
     if correction.metric_name:
         meta = dict(item.item_metadata) if isinstance(item.item_metadata, dict) else {}
@@ -8649,7 +8615,7 @@ def _delete_active_candidate(
         correction.reviewed_by_user_id = reviewer_id
         correction.reviewed_at = reviewed_at
         correction.review_comment = comment
-        return
+        return before
 
     apply_root_cause_change(
         db,
@@ -8669,6 +8635,7 @@ def _delete_active_candidate(
     correction.reviewed_by_user_id = reviewer_id
     correction.reviewed_at = reviewed_at
     correction.review_comment = comment
+    return before
 
 
 @router.get("/api/corrections")
@@ -8762,12 +8729,12 @@ def list_corrections(
     )
     active_query = apply_reviewable_run_filter(active_query, db, principal)
     if project_slug:
-        project = (
-            db.query(Project)
-            .filter(Project.slug == project_slug, Project.is_active.is_(True))
-            .first()
-        )
-        if not project:
+        project = db.query(Project).filter(Project.slug == project_slug).first()
+        # Runs of an archived project have left the queue: its members get an
+        # empty queue, anyone else "Project not found" as before.
+        if not project or (
+            not project.is_active and not has_project_access(db, principal, project.id)
+        ):
             raise HTTPException(status_code=404, detail="Project not found")
         active_query = active_query.filter(Run.project_id == project.id)
 
@@ -9022,6 +8989,7 @@ def update_correction(
         raise HTTPException(status_code=404, detail="Run not found")
     if not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
     item = (
         db.query(RunItem)
         .filter(RunItem.run_id == c.run_id, RunItem.item_id == c.item_id)
@@ -9175,6 +9143,7 @@ def approve_correction(
     run = Run.active(db).filter(Run.id == correction.run_id).first()
     if not run or not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
     item = (
         db.query(RunItem)
         .filter(
@@ -9247,6 +9216,7 @@ def approve_metric_analysis(
     run = Run.active(db).filter(Run.id == run_id).first()
     if not run or not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
     _check_pass_version(db, run, request.get("pass_number"),
                         request.get("expected_pass_version"), lock=True)
 
@@ -9392,6 +9362,7 @@ def reject_correction(
     run = Run.active(db).filter(Run.id == c.run_id).first()
     if not run or not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
 
     _reject_candidate(
         db,
@@ -9419,13 +9390,14 @@ def reset_correction(
     run = Run.active(db).filter(Run.id == c.run_id).first()
     if not run or not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
 
     lock_issue_correction(db, c)
-    c.status = CorrectionStatus.PENDING
-    c.reviewed_by_user_id = None
-    c.reviewed_at = None
-    c.review_comment = ""
-    sync_correction_issue_metadata(db, c)
+    _reset_candidate(
+        db,
+        correction=c,
+        actor_user_id=principal.user.id if principal.auth_type != "none" else None,
+    )
 
     db.commit()
     return _serialize_corrections_with_history(db, [c])[0]
@@ -9469,6 +9441,7 @@ def bulk_correction_action(
         run = runs_by_id.get(correction.run_id)
         if not run or not can_review_run(db, principal, run):
             raise HTTPException(status_code=403, detail="Access denied")
+        require_project_writable(db, run.project_id)
 
     now = utc_now_naive()
     reviewer_id = principal.user.id if principal.auth_type != "none" else None
@@ -9502,11 +9475,7 @@ def bulk_correction_action(
             )
             affected += 1
         elif request.action == "reset":
-            c.status = CorrectionStatus.PENDING
-            c.reviewed_by_user_id = None
-            c.reviewed_at = None
-            c.review_comment = ""
-            sync_correction_issue_metadata(db, c)
+            _reset_candidate(db, correction=c, actor_user_id=reviewer_id)
             affected += 1
         elif request.action == "delete":
             _delete_active_candidate(
@@ -9540,6 +9509,7 @@ def delete_correction(
     run = Run.active(db).filter(Run.id == c.run_id).first()
     if not run or not can_review_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
+    require_project_writable(db, run.project_id)
     _delete_active_candidate(
         db,
         correction=c,

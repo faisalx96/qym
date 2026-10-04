@@ -378,3 +378,242 @@ def test_repeat_search_streams_scoped_detail_batches(data, monkeypatch):
     assert result["matches"]["q"] == [str(index) for index in range(251)]
     assert len(scopes) >= 2
     assert sum(map(len, scopes)) == 251
+
+
+def add_judge_payloads(db, run, samples=1):
+    """Production-shaped judge output: large blobs next to short flags."""
+    run.samples = samples
+    long_error = "Judge call failed: 429 rate limit " + "retry " * 60
+    for index in range(4):
+        item_id = f"judge-{index}"
+        db.add(
+            RunItem(
+                run_id=run.id,
+                item_id=item_id,
+                index=index,
+                input={"question": "  What   is\n\n" + "context " * 400},
+                expected="expected",
+                output="answer",
+                item_metadata={},
+            )
+        )
+        db.add(
+            RunItemScore(
+                run_id=run.id,
+                item_id=item_id,
+                metric_name="quality",
+                score_numeric=None if index == 1 else 1.0,
+                meta={
+                    "gold_results": [[row, "value " * 20] for row in range(80)],
+                    "prediction_result": "p" * 5000,
+                    "label": "match",
+                    "rows_compared": 80,
+                    "modified": True,
+                    "original_score": 0.5,
+                    **({"status": "error", "error": long_error} if index == 1 else {}),
+                },
+                explanation="Judge explanation " * 50,
+            )
+        )
+        for number in range(1, samples + 1 if samples > 1 else 1):
+            db.add(
+                RunItemAttempt(
+                    run_id=run.id,
+                    item_id=item_id,
+                    pass_number=number,
+                    attempt_number=1,
+                    is_last_attempt=True,
+                    status="completed",
+                    output=f"pass {number} answer",
+                )
+            )
+            db.add(
+                RunItemPassScore(
+                    run_id=run.id,
+                    item_id=item_id,
+                    metric_name="quality",
+                    pass_number=number,
+                    score_numeric=None if index == 2 else 1.0,
+                    label="correct",
+                    explanation="pass judge " * 40,
+                    meta={
+                        "llm_result": {"verdict": "correct", "reasoning": "r" * 20000},
+                        "expected_result": "e" * 3000,
+                        "judge_model": "gpt-4.1",
+                        **(
+                            {"status": "error", "error": long_error}
+                            if index == 2 and number == 2
+                            else {}
+                        ),
+                    },
+                )
+            )
+    db.commit()
+    return long_error
+
+
+def test_compact_index_drops_judge_payloads_but_keeps_flags_and_errors(data):
+    db, run, principal = data
+    long_error = add_judge_payloads(db, run)
+    full = legacy_run_data(run.id, db, principal)
+    compact = legacy_run_data(run.id, db, principal, view="compact")
+    rows = {row["item_id"]: row for row in compact["snapshot"]["rows"]}
+    # Short flags stay in the index for filters, edit markers and error buckets.
+    assert rows["judge-0"]["metric_meta"]["quality"] == {
+        "label": "match",
+        "rows_compared": 80,
+        "modified": True,
+        "original_score": 0.5,
+    }
+    # Error strings stay whole even beyond the short-value limit.
+    assert len(long_error) > 200
+    assert rows["judge-1"]["metric_meta"]["quality"]["error"] == long_error
+    assert rows["judge-1"]["metric_meta"]["quality"]["status"] == "error"
+    # The metric-field chooser still sees every key once per run.
+    assert compact["snapshot"]["metric_meta_keys"]["quality"] == [
+        "error",
+        "explanation",
+        "gold_results",
+        "label",
+        "modified",
+        "original_score",
+        "prediction_result",
+        "rows_compared",
+        "status",
+    ]
+    # The collapsed title: whitespace-collapsed, as the page renders it.
+    assert rows["judge-0"]["input_preview"].startswith(
+        '{ "question": " What is\\n\\ncontext context'
+    )
+    assert len(rows["judge-0"]["input_preview"]) == 300
+    # Bounded per row, whatever the judge wrote.
+    full_rows = {row["item_id"]: row for row in full["snapshot"]["rows"]}
+    assert len(json.dumps(full_rows["judge-0"])) > 20000
+    assert len(json.dumps(rows["judge-0"])) < 1500
+    # Opening the item restores exactly the full row.
+    details = run_item_details(run.id, {"item_ids": ["judge-0"]}, db, principal)
+    detail = details["rows"][0]
+    assert detail["metric_meta"] == full_rows["judge-0"]["metric_meta"]
+    assert detail["input"] == full_rows["judge-0"]["input"]
+
+
+def test_compact_repeat_index_drops_pass_judge_payloads(data):
+    db, run, principal = data
+    long_error = add_judge_payloads(db, run, samples=12)
+    full = legacy_run_data(run.id, db, principal)
+    compact = legacy_run_data(run.id, db, principal, view="compact")
+    rows = {row["item_id"]: row for row in compact["snapshot"]["rows"]}
+    full_rows = {row["item_id"]: row for row in full["snapshot"]["rows"]}
+    passes = rows["judge-2"]["pass_metric_meta"]["quality"]
+    assert len(passes) == 12
+    assert passes[0] == {"judge_model": "gpt-4.1", "label": "correct"}
+    assert passes[1]["error"] == long_error and passes[1]["status"] == "error"
+    assert compact["snapshot"]["pass_metric_meta_keys"]["quality"] == [
+        "error",
+        "expected_result",
+        "explanation",
+        "judge_model",
+        "label",
+        "llm_result",
+        "status",
+    ]
+    # A single-pass view offers its own pass's keys: only pass 2 raised.
+    by_pass = compact["snapshot"]["pass_metric_meta_keys_by_pass"]
+    assert sorted(by_pass, key=int) == [str(number) for number in range(1, 13)]
+    judge_keys = [
+        "expected_result",
+        "explanation",
+        "judge_model",
+        "label",
+        "llm_result",
+    ]
+    assert by_pass["1"] == by_pass["12"] == judge_keys
+    assert by_pass["2"] == sorted(judge_keys + ["error", "status"])
+    assert rows["judge-2"]["pass_scores"] == full_rows["judge-2"]["pass_scores"]
+    # 12 passes of ~25 KB judge output stay a few KB in the index.
+    assert len(json.dumps(full_rows["judge-0"])) > 12 * 20000
+    assert len(json.dumps(rows["judge-0"])) < 8000
+    details = run_item_details(run.id, {"item_ids": ["judge-2"]}, db, principal)
+    detail = details["rows"][0]
+    assert detail["pass_metric_meta"] == full_rows["judge-2"]["pass_metric_meta"]
+    assert detail["pass_attempts"] == full_rows["judge-2"]["pass_attempts"]
+
+
+def test_compare_builds_each_requested_run_once(data, monkeypatch):
+    from qym_platform.api import runs as runs_api
+
+    db, run, principal = data
+    add_rows(db, run, count=2)
+    built = []
+    original = runs_api.legacy_run_data
+
+    def counted(run_id, *args, **kwargs):
+        built.append(run_id)
+        return original(run_id, *args, **kwargs)
+
+    monkeypatch.setattr(runs_api, "legacy_run_data", counted)
+    compared = runs_api.legacy_compare(
+        files=[run.id, f"{run.id},{run.id}"], db=db, principal=principal, view="compact"
+    )
+    assert built == [run.id]
+    assert [item["run"]["run_id"] for item in compared["runs"]] == [run.id]
+
+
+def test_multi_pass_search_matches_each_pass_searched_alone(data, monkeypatch):
+    from qym_platform.api import runs as runs_api
+
+    db, run, principal = data
+    run.samples = 3
+    add_rows(db, run, count=4)
+    for item in ["0", "1", "2"]:
+        for number in [1, 2, 3]:
+            db.add(
+                RunItemAttempt(
+                    run_id=run.id,
+                    item_id=item,
+                    pass_number=number,
+                    attempt_number=1,
+                    is_last_attempt=True,
+                    status="completed",
+                    output=f"item {item} pass {number} answer",
+                )
+            )
+    db.commit()
+    conditions = [
+        {"id": "a", "field": "output", "value": "pass 2"},
+        {"id": "b", "field": "all", "value": "item 1"},
+        {"id": "c", "field": "content", "value": "same"},
+    ]
+    builds = []
+    original = runs_api._build_run_data
+
+    def counted(*args, **kwargs):
+        builds.append(kwargs.get("item_ids"))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(runs_api, "_build_run_data", counted)
+    combined = runs_api.search_run_items(
+        run.id, {"conditions": conditions, "pass_numbers": [3, 1, 2]}, db, principal
+    )
+    # The run's rows are read once for every requested pass.
+    assert len(builds) == 1
+    assert list(combined["matches_by_pass"]) == ["3", "1", "2"]
+    for number in (1, 2, 3):
+        alone = runs_api.search_run_items(
+            run.id, {"conditions": conditions, "pass_number": number}, db, principal
+        )
+        assert combined["matches_by_pass"][str(number)] == alone["matches"]
+    assert combined["matches_by_pass"]["2"]["a"] == ["0", "1", "2"]
+    assert combined["matches_by_pass"]["1"]["a"] == []
+    for invalid in (
+        {"pass_numbers": []},
+        {"pass_numbers": [4]},
+        {"pass_numbers": [True]},
+        {"pass_numbers": "1"},
+        {"pass_numbers": [1], "pass_number": 1},
+    ):
+        with pytest.raises(HTTPException) as error:
+            runs_api.search_run_items(
+                run.id, {"conditions": conditions, **invalid}, db, principal
+            )
+        assert error.value.status_code == 422

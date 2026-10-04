@@ -36,7 +36,7 @@ print(result.pass_hat(5, "correctness"))      # estimate all 5 of the 9</pre>
 
 <p>The SDK runs the dataset as <strong>n sequential passes</strong>: all items finish pass 1 before pass 2 begins. Task retries remain inside their pass. The checkpoint stores one row per item &times; pass, so resume continues from the missing execution instead of repeating completed work.</p>
 
-<p>The platform stores per-pass output, score, judge metadata, latency, trace, status, and retry information while retaining a reduced run-level score for compatibility. A failed execution contributes <code>0</code> when that metric was declared.</p>
+<p>The platform stores per-pass output, score, judge metadata, latency, trace, status, and retry information while retaining a reduced run-level score for compatibility. Each pass follows the run-mean rule: a pass whose task or scorer failed contributes <code>0</code>, or is left out for a lower-is-better metric (<code>direction="minimize"</code>), whose best value is 0. An item's score is the mean over its counted passes, and the run mean is the mean over items. The SDK's <code>get_metric_stats()</code>, <code>group_stats()</code> and summary apply the same rule, so they match the platform.</p>
 
 <h2>Collected attempts and reported k</h2>
 
@@ -59,7 +59,7 @@ print(result.pass_hat(5, "correctness"))      # estimate all 5 of the 9</pre>
 
 <h2>The repeat metrics</h2>
 
-<p>Pass/fail uses <code>score &gt;= threshold</code>; the default threshold is <code>0.8</code> and can be changed per call or in the platform analysis.</p>
+<p>Pass/fail follows the metric's direction: <code>score &gt;= threshold</code>, or <code>score &lt;= threshold</code> for a lower-is-better metric, and an errored pass never passes. The threshold defaults to the metric's <code>pass_threshold</code>, else <code>0.2</code> for a lower-is-better metric and <code>0.8</code> otherwise; it can be changed per call or in the platform analysis. For a lower-is-better metric <code>max_at_k</code> takes each item's lowest (best) score, and errored passes are left out of <code>avg_at_k</code> and <code>max_at_k</code> (they are <code>None</code> when every pass errored).</p>
 
 <table>
   <thead><tr><th>Metric</th><th>Question it answers</th></tr></thead>
@@ -87,7 +87,7 @@ print(result.pass_hat(5, "correctness"))      # estimate all 5 of the 9</pre>
 for k in range(1, 11):
     print(k, result.pass_at(k), result.pass_hat(k))</pre>
 
-<p><code>get_metric_stats()</code> reports a clustered bootstrap interval for the repeat-run mean: it resamples items and keeps each item's attempts together. The platform's repeat curves use deterministic 95% item-bootstrap intervals when at least 20 eligible items are available. Curves are cached by run, metric, and threshold, then invalidated when stored scores change.</p>
+<p><code>get_metric_stats()</code> reports a clustered bootstrap interval for the repeat-run mean: it resamples items and keeps each item's attempts together (the mean over items of each item's mean over its passes, as on the platform). The platform's repeat curves use deterministic 95% item-bootstrap intervals when at least 20 eligible items are available. Curves are cached by run, metric, and threshold, then invalidated when stored scores change.</p>
 
 <h2>Platform review workflow</h2>
 

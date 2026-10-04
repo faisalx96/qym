@@ -252,10 +252,10 @@ evaluator = Evaluator(
 <li><strong>JSON parse.</strong> Read <code>verdict</code> and <code>explanation</code> from the JSON response. Verdicts match against <code>choices</code> exactly, then case-insensitively.</li>
 <li><strong>One stricter retry.</strong> If parsing fails, the judge re-asks once with an explicit "respond with ONLY a JSON object" nudge listing the allowed labels.</li>
 <li><strong>Rail snapping.</strong> If that still fails, it scans the raw text for any label as a whole word (longest label first, case-insensitive) and uses the first match.</li>
-<li><strong>Give up.</strong> If nothing matches, the result is <code>score=0.0</code> with <code>metadata={"error": "Could not parse LLM verdict", "raw_response": ...}</code>.</li>
+<li><strong>Give up.</strong> If nothing matches, the result is <code>score=0.0</code> with <code>metadata={"status": "error", "error": "Could not parse LLM verdict", "raw_response": ...}</code>, which the platform shows as a metric error rather than a judged 0. A judge call that still fails after its retries is recorded the same way.</li>
 </ol>
 
-<p>Transport failures are also handled: each LLM call retries up to three times with exponential backoff and jitter, capped by the per-attempt <code>timeout</code>. If all attempts fail, the judge returns <code>score=0.0</code> with <code>metadata={"error": "..."}</code> rather than crashing the run.</p>
+<p>Transport failures are also handled: each LLM call retries up to three times with exponential backoff and jitter, capped by the per-attempt <code>timeout</code>. If all attempts fail, the judge returns <code>score=0.0</code> with <code>metadata={"status": "error", "error": "..."}</code> rather than crashing the run, and the platform shows a metric error.</p>
 
 <div class="docs-callout warn"><svg class="docs-callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><p><span class="docs-callout-title">A failed judge call scores 0.0, not "no data".</span> Because parse and transport failures both return <code>score=0.0</code> with an <code>error</code> in metadata, a provider outage can quietly look like a wave of zeros. Inspect the per-item <code>error</code> metadata before treating a low judge mean as a real quality drop.</p></div>
 
@@ -265,7 +265,7 @@ evaluator = Evaluator(
 <li><strong>Sample first.</strong> Validate prompts and config on a handful of items before a full run — it surfaces the <code>RuntimeError</code> config check and any unfilled <code>{placeholders}</code> immediately.</li>
 <li><strong><code>max_metric_concurrency</code></strong> (default <code>1</code>) controls how many metrics run in parallel <em>per item</em>. Raise it to fan out multiple judge calls on the same item; keep it low when your provider's rate limits are strict.</li>
 <li><strong><code>metric_timeout</code></strong> (default <code>60.0</code>s) is the wall-clock budget per judge attempt. Raise it (or set it to <code>None</code>) for slow models.</li>
-<li><strong><code>metric_max_retries</code></strong> (default <code>2</code>) retries attempts that reach that wall-clock limit. Exhausted timeouts become ordinary metric errors and are excluded from the mean.</li>
+<li><strong><code>metric_max_retries</code></strong> (default <code>2</code>) retries attempts that reach that wall-clock limit. Exhausted timeouts become ordinary metric errors and count as <code>0</code> in the run mean (a lower-is-better metric leaves them out of its mean).</li>
 <li><strong>Tier your judges.</strong> Use a cheap model for smoke tests and a stronger one for release gates via per-judge <code>judge_model</code> overrides.</li>
 <li><strong>Record provenance.</strong> Store the judge model and prompt version in your run metadata so scores stay comparable across runs.</li>
 </ul>

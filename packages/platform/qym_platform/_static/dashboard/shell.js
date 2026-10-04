@@ -21,6 +21,10 @@
   let _projects = [];
   let _currentProject = null;
   let _routeCtx = null;
+  // An archived project stays out of the switcher list (/v1/me lists active
+  // projects), but admins and its members open it read-only from Admin or a
+  // link: the shell loads it by slug and keeps it here.
+  let _archivedProject = null;
 
   // ══════════════════════════════════════════════════
   // URL PARSING
@@ -105,15 +109,17 @@
       }
       else if (rest.startsWith('runs/')) { page = 'run-detail'; subId = rest.slice(5); }
 
-      return { projectSlug: slug, page: page, subId: subId };
+      return { projectSlug: slug, page: page, subId: subId, explicitProject: true };
     }
 
-    // Legacy run detail: /run/{id} — keep project context from last known project
+    // Legacy run detail: /run/{id} — keep project context from last known project.
+    // That is a guess (the run can belong to another or an archived project), so
+    // the page corrects it with QymShell.setPageProject once the run has loaded.
     const lastSlug = localStorage.getItem('qym:last-project-slug') || null;
     const analyzerMatch = pathname.match(/\/run\/(.+)\/analyzer$/);
-    if (analyzerMatch) return { projectSlug: lastSlug, page: 'analysis', subId: analyzerMatch[1] };
+    if (analyzerMatch) return { projectSlug: lastSlug, page: 'analysis', subId: analyzerMatch[1], guessedProject: true };
     const runMatch = pathname.match(/\/run\/(.+)$/);
-    if (runMatch) return { projectSlug: lastSlug, page: 'run-detail', subId: runMatch[1] };
+    if (runMatch) return { projectSlug: lastSlug, page: 'run-detail', subId: runMatch[1], guessedProject: true };
 
     // Global pages — truly no project
     if (pathname.endsWith('/admin')) return { projectSlug: null, page: 'admin', subId: null };
@@ -133,10 +139,9 @@
   // UTILITY
   // ══════════════════════════════════════════════════
 
+  // One shared escaping rule (qym_safe.js): & < > " ' so it is attribute-safe.
   function esc(s) {
-    const d = document.createElement('div');
-    d.textContent = s || '';
-    return d.innerHTML;
+    return QymSafe.escapeHtml(s || '');
   }
 
   function getInitials(name) {
@@ -217,6 +222,7 @@
 
   function projectExists(projectSlug) {
     if (!projectSlug) return false;
+    if (_archivedProject && _archivedProject.slug === projectSlug) return true;
     var projects = _user && Array.isArray(_user.projects) ? _user.projects : _projects;
     return projects.some(function (project) {
       return project && project.slug === projectSlug;
@@ -229,6 +235,9 @@
       _currentProject = _user.projects.find(function (project) {
         return project && project.slug === _routeCtx.projectSlug;
       }) || null;
+      if (!_currentProject && _archivedProject && _archivedProject.slug === _routeCtx.projectSlug) {
+        _currentProject = _archivedProject;
+      }
     } else {
       _currentProject = null;
     }
@@ -240,10 +249,103 @@
       } else {
         sidebar.classList.add('no-project');
       }
+      sidebar.classList.toggle('project-archived', isProjectArchived());
     }
 
     var triggerText = document.querySelector('.project-trigger-text');
     if (triggerText && _currentProject) triggerText.textContent = _currentProject.name;
+    // Pages may render their own crumbs, so the tag is updated in place.
+    var archivedTag = document.querySelector('.breadcrumb-project-btn .project-archived-tag');
+    if (archivedTag && !isProjectArchived()) archivedTag.remove();
+    if (!archivedTag && triggerText && isProjectArchived()) {
+      triggerText.insertAdjacentHTML('afterend', '<span class="project-archived-tag">Archived</span>');
+    }
+    renderArchivedNotice();
+  }
+
+  // The current project is archived: its pages are read-only and every write
+  // answers 409 "Project is archived", so pages leave their edit controls out.
+  function isProjectArchived() {
+    return !!(_currentProject && _currentProject.is_active === false);
+  }
+
+  // Load an archived project named in the URL (not in /v1/me). Only archived
+  // projects are kept: an active project missing from the list is one the
+  // user cannot open, which stays "Project not found".
+  async function loadArchivedProject(slug) {
+    if (!slug) return false;
+    try {
+      var res = await fetch(apiUrl('v1/projects/by-slug/' + encodeURIComponent(slug)), { credentials: 'same-origin' });
+      if (!res.ok) return false;
+      var project = await res.json();
+      if (!project || project.slug !== slug || project.is_active !== false) return false;
+      _archivedProject = project;
+      return true;
+    } catch (_err) {
+      return false;
+    }
+  }
+
+  // Pages whose read-only state the shell announces. Compare and Reviews keep
+  // their own notices (they can mix projects).
+  var ARCHIVED_NOTICE_PAGES = {
+    runs: true, overview: true, charts: true, models: true, datasets: true, settings: true, 'run-detail': true,
+  };
+
+  function renderArchivedNotice() {
+    var notice = document.getElementById('shell-archived-notice');
+    if (!notice) return;
+    var show = isProjectArchived() && !!(_routeCtx && ARCHIVED_NOTICE_PAGES[_routeCtx.page]);
+    notice.hidden = !show;
+    notice.innerHTML = show
+      ? '<strong>Read-only.</strong> "' + esc(_currentProject.name || _currentProject.slug) + '" is archived. '
+        + 'You can open its runs, datasets and settings, but nothing can be changed until an admin unarchives it.'
+      : '';
+  }
+
+  // A remembered project that is gone (archived, or access removed) is no
+  // context at all for a guessed route; it is not a "project not found" page.
+  function dropMissingGuessedProject() {
+    if (_routeCtx && _routeCtx.guessedProject && _routeCtx.projectSlug && !projectExists(_routeCtx.projectSlug)) {
+      _routeCtx.projectSlug = null;
+      updateCurrentProjectForRoute();
+    }
+  }
+
+  // Pages reached without a project in the URL (/run/{id}) tell the shell
+  // which project they belong to once they know. An archived project becomes
+  // a read-only context (whoever can view the run can open its project); one
+  // the user cannot open gives no project context.
+  var _pendingPageProject = null;
+  function setPageProject(project) {
+    if (!_routeCtx) return;
+    if (!_user) {
+      _pendingPageProject = project || null;
+      return;
+    }
+    _pendingPageProject = null;
+    var slug = project && project.slug ? String(project.slug) : null;
+    var archived = !!(project && project.archived);
+    if (slug && archived && !projectExists(slug)) {
+      // Enough for the context now; the full project (role) follows.
+      _archivedProject = { id: project.id, slug: slug, name: String(project.name || slug), is_active: false, role: '' };
+      loadArchivedProject(slug).then(function (loaded) {
+        if (loaded && _routeCtx && _routeCtx.projectSlug === slug) {
+          updateCurrentProjectForRoute();
+          renderBreadcrumbs(computeBreadcrumbs(_routeCtx));
+        }
+      });
+    }
+    var usable = !!(slug && projectExists(slug));
+    _routeCtx.projectSlug = usable ? slug : null;
+    _routeCtx.guessedProject = false;
+    updateCurrentProjectForRoute();
+    // An archived project never becomes the remembered project.
+    if (usable && !archived) {
+      try { localStorage.setItem('qym:last-project-slug', slug); } catch (_err) { /* private mode */ }
+    }
+    renderBreadcrumbs(computeBreadcrumbs(_routeCtx));
+    renderProjectList();
   }
 
   function renderProjectNotFound(projectSlug) {
@@ -262,7 +364,7 @@
       +     (projectSlug
               ? '<div style="margin-top:16px;padding:10px 12px;border-radius:8px;background:var(--bg-elevated);border:1px solid var(--border-subtle);font-family:var(--font-mono);font-size:var(--font-base);color:var(--text-muted);">Slug: ' + esc(projectSlug) + '</div>'
               : '')
-      +     '<div style="margin-top:20px;"><a href="' + getAppRootPath() + '" class="shell-btn shell-btn-primary" style="display:inline-flex;text-decoration:none;">Back to Projects</a></div>'
+      +     '<div style="margin-top:20px;"><a href="' + esc(getAppRootPath()) + '" class="shell-btn shell-btn-primary" style="display:inline-flex;text-decoration:none;">Back to Projects</a></div>'
       +   '</div>'
       + '</div>';
   }
@@ -278,6 +380,11 @@
 
   function upsertProject(project) {
     if (!project) return;
+    // Unarchived: it is an ordinary project again.
+    if (_archivedProject && project.is_active !== false
+        && ((project.id && project.id === _archivedProject.id) || (project.slug && project.slug === _archivedProject.slug))) {
+      _archivedProject = null;
+    }
     var nextProjects = (_user && Array.isArray(_user.projects) ? _user.projects : _projects).slice();
     var idx = nextProjects.findIndex(function (item) {
       if (!item) return false;
@@ -350,7 +457,7 @@
     const href = opts.href || '#';
     const badge = opts.badge ? '<span class="nav-item-badge ' + (opts.badgeClass || 'count') + '">' + esc(opts.badge) + '</span>' : '';
     const extraClass = opts.className ? ' ' + opts.className : '';
-    return '<a class="nav-item' + extraClass + '" href="' + href + '" data-tooltip="' + esc(label) + '" data-page="' + page + '">'
+    return '<a class="nav-item' + extraClass + '" href="' + esc(href) + '" data-tooltip="' + esc(label) + '" data-page="' + page + '">'
       + icon(iconName)
       + '<span class="nav-item-label">' + esc(label) + '</span>'
       + badge
@@ -379,9 +486,9 @@
     return ''
       // Logo
       + '<div class="sidebar-logo">'
-      +   '<a href="' + root + '">'
-      +     '<img src="' + root + 'static/qym_icon.png" alt="قيِّم" class="logo-icon-img" />'
-      +     '<img src="' + root + 'static/qym_text.png" alt="قيِّم" class="logo-text-img" />'
+      +   '<a href="' + esc(root) + '">'
+      +     '<img src="' + esc(root) + 'static/qym_icon.png" alt="قيِّم" class="logo-icon-img" />'
+      +     '<img src="' + esc(root) + 'static/qym_text.png" alt="قيِّم" class="logo-text-img" />'
       +   '</a>'
       + '</div>'
 
@@ -409,7 +516,7 @@
       +       '</div>'
       +     '</div>'
       +     '<div class="user-popover-list">'
-      +       '<a class="user-popover-item" href="' + root + 'profile">'
+      +       '<a class="user-popover-item" href="' + esc(root) + 'profile">'
       +         iconRaw('profile', 15, 15)
       +         ' Profile'
       +       '</a>'
@@ -514,6 +621,7 @@
                   : iconRaw('project', 10, 10))
           +   '</span>'
           +   '<span class="project-trigger-text">' + esc(c.label) + '</span>'
+          +   (isProjectArchived() ? '<span class="project-archived-tag">Archived</span>' : '')
           +   '<span class="project-trigger-chevron">' + iconRaw('chevronDown', 10, 10) + '</span>'
           + '</button>'
           + '<div class="project-popover" id="shell-project-popover">'
@@ -525,7 +633,7 @@
       } else if (c.current) {
         html += '<span class="breadcrumb-item current">' + esc(c.label) + '</span>';
       } else {
-        html += '<a class="breadcrumb-item" href="' + c.href + '">' + esc(c.label) + '</a>';
+        html += '<a class="breadcrumb-item" href="' + esc(c.href) + '">' + esc(c.label) + '</a>';
       }
     }
     bcEl.innerHTML = html;
@@ -566,15 +674,20 @@
     var list = document.getElementById('shell-project-list');
     if (!list) return;
     var query = (filter || '').toLowerCase();
-    var filtered = _projects.filter(function (p) {
+    var listed = _projects.slice();
+    if (isProjectArchived() && !listed.some(function (p) { return p.slug === _currentProject.slug; })) {
+      listed.unshift(_currentProject);
+    }
+    var filtered = listed.filter(function (p) {
       return !query || p.name.toLowerCase().indexOf(query) !== -1 || p.slug.toLowerCase().indexOf(query) !== -1;
     });
     var html = '';
     filtered.forEach(function (p) {
       var isActive = _currentProject && _currentProject.slug === p.slug;
-      html += '<a class="popover-item' + (isActive ? ' active' : '') + '" data-slug="' + esc(p.slug) + '" href="' + projectUrl(p.slug) + '">'
+      html += '<a class="popover-item' + (isActive ? ' active' : '') + '" data-slug="' + esc(p.slug) + '" href="' + esc(projectUrl(p.slug)) + '">'
         + '<span class="popover-item-icon">' + identiconHTML(p.slug, { cell: 2, gap: 1, showEmpty: false }) + '</span>'
         + '<span>' + esc(p.name) + '</span>'
+        + (p.is_active === false ? '<span class="project-archived-tag">Archived</span>' : '')
         + (isActive ? '<span class="popover-item-check">' + iconRaw('check', 14, 14) + '</span>' : '')
         + '</a>';
     });
@@ -784,6 +897,7 @@
         +     descriptions.map(function (line) {
                 return '<p class="shell-modal-description">' + esc(line) + '</p>';
               }).join('')
+        +     confirmWarningHtml(options.warning)
         +     (options.note ? '<div class="shell-modal-note">' + esc(options.note) + '</div>' : '')
         +     (needsInput
                 ? '<div class="shell-form-group" style="margin-top:var(--space-md)">'
@@ -795,6 +909,9 @@
         +   '</div>'
         +   '<div class="shell-modal-footer">'
         +     '<button class="shell-btn shell-btn-secondary" id="shell-confirm-cancel" type="button">' + esc(options.cancelLabel || 'Cancel') + '</button>'
+        +     (options.altLabel
+                ? '<button class="shell-btn shell-btn-secondary" id="shell-confirm-alt" type="button">' + esc(options.altLabel) + '</button>'
+                : '')
         +     '<button class="shell-btn ' + (options.confirmClass || 'shell-btn-primary') + '" id="shell-confirm-submit" type="button">' + esc(options.confirmLabel || 'Confirm') + '</button>'
         +   '</div>'
         + '</div>';
@@ -805,6 +922,7 @@
 
       var closeBtn = dialog.querySelector('.shell-modal-close');
       var cancelBtn = document.getElementById('shell-confirm-cancel');
+      var altBtn = document.getElementById('shell-confirm-alt');
       var confirmBtn = document.getElementById('shell-confirm-submit');
       var input = document.getElementById('shell-confirm-input');
       var errorEl = document.getElementById('shell-confirm-error');
@@ -838,7 +956,10 @@
           close({ confirmed: false, value: null });
           return;
         }
-        if (e.key === 'Enter' && (!input || document.activeElement === input)) {
+        // A focused Cancel, Close or alternate button handles Enter itself.
+        var active = document.activeElement;
+        if (active && (active === cancelBtn || active === altBtn || active === closeBtn)) return;
+        if (e.key === 'Enter' && (!input || active === input)) {
           e.preventDefault();
           submit();
         }
@@ -856,6 +977,8 @@
 
       if (closeBtn) closeBtn.addEventListener('click', function () { close({ confirmed: false, value: null }); });
       if (cancelBtn) cancelBtn.addEventListener('click', function () { close({ confirmed: false, value: null }); });
+      // The optional third action (altLabel) resolves { alternative: true }.
+      if (altBtn) altBtn.addEventListener('click', function () { close({ confirmed: false, alternative: true, value: null }); });
       if (confirmBtn) confirmBtn.addEventListener('click', submit);
       if (input) {
         input.addEventListener('input', refreshState);
@@ -869,6 +992,153 @@
       document.addEventListener('keydown', onKeyDown);
       refreshState();
     });
+  }
+
+  // A consequence the reader must see before confirming: a lead sentence, an
+  // explanation and an optional list ({ title, meta } rows, then "and N more").
+  function confirmWarningHtml(warning) {
+    if (!warning) return '';
+    var items = Array.isArray(warning.items) ? warning.items : [];
+    var more = Number(warning.more) || 0;
+    var rows = items.map(function (item) {
+      return '<li style="color:var(--text-secondary);font-size:var(--font-sm);line-height:1.5;">'
+        + '<span style="color:var(--text-primary);">' + esc(item.title) + '</span>'
+        + (item.meta ? ' <span style="color:var(--text-muted);">· ' + esc(item.meta) + '</span>' : '')
+        + '</li>';
+    });
+    if (more > 0) {
+      rows.push('<li style="color:var(--text-muted);font-size:var(--font-sm);line-height:1.5;">and ' + esc(String(more)) + ' more</li>');
+    }
+    return '<div class="shell-modal-warning" role="note" style="margin-top:var(--space-md);padding:var(--space-sm) var(--space-md);'
+      + 'background:var(--bg-elevated);border:1px solid var(--border-subtle);border-left:3px solid var(--warning);border-radius:var(--radius-md);">'
+      + '<p style="margin:0;color:var(--text-secondary);font-size:var(--font-sm);line-height:1.5;">'
+      + (warning.lead ? '<strong style="color:var(--warning);font-weight:600;">' + esc(warning.lead) + '</strong> ' : '')
+      + esc(warning.text || '') + '</p>'
+      + (rows.length
+        ? '<ul aria-label="' + esc(warning.itemsLabel || 'Details') + '" style="margin:var(--space-sm) 0 0;padding-left:var(--space-lg);">' + rows.join('') + '</ul>'
+        : '')
+      + '</div>';
+  }
+
+  function formatDateTime(value) {
+    var date = value ? new Date(value) : null;
+    if (!date || isNaN(date.getTime())) return '';
+    return date.toLocaleString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+  }
+
+  // Archive confirmation shared by Project Settings and Admin > Projects.
+  // Archiving cuts off the project's API keys at once, so a run that is still
+  // sending results loses the rest of them (unarchiving does not bring them
+  // back): list those runs before the confirm button. Resolves like
+  // openConfirmDialog.
+  async function confirmArchiveProject(project) {
+    project = project || {};
+    var name = project.name || 'this project';
+    var preview = null;
+    try {
+      var res = await fetch(apiUrl('v1/admin/projects/' + encodeURIComponent(project.id) + '/archive-preview'), {
+        credentials: 'same-origin',
+      });
+      if (res.status === 403) {
+        // Not a failed check: only admins can archive, so there is nothing to confirm.
+        toast('Only an admin can archive a project.', 'error');
+        return { confirmed: false };
+      }
+      if (res.ok) preview = await res.json();
+    } catch (_err) {
+      preview = null;
+    }
+    var warning = null;
+    if (!preview) {
+      warning = {
+        lead: 'Runs in progress could not be checked.',
+        text: 'Archiving stops the project\'s API keys at once, so the remaining results of any run still in progress will be lost. Unarchiving does not bring them back.',
+      };
+    } else if (preview.running_count > 0) {
+      var count = Number(preview.running_count) || 0;
+      var runs = Array.isArray(preview.running_runs) ? preview.running_runs : [];
+      warning = {
+        lead: count === 1 ? '1 run is still in progress.' : count + ' runs are still in progress.',
+        text: 'Archiving stops the project\'s API keys at once, so ' + (count === 1 ? 'its' : 'their')
+          + ' remaining results will be lost, and product evals the platform runs for this project are stopped.'
+          + ' Unarchiving does not bring them back.',
+        itemsLabel: 'Runs in progress',
+        items: runs.map(function (run) {
+          var started = formatDateTime(run.started_at);
+          return { title: run.run_name || run.run_id, meta: started ? 'started ' + started : '' };
+        }),
+        more: Math.max(0, count - runs.length),
+      };
+    }
+    return openConfirmDialog({
+      title: 'Archive project?',
+      description: project.description || [
+        '"' + name + '" will be hidden from the project list and its API keys will stop working.',
+      ],
+      warning: warning,
+      confirmLabel: warning ? 'Archive anyway' : 'Archive project',
+      confirmClass: warning ? 'shell-btn-danger' : 'shell-btn-primary',
+    });
+  }
+
+  // Unarchive confirmation shared by Admin > Projects and Project Settings.
+  // Unarchiving turns the project's API keys back on at once, so name the keys
+  // that start working again and offer to revoke them first, which stays
+  // possible while the project is archived (Project Settings > API Keys).
+  // Resolves like openConfirmDialog, or { confirmed: false, revokeFirst: true }.
+  async function confirmUnarchiveProject(project) {
+    project = project || {};
+    var name = project.name || 'this project';
+    var preview = null;
+    try {
+      var res = await fetch(apiUrl('v1/admin/projects/' + encodeURIComponent(project.id) + '/unarchive-preview'), {
+        credentials: 'same-origin',
+      });
+      if (res.status === 403) {
+        toast('Only an admin can unarchive a project.', 'error');
+        return { confirmed: false };
+      }
+      if (res.ok) preview = await res.json();
+    } catch (_err) {
+      preview = null;
+    }
+    var count = preview ? Number(preview.active_api_key_count) || 0 : 0;
+    var warning = null;
+    if (!preview) {
+      warning = {
+        lead: 'API keys could not be checked.',
+        text: 'Unarchiving turns every API key of this project that is not revoked back on at once.',
+      };
+    } else if (count > 0) {
+      var keys = Array.isArray(preview.active_api_keys) ? preview.active_api_keys : [];
+      warning = {
+        lead: count === 1 ? '1 API key starts working again.' : count + ' API keys start working again.',
+        text: 'Unarchiving turns ' + (count === 1 ? 'it' : 'them') + ' back on at once. To keep a key off, revoke it first in Project Settings > API Keys; that works while the project stays archived.',
+        itemsLabel: 'API keys that start working again',
+        items: keys.map(function (key) {
+          var owner = key.creator ? (key.creator.display_name || key.creator.email) : '';
+          return { title: key.name || 'default', meta: owner ? 'created by ' + owner : '' };
+        }),
+        more: Math.max(0, count - keys.length),
+      };
+    }
+    var keysAhead = !preview || count > 0;
+    var result = await openConfirmDialog({
+      title: 'Unarchive project?',
+      description: [
+        '"' + name + '" returns to the project list and can be changed again.',
+        preview && count === 0 ? 'It has no active API keys, so no key starts working again.' : '',
+        'Deleted runs of the project in Trash resume their purge countdown where it paused.',
+      ],
+      warning: warning,
+      altLabel: keysAhead ? 'Revoke keys first' : '',
+      confirmLabel: keysAhead ? 'Unarchive anyway' : 'Unarchive project',
+      confirmClass: keysAhead ? 'shell-btn-danger' : 'shell-btn-primary',
+    });
+    if (result && result.alternative) return { confirmed: false, revokeFirst: true };
+    return result;
   }
 
   // ══════════════════════════════════════════════════
@@ -1224,7 +1494,9 @@
   // ══════════════════════════════════════════════════
 
   function switchProject(slug) {
-    localStorage.setItem('qym:last-project-slug', slug);
+    if (!(_archivedProject && _archivedProject.slug === slug)) {
+      localStorage.setItem('qym:last-project-slug', slug);
+    }
     navigateTo(projectUrl(slug));
   }
 
@@ -1267,6 +1539,18 @@
     var parser = new DOMParser();
     var doc = parser.parseFromString(html, 'text/html');
 
+    // Relative asset URLs (compare.html and trash.html use ./static/) belong
+    // to the fetched page. The parsed document resolves them against the
+    // page we are leaving, which 404s from nested routes such as
+    // /projects/<slug>/runs and forced a full reload.
+    var pageUrl = new URL(url, window.location.href);
+    function resolveForPage(value) {
+      try { return new URL(value, pageUrl).href; } catch (e) { return value; }
+    }
+    doc.body.querySelectorAll('link[href]').forEach(function (link) {
+      link.setAttribute('href', resolveForPage(link.getAttribute('href')));
+    });
+
     // Update page title
     var newTitle = doc.querySelector('title');
     if (newTitle) document.title = newTitle.textContent;
@@ -1297,7 +1581,7 @@
     allScripts.forEach(function (script) {
       if (script.src && (script.src.indexOf('shell.js') !== -1 || script.src.indexOf('auth.js') !== -1)) return;
       scriptInfos.push({
-        src: script.src || null,
+        src: script.getAttribute('src') ? resolveForPage(script.getAttribute('src')) : null,
         text: script.textContent || '',
         type: script.type || '',
       });
@@ -1332,9 +1616,15 @@
       history.pushState({ qym: true }, '', url);
     }
 
+    _pendingPageProject = null;
     _routeCtx = parseRoute();
     setActiveNav(_routeCtx.page);
     updateCurrentProjectForRoute();
+    if (_user) dropMissingGuessedProject();
+    if (_routeCtx.explicitProject && _user && !projectExists(_routeCtx.projectSlug)
+        && await loadArchivedProject(_routeCtx.projectSlug)) {
+      updateCurrentProjectForRoute();
+    }
 
     if (_routeCtx.projectSlug && _user && !projectExists(_routeCtx.projectSlug)) {
       renderProjectNotFound(_routeCtx.projectSlug);
@@ -1420,13 +1710,23 @@
   // TOPBAR STATS
   // ══════════════════════════════════════════════════
 
-  function setTopbarStats(stats) {
+  function escAttr(s) {
+    return esc(s).replace(/"/g, '&quot;');
+  }
+
+  function setTopbarStats(stats, options) {
     var el = document.getElementById('shell-topbar-stats');
     if (!el) return;
     if (!stats || !stats.length) { el.innerHTML = ''; return; }
     var html = '';
+    if (options && options.scope) {
+      html += '<span class="topbar-stats-scope"'
+        + (options.scopeTitle ? ' title="' + escAttr(options.scopeTitle) + '"' : '')
+        + '>' + esc(options.scope) + '</span>';
+    }
     stats.forEach(function (s) {
-      html += '<div class="topbar-stat">'
+      html += '<div class="topbar-stat' + (s.secondary ? ' topbar-stat--secondary' : '') + '"'
+        + (s.title ? ' title="' + escAttr(s.title) + '"' : '') + '>'
         + '<span class="topbar-stat-dot" style="background:' + (s.color || 'var(--accent-primary)') + '"></span>'
         + '<span class="topbar-stat-value">' + esc(String(s.value)) + '</span> ' + esc(s.label)
         + '</div>';
@@ -1502,8 +1802,16 @@
       content.appendChild(document.body.firstChild);
     }
 
+    // Read-only notice of an archived project (renderArchivedNotice).
+    var archivedNotice = document.createElement('div');
+    archivedNotice.className = 'shell-archived-notice';
+    archivedNotice.id = 'shell-archived-notice';
+    archivedNotice.setAttribute('role', 'note');
+    archivedNotice.hidden = true;
+
     // Assemble
     mainArea.appendChild(topbar);
+    mainArea.appendChild(archivedNotice);
     mainArea.appendChild(content);
     wrapper.appendChild(sidebar);
     wrapper.appendChild(mainArea);
@@ -1545,12 +1853,19 @@
       }
       if (!res.ok) return;
       _user = await res.json();
+      _projects = _user.projects || [];
+      // An archived project named in the URL opens read-only. Load it before
+      // pages see the user, so they start from the right project.
+      if (_routeCtx.explicitProject && !projectExists(_routeCtx.projectSlug)) {
+        await loadArchivedProject(_routeCtx.projectSlug);
+      }
       window.__QYM_USER__ = _user;
       populateUser(_user);
 
       // Fetch all projects for the switcher
-      _projects = _user.projects || [];
       updateCurrentProjectForRoute();
+      dropMissingGuessedProject();
+      if (_pendingPageProject) setPageProject(_pendingPageProject);
       if (_routeCtx.projectSlug && !projectExists(_routeCtx.projectSlug)) {
         renderProjectNotFound(_routeCtx.projectSlug);
         return;
@@ -1666,9 +1981,13 @@
     navigateTo: navigateTo,
     openCreateProjectDialog: openCreateProjectDialog,
     openConfirmDialog: openConfirmDialog,
+    confirmArchiveProject: confirmArchiveProject,
+    confirmUnarchiveProject: confirmUnarchiveProject,
+    isProjectArchived: isProjectArchived,
     upsertProject: upsertProject,
     removeProject: removeProject,
     projectExists: projectExists,
+    setPageProject: setPageProject,
     renderProjectNotFound: renderProjectNotFound,
     openFormDialog: openFormDialog,
     openDrawer: openDrawer,

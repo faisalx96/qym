@@ -22,13 +22,25 @@ from qym_platform.db.models import (
     Project,
     Run,
     RunItem,
-    RunItemScore,
     RunMetricSpec,
     RunWorkflowStatus,
 )
 from qym_platform.deps import get_db
-from qym_platform.permissions import has_project_access
+from qym_platform.permissions import project_for_read_by_slug
 from qym_platform.settings import PlatformSettings
+from qym_platform.services.execution_errors import (
+    execution_success_fields,
+    repeat_execution_counts,
+)
+from qym_platform.services.run_means import (
+    MetricTotals,
+    completed_review_runs,
+    mean_task_errors,
+    not_received_clause,
+    raw_metric_totals,
+    run_metric_count,
+    run_metric_mean,
+)
 
 
 router = APIRouter(tags=["insights"])
@@ -83,16 +95,8 @@ def _metric_spec_payload(spec: RunMetricSpec) -> dict[str, Any]:
 
 
 def _project(db: Session, principal: Principal, project_slug: str) -> Project:
-    project = (
-        db.query(Project)
-        .filter(Project.slug == project_slug, Project.is_active.is_(True))
-        .first()
-    )
-    if project is None:
-        raise HTTPException(status_code=404, detail="Project not found")
-    if not has_project_access(db, principal, project.id):
-        raise HTTPException(status_code=403, detail="Access denied")
-    return project
+    # Archived projects stay readable to their members (read-only).
+    return project_for_read_by_slug(db, principal, project_slug)
 
 
 @router.get("/api/projects/{project_slug}/insights")
@@ -242,7 +246,18 @@ def project_insights(
             func.count(case((RunItem.error.isnot(None), 1))).label("errors"),
             func.coalesce(func.sum(RunItem.retry_count), 0).label("retries"),
             func.avg(RunItem.latency_ms).label("avg_latency"),
+            func.count(
+                case(
+                    (
+                        not_received_clause(
+                            RunItem, Run, completed_review_runs(db, run_ids)
+                        ),
+                        1,
+                    )
+                )
+            ).label("not_received"),
         )
+        .join(Run, Run.id == RunItem.run_id)
         .filter(RunItem.run_id.in_(run_ids))
         .group_by(RunItem.run_id)
         .all()
@@ -251,6 +266,7 @@ def project_insights(
         row.run_id: {
             "total": int(row.total or 0),
             "errors": int(row.errors or 0),
+            "not_received": int(row.not_received or 0),
             "retries": int(row.retries or 0),
             "avg_latency": float(row.avg_latency) if row.avg_latency is not None else None,
         }
@@ -264,28 +280,15 @@ def project_insights(
     ):
         latencies[run_id].append(float(latency))
 
-    score_rows = (
-        db.query(
-            RunItemScore.run_id,
-            RunItemScore.metric_name,
-            func.sum(RunItemScore.score_numeric).label("score_sum"),
-            func.count(RunItemScore.score_numeric).label("score_count"),
-        )
-        .join(
-            RunItem,
-            (RunItem.run_id == RunItemScore.run_id)
-            & (RunItem.item_id == RunItemScore.item_id),
-        )
-        .filter(RunItemScore.run_id.in_(run_ids), RunItem.error.is_(None))
-        .group_by(RunItemScore.run_id, RunItemScore.metric_name)
-        .all()
+    # Only the run mean is shown: repeat runs then read pass rows only for
+    # their lower-is-better metrics, not for the unused mean without errors.
+    score_totals = raw_metric_totals(db, run_ids, scored_averages=False)
+    # Reliability is execution success: repeat runs count item passes.
+    repeat_executions = repeat_execution_counts(
+        db,
+        [run.id for run in runs if int(run.samples or 1) > 1],
+        prefer_published=True,
     )
-    scores: dict[str, dict[str, dict[str, float]]] = defaultdict(dict)
-    for row in score_rows:
-        scores[row.run_id][row.metric_name] = {
-            "sum": float(row.score_sum or 0.0),
-            "count": float(row.score_count or 0.0),
-        }
 
     specs: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
     for spec in (
@@ -313,11 +316,11 @@ def project_insights(
         )
         denominator_by_metric: dict[str, int] = {}
         averages: dict[str, float | None] = {}
+        task_errors = mean_task_errors(run.samples, stats["errors"])
         for metric_name in run.metrics or []:
-            score = scores.get(run.id, {}).get(metric_name, {"sum": 0.0, "count": 0.0})
-            denominator = int(score["count"] + stats["errors"])
-            denominator_by_metric[metric_name] = denominator
-            averages[metric_name] = score["sum"] / denominator if denominator else None
+            totals = score_totals.get(run.id, {}).get(metric_name) or MetricTotals()
+            denominator_by_metric[metric_name] = run_metric_count(totals, task_errors)
+            averages[metric_name] = run_metric_mean(totals, task_errors)
 
         started_at = run.started_at or run.created_at
         duration_ms = None
@@ -348,8 +351,15 @@ def project_insights(
                 "metric_specs": specs.get(run.id, {}),
                 "total_items": total_items,
                 "error_count": error_count,
+                # Items never received are neither executions nor successes.
                 "success_rate": (
-                    (total_items - error_count) / total_items if total_items else None
+                    execution_success_fields(
+                        total_items - int(stats.get("not_received") or 0),
+                        total_items - error_count - int(stats.get("not_received") or 0),
+                        repeat_executions.get(run.id),
+                    )["success_rate"]
+                    if total_items
+                    else None
                 ),
                 "total_retries": stats["retries"],
                 "avg_latency_ms": stats["avg_latency"],

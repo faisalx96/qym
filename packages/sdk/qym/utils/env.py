@@ -28,15 +28,3 @@ def load_cwd_dotenv(*, override: bool = False) -> Optional[str]:
 def get_platform_url_env(default: str = "http://localhost:8000") -> str:
     """Return the platform URL from QYM_BASE_URL."""
     return (os.getenv("QYM_BASE_URL") or default).rstrip("/")
-
-
-def get_langfuse_host_env(default: str = "") -> str:
-    """Return the Langfuse host, preferring LANGFUSE_HOST.
-
-    LANGFUSE_BASE_URL is accepted as a compatibility alias.
-    """
-    return (
-        os.getenv("LANGFUSE_HOST")
-        or os.getenv("LANGFUSE_BASE_URL")
-        or default
-    ).rstrip("/")

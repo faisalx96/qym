@@ -34,6 +34,10 @@ def _run_javascript(script: str) -> None:
         [node],
         input=(
             "const assert = require('node:assert/strict');\n"
+            # Pages load the shared escaping layer (qym_safe.js) before any script.
+            "const QymSafe = (() => { const window = {};\n"
+            + (DASHBOARD / "qym_safe.js").read_text(encoding="utf-8")
+            + "\nreturn window.QymSafe; })();\n"
             "async function test() {\n" + script + "\n}\n"
             "test().catch(error => { console.error(error); process.exitCode = 1; });"
         ),
@@ -237,12 +241,31 @@ def test_playground_can_rebuild_categories_from_fresh_approved_examples() -> Non
 
 
 def test_metric_analysis_is_shown_only_for_failed_or_errored_judges() -> None:
-    function = _function("run", "shouldRenderMetricAnalysis")
+    function = "\n".join(
+        _function("run", name)
+        for name in (
+            "metricDirectionOf",
+            "metricPassesFor",
+            "rowScoreFor",
+            "errorsLeftOutFor",
+            "shouldRenderMetricAnalysis",
+        )
+    )
+    metrics_js = (DASHBOARD / "metrics.js").read_text()
     _run_javascript(
-        function
+        "const realMetrics = (() => { const window = {};\n"
+        + metrics_js
+        + "\nreturn window.QymMetrics; })();\n"
+        + function
         + """
         const metricErrors = new Set();
         const state = {
+          // Pass/fail follows the declared direction (C008).
+          metricDirections: {
+            passing_boolean: 'maximize', failing_boolean: 'maximize',
+            passing_score: 'maximize', failing_score: 'maximize',
+            zero_threshold: 'maximize', broken_judge: 'maximize',
+          },
           metricTypes: {
             passing_boolean: 'boolean',
             failing_boolean: 'boolean',
@@ -263,6 +286,9 @@ def test_metric_analysis_is_shown_only_for_failed_or_errored_judges() -> None:
           },
         };
         const window = {QymMetrics: {
+          metricPasses: realMetrics.metricPasses,
+          errorsLeftOut: realMetrics.errorsLeftOut,
+          getRowScore: realMetrics.getRowScore,
           isTaskErrorRow: row => ['error', 'failed'].includes(String(row?.status || '').toLowerCase()),
           hasMetricError: (_row, metricName) => metricErrors.has(metricName),
           parseScoreValue: value => {
@@ -350,7 +376,14 @@ def test_compare_displays_and_saves_the_same_scope(scope_kind: str) -> None:
             "passRefBase",
             "compareRootCauseScope",
             "compareExecutionErrorInfo",
+            "metricDirectionFor",
+            "metricPassesFor",
+            "rowScoreFor",
+            "rowPassesFor",
+            "errorsLeftOutFor",
+            "metricColorClassFor",
             "renderCompareOutputGroup",
+            "compareRunReadOnly",
             "wireRootCauseHandlers",
             "saveRootCauseIssues",
         )
@@ -407,6 +440,7 @@ def test_compare_displays_and_saves_the_same_scope(scope_kind: str) -> None:
         assert.ok(!html.includes('Accuracy finding'));
         const metricName = scopeKind === 'legacy' ? '' : 'style';
         assert.ok(html.includes('data-rc-issues-metric="' + metricName + '"'));
+        assert.ok(html.includes('data-rc-issues-item="compare-item"'));
 
         const trigger = new EventTarget();
         trigger.dataset = {rcIssuesItem: 'compare-item', rcIssuesRunIdx: '0', rcIssuesMetric: metricName};
@@ -815,11 +849,16 @@ def test_failed_analysis_card_matches_unanalysed_without_changing_saved_data():
         }
         const issue = {issue_id: 'issue-1', category: 'Retrieval', finding: 'Missing evidence',
           solution: 'Improve retrieval', solution_note: 'Add a filter', review_status: 'approved'};
-        const human = {source: 'human', root_cause_issues: [issue]};
+        // A legacy analysis-level solution is not rendered; only per-issue solutions are.
+        const human = {source: 'human', solution: 'Old shared solution', solution_note: 'Shared notes',
+          root_cause_issues: [issue]};
         const humanBefore = JSON.stringify(human);
         const html = render(human);
         for (const text of ['1 issue', 'Human edited', 'Missing evidence', 'Improve retrieval', 'Add a filter', 'Approved', 'Edit']) {
           assert.ok(html.includes(text), text);
+        }
+        for (const text of ['Old shared solution', 'Shared notes', 'Shared · legacy', 'metric-analysis-shared-solution']) {
+          assert.ok(!html.includes(text), text);
         }
         assert.equal(JSON.stringify(human), humanBefore);
         assert.ok(render({source: 'ai', confidence: 0.9, root_cause_issues: [issue]}).includes('90% confidence'));

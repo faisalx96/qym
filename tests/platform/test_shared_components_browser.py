@@ -154,6 +154,15 @@ def test_help_marker_has_aria_and_escape_unpins(component_page: object) -> None:
     assert not marker.evaluate("el => el.classList.contains('is-open')")
     assert marker.get_attribute("aria-expanded") == "false"
 
+    # A touch tap does not focus the marker natively; opening must focus it so
+    # Escape (handled on the focused marker) can still close the tooltip.
+    marker.evaluate("el => el.blur()")
+    marker.dispatch_event("click")
+    assert marker.get_attribute("aria-expanded") == "true"
+    assert marker.evaluate("el => document.activeElement === el")
+    component_page.keyboard.press("Escape")
+    assert marker.get_attribute("aria-expanded") == "false"
+
 
 def test_pagination_supports_navigation_direct_entry_and_page_size(component_page: object) -> None:
     component_page.locator("#pagination [data-qym-page='next']").click()

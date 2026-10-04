@@ -9,17 +9,12 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+pytestmark = pytest.mark.browser
+
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "packages/platform/qym_platform/_static/dashboard/step_latency.js"
-
-
-@pytest.fixture(scope="module")
-def browser():
-    api = pytest.importorskip("playwright.sync_api")
-    with api.sync_playwright() as playwright:
-        instance = playwright.chromium.launch()
-        yield instance
-        instance.close()
+# Pages load the shared escaping layer before any other script.
+SAFE = ROOT / "packages/platform/qym_platform/_static/dashboard/qym_safe.js"
 
 
 def payload(latency=222, *, step="llm:test", tokens=500):
@@ -73,6 +68,9 @@ def trace_strip():
 class Panel:
     def __init__(self, page):
         self.page = page
+        # The server answers group_by=ref with every compared lane's groups.
+        # Off, responses model a server without it: lanes request their own.
+        self.lanes_in_pool = True
 
     def mount(self, refs=None, opts=None):
         self.page.evaluate(
@@ -92,13 +90,28 @@ class Panel:
         )
 
     def respond_since(self, start, data=None):
-        """Complete this selection's requests, including auxiliary name groups."""
+        """Complete this selection's requests, including auxiliary name groups
+        and lane requests that follow a pooled response."""
         self.wait_requests(start + 1)
-        for index, request in enumerate(self.requests()[start:], start):
-            if not request["settled"]:
+        for _ in range(10):
+            pending = [
+                index
+                for index, request in enumerate(self.requests()[start:], start)
+                if not request["settled"]
+            ]
+            if not pending:
+                return
+            for index in pending:
                 self.respond(index, data)
 
     def respond(self, index, data=None, *, outcome="success"):
+        data = dict(data or payload())
+        query = parse_qs(urlparse(self.requests()[index]["url"]).query)
+        if self.lanes_in_pool and query.get("group_by") == ["ref"]:
+            refs = query["run_ids"][0].split(",")
+            data.setdefault("groups_by_ref", {ref: data["groups"] for ref in refs})
+        # evaluate() returns after the response promise and its continuations
+        # drain, so requests those continuations send are already recorded.
         self.page.evaluate(
             """({index, data, outcome}) => {
               const request = latencyRequests[index];
@@ -111,7 +124,7 @@ class Panel:
                   json: async () => data});
               }
             }""",
-            {"index": index, "data": data or payload(), "outcome": outcome},
+            {"index": index, "data": data, "outcome": outcome},
         )
 
     def select(self, control, value):
@@ -152,6 +165,7 @@ def panel(browser):
           });
         }"""
     )
+    page.add_script_tag(path=str(SAFE))
     page.add_script_tag(path=str(SCRIPT))
     yield Panel(page)
     context.close()
@@ -183,21 +197,56 @@ def test_obsolete_requests_cannot_replace_current_plot(panel, change, outcome):
 
 
 @pytest.mark.parametrize("outcome", ["success", "http-error"])
-def test_obsolete_comparison_lane_cannot_break_a_new_mount(panel, outcome):
+@pytest.mark.parametrize("lanes_in_pool", [True, False])
+def test_obsolete_comparison_lane_cannot_break_a_new_mount(panel, outcome, lanes_in_pool):
+    panel.lanes_in_pool = lanes_in_pool
     panel.mount(["old-run"], {"pooled": True})
-    panel.wait_requests(2)
+    panel.wait_requests(1)
     panel.mount(["new-run"], {"pooled": True})
-    panel.wait_requests(4)
-    panel.respond(2)
-    panel.respond(3)
+    panel.wait_requests(2)
+    panel.respond_since(1)
     panel.expect_latency(222)
-    panel.respond(0, payload(111))
-    panel.respond(1, payload(111), outcome=outcome)
+    if not lanes_in_pool:
+        # Without group_by the new lane asked for its own data.
+        assert len(panel.requests()) == 3
+    panel.respond(0, payload(111), outcome=outcome)
     panel.expect_latency(222)
     assert "mean 111ms" not in panel.page.locator(".sl-plot").text_content()
+    # An obsolete pooled response never starts lane requests for its mount.
+    assert all(request["settled"] for request in panel.requests())
+
+
+def test_comparison_lanes_arrive_with_the_pooled_request(panel):
+    refs = ["run-1::pass1", "run-1::pass2", "run-2"]
+    panel.mount(refs, {"pooled": True})
+    panel.wait_requests(1)
+    data = payload(100)
+    data["groups_by_ref"] = {
+        ref: payload(300 + index)["groups"] for index, ref in enumerate(refs)
+    }
+    panel.respond(0, data)
+    panel.expect_latency(300)
+    for index in range(len(refs)):
+        assert f"mean {300 + index}ms" in panel.page.locator(".sl-plot").text_content()
+    [request] = panel.requests()
+    query = parse_qs(urlparse(request["url"]).query)
+    assert query["run_ids"] == [",".join(refs)]
+    assert query["group_by"] == ["ref"]
+    # Lane toggles reuse the loaded lanes instead of fetching them again.
+    panel.page.locator('[data-sl-run="run-2"]').click()
+    panel.page.locator('[data-sl-run="run-2"]').click()
+    assert "mean 302ms" in panel.page.locator(".sl-plot").text_content()
+    assert len(panel.requests()) == 1
+    # CSV exports keep the plain pooled scope.
+    for href in panel.page.locator("#panel a[download]").evaluate_all(
+        "links => links.map(link => link.href)"
+    ):
+        assert "group_by" not in parse_qs(urlparse(href).query)
 
 
 def test_reselected_comparison_lane_keeps_the_current_result(panel):
+    # Lane requests exist only when the server does not return lanes pooled.
+    panel.lanes_in_pool = False
     panel.mount(["run-1", "run-2"], {"pooled": True})
     panel.respond_since(0, payload(100))
     panel.expect_latency(100)
@@ -250,7 +299,7 @@ def test_empty_step_latency_panel_hides_and_returns_on_refresh(panel, pooled):
 @pytest.mark.parametrize("pooled", [False, True])
 def test_obsolete_data_cannot_restore_an_empty_panel(panel, pooled):
     panel.mount(["old-run"], {"pooled": pooled})
-    old_count = 2 if pooled else 1
+    old_count = 1
     panel.wait_requests(old_count)
     panel.mount(["new-run"], {"pooled": pooled})
     panel.respond_since(old_count, {"groups": [], "passes": []})
@@ -480,9 +529,7 @@ def test_comparison_legends_and_svg_preserve_labels_as_text(panel, tmp_path):
         for index, label in enumerate(labels)
     ]
     panel.mount(["run-0", "run-1"], {"pooled": True, "cohorts": cohorts})
-    panel.wait_requests(3)
-    for index in range(3):
-        panel.respond(index, payload(100 + index))
+    panel.respond_since(0, payload(100))
     legend = panel.page.locator(".sl-legend")
     for label in labels:
         assert label in legend.text_content()
@@ -558,9 +605,7 @@ def test_wide_comparison_labels_fit_live_and_exported_legends(panel, tmp_path):
 def test_csv_exports_preserve_individual_repeat_pass_scopes(panel):
     refs = ["run-1::pass1", "run-2::pass2"]
     panel.mount(refs, {"pooled": True})
-    panel.wait_requests(3)
-    for index in range(3):
-        panel.respond(index)
+    panel.respond_since(0)
     links = panel.page.locator("#panel a[download]")
     assert links.count() == 2
     for href in links.evaluate_all("links => links.map(link => link.href)"):

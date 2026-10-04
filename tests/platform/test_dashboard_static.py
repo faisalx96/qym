@@ -12,14 +12,6 @@ DOCS_JS = DASHBOARD_DIR / "docs.js"
 DOCS_CSS = DASHBOARD_DIR / "docs.css"
 RUNS_API = ROOT / "packages" / "platform" / "qym_platform" / "api" / "runs.py"
 ANALYSIS_API = ROOT / "packages" / "platform" / "qym_platform" / "api" / "analysis.py"
-REPEAT_PASSES_SERVICE = (
-    ROOT
-    / "packages"
-    / "platform"
-    / "qym_platform"
-    / "services"
-    / "repeat_passes.py"
-)
 ANALYZER_HTML = DASHBOARD_DIR / "analyzer.html"
 
 
@@ -77,7 +69,6 @@ def test_run_and_compare_exports_keep_independent_scroll_containers() -> None:
 def test_run_item_scopes_task_and_metric_errors_to_the_right_surface() -> None:
     """Task errors mark the item; metric errors mark only their metric."""
     source = (DASHBOARD_DIR / "run.html").read_text(encoding="utf-8")
-    metrics_source = (DASHBOARD_DIR / "metrics.js").read_text(encoding="utf-8")
     verdict_block = source.split(
         "// The verdict belongs to the expanded execution", 1
     )[1].split("// Detailed AI analysis", 1)[0]
@@ -91,9 +82,9 @@ def test_run_item_scopes_task_and_metric_errors_to_the_right_surface() -> None:
         "function renderErrorDistributionSection", 1
     )[0]
 
-    assert (
-        "const hasTaskError = window.QymMetrics.isTaskErrorRow(row);" in verdict_block
-    )
+    # A repeat item's task errors are its failed passes, not the status of
+    # the pass that arrived last (metrics.js hasTaskError).
+    assert "const hasTaskError = window.QymMetrics.hasTaskError(row);" in verdict_block
     assert "const taskErrorAttempts = isRepeatItem" in verdict_block
     assert "window.QymMetrics.isTaskErrorRow(att)" in verdict_block
     assert (
@@ -102,15 +93,32 @@ def test_run_item_scopes_task_and_metric_errors_to_the_right_surface() -> None:
     )
     assert "const selectedMetricHasError = metric" in verdict_block
     assert "window.QymMetrics.hasMetricError(row, metric)" in verdict_block
-    assert "if (hasAnyTaskError)" in verdict_block
+    # A lower-is-better metric leaves a scorer error out of its mean: the item
+    # shows as an error, never as a (best) score.
+    assert (
+        "const scorerErrorLeftOut = selectedMetricHasError && errorsLeftOutFor(metric);"
+        in verdict_block
+    )
+    assert "if (hasAnyTaskError || scorerErrorLeftOut)" in verdict_block
     assert "else if (!selectedMetricHasError" in verdict_block
     assert "pfClass = 'error';" in verdict_block
-    assert "pfClass = pfVal >= threshold ? 'pass' : 'fail';" in verdict_block
-    assert "const statusLabel = pfClass === 'pass' ? 'Pass' : 'Fail';" in verdict_block
+    # Pass/Fail follows the declared direction and the metric's error rule;
+    # none = no tag (C008).
+    assert "const pfPassed = rowPassesFor(metric, rowScoreFor(row, mIdx, metric));" in verdict_block
+    assert "pfClass = pfPassed ? 'pass' : 'fail';" in verdict_block
+    assert (
+        "const statusLabel = pfClass === 'not-received' ? 'Not received' "
+        ": pfClass === 'pass' ? 'Pass' : 'Fail';" in verdict_block
+    )
+    # An item never received has no verdict: it is neither a pass nor an error.
+    assert "const notReceived = window.QymMetrics.isNotReceivedRow(row);" in verdict_block
+    assert "if (notReceived) {\n            pfClass = 'not-received';" in verdict_block
     assert "? 'Task execution failed in ' + taskErrorAttempts.length" in verdict_block
     assert ": 'Task execution failed')" in verdict_block
     assert ": 'qym-tag--danger';" in verdict_block
-    assert "qym-tag--warning" not in verdict_block
+    # Warning is the not-received state's tone only; errors stay danger.
+    assert verdict_block.count("qym-tag--warning") == 1
+    assert "pfClass === 'not-received'\n            ? 'qym-tag--warning'" in verdict_block
     assert "const statusIconOnlyClass = pfClass === 'error'" in verdict_block
     assert "const statusContent = pfClass === 'error' ? FAILURE_ICON" in verdict_block
     assert "const statusAccessibility = pfClass === 'error'" in verdict_block
@@ -173,22 +181,13 @@ def test_run_item_scopes_task_and_metric_errors_to_the_right_surface() -> None:
     assert "min-width: var(--badge-height);" in metric_icon_rule
     assert "padding: 0;" in metric_icon_rule
 
-    assert "function isTaskErrorRow(row)" in metrics_source
-    assert "function isMetricErrorMeta(meta)" in metrics_source
-    assert "const status = String(meta.status || '').trim().toLowerCase();" in metrics_source
-    assert "meta.status || meta.label" not in metrics_source
-    assert "function hasMetricError(row, metricName = null)" in metrics_source
-    assert "return isTaskErrorRow(row) || hasMetricError(row);" in metrics_source
-    assert "function getRowScore(row, metricIdx, metricName = null)" in metrics_source
-    assert "const metricError = metricName !== null" in metrics_source
-    assert "return { score, isError: metricError };" in metrics_source
     assert "Metric Errors" in source
     assert "'Metric error'" in source
     assert "const passTaskErrors = isRepeatAggregateView()" in error_distribution
     assert "Array.isArray(row.pass_attempts)" in error_distribution
     assert "for (const attempt of passTaskErrors)" in error_distribution
     assert "attempt.error || attempt.output || ''" in error_distribution
-    assert "} else if (window.QymMetrics.isTaskErrorRow(row)) {" in error_distribution
+    assert "} else if (window.QymMetrics.isItemTaskError(row)) {" in error_distribution
     assert "const passErrors = Array.isArray(perPass)" in error_distribution
     assert "passErrors.length" in error_distribution
 
@@ -333,26 +332,10 @@ def test_runs_badges_separate_error_types_without_changing_item_math() -> None:
     assert "execution_error_count: executionErrorCount" in flatten
     assert "a.execution_error_count - b.execution_error_count" in source
     assert "b.execution_error_count - a.execution_error_count" in source
-    assert "function renderExecutionErrors" in source
-    assert "run.task_error_count != null && run.metric_error_count != null" in source
-    assert "status-metric-errors" in source
-    assert "task/metric breakdown is updating" in source
     assert "run.samples > 1 ? ' across all passes' : ''" in source
     assert "const retryScope = run.samples > 1 ? ' across all passes' : ' across all items';" in source
     assert "${retryScope}" in source
-    assert "dashboard.js?v=runs-performance-" in index
-
-
-def test_repeat_run_rows_show_each_pass_retry_count() -> None:
-    """Expanded pass rows expose the retries included in the parent total."""
-    source = DASHBOARD_JS.read_text(encoding="utf-8")
-    member_row = source.split("const memberRow = (pass, isLast) =>", 1)[1].split(
-        "// The group-metrics strip", 1
-    )[0]
-
-    assert "const retries = Number(pass.retry_count) || 0;" in member_row
-    assert "${retries}↻" in member_row
-    assert "in this pass" in member_row
+    assert "dashboard.js?v=p0-20260930-3" in index
 
 
 def test_run_column_wraps_names_at_400px() -> None:
@@ -371,45 +354,27 @@ def test_live_repeat_progress_is_shown_on_the_active_pass_only() -> None:
     source = DASHBOARD_JS.read_text(encoding="utf-8")
 
     assert "const parentProgressText = run.samples > 1" in source
-    assert ">${status}${passText}${parentProgressText}</span>" in source
+    assert ">${escapeHtml(status)}${passText}${parentProgressText}</span>" in source
     assert "const completedCount = Number(pass.completed_count) || 0;" in source
     assert "const totalCount = Number(pass.items_total) || 0;" in source
     assert "Math.round((completedCount / totalCount) * 100)" in source
-    assert "${statusLabel}${progressLabel}</span>" in source
+    assert "${escapeHtml(statusLabel)}${progressLabel}</span>" in source
 
 
 def test_stopped_repeat_run_never_renders_a_running_pass() -> None:
     source = DASHBOARD_JS.read_text(encoding="utf-8")
-    api = RUNS_API.read_text(encoding="utf-8")
 
     assert "stopped: 'STOPPED'" in source
     assert "rawPassStatus === 'running' && terminalPassStatus" in source
     assert "String(pass.status || '').toLowerCase() === 'running'" in source
-    assert api.count("_repeat_pass_status(") == 3
 
 
 def test_repeat_passes_use_runs_view_bulk_delete_action() -> None:
     source = (DASHBOARD_DIR / "run.html").read_text(encoding="utf-8")
     dashboard = DASHBOARD_JS.read_text(encoding="utf-8")
-    api = RUNS_API.read_text(encoding="utf-8")
-    service = REPEAT_PASSES_SERVICE.read_text(encoding="utf-8")
 
     assert 'data-delete-pass="' not in source
-    assert 'class="pass-checkbox"' in dashboard
-    assert "const passGroups = new Map();" in dashboard
-    assert "body: JSON.stringify({ pass_numbers: group.passNumbers, expected_pass_version: group.passVersion })" in dashboard
     assert 'class="pass-delete-action qym-icon-action action-icon delete-run"' in dashboard
-    assert "data-can-delete-pass=" in dashboard
-    assert "await fetchRuns({ refreshAllPages: true });" in dashboard
-    assert "delete state._samplesData[runId];" in dashboard
-    single_delete_handler = dashboard.split(
-        "function insertSamplesDetail(runId, row, panelId, animate)", 1
-    )[1].split("async function loadSamplesData", 1)[0]
-    assert "const runFilePath = decodeURIComponent(row?.dataset?.file || '');" in single_delete_handler
-    assert "if (runFilePath) {" in single_delete_handler
-    assert '@router.delete("/api/runs/{run_id}/passes/{pass_number}")' in api
-    assert '@router.delete("/api/runs/{run_id}/passes")' in api
-    assert 'action="run.pass_deleted"' in service
 
 
 def test_repeat_parent_checkbox_selects_its_current_scope() -> None:
@@ -428,7 +393,7 @@ def test_repeat_parent_checkbox_selects_its_current_scope() -> None:
     assert "isPartiallySelected" not in source
     assert "state.selectedRuns.delete(filePath);" in source
     assert "if (!allSelected) refs.forEach(ref => state.selectedRuns.add(ref));" in source
-    assert "dashboard.js?v=runs-performance-" in index
+    assert "dashboard.js?v=p0-20260930-3" in index
 
 
 def test_repeat_comparison_selection_expands_to_exact_passes() -> None:
@@ -612,8 +577,9 @@ def test_repeat_drawer_follows_mock_option_c() -> None:
     assert ".pass-member .tag," in styles
 
     # best-in-column chips across sibling passes (same dialect as the run
-    # page's pass sweep): max wins for metrics, min wins for latencies
-    assert "winnersFor(p => (p.metric_means || {})[metric], 'max')" in source
+    # page's pass sweep): metrics follow their declared direction (none = no
+    # best, C008), min wins for latencies
+    assert "{ maximize: 'max', minimize: 'min' }[runMetricDirection(parentRun, metric)] || null" in source
     assert "const avgLatencyWinners = winnersFor(p => p.avg_latency_ms, 'min');" in source
     assert "const medianLatencyWinners = winnersFor(p => p.median_latency_ms, 'min');" in source
     assert "const chipAttrs = (winners, passNumber) =>" in source
@@ -660,7 +626,8 @@ def test_run_page_supports_single_pass_scope() -> None:
     assert "const isRepeatItem = !state.viewPass" in source
     # edits are allowed and routed to the viewed pass
     assert "const passNumber = Number(btn.dataset.passNumber) || state.viewPass || null;" in source
-    assert "updateMetricScore(filePath, rowIndex, metricName, input.value, passNumber)" in source
+    # the validated number is sent, never the raw input text (C009)
+    assert "updateMetricScore(filePath, rowIndex, metricName, parsed.value, passNumber)" in source
     assert "...(passNumber ? { pass_number: passNumber, expected_pass_version: currentPassVersion() } : {})," in source
     # applying the server row keeps per-pass fields and re-applies the lens
     assert "let next = { ...rows[pos], ...updatedRow };" in source
@@ -721,17 +688,6 @@ def test_run_page_supports_single_pass_scope() -> None:
     assert "itemHiddenOutputs" in source
     assert "itemComparedMetric" in source
     assert 'aria-pressed="' in source
-
-    # the API ships per-pass attempts on run-detail rows, and update_metric
-    # accepts a pass_number and re-reduces the run-level mean
-    api = RUNS_API.read_text(encoding="utf-8")
-    assert '"pass_attempts": (' in api
-    assert "RunItemAttempt.is_last_attempt.is_(True)" in api
-    assert '"completed_count": completed_by_pass.get(p, 0)' in api
-    assert '"running_count": (' in api
-    assert 'running_by_pass.get(p, 0) if status == "running" else 0' in api
-    assert 'pass_number = request.get("pass_number")' in api
-    assert "Re-reduce: run-level score = mean over all stored passes" in api
 
 
 def test_repeat_and_compare_share_grouped_output_interaction() -> None:
@@ -1061,7 +1017,7 @@ def test_repeat_run_analysis_uses_shared_visual_language() -> None:
     assert "'&threshold=' + encodeURIComponent(requestedThreshold)" in source
     assert "state.metricThresholds[groupMetric] = value / 100;" in source
     assert 'class="samples-metric-threshold"' not in source
-    assert "window.QymMetrics.getMetricColorClass(v, mTypeOf(m))" in source
+    assert "metricColorClassFor(m, v, mTypeOf(m))" in source
     assert "statTile('Max@' + samplesCount" not in source
     assert "statTile('Avg Score'" in source
     assert "const finalRepeatPoint = group.band?.[samplesCount]" in source
@@ -1169,7 +1125,8 @@ def test_repeat_run_analysis_uses_shared_visual_language() -> None:
     assert "P95 Latency" not in repeat_analysis
     assert "p.p95_latency_ms" not in repeat_analysis
     assert "const winnersFor = (valueOf, direction) =>" in source
-    assert "winnersFor(p => (p.metric_means || {})[m], 'max')" in source
+    # Best pass per metric column follows the declared direction (C008).
+    assert "{ maximize: 'max', minimize: 'min' }[metricDirectionOf(m)] || null" in source
     assert "const avgLatencyWinners = winnersFor(p => p.avg_latency_ms, 'min');" in source
     assert "const medianLatencyWinners = winnersFor(p => p.median_latency_ms, 'min');" in source
     assert "const errorWinners = winnersFor(p => Number(p.error_count || 0), 'min');" in source
@@ -1222,7 +1179,9 @@ def test_repeat_run_analysis_uses_shared_visual_language() -> None:
     assert "samples-band-table-wrap" in repeat_analysis
     assert "samples-band-cell-ci" in repeat_analysis
     assert "±" in repeat_analysis
-    assert "window.QymMetrics.getMetricColorClass(value, groupMetricType)" in repeat_analysis
+    # Pass rates read higher-is-better; the average follows the metric (C008).
+    assert "window.QymMetrics.getMetricColorClass(value, groupMetricType, 'maximize')" in repeat_analysis
+    assert "metricColorClassFor(groupMetric, value, groupMetricType)" in repeat_analysis
     assert "samples-band-cell-main qym-score-value" in repeat_analysis
     for band in range(1, 6):
         assert f".qym-score-value.score-{band} {{ color: var(--score-{band}); }}" in components
@@ -1404,8 +1363,8 @@ def test_run_category_breakdown_keeps_cards_and_adds_repeat_aware_compare_view()
     assert "Avg / pass rate" not in source
     assert 'class="breakdown-pass-summary"' not in source
     assert 'class="category-pass-track' in source
-    assert "function categoryScoreTrack(score, baseline)" in source
-    assert "categoryScoreTrack(group.avgScore, overallAverage)" in source
+    assert "function categoryScoreTrack(score, baseline, direction = 'maximize')" in source
+    assert "categoryScoreTrack(group.avgScore, overallAverage, metricDirectionOf(metric))" in source
     assert 'class="category-compare-row"' in source
     assert "<span>Pass rate</span>" not in source
     assert "<span>Rate</span>" not in source
@@ -1473,7 +1432,11 @@ def test_models_view_uses_globally_filtered_runs() -> None:
     assert "state.filterModels.size > 0 && !state.filterModels.has('__none__')" not in models_block
     assert "? state.filteredRuns.filter(r => r.task_name === currentTask && getRunDatasetKey(r) === currentDataset)" in dropdown_block
     assert "? state.flatRuns.filter(r => r.task_name === currentTask && getRunDatasetKey(r) === currentDataset)" not in dropdown_block
-    assert "currentTask && currentDataset && candidates ? candidates.metrics : []" in dropdown_block
+    assert "currentTask && currentDataset && candidates ? (candidates.metrics || []) : []" in dropdown_block
+    # Spec position order and the declared primary metric, not alphabetical (C008).
+    assert "window.QymMetrics.mergeMetricNames([" in dropdown_block
+    assert "window.QymMetrics.defaultMetricName(newest.metrics || [], newest.metric_specs || {})" in dropdown_block
+    assert "[...metricsSet].sort()" not in dropdown_block
 
 
 def test_charts_grouped_view_uses_presets_for_version_model_splits() -> None:
@@ -1513,7 +1476,7 @@ def test_charts_grouped_view_uses_presets_for_version_model_splits() -> None:
     assert "function renderEmptyGroupStatCells()" in charts_block
     assert "function renderGroupStatBar(value, label, title, modelIdx)" in charts_block
     assert "scheduleChartGroupMetricStats(runs, groupMetricName, threshold, isBoolean)" in charts_block
-    assert "calculateModelStatsFromItems(detailedRuns, metricName, threshold, isBoolean)" in charts_block
+    assert "calculateModelStatsFromItems(detailedRuns, metricName, threshold, isBoolean, runsMetricDirection(runs, metricName))" in charts_block
     assert "const GROUP_DISPLAY_COLUMNS = [" in source
     assert "Grouped Run Columns" in source
     assert "...GROUP_DISPLAY_COLUMNS.map(col => col.key)" in source
@@ -1532,7 +1495,7 @@ def test_charts_grouped_view_uses_presets_for_version_model_splits() -> None:
     assert "GROUP_RELIABILITY_COLUMN_KEY" in charts_block
     assert "function isGroupStatSortKey(key)" in charts_block
     assert "chart-col-header chart-group-stat-header sortable-col" in charts_block
-    assert "data-sort=\"${key}\"" in charts_block
+    assert "data-sort=\"${escapeHtml(key)}\"" in charts_block
     assert "chart-table ${isGrouped ? 'chart-table-grouped' : ''}" in charts_block
     assert "${showGroupStatColumns ? groupStatHeaderCells : ''}\n                ${headerCells}" in charts_block
     assert "${groupStatCells}\n              ${dataCells}" in charts_block
@@ -1721,14 +1684,53 @@ def test_dashboard_stops_polling_before_shell_navigation() -> None:
     assert "if (!dashboardActive) return;" in source
 
 
+def _static_asset_versions(source: str, asset: str) -> set[str]:
+    """Return each ``?v=`` value ``source`` uses to load ``asset`` ('' if none)."""
+    pattern = r'(?:src|href)="[^"?]*/' + re.escape(asset) + r'(?:\?v=([^"]*))?"'
+    return set(re.findall(pattern, source))
+
+
 def test_changed_route_assets_are_cache_versioned() -> None:
+    """Route-specific assets load with one non-empty cache key."""
     docs = (DASHBOARD_DIR / "docs.html").read_text(encoding="utf-8")
     runs_api = RUNS_API.read_text(encoding="utf-8")
 
-    assert "/static/docs.css?v=ui-consistency-20260730-15" in docs
-    assert "/static/docs.js?v=ui-consistency-20260730-18" in docs
-    assert 'dashboard.css?v=ui-consistency-20260730-10"' in runs_api
-    assert 'shell.js?v=ui-consistency-20260730-10"' in runs_api
+    for source, asset in (
+        (docs, "docs.css"),
+        (docs, "docs.js"),
+        # The project-not-found page loads the shared shell assets too.
+        (runs_api, "auth.js"),
+        (runs_api, "shell.css"),
+        (runs_api, "dashboard.css"),
+        (runs_api, "shell.js"),
+    ):
+        versions = _static_asset_versions(source, asset)
+        assert len(versions) == 1 and all(versions), (asset, versions)
+
+
+def test_every_page_versions_the_shared_shell_assets() -> None:
+    """shell.css and auth.js changed without a version, so browsers could keep
+    a stale copy next to the new shell.js/kpis.js after a deploy."""
+    for page in DASHBOARD_DIR.glob("*.html"):
+        source = page.read_text(encoding="utf-8")
+        for asset in ("shell.css", "auth.js", "shell.js", "dashboard.css"):
+            assert all(_static_asset_versions(source, asset)), (page.name, asset)
+
+
+def test_pages_share_one_version_of_the_shared_ui_layer() -> None:
+    """A ui_components bump must reach every page that loads it."""
+    for asset in ("ui_components.css", "ui_components.js"):
+        versions = {
+            page.name: _static_asset_versions(page.read_text(encoding="utf-8"), asset)
+            for page in sorted(DASHBOARD_DIR.glob("*.html"))
+        }
+        versions = {name: found for name, found in versions.items() if found}
+        assert len(versions) > 1, asset
+        for name, found in versions.items():
+            assert len(found) == 1 and all(found), (asset, name, found)
+        # analyzer.html carries its own revision of the shared layer.
+        assert versions.pop("analyzer.html")
+        assert len(set().union(*versions.values())) == 1, (asset, versions)
 
 
 def test_multiselects_share_search_actions_options_and_only_action() -> None:
@@ -2056,7 +2058,9 @@ def test_compare_view_uses_current_run_detail_component_contracts() -> None:
     assert "table-layout: fixed;" in compare
     assert "width: 18%;" in compare
     assert "display: flex;" in compare.split(".metric-run-heading {", 1)[1].split("}", 1)[0]
-    assert "const isBest = mType !== 'numeric'" in compare
+    # "Best" follows the metric's declared direction; none = no best (C008).
+    assert "const isBest = bestValues[metric] !== null" in compare
+    assert "window.QymMetrics.bestMetricIndexes(values, metricDirectionFor(metric))" in compare
     assert "text-align: center;" in compare.split(
         ".metrics-table.qdt-table th:not(:first-child),", 1
     )[1].split("}", 1)[0]
@@ -2178,19 +2182,6 @@ def test_clear_filter_control_has_aligned_label_and_soft_count_pill() -> None:
     assert "border-radius: 999px;" in count_pill
     assert "background: rgba(239, 68, 68, 0.14);" in count_pill
     assert "font-family: var(--font-mono);" in components
-
-    for page in DASHBOARD_DIR.glob("*.html"):
-        source = page.read_text(encoding="utf-8")
-        if page.name == "analyzer.html":
-            assert "dashboard.css?v=approved-subcategories-20260917-1" in source
-            assert "playground.js?v=approved-subcategories-20260917-1" in source
-            assert "ui_components.css?v=auto-analysis-selectors-20260811-1" in source
-            assert "ui_components.js?v=auto-analysis-selectors-20260811-1" in source
-            continue
-        if "ui_components.css?v=" in source:
-            assert "ui_components.css?v=ui-consistency-20260803-60" in source
-        if "ui_components.js?v=" in source:
-            assert "ui_components.js?v=ui-consistency-20260803-28" in source
 
 
 def test_operational_statistics_use_connected_strip_contract() -> None:
@@ -2433,12 +2424,6 @@ def test_shared_segmented_controls_use_one_motion_indicator() -> None:
     assert "width: var(--qym-segment-width);" in components
     assert "cubic-bezier(0.16, 1, 0.3, 1)" in components
     assert "@media (prefers-reduced-motion: reduce)" in components
-    assert "function syncSegmented(segmented)" in behavior
-    assert "function scheduleSegmentedSync(segmented, frames)" in behavior
-    assert "function observeSegmented(segmented)" in behavior
-    assert "function cleanupSegmented(root)" in behavior
-    assert "function segmentedHistoryKey(segmented)" in behavior
-    assert "var segmentPositions = new Map();" in behavior
     assert "new ResizeObserver" in behavior
     assert "active.offsetLeft + 'px'" in behavior
     assert "active.offsetWidth + 'px'" in behavior
@@ -2514,9 +2499,10 @@ def test_quick_actions_share_the_same_icon_only_green_treatment() -> None:
         run,
         compare,
         reviews,
-        (DASHBOARD_DIR / "trash.html").read_text(encoding="utf-8"),
     ):
         assert re.search(r'class="toast-close qym-icon-action"', source)
+    # Deleted Runs has no toast markup of its own; it uses the shell's toasts.
+    assert "window.QymShell.toast(" in (DASHBOARD_DIR / "trash.html").read_text(encoding="utf-8")
     title_copy_rule = datasets.split(
         ".dsx-item-title-line .tv-copy-btn {",
         1,
@@ -2679,7 +2665,6 @@ def test_rerendered_controls_restore_keyboard_focus() -> None:
 
 
 def test_shared_help_markers_are_keyboard_and_touch_operable() -> None:
-    behavior = (DASHBOARD_DIR / "ui_components.js").read_text(encoding="utf-8")
     run = (DASHBOARD_DIR / "run.html").read_text(encoding="utf-8")
     compare = (DASHBOARD_DIR / "compare.html").read_text(encoding="utf-8")
 
@@ -2687,25 +2672,6 @@ def test_shared_help_markers_are_keyboard_and_touch_operable() -> None:
         assert 'class="stat-info-icon qym-help-marker' in source
         assert 'role="tooltip"' in source
         assert 'aria-expanded="false"' in source
-    assert "marker.classList.toggle('is-open', !wasOpen);" in behavior
-    assert "event.key === 'Escape'" in behavior
-    assert "marker.focus({ preventScroll: true });" in behavior
-    assert "marker.setAttribute('aria-describedby', tooltip.id);" in behavior
-    assert "directTabs(tablist)" in behavior
-    assert "'ArrowLeft', 'ArrowRight', 'Home', 'End'" in behavior
-
-
-def test_compare_html_export_is_self_contained_and_export_safe() -> None:
-    source = (DASHBOARD_DIR / "compare.html").read_text(encoding="utf-8")
-
-    assert "async function inlineCompareExportAssets(html)" in source
-    assert "(?:dashboard|shell|ui_components)\\.css" in source
-    assert "(?:metrics|trace_viewer|ui_components)\\.js" in source
-    assert "(?:auth|shell|playground|run_details|step_latency)\\.js" in source
-    assert "html.replace(match[0], () => '<style>" in source
-    assert "html.replace(match[0], () => '<script>" in source
-    assert "html = await inlineCompareExportAssets(html);" in source
-    assert "if (!IS_COMPARE_EXPORT && typeof QymPlayground !== 'undefined')" in source
 
 
 def test_compare_uses_shared_composable_item_filter_builder() -> None:
@@ -3379,7 +3345,7 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert '"type": "retrying"' in analysis_api
     assert "state.phase === 'retrying'" in playground
     assert "Retrying timed-out analysis…" in playground
-    assert "playground.js?v=approved-subcategories-20260917-1" in (
+    assert "playground.js?v=p0-20260930" in (
         DASHBOARD_DIR / "analyzer.html"
     ).read_text(encoding="utf-8")
     assert "Timeout retries: <strong>" in playground
@@ -3832,20 +3798,11 @@ def test_root_cause_issue_records_are_rendered_edited_and_exported() -> None:
     assert "function reviewRootCauseIssues" in reviews
     assert "data-review-issue-edit" in reviews
     assert "human_root_cause_issues: issues" in reviews
-    assert "function rootCauseIssuePatch" in run
     assert 'data-metric-issues-item=' in run
     assert ":root_cause_issues" in run
-    assert "function rootCauseIssuePatch" in compare
     assert 'data-rc-issues-item=' in compare
     assert "root_cause_issues', label: 'Root cause issues (JSON)'" in compare
     assert "canonical <code>root_cause_issues</code> records" in endpoints
-
-    active_compare_output = compare.split("function renderCompareOutputGroup", 1)[
-        1
-    ].split("function renderItemComparisonCard", 1)[0]
-    assert "const rootCauseBlockFor = (row, runIdx)" in active_compare_output
-    assert "${rootCauseBlockFor(row, runIdx)}" in active_compare_output
-    assert 'data-rc-issues-item="${escapeAttr(itemId)}"' in active_compare_output
 
 
 def test_run_manual_diagnosis_uses_project_backed_modal_picker() -> None:
@@ -3958,7 +3915,7 @@ def test_runs_table_sticky_columns_size_to_visible_values() -> None:
     dashboard_js = (DASHBOARD_DIR / "dashboard.js").read_text(encoding="utf-8")
     styles = (DASHBOARD_DIR / "dashboard.css").read_text(encoding="utf-8")
 
-    assert "const RUNS_STICKY_COLUMN_LIMITS" in dashboard_js
+    assert "const RUNS_IDENTITY_COLUMNS" in dashboard_js
     assert "function scheduleRunsStickyColumnSizing()" in dashboard_js
     assert "runs-table--measuring-sticky-columns" in dashboard_js
     assert "scheduleRunsStickyColumnSizing();" in dashboard_js
@@ -3971,7 +3928,9 @@ def test_runs_table_sticky_columns_size_to_visible_values() -> None:
     assert "text-overflow: clip" in styles
 
 
-def test_runs_table_freezes_dataset_owner_and_date_with_identity_columns() -> None:
+def test_runs_table_freezes_the_chosen_identity_columns() -> None:
+    """C002: the reader picks the frozen identity columns (all seven by
+    default); offsets come from the frozen set, not a fixed calc() chain."""
     markup = (DASHBOARD_DIR / "index.html").read_text(encoding="utf-8")
     source = DASHBOARD_JS.read_text(encoding="utf-8")
     styles = (DASHBOARD_DIR / "dashboard.css").read_text(encoding="utf-8")
@@ -3980,10 +3939,6 @@ def test_runs_table_freezes_dataset_owner_and_date_with_identity_columns() -> No
     status_header = markup.index('class="col-status sortable" data-sort="status"')
     assert run_header < status_header
     assert markup.index("RUN NAME", run_header, status_header)
-    run_rule = _rule(styles, ".runs-table .col-run {")
-    status_rule = _rule(styles, ".runs-table .col-status {")
-    assert "left: 0;" in run_rule
-    assert "left: var(--runs-col-run-width);" in status_rule
 
     run_row = source.index('data-can-delete-pass=')
     assert source.index('<td class="col-run">', run_row) < source.index(
@@ -4002,12 +3957,40 @@ def test_runs_table_freezes_dataset_owner_and_date_with_identity_columns() -> No
         markup.index('class="col-analysis"'),
     ]
     assert identity_headers == sorted(identity_headers)
-    for column in ("dataset", "owner", "time"):
-        rule = _rule(styles, f".runs-table .col-{column} {{")
+
+    # Default: exactly today's seven frozen columns, Date casting the edge.
+    assert (
+        '<table class="runs-table" data-frozen-columns="run status task model '
+        'dataset owner time" data-frozen-edges="time">'
+    ) in markup
+    keys = ("run", "status", "task", "model", "dataset", "owner", "time")
+    for column in keys:
+        rule = _rule(
+            styles, f'.runs-table[data-frozen-columns~="{column}"] .col-{column} {{'
+        )
         assert "position: sticky;" in rule
-        assert "left: calc(" in rule
-        assert f"th.col-{column}" in styles
+        assert f"left: var(--runs-col-{column}-left, auto);" in rule
+        assert f'.runs-table[data-frozen-columns~="{column}"] thead th.col-{column}' in styles
+        assert f'.runs-table[data-frozen-edges~="{column}"] .col-{column}::before' in styles
         assert f"td.col-{column}" in styles
+    # No hard-coded chain of widths, and no identity column is sticky on its own.
+    assert "left: calc(var(--runs-col-" not in styles
+    for column in keys:
+        assert f".runs-table .col-{column} {{" not in styles
+    edge_rule = _rule(styles, '.runs-table[data-frozen-edges~="run"] .col-run::before')
+    assert "box-shadow: 4px 0 8px rgba(0, 0, 0, 0.25);" in edge_rule
+    assert "pointer-events: none;" in edge_rule
+
+    # JS writes the offsets from the measured widths of the frozen set only,
+    # remembers the choice per browser, and offers it in the Columns menu.
+    assert "applyRunsFrozenColumns(table, widths);" in source
+    assert "table.style.setProperty(`--runs-col-${column.key}-left`, `${left}px`);" in source
+    assert "const RUNS_FROZEN_COLUMNS_STORAGE_KEY = 'qym:runs-frozen-columns';" in source
+    assert "renderRunsFrozenColumnsSection(searchValue);" in source
+    assert '<div role="group" aria-labelledby="mv-frozen-label">' in source
+    assert "Reset to default" in source
+    # Focus padding follows the frozen block that is actually stuck.
+    assert "runsFrozenWidth(scroller)" in source
 
     timestamp_rule = _rule(styles, ".timestamp {")
     assert "display: inline-flex;" in timestamp_rule

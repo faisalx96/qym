@@ -5,15 +5,14 @@ from __future__ import annotations
 import os
 import time
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from alembic import command
-from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, inspect, select, text
-from sqlalchemy.engine import make_url
+from sqlalchemy import inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from qym_platform.db.dashboard_models import DashboardRunDimension, DashboardRunSummary
@@ -29,127 +28,91 @@ from qym_platform.db.models import (
     User,
     UserRole,
 )
-
-MIGRATIONS = (
-    Path(__file__).resolve().parents[2] / "packages/platform/qym_platform/migrations"
-)
+from _helpers import insert_at_revision
 
 
-@pytest.fixture
-def postgres(request, monkeypatch):
-    url = os.environ.get("QYM_TEST_POSTGRES_URL")
-    if not url:
-        pytest.skip("QYM_TEST_POSTGRES_URL not configured")
-    schema = "qym_migration_lifecycle_" + uuid4().hex
-    admin = create_engine(url)
-    with admin.begin() as connection:
-        connection.execute(text(f'CREATE SCHEMA "{schema}"'))
-    scoped = make_url(url).update_query_dict({"options": f"-csearch_path={schema}"})
-    engine = create_engine(scoped)
-    monkeypatch.setenv("QYM_DATABASE_URL", scoped.render_as_string(hide_password=False))
-    monkeypatch.setenv("PYTHON_DOTENV_DISABLED", "1")
-    config = Config()
-    config.set_main_option("script_location", str(MIGRATIONS))
+def seed(engine):
+    """Write historical source rows with the columns of the migrated revision.
 
-    def cleanup():
-        engine.dispose()
-        with admin.begin() as connection:
-            connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
-        admin.dispose()
-
-    request.addfinalizer(cleanup)
-    return engine, config
-
-
-def seed(engine, *, before_dashboard=False):
-    with Session(engine) as db:
-        if before_dashboard:
-            db.info["dashboard_projection_worker"] = True
-        db.add(User(id="owner", email="owner@example.invalid", role=UserRole.ADMIN))
-        db.flush()
-        db.add(
-            Project(
-                id="project", name="Project", slug="project", created_by_user_id="owner"
-            )
+    Core inserts skip the ORM flush hooks, so the rows get no dashboard
+    summaries or outbox registration, like rows written before 0047.
+    """
+    now = datetime.now()
+    with engine.begin() as connection:
+        insert = partial(insert_at_revision, connection)
+        insert(User, id="owner", email="owner@example.invalid", role=UserRole.ADMIN)
+        insert(
+            Project, id="project", name="Project", slug="project", created_by_user_id="owner"
         )
-        db.flush()
-        db.add(
-            Run(
-                id="run",
-                project_id="project",
-                owner_user_id="owner",
-                created_by_user_id="owner",
-                task="test",
-                dataset="test",
-                model=None,
-                metrics=["quality"],
-                run_config={},
-                run_metadata={"total_items": 1},
-                status=RunWorkflowStatus.COMPLETED,
-                created_at=datetime.now(),
-                started_at=datetime.now(),
-                last_event_at=datetime.now(),
-            )
+        insert(
+            Run,
+            id="run",
+            project_id="project",
+            owner_user_id="owner",
+            created_by_user_id="owner",
+            task="test",
+            dataset="test",
+            model=None,
+            metrics=["quality"],
+            run_config={},
+            run_metadata={"total_items": 1},
+            status=RunWorkflowStatus.COMPLETED,
+            created_at=now,
+            started_at=now,
+            last_event_at=now,
         )
-        db.flush()
-        db.add(
-            ProjectAnalysisCategoryCatalogVersion(
-                id="catalog",
-                project_id="project",
-                version=1,
-                content_hash="f" * 64,
-                subcategory_taxonomy={
-                    "reasoning": {"math": {"label": "Math", "description": "Preserve"}}
-                },
-            )
+        insert(
+            ProjectAnalysisCategoryCatalogVersion,
+            id="catalog",
+            project_id="project",
+            version=1,
+            content_hash="f" * 64,
+            subcategory_taxonomy={
+                "reasoning": {"math": {"label": "Math", "description": "Preserve"}}
+            },
         )
-        db.execute(
-            ReviewCorrection.__table__.insert().values(
-                run_id="run",
-                item_id="item",
-                task="test",
-                ai_root_cause="reasoning",
-                human_root_cause="reasoning",
-                ai_root_cause_issues=[
-                    {"category": "reasoning", "subcategory": "math", "finding": "AI"}
-                ],
-                human_root_cause_issues=[
-                    {"category": "reasoning", "subcategory": "math", "finding": "Human"}
-                ],
-            )
+        insert(
+            ReviewCorrection,
+            run_id="run",
+            item_id="item",
+            task="test",
+            ai_root_cause="reasoning",
+            human_root_cause="reasoning",
+            ai_root_cause_issues=[
+                {"category": "reasoning", "subcategory": "math", "finding": "AI"}
+            ],
+            human_root_cause_issues=[
+                {"category": "reasoning", "subcategory": "math", "finding": "Human"}
+            ],
         )
-        db.add(
-            RunItem(
-                run_id="run",
-                item_id="item",
-                input={"preserve": "source"},
-                output="original",
-                latency_ms=12,
-            )
+        insert(
+            RunItem,
+            run_id="run",
+            item_id="item",
+            input={"preserve": "source"},
+            output="original",
+            latency_ms=12,
         )
-        db.add(
-            RunItemScore(
-                run_id="run", item_id="item", metric_name="quality", score_numeric=0.75
-            )
+        insert(
+            RunItemScore, run_id="run", item_id="item", metric_name="quality", score_numeric=0.75
         )
-        db.add(
-            RunEvent(
-                run_id="run",
-                event_id=str(uuid4()),
-                sequence=1,
-                sent_at=datetime.now(),
-                type="item_completed",
-                payload={"preserve": True},
-            )
+        insert(
+            RunEvent,
+            run_id="run",
+            event_id=str(uuid4()),
+            sequence=1,
+            sent_at=now,
+            type="item_completed",
+            payload={"preserve": True},
         )
-        db.commit()
 
 
 def source_snapshot(engine):
+    # Select named columns only: older revisions lack some model columns.
     with Session(engine) as db:
-        source = db.scalar(select(RunItem))
+        source = db.execute(select(RunItem.input, RunItem.output)).one()
         return {
-            "run": db.get(Run, "run").id,
+            "run": db.scalar(select(Run.id).where(Run.id == "run")),
             "input": source.input,
             "output": source.output,
             "score": db.scalar(select(RunItemScore.score_numeric)),
@@ -171,12 +134,12 @@ def test_postgres_full_chain_upgrade_p1_downgrade_reupgrade(postgres, populated)
     engine, config = postgres
     command.upgrade(config, "0046")
     if populated:
-        seed(engine, before_dashboard=True)
+        seed(engine)
         expected = source_snapshot(engine)
     command.upgrade(config, "head")
     with engine.connect() as connection:
         assert (
-            connection.scalar(text("select version_num from alembic_version")) == "0059"
+            connection.scalar(text("select version_num from alembic_version")) == "0065"
         )
         inspector = inspect(connection)
         assert "ix_dashboard_event_retention" in {
@@ -237,7 +200,7 @@ def test_real_application_starts_projects_restarts_and_stops_worker(
         ),
     )
     # Historical source rows have no prebuilt summaries or outbox registration.
-    seed(engine, before_dashboard=True)
+    seed(engine)
     app = main.build_app()
     path = prefix.rstrip("/")
     inner = (
@@ -308,7 +271,7 @@ def test_uvicorn_entrypoint_publishes_history_under_production_prefix(
 
     engine, config = postgres
     command.upgrade(config, "head")
-    seed(engine, before_dashboard=True)
+    seed(engine)
     root = Path(__file__).resolve().parents[2]
     env = dict(
         os.environ,

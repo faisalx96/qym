@@ -433,10 +433,11 @@ async def test_cancellation_drains_accepted_events_before_stopped_terminal(
         },
     )
     running = asyncio.create_task(evaluator.arun(show_tui=False, auto_save=False))
-    await asyncio.wait_for(entered.wait(), 3)
+    # Hang guards only: a loaded parallel run can take seconds to start.
+    await asyncio.wait_for(entered.wait(), 30)
     running.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await asyncio.wait_for(running, 5)
+        await asyncio.wait_for(running, 30)
     assert evaluator._platform_stream._q.unfinished_tasks == 0
     assert not evaluator._platform_stream._thread.is_alive()
     with Session(engine) as db:

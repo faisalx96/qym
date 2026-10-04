@@ -2741,9 +2741,9 @@ body.chart-col-resize-active {
   display: none;
 }
 
-/* One-frame natural-layout pass used to measure the visible sticky-column
-   values. JavaScript clamps the results and writes the existing width vars,
-   which also drive every chained sticky left offset below. */
+/* One-frame natural-layout pass used to measure the visible identity-column
+   values. JavaScript clamps the results and writes the width vars, and from
+   them the left offsets of the frozen columns (see Frozen columns below). */
 .runs-table.runs-table--measuring-sticky-columns {
   min-width: 0;
 }
@@ -3219,54 +3219,80 @@ body.chart-col-resize-active {
   white-space: nowrap;
 }
 
-/* ── Sticky columns: freeze the run identity block on horizontal scroll ── */
-.runs-table .col-status {
+/* ── Frozen columns: the identity columns named in the table's
+   data-frozen-columns stay put on horizontal scroll (Display > Columns >
+   Frozen columns; all seven by default). scheduleRunsStickyColumnSizing()
+   writes each frozen column's --runs-col-<key>-left, the width of the frozen
+   columns before it, so the block closes up around columns that scroll.
+   Unfrozen identity cells scroll with the data; their headers stay sticky at
+   the top like every other header. ── */
+.runs-table[data-frozen-columns~="run"] .col-run {
   position: sticky;
-  left: var(--runs-col-run-width);
+  left: var(--runs-col-run-left, auto);
   z-index: 2;
 }
-.runs-table .col-run {
+.runs-table[data-frozen-columns~="status"] .col-status {
   position: sticky;
-  left: 0;
+  left: var(--runs-col-status-left, auto);
   z-index: 2;
 }
-.runs-table .col-task {
+.runs-table[data-frozen-columns~="task"] .col-task {
   position: sticky;
-  left: calc(var(--runs-col-status-width) + var(--runs-col-run-width));
+  left: var(--runs-col-task-left, auto);
   z-index: 2;
 }
-.runs-table .col-model {
+.runs-table[data-frozen-columns~="model"] .col-model {
   position: sticky;
-  left: calc(var(--runs-col-status-width) + var(--runs-col-run-width) + var(--runs-col-task-width));
+  left: var(--runs-col-model-left, auto);
   z-index: 2;
 }
-.runs-table .col-dataset {
+.runs-table[data-frozen-columns~="dataset"] .col-dataset {
   position: sticky;
-  left: calc(var(--runs-col-status-width) + var(--runs-col-run-width) + var(--runs-col-task-width) + var(--runs-col-model-width));
+  left: var(--runs-col-dataset-left, auto);
   z-index: 2;
 }
-.runs-table .col-owner {
+.runs-table[data-frozen-columns~="owner"] .col-owner {
   position: sticky;
-  left: calc(var(--runs-col-status-width) + var(--runs-col-run-width) + var(--runs-col-task-width) + var(--runs-col-model-width) + var(--runs-col-dataset-width));
+  left: var(--runs-col-owner-left, auto);
   z-index: 2;
 }
-.runs-table .col-time {
+.runs-table[data-frozen-columns~="time"] .col-time {
   position: sticky;
-  left: calc(var(--runs-col-status-width) + var(--runs-col-run-width) + var(--runs-col-task-width) + var(--runs-col-model-width) + var(--runs-col-dataset-width) + var(--runs-col-owner-width));
+  left: var(--runs-col-time-left, auto);
   z-index: 2;
-  box-shadow: 4px 0 8px rgba(0, 0, 0, 0.25);
 }
 
-/* Corner cells: sticky header + sticky column need highest z-index */
-.runs-table thead th.col-select,
-.runs-table thead th.col-status,
-.runs-table thead th.col-run,
-.runs-table thead th.col-task,
-.runs-table thead th.col-model,
-.runs-table thead th.col-dataset,
-.runs-table thead th.col-owner,
-.runs-table thead th.col-time {
+/* Corner cells: a frozen header sits above the scrolling headers and the
+   frozen body cells. Unfrozen headers keep the plain header layer, so they
+   pass beneath the frozen ones. */
+.runs-table[data-frozen-columns~="run"] thead th.col-run,
+.runs-table[data-frozen-columns~="status"] thead th.col-status,
+.runs-table[data-frozen-columns~="task"] thead th.col-task,
+.runs-table[data-frozen-columns~="model"] thead th.col-model,
+.runs-table[data-frozen-columns~="dataset"] thead th.col-dataset,
+.runs-table[data-frozen-columns~="owner"] thead th.col-owner,
+.runs-table[data-frozen-columns~="time"] thead th.col-time {
   z-index: 12;
+}
+
+/* A frozen column with scrolling content to its right casts the separator
+   shadow (the last frozen column, or each end of a split block). A pseudo
+   element carries it so row accents that set the cell's own box-shadow
+   (selected, open repeat run, pass rows, keyboard focus) never drop it. It
+   spans the border box (cells have a 1px bottom border), as the cell's own
+   shadow did. ::before, because th.sorted::after draws the sort arrow. */
+.runs-table[data-frozen-edges~="run"] .col-run::before,
+.runs-table[data-frozen-edges~="status"] .col-status::before,
+.runs-table[data-frozen-edges~="task"] .col-task::before,
+.runs-table[data-frozen-edges~="model"] .col-model::before,
+.runs-table[data-frozen-edges~="dataset"] .col-dataset::before,
+.runs-table[data-frozen-edges~="owner"] .col-owner::before,
+.runs-table[data-frozen-edges~="time"] .col-time::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 -1px 0;
+  box-shadow: 4px 0 8px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
 }
 
 /* Opaque backgrounds for sticky cells — must cover scrolling content */
@@ -3532,6 +3558,11 @@ body.chart-col-resize-active {
 
 .col-metric-value {
   min-width: 70px;
+}
+
+/* Keep a metric-error ⚠ on the same line as its score. */
+.runs-table td.col-metric-value {
+  white-space: nowrap;
 }
 
 .metric-score {
@@ -10275,11 +10306,26 @@ td.col-trace-metric-value {
   margin: 6px 0;
 }
 .mv-trace-label {
-  font-size: var(--font-xs);
+  font-size: var(--font-sm);
+  font-weight: 600;
   color: var(--text-muted);
   padding: 2px 10px 4px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.05em;
+}
+/* Runs only: the Frozen columns section heads its checkboxes with the label
+   and a Reset to default action on one row. */
+.mv-frozen-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding-right: var(--space-sm);
+  white-space: nowrap;
+}
+.mv-frozen-reset[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
 }
 
 /* ─── Responsive ─── */

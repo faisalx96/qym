@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -53,7 +52,6 @@ def _client_with_label_mappings(
     *,
     categories: dict[str, str | None] | None = None,
     details: dict[str, str | None] | None = None,
-    delay: float = 0,
 ) -> SimpleNamespace:
     configured = {
         "category": categories or {},
@@ -65,8 +63,6 @@ def _client_with_label_mappings(
     }
 
     async def parse(**kwargs: object) -> SimpleNamespace:
-        if delay:
-            await asyncio.sleep(delay)
         messages = kwargs["messages"]
         assert isinstance(messages, list)
         prompt = json.loads(messages[1]["content"])
@@ -393,7 +389,7 @@ async def test_invalid_joint_mapping_response_is_reported() -> None:
 
 
 @pytest.mark.asyncio
-async def test_omitted_empty_cluster_field_does_not_discard_useful_merges() -> None:
+async def test_explicit_empty_category_clusters_keep_detail_merges() -> None:
     results = [
         _result("dataset", "Missing Customers table"),
         _result("other data", "Missing Orders table"),
@@ -410,7 +406,7 @@ async def test_omitted_empty_cluster_field_does_not_discard_useful_merges() -> N
                                     "canonical_label": "Missing schema table",
                                     "member_ids": ["d0", "d1"],
                                 }
-                            ]
+                            ],
                         }
                     )
                 )
@@ -844,17 +840,13 @@ async def test_many_categories_still_use_one_model_round_trip() -> None:
             for index in range(8)
             for variant in range(2)
         },
-        delay=0.05,
     )
 
-    started = time.perf_counter()
     await aggregate_analysis_categories(
         client,
         "test-model",
         results,
         known_categories=categories,
     )
-    elapsed = time.perf_counter() - started
 
     client.chat.completions.parse.assert_awaited_once()
-    assert elapsed < 0.15

@@ -5,9 +5,11 @@ import csv
 import io
 import json
 import re
+import unicodedata
 from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict, Iterable, Optional
+from urllib.parse import quote
 from uuid import uuid4
 
 from fastapi import APIRouter, Body, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
@@ -16,11 +18,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import String, cast, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
-from qym_platform.auth import Principal, require_api_key_scope, require_ui_principal
+from qym_platform.auth import Principal, require_api_key_scope, require_ui_principal, resolve_api_key_principal
 from qym_platform.datetime_utils import to_api_timestamp, utc_now_naive
 from qym_platform.db.models import (
-    ApiKey,
     Dataset,
     DatasetAlias,
     DatasetItem,
@@ -36,17 +38,58 @@ from qym_platform.db.models import (
 )
 from qym_platform.deps import get_db
 from qym_platform.item_identity import build_identity_fingerprint
-from qym_platform.permissions import has_project_access
-from qym_platform.security import api_key_prefix, verify_api_key
+from qym_platform.permissions import (
+    has_project_access,
+    project_for_read_by_slug,
+    require_project_writable,
+)
 from qym_platform.services.dataset_search import filter_dataset_item_search
+from qym_platform.services.run_means import metric_directions
 
 
 router = APIRouter()
 
 
+_MAX_SLUG_LENGTH = 120
+
+
 def _slugify(value: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", (value or "").strip().lower()).strip("-")
-    return slug or "dataset"
+    """Build a URL slug that keeps letters and digits from every script.
+
+    Arabic (or any non-Latin) names keep their letters, so different names get
+    different slugs. A name with no letters or digits gets a unique fallback
+    instead of a shared constant, so it can never collide with another dataset.
+    """
+    text = unicodedata.normalize("NFKC", value or "").strip().lower()
+    chars: list[str] = []
+    for ch in text:
+        category = unicodedata.category(ch)
+        if category[0] in ("L", "N"):
+            chars.append(ch)
+        elif category[0] == "M" and chars and chars[-1] != "-":
+            # Combining marks (Arabic harakat, Indic vowel signs) stay with their letter.
+            chars.append(ch)
+        elif chars and chars[-1] != "-":
+            chars.append("-")
+    slug = "".join(chars)[:_MAX_SLUG_LENGTH].strip("-")
+    return slug or f"dataset-{uuid4().hex[:8]}"
+
+
+def _ascii_name(value: str, default: str) -> str:
+    """ASCII letters, digits, ".", "_" and "-" from value (accents folded)."""
+    folded = unicodedata.normalize("NFKD", value or "").encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", folded).strip("-._") or default
+
+
+def _attachment_disposition(filename: str, fallback: str) -> str:
+    """Content-Disposition for a file name in any script (RFC 6266).
+
+    Header values are Latin-1, so a Unicode name goes in ``filename*`` as UTF-8.
+    ``filename`` keeps an ASCII fallback for clients that ignore ``filename*``.
+    """
+    if filename == fallback:
+        return f'attachment; filename="{filename}"'
+    return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(filename, safe='')}"
 
 
 def _labels(value: Any) -> list[str]:
@@ -71,6 +114,11 @@ def _json_safe(value: Any) -> Any:
     return value
 
 
+def _same_json(a: Any, b: Any) -> bool:
+    """Type-strict JSON equality (``1``, ``1.0``, ``True`` and ``"1"`` all differ)."""
+    return json.dumps(a, sort_keys=True, default=str) == json.dumps(b, sort_keys=True, default=str)
+
+
 def _principal_from_bearer(db: Session, authorization: Optional[str]) -> Optional[Principal]:
     if not authorization:
         return None
@@ -80,19 +128,9 @@ def _principal_from_bearer(db: Session, authorization: Optional[str]) -> Optiona
     token = parts[1].strip()
     if not token:
         return None
-    row = (
-        db.query(ApiKey)
-        .filter(ApiKey.prefix == api_key_prefix(token))
-        .filter(ApiKey.revoked_at.is_(None))
-        .first()
-    )
-    if not row or not verify_api_key(token, row.key_hash):
-        raise HTTPException(status_code=401, detail="Invalid API key")
-    user = db.query(User).filter(User.id == row.user_id).first()
-    if not user or not user.is_active:
-        raise HTTPException(status_code=403, detail="User disabled")
-    scopes = tuple(str(scope).strip() for scope in (row.scopes or []) if str(scope).strip())
-    return Principal(user=user, auth_type="api_key", scopes=scopes, project_id=row.project_id)
+    # Same checks as every other key-authenticated route: revocation, active
+    # owner, the owner's current membership and an active project.
+    return resolve_api_key_principal(db, token)
 
 
 def dataset_principal(
@@ -120,20 +158,28 @@ def _require_scope(principal: Principal, scope: str) -> None:
         require_api_key_scope(principal, scope)
 
 
-def _project_for_request(db: Session, principal: Principal, project_slug: Optional[str]) -> Project:
+def _project_for_request(
+    db: Session, principal: Principal, project_slug: Optional[str], *, write: bool = False
+) -> Project:
+    """The project a dataset request acts on.
+
+    API keys of an archived project are refused before this (409). A UI user
+    who names an archived project by slug reads its datasets like on the run
+    routes (members and admins only); every write (``write=True``) answers
+    409 "Project is archived" until an admin unarchives the project.
+    """
+    active = db.query(Project).filter(Project.is_active.is_(True))
     if principal.project_id:
-        project = db.query(Project).filter(Project.id == principal.project_id).first()
+        project = active.filter(Project.id == principal.project_id).first()
         if not project:
             raise HTTPException(status_code=403, detail="API key project not found")
         return project
     if project_slug:
-        project = db.query(Project).filter(Project.slug == project_slug).first()
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
-        if not has_project_access(db, principal, project.id):
-            raise HTTPException(status_code=403, detail="Access denied")
+        project = project_for_read_by_slug(db, principal, project_slug)
+        if write:
+            require_project_writable(db, project.id)
         return project
-    project = db.query(Project).order_by(Project.name).first()
+    project = active.order_by(Project.name).first()
     if not project:
         raise HTTPException(status_code=404, detail="No project found")
     if not has_project_access(db, principal, project.id):
@@ -177,6 +223,63 @@ def _free_slug_from_deleted(db: Session, project: Project, slug: str) -> None:
         ds.slug = f"{slug}__deleted_{uuid4().hex[:8]}"
     if stale:
         db.flush()
+
+
+def _live_dataset_with_slug(db: Session, project: Project, slug: str) -> Optional[Dataset]:
+    return (
+        db.query(Dataset)
+        .filter(Dataset.project_id == project.id, Dataset.slug == slug, Dataset.deleted_at.is_(None))
+        .first()
+    )
+
+
+def _slug_conflict_detail(db: Session, project: Project, slug: str) -> str:
+    existing = _live_dataset_with_slug(db, project, slug)
+    owner = f" by dataset '{existing.name}'" if existing else ""
+    return f"Dataset slug already exists in this project: '{slug}' is used{owner}. Choose another name or slug."
+
+
+def _same_dataset_name(a: str, b: str) -> bool:
+    return (a or "").strip().casefold() == (b or "").strip().casefold()
+
+
+def _live_dataset_with_name(db: Session, project: Project, name: str) -> Optional[Dataset]:
+    """Oldest live dataset with this display name: an exact match, else ignoring case."""
+    live = (Dataset.project_id == project.id, Dataset.deleted_at.is_(None))
+    exact = db.query(Dataset).filter(*live, Dataset.name == name).order_by(Dataset.created_at).first()
+    if exact:
+        return exact
+    # Case-insensitive in Python: SQLite's lower() only folds ASCII. A project holds few
+    # datasets, and only ids and names are loaded.
+    rows = db.query(Dataset.id, Dataset.name).filter(*live).order_by(Dataset.created_at).all()
+    match = next((row.id for row in rows if _same_dataset_name(row.name, name)), None)
+    return db.get(Dataset, match) if match else None
+
+
+def _dataset_for_upload(db: Session, project: Project, name: str, slug: str) -> Optional[Dataset]:
+    """Find the dataset an upload by ``name`` appends to (SDK/CI re-uploads).
+
+    Only the same display name (ignoring case), or the dataset's exact slug, counts as
+    the same dataset. A different name that merely produces the same slug is a conflict:
+    uploads never merge into an unrelated dataset.
+    """
+    clean = (name or "").strip()
+    by_slug = _live_dataset_with_slug(db, project, slug)
+    if by_slug and (_same_dataset_name(by_slug.name, clean) or clean == by_slug.slug):
+        return by_slug
+    by_name = _live_dataset_with_name(db, project, clean)
+    if by_name:
+        # e.g. an older dataset whose slug was derived with earlier slug rules.
+        return by_name
+    if by_slug:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Dataset slug '{slug}' is already used by dataset '{by_slug.name}'. "
+                "Use a different name, or upload to that dataset explicitly as a new version."
+            ),
+        )
+    return None
 
 
 def _resolve_version(db: Session, dataset: Dataset, ref: Optional[str]) -> DatasetVersion:
@@ -512,6 +615,43 @@ def _item_result_summaries(
     return summaries
 
 
+def _shared_metric_directions(
+    db: Session, run_metrics: Iterable[tuple[str, str]]
+) -> Dict[str, Optional[str]]:
+    """Each metric's declared direction, when all its runs declare the same one.
+
+    ``run_metrics`` holds the (run id, metric name) pairs behind a value that
+    spans runs. A run that declares no direction, or runs that disagree, give
+    the metric None, so the page shows its value without a colour.
+    """
+    pairs = set(run_metrics)
+    declared = metric_directions(db, {run_id for run_id, _ in pairs})
+    found: Dict[str, set[Optional[str]]] = defaultdict(set)
+    for run_id, metric in pairs:
+        found[metric].add(declared.get(run_id, {}).get(metric))
+    return {
+        metric: next(iter(values)) if len(values) == 1 else None
+        for metric, values in sorted(found.items())
+    }
+
+
+def _version_metric_directions(
+    db: Session, version: DatasetVersion
+) -> Dict[str, Optional[str]]:
+    """The shared direction of each metric the version's runs scored."""
+    pairs = (
+        db.query(RunItemScore.run_id, RunItemScore.metric_name)
+        .join(Run, Run.id == RunItemScore.run_id)
+        .filter(
+            Run.deleted_at.is_(None),
+            Run.dataset_version_id == version.id,
+        )
+        .distinct()
+        .all()
+    )
+    return _shared_metric_directions(db, (tuple(pair) for pair in pairs))
+
+
 def _version_metric_names(db: Session, version: DatasetVersion) -> list[str]:
     names: set[str] = set()
     score_rows = (
@@ -674,33 +814,143 @@ def _combine_columns(row: Dict[str, Any], cols: list[str]) -> Any:
     return {col: _parse_cell(row.get(col, "")) for col in cols}
 
 
-def _decode_csv(raw: bytes) -> str:
+# Encodings a caller may choose explicitly (labels match the browser's TextDecoder names).
+_CSV_ENCODINGS = {
+    "utf-8": "utf-8-sig",
+    "utf-16": "utf-16",
+    "utf-16le": "utf-16-le",
+    "utf-16be": "utf-16-be",
+    "utf-32": "utf-32",
+    "windows-1256": "cp1256",
+    "windows-1252": "cp1252",
+    "iso-8859-6": "iso8859_6",
+}
+# Legacy single-byte encodings tried when a file is not UTF-8. The order breaks ties,
+# so Latin text that decodes identically in both keeps the historic Windows-1252.
+_LEGACY_CSV_ENCODINGS = ("windows-1252", "windows-1256", "iso-8859-6")
+_ENCODING_SAMPLE_CHARS = 262144
+_CSV_ENCODING_HELP = "Save the file as 'CSV UTF-8' (Excel: File > Save As > CSV UTF-8) and upload it again."
+# Non-letter characters that are normal in real text in any of the legacy encodings.
+# "\u00d7" and "\u00ac" are Arabic letters in ISO-8859-6, so they are no evidence either way.
+_NEUTRAL_TEXT_CHARS = frozenset(
+    "\u00a0\u00ab\u00bb\u201c\u201d\u2018\u2019\u201e\u2013\u2014\u2026\u2022\u20ac\u00a3\u00a5"
+    "\u00b0\u00a9\u00ae\u2122\u00a7\u00b7\u00bf\u00a1\u00d7\u00ac\u060c\u061b\u061f\u066a\u066b\u066c"
+)
+
+
+def _is_arabic_char(ch: str) -> bool:
+    cp = ord(ch)
+    return 0x0600 <= cp <= 0x06FF or 0x0750 <= cp <= 0x077F or 0x08A0 <= cp <= 0x08FF or 0xFB50 <= cp <= 0xFDFF or 0xFE70 <= cp <= 0xFEFF
+
+
+def _legacy_text_score(text: str) -> int:
+    """Score how much a legacy-decoded text looks like real words.
+
+    Mis-decoded Arabic (Windows-1256 read as Windows-1252) turns every word into a
+    run of accented Latin letters, and Latin text read as Windows-1256 mixes Arabic
+    letters into Latin words. Real text has words in one script, with accented
+    letters in the minority for Latin words.
+
+    A one-letter word is no evidence: French "à" is a lone Arabic letter in
+    ISO-8859-6. Text whose only non-ASCII words are lone Arabic letters therefore
+    keeps Windows-1252; such a file needs an explicit encoding.
+    """
+    total = 0
+    word: list[str] = []
+
+    def flush() -> None:
+        nonlocal total
+        non_ascii = [ch for ch in word if ord(ch) > 0x7F]
+        if non_ascii and len(word) > 1:
+            arabic = any(_is_arabic_char(ch) for ch in word)
+            latin = any(ord(ch) < 0x0250 for ch in word)
+            other = any(ord(ch) >= 0x0250 and not _is_arabic_char(ch) for ch in word)
+            if other or (arabic and latin):
+                total -= 2 * len(non_ascii)
+            elif arabic:
+                total += len(word)
+            elif 2 * len(non_ascii) <= len(word):
+                total += len(non_ascii)
+            else:
+                total -= len(non_ascii)
+        word.clear()
+
+    for ch in text:
+        category = unicodedata.category(ch)
+        if category[0] in ("L", "M"):
+            word.append(ch)
+            continue
+        flush()
+        if ord(ch) > 0x7F and category[0] not in ("N", "Z") and ch not in _NEUTRAL_TEXT_CHARS:
+            total -= 1
+    flush()
+    return total
+
+
+def _decode_csv(raw: bytes, encoding: Optional[str] = None) -> tuple[str, str]:
+    """Decode an uploaded CSV. Returns the text and the encoding label that was used.
+
+    An explicit ``encoding`` (from the upload wizard's Encoding choice) is honored or
+    rejected; otherwise BOMs and strict UTF-8 win, and a non-UTF-8 file is decoded with
+    the legacy encoding whose result looks most like real text (Windows-1256 Arabic
+    exports from Excel no longer turn into Windows-1252 mojibake).
+    """
     if not raw:
         raise HTTPException(status_code=400, detail="CSV file is empty")
-    if raw.startswith((codecs.BOM_UTF32_LE, codecs.BOM_UTF32_BE)):
-        encodings = ["utf-32"]
-    elif raw.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
-        encodings = ["utf-16"]
-    else:
-        encodings = ["utf-8-sig", "cp1252"]
-    for encoding in encodings:
+    requested = (encoding or "").strip().lower()
+    if requested:
+        codec = _CSV_ENCODINGS.get(requested)
+        if not codec:
+            raise HTTPException(status_code=400, detail=f"Unsupported CSV encoding: {encoding}")
+        if codec.startswith("utf-16") and raw.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+            codec = "utf-16"
         try:
-            return raw.decode(encoding)
+            return raw.decode(codec).lstrip("\uFEFF"), requested
+        except UnicodeDecodeError as exc:
+            label = requested.upper() if requested.startswith("utf") else requested
+            raise HTTPException(
+                status_code=400,
+                detail=f"The file is not valid {label}. Choose the file's real encoding. {_CSV_ENCODING_HELP}",
+            ) from exc
+    if raw.startswith((codecs.BOM_UTF32_LE, codecs.BOM_UTF32_BE)):
+        try:
+            return raw.decode("utf-32"), "utf-32"
         except UnicodeDecodeError:
-            continue
+            pass
+    elif raw.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        try:
+            return raw.decode("utf-16"), "utf-16"
+        except UnicodeDecodeError:
+            pass
+    else:
+        try:
+            return raw.decode("utf-8-sig"), "utf-8"
+        except UnicodeDecodeError:
+            pass
+        best: Optional[tuple[int, str, str]] = None
+        for label in _LEGACY_CSV_ENCODINGS:
+            try:
+                text = raw.decode(_CSV_ENCODINGS[label])
+            except UnicodeDecodeError:
+                continue
+            score = _legacy_text_score(text[:_ENCODING_SAMPLE_CHARS])
+            if best is None or score > best[0]:
+                best = (score, label, text)
+        if best is not None:
+            return best[2], best[1]
     raise HTTPException(
         status_code=400,
-        detail="Unsupported CSV encoding; export as UTF-8, UTF-16, or Windows-1252",
+        detail=f"Could not detect the CSV encoding. {_CSV_ENCODING_HELP}",
     )
 
 
-def _csv_reader(raw: bytes) -> csv.DictReader:
-    text = _decode_csv(raw)
+def _csv_reader(raw: bytes, encoding: Optional[str] = None) -> tuple[csv.DictReader, str]:
+    text, used_encoding = _decode_csv(raw, encoding)
     try:
         dialect = csv.Sniffer().sniff(text[:65536], delimiters=",;\t|")
     except csv.Error:
         dialect = csv.excel
-    return csv.DictReader(io.StringIO(text, newline=""), dialect=dialect)
+    return csv.DictReader(io.StringIO(text, newline=""), dialect=dialect), used_encoding
 
 
 def _items_from_csv(
@@ -711,8 +961,10 @@ def _items_from_csv(
     id_col: Optional[str],
     metadata_cols: list[str],
     label_cols: list[str],
-) -> list[Dict[str, Any]]:
-    reader = _csv_reader(raw)
+    encoding: Optional[str] = None,
+) -> tuple[list[Dict[str, Any]], str]:
+    """Parse CSV rows into items. Returns the items and the encoding that was used."""
+    reader, used_encoding = _csv_reader(raw, encoding)
     raw_fields = list(reader.fieldnames or [])
     fields = [field.strip() if field is not None else "" for field in raw_fields]
     if not fields:
@@ -756,31 +1008,118 @@ def _items_from_csv(
                 "labels": sorted(set(labels)),
             }
         )
-    return items
+    return items, used_encoding
+
+
+_MAX_REPORTED_LINE_ERRORS = 5
+
+
+def _decode_json_text(raw: bytes, kind: str) -> str:
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"{kind} files must be UTF-8 encoded") from exc
+
+
+def _json_record_problem(obj: Any) -> Optional[str]:
+    if not isinstance(obj, dict):
+        return "must be a JSON object"
+    metadata = obj.get("metadata")
+    if metadata is not None and not isinstance(metadata, dict):
+        return "metadata must be a JSON object"
+    return None
+
+
+def _json_record_item(obj: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "item_id": str(obj.get("item_id") or obj.get("id") or "").strip(),
+        "input": obj.get("input"),
+        "expected_output": obj.get("expected_output", obj.get("expected")),
+        "metadata": obj.get("metadata") or {},
+        "labels": _labels(obj.get("labels")),
+    }
 
 
 def _items_from_jsonl(raw: bytes) -> list[Dict[str, Any]]:
+    """Parse JSONL strictly: every non-blank line must be a JSON object.
+
+    All invalid lines are reported together (line numbers and a count) so nothing
+    is dropped silently and the user can fix the file in one pass.
+    """
     items: list[Dict[str, Any]] = []
-    for line_no, line in enumerate(raw.decode("utf-8").splitlines(), start=1):
+    problems: list[str] = []
+    record_count = 0
+    # Split on newlines only (like the browser import), so U+2028 inside a string is not a line break.
+    for line_no, line in enumerate(_decode_json_text(raw, "JSONL").split("\n"), start=1):
         text = line.strip()
         if not text:
             continue
+        record_count += 1
         try:
             obj = json.loads(text)
         except json.JSONDecodeError as exc:
-            raise HTTPException(status_code=400, detail=f"Invalid JSONL at line {line_no}: {exc}") from exc
-        if not isinstance(obj, dict):
-            raise HTTPException(status_code=400, detail=f"JSONL line {line_no} must be an object")
-        items.append(
-            {
-                "item_id": str(obj.get("item_id") or obj.get("id") or "").strip(),
-                "input": obj.get("input"),
-                "expected_output": obj.get("expected_output", obj.get("expected")),
-                "metadata": obj.get("metadata") or {},
-                "labels": _labels(obj.get("labels")),
-            }
+            problems.append(f"line {line_no} is not valid JSON ({exc.msg})")
+            continue
+        problem = _json_record_problem(obj)
+        if problem:
+            problems.append(f"line {line_no} {problem}")
+            continue
+        items.append(_json_record_item(obj))
+    if problems:
+        shown = "; ".join(problems[:_MAX_REPORTED_LINE_ERRORS])
+        more = len(problems) - _MAX_REPORTED_LINE_ERRORS
+        suffix = f"; and {more} more" if more > 0 else ""
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid JSONL: {len(problems)} of {record_count} lines cannot be imported: {shown}{suffix}",
         )
     return items
+
+
+def _items_from_json(raw: bytes) -> list[Dict[str, Any]]:
+    """Parse a JSON document holding an array of item objects."""
+    try:
+        doc = json.loads(_decode_json_text(raw, "JSON"))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid JSON at line {exc.lineno}, column {exc.colno}: {exc.msg}",
+        ) from exc
+    if not isinstance(doc, list):
+        raise HTTPException(status_code=400, detail="A JSON file must contain an array of item objects")
+    problems = []
+    for index, obj in enumerate(doc, start=1):
+        problem = _json_record_problem(obj)
+        if problem:
+            problems.append(f"item {index} {problem}")
+    if problems:
+        shown = "; ".join(problems[:_MAX_REPORTED_LINE_ERRORS])
+        more = len(problems) - _MAX_REPORTED_LINE_ERRORS
+        suffix = f"; and {more} more" if more > 0 else ""
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid JSON: {len(problems)} of {len(doc)} items cannot be imported: {shown}{suffix}",
+        )
+    return [_json_record_item(obj) for obj in doc]
+
+
+def _upload_format(requested: str, filename: str, raw: bytes) -> str:
+    """Pick the parser: an explicit ``format`` wins, then the file name.
+
+    A ``.json`` file holding an array is JSON; one object per line is JSONL.
+    """
+    clean = (requested or "").strip().lower()
+    if clean:
+        if clean not in {"csv", "jsonl", "json"}:
+            raise HTTPException(status_code=400, detail=f"Unsupported format: {requested} (use csv, jsonl, or json)")
+        return clean
+    lower = (filename or "").lower()
+    if lower.endswith(".jsonl") or lower.endswith(".ndjson"):
+        return "jsonl"
+    if lower.endswith(".json"):
+        head = raw.lstrip(b"\xef\xbb\xbf \t\r\n")[:1]
+        return "json" if head == b"[" else "jsonl"
+    return "csv"
 
 
 def _insert_items(db: Session, version: DatasetVersion, items: list[Dict[str, Any]]) -> None:
@@ -861,6 +1200,16 @@ class UpsertItemRequest(BaseModel):
     labels: list[str] = Field(default_factory=list)
 
 
+class PatchItemRequest(BaseModel):
+    """Partial item update: only the fields present in the body are changed."""
+
+    item_id: Optional[str] = None
+    input: Any = None
+    expected_output: Any = None
+    metadata: Optional[Dict[str, Any]] = None
+    labels: Optional[list[str]] = None
+
+
 class BulkUpsertEntry(BaseModel):
     item_id: Optional[str] = None
     op: Optional[str] = None
@@ -899,7 +1248,7 @@ def create_dataset(
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, req.project_slug)
+    project = _project_for_request(db, principal, req.project_slug, write=True)
     slug = _slugify(req.slug or req.name)
     _free_slug_from_deleted(db, project, slug)
     dataset = Dataset(
@@ -918,7 +1267,7 @@ def create_dataset(
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Dataset slug already exists in this project") from exc
+        raise HTTPException(status_code=409, detail=_slug_conflict_detail(db, project, slug)) from exc
     return {"dataset": _dataset_payload(db, dataset)}
 
 
@@ -944,18 +1293,26 @@ def update_dataset(
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, project_slug)
+    project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     if req.name is not None:
         dataset.name = req.name.strip()
+    next_slug = None
     if req.slug is not None:
-        dataset.slug = _slugify(req.slug)
+        next_slug = _slugify(req.slug)
+        if next_slug != dataset.slug:
+            _free_slug_from_deleted(db, project, next_slug)
+        dataset.slug = next_slug
     if req.description is not None:
         dataset.description = req.description
     if req.tags is not None:
         dataset.tags = _labels(req.tags)
     dataset.updated_at = utc_now_naive()
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=_slug_conflict_detail(db, project, next_slug or "")) from exc
     return {"dataset": _dataset_payload(db, dataset)}
 
 
@@ -967,7 +1324,7 @@ def delete_dataset(
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:delete")
-    project = _project_for_request(db, principal, project_slug)
+    project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     dataset.deleted_at = utc_now_naive()
     db.commit()
@@ -1030,6 +1387,7 @@ def list_dataset_runs(
     avg_latencies: Dict[str, float] = {}
     metric_values_by_run: Dict[str, Dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     eval_values_by_run: Dict[str, list[float]] = defaultdict(list)
+    run_directions = metric_directions(db, run_ids)
     if run_ids:
         items_counts = dict(
             db.query(RunItem.run_id, func.count(RunItem.id))
@@ -1092,6 +1450,7 @@ def list_dataset_runs(
                 "avg_latency_ms": avg_latencies.get(run.id),
                 "eval_score": run_eval_score(run.id),
                 "metric_averages": run_metric_averages(run.id),
+                "metric_directions": run_directions.get(run.id, {}),
                 "version_label": version_labels.get(run.dataset_version_id),
                 "items_count": int(items_counts.get(run.id, 0)),
             }
@@ -1111,7 +1470,7 @@ def create_version(
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, project_slug)
+    project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     source_ref = req.from_version or req.from_alias
     parent = _resolve_version(db, dataset, source_ref) if source_ref else None
@@ -1165,7 +1524,7 @@ def publish_version(
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, project_slug)
+    project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     version = _resolve_version(db, dataset, version_ref)
     items = db.query(DatasetItem).filter(DatasetItem.dataset_version_id == version.id).order_by(DatasetItem.index).all()
@@ -1200,7 +1559,7 @@ def update_version(
 ) -> Dict[str, Any]:
     """Edit version metadata. The vN identifier itself is immutable."""
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, project_slug)
+    project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     version = _resolve_version(db, dataset, version_ref)
     if req.name is not None:
@@ -1274,7 +1633,7 @@ def set_alias(
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, project_slug)
+    project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     version = _resolve_version(db, dataset, req.version)
     alias = _set_alias(db, dataset, alias_name, version, principal.user.id)
@@ -1426,6 +1785,8 @@ def list_items(
     return {
         "dataset": _dataset_payload(db, dataset),
         "version": _version_payload(db, version),
+        # Each metric's direction across the version's runs, for the item means.
+        "metric_directions": _version_metric_directions(db, version),
         "items": [
             _item_payload(
                 item,
@@ -1451,7 +1812,7 @@ def create_item(
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, project_slug)
+    project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
@@ -1526,13 +1887,17 @@ def update_item(
     dataset_ref: str,
     version_ref: str,
     item_id: str,
-    req: UpsertItemRequest,
+    req: PatchItemRequest,
     project_slug: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
+    """Partially update an item: fields left out of the body keep their values.
+
+    A full body (every field) still replaces the whole item, as the History revert does.
+    """
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, project_slug)
+    project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
@@ -1544,14 +1909,30 @@ def update_item(
     if not item:
         raise HTTPException(status_code=404, detail="Dataset item not found")
     before = _item_payload(item)
-    input_value = _json_safe(req.input)
-    expected = _json_safe(req.expected_output)
-    metadata = _json_safe(req.metadata or {})
-    item.item_id = (req.item_id or item.item_id).strip()
+    changes = req.model_dump(exclude_unset=True)
+    next_item_id = (changes.get("item_id") or "").strip() or item.item_id
+    input_value = _json_safe(changes["input"]) if "input" in changes else item.input
+    expected = _json_safe(changes["expected_output"]) if "expected_output" in changes else item.expected_output
+    metadata = _json_safe(changes["metadata"] or {}) if "metadata" in changes else (item.item_metadata or {})
+    labels = _labels(changes["labels"]) if "labels" in changes else list(item.labels or [])
+    unchanged = (
+        next_item_id == item.item_id
+        and _same_json(input_value, item.input)
+        and _same_json(expected, item.expected_output)
+        and _same_json(metadata, item.item_metadata or {})
+        and labels == list(item.labels or [])
+    )
+    if unchanged:
+        # Nothing to write: no revision, no updated_at bump.
+        return {"item": before}
+    item.item_id = next_item_id
     item.input = input_value
     item.expected_output = expected
     item.item_metadata = metadata
-    item.labels = _labels(req.labels)
+    item.labels = labels
+    # SQLAlchemy compares JSON values with ==, so 1 -> true or 1 -> 1.0 would not be written.
+    for attr in ("input", "expected_output", "item_metadata"):
+        flag_modified(item, attr)
     item.fingerprint = build_identity_fingerprint(input_value=input_value, expected_value=expected, metadata=metadata)
     item.updated_at = utc_now_naive()
     _record_item_revision(db, version, item, change_type="updated", before=before, after=_item_payload(item), actor_user_id=principal.user.id)
@@ -1569,7 +1950,7 @@ def delete_item(
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, project_slug)
+    project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
@@ -1600,7 +1981,7 @@ def bulk_items(
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, project_slug)
+    project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
@@ -1751,6 +2132,7 @@ def item_runs(
             scores_by_key[key].append(score)
     users = _user_map(db, [run.owner_user_id for run, _ in rows])
     numeric_scores_by_metric: Dict[str, list[float]] = defaultdict(list)
+    scored_run_metrics: set[tuple[str, str]] = set()
     all_numeric_scores: list[float] = []
     latencies: list[float] = []
     error_count = 0
@@ -1765,6 +2147,8 @@ def item_runs(
                 continue
             all_numeric_scores.append(value)
             numeric_scores_by_metric[score.metric_name].append(value)
+            scored_run_metrics.add((run.id, score.metric_name))
+    run_directions = metric_directions(db, run_ids)
     metric_aggregates = {
         metric: {
             "count": len(values),
@@ -1783,6 +2167,7 @@ def item_runs(
             "avg_latency_ms": round(sum(latencies) / len(latencies), 2) if latencies else None,
             "avg_score": round(sum(all_numeric_scores) / len(all_numeric_scores), 4) if all_numeric_scores else None,
             "metrics": metric_aggregates,
+            "metric_directions": _shared_metric_directions(db, scored_run_metrics),
         },
         "runs": [
             {
@@ -1810,6 +2195,7 @@ def item_runs(
                 "error": run_item.error,
                 "latency_ms": run_item.latency_ms,
                 "retry_count": run_item.retry_count,
+                "metric_directions": run_directions.get(run.id, {}),
                 "scores": [
                     {
                         "metric_name": score.metric_name,
@@ -2011,11 +2397,12 @@ def compare_versions(
             unchanged.append(item_id_key)
         else:
             fields = []
-            if b.input != t.input:
+            # Type-strict, so "51" -> 51 (or 1 -> true) is reported as a change.
+            if not _same_json(b.input, t.input):
                 fields.append("input")
-            if b.expected_output != t.expected_output:
+            if not _same_json(b.expected_output, t.expected_output):
                 fields.append("expected_output")
-            if (b.item_metadata or {}) != (t.item_metadata or {}):
+            if not _same_json(b.item_metadata or {}, t.item_metadata or {}):
                 fields.append("metadata")
             if (b.labels or []) != (t.labels or []):
                 fields.append("labels")
@@ -2084,21 +2471,42 @@ async def upload_dataset(
     id_col: Optional[str] = Form(default=None),
     metadata_cols: str = Form(default=""),
     label_cols: str = Form(default=""),
+    upload_format: str = Form(default="", alias="format"),
+    encoding: str = Form(default=""),
+    create_only: bool = Form(default=False),
+    dataset_ref: Optional[str] = Form(default=None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
+    """Upload a file as a new dataset, or as a new version of an existing one.
+
+    - ``dataset_ref``: add the file as a new version of exactly that dataset.
+    - ``create_only``: always create a new dataset; 409 if the name or slug is taken.
+    - neither (SDK/CI default): append to the dataset with the same name or slug,
+      otherwise create it. A different name that only shares the slug is a 409.
+    """
     _require_scope(principal, "datasets:write")
-    project = _project_for_request(db, principal, project_slug)
-    slug = _slugify(name)
-    dataset = (
-        db.query(Dataset)
-        .filter(Dataset.project_id == project.id, Dataset.slug == slug, Dataset.deleted_at.is_(None))
-        .first()
-    )
+    project = _project_for_request(db, principal, project_slug, write=True)
+    clean_name = (name or "").strip()
+    if not clean_name:
+        raise HTTPException(status_code=400, detail="Dataset name is required")
+    slug = _slugify(clean_name)
+    if dataset_ref:
+        dataset: Optional[Dataset] = _get_dataset(db, project, dataset_ref)
+    else:
+        dataset = _dataset_for_upload(db, project, clean_name, slug)
+        if dataset and create_only:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"A dataset named '{dataset.name}' already exists (slug '{dataset.slug}'). "
+                    "Choose another name, or upload the file as a new version of that dataset."
+                ),
+            )
     if not dataset:
         _free_slug_from_deleted(db, project, slug)
-        dataset = Dataset(id=str(uuid4()), project_id=project.id, name=name, slug=slug, description=description, tags=_labels(tags), created_by_user_id=principal.user.id, created_at=utc_now_naive(), updated_at=utc_now_naive())
+        dataset = Dataset(id=str(uuid4()), project_id=project.id, name=clean_name, slug=slug, description=description, tags=_labels(tags), created_by_user_id=principal.user.id, created_at=utc_now_naive(), updated_at=utc_now_naive())
         db.add(dataset)
         db.flush()
     # New-style callers (the dashboard) send the multi-column params input_cols/expected_cols,
@@ -2112,20 +2520,26 @@ async def upload_dataset(
         expected_columns = [expected_col] if expected_col else []
     raw = await file.read()
     filename = file.filename or ""
-    if filename.lower().endswith(".jsonl"):
-        source_type = "jsonl"
+    source_type = _upload_format(upload_format, filename, raw)
+    used_encoding: Optional[str] = None
+    if source_type == "jsonl":
         items = _items_from_jsonl(raw)
+    elif source_type == "json":
+        items = _items_from_json(raw)
     else:
-        source_type = "csv"
-        items = _items_from_csv(
+        items, used_encoding = _items_from_csv(
             raw,
             input_cols=input_columns,
             expected_cols=expected_columns,
             id_col=id_col,
             metadata_cols=_labels(metadata_cols),
             label_cols=_labels(label_cols),
+            encoding=encoding or None,
         )
     version_label, display_name = _version_identity(db, dataset, version, version_name)
+    schema = {"input_cols": input_columns, "expected_cols": expected_columns, "id_col": id_col, "metadata_cols": _labels(metadata_cols), "label_cols": _labels(label_cols)}
+    if used_encoding:
+        schema["encoding"] = used_encoding
     version_row = DatasetVersion(
         id=str(uuid4()),
         dataset_id=dataset.id,
@@ -2136,7 +2550,7 @@ async def upload_dataset(
         source_type=source_type,
         source_uri=filename,
         labels=_labels(labels),
-        schema={"input_cols": input_columns, "expected_cols": expected_columns, "id_col": id_col, "metadata_cols": _labels(metadata_cols), "label_cols": _labels(label_cols)},
+        schema=schema,
         created_by_user_id=principal.user.id,
         created_at=utc_now_naive(),
         updated_at=utc_now_naive(),
@@ -2184,10 +2598,11 @@ def download_version(
         for item in items
     ]
     filename = f"{dataset.slug}-{version.version}.jsonl"
+    fallback = f"{_ascii_name(dataset.slug, 'dataset')}-{_ascii_name(version.version, 'version')}.jsonl"
     return Response(
         "\n".join(lines) + ("\n" if lines else ""),
         media_type="application/x-ndjson",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": _attachment_disposition(filename, fallback)},
     )
 
 

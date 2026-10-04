@@ -1,0 +1,15 @@
+# Test tools for .github/workflows/tests.yml. Python 3.9 keeps the last
+# releases that still support it; the CI node tests install the npm
+# playwright that matches the Python playwright version below.
+axe-playwright-python==0.1.8
+build==1.4.4; python_version < "3.10"
+build==1.6.1; python_version >= "3.10"
+hypothesis==6.141.1; python_version < "3.10"
+hypothesis==6.168.3; python_version >= "3.10"
+playwright==1.60.0; python_version < "3.10"
+playwright==1.63.0; python_version >= "3.10"
+pytest==8.4.2; python_version < "3.10"
+pytest==9.1.1; python_version >= "3.10"
+pytest-asyncio==1.2.0; python_version < "3.10"
+pytest-asyncio==1.4.0; python_version >= "3.10"
+pytest-xdist==3.8.0

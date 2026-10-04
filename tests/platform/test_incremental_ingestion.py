@@ -14,7 +14,6 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import create_engine, event, text
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -358,7 +357,13 @@ def test_duplicate_events_and_span_identities_do_not_double_apply(database):
         ),
     ]
     result = _apply(db, run, principal, [events[0], events[0], events[1]])
-    assert result == {"ok": True, "applied": 2, "skipped": 1}
+    assert result == {
+        "ok": True,
+        "applied": 2,
+        "skipped": 1,
+        "rejected": 0,
+        "rejected_events": [],
+    }
     snapshot = copy.deepcopy(run.run_metadata)
     assert _apply(db, run, principal, events)["skipped"] == 2
     second_span = _event(run, 3, "span_completed", events[1]["payload"])
@@ -433,7 +438,7 @@ def test_ordered_repeats_keep_outputs_final_attempt_and_reduced_scores(
     ] == [1, 0.5, 0]
 
 
-def test_invalid_metric_rolls_back_event_and_item_changes_in_worker(database):
+def test_invalid_metric_is_rejected_without_rolling_back_its_batch(database):
     engine, db, run, principal = database
     db.add(
         RunMetricSpec(
@@ -450,26 +455,33 @@ def test_invalid_metric_rolls_back_event_and_item_changes_in_worker(database):
             dict(item_id="a", metric_name="score", score_numeric=4),
         ),
     ]
-    with pytest.raises(HTTPException):
-        ingest._ingest_events_worker(
-            run.id, "\n".join(map(json.dumps, events)).encode(), engine, principal
-        )
+    response = ingest._ingest_events_worker(
+        run.id, "\n".join(map(json.dumps, events)).encode(), engine, principal
+    )
+    result = json.loads(response.body)
+    assert (result["applied"], result["rejected"]) == (1, 1)
+    assert result["rejected_events"][0]["event_id"] == events[1]["event_id"]
     db.expire_all()
-    assert db.query(RunEvent).count() == 0
-    assert db.query(RunItem).count() == 0
+    # The rejected score leaves no event row and no partial projection.
+    assert [row.event_id for row in db.query(RunEvent)] == [events[0]["event_id"]]
+    assert db.query(RunItem).count() == 1
+    assert db.query(RunItemScore).count() == 0
 
 
-def test_sequence_collision_rolls_back_entire_batch(database):
+def test_sequence_collision_rejects_only_the_second_claim(database):
     engine, db, run, principal = database
     events = [
         _event(run, 1, "item_started", dict(item_id=str(i), index=i, input="x"))
         for i in range(2)
     ]
-    with pytest.raises(IntegrityError):
-        ingest._ingest_events_worker(
-            run.id, "\n".join(map(json.dumps, events)).encode(), engine, principal
-        )
-    assert db.query(RunItem).count() == db.query(RunEvent).count() == 0
+    response = ingest._ingest_events_worker(
+        run.id, "\n".join(map(json.dumps, events)).encode(), engine, principal
+    )
+    result = json.loads(response.body)
+    assert (result["applied"], result["rejected"]) == (1, 1)
+    assert "sequence 1" in result["rejected_events"][0]["error"]
+    assert [row.item_id for row in db.query(RunItem)] == ["0"]
+    assert [row.event_id for row in db.query(RunEvent)] == [events[0]["event_id"]]
 
 
 def test_failed_span_bulk_write_isolates_bad_span_and_keeps_items(

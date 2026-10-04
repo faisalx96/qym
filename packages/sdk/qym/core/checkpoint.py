@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import ast
 import csv
 import json
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+
+from .results import METRIC_ERROR_STATUSES
 
 
 BASE_FIELDS = [
@@ -36,14 +39,16 @@ def _parse_pass_number(value: Any) -> int:
 
 
 def _is_error_row(row: Dict[str, Any], metrics: Sequence[str]) -> bool:
+    """A failed task: the checkpoint writes ``"ERROR: <message>"`` as the
+    output and ``"N/A"`` as every score. A scorer error (``"ERROR: ..."`` in
+    one score) or a label that contains "ERROR" is not a failed task."""
     output = str(row.get("output", "") or "")
-    if output.startswith("ERROR:") or output.startswith("ERROR "):
-        return True
-    if metrics:
-        score_str = str(row.get(f"{metrics[0]}_score", "") or "")
-        if "ERROR" in score_str or score_str.strip().upper() == "N/A":
-            return True
-    return False
+    if not (output.startswith("ERROR:") or output.startswith("ERROR ")):
+        return False
+    return all(
+        str(row.get(f"{metric}_score", "") or "").strip().upper() in ("", "N/A")
+        for metric in metrics
+    )
 
 
 def _parse_metric_score(value: Any) -> Optional[float]:
@@ -77,6 +82,75 @@ def _parse_metric_score(value: Any) -> Optional[float]:
 def parse_metric_score(value: Any) -> Optional[float]:
     """Public wrapper to parse numeric metric scores."""
     return _parse_metric_score(value)
+
+
+# Metadata key on a score that a checkpoint row holds but cannot be read.
+UNREADABLE_SCORE_KEY = "checkpoint_unreadable"
+_LEGACY_RESULT_MAX_LENGTH = 100_000
+
+
+def checkpoint_score(value: Any) -> Tuple[Any, Dict[str, Any]]:
+    """One metric score as its checkpoint cell and its ``__meta__json`` value.
+
+    A scorer error is the ``"ERROR: ..."`` marker. A ``MetricResult`` is its
+    number, with its label, explanation and metadata in the meta column, so a
+    resumed run reads back the same score.
+    """
+    if isinstance(value, dict):
+        meta = value.get("metadata")
+        meta = meta if isinstance(meta, dict) else {}
+        if "error" in value:
+            return f"ERROR: {value['error']}", meta
+        if "score" in value:
+            return value.get("score"), meta
+        return value, meta
+    if hasattr(value, "to_legacy_dict"):  # MetricResult
+        legacy = value.to_legacy_dict()
+        meta = legacy["metadata"]
+        status = str(meta.get("status") or "").strip().lower()
+        if status in METRIC_ERROR_STATUSES:
+            return f"ERROR: {meta.get('error') or status}", meta
+        return legacy["score"], meta
+    return value, {}
+
+
+def _legacy_metric_result(raw: str) -> Optional[Dict[str, Any]]:
+    """Read a ``MetricResult(...)`` repr, which older checkpoints wrote.
+
+    Only literal keyword values are read (``ast.literal_eval``); no text is
+    run. Returns the score in ``checkpoint_score``'s form, or None when the
+    text cannot be read.
+    """
+    if len(raw) > _LEGACY_RESULT_MAX_LENGTH:
+        return None
+    try:
+        call = ast.parse(raw, mode="eval").body
+        if not (
+            isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Name)
+            and call.func.id == "MetricResult"
+            and not call.args
+            and all(keyword.arg for keyword in call.keywords)
+        ):
+            return None
+        fields = {
+            keyword.arg: ast.literal_eval(keyword.value) for keyword in call.keywords
+        }
+    except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
+        return None
+    score = fields.get("score")
+    metadata = fields.get("metadata", {})
+    if isinstance(score, bool) or not isinstance(score, (int, float)):
+        return None
+    if not isinstance(metadata, dict):
+        return None
+    meta = dict(metadata)
+    for key in ("label", "explanation"):
+        if fields.get(key) is not None:
+            meta[key] = fields[key]
+    if fields.get("kind") not in (None, "code"):
+        meta["kind"] = fields["kind"]
+    return {"score": float(score), "metadata": meta}
 
 
 def build_checkpoint_header(metrics: Sequence[str]) -> List[str]:
@@ -127,7 +201,9 @@ def serialize_checkpoint_row(
     for metric, score in scores.items():
         row[f"{metric}_score"] = score
         meta_val = metric_meta.get(metric, {})
-        row[f"{metric}__meta__json"] = json.dumps(meta_val, ensure_ascii=False) if meta_val else ""
+        row[f"{metric}__meta__json"] = (
+            json.dumps(meta_val, ensure_ascii=False, default=str) if meta_val else ""
+        )
     return row
 
 
@@ -304,8 +380,15 @@ def parse_checkpoint_row(
     for metric in metrics:
         score_val = row.get(f"{metric}_score", "")
         score_num = _parse_metric_score(score_val)
+        raw_score = str(score_val or "").strip()
         if score_num is not None:
             scores[metric] = score_num
+        elif raw_score.startswith("MetricResult("):
+            # Never a guessed score: an unreadable one is left out, and marked.
+            scores[metric] = _legacy_metric_result(raw_score) or {
+                "score": None,
+                "metadata": {UNREADABLE_SCORE_KEY: True},
+            }
         else:
             scores[metric] = score_val
         meta_raw = row.get(f"{metric}__meta__json", "")
@@ -321,7 +404,7 @@ def parse_checkpoint_row(
     if metric_meta:
         for metric, meta in metric_meta.items():
             if isinstance(scores.get(metric), dict):
-                scores[metric]["metadata"] = meta
+                scores[metric]["metadata"] = {**scores[metric]["metadata"], **meta}
             else:
                 scores[metric] = {"score": scores.get(metric), "metadata": meta}
     return item_id, result, is_error

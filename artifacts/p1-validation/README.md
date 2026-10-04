@@ -27,13 +27,14 @@ file and full frontend suite also pass independently.
 | `docker-runtime-manifest.json` | 43 changed runtime files match the built image byte for byte |
 | `wheel-content.json` | Repeated wheel builds contain current modules/assets and no stale build namespaces |
 | `type-check-comparison.json` | Main: 113 SDK mypy diagnostics; branch: 111; none newly introduced |
-| `screenshots/` | Desktop visual inspection and unchanged 390px baseline clipping |
+| `screenshots/` | Desktop visual inspection and unchanged 390px baseline clipping; refresh with `QYM_EVIDENCE_SCREENSHOTS=artifacts/p1-validation/screenshots pytest tests/platform/test_overview_performance_browser.py` |
 
 The complete local suite's external SDK fixture imports the sibling `sql_eval`
 repository and assumes an `AsyncOpenAI` export that its current task module does
 not have. The same failure occurs on the original checkout. Clean checkouts skip
 that optional external test. Other skips are optional Traceloop integration and
-SQLite cases whose concurrency/pool behavior is exercised on PostgreSQL.
+SQLite cases whose concurrency/pool behavior is exercised on PostgreSQL. The later
+test audit removed the external `sql_eval` test and the Traceloop tests.
 
 Run the full suite against a disposable PostgreSQL database:
 

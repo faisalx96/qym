@@ -21,7 +21,6 @@ from qym_platform.db.models import (
     User,
 )
 from test_dashboard_durable_summaries import (
-    database,
     drain,
     item,
     legacy,
@@ -52,9 +51,11 @@ def test_task_errors_exclude_skipped_metrics_and_count_each_failed_check(
         for item_id, metric, meta in [
             ("task", "score", {"status": "error", "error": "task unavailable"}),
             ("metric", "score", {"status": "timeout"}),
-            ("metric", "other", {"error": "judge failed"}),
+            ("metric", "other", {"status": "error", "error": "judge failed"}),
             ("zero", "score", {"status": "success", "error": ""}),
-            ("zero", "other", {"error": False}),
+            # A verdict reason in meta.error is a judged 0, not a scorer
+            # error (C010): only meta.status marks an execution error.
+            ("zero", "other", {"is_valid": False, "error": "syntax error"}),
         ]:
             # A classic run may retain both score representations; count once.
             db.add(
