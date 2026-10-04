@@ -135,15 +135,16 @@ def test_launch_form_hook_is_small_and_separated():
     assert LAUNCH.count("innerHTML") == 2
 
 
-def test_module_mounts_three_collapsed_tabs():
+def test_module_mounts_three_separate_cards():
     assert "window.QymLaunchAdvanced = { mount };" in MODULE
-    assert "el('details', { className: 'xl-card xa-panel'" in MODULE
-    assert "open: false," in MODULE  # collapsed by default
     for label in ("'Evaluation inputs'", "'Role overrides'", "'Raw JSON'"):
         assert label in MODULE, label
-    assert "className: 'qym-tabs xa-tabs', role: 'tablist'" in MODULE
-    assert "role: 'tab'" in MODULE and "role: 'tabpanel'" in MODULE
-    assert "'aria-selected'" in MODULE
+    # Unrelated parts: one card each, no tabs and no disclosure of their own.
+    assert "role: 'tablist'" not in MODULE and "el('details'" not in MODULE
+    assert "'data-xa-section': section.id" in MODULE
+    # Role overrides sit under the form's environment overrides.
+    assert "[data-xl-advanced-slot=\"roles\"]" in MODULE
+    assert LAUNCH.count("'data-xl-advanced-slot': 'roles'") == 2  # launch + editor
 
 
 def test_evaluation_inputs_tab():

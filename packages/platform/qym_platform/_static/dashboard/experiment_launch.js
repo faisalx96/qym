@@ -96,9 +96,9 @@
   const STYLESHEETS = [
     'static/eval_environments.css?v=eval-environments-20260929-1',
     'static/eval_temporary_model.css?v=eval-temporary-model-20260930-1',
-    'static/experiment_launch.css?v=experiment-launch-20261003-2',
+    'static/experiment_launch.css?v=experiment-launch-20261003-3',
     'static/experiment_launch_json.css?v=experiment-launch-json-20261003-2',
-    'static/experiment_launch_advanced.css?v=experiment-launch-advanced-20260930-1',
+    'static/experiment_launch_advanced.css?v=experiment-launch-advanced-20261003-2',
     'static/experiment_launch_sweeps.css?v=experiment-launch-sweeps-20260930-1',
     'static/experiment_launch_best_run.css?v=experiment-launch-best-run-20261002-scope',
   ];
@@ -2946,11 +2946,13 @@
         el('summary', null, [
           el('span', { className: 'xl-advanced-config-title', text: 'Advanced configuration' }),
           el('span', { className: 'qym-tag qym-tag--count', 'data-xl-advanced-count': '1', hidden: true }),
-          el('span', { className: 'xl-hint', text: 'Environment overrides, sweeps, evaluation inputs and raw JSON.' }),
+          el('span', { className: 'xl-hint', text: 'Environment and role overrides, sweeps, evaluation inputs and raw JSON.' }),
         ]),
         el('div', { className: 'xl-advanced-config-body' }, [
           section('settings', 6, 'Environment overrides', 'Generated from the environment schema. Only changed values are sent.'),
-          // Extension points: sweeps (#34) and the Advanced panel (#24) mount here.
+          // Extension points: the Advanced panel's Role overrides card (#24) right under
+          // the overrides it belongs to, sweeps (#34), then its other cards.
+          el('div', { 'data-xl-advanced-slot': 'roles', hidden: true }),
           el('div', { 'data-xl-sweeps': '1', hidden: true }),
           el('div', { 'data-xl-advanced': '1', hidden: true }),
         ]),
@@ -3003,6 +3005,7 @@
         section('base', 2, 'Compared with', 'The configuration your changes are counted against.'),
         section('models', 3, 'Models', 'Bind each LLM slot to a project model, or leave it to the environment.'),
         section('settings', 4, 'Settings', 'Generated from the environment schema. Only changed values are saved.'),
+        el('div', { 'data-xl-advanced-slot': 'roles', hidden: true }),
         el('div', { 'data-xl-advanced': '1', hidden: true }),
       ]);
       const saveLabel = opts.saveLabel || 'Save';

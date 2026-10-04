@@ -18,8 +18,9 @@
  * and model slots become chips and multi-selects, and "links" becomes st.links.
  * Without it (a form mounted with `sweeps: false`) sweeps are refused here.
  *
- * Collapsed by default (its own disclosure, or, in the launch form, the
- * "Advanced configuration" disclosure it is mounted in), three tabs:
+ * Three separate cards (no tabs; they are unrelated). In the launch form they sit
+ * inside, and follow, the "Advanced configuration" disclosure, and Role overrides
+ * goes to the form's [data-xl-advanced-slot="roles"] under Environment overrides:
  *   1. Evaluation inputs: the static EvaluatorRequestConfig descriptor from
  *      GET /v1/projects/{pid}/experiments/evaluator-config (D5), a run_metadata
  *      key/value editor (qym_* reserved), the custom dataset string (the same
@@ -50,10 +51,13 @@
   const METADATA_POINTER = '/evaluator/config/run_metadata';
   const SWEEP_MESSAGE = 'Sweeps are not available in this form';
   const DATASET_SWEEP_MESSAGE = 'The dataset cannot be swept in this form';
-  const TABS = [
-    { id: 'inputs', label: 'Evaluation inputs' },
-    { id: 'roles', label: 'Role overrides' },
-    { id: 'json', label: 'Raw JSON' },
+  // Three unrelated parts, one card each (no tabs): role overrides are env_overrides
+  // and sit under the form's Environment overrides; evaluation inputs and the raw
+  // document come after.
+  const SECTIONS = [
+    { id: 'roles', label: 'Role overrides', description: 'Per-role LLM settings of the environment schema (env_overrides), one row per role.' },
+    { id: 'inputs', label: 'Evaluation inputs', description: 'evaluator.config inputs, custom run_metadata and the fields the platform sets.' },
+    { id: 'json', label: 'Raw JSON', description: 'The whole launch document. Edits apply when the editor loses focus and flow back into the form.' },
   ];
 
   // CodeMirror 6 (vendored bundle, see trace_viewer.js). Loaded through
@@ -139,8 +143,7 @@
 
     const adv = {
       active: true,
-      open: false,
-      tab: 'inputs',
+      open: false, // the cards are shown (always, unless a host disclosure is closed)
       panel: null, // loaded /experiments/evaluator-config payload
       panelError: '',
       config: {}, // evaluator.config field → value (user fields only)
@@ -178,7 +181,7 @@
       } else {
         adv.panelError = (res.data && typeof res.data.detail === 'string' && res.data.detail) || 'Failed to load the evaluation inputs';
       }
-      if (adv.open && adv.tab === 'inputs') renderInputs();
+      if (adv.open) renderInputs();
     }
 
     function configEntry(name) {
@@ -273,7 +276,7 @@
     function summaryText(table) {
       const rows = table.rows || [];
       const count = rows.filter(rowOverridden).length;
-      return count + ' of ' + rows.length + ' roles overridden. Roles are edited in ' + (nested ? 'Advanced configuration' : 'Advanced') + ' › Role overrides.';
+      return count + ' of ' + rows.length + ' roles overridden. Roles are edited under Role overrides.';
     }
 
     function roleTableSummary(model, table) {
@@ -1064,7 +1067,7 @@
       st.links = result.links || undefined;
       json.dirty = false;
       api.rerender();
-      renderActive();
+      if (adv.open) { renderRoles(); renderInputs(); }
       syncJson(true);
       updateCounts();
       api.schedulePreview();
@@ -1079,37 +1082,31 @@
       nodes.counts.roles.textContent = loading ? '0' : String(overriddenRoleCount());
     }
 
-    function renderActive() {
-      if (!adv.open) return;
-      if (adv.tab === 'inputs') renderInputs();
-      else if (adv.tab === 'roles') renderRoles();
+    function renderSection(id) {
+      if (id === 'inputs') renderInputs();
+      else if (id === 'roles') renderRoles();
       else renderJson();
     }
 
-    function selectTab(id) {
-      adv.tab = id;
-      TABS.forEach((tab) => {
-        const selected = tab.id === id;
-        const button = nodes.tabs[tab.id];
-        button.classList.toggle('active', selected);
-        button.setAttribute('aria-selected', selected ? 'true' : 'false');
-        button.setAttribute('tabindex', selected ? '0' : '-1');
-        nodes.panels[tab.id].hidden = !selected;
-      });
-      renderActive();
+    function renderAll() {
+      if (!adv.open) return;
+      SECTIONS.forEach((section) => renderSection(section.id));
     }
 
-    function open(tab, focus) {
+    /** Shows the cards (opening the host disclosure) and optionally scrolls to one. */
+    function open(id, focus) {
+      const wasOpen = adv.open;
       adv.open = true;
-      (nested || nodes.details).open = true;
-      selectTab(tab || adv.tab);
-      if (focus) {
-        nodes.details.scrollIntoView({ block: 'start', behavior: 'smooth' });
-        nodes.tabs[adv.tab].focus({ preventScroll: true });
+      if (nested) nested.open = true;
+      if (!wasOpen) renderAll();
+      const card = nodes.cards[id];
+      if (focus && card) {
+        card.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        card.focus({ preventScroll: true });
       }
     }
 
-    /** Before the launch form focuses an error: show the tab that holds it. */
+    /** Before the launch form focuses an error: show the card that holds it. */
     function reveal(pointer) {
       if (typeof pointer !== 'string') return false;
       if (pointer === JSON_POINTER) { open('json'); return true; }
@@ -1138,11 +1135,12 @@
       adv.summaries.forEach((node) => { node.textContent = summaryText(node._xaTable); });
       updateCounts();
       if (!adv.open) return;
-      const panel = nodes.panels[adv.tab];
-      const focusInside = panel.contains(document.activeElement);
-      if (adv.tab === 'json') syncJson(false);
-      else if (!focusInside) renderActive();
-      else if (adv.tab === 'inputs') renderOwned();
+      SECTIONS.forEach(({ id }) => {
+        const focusInside = nodes.panels[id].contains(document.activeElement);
+        if (id === 'json') syncJson(false);
+        else if (!focusInside) renderSection(id);
+        else if (id === 'inputs') renderOwned();
+      });
     }
 
     function scheduleRefresh() {
@@ -1155,55 +1153,47 @@
     }
 
     function build() {
-      nodes.tabs = {};
       nodes.panels = {};
       nodes.counts = {};
-      const tablist = el('div', { className: 'qym-tabs xa-tabs', role: 'tablist', 'aria-label': 'Advanced settings' });
-      TABS.forEach((tab) => {
-        const tabId = 'xa-tab-' + tab.id;
-        const panelId = 'xa-panel-' + tab.id;
-        const count = tab.id === 'json' ? null : el('span', { className: 'xa-tab-count', text: '0' });
-        if (count) nodes.counts[tab.id] = count;
-        const button = el('button', {
-          type: 'button', className: 'qym-tabs__tab', role: 'tab', id: tabId, 'aria-controls': panelId,
-          'aria-selected': tab.id === adv.tab ? 'true' : 'false', 'data-xa-tab': tab.id,
-          onClick: () => selectTab(tab.id),
-        }, [tab.label, count]);
-        nodes.tabs[tab.id] = button;
-        tablist.appendChild(button);
-        nodes.panels[tab.id] = el('div', { className: 'xa-tab-panel', role: 'tabpanel', id: panelId, 'aria-labelledby': tabId, 'data-xa-panel': tab.id, hidden: tab.id !== adv.tab });
+      nodes.cards = {};
+      SECTIONS.forEach((section) => {
+        const count = section.id === 'json' ? null : el('span', { className: 'qym-tag qym-tag--count', text: '0' });
+        if (count) nodes.counts[section.id] = count;
+        nodes.panels[section.id] = el('div', { className: 'xa-section-body', 'data-xa-panel': section.id });
+        nodes.cards[section.id] = el('section', { className: 'xl-card xa-card', 'data-xa-section': section.id, tabindex: '-1', 'aria-label': section.label }, [
+          el('div', { className: 'xl-card-header' }, [el('div', null, [
+            el('h2', { className: 'xl-section-title' }, [section.label, count ? ' ' : null, count]),
+            el('p', { className: 'xl-section-description', text: section.description }),
+          ])]),
+          el('div', { className: 'xl-card-body' }, [nodes.panels[section.id]]),
+        ]);
       });
-      const heading = el('div', null, [
-        el('h2', { className: 'xl-section-title', text: nested ? 'Evaluation inputs and role overrides' : 'Advanced' }),
-        el('p', { className: 'xl-section-description', text: 'Evaluation inputs, per-role LLM overrides and the raw JSON document.' }),
-      ]);
-      const body = el('div', { className: 'xl-card-body' }, [tablist].concat(TABS.map((tab) => nodes.panels[tab.id])));
-      // The disclosure that shows the panel: its own, or the launch form's around it.
-      let disclosure;
-      if (nested) {
-        nodes.details = el('section', { className: 'xl-card xa-panel', 'data-xa-advanced': '1', tabindex: '-1' }, [
-          el('div', { className: 'xl-card-header' }, [heading]),
-          body,
-        ]);
-        disclosure = nested;
-      } else {
-        nodes.details = el('details', { className: 'xl-card xa-panel', 'data-xa-advanced': '1' }, [
-          el('summary', { className: 'xa-summary' }, [heading]),
-          body,
-        ]);
-        disclosure = nodes.details;
+      // Role overrides go to the form's roles slot (under Environment overrides) when
+      // it has one; the other cards go to the host.
+      const scope = host.parentElement || host;
+      const rolesSlot = scope.querySelector('[data-xl-advanced-slot="roles"]');
+      if (rolesSlot) {
+        rolesSlot.className = 'xa-host';
+        rolesSlot.hidden = false;
+        rolesSlot.replaceChildren(nodes.cards.roles);
+        nodes.rolesSlot = rolesSlot;
       }
-      disclosure.addEventListener('toggle', () => {
-        if (!adv.active) return; // a torn-down panel whose host disclosure survived
-        // open() sets adv.open first: re-rendering here would drop the focus it set.
-        const wasOpen = adv.open;
-        adv.open = disclosure.open;
-        if (adv.open && !wasOpen) selectTab(adv.tab);
-      });
       host.className = 'xa-host';
-      host.replaceChildren(nodes.details);
+      host.replaceChildren.apply(host, SECTIONS.filter((section) => !(rolesSlot && section.id === 'roles')).map((section) => nodes.cards[section.id]));
+      // Inside the launch form's "Advanced configuration" the cards follow that
+      // disclosure; elsewhere (the official defaults editor) they are always shown.
+      adv.open = nested ? nested.open : true;
+      if (nested) {
+        nested.addEventListener('toggle', () => {
+          if (!adv.active) return; // a torn-down panel whose host disclosure survived
+          // open() sets adv.open first: re-rendering here would drop the focus it set.
+          const wasOpen = adv.open;
+          adv.open = nested.open;
+          if (adv.open && !wasOpen) renderAll();
+        });
+      }
       updateCounts();
-      if (nested && nested.open) open(adv.tab);
+      renderAll();
     }
 
     function teardown() {
@@ -1214,6 +1204,7 @@
       json.view = null;
       json.textarea = null;
       adv.summaries = [];
+      if (nodes.rolesSlot) { nodes.rolesSlot.replaceChildren(); nodes.rolesSlot.hidden = true; }
     }
 
     build();

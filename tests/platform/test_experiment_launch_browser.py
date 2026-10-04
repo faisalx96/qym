@@ -132,22 +132,19 @@ def test_advanced_configuration_is_the_only_disclosure(launch):
     launch.open()
     page = launch.page
     outer = page.locator("[data-xl-advanced-config]")
-    # The panel inside it is a plain card, not a second <details>.
-    assert (
-        page.locator("[data-xl-advanced-config] details[data-xa-advanced]").count() == 0
+    # No disclosure or tabs inside it: one card per part, in this order.
+    assert outer.locator("details:not([data-xl-group])").count() == 0
+    assert outer.locator("[role=tablist]").count() == 0
+    order = outer.locator(
+        "[data-xl-section], [data-xa-section], [data-xl-sweeps]"
+    ).evaluate_all(
+        "ns => ns.map(n => n.dataset.xlSection || n.dataset.xaSection || 'sweeps')"
     )
-    assert (
-        page.locator("[data-xl-advanced-config] [data-xa-advanced]").evaluate(
-            "n => n.tagName"
-        )
-        == "SECTION"
-    )
+    assert order == ["settings", "roles", "sweeps", "inputs", "json"]
     outer.locator("summary").first.click()
-    tab = page.locator('[data-xa-tab="roles"]')
-    tab.wait_for(state="visible")
-    tab.click()
     page.wait_for_selector('[data-xa-panel="roles"] [data-xa-row]')
-    # Closing and reopening the one disclosure keeps the chosen tab.
+    assert page.locator('[data-xa-panel="inputs"]').is_visible()
+    # Closing and reopening the one disclosure shows the cards again.
     outer.locator("summary").first.click()
     assert not outer.evaluate("n => n.open")
     outer.locator("summary").first.click()
@@ -158,7 +155,6 @@ def test_all_roles_sets_a_column_on_every_role_shown(launch):
     launch.open()
     page = launch.page
     page.locator("[data-xl-advanced-config] summary").first.click()
-    page.locator('[data-xa-tab="roles"]').click()
     panel = page.locator('[data-xa-panel="roles"]')
     page.wait_for_selector('[data-xa-panel="roles"] [data-xa-row]')
     all_temperature = panel.get_by_label("All roles · temperature", exact=True)
