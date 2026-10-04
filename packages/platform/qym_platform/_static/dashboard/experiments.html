@@ -18,8 +18,8 @@
   -->
   <style>
     .exp-page { }
-    /* The new-experiment form is two columns: wider than the shell's 1120px page cap and with tighter outer padding. */
-    .shell-content > .exp-page:has(> [data-xl-launch-form]) { max-width: 1440px; padding: var(--space-md); }
+    /* One container for every Experiments view and the new-experiment form: wider than the 1120px shell cap and with the same padding everywhere. */
+    .shell-content > .exp-page { max-width: 1440px; padding: var(--space-lg); }
     .exp-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-lg); margin-bottom: var(--space-lg); }
     .exp-header-text { min-width: 0; }
     .exp-title { margin: 0; font-size: var(--font-title); font-weight: 650; color: var(--text-primary); letter-spacing: -0.3px; overflow-wrap: anywhere; }
@@ -105,7 +105,7 @@
   <link rel="stylesheet" href="/static/eval_environments.css?v=eval-environments-20261004-2">
   <link rel="stylesheet" href="/static/eval_temporary_model.css?v=eval-temporary-model-20260930-1">
   <link rel="stylesheet" href="/static/eval_official_defaults.css?v=eval-official-defaults-20260930-2">
-  <link rel="stylesheet" href="/static/experiment_launch.css?v=experiment-launch-20261004-4">
+  <link rel="stylesheet" href="/static/experiment_launch.css?v=experiment-launch-20261004-7">
   <link rel="stylesheet" href="/static/experiment_launch_json.css?v=experiment-launch-json-20261003-2">
   <link rel="stylesheet" href="/static/experiment_launch_advanced.css?v=experiment-launch-advanced-20261003-2">
   <link rel="stylesheet" href="/static/experiment_launch_sweeps.css?v=experiment-launch-sweeps-20260930-1">
@@ -117,7 +117,7 @@
   <main class="page exp-page" id="exp-root" aria-live="polite">
     <div class="exp-loading">Loading experiments…</div>
   </main>
-  <script src="/static/experiment_matrix.js?v=experiments-20261004-1"></script>
+  <script src="/static/experiment_matrix.js?v=experiments-20261004-2"></script>
   <!-- New-experiment form (#23): ?new=1 mounts window.QymExperimentLaunch. -->
   <script src="/static/eval_environments.js?v=eval-environments-20261004-2"></script>
   <script src="/static/eval_temporary_model.js?v=eval-temporary-model-20260930-1"></script>
@@ -129,9 +129,9 @@
   <script src="/static/experiment_launch_best_run.js?v=experiment-launch-best-run-20261002-scope"></script>
   <!-- JSON settings as fields: used by experiment_launch.js. -->
   <script src="/static/experiment_launch_json.js?v=experiment-launch-json-20261003-2"></script>
-  <script src="/static/experiment_launch.js?v=experiment-launch-20261004-4"></script>
+  <script src="/static/experiment_launch.js?v=experiment-launch-20261004-7"></script>
   <!-- Environment page (?environment=): default preset history and editor. -->
   <script src="/static/eval_official_defaults.js?v=eval-official-defaults-20261004-1"></script>
-  <script src="/static/experiments.js?v=experiments-20261004-1"></script>
+  <script src="/static/experiments.js?v=experiments-20261004-2"></script>
 </body>
 </html>

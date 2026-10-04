@@ -345,6 +345,26 @@ preset" and says what it is: the preset launches start from by default.
 **To reverse.** Re-apply the phrase list in reverse on the dashboard JS/HTML and
 `services/eval_presets.py` / `services/eval_promote.py` messages.
 
+### B18. Any project member can refresh an environment's schema (Implemented)
+
+**Decision.** `POST …/eval-environments/{id}/schema/refresh` now needs project
+access instead of manager rights. The new-experiment page refreshes the schema of
+each environment once per visit, when it is selected, so the form is generated
+from the service's current schema without a manual "Refresh schema" button.
+Editing the environment and its LLM groups stays manager-only.
+
+**Why.** The user asked for the button to go and for the refresh to happen when a
+user opens the page; with manager-only access it would have failed for members.
+The call only re-reads the service's schema (the same outbound access a launch
+uses) and records health.
+
+**Trade-offs.** One extra service call per selected environment per page visit. A
+refresh that finds a new schema can mark LLM groups as needing confirmation; only
+a manager can confirm them, as before.
+
+**To reverse.** Restore `_require_project_manager` in `refresh_environment_schema`
+and skip `refreshEnvSchema` for non-managers in `experiment_launch.js`.
+
 ---
 
 ## C. Operational follow-ups (not blocking)

@@ -41,6 +41,9 @@ class LaunchFixture:
         self.form_loads = 0
         self.slots = []
         self.put_bodies = []
+        # hold_refresh: schema refresh answers wait for release_refresh().
+        self.hold_refresh = False
+        self.held = []
         self.manager = True
         self.context = browser.new_context(viewport={"width": 1440, "height": 900})
         self.page = self.context.new_page()
@@ -125,6 +128,9 @@ class LaunchFixture:
             and method == "POST"
         ):
             self.posts.append(path)
+            if self.hold_refresh:
+                self.held.append(route)
+                return
             route.fulfill(
                 json={
                     **self.refresh,
@@ -147,6 +153,19 @@ class LaunchFixture:
             " toast: (message, type) => window.toasts.push([message, type]) };"
         )
         self.page.locator('[data-xl-env="e1"]').check()
+
+    def release_refresh(self):
+        """Answers the held schema refreshes (see hold_refresh)."""
+        held, self.held = self.held, []
+        for route in held:
+            route.fulfill(
+                json={
+                    **self.refresh,
+                    "schema_hash": "new",
+                    "slots": [],
+                    "needs_confirmation": False,
+                }
+            )
 
     def customize(self, step):
         """Entry screen → Customize, on wizard step `step`."""
@@ -278,40 +297,46 @@ def test_all_roles_sets_a_column_on_every_role_shown(launch):
         )
 
 
-def test_managers_refresh_the_schema_from_the_form(launch):
+def test_selecting_an_environment_refreshes_its_schema_once(launch):
     launch.open()
     page = launch.page
-    launch.wait(lambda: launch.form_loads >= 1)
-    page.wait_for_timeout(200)
-    loads = launch.form_loads
-    page.locator('[data-xl-env-refresh="e1"]').click()
-    page.wait_for_function("() => window.toasts.length === 1")
-    assert page.evaluate("window.toasts") == [
-        ["Schema for Staging is up to date", "success"]
-    ]
+    launch.wait(lambda: launch.posts and launch.form_loads >= 1)
+    page.wait_for_timeout(300)
+    # No manual button: the schema is re-read when the environment is selected.
+    assert page.locator("[data-xl-env-refresh]").count() == 0
     assert launch.posts == ["/v1/projects/p/eval-environments/e1/schema/refresh"]
-    assert page.locator(
-        '[data-xl-env="e1"]'
-    ).is_checked()  # the click did not toggle it
-    assert launch.form_loads == loads  # unchanged schema: nothing to reload
-    # A changed schema reloads the selected environment's form.
+    loads = launch.form_loads
+    # Unchanged: quiet, and the form is not reloaded.
+    assert page.evaluate("window.toasts") == []
+    # Selecting it again on the same page does not refresh again.
+    page.locator('[data-xl-env="e1"]').uncheck()
+    page.locator('[data-xl-env="e1"]').check()
+    page.wait_for_timeout(300)
+    assert len(launch.posts) == 1
+    assert launch.form_loads >= loads
+
+
+def test_a_changed_schema_reloads_the_form(launch):
     launch.refresh = {"changed": True, "added": ["/A"], "removed": []}
-    page.locator('[data-xl-env-refresh="e1"]').click()
-    page.wait_for_function("() => window.toasts.length === 2")
-    assert page.evaluate("window.toasts[1]") == [
+    launch.hold_refresh = True
+    launch.open()
+    page = launch.page
+    launch.wait(lambda: launch.held)
+    launch.release_refresh()
+    page.wait_for_function("() => window.toasts.length === 1")
+    assert page.evaluate("window.toasts[0]") == [
         "Schema updated for Staging (1 added, 0 removed)",
-        "success",
+        "info",
     ]
-    launch.wait(lambda: launch.form_loads == loads + 1)
-    assert page.locator('[data-xl-env-refresh="e1"]').inner_text() == "Refresh schema"
+    # The environment's form is loaded again from the new schema.
+    launch.wait(lambda: launch.form_loads >= 2)
 
 
-def test_members_get_no_refresh_button(launch):
+def test_members_also_get_the_refresh(launch):
     launch.manager = False
     launch.open()
-    page = launch.page
-    launch.wait(lambda: launch.form_loads >= 1)
-    assert page.locator("[data-xl-env-refresh]").count() == 0
+    launch.wait(lambda: launch.posts)
+    assert launch.page.locator("[data-xl-env-refresh]").count() == 0
 
 
 def test_all_entries_sets_a_setting_on_every_collection_entry(launch):
@@ -456,3 +481,57 @@ def test_environments_tab_lists_and_opens_the_environment_page(launch):
     assert page.locator("#shell-drawer").count() == 0
     page.locator("[data-env-page-back]").click()
     page.wait_for_function("() => location.search === '?view=environments'")
+
+
+def test_typing_the_name_keeps_focus_and_does_not_rebuild_the_form(launch):
+    """Regression: each keystroke rebuilt the entry bar (dropping the focus) and
+    re-rendered the hidden Advanced panel in Customize."""
+    launch.open()
+    page = launch.page
+    launch.wait(lambda: launch.form_loads >= 1)
+    name = page.locator("[data-xl-entry-name]")
+    page.evaluate("window.__name = document.querySelector('[data-xl-entry-name]')")
+    name.press_sequentially("rag threshold", delay=30)
+    # The debounced dry run lands too; the field survives it.
+    page.wait_for_timeout(800)
+    assert name.input_value() == "rag threshold"
+    assert page.evaluate(
+        "document.activeElement === window.__name"
+        " && document.querySelector('[data-xl-entry-name]') === window.__name"
+    )
+    # Customize: typing the name leaves the (hidden) Settings step alone.
+    launch.customize(1)
+    page.wait_for_selector('[data-xa-panel="roles"] [data-xa-row]', state="attached")
+    page.evaluate("""() => {
+          window.__added = 0;
+          new MutationObserver((ms) => {
+            window.__added += ms.reduce((n, m) => n + m.addedNodes.length, 0);
+          }).observe(document.querySelector('[data-xl-step-group="4"]'),
+                     { childList: true, subtree: true });
+        }""")
+    field = page.locator('[data-xl-pointer="#name"]')
+    field.fill("")
+    field.press_sequentially(" on staging", delay=20)
+    page.wait_for_timeout(800)
+    assert field.input_value() == " on staging"
+    assert page.evaluate("window.__added") == 0
+
+
+def test_dataset_card_matches_the_environment_card_height(launch):
+    launch.open()
+    page = launch.page
+    launch.wait(lambda: launch.form_loads >= 1)
+    heights = (
+        "() => ['environments', 'dataset'].map(k => Math.round("
+        "document.querySelector('[data-xl-view=\"entry\"] [data-xl-section=\"' + k + '\"]')"
+        ".getBoundingClientRect().height))"
+    )
+    env_h, data_h = page.evaluate(heights)
+    assert env_h == data_h
+    # It grows with the environment card (e.g. a long environment list).
+    page.evaluate(
+        "document.querySelector('[data-xl-section=\"environments\"] [data-xl-body]')"
+        ".style.minHeight = '400px'"
+    )
+    env_h2, data_h2 = page.evaluate(heights)
+    assert env_h2 > env_h and env_h2 == data_h2

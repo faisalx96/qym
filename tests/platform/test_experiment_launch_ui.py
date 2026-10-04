@@ -407,8 +407,9 @@ def test_entry_screen_then_a_five_step_wizard():
     for kind in ("'official'", "'best_run'", "'clone'", "'saved'", "'blank'"):
         assert f"kind: {kind}" in MODULE, kind
     # Customize (option A): five steps; settings hold overrides, sweeps, the panel.
-    wizard = MODULE[MODULE.index("    function renderWizardLayout(") :]
+    wizard = MODULE[MODULE.index("    function wizardGroups(") :]
     wizard = wizard[: wizard.index("    function setStep(")]
+    wizard = wizard[wizard.index("      return {\n        1: [") :]
     order = [
         wizard.index(f"section('{key}'")
         for key in ("run", "environments", "dataset", "base", "models", "settings")

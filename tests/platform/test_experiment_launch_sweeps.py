@@ -231,7 +231,7 @@ def test_linked_groups_ui():
 
 
 def test_preview_runs_and_cap():
-    assert "'Preview ' + count + ' run'" in LAUNCH
+    assert "count + ' run' + (count === 1 ? '' : 's') + ' to launch'" in LAUNCH
     assert "st.preview.combo_count" in LAUNCH
     assert "if (res.data && res.data.max_jobs != null) st.maxJobs = res.data.max_jobs;" in LAUNCH
     # Submit is disabled over the cap, on the dry run's count or the local estimate.

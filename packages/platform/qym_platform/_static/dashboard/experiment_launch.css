@@ -52,7 +52,7 @@
 .xl-env-main { display: grid; gap: var(--space-xs); flex: 1; min-width: 0; }
 .xl-env-head { display: flex; align-items: baseline; gap: var(--space-sm); min-width: 0; }
 .xl-env-name { flex: 1; min-width: 0; font-size: var(--font-md); font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.xl-env-refresh { flex: none; white-space: nowrap; }
+.xl-env-link { flex: none; white-space: nowrap; }
 .xl-env-sub { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
 
 /* Model cards */
@@ -140,7 +140,8 @@
 /* ── Entry screen: where it runs, then pick a starting point ── */
 .xl-entry { display: grid; gap: var(--space-md); }
 .xl-entry .xl-description { margin-bottom: var(--space-xs); }
-.xl-entry-where { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-md); align-items: start; }
+/* Environment and dataset cards share a row height: the shorter one grows with the other. */
+.xl-entry-where { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-md); align-items: stretch; }
 .xl-entry-where > .xl-card { margin-bottom: 0; }
 .xl-starts { display: grid; gap: var(--space-md); }
 .xl-starts-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-sm); }

@@ -208,13 +208,16 @@ def test_launch_form_has_a_small_editor_mode():
     assert "function mountEditor(options)" in LAUNCH
     assert "{ mount, mountEditor, BASE_OPTIONS }" in LAUNCH
     assert "opts.mode === 'editor'" in LAUNCH
-    # Editor mode drops environments, priority, name and the dry-run preview.
-    layout = LAUNCH[LAUNCH.index("function renderEditorLayout()") :]
-    layout = layout[: layout.index("function editorErrors()")]
+    # Editor mode is the launch wizard over one environment: no environments,
+    # priority, name or dry-run preview; the last step reviews and publishes.
+    groups = LAUNCH[LAUNCH.index("function wizardGroups(newEnvButton)") :]
+    editor_groups = groups[: groups.index("      return {\n        1: [")]
     for section in ("'dataset'", "'base'", "'models'", "'settings'", "data-xl-advanced"):
-        assert section in layout
-    for section in ("'environments'", "'run'", "Launch"):
-        assert section not in layout
+        assert section in editor_groups
+    for section in ("'environments'", "'run'", "data-xl-sweeps"):
+        assert section not in editor_groups
+    assert "if (editor) { renderWizardLayout(null); return; }" in LAUNCH
+    assert "label: 'Review and ' + (opts.saveVerb || 'publish')" in LAUNCH
     assert "if (editor) { renderPreviewSoon(); return; }" in LAUNCH
     assert "if (editor) { renderEditorPanel(host); return; }" in LAUNCH
     # One configuration: sweeps and (for official defaults) temporary models refused.

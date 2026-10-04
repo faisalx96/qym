@@ -814,7 +814,9 @@ async def refresh_environment_schema(
     principal: Principal = Depends(require_ui_principal),
     client_factory: EvalClientFactory = Depends(get_eval_client_factory),
 ) -> Dict[str, Any]:
-    _require_project_manager(db, principal, project_id)
+    # Any project member: the new-experiment page refreshes the schema of the
+    # environments it opens on (it only re-reads the service; slots stay manager-edited).
+    _require_project_access(db, principal, project_id)
     settings = PlatformSettings()
     env = _get_environment(db, project_id, env_id)
     api_key = _stored_key(env, settings)

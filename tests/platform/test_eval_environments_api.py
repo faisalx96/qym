@@ -348,11 +348,13 @@ def test_member_reads_manager_writes(client):
     assert (
         client.post(_url(suffix=f"/{env_id}/test"), headers=member).status_code == 403
     )
+    # Members may refresh the schema (the launch page does it on open); they
+    # still cannot change the environment or its LLM groups.
     assert (
         client.post(
             _url(suffix=f"/{env_id}/schema/refresh"), headers=member
         ).status_code
-        == 403
+        != 403
     )
     assert (
         client.put(
