@@ -195,7 +195,7 @@ def _normalize_notes(notes: Optional[str], kind: EvalConfigPresetKind) -> str:
     value = (notes or "").strip()
     if kind == EvalConfigPresetKind.OFFICIAL and not value:
         raise PresetError(
-            422, "Release notes are required to publish official defaults"
+            422, "Release notes are required to publish the default preset"
         )
     if len(value) > MAX_NOTES_LENGTH:
         raise PresetError(422, f"Notes are at most {MAX_NOTES_LENGTH} characters")
@@ -284,7 +284,7 @@ def prepare_config(
                 _issue(
                     "temporary_binding",
                     f"Temporary model {label or slot_key!r} must be rebound to a "
-                    "project model before publishing official defaults",
+                    "project model before publishing the default preset",
                     slot_key=str(slot_key),
                 )
             )
@@ -463,7 +463,7 @@ def create_preset(
             raise PresetError(
                 409,
                 {
-                    "message": "This environment already has official defaults; "
+                    "message": "This environment already has a default preset; "
                     "publish a new version instead",
                     "preset_id": existing.id,
                 },
@@ -479,7 +479,7 @@ def create_preset(
         created_by_user_id=user_id,
     )
     db.add(preset)
-    _flush(db, "This environment already has official defaults")
+    _flush(db, "This environment already has a default preset")
     version = EvalConfigPresetVersion(
         preset_id=preset.id,
         version=1,

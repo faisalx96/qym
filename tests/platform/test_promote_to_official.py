@@ -261,7 +261,7 @@ def test_settings_page_opens_the_editor_from_a_deep_link():
 
 def test_run_panel_and_matrix_link_to_the_editor_for_managers_only():
     for source in (PANEL, MATRIX):
-        assert "Promote to official" in source
+        assert "Promote to default preset" in source
         assert "promote=" in source and "tab=environments" in source
         assert "can_promote" in source or "canPromote" in source
     # Ids only in the URL: never the config document.

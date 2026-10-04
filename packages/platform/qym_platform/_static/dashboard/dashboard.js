@@ -430,7 +430,7 @@
   }
 
   // Origin (plan §11): "Official run" is the badge for a platform-dispatched,
-  // ingest-verified run. It is distinct from the "Official defaults" preset.
+  // ingest-verified run. It is distinct from an environment's "Default preset".
   const ORIGIN_FILTER_VALUES = ['all', 'official', 'local'];
   const OFFICIAL_RUN_BADGE_TITLE = 'Dispatched by the platform and verified at ingest';
 

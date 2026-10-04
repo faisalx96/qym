@@ -1,15 +1,15 @@
 /*
- * Official defaults editor, publish and history; saved presets list
+ * Default preset editor, publish and history; saved presets list
  * (plan §9.1, §12.1; issue #30).
  *
  *   window.QymOfficialDefaults.renderDrawerSection(container, {
  *     projectId, projectSlug, env, onEdit })
- *       Environments → env drawer: "Official defaults" (current version, Publish /
+ *       Environments → env drawer: "Default preset" (current version, Publish /
  *       Edit and publish, version history with notes, author and date; any version
  *       opens read-only) and "Saved presets" (name, author, updated; open in the
  *       launch form). onEdit({ fromVersion }) opens the editor; without it (or
  *       when the API says the viewer cannot publish) no write action is shown.
- *       Managers also get "Promote to official" on each saved preset (#39):
+ *       Managers also get "Promote to default preset" on each saved preset (#39):
  *       onEdit({ promote: { kind: 'saved', id } }).
  *
  *   window.QymOfficialDefaults.openEditor({
@@ -20,7 +20,7 @@
  *       laid on top as edits. Publish needs release notes and posts
  *       POST …/presets (v1, kind official) or POST …/presets/{id}/versions.
  *
- *   Promote to official (#39, plan §9.1): `promote` = { kind: saved|run|job, id }
+ *   Promote to default preset (#39, plan §9.1): `promote` = { kind: saved|run|job, id }
  *       loads GET …/eval-environments/{env}/promote-prefill (managers; re-mapped
  *       onto the current schema, temporary slots unbound) and lays it on top of
  *       the current official version as edits. It never publishes: the manager
@@ -291,19 +291,19 @@
       }
       const children = [el('div', { className: 'env-section-head' }, [
         el('div', null, [
-          el('div', { className: 'env-section-title', text: 'Official defaults' }),
+          el('div', { className: 'env-section-title', text: 'Default preset' }),
           el('div', { className: 'env-section-desc', text: 'The default base of every launch on this environment. Each publish adds a version; earlier versions never change.' }),
         ]),
         el('div', { className: 'env-section-actions' }, actions),
       ])];
       if (data.error) children.push(el('div', { className: 'env-callout env-callout--error', role: 'alert' }, [el('div', { text: data.error })]));
       if (!data.canPublishOfficial) {
-        children.push(el('div', { className: 'env-hint', 'data-odx-readonly-note': '1', text: 'Only project managers publish official defaults. You can view every version.' }));
+        children.push(el('div', { className: 'env-hint', 'data-odx-readonly-note': '1', text: 'Only project managers publish the default preset. You can view every version.' }));
       } else if (env.is_active === false) {
         children.push(el('div', { className: 'env-hint', text: 'Re-enable this environment to publish.' }));
       }
       if (!current) {
-        if (!data.error) children.push(el('div', { className: 'env-empty-state', text: 'No official defaults yet. Launches on this environment start from Blank.' }));
+        if (!data.error) children.push(el('div', { className: 'env-empty-state', text: 'No default preset yet. Launches on this environment start from Blank.' }));
         return el('section', { className: 'env-section', 'data-odx-official': '1' }, children);
       }
       children.push(el('dl', { className: 'env-kv', 'data-odx-current': '1' }, [
@@ -381,8 +381,8 @@
           // Opens the editor prefilled with this preset; never publishes (#39).
           const promote = promotable && version ? el('button', {
             type: 'button', className: 'qym-inline-action qym-inline-action--neutral', 'data-odx-promote': preset.id,
-            text: 'Promote to official',
-            title: 'Open the official defaults editor with this preset, compared with the current version; nothing is published until you publish',
+            text: 'Promote to default preset',
+            title: 'Open the default preset editor with this preset, compared with the current version; nothing is published until you publish',
             onClick: () => opts.onEdit({ fromVersion: null, promote: { kind: 'saved', id: preset.id } }),
           }) : null;
           return el('tr', { 'data-odx-saved': preset.id }, [
@@ -445,7 +445,7 @@
     const project = o.project || {};
     const launch = window.QymExperimentLaunch;
     if (!o.host || !launch || !launch.mountEditor) {
-      toast('The official defaults editor failed to load', 'error');
+      toast('The default preset editor failed to load', 'error');
       return null;
     }
     ensureStylesheet();
@@ -454,17 +454,17 @@
     const official = data.official;
     const current = official && official.current_version;
     if (!data.canPublishOfficial || (official && official.can_publish === false)) {
-      toast('Only project managers publish official defaults', 'error');
+      toast('Only project managers publish the default preset', 'error');
       return null;
     }
     let baseConfig = {};
-    let baseMeta = { label: 'Blank (no official defaults yet)' };
+    let baseMeta = { label: 'Blank (no default preset yet)' };
     if (current) {
       const cur = await remapped(project.id, env.id, official.id, current.version);
       if (cur.error) { toast(cur.error, 'error'); return null; }
       baseConfig = cur.remap.config || {};
       baseMeta = {
-        label: 'Official defaults v' + current.version,
+        label: 'Default preset v' + current.version,
         version: current.version,
         versionId: current.id,
         releaseNotes: current.notes || '',
@@ -507,10 +507,10 @@
     async function publish(payload) {
       const diff = payload.diff || { total: 0 };
       const ok = await confirmDialog({
-        title: 'Publish official defaults v' + next + '?',
+        title: 'Publish default preset v' + next + '?',
         description: [
-          current ? diff.total + ' change' + (diff.total === 1 ? '' : 's') + ' vs ' + payload.baseLabel + '.' : 'The first version of the official defaults of “' + env.name + '”.',
-          'Launches that start from official defaults use it from now on. Earlier versions stay in the history and never change.',
+          current ? diff.total + ' change' + (diff.total === 1 ? '' : 's') + ' vs ' + payload.baseLabel + '.' : 'The first version of the default preset of “' + env.name + '”.',
+          'Launches that start from the default preset use it from now on. Earlier versions stay in the history and never change.',
         ],
         confirmLabel: 'Publish v' + next,
         cancelLabel: 'Keep editing',
@@ -524,7 +524,7 @@
       if (res.ok) {
         const version = (res.data.version || (res.data.preset && res.data.preset.current_version) || {}).version || next;
         const warnings = (res.data.warnings || []).length;
-        toast('Published official defaults v' + version + ' for “' + env.name + '”' + (warnings ? ' (' + warnings + ' warning' + (warnings === 1 ? '' : 's') + ')' : ''), 'success');
+        toast('Published default preset v' + version + ' for “' + env.name + '”' + (warnings ? ' (' + warnings + ' warning' + (warnings === 1 ? '' : 's') + ')' : ''), 'success');
         close();
         if (o.onPublished) o.onPublished(res.data);
         return { ok: true };
@@ -533,7 +533,7 @@
         return { ok: false, errors: detail.errors, message: 'The configuration is not valid' };
       }
       if (res.status === 409) {
-        return { ok: false, message: errorMessage(res.data, 'The official defaults changed meanwhile') + '. Close the editor and open it again.' };
+        return { ok: false, message: errorMessage(res.data, 'The default preset changed meanwhile') + '. Close the editor and open it again.' };
       }
       return { ok: false, message: errorMessage(res.data, 'Could not publish') };
     }
@@ -547,12 +547,12 @@
       baseConfig,
       baseMeta,
       initialConfig,
-      title: 'Official defaults · ' + (env.name || ''),
+      title: 'Default preset · ' + (env.name || ''),
       description: promoted
         ? 'Promoting ' + ((promoted.source && promoted.source.label) || 'a configuration') + ', compared with ' + (current ? 'the current version' : 'Blank') + '. Nothing changes until you publish.'
         : initialConfig
           ? 'A draft from v' + o.fromVersion + ', compared with the current version. Nothing changes until you publish.'
-          : 'Edit the environment\'s official defaults and publish them as a new version.',
+          : 'Edit the environment\'s default preset and publish it as a new version.',
       backLabel: '← Environments',
       saveLabel: 'Publish v' + next,
       notesLabel: 'Release notes',

@@ -329,6 +329,22 @@ limit with qym, as they already did.
 5), then restore the cap check in `EvalDispatcher._try_submit` / `_begin_submit` and
 the field in the API and UI from the commit that removed them.
 
+### B17. "Official defaults" renamed to "Default preset" (Implemented, UI only)
+
+**Decision.** Every user-facing "Official defaults" / "official preset" became
+**Default preset**: "Default preset v3", "Run default preset", "Promote to default
+preset", the Start from option and the environments table column. The API, the
+database and the preset `kind` keep `official` (`official_preset_version`,
+`kind: "official"`, `QymOfficialDefaults`), so nothing breaks for API clients.
+Server error messages that users see were reworded the same way.
+
+**Why.** The user asked for a name that does not clash with *official runs*
+(runs launched by the platform). "Default preset" pairs with the existing "Saved
+preset" and says what it is: the preset launches start from by default.
+
+**To reverse.** Re-apply the phrase list in reverse on the dashboard JS/HTML and
+`services/eval_presets.py` / `services/eval_promote.py` messages.
+
 ---
 
 ## C. Operational follow-ups (not blocking)

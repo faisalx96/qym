@@ -15,7 +15,7 @@
  *   POST /v1/projects/{pid}/eval-environments/{env_id}/presets
  * Temporary models are saved without their key (the preset API drops it).
  *
- * "Promote to official" (#39; managers only, ctx.canPromote) opens the official
+ * "Promote to default preset" (#39; managers only, ctx.canPromote) opens the official
  * defaults editor on the settings page, prefilled from the cell's job config:
  *   /projects/{slug}/settings?tab=environments&env=<env_id>&promote=job&id=<job_id>
  * Only ids travel in the URL; nothing is published until the manager publishes.
@@ -304,7 +304,7 @@
     return btn;
   }
 
-  // ── Promote to official (#39) ───────────────────────────────────────────
+  // ── Promote to default preset (#39) ───────────────────────────────────────────
   function promoteUrl(ctx, job) {
     const params = new URLSearchParams();
     params.set('tab', 'environments');
@@ -323,8 +323,8 @@
       className: 'qym-inline-action qym-inline-action--neutral',
       'data-exp-promote': job.id,
       disabled: !!reason,
-      title: reason || 'Open the official defaults editor of ' + (job.environment_name || 'its environment') + ' with this cell’s configuration; nothing is published until you publish',
-      text: 'Promote to official',
+      title: reason || 'Open the default preset editor of ' + (job.environment_name || 'its environment') + ' with this cell’s configuration; nothing is published until you publish',
+      text: 'Promote to default preset',
     });
     btn.addEventListener('click', (event) => { event.stopPropagation(); ctx.navigate(promoteUrl(ctx, job)); });
     return btn;

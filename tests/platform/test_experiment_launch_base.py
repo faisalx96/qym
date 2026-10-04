@@ -431,7 +431,7 @@ def test_clone_prefill_asks_for_temporary_keys_again():
 
 def test_environments_tab_runs_official_defaults_in_one_click():
     assert "data-env-run-official=\"${id}\"" in ENVIRONMENTS_JS
-    assert ">Run official defaults</button>" in ENVIRONMENTS_JS
+    assert ">Run default preset</button>" in ENVIRONMENTS_JS
     # Only for active environments with a schema and a published version.
     assert (
         "env.is_active && env.current_schema_id && env.official_preset_id "

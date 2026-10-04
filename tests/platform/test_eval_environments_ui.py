@@ -55,8 +55,8 @@ def test_settings_page_has_environments_tab_and_panel():
         "URL",
         "Health",
         "Schema",
-        "LLM slots",
-        "Official preset",
+        "LLM groups",
+        "Default preset",
         "Priority cap",
     ):
         assert f">{column}</th>" in SETTINGS, column

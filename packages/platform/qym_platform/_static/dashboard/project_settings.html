@@ -187,18 +187,18 @@
       animation: spin 0.7s linear infinite;
     }
   </style>
-  <link rel="stylesheet" href="/static/eval_environments.css?v=eval-environments-20261004-1">
+  <link rel="stylesheet" href="/static/eval_environments.css?v=eval-environments-20261004-2">
   <link rel="stylesheet" href="/static/eval_official_defaults.css?v=eval-official-defaults-20260930-2">
   <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60">
   <script defer src="/static/ui_components.js?v=ui-consistency-20260803-28"></script>
-  <script src="/static/eval_environments.js?v=eval-environments-20261004-1"></script>
-  <!-- Official defaults editor (#30): the launch form in editor mode; its stylesheets are added on mount. -->
+  <script src="/static/eval_environments.js?v=eval-environments-20261004-2"></script>
+  <!-- Default preset editor (#30): the launch form in editor mode; its stylesheets are added on mount. -->
   <script src="/static/eval_temporary_model.js?v=eval-temporary-model-20260930-1"></script>
   <script src="/static/experiment_launch_advanced.js?v=experiment-launch-advanced-20261003-2"></script>
   <!-- JSON settings as fields: used by experiment_launch.js. -->
   <script src="/static/experiment_launch_json.js?v=experiment-launch-json-20261003-2"></script>
-  <script src="/static/experiment_launch.js?v=experiment-launch-20261004-2"></script>
-  <script src="/static/eval_official_defaults.js?v=eval-official-defaults-20260930-2"></script>
+  <script src="/static/experiment_launch.js?v=experiment-launch-20261004-4"></script>
+  <script src="/static/eval_official_defaults.js?v=eval-official-defaults-20261004-1"></script>
 </head>
 <body>
   <main class="settings-page">
@@ -324,7 +324,7 @@
         </div>
         <div class="card-body flush env-table-wrap">
           <table class="data-table">
-            <thead><tr><th>Environment</th><th>URL</th><th>Health</th><th>Schema</th><th>LLM slots</th><th>Official preset</th><th>Priority cap</th><th style="text-align:right">Actions</th></tr></thead>
+            <thead><tr><th>Environment</th><th>URL</th><th>Health</th><th>Schema</th><th>LLM groups</th><th>Default preset</th><th>Priority cap</th><th style="text-align:right">Actions</th></tr></thead>
             <tbody id="environments-tbody"><tr><td colspan="9"><div class="env-loading"><span class="env-spinner" aria-hidden="true"></span>Loading…</div></td></tr></tbody>
           </table>
         </div>
@@ -429,7 +429,7 @@
         </div>
       </div>
     </div>
-    <!-- Official defaults editor (#30); mounted by eval_official_defaults.js. -->
+    <!-- Default preset editor (#30); mounted by eval_official_defaults.js. -->
     <div class="ps-editor-host" id="env-editor-host" hidden></div>
   </main>
 
@@ -523,8 +523,8 @@
       }
 
       // Deep links: ?tab=environments selects the tab; with &env=<id>&promote=
-      // saved|run|job&id=<source id> ("Promote to official" on the run page and the
-      // experiment matrix, #39) it opens the official defaults editor prefilled from
+      // saved|run|job&id=<source id> ("Promote to default preset" on the run page and the
+      // experiment matrix, #39) it opens the default preset editor prefilled from
       // that source. Only ids travel in the URL; the editor never publishes by itself.
       let urlHandled = false; // load() runs again after edits; the link is read once
       async function openFromUrl() {
@@ -570,10 +570,16 @@
           note: document.getElementById('env-panel-note'),
           onGotoApiKeys: () => document.getElementById('settings-tab-apikeys').click(),
           onEditOfficial: openOfficialDefaultsEditor,
+          // Manage / View opens the environment page (Experiments › Environments).
+          openEnv: (env) => {
+            const url = (window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '') + '/projects/' + encodeURIComponent(state.project.slug) + '/experiments?environment=' + encodeURIComponent(env.id);
+            if (window.QymShell && window.QymShell.navigateTo) window.QymShell.navigateTo(url);
+            else window.location.href = url;
+          },
         });
       }
 
-      // Environments → env → Official defaults (#30): the launch form without sweeps.
+      // Environments → env → Default preset (#30): the launch form without sweeps.
       function openOfficialDefaultsEditor({ env, fromVersion, promote }) {
         if (!window.QymOfficialDefaults) return;
         window.QymOfficialDefaults.openEditor({

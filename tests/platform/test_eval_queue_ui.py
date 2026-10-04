@@ -117,19 +117,22 @@ def test_shell_knows_the_queue_route():
     assert "projectUrl(ctx.projectSlug, 'experiments')" in crumbs
 
 
-def test_experiments_and_queue_pages_share_a_tab_pair():
-    for source, prefix in ((MODULE, "exq"), (EXPERIMENTS, "exp")):
-        assert f"className: 'qym-tabs {prefix}-tabs', role: 'tablist'" in source
-        assert source.count("role: 'tab'") == 2
-        assert "text: 'Experiments'" in source and "text: 'Queue'" in source
-    # Each page marks itself selected and links to the other.
+def test_experiments_queue_and_environments_tabs():
+    # Experiments | Queue | Environments on both pages.
+    assert "className: 'qym-tabs exq-tabs', role: 'tablist'" in MODULE
+    assert MODULE.count("role: 'tab'") == 3
+    assert "className: 'qym-tabs exp-tabs', role: 'tablist'" in EXPERIMENTS
+    for text in ("'Experiments'", "'Queue'", "'Environments'"):
+        assert text in MODULE and text in EXPERIMENTS, text
+    # Each page marks itself selected and links to the others.
     assert "exq-tab active', role: 'tab', 'aria-selected': 'true'" in MODULE
     assert "href: experimentUrl(null), text: 'Experiments'" in MODULE
-    assert "exp-tab active', role: 'tab', 'aria-selected': 'true'" in EXPERIMENTS
-    assert "href: queuePageUrl(null), text: 'Queue'" in EXPERIMENTS
+    assert "'?view=environments'" in MODULE and "'?view=environments'" in EXPERIMENTS
+    assert "tab('queue', queuePageUrl(null), 'Queue')" in EXPERIMENTS
+    assert "tab('environments', environmentsUrl(null), 'Environments')" in EXPERIMENTS
     assert "projectPage('/experiments/queue')" in EXPERIMENTS
     assert "projectPage('/experiments/queue')" in MODULE
-    assert "root.replaceChildren(header, sectionTabs(), toolbar, card);" in EXPERIMENTS
+    assert "root.replaceChildren(header, sectionTabs('experiments'), toolbar, card);" in EXPERIMENTS
 
 
 # --------------------------------------------------------------------------- page

@@ -7,6 +7,8 @@
  *   mountEnvironmentsPanel({ projectId, canManage, tbody, addButton, note, onGotoApiKeys })
  *   openAddDialog({ projectId, onChange, onGotoApiKeys })        3-step add dialog
  *   openEnvironmentDrawer({ projectId, projectSlug, env, canManage, onChange, onEditOfficial })
+ *   mountEnvironmentPage({ root, projectId, projectSlug, envId, canManage, onClose, ... })
+ *                                    the same sections as a page (Experiments › Environments)
  *                                    detail drawer; its presets section (official
  *                                    defaults + saved presets, #30) is
  *                                    QymOfficialDefaults.renderDrawerSection
@@ -14,7 +16,7 @@
  *   renderFormPreview(descriptor)                                 read-only generated form
  *   HIGH_PRIORITY_WARNING / highPriorityWarning(envName)          §5.3 preemption text
  *   runOfficialDefaults({ projectId, projectSlug, env, canManage, onLaunched })
- *                                    "Run official defaults" one click (§9.2, #31)
+ *                                    "Run default preset" one click (§9.2, #31)
  *
  * Security: every server or user string goes through esc() before it reaches
  * innerHTML. The environment API key only exists in its password input until
@@ -269,12 +271,12 @@
   }
 
   /**
-   * Official preset version (plan §9, issues #27/#28/#31): the environment payload
-   * carries ``official_preset_version`` (null until official defaults are published).
+   * Default preset version (plan §9, issues #27/#28/#31): the environment payload
+   * carries ``official_preset_version`` (null until default preset are published).
    */
   function officialPresetVersionHtml(env) {
     const version = env && env.official_preset_version;
-    if (version == null || version === '') return '<span class="env-empty" title="No official defaults published yet">—</span>';
+    if (version == null || version === '') return '<span class="env-empty" title="No default preset published yet">—</span>';
     return `<span class="qym-tag qym-tag--version">v${esc(version)}</span>`;
   }
 
@@ -309,7 +311,7 @@
           <td><span class="qym-tag qym-tag--data">${esc(env.max_priority || '—')}</span></td>
           <td class="env-actions-cell">
             <div class="env-row-actions">
-              ${canRunOfficial(env) ? `<button class="btn btn-secondary env-btn-sm" type="button" data-env-run-official="${id}" title="${esc(`Launch a 1-job experiment with official defaults v${env.official_preset_version}`)}">Run official defaults</button>` : ''}
+              ${canRunOfficial(env) ? `<button class="btn btn-secondary env-btn-sm" type="button" data-env-run-official="${id}" title="${esc(`Launch a 1-job experiment with default preset v${env.official_preset_version}`)}">Run default preset</button>` : ''}
               <button class="btn btn-secondary env-btn-sm" type="button" data-env-open="${id}">${canManage ? 'Manage' : 'View'}</button>
               ${canManage ? `<button class="btn btn-secondary env-btn-sm" type="button" data-env-test="${id}">Test</button>` : ''}
             </div>
@@ -1157,6 +1159,71 @@
   function openEnvironmentDrawer(options) {
     const opts = options || {};
     if (!window.QymShell || !window.QymShell.openDrawer) return null;
+    const drawer = window.QymShell.openDrawer({ title: opts.env.name, subtitle: opts.env.base_url, width: 640 });
+    drawer.el.querySelector('.shell-drawer').classList.add('env-drawer');
+    environmentView(drawer, opts);
+    return drawer;
+  }
+
+  /**
+   * The environment as a page (Experiments › Environments › name): the same
+   * sections as the drawer, laid out as cards, with Back instead of Close.
+   * options: { root, projectId, projectSlug, envId, canManage, backLabel,
+   * onClose, onChange, onEditOfficial }. Resolves to the surface, or null.
+   */
+  async function mountEnvironmentPage(options) {
+    const opts = options || {};
+    ensureEnvironmentStyles();
+    opts.root.innerHTML = '<div class="env-loading"><span class="env-spinner" aria-hidden="true"></span>Loading…</div>';
+    const res = await request(envPath(opts.projectId, `/${encodeURIComponent(opts.envId)}`));
+    if (!res.ok) {
+      opts.root.innerHTML = `<div class="env-callout env-callout--error" role="alert"><div>${esc(errorMessage(res.data, 'Could not load the environment.'))}</div></div>`;
+      return null;
+    }
+    opts.root.innerHTML = `
+      <div class="env-page" data-env-page="${esc(res.data.id)}">
+        <button class="env-link-btn env-page-back" type="button" data-env-page-back>← ${esc(opts.backLabel || 'Environments')}</button>
+        <header class="env-page-header">
+          <div class="env-page-heading">
+            <h1 class="env-page-title" data-env-page-title></h1>
+            <div class="env-page-subtitle" data-env-page-subtitle></div>
+          </div>
+        </header>
+        <div class="env-page-body" data-env-page-body></div>
+        <div class="env-page-footer" data-env-page-footer hidden></div>
+      </div>`;
+    const page = opts.root.querySelector('[data-env-page]');
+    const body = page.querySelector('[data-env-page-body]');
+    const footer = page.querySelector('[data-env-page-footer]');
+    const close = () => { if (opts.onClose) opts.onClose(); };
+    page.querySelector('[data-env-page-back]').addEventListener('click', close);
+    const surface = {
+      el: page,
+      body,
+      page: true,
+      setTitle: (text) => { page.querySelector('[data-env-page-title]').textContent = text || ''; },
+      setSubtitle: (text) => { page.querySelector('[data-env-page-subtitle]').textContent = text || ''; },
+      setBody: (html) => { body.innerHTML = html; },
+      setFooter: (html) => { footer.hidden = html == null; footer.innerHTML = html || ''; },
+      close,
+      env: res.data,
+    };
+    environmentView(surface, Object.assign({}, opts, { env: res.data }));
+    return surface;
+  }
+
+  /** Loads eval_environments.css on pages that did not link it. */
+  function ensureEnvironmentStyles() {
+    if (document.querySelector('link[href*="eval_environments.css"]')) return;
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = apiUrl('static/eval_environments.css?v=eval-environments-20261004-2');
+    document.head.appendChild(link);
+  }
+
+  /** Status, schema, LLM groups, presets and settings of one environment on `drawer`
+   *  (the shell drawer, or the page surface of mountEnvironmentPage). */
+  function environmentView(drawer, opts) {
     const canManage = !!opts.canManage;
     const st = { env: opts.env, slots: [], schemaId: null, descriptor: null, loadError: '', diff: null, editing: false, editor: null, keysTouched: false };
 
@@ -1173,8 +1240,6 @@
       return url;
     }
     function urlChanged(value) { return normalizeUrl(value) !== normalizeUrl(st.env.base_url); }
-    const drawer = window.QymShell.openDrawer({ title: st.env.name, subtitle: st.env.base_url, width: 640 });
-    drawer.el.querySelector('.shell-drawer').classList.add('env-drawer');
 
     function notifyChange() { if (opts.onChange) opts.onChange(st.env); }
 
@@ -1214,7 +1279,7 @@
             <dt>State</dt><dd>${env.is_active ? 'Active' : '<span class="qym-tag qym-tag--warning">Disabled</span>'}</dd>
             <dt>Health</dt><dd>${healthHtml(env)}${env.health_status === 'error' && env.health_error ? `<div class="env-error-text">${esc(env.health_error)}</div>` : ''}</dd>
             <dt>API key</dt><dd>${keyText}</dd>
-            <dt>Official defaults</dt><dd>${officialPresetVersionHtml(env)}</dd>
+            <dt>Default preset</dt><dd>${officialPresetVersionHtml(env)}</dd>
             <dt>Created</dt><dd><span class="env-mono">${esc(absTime(env.created_at) || '—')}</span></dd>
           </dl>
         </section>`;
@@ -1277,7 +1342,7 @@
         <section class="env-section">
           <div class="env-section-head"><div>
             <div class="env-section-title">Ranking</div>
-            <div class="env-section-desc">How best runs on this environment are ranked (plan §10.2).</div>
+            <div class="env-section-desc">How best runs on this environment are ranked.</div>
           </div></div>
           <div class="env-form-grid">
             <div class="shell-form-group">
@@ -1364,7 +1429,7 @@
       });
     }
 
-    /** Official defaults and saved presets (#30): eval_official_defaults.js fills it. */
+    /** Default preset and saved presets (#30): eval_official_defaults.js fills it. */
     function presetsSection() {
       return '<div data-drawer-presets></div>';
     }
@@ -1378,7 +1443,8 @@
         env: st.env,
         // Only the settings page hosts the editor; elsewhere the history is read-only.
         onEdit: opts.onEditOfficial ? (payload) => {
-          drawer.close();
+          if (!drawer.page) drawer.close(); // the page hides itself under the editor
+
           opts.onEditOfficial(Object.assign({ env: st.env }, payload));
         } : null,
       });
@@ -1405,7 +1471,7 @@
       renderPresets();
       drawer.setFooter(canManage ? `
         <button class="shell-btn shell-btn-danger env-footer-start" type="button" data-drawer-delete>Delete environment</button>
-        <button class="shell-btn shell-btn-secondary" type="button" data-drawer-close>Close</button>
+        ${drawer.page ? '' : '<button class="shell-btn shell-btn-secondary" type="button" data-drawer-close>Close</button>'}
         <button class="shell-btn shell-btn-primary" type="button" data-drawer-save>Save changes</button>` : null);
     }
 
@@ -1568,7 +1634,7 @@
     return drawer;
   }
 
-  // ── "Run official defaults" (plan §9.2, issue #31) ─────────────────────
+  // ── "Run default preset" (plan §9.2, issue #31) ─────────────────────
   // services/eval_priority.PREEMPTION_ACK_REQUIRED
   const PREEMPTION_ACK_REQUIRED = 'preemption_acknowledgement_required';
 
@@ -1594,14 +1660,14 @@
   /**
    * Why a re-mapped official version cannot launch in one click (null when it can).
    *
-   * Temporary models: official defaults never hold one (publishing refuses them,
+   * Temporary models: default preset never hold one (publishing refuses them,
    * plan §9.1), and a key is never stored in a preset (§7.5). A temporary binding
    * found here is therefore stale data. It is not quietly switched to Inherit
-   * (that would run a different model than the official defaults name): the launch
+   * (that would run a different model than the default preset name): the launch
    * form opens instead, where the key can be entered or the slot changed.
    */
   function officialLaunchBlocker(env, version, remap) {
-    const label = `Official defaults v${version.version}`;
+    const label = `Default preset v${version.version}`;
     if (!remap || remap.ok === false || (remap.errors || []).length) {
       return `${label} need changes for the current schema of “${env.name}”.`;
     }
@@ -1615,7 +1681,7 @@
       return `${label} use a temporary model, which needs its API key.`;
     }
     const models = (version.warnings || []).filter((w) => w && (w.rule === 'connection_missing' || w.rule === 'connection_unavailable'));
-    if (models.length) return models[0].message || 'A model of the official defaults is not available.';
+    if (models.length) return models[0].message || 'A model of the default preset is not available.';
     return null;
   }
 
@@ -1625,7 +1691,7 @@
    * environment's current schema (§9.2, §9.3). When it cannot launch as is (no
    * dataset, re-map errors, a missing model, HIGH default for a non-manager,
    * validation errors) the launch form opens on that environment instead, where
-   * Official defaults is the default base. HIGH asks for the §5.3 acknowledgement.
+   * Default preset is the default base. HIGH asks for the §5.3 acknowledgement.
    */
   async function runOfficialDefaults(options) {
     const opts = options || {};
@@ -1637,12 +1703,12 @@
       return null;
     };
     if (!canRunOfficial(env)) {
-      toast(`No official defaults are published for “${env.name || 'this environment'}”.`, 'error');
+      toast(`No default preset is published for “${env.name || 'this environment'}”.`, 'error');
       return null;
     }
     const res = await request(envPath(opts.projectId, `/${encodeURIComponent(env.id)}/presets/${encodeURIComponent(env.official_preset_id)}/versions/${encodeURIComponent(env.official_preset_version)}?remap=current`));
     if (!res.ok) {
-      toast(errorMessage(res.data, 'Could not load the official defaults'), 'error');
+      toast(errorMessage(res.data, 'Could not load the default preset'), 'error');
       return null;
     }
     const version = res.data.version || {};
@@ -1651,7 +1717,7 @@
     if (blocker) return review(blocker);
     if ((remap.dropped || []).length) {
       const ok = await confirmDialog({
-        title: 'Launch official defaults?',
+        title: 'Launch the default preset?',
         description: [remap.summary || 'Some settings are no longer supported.', 'Those settings keep the environment’s own values.'],
         confirmLabel: 'Launch anyway',
         cancelLabel: 'Don’t launch',
@@ -1659,7 +1725,7 @@
       if (!ok) return null;
     }
     const body = {
-      name: `${env.name} · official v${version.version}`.slice(0, 200),
+      name: `${env.name} · default preset v${version.version}`.slice(0, 200),
       environment_ids: [env.id],
       spec: remap.config,
       base_source: { kind: 'official', preset_version_id: version.id },
@@ -1686,15 +1752,15 @@
       detail = launch.data && launch.data.detail;
     }
     if (launch.ok && launch.data && launch.data.id) {
-      toast(`Launched official defaults v${version.version} on “${env.name}”`, 'success');
+      toast(`Launched default preset v${version.version} on “${env.name}”`, 'success');
       if (opts.onLaunched) opts.onLaunched(launch.data);
       else navigateTo(experimentsUrl(slug, `experiment=${encodeURIComponent(launch.data.id)}`));
       return launch.data;
     }
     if (launch.status === 422 && detail && Array.isArray(detail.errors) && detail.errors.length) {
-      return review(`Official defaults v${version.version} do not validate:${detail.errors[0].message || 'invalid value'}.`);
+      return review(`Default preset v${version.version} does not validate:${detail.errors[0].message || 'invalid value'}.`);
     }
-    toast(errorMessage(launch.data, 'Failed to launch the official defaults'), 'error');
+    toast(errorMessage(launch.data, 'Failed to launch the default preset'), 'error');
     return null;
   }
 
@@ -1720,6 +1786,8 @@
           } finally {
             done();
           }
+        } else if (button.dataset.envOpen && ctl.opts.openEnv) {
+          ctl.opts.openEnv(env);
         } else if (button.dataset.envOpen) {
           openEnvironmentDrawer({
             projectId: ctl.opts.projectId, projectSlug: ctl.opts.projectSlug, env, canManage: ctl.opts.canManage,
@@ -1770,6 +1838,7 @@
     mountEnvironmentsPanel,
     openAddDialog,
     openEnvironmentDrawer,
+    mountEnvironmentPage,
     openGroupingDialog,
     createSlotEditor,
     renderFormPreview,

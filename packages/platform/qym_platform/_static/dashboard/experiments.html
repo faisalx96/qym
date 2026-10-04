@@ -100,13 +100,14 @@
     .exp-error { padding: var(--space-md) var(--space-lg); color: var(--error); font-size: var(--font-base); }
     .exp-poll-note { font-size: var(--font-sm); color: var(--text-muted); }
   </style>
-  <link rel="stylesheet" href="/static/eval_environments.css?v=eval-environments-20261004-1">
+  <link rel="stylesheet" href="/static/eval_environments.css?v=eval-environments-20261004-2">
   <link rel="stylesheet" href="/static/eval_temporary_model.css?v=eval-temporary-model-20260930-1">
-  <link rel="stylesheet" href="/static/experiment_launch.css?v=experiment-launch-20261004-2">
+  <link rel="stylesheet" href="/static/eval_official_defaults.css?v=eval-official-defaults-20260930-2">
+  <link rel="stylesheet" href="/static/experiment_launch.css?v=experiment-launch-20261004-4">
   <link rel="stylesheet" href="/static/experiment_launch_json.css?v=experiment-launch-json-20261003-2">
   <link rel="stylesheet" href="/static/experiment_launch_advanced.css?v=experiment-launch-advanced-20261003-2">
   <link rel="stylesheet" href="/static/experiment_launch_sweeps.css?v=experiment-launch-sweeps-20260930-1">
-  <link rel="stylesheet" href="/static/experiment_launch_best_run.css?v=experiment-launch-best-run-20261002-scope">
+  <link rel="stylesheet" href="/static/experiment_launch_best_run.css?v=experiment-launch-best-run-20261004-1">
   <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60">
   <script defer src="/static/ui_components.js?v=ui-consistency-20260803-28"></script>
 </head>
@@ -114,9 +115,9 @@
   <main class="page exp-page" id="exp-root" aria-live="polite">
     <div class="exp-loading">Loading experiments…</div>
   </main>
-  <script src="/static/experiment_matrix.js?v=experiments-20260930-6"></script>
+  <script src="/static/experiment_matrix.js?v=experiments-20261004-1"></script>
   <!-- New-experiment form (#23): ?new=1 mounts window.QymExperimentLaunch. -->
-  <script src="/static/eval_environments.js?v=eval-environments-20261004-1"></script>
+  <script src="/static/eval_environments.js?v=eval-environments-20261004-2"></script>
   <script src="/static/eval_temporary_model.js?v=eval-temporary-model-20260930-1"></script>
   <!-- Advanced panel (#24): mounted by experiment_launch.js into [data-xl-advanced]. -->
   <script src="/static/experiment_launch_advanced.js?v=experiment-launch-advanced-20261003-2"></script>
@@ -126,7 +127,9 @@
   <script src="/static/experiment_launch_best_run.js?v=experiment-launch-best-run-20261002-scope"></script>
   <!-- JSON settings as fields: used by experiment_launch.js. -->
   <script src="/static/experiment_launch_json.js?v=experiment-launch-json-20261003-2"></script>
-  <script src="/static/experiment_launch.js?v=experiment-launch-20261004-2"></script>
-  <script src="/static/experiments.js?v=experiments-20261002-versioning"></script>
+  <script src="/static/experiment_launch.js?v=experiment-launch-20261004-4"></script>
+  <!-- Environment page (?environment=): default preset history and editor. -->
+  <script src="/static/eval_official_defaults.js?v=eval-official-defaults-20261004-1"></script>
+  <script src="/static/experiments.js?v=experiments-20261004-1"></script>
 </body>
 </html>

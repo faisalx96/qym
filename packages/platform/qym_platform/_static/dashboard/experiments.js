@@ -52,7 +52,7 @@
     BLOCKED: 'warning', CANCELLING: 'warning', CANCELLED: 'warning',
   };
   const BASE_LABELS = {
-    official: 'Official defaults', best_run: 'Best run', saved: 'Saved preset',
+    official: 'Default preset', best_run: 'Best run', saved: 'Saved preset',
     blank: 'Blank', clone: 'Clone',
   };
 
@@ -128,6 +128,10 @@
 
   function experimentUrl(id) {
     return projectPage('/experiments') + (id ? '?experiment=' + encodeURIComponent(id) : '');
+  }
+
+  function environmentsUrl(envId) {
+    return projectPage('/experiments') + (envId ? '?environment=' + encodeURIComponent(envId) : '?view=environments');
   }
 
   function queuePageUrl(experimentId) {
@@ -271,7 +275,7 @@
     return !!(experiment && me.id && experiment.created_by_user_id === me.id);
   }
 
-  /** "Promote to official" (#39) opens the official defaults editor: managers only. */
+  /** "Promote to default preset" (#39) opens the default preset editor: managers only. */
   function canPromote() {
     if (state.denied) return false;
     const me = state.me || {};
@@ -333,6 +337,9 @@
     const params = new URLSearchParams(window.location.search);
     state.experimentId = params.get('experiment') || null;
     state.creating = !state.experimentId && params.get('new') === '1';
+    // Environments live here too: ?view=environments (list), ?environment=<id> (page).
+    state.environmentId = params.get('environment') || null;
+    state.viewEnvironments = !state.experimentId && !state.creating && (params.get('view') === 'environments' || !!state.environmentId);
     state.status = params.get('status') || '';
     state.mine = params.get('mine') === '1';
     state.versioning = {};
@@ -488,11 +495,80 @@
     });
   }
 
-  function sectionTabs() {
+  function sectionTabs(active) {
+    const tab = (id, href, text) => el('a', {
+      className: 'qym-tabs__tab exp-tab' + (active === id ? ' active' : ''), role: 'tab',
+      'aria-selected': active === id ? 'true' : 'false', 'aria-current': active === id ? 'page' : null,
+      href, text, 'data-exp-tab': id,
+    });
     return el('nav', { className: 'qym-tabs exp-tabs', role: 'tablist', 'aria-label': 'Experiments sections', 'data-exp-tabs': '1' }, [
-      el('a', { className: 'qym-tabs__tab exp-tab active', role: 'tab', 'aria-selected': 'true', 'aria-current': 'page', href: experimentUrl(null), text: 'Experiments' }),
-      el('a', { className: 'qym-tabs__tab exp-tab', role: 'tab', 'aria-selected': 'false', href: queuePageUrl(null), text: 'Queue' }),
+      tab('experiments', experimentUrl(null), 'Experiments'),
+      tab('queue', queuePageUrl(null), 'Queue'),
+      tab('environments', environmentsUrl(null), 'Environments'),
     ]);
+  }
+
+  // ── Environments (list and page) ───────────────────────────────────────
+  function setEnvironmentCrumbs(label) {
+    if (!window.QymShell || !window.QymShell.setBreadcrumbs) return;
+    const project = window.QymShell.getProject ? window.QymShell.getProject() : null;
+    const crumbs = [];
+    if (project) crumbs.push({ label: project.name, projectSwitcher: true });
+    crumbs.push({ label: 'Experiments', href: experimentUrl(null) });
+    crumbs.push(label ? { label: 'Environments', href: environmentsUrl(null) } : { label: 'Environments', current: true });
+    if (label) crumbs.push({ label, current: true });
+    try { window.QymShell.setBreadcrumbs(crumbs); } catch (_) { /* shell owns the fallback */ }
+  }
+
+  function renderEnvironments() {
+    const envs = window.QymEvalEnvironments;
+    if (!envs || !envs.mountEnvironmentsPanel) { renderMessage('exp-error', 'The environments page failed to load.'); return; }
+    setEnvironmentCrumbs(null);
+    const addButton = el('button', { className: 'qym-inline-action qym-inline-action--accent', type: 'button', 'data-exp-add-env': '1', text: '+ Add environment', hidden: true });
+    const note = el('p', { className: 'exp-description' });
+    const tbody = el('tbody');
+    const header = el('div', { className: 'exp-header' }, [
+      el('div', { className: 'exp-header-text' }, [el('h1', { className: 'exp-title', text: 'Environments' }), note]),
+      el('div', { className: 'exp-header-actions' }, [addButton]),
+    ]);
+    const table = el('table', { className: 'data-table' }, [
+      el('thead', null, [el('tr', null, ['Environment', 'URL', 'Health', 'Schema', 'LLM groups', 'Default preset', 'Priority cap', 'Actions']
+        .map((text, i) => el('th', { text, style: i === 7 ? 'text-align:right' : null })))]),
+      tbody,
+    ]);
+    root.replaceChildren(header, sectionTabs('environments'), el('section', { className: 'exp-card' }, [el('div', { className: 'exp-table-wrap env-table-wrap' }, [table])]));
+    envs.mountEnvironmentsPanel({
+      projectId: state.project.id,
+      projectSlug: state.slug,
+      canManage: canPromote(),
+      tbody, addButton, note,
+      openEnv: (env) => navigate(environmentsUrl(env.id)),
+    });
+  }
+
+  async function renderEnvironmentPage() {
+    const envs = window.QymEvalEnvironments;
+    if (!envs || !envs.mountEnvironmentPage) { renderMessage('exp-error', 'The environment page failed to load.'); return; }
+    const pageHost = el('div', { 'data-exp-env-page': '1' });
+    const editorHost = el('div', { 'data-exp-env-editor': '1', hidden: true });
+    root.replaceChildren(sectionTabs('environments'), pageHost, editorHost);
+    const surface = await envs.mountEnvironmentPage({
+      root: pageHost,
+      projectId: state.project.id,
+      projectSlug: state.slug,
+      envId: state.environmentId,
+      canManage: canPromote(),
+      onClose: () => navigate(environmentsUrl(null)),
+      onChange: () => {},
+      // The default preset editor opens in place of the page.
+      onEditOfficial: window.QymOfficialDefaults ? (payload) => window.QymOfficialDefaults.openEditor({
+        host: editorHost, hide: [pageHost], project: state.project, me: state.me, env: payload.env,
+        fromVersion: payload.fromVersion, promote: payload.promote,
+        onPublished: () => renderEnvironmentPage(),
+      }) : null,
+    });
+    if (!state.active) return;
+    setEnvironmentCrumbs((surface && surface.env && surface.env.name) || 'Environment');
   }
 
   function renderList() {
@@ -543,7 +619,7 @@
         el('h2', { className: 'exp-empty-title', text: filtered ? 'No matching experiments' : 'No experiments yet' }),
         el('p', { className: 'exp-empty-body', text: filtered
           ? 'Try different filters or include experiments created by others.'
-          : 'Experiments launch evaluation jobs on this project’s environments. Register an environment in Project Settings → Environments first.' }),
+          : 'Experiments launch evaluation jobs on this project’s environments. Register one under the Environments tab first.' }),
       ]));
     } else {
       const host = el('div', { className: 'exp-table-wrap', 'data-exp-list': '1' });
@@ -564,7 +640,7 @@
       }
     }
 
-    root.replaceChildren(header, sectionTabs(), toolbar, card);
+    root.replaceChildren(header, sectionTabs('experiments'), toolbar, card);
   }
 
   const LIST_COLUMNS = [
@@ -1075,6 +1151,8 @@
     await loadContext();
     if (!state.active) return;
     if (state.creating) { mountLaunchForm(); return; }
+    if (state.environmentId) { await renderEnvironmentPage(); return; }
+    if (state.viewEnvironments) { renderEnvironments(); return; }
     await refresh();
   }
 

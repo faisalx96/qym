@@ -47,7 +47,7 @@ SOURCE_KINDS = ("saved", "run", "job")
 DOCUMENT_KEYS = ("schema_hash", "evaluator", "slot_bindings", "env_overrides")
 
 REBIND_REASON = (
-    "The source used a temporary model; official defaults need a project model"
+    "The source used a temporary model; the default preset needs a project model"
 )
 
 

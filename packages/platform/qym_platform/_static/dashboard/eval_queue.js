@@ -612,6 +612,7 @@
     return el('nav', { className: 'qym-tabs exq-tabs', role: 'tablist', 'aria-label': 'Experiments sections', 'data-exq-tabs': '1' }, [
       el('a', { className: 'qym-tabs__tab exq-tab', role: 'tab', 'aria-selected': 'false', href: experimentUrl(null), text: 'Experiments' }),
       el('a', { className: 'qym-tabs__tab exq-tab active', role: 'tab', 'aria-selected': 'true', 'aria-current': 'page', href: queueUrl(), text: 'Queue' }),
+      el('a', { className: 'qym-tabs__tab exq-tab', role: 'tab', 'aria-selected': 'false', href: projectPage('/experiments') + '?view=environments', text: 'Environments' }),
     ]);
   }
 

@@ -12,7 +12,7 @@
  * run's combination (POST …/experiments/{id}/clone?job_id=<job_id>); without it the
  * whole experiment is cloned.
  *
- * "Promote to official" (#39, managers only: `panel.can_promote`) opens the official
+ * "Promote to default preset" (#39, managers only: `panel.can_promote`) opens the official
  * defaults editor on the project settings page, prefilled from this run's config:
  *   /projects/{slug}/settings?tab=environments&env=<env_id>&promote=run&id=<run_id>
  * Only ids travel in the URL; the editor never publishes until the manager does.
@@ -23,7 +23,7 @@
   'use strict';
 
   const BASE_LABELS = {
-    official: 'Official defaults',
+    official: 'Default preset',
     saved: 'Saved preset',
     best_run: 'Best run',
     blank: 'Blank',
@@ -86,7 +86,7 @@
   // Run statuses a promote accepts (completed; review may have moved them on).
   const PROMOTABLE_STATUSES = ['COMPLETED', 'SUBMITTED', 'APPROVED'];
 
-  /** The settings-page editor link for "Promote to official" (null when not allowed). */
+  /** The settings-page editor link for "Promote to default preset" (null when not allowed). */
   function promoteUrl(panel, slug, runId) {
     if (!panel || !slug || !runId || !panel.can_promote || !panel.environment_id) return null;
     const params = new URLSearchParams();
@@ -195,8 +195,8 @@
           : '<button type="button" class="qym-inline-action qym-inline-action--accent" id="rxp-rerun" disabled title="The experiment no longer exists">Rerun with this config</button>') +
         (promote
           ? (promotable
-            ? '<a class="qym-inline-action qym-inline-action--neutral" id="rxp-promote" href="' + esc(promote) + '" title="Open the official defaults editor with this run\'s configuration, compared with the current version; nothing is published until you publish">Promote to official</a>'
-            : '<button type="button" class="qym-inline-action qym-inline-action--neutral" id="rxp-promote" disabled title="Only completed runs can be promoted">Promote to official</button>')
+            ? '<a class="qym-inline-action qym-inline-action--neutral" id="rxp-promote" href="' + esc(promote) + '" title="Open the default preset editor with this run\'s configuration, compared with the current version; nothing is published until you publish">Promote to default preset</a>'
+            : '<button type="button" class="qym-inline-action qym-inline-action--neutral" id="rxp-promote" disabled title="Only completed runs can be promoted">Promote to default preset</button>')
           : '') +
       '</div>';
     }

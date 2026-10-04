@@ -251,7 +251,7 @@ def test_drawer_section_publish_history_and_saved_presets():
         "Version history",
         "published_by",
         "Config document (read-only)",
-        "Only project managers publish official defaults",
+        "Only project managers publish the default preset",
         "&base=saved&preset=",
         "Saved presets",
         "created_by",
