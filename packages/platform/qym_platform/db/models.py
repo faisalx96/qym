@@ -633,6 +633,11 @@ class EvalModelSlot(Base):
     transport_fields: Mapped[dict[str, Any]] = mapped_column(
         BIG_JSON, default=dict, nullable=False
     )
+    # More key sets the same bound model fills, each shaped like ``field_map``
+    # (e.g. VIZ_LLM_MODEL and CHART_LLM_MODEL under one "Visualization model").
+    extra_field_maps: Mapped[list[dict[str, Any]]] = mapped_column(
+        BIG_JSON, default=list, server_default="[]", nullable=False
+    )
     required: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )

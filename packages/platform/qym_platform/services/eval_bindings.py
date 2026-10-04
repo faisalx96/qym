@@ -269,8 +269,10 @@ def _slot_maps_role(
     slot = _slot_for(slot_key, index, descriptor or {})
     if slot is None:
         return True  # fail closed
-    pointer = slot["field_map"].get(role)
-    return isinstance(pointer, str) and bool(pointer)
+    return any(
+        isinstance(m.get(role), str) and bool(m.get(role))
+        for m in slot.get("field_maps") or [slot["field_map"]]
+    )
 
 
 def _slot_sends_key(

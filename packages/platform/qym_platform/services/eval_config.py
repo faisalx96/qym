@@ -106,7 +106,7 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError, ValidationError, best_match
 from pydantic import BaseModel, ConfigDict, Field
 
-from .eval_model_slots import propose_endpoint_slot, resolve_field
+from .eval_model_slots import propose_endpoint_slot, resolve_field, slot_field_maps
 from .eval_schema_form import (
     build_form_descriptor,
     escape_pointer_segment,
@@ -424,16 +424,19 @@ def _binding_errors(slot_key: str, binding: Any) -> list[str]:
 
 
 def _slot_index(slots: Sequence[Any]) -> dict[str, dict[str, Any]]:
-    """Slot dicts (or ``EvalModelSlot`` rows) keyed by ``slot_key``."""
+    """Slot dicts (or ``EvalModelSlot`` rows) keyed by ``slot_key``.
+
+    ``field_maps`` lists every key set the slot fills (``field_map`` first).
+    """
     index: dict[str, dict[str, Any]] = {}
     for slot in slots:
         if isinstance(slot, Mapping):
-            key, field_map = slot.get("slot_key"), slot.get("field_map")
+            key = slot.get("slot_key")
         else:
             key = getattr(slot, "slot_key", None)
-            field_map = getattr(slot, "field_map", None)
         if key:
-            index[key] = {"slot_key": key, "field_map": dict(field_map or {})}
+            maps = slot_field_maps(slot)
+            index[key] = {"slot_key": key, "field_map": maps[0], "field_maps": maps}
     return index
 
 
@@ -447,7 +450,12 @@ def _slot_for(
     if prefix == "endpoint" and name:
         proposal = propose_endpoint_slot(descriptor, name)
         if proposal is not None:
-            return {"slot_key": slot_key, "field_map": dict(proposal.field_map)}
+            field_map = dict(proposal.field_map)
+            return {
+                "slot_key": slot_key,
+                "field_map": field_map,
+                "field_maps": [field_map],
+            }
     return None
 
 
@@ -533,7 +541,11 @@ def _materialize(
         slot = _slot_for(slot_key, index, descriptor)
         if slot is None:
             continue
-        for role, pointer in slot["field_map"].items():
+        for role, pointer in (
+            (role, pointer)
+            for field_map in slot["field_maps"]
+            for role, pointer in field_map.items()
+        ):
             if not isinstance(pointer, str) or not pointer:
                 continue
             if sweep:
@@ -1183,7 +1195,9 @@ def validate_config_document(
                     )
                 )
                 continue
-            for role, pointer in slot["field_map"].items():
+            for pointer in (
+                p for field_map in slot["field_maps"] for p in field_map.values()
+            ):
                 if not isinstance(pointer, str) or not pointer:
                     continue
                 if resolve_field(descriptor, pointer) is None:

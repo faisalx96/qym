@@ -491,3 +491,83 @@ def test_drift_carries_unconfirmed_proposals(db, env, schema):
     _, slots = _refresh(db, environment, v2_json)
     assert _state(slots) == {"endpoint:primary": PROPOSED, "flat:VIZ_LLM": PROPOSED}
     assert db.query(EvalModelSlot).count() == 4
+
+
+# --------------------------------------------------------------------------- key sets
+
+
+def _primary_with_viz_set(descriptor):
+    """Primary also fills VIZ_LLM_MODEL (the flat slot is dropped to free it)."""
+    payload = [p for p in _payload(descriptor) if p["slot_key"] == "endpoint:primary"]
+    payload[0]["extra_field_maps"] = [{"model": "/VIZ_LLM_MODEL"}]
+    return payload
+
+
+def test_slots_accept_extra_key_sets(schema):
+    descriptor = build_form_descriptor(schema)
+    (primary,) = validate_slots(descriptor, _primary_with_viz_set(descriptor))
+    # Outside the endpoint's own entry is fine for an extra set.
+    assert primary.extra_field_maps == [
+        {"model": "/VIZ_LLM_MODEL", "base_url": None, "api_key": None}
+    ]
+    assert primary.to_dict()["extra_field_maps"][0]["model"] == "/VIZ_LLM_MODEL"
+
+    def errors(extra, keep_flat=False):
+        payload = (
+            _payload(descriptor) if keep_flat else _primary_with_viz_set(descriptor)
+        )
+        payload[0]["extra_field_maps"] = extra
+        with pytest.raises(SlotValidationError) as exc:
+            validate_slots(descriptor, payload)
+        return " ".join(e["message"] for e in exc.value.errors)
+
+    assert "key set 2 needs a model field" in errors([{"model": None}])
+    assert "must be a list" in errors({"model": "/VIZ_LLM_MODEL"})
+    assert "unknown field role" in errors([{"model": "/VIZ_LLM_MODEL", "x": "/A"}])
+    assert "not a field of this schema" in errors([{"model": "/NOPE"}])
+    # A field belongs to one set of one slot only.
+    assert "used by both" in errors([{"model": "/VIZ_LLM_MODEL"}], keep_flat=True)
+    assert "same field twice" in errors([{"model": f"{EP}/primary/model"}])
+
+
+def test_extra_key_sets_persist_and_drop_when_their_fields_vanish(db, env, schema):
+    user, environment = env
+    row, _ = _refresh(db, environment, schema)
+    descriptor = build_form_descriptor(schema)
+    confirm_model_slots(
+        db, environment, row, _primary_with_viz_set(descriptor), user_id=user.id
+    )
+    db.commit()
+    db.expire_all()
+    (stored,) = list_model_slots(db, row.id)
+    assert stored.extra_field_maps[0]["model"] == "/VIZ_LLM_MODEL"
+    assert slot_to_dict(stored)["extra_field_maps"][0]["model"] == "/VIZ_LLM_MODEL"
+
+    # The next schema drops VIZ_LLM_MODEL: only that key set goes, the slot stays.
+    changed = copy.deepcopy(schema)
+    del changed["properties"]["VIZ_LLM_MODEL"]
+    new_row, slots = _refresh(db, environment, changed)
+    primary = next(s for s in slots if s.slot_key == "endpoint:primary")
+    assert primary.status == CONFIRMED and primary.extra_field_maps == []
+
+
+def test_a_bound_model_fills_every_key_set(schema):
+    from qym_platform.services.eval_config import materialize_job_body
+
+    descriptor = build_form_descriptor(schema)
+    slots = [
+        p.to_dict()
+        for p in validate_slots(descriptor, _primary_with_viz_set(descriptor))
+    ]
+    body = materialize_job_body(
+        {
+            "evaluator": {"dataset": "d"},
+            "slot_bindings": {"endpoint:primary": {"connection_id": "c1"}},
+            "env_overrides": {},
+        },
+        slots,
+        descriptor=descriptor,
+    )
+    overrides = body["env_overrides"]
+    first = overrides["LLM_OVERRIDES"]["endpoints"]["primary"]["model"]
+    assert first and overrides["VIZ_LLM_MODEL"] == first

@@ -175,7 +175,9 @@ def test_drawer_and_row_write_controls_are_manager_only():
         line = next(ln for ln in MODULE.splitlines() if hook in ln and "<button" in ln)
         prefix = MODULE[: MODULE.index(line)].splitlines()[-3:] + [line]
         assert any("canManage" in ln for ln in prefix), hook
-    assert "canEdit: canManage && st.editing" in MODULE
+    # The drawer lists groups read-only; managers edit them in the pop-up.
+    assert "canEdit: false, // edited in the LLM model groups pop-up" in MODULE
+    assert "data-drawer-edit-slots" in MODULE and "function openGroupingDialog(" in MODULE
 
 
 def test_api_keys_are_never_rendered_or_kept():

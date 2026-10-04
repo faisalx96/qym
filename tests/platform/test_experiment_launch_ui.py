@@ -168,7 +168,9 @@ def test_model_cards_bindings_and_group_banner():
     assert "'Group LLM settings to pick project models'" in MODULE
     assert "openEnvironmentDrawer({" in MODULE
     # Slot-filled fields are locked so the spec never has a binding_conflict.
-    assert "delete st.values[slot.field_map[role]]" in MODULE
+    # (every key set of the slot: `pointers`).
+    assert "slot.pointers.forEach((pointer) => {" in MODULE
+    assert "delete st.values[pointer];" in MODULE
 
 
 def test_new_environment_reuses_the_environments_dialog():
@@ -455,7 +457,8 @@ def test_add_llm_endpoint_controls_and_unconfirmed_slots():
     # Bases and clones bring their unconfirmed endpoint bindings back as extra slots.
     assert MODULE.count("await ensureExtraEndpoints(unconfirmedEndpoints(") == 2
     # Managers can still edit the environment's saved groupings from here.
-    assert "text: 'Edit groupings'" in MODULE
+    assert "'Edit LLM groups'" in MODULE
+    assert "window.QymEvalEnvironments.openGroupingDialog({" in MODULE
 
 
 def test_slot_preview_for_a_new_endpoint(client, env):

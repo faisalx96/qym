@@ -39,6 +39,8 @@ class LaunchFixture:
         self.posts = []
         self.refresh = {"changed": False, "added": [], "removed": []}
         self.form_loads = 0
+        self.slots = []
+        self.put_bodies = []
         self.manager = True
         self.context = browser.new_context(viewport={"width": 1440, "height": 900})
         self.page = self.context.new_page()
@@ -87,8 +89,28 @@ class LaunchFixture:
                     "descriptor": DESCRIPTOR,
                 }
             )
+        elif (
+            path == "/v1/projects/p/eval-environments/e1/model-slots"
+            and method == "PUT"
+        ):
+            body = json.loads(route.request.post_data)
+            self.put_bodies.append(body)
+            self.slots = [dict(s, status="confirmed") for s in body["slots"]]
+            route.fulfill(
+                json={
+                    "slots": self.slots,
+                    "schema_id": "s1",
+                    "needs_confirmation": False,
+                }
+            )
         elif path == "/v1/projects/p/eval-environments/e1/model-slots":
-            route.fulfill(json={"slots": [], "needs_confirmation": False})
+            route.fulfill(
+                json={
+                    "slots": self.slots,
+                    "schema_id": "s1",
+                    "needs_confirmation": False,
+                }
+            )
         elif (
             path == "/v1/projects/p/eval-environments/e1/schema/refresh"
             and method == "POST"
@@ -295,3 +317,61 @@ def test_dataset_has_no_custom_string(launch):
     dataset = launch.page.locator('[data-xl-section="dataset"]')
     assert dataset.get_by_role("button", name="Custom string").count() == 0
     assert dataset.get_by_label("Custom dataset string").count() == 0
+
+
+def test_llm_groups_pop_up_moves_keys_into_another_group(launch):
+    from qym_platform.services.eval_model_slots import detect_model_slots
+
+    launch.slots = [
+        dict(p.to_dict(), status="confirmed") for p in detect_model_slots(DESCRIPTOR)
+    ]
+    launch.open()
+    page = launch.page
+    page.locator('[data-xl-edit-groups="e1"]').click()
+    dialog = page.locator("#env-grouping-dialog")
+    primary = dialog.locator('[data-slot-key="endpoint:primary"]')
+    primary.wait_for()
+    assert primary.locator(".env-keyset").count() == 1
+    # "+ Add another set of keys" adds an empty set; Remove takes it away again.
+    primary.get_by_role("button", name="+ Add another set of keys").click()
+    assert primary.locator(".env-keyset").count() == 2
+    primary.locator("[data-slot-remove-set]").click()
+    assert primary.locator(".env-keyset").count() == 1
+    # Moving the VIZ group's keys makes them a second key set of the primary group.
+    dialog.locator(
+        '[data-slot-key="flat:VIZ_LLM"] select[data-slot-merge]'
+    ).select_option(label="Primary model")
+    assert primary.locator(".env-keyset").count() == 2
+    dialog.locator("[data-grouping-save]").click()
+    page.wait_for_function("() => !document.querySelector('#env-grouping-dialog')")
+    (body,) = launch.put_bodies
+    (saved,) = body["slots"]
+    assert saved["slot_key"] == "endpoint:primary"
+    assert saved["extra_field_maps"] == [
+        {"model": "/VIZ_LLM_MODEL", "base_url": None, "api_key": None}
+    ]
+    # The launch form reloads the environment: the card says what it fills.
+    page.wait_for_function(
+        "() => /in 2 key sets/.test(document.querySelector('[data-xl-section=\"models\"]').innerText)"
+    )
+
+
+def test_llm_groups_pop_up_requires_a_model_in_every_key_set(launch):
+    from qym_platform.services.eval_model_slots import detect_model_slots
+
+    launch.slots = [
+        dict(p.to_dict(), status="confirmed") for p in detect_model_slots(DESCRIPTOR)
+    ]
+    launch.open()
+    page = launch.page
+    page.locator('[data-xl-edit-groups="e1"]').click()
+    dialog = page.locator("#env-grouping-dialog")
+    primary = dialog.locator('[data-slot-key="endpoint:primary"]')
+    primary.get_by_role("button", name="+ Add another set of keys").click()
+    dialog.locator("[data-grouping-save]").click()
+    assert dialog.get_by_text(
+        "Every set of keys needs a model field"
+    ).first.is_visible()
+    assert launch.put_bodies == []
+    page.keyboard.press("Escape")
+    assert page.locator("#env-grouping-dialog").count() == 0

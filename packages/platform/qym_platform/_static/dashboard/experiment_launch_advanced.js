@@ -982,8 +982,7 @@
       // A bound slot fills its fields: a raw value there is a binding_conflict.
       slots.forEach((slot) => {
         if (!bindings[slot.slot_key]) return;
-        Object.keys(slot.field_map).forEach((role) => {
-          const pointer = slot.field_map[role];
+        slot.pointers.forEach((pointer) => {
           if (has(values, pointer)) errors.push({ pointer: '/env_overrides' + pointer, message: 'Filled by the ' + slot.label + ' binding; remove this value or unbind the slot' });
         });
       });

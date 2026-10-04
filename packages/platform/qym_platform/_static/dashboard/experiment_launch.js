@@ -94,9 +94,9 @@
   if (window.QymExperimentLaunch) return;
 
   const STYLESHEETS = [
-    'static/eval_environments.css?v=eval-environments-20260929-1',
+    'static/eval_environments.css?v=eval-environments-20261004-1',
     'static/eval_temporary_model.css?v=eval-temporary-model-20260930-1',
-    'static/experiment_launch.css?v=experiment-launch-20261003-3',
+    'static/experiment_launch.css?v=experiment-launch-20261004-2',
     'static/experiment_launch_json.css?v=experiment-launch-json-20261003-2',
     'static/experiment_launch_advanced.css?v=experiment-launch-advanced-20261003-2',
     'static/experiment_launch_sweeps.css?v=experiment-launch-sweeps-20260930-1',
@@ -579,7 +579,8 @@
       const index = {};
       const merge = (id, slot, extra) => {
         if (!index[slot.slot_key]) {
-          index[slot.slot_key] = { slot_key: slot.slot_key, label: slot.label || slot.slot_key, kind: slot.kind, required: !!slot.required, field_map: {}, envs: [], extra };
+          // `pointers`: every field the slot fills, over all of its key sets.
+          index[slot.slot_key] = { slot_key: slot.slot_key, label: slot.label || slot.slot_key, kind: slot.kind, required: !!slot.required, field_map: {}, extra_field_maps: [], pointers: [], envs: [], extra };
           slots.push(index[slot.slot_key]);
         }
         const merged = index[slot.slot_key];
@@ -589,6 +590,13 @@
         Object.keys(slot.field_map || {}).forEach((role) => {
           if (slot.field_map[role]) merged.field_map[role] = slot.field_map[role];
         });
+        (slot.extra_field_maps || []).forEach((set) => {
+          const known = merged.extra_field_maps.some((m) => JSON.stringify(m) === JSON.stringify(set));
+          if (!known) merged.extra_field_maps.push(Object.assign({}, set));
+        });
+        [slot.field_map || {}].concat(slot.extra_field_maps || []).forEach((set) => Object.keys(set).forEach((role) => {
+          if (set[role] && merged.pointers.indexOf(set[role]) < 0) merged.pointers.push(set[role]);
+        }));
       };
       st.selected.forEach((id) => {
         const data = st.envData[id];
@@ -693,13 +701,14 @@
       };
       button.addEventListener('click', add);
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
-      const manage = isManager && window.QymEvalEnvironments && window.QymEvalEnvironments.openEnvironmentDrawer
+      const manage = isManager && window.QymEvalEnvironments && window.QymEvalEnvironments.openGroupingDialog
         ? selectedEnvs().map((env) => el('button', {
-          type: 'button', className: 'xl-link-btn', text: 'Edit groupings' + (st.selected.length > 1 ? ' · ' + env.name : ''),
-          title: 'Change the saved LLM groupings of ' + env.name + ' (every experiment on it)',
-          onClick: () => window.QymEvalEnvironments.openEnvironmentDrawer({
-            projectId: project.id, env, canManage: true,
-            onChange: () => { if (!st.active) return; delete st.envData[env.id]; loadEnvironments(); },
+          type: 'button', className: 'xl-link-btn', 'data-xl-edit-groups': env.id,
+          text: 'Edit LLM groups' + (st.selected.length > 1 ? ' · ' + env.name : ''),
+          title: 'Change the saved LLM model groups of ' + env.name + ' (every experiment on it)',
+          onClick: () => window.QymEvalEnvironments.openGroupingDialog({
+            projectId: project.id, env,
+            onConfirmed: () => { if (!st.active) return; delete st.envData[env.id]; loadEnvironments(); },
           }),
         }))
         : [];
@@ -716,7 +725,7 @@
       const out = {};
       unionSlots().forEach((slot) => {
         if (!st.bindings[slot.slot_key]) return;
-        Object.keys(slot.field_map).forEach((role) => { out[slot.field_map[role]] = slot.label; });
+        slot.pointers.forEach((pointer) => { out[pointer] = slot.label; });
       });
       return out;
     }
@@ -755,9 +764,9 @@
         st.bindings[slotKey] = binding;
         // A bound slot fills its fields: drop raw values there (binding_conflict otherwise).
         const slot = unionSlots().find((s) => s.slot_key === slotKey);
-        if (slot) Object.keys(slot.field_map).forEach((role) => {
-          delete st.values[slot.field_map[role]];
-          delete st.invalid[slot.field_map[role]];
+        if (slot) slot.pointers.forEach((pointer) => {
+          delete st.values[pointer];
+          delete st.invalid[pointer];
         });
       }
       renderModels();
@@ -937,7 +946,7 @@
     function stripBoundFields(values, bindings) {
       unionSlots().forEach((slot) => {
         if (!bindings[slot.slot_key]) return;
-        Object.keys(slot.field_map).forEach((role) => { delete values[slot.field_map[role]]; });
+        slot.pointers.forEach((pointer) => { delete values[pointer]; });
       });
     }
 
@@ -1952,7 +1961,9 @@
           },
         }),
       ] : []));
-      const fills = Object.keys(slot.field_map).map((role) => ROLE_LABELS[role] || role).join(', ');
+      const sets = (slot.extra_field_maps || []).length + 1;
+      const fills = Object.keys(slot.field_map).map((role) => ROLE_LABELS[role] || role).join(', ')
+        + (sets > 1 ? ' in ' + sets + ' key sets' : '');
       // A swept slot (#34) is a multi-select of models instead of one picker.
       const swept = sweeps ? sweeps.modelCard(slot, { head, fills }) : null;
       if (swept) return swept;
@@ -3024,7 +3035,7 @@
       const main = el('div', { className: 'xl-main' }, [
         section('dataset', 1, 'Dataset', 'Optional. A launch from this configuration without a dataset asks for one.'),
         section('base', 2, 'Compared with', 'The configuration your changes are counted against.'),
-        section('models', 3, 'Models', 'Bind each LLM slot to a project model, or leave it to the environment.'),
+        section('models', 3, 'Models', 'Bind each LLM group to a project model, or leave it to the environment.'),
         section('settings', 4, 'Settings', 'Generated from the environment schema. Only changed values are saved.'),
         el('div', { 'data-xl-advanced-slot': 'roles', hidden: true }),
         el('div', { 'data-xl-advanced': '1', hidden: true }),

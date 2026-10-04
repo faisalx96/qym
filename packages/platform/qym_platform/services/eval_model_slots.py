@@ -25,8 +25,15 @@ Slot shape (``SlotProposal.to_dict`` and ``slot_to_dict``)::
       "field_map": {"model": "/LLM_OVERRIDES/endpoints/primary/model",
                     "base_url": "<ptr>" | None, "api_key": "<ptr>" | None},
       "transport_fields": {"timeout": "/LLM_OVERRIDES/endpoints/primary/timeout", ...},
+      "extra_field_maps": [{"model": "<ptr>", "base_url": ..., "api_key": ...}],
       "required": True,
     }
+
+``extra_field_maps`` are further key sets of the same slot (user-added, never
+detected): the model bound to the slot is written into each of them as well. Extra
+sets may sit anywhere in the schema (also outside an endpoint's own entry), and no
+field may belong to two sets. A set whose fields vanish from a new schema is dropped;
+only the first set (``field_map``) decides whether the slot goes ``stale``.
 
 Pointers are concrete (no ``{param}`` segments): they are what a binding writes into
 ``env_overrides``.
@@ -154,6 +161,7 @@ class SlotProposal:
     field_map: dict[str, Optional[str]]
     transport_fields: dict[str, str] = field(default_factory=dict)
     required: bool = False
+    extra_field_maps: list[dict[str, Optional[str]]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -162,6 +170,7 @@ class SlotProposal:
             "label": self.label,
             "field_map": dict(self.field_map),
             "transport_fields": dict(self.transport_fields),
+            "extra_field_maps": [dict(m) for m in self.extra_field_maps],
             "required": self.required,
         }
 
@@ -339,14 +348,30 @@ def propose_endpoint_slot(
 
 
 def slot_pointers(
-    field_map: Mapping[str, Any], transport_fields: Optional[Mapping[str, Any]] = None
+    field_map: Mapping[str, Any],
+    transport_fields: Optional[Mapping[str, Any]] = None,
+    extra_field_maps: Optional[Sequence[Mapping[str, Any]]] = None,
 ) -> list[str]:
     """Every non-null pointer a slot fills."""
     pointers = [p for p in (field_map or {}).values() if isinstance(p, str) and p]
+    for extra in extra_field_maps or ():
+        pointers += [p for p in (extra or {}).values() if isinstance(p, str) and p]
     pointers += [
         p for p in (transport_fields or {}).values() if isinstance(p, str) and p
     ]
     return pointers
+
+
+def slot_field_maps(slot: Any) -> list[dict[str, Any]]:
+    """Every key set of a slot (dict, row or proposal): ``field_map`` first."""
+    if isinstance(slot, Mapping):
+        first, extras = slot.get("field_map"), slot.get("extra_field_maps")
+    else:
+        first = getattr(slot, "field_map", None)
+        extras = getattr(slot, "extra_field_maps", None)
+    maps = [dict(first or {})]
+    maps += [dict(m) for m in (extras or ()) if isinstance(m, Mapping)]
+    return maps
 
 
 def resolve_field(descriptor: Mapping[str, Any], pointer: Any) -> Optional[dict]:
@@ -471,6 +496,35 @@ def validate_slots(
         if not field_map.get("model"):
             fail(key, f"slot {key} needs a model field")
 
+        # More key sets filled by the same model; anywhere in the schema.
+        extras_raw = raw.get("extra_field_maps") or []
+        extra_maps: list[dict[str, Optional[str]]] = []
+        if not isinstance(extras_raw, (list, tuple)):
+            fail(key, f"slot {key}: extra_field_maps must be a list")
+            extras_raw = []
+        for index, extra_raw in enumerate(extras_raw, start=2):
+            if not isinstance(extra_raw, Mapping):
+                fail(key, f"slot {key}: key set {index} must be an object")
+                continue
+            extra = _empty_field_map(rules)
+            for role, pointer in extra_raw.items():
+                rule = rules.role_rule(role)
+                if rule is None:
+                    fail(key, f"slot {key}: unknown field role {role!r}")
+                    continue
+                if pointer in (None, ""):
+                    continue
+                entry = resolve_field(descriptor, pointer)
+                if entry is None:
+                    fail(key, f"slot {key}: {pointer!r} is not a field of this schema")
+                elif entry.get("type") not in rule.types:
+                    fail(key, f"slot {key}: {pointer} cannot hold a {role}")
+                else:
+                    extra[role] = pointer
+            if not extra.get("model"):
+                fail(key, f"slot {key}: key set {index} needs a model field")
+            extra_maps.append(extra)
+
         transport_raw = raw.get("transport_fields") or {}
         transport: dict[str, str] = {}
         if not isinstance(transport_raw, Mapping):
@@ -498,7 +552,7 @@ def validate_slots(
             if outside:
                 fail(key, f"slot {key}: {outside[0]} is outside endpoint {name!r}")
 
-        own = slot_pointers(field_map, transport)
+        own = slot_pointers(field_map, transport, extra_maps)
         if len(set(own)) != len(own):
             fail(key, f"slot {key} uses the same field twice")
         for pointer in own:
@@ -519,6 +573,7 @@ def validate_slots(
                 field_map=field_map,
                 transport_fields=transport,
                 required=bool(proposal and proposal.required),
+                extra_field_maps=extra_maps,
             )
         )
     for key, proposal in detected.items():
@@ -564,6 +619,7 @@ def slot_to_dict(slot: EvalModelSlot) -> dict[str, Any]:
         "label": slot.label,
         "field_map": dict(slot.field_map or {}),
         "transport_fields": dict(slot.transport_fields or {}),
+        "extra_field_maps": [dict(m) for m in (slot.extra_field_maps or [])],
         "required": bool(slot.required),
         "status": slot.status.value,
         "confirmed_by_user_id": slot.confirmed_by_user_id,
@@ -592,6 +648,7 @@ def _proposal_of(slot: EvalModelSlot) -> SlotProposal:
         field_map=dict(slot.field_map or {}),
         transport_fields=dict(slot.transport_fields or {}),
         required=bool(slot.required),
+        extra_field_maps=[dict(m) for m in (slot.extra_field_maps or [])],
     )
 
 
@@ -619,6 +676,7 @@ def _write_slots(
         row.label = p.label
         row.field_map = dict(p.field_map)
         row.transport_fields = dict(p.transport_fields)
+        row.extra_field_maps = [dict(m) for m in p.extra_field_maps]
         row.required = p.required
         row.status = spec.status
         row.confirmed_by_user_id = spec.confirmed_by_user_id
@@ -659,6 +717,10 @@ def _reconcile(
         candidate = by_key.get(slot.slot_key)
         carried.required = carried.required or bool(candidate and candidate.required)
         gone = missing_pointers(descriptor, carried.field_map)
+        # Extra key sets whose fields vanished are dropped; the slot stays usable.
+        carried.extra_field_maps = [
+            m for m in carried.extra_field_maps if not missing_pointers(descriptor, m)
+        ]
         if not gone:
             # Drop vanished transport fields and pick up newly detected ones.
             transport = {
@@ -691,7 +753,9 @@ def _reconcile(
         ptr
         for spec in result.values()
         if spec.status != EvalModelSlotStatus.STALE
-        for ptr in slot_pointers(spec.proposal.field_map)
+        for ptr in slot_pointers(
+            spec.proposal.field_map, None, spec.proposal.extra_field_maps
+        )
     }
     for proposal in proposals:
         current = result.get(proposal.slot_key)

@@ -228,8 +228,13 @@
     return out;
   }
 
+  /** Every key set of a slot: field_map first, then extra_field_maps. */
+  function keySets(slot) {
+    return [(slot && slot.field_map) || {}].concat((slot && slot.extra_field_maps) || []);
+  }
+
   function slotPointers(slot) {
-    return Object.values((slot && slot.field_map) || {})
+    return keySets(slot).reduce((all, set) => all.concat(Object.values(set)), [])
       .concat(Object.values((slot && slot.transport_fields) || {}))
       .filter((p) => typeof p === 'string' && p);
   }
@@ -432,15 +437,21 @@
     new: '<span class="qym-tag qym-tag--accent">New</span>',
   };
 
+  function normalizeKeySet(set) {
+    const out = {};
+    ROLES.forEach((role) => { out[role] = (set && set[role]) || null; });
+    return out;
+  }
+
   function normalizeSlot(slot) {
-    const fieldMap = {};
-    ROLES.forEach((role) => { fieldMap[role] = (slot.field_map && slot.field_map[role]) || null; });
+    const fieldMap = normalizeKeySet(slot.field_map);
     return {
       slot_key: String(slot.slot_key || ''),
       kind: slot.kind || (String(slot.slot_key || '').startsWith('flat:') ? 'flat' : 'endpoint'),
       label: slot.label || '',
       field_map: fieldMap,
       transport_fields: Object.assign({}, slot.transport_fields || {}),
+      extra_field_maps: (slot.extra_field_maps || []).map(normalizeKeySet),
       required: !!slot.required,
       status: slot.status || 'new',
     };
@@ -475,31 +486,48 @@
       return used;
     }
 
-    function candidatesFor(slot, idx, role) {
+    /** Fields that can fill `role` of key set `setIdx` of slot `idx` (unused elsewhere). */
+    function candidatesFor(slot, idx, role, setIdx) {
       const name = slot.slot_key.slice(slot.slot_key.indexOf(':') + 1);
-      // A field fills one role of one slot only (validate_slots rejects sharing).
+      // A field fills one role of one key set of one slot only (validate_slots).
       const used = usedPointers(idx);
-      Object.entries(slot.field_map).forEach(([r, p]) => { if (r !== role && p) used.add(p); });
+      keySets(slot).forEach((set, j) => Object.entries(set).forEach(([r, p]) => {
+        if (p && (j !== setIdx || r !== role)) used.add(p);
+      }));
       Object.values(slot.transport_fields).forEach((p) => used.add(p));
-      const candidates = slot.kind === 'endpoint'
+      // The first set of an endpoint slot lives in its endpoint entry; other sets
+      // can be any top-level LLM field (e.g. CHART_LLM_MODEL next to VIZ_LLM_MODEL).
+      const candidates = slot.kind === 'endpoint' && setIdx === 0
         ? endpointCandidates(st.descriptor, name, role)
         : flatCandidates(st.descriptor, role);
       return candidates.filter((p) => !used.has(p));
     }
 
-    function roleRowHtml(slot, idx, role) {
-      const value = slot.field_map[role];
+    function roleCellHtml(slot, idx, role, setIdx) {
+      const value = keySets(slot)[setIdx][role];
+      const label = `${ROLE_LABELS[role]}${setIdx ? ` (key set ${setIdx + 1})` : ''} field for ${slot.label || slot.slot_key}`;
       let control;
       if (opts.canEdit) {
-        const candidates = candidatesFor(slot, idx, role);
+        const candidates = candidatesFor(slot, idx, role, setIdx);
         if (value && !candidates.includes(value)) candidates.unshift(value);
-        const optionsHtml = (role === 'model' && value ? '' : `<option value="">${role === 'model' ? 'Pick a model field…' : 'Not mapped (plain input)'}</option>`)
+        const optionsHtml = (role === 'model' && value ? '' : `<option value="">${role === 'model' ? 'Pick a model field…' : 'Not mapped'}</option>`)
           + candidates.map((p) => `<option value="${esc(p)}"${p === value ? ' selected' : ''}>${esc(p)}</option>`).join('');
-        control = `<select class="qym-control qym-select env-slot-select" data-slot-role="${idx}" data-role="${role}" aria-label="${esc(`${ROLE_LABELS[role]} field for ${slot.label || slot.slot_key}`)}">${optionsHtml}</select>`;
+        control = `<select class="qym-control qym-select env-slot-select" data-slot-role="${idx}" data-set="${setIdx}" data-role="${role}" aria-label="${esc(label)}">${optionsHtml}</select>`;
       } else {
         control = value ? `<span class="env-slot-pointer">${esc(value)}</span>` : '<span class="env-empty">Not mapped</span>';
       }
-      return `<div class="env-slot-row"><span class="env-slot-role">${esc(ROLE_LABELS[role])}</span>${control}</div>`;
+      return `<div class="env-keyset-cell"><span class="env-slot-role">${esc(ROLE_LABELS[role])}</span>${control}</div>`;
+    }
+
+    /** One set of keys (model, base URL, API key) the group's model fills. */
+    function keySetHtml(slot, idx, setIdx, count) {
+      const remove = opts.canEdit && setIdx > 0
+        ? `<button class="env-link-btn" type="button" data-slot-remove-set="${idx}" data-set="${setIdx}" aria-label="${esc(`Remove key set ${setIdx + 1} of ${slot.label || slot.slot_key}`)}">Remove</button>`
+        : '';
+      const head = count > 1 || opts.canEdit
+        ? `<div class="env-keyset-head"><span class="env-keyset-title">Keys ${setIdx + 1}</span>${remove}</div>`
+        : '';
+      return `<div class="env-keyset" data-keyset="${setIdx}">${head}<div class="env-keyset-grid">${ROLES.map((role) => roleCellHtml(slot, idx, role, setIdx)).join('')}</div></div>`;
     }
 
     function transportHtml(slot, idx) {
@@ -513,19 +541,20 @@
 
     function cardHtml(slot, idx) {
       const errors = st.errors[slot.slot_key] || [];
-      const flatTargets = st.slots
+      // Merging moves this group's keys into another group as extra key sets.
+      const flatTargets = slot.required ? [] : st.slots
         .map((other, j) => ({ other, j }))
-        .filter(({ other, j }) => j !== idx && other.kind === 'flat' && slot.kind === 'flat');
+        .filter(({ j }) => j !== idx);
       const title = opts.canEdit
-        ? `<input class="qym-control qym-input env-slot-label" type="text" maxlength="200" data-slot-label="${idx}" value="${esc(slot.label)}" aria-label="${esc(`Name of slot ${slot.slot_key}`)}" placeholder="Slot name">`
+        ? `<input class="qym-control qym-input env-slot-label" type="text" maxlength="200" data-slot-label="${idx}" value="${esc(slot.label)}" aria-label="${esc(`Name of slot ${slot.slot_key}`)}" placeholder="Group name">`
         : `<span class="env-slot-title">${esc(slot.label || slot.slot_key)}</span>`;
       const footer = opts.canEdit && (flatTargets.length || !slot.required) ? `
         <div class="env-slot-footer">
           ${flatTargets.length ? `<select class="qym-control qym-select env-slot-merge" data-slot-merge="${idx}" aria-label="${esc(`Merge ${slot.label || slot.slot_key} into another slot`)}">
-              <option value="">Merge into…</option>
+              <option value="">Move keys into group…</option>
               ${flatTargets.map(({ other, j }) => `<option value="${j}">${esc(other.label || other.slot_key)}</option>`).join('')}
             </select>` : ''}
-          ${slot.required ? '' : `<button class="qym-inline-action qym-inline-action--danger" type="button" data-slot-remove="${idx}">Remove slot</button>`}
+          ${slot.required ? '' : `<button class="qym-inline-action qym-inline-action--danger" type="button" data-slot-remove="${idx}">Remove group</button>`}
         </div>` : '';
       return `
         <article class="env-slot${errors.length ? ' has-error' : ''}" data-slot-key="${esc(slot.slot_key)}">
@@ -536,7 +565,8 @@
             ${slot.required ? '<span class="qym-tag" title="Required by the service">Required</span>' : ''}
           </header>
           <div class="env-slot-body">
-            ${ROLES.map((role) => roleRowHtml(slot, idx, role)).join('')}
+            ${keySets(slot).map((set, j, all) => keySetHtml(slot, idx, j, all.length)).join('')}
+            ${opts.canEdit ? `<div><button class="qym-inline-action qym-inline-action--neutral" type="button" data-slot-add-set="${idx}">+ Add another set of keys</button></div>` : ''}
             ${transportHtml(slot, idx)}
           </div>
           ${footer}
@@ -551,18 +581,18 @@
       const flatModels = flatCandidates(st.descriptor, 'model').filter((p) => !used.has(p));
       return `
         <div class="env-add-slot">
-          <div class="env-add-slot-title">Add a slot manually</div>
+          <div class="env-add-slot-title">Add a group</div>
           ${collection ? `
           <div class="env-add-slot-row">
             <input class="qym-control qym-input" type="text" maxlength="100" data-add-endpoint-name placeholder="Endpoint name, e.g. fast" aria-label="New endpoint name">
-            <button class="qym-inline-action qym-inline-action--neutral" type="button" data-add-endpoint>Add endpoint slot</button>
+            <button class="qym-inline-action qym-inline-action--neutral" type="button" data-add-endpoint>Add endpoint group</button>
           </div>` : ''}
           <div class="env-add-slot-row">
-            <select class="qym-control qym-select env-slot-select" data-add-flat-model aria-label="Model field for a new slot"${flatModels.length ? '' : ' disabled'}>
+            <select class="qym-control qym-select env-slot-select" data-add-flat-model aria-label="Model field for a new group"${flatModels.length ? '' : ' disabled'}>
               <option value="">${flatModels.length ? 'Pick a model field…' : 'No unassigned model fields'}</option>
               ${flatModels.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join('')}
             </select>
-            <button class="qym-inline-action qym-inline-action--neutral" type="button" data-add-flat${flatModels.length ? '' : ' disabled'}>Add slot from field</button>
+            <button class="qym-inline-action qym-inline-action--neutral" type="button" data-add-flat${flatModels.length ? '' : ' disabled'}>Add group from field</button>
           </div>
           <div class="env-hint">Unmapped LLM fields stay plain inputs on the launch form.</div>
         </div>`;
@@ -580,7 +610,7 @@
       root.innerHTML = `
         ${st.general ? `<div class="env-callout env-callout--error" role="alert"><div>${esc(st.general)}${st.generalReload ? ' <button class="env-link-btn" type="button" data-slot-reload>Reload slots</button>' : ''}</div></div>` : ''}
         ${st.notice ? `<div class="env-callout" role="status"><div>${esc(st.notice)}</div></div>` : ''}
-        <div class="env-slots">${st.slots.length ? st.slots.map(cardHtml).join('') : '<div class="env-empty-state">No LLM slots detected in this schema.</div>'}</div>
+        <div class="env-slots">${st.slots.length ? st.slots.map(cardHtml).join('') : '<div class="env-empty-state">No LLM settings detected in this schema.</div>'}</div>
         ${removedHtml}
         ${addFormHtml()}
         ${actions}`;
@@ -597,19 +627,15 @@
       const dst = st.slots[dstIdx];
       if (!src || !dst) return;
       const dropped = [];
-      ROLES.forEach((role) => {
-        const pointer = src.field_map[role];
-        if (!pointer) return;
-        if (!dst.field_map[role]) dst.field_map[role] = pointer;
-        else dropped.push(pointer);
-      });
+      // Each of the source's key sets becomes one more key set of the target.
+      keySets(src).forEach((set) => { if (set.model) dst.extra_field_maps.push(normalizeKeySet(set)); });
       Object.entries(src.transport_fields).forEach(([name, pointer]) => {
         if (!dst.transport_fields[name]) dst.transport_fields[name] = pointer;
         else dropped.push(pointer);
       });
       st.slots.splice(srcIdx, 1);
       clearErrors(dst.slot_key);
-      st.notice = `Merged “${src.label || src.slot_key}” into “${dst.label || dst.slot_key}”.${dropped.length ? ` ${dropped.join(', ')} stay plain inputs.` : ''}`;
+      st.notice = `Moved the keys of “${src.label || src.slot_key}” into “${dst.label || dst.slot_key}”: the model picked for it now fills them too.${dropped.length ? ` ${dropped.join(', ')} stay plain inputs.` : ''}`;
     }
 
     function addFlat(pointer) {
@@ -684,11 +710,11 @@
 
     /** PUT the slots; resolves to the response payload, or null on error. */
     async function confirm() {
-      const missing = st.slots.filter((s) => !s.field_map.model);
+      const missing = st.slots.filter((s) => keySets(s).some((set) => !set.model));
       st.errors = {};
       if (missing.length) {
-        missing.forEach((s) => { st.errors[s.slot_key] = ['Pick a model field, or remove this slot.']; });
-        st.general = 'Every slot needs a model field.';
+        missing.forEach((s) => { st.errors[s.slot_key] = ['Every set of keys needs a model field; pick one or remove the set.']; });
+        st.general = 'Every set of keys needs a model field.';
         render();
         return null;
       }
@@ -702,6 +728,7 @@
           label: String(s.label || '').trim(),
           field_map: s.field_map,
           transport_fields: s.transport_fields,
+          extra_field_maps: s.extra_field_maps,
         })),
         schema_id: st.schemaId,
       };
@@ -744,8 +771,9 @@
       const target = event.target;
       if (target.dataset.slotRole != null) {
         const slot = st.slots[Number(target.dataset.slotRole)];
-        if (!slot) return;
-        slot.field_map[target.dataset.role] = target.value || null;
+        const set = slot && keySets(slot)[Number(target.dataset.set || 0)];
+        if (!set) return;
+        set[target.dataset.role] = target.value || null;
         clearErrors(slot.slot_key);
         render();
       } else if (target.dataset.slotMerge != null && target.value !== '') {
@@ -772,10 +800,18 @@
         } else if (slot) {
           // Fields another slot claimed meanwhile cannot be shared.
           const used = usedPointers(-1);
-          ROLES.forEach((role) => { if (slot.field_map[role] && used.has(slot.field_map[role])) slot.field_map[role] = null; });
+          keySets(slot).forEach((set) => ROLES.forEach((role) => { if (set[role] && used.has(set[role])) set[role] = null; }));
           Object.keys(slot.transport_fields).forEach((n) => { if (used.has(slot.transport_fields[n])) delete slot.transport_fields[n]; });
           st.slots.push(slot);
         }
+        render();
+      } else if (data.slotAddSet != null) {
+        const slot = st.slots[Number(data.slotAddSet)];
+        if (slot) { slot.extra_field_maps.push(normalizeKeySet({})); clearErrors(slot.slot_key); }
+        render();
+      } else if (data.slotRemoveSet != null) {
+        const slot = st.slots[Number(data.slotRemoveSet)];
+        if (slot) { slot.extra_field_maps.splice(Number(data.set) - 1, 1); clearErrors(slot.slot_key); }
         render();
       } else if (data.slotDetach != null) {
         const slot = st.slots[Number(data.slotDetach)];
@@ -809,6 +845,87 @@
       getSlots: () => clone(st.slots),
       isBusy: () => st.busy,
     };
+  }
+
+  // ── LLM model groups dialog ────────────────────────────────────────────
+  /**
+   * A pop-up to add or change the LLM model groups (slots) of an environment:
+   * loads its form descriptor and slots, edits them with createSlotEditor and
+   * PUTs them on Save. onConfirmed(payload) runs after a successful save.
+   */
+  async function openGroupingDialog(options) {
+    const opts = options || {};
+    const env = opts.env || {};
+    const existing = document.getElementById('env-grouping-dialog');
+    if (existing) existing.remove();
+    const backdrop = document.createElement('div');
+    backdrop.id = 'env-grouping-dialog';
+    backdrop.className = 'shell-modal-backdrop env-dialog-backdrop';
+    backdrop.innerHTML = `
+      <div class="shell-modal env-dialog env-grouping-dialog" role="dialog" aria-modal="true" aria-labelledby="env-grouping-title">
+        <div class="shell-modal-header">
+          <div class="shell-modal-title" id="env-grouping-title">LLM model groups · ${esc(env.name || '')}</div>
+          <button class="shell-modal-close qym-icon-action" type="button" data-grouping-close aria-label="Close">&times;</button>
+        </div>
+        <div class="shell-modal-body env-dialog-body">
+          <p class="env-step-intro">Each group is one LLM you pick a model for when launching. A group can fill several sets of keys: the model picked for it is written into every set. Fields in no group stay plain inputs.</p>
+          <div data-grouping-editor><div class="env-loading"><span class="env-spinner" aria-hidden="true"></span>Loading…</div></div>
+        </div>
+        <div class="shell-modal-footer">
+          <button class="shell-btn shell-btn-secondary" type="button" data-grouping-close>Cancel</button>
+          <button class="shell-btn shell-btn-primary" type="button" data-grouping-save disabled>Save groups</button>
+        </div>
+      </div>`;
+    document.body.appendChild(backdrop);
+    let editor = null;
+    const close = () => {
+      document.removeEventListener('keydown', onKey);
+      backdrop.remove();
+      if (opts.onClose) opts.onClose();
+    };
+    const onKey = (event) => { if (event.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    backdrop.addEventListener('click', async (event) => {
+      if (event.target === backdrop) { close(); return; }
+      const button = event.target.closest('button');
+      if (!button) return;
+      if (button.dataset.groupingClose != null) close();
+      else if (button.dataset.groupingSave != null && editor) {
+        const done = spinnerLabel(button, 'Saving…');
+        const payload = await editor.confirm();
+        done();
+        if (!payload) return;
+        toast(`LLM model groups saved for “${env.name}”`, 'success');
+        close();
+        if (opts.onConfirmed) opts.onConfirmed(payload);
+      }
+    });
+
+    const base = `/${encodeURIComponent(env.id)}`;
+    const [slotsRes, formRes] = await Promise.all([
+      request(envPath(opts.projectId, `${base}/model-slots`)),
+      request(envPath(opts.projectId, `${base}/form`)),
+    ]);
+    const host = backdrop.querySelector('[data-grouping-editor]');
+    if (!backdrop.isConnected) return null;
+    if (!slotsRes.ok || !formRes.ok) {
+      host.innerHTML = `<div class="env-callout env-callout--error" role="alert"><div>${esc(errorMessage((slotsRes.ok ? formRes : slotsRes).data, 'Could not load the LLM settings of this environment.'))}</div></div>`;
+      return { close };
+    }
+    editor = createSlotEditor({
+      container: host,
+      projectId: opts.projectId,
+      env,
+      descriptor: formRes.data.descriptor || { fields: {}, root: [] },
+      schemaId: slotsRes.data.schema_id || formRes.data.schema_id,
+      slots: slotsRes.data.slots || [],
+      canEdit: true,
+      showActions: false,
+    });
+    backdrop.querySelector('[data-grouping-save]').disabled = false;
+    const first = host.querySelector('input, select, button');
+    if (first) first.focus();
+    return { close };
   }
 
   // ── Add-environment dialog (3 steps) ───────────────────────────────────
@@ -1134,11 +1251,11 @@
         <section class="env-section">
           <div class="env-section-head">
             <div>
-              <div class="env-section-title">LLM model slots</div>
-              <div class="env-section-desc">Which schema fields a project model fills at launch.</div>
+              <div class="env-section-title">LLM model groups</div>
+              <div class="env-section-desc">Each group is one LLM picked at launch, and the sets of keys its model fills.</div>
             </div>
             <div class="env-section-actions">
-              ${canManage && st.descriptor && !st.editing ? `<button class="qym-inline-action ${needs ? 'qym-inline-action--accent' : 'qym-inline-action--neutral'}" type="button" data-drawer-edit-slots>${needs ? 'Group LLM settings' : 'Edit grouping'}</button>` : ''}
+              ${canManage && st.descriptor ? `<button class="qym-inline-action ${needs ? 'qym-inline-action--accent' : 'qym-inline-action--neutral'}" type="button" data-drawer-edit-slots>${needs ? 'Group LLM settings' : 'Edit groups'}</button>` : ''}
             </div>
           </div>
           ${st.loadError ? `<div class="env-callout env-callout--error" role="alert"><div>${esc(st.loadError)}</div></div>` : banner}
@@ -1230,13 +1347,18 @@
         descriptor: st.descriptor,
         schemaId: st.schemaId,
         slots: st.slots,
-        canEdit: canManage && st.editing,
-        onCancel: () => { st.editing = false; renderSection('slots'); },
+        canEdit: false, // edited in the LLM model groups pop-up (openGrouping)
+      });
+    }
+
+    /** The LLM model groups pop-up; the drawer shows the saved groups read-only. */
+    function openGrouping() {
+      openGroupingDialog({
+        projectId: opts.projectId,
+        env: st.env,
         onConfirmed: (payload) => {
           st.slots = payload.slots || [];
           st.schemaId = payload.schema_id || st.schemaId;
-          st.editing = false;
-          toast(`LLM settings grouped for “${st.env.name}”`, 'success');
           refreshEnv().then(() => { renderSection('slots'); notifyChange(); });
         },
       });
@@ -1287,12 +1409,12 @@
         <button class="shell-btn shell-btn-primary" type="button" data-drawer-save>Save changes</button>` : null);
     }
 
-    /** After an environment update: refresh everything but an open slot editor. */
+    /** After an environment update: refresh every section. */
     function renderEnvSections() {
       drawer.setTitle(st.env.name);
       drawer.setSubtitle(st.env.base_url);
       ['status', 'schema', 'presets', 'settings'].forEach(renderSection);
-      if (!st.editing) renderSection('slots');
+      renderSection('slots');
     }
 
     async function refreshEnv() {
@@ -1373,9 +1495,9 @@
       }
       st.diff = res.data;
       await loadDetails();
-      st.editing = canManage && !!res.data.needs_confirmation;
       ['status', 'schema', 'slots', 'presets'].forEach(renderSection);
       notifyChange();
+      if (canManage && res.data.needs_confirmation) openGrouping();
     }
 
     async function remove() {
@@ -1431,7 +1553,7 @@
       const data = button.dataset;
       if (data.drawerTest != null) await test(button);
       else if (data.drawerRefresh != null) await refreshSchema(button);
-      else if (data.drawerEditSlots != null) { st.editing = true; renderSection('slots'); }
+      else if (data.drawerEditSlots != null) openGrouping();
       else if (data.drawerSave != null) await save(button);
       else if (data.drawerDelete != null) await remove();
       else if (data.drawerClose != null) drawer.close();
@@ -1440,8 +1562,8 @@
 
     drawer.setBody('<div class="env-loading"><span class="env-spinner" aria-hidden="true"></span>Loading…</div>');
     loadDetails().then(() => {
-      st.editing = canManage && !!opts.editSlots && !!st.descriptor;
       render();
+      if (canManage && opts.editSlots && st.descriptor) openGrouping();
     });
     return drawer;
   }
@@ -1648,6 +1770,7 @@
     mountEnvironmentsPanel,
     openAddDialog,
     openEnvironmentDrawer,
+    openGroupingDialog,
     createSlotEditor,
     renderFormPreview,
     renderEnvironmentRows,

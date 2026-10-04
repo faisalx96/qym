@@ -134,6 +134,14 @@
 .env-slot-header .env-slot-label { flex: 1 1 calc(var(--space-xl) * 5); min-width: 0; }
 .env-slot-body { display: grid; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); }
 .env-slot-row { display: grid; grid-template-columns: calc(var(--space-xl) * 3) minmax(0, 1fr); align-items: center; gap: var(--space-sm); }
+/* Key sets: one per set of LLM keys a group's model fills. */
+.env-keyset { display: grid; gap: var(--space-xs); padding: var(--space-sm); border: 1px solid var(--border-subtle); border-radius: var(--control-radius); background: var(--bg-elevated); }
+.env-keyset-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
+.env-keyset-title { color: var(--text-muted); font-size: var(--font-sm); font-weight: 600; }
+.env-keyset-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-sm); }
+.env-keyset-cell { display: grid; gap: 2px; min-width: 0; }
+.env-keyset-cell select.env-slot-select { width: 100%; min-width: 0; font-family: var(--font-mono); }
+.shell-modal.env-grouping-dialog { width: min(960px, calc(100vw - 2 * var(--space-lg))); }
 .env-slot-role { color: var(--text-muted); font-size: var(--font-sm); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
 .env-slot-pointer { color: var(--text-secondary); font-family: var(--font-mono); font-size: var(--font-base); overflow-wrap: anywhere; }
 .env-slot select.env-slot-select,
@@ -185,5 +193,5 @@
 .env-diff-line .env-meta { display: inline; font-family: var(--font-mono); }
 
 @media (max-width: 600px) {
-  .env-slot-row, .env-add-slot-row, .env-kv { grid-template-columns: minmax(0, 1fr); }
+  .env-slot-row, .env-add-slot-row, .env-kv, .env-keyset-grid { grid-template-columns: minmax(0, 1fr); }
 }

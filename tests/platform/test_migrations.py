@@ -42,7 +42,7 @@ def test_alembic_has_one_upgrade_head() -> None:
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["0068"]
+    assert heads == ["0069"]
 
 
 def test_subcategory_taxonomy_migration_preserves_rows_and_defaults_json(
@@ -371,13 +371,14 @@ def test_eval_environments_migration_sqlite_upgrade_and_downgrade(
 def test_eval_environments_migration_matches_models(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The ORM models and migrations 0060 + 0068 describe the same schema."""
+    """The ORM models and migrations 0060 + 0068 + 0069 describe the same schema."""
     from alembic.autogenerate import compare_metadata
     from qym_platform.db import models
     from qym_platform.db.base import Base
 
     migration = _load_migration("0060_eval_environments.py")
     drop_cap = _load_migration("0068_drop_eval_inflight_cap.py")
+    extra_maps = _load_migration("0069_eval_slot_extra_field_maps.py")
     engine = sa.create_engine("sqlite://")
     _eval_environment_prerequisites(engine)
 
@@ -389,8 +390,10 @@ def test_eval_environments_migration_matches_models(
         ops = Operations(MigrationContext.configure(connection))
         monkeypatch.setattr(migration, "op", ops)
         monkeypatch.setattr(drop_cap, "op", ops)
+        monkeypatch.setattr(extra_maps, "op", ops)
         migration.upgrade()
         drop_cap.upgrade()
+        extra_maps.upgrade()
         context = MigrationContext.configure(
             connection,
             opts={"compare_type": True, "include_object": include_object},
@@ -485,6 +488,7 @@ LATER_REVISIONS = (
         True,
     ),
     ("eval_environments", "max_inflight_jobs", "0068_drop_eval_inflight_cap.py", False),
+    ("eval_model_slots", "extra_field_maps", "0069_eval_slot_extra_field_maps.py", True),
 )
 
 
@@ -1644,4 +1648,28 @@ def test_drop_eval_inflight_cap_round_trips(monkeypatch: pytest.MonkeyPatch) -> 
             sa.text("SELECT max_inflight_jobs FROM eval_environments")
         )
         assert cap.scalar_one() == 5
+    engine.dispose()
+
+
+def test_slot_extra_field_maps_round_trips(monkeypatch: pytest.MonkeyPatch) -> None:
+    """0069 adds extra_field_maps (existing slots get []); downgrade drops it."""
+    migration = _load_migration("0060_eval_environments.py")
+    extra_maps = _load_migration("0069_eval_slot_extra_field_maps.py")
+    engine = sa.create_engine("sqlite://")
+    _eval_environment_prerequisites(engine)
+    with engine.begin() as connection:
+        ops = Operations(MigrationContext.configure(connection))
+        monkeypatch.setattr(migration, "op", ops)
+        monkeypatch.setattr(extra_maps, "op", ops)
+        migration.upgrade()
+        extra_maps.upgrade()
+        columns = {
+            c["name"] for c in sa.inspect(connection).get_columns("eval_model_slots")
+        }
+        assert "extra_field_maps" in columns
+        extra_maps.downgrade()
+        columns = {
+            c["name"] for c in sa.inspect(connection).get_columns("eval_model_slots")
+        }
+        assert "extra_field_maps" not in columns
     engine.dispose()
