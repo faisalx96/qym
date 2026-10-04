@@ -23,8 +23,7 @@
  * goes to the form's [data-xl-advanced-slot="roles"] under Environment overrides:
  *   1. Evaluation inputs: the static EvaluatorRequestConfig descriptor from
  *      GET /v1/projects/{pid}/experiments/evaluator-config (D5), a run_metadata
- *      key/value editor (qym_* reserved), the custom dataset string (the same
- *      state as the Dataset section) and the platform-owned fields, read-only.
+ *      key/value editor (qym_* reserved) and the platform-owned fields, read-only.
  *   2. Role overrides: the complete per-role table (rows = schema roles), with
  *      "Overridden only" and search. The Settings form shows a summary instead.
  *   3. Raw JSON: a CodeMirror editor over the §8.1 document built by
@@ -599,22 +598,6 @@
         ]));
         children.push(metadataEditor());
       }
-      const custom = el('input', {
-        className: 'qym-control qym-input xl-wide xl-mono', type: 'text', maxlength: '2000', placeholder: 'e.g. playground_set_v2',
-        'aria-label': 'Custom dataset string', 'data-xa-custom-dataset': '1', spellcheck: 'false',
-        value: st.datasetMode === 'custom' ? st.customDataset : '',
-        onInput: (e) => {
-          st.customDataset = e.target.value;
-          if (e.target.value.trim()) st.datasetMode = 'custom';
-          api.renderDataset();
-          api.schedulePreview();
-        },
-      });
-      children.push(el('div', { className: 'xl-object' }, [
-        el('div', { className: 'xl-object-title' }, [el('span', { text: 'Custom dataset string' }), el('span', { className: 'xl-field-name', text: 'evaluator.dataset' })]),
-        custom,
-        el('div', { className: 'xl-hint', text: 'A raw evaluator.dataset value for the service\'s dataset loader, instead of a project dataset. Same value as Dataset › Custom string.' }),
-      ]));
       const extras = [];
       if (adv.extra.report_k != null) extras.push('evaluator.report_k = ' + adv.extra.report_k);
       if (adv.extra.dataset_version != null) extras.push('evaluator.dataset_version = ' + adv.extra.dataset_version);

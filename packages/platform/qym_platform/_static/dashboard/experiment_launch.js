@@ -113,11 +113,11 @@
   // form's project dataset (#38). "Clone" only appears for a ?clone= prefill.
   const BASE_OPTIONS = [
     { kind: 'official', label: 'Official defaults', available: true },
-    { kind: 'best_run', label: 'Best run', available: true },
+    { kind: 'best_run', label: 'Best past run', available: true },
     { kind: 'saved', label: 'Saved preset', available: true },
-    { kind: 'blank', label: 'Blank', available: true },
+    { kind: 'blank', label: 'From scratch', available: true },
   ];
-  const CLONE_OPTION = { kind: 'clone', label: 'Clone', available: true };
+  const CLONE_OPTION = { kind: 'clone', label: 'Copy of experiment', available: true };
   const ROLE_LABELS = { model: 'model', base_url: 'base URL', api_key: 'API key' };
   // New LLM endpoint names when the schema gives no propertyNames pattern.
   const ENDPOINT_NAME_PATTERN = '^[A-Za-z0-9][A-Za-z0-9_.-]*$';
@@ -404,6 +404,7 @@
       extraEndpoints: [], // LLM endpoints added for this experiment only (endpoint:<name> slots)
       advancedOpen: false, // the "Advanced configuration" disclosure
       refreshingSchema: {}, // environment id → true while its schema refresh runs
+      groupOpen: {}, // settings group id → true once the user opened it (closed by default)
       search: '',
       changedOnly: false,
       priority: '',
@@ -508,11 +509,9 @@
       if (!st.active) return;
       if (res.ok) {
         st.datasets = res.data.datasets || [];
-        if (!st.datasets.length) st.datasetMode = 'custom';
       } else {
         st.datasets = [];
         st.datasetsError = errorMessage(res.data, 'Failed to load datasets');
-        st.datasetMode = 'custom';
       }
       renderDataset();
     }
@@ -1050,7 +1049,7 @@
 
     function diffText() {
       const total = diffVsBase().total;
-      return total + ' change' + (total === 1 ? '' : 's') + ' vs base';
+      return total + ' change' + (total === 1 ? '' : 's') + (editor ? ' vs this version' : ' on top');
     }
 
     /** The user's edits relative to the current base (see replayEdits). */
@@ -1222,13 +1221,13 @@
       const diff = diffVsBase();
       if (diff.total > 0) {
         const ok = await confirmDialog({
-          title: 'Switch base?',
+          title: 'Change the starting point?',
           description: [
-            'You have ' + diff.total + ' change' + (diff.total === 1 ? '' : 's') + ' from ' + baseLabel() + '.',
-            'Changes to settings and models that also exist on the new base are kept; the others are dropped.',
+            'You have ' + diff.total + ' change' + (diff.total === 1 ? '' : 's') + ' on top of ' + baseLabel() + '.',
+            'Changes to settings and models that also exist in the new starting point are kept; the others are dropped.',
           ],
-          confirmLabel: 'Switch base',
-          cancelLabel: 'Keep current base',
+          confirmLabel: 'Change starting point',
+          cancelLabel: 'Keep current',
         });
         if (!ok || !st.active) { renderBase(); return false; }
       }
@@ -1236,7 +1235,7 @@
       st.baseNote = '';
       const result = await setBase(kind);
       if (result && result.dropped) {
-        toast(result.dropped + ' change' + (result.dropped === 1 ? '' : 's') + ' did not fit the new base and ' + (result.dropped === 1 ? 'was' : 'were') + ' dropped', 'info');
+        toast(result.dropped + ' change' + (result.dropped === 1 ? '' : 's') + ' did not fit the new starting point and ' + (result.dropped === 1 ? 'was' : 'were') + ' dropped', 'info');
       }
       return true;
     }
@@ -1459,9 +1458,9 @@
         if (data && data.formError) errors.push({ pointer: '#environments', message: data.formError + ' (' + envName(id) + ')' });
       });
       if ((st.base === 'official' || st.base === 'saved') && !(st.baseInfo.loaded && st.baseInfo.versionId)) {
-        errors.push({ pointer: '#base', message: st.baseInfo.loading ? 'The base is still loading.' : (st.baseInfo.error || 'The base did not load; pick another base.') });
+        errors.push({ pointer: '#base', message: st.baseInfo.loading ? 'The starting point is still loading.' : (st.baseInfo.error || 'The starting point did not load; pick another one.') });
       }
-      if (!datasetValue() && !editor) errors.push({ pointer: '/evaluator/dataset', message: 'Choose a dataset or enter a custom dataset string.' });
+      if (!datasetValue() && !editor) errors.push({ pointer: '/evaluator/dataset', message: 'Choose a dataset.' });
       Object.keys(st.invalid).forEach((p) => errors.push({ pointer: '/env_overrides' + p, message: st.invalid[p].message }));
       Object.keys(st.values).forEach((p) => envsMissing(p).forEach((id) => errors.push({
         pointer: '/env_overrides' + p, environment_id: id, rule: 'not_in_environment', message: notInEnvMessage(p, id),
@@ -1610,12 +1609,12 @@
           tags.push(tag(health[0], health[1], env.health_status === 'error' && env.health_error ? env.health_error : null));
           if (!env.schema_hash) tags.push(tag('No schema', 'danger'));
           if (env.model_slots && env.model_slots.needs_confirmation) tags.push(tag('Needs LLM grouping', 'warning'));
-          tags.push(tag('max ' + env.max_priority, null, 'Highest priority allowed on this environment'));
-          if (hasOfficial(env)) tags.push(tag('official v' + env.official_preset_version, 'version', 'Published official defaults'));
+          tags.push(tag('Priority up to ' + String(env.max_priority || 'NORMAL').toLowerCase(), null, 'Highest priority allowed on this environment'));
+          if (hasOfficial(env)) tags.push(tag('Official defaults v' + env.official_preset_version, 'version', 'Published official defaults'));
           const refreshing = !!st.refreshingSchema[env.id];
           // Managers re-read the service's override schema without leaving the form.
           const refresh = isManager ? el('button', {
-            type: 'button', className: 'qym-inline-action qym-inline-action--neutral xl-env-refresh', 'data-xl-env-refresh': env.id,
+            type: 'button', className: 'xl-link-btn xl-env-refresh', 'data-xl-env-refresh': env.id,
             disabled: refreshing, text: refreshing ? 'Refreshing…' : 'Refresh schema',
             title: 'Fetch the latest settings schema from this environment',
             onClick: (e) => { e.preventDefault(); e.stopPropagation(); refreshEnvSchema(env); },
@@ -1623,10 +1622,12 @@
           return el('label', { className: 'xl-env-option' + (selected ? ' xl-env-option--selected' : '') }, [
             el('input', { type: 'checkbox', checked: selected, 'data-xl-env': env.id, onChange: (e) => toggleEnv(env.id, e.target.checked) }),
             el('span', { className: 'xl-env-main' }, [
-              el('div', { className: 'xl-env-name', text: env.name }),
-              el('div', { className: 'xl-env-sub' }, tags),
+              el('span', { className: 'xl-env-head' }, [
+                el('span', { className: 'xl-env-name', title: env.name, text: env.name }),
+                refresh,
+              ]),
+              el('span', { className: 'xl-env-sub' }, tags),
             ]),
-            refresh,
           ]);
         })));
       }
@@ -1665,59 +1666,64 @@
     }
 
     // ── Section: dataset ────────────────────────────────────────────────
+    /** Selects a project dataset (or none), replacing any dataset string the base carried. */
+    function useProjectDataset(name) {
+      st.datasetMode = 'project';
+      st.customDataset = '';
+      st.datasetName = name;
+      st.datasetRef = '';
+      if (name) loadVersions(name);
+      renderDataset();
+      renderBase(); // best-run availability and list follow the dataset (#38)
+      renderPreview();
+      schedulePreview();
+    }
+
     function renderDataset() {
       const host = hosts.dataset;
       if (!host) return;
       const body = host.querySelector('[data-xl-body]');
-      const modes = el('div', { className: 'qym-segmented', role: 'group', 'aria-label': 'Dataset source' }, [
-        ['project', 'Project dataset'], ['custom', 'Custom string'],
-      ].map(([mode, label]) => el('button', {
-        type: 'button',
-        className: 'qym-segmented__option' + (st.datasetMode === mode ? ' active' : ''),
-        'aria-pressed': st.datasetMode === mode ? 'true' : 'false',
-        disabled: mode === 'project' && st.datasets && !st.datasets.length,
-        text: label,
-        onClick: () => { st.datasetMode = mode; renderDataset(); renderBase(); renderPreview(); schedulePreview(); },
-      })));
-      const children = [modes];
-      if (st.datasetMode === 'project') {
-        if (!st.datasets) {
-          children.push(el('div', { className: 'xl-hint', text: 'Loading datasets…' }));
-        } else {
-          const datasetSelect = el('select', {
-            className: 'qym-control qym-select xl-grow', 'aria-label': 'Dataset', 'data-xl-pointer': '/evaluator/dataset',
-            onChange: (e) => {
-              st.datasetName = e.target.value;
-              st.datasetRef = '';
-              loadVersions(st.datasetName);
-              renderDataset();
-              renderBase(); // best-run availability and list follow the dataset (#38)
-              schedulePreview();
-            },
-          }, [el('option', { value: '', text: 'Choose a dataset…' })].concat(st.datasets.map((ds) => el('option', {
-            value: ds.name, selected: ds.name === st.datasetName, text: ds.name,
-          }))));
-          const info = st.versions[st.datasetName];
-          const versionOptions = [el('option', { value: '', text: 'Latest version' })];
-          if (info && !info.loading) {
-            info.aliases.forEach((alias) => versionOptions.push(el('option', { value: 'a:' + alias, selected: st.datasetRef === 'a:' + alias, text: 'Alias: ' + alias })));
-            info.versions.forEach((v) => versionOptions.push(el('option', { value: 'v:' + v.version, selected: st.datasetRef === 'v:' + v.version, text: v.version + (v.status ? ' · ' + String(v.status).toLowerCase() : '') })));
-          }
-          const versionSelect = el('select', {
-            className: 'qym-control qym-select', 'aria-label': 'Dataset version or alias', 'data-xl-pointer': '/evaluator/dataset_version',
-            disabled: !st.datasetName,
-            onChange: (e) => { st.datasetRef = e.target.value; renderBase(); schedulePreview(); },
-          }, versionOptions);
-          children.push(el('div', { className: 'xl-row' }, [datasetSelect, versionSelect]));
+      const children = [];
+      // No free-text dataset in the form; a clone, base or Raw JSON may still carry
+      // one. It is sent as is until a project dataset replaces it.
+      const custom = st.datasetMode === 'custom' ? st.customDataset.trim() : '';
+      if (custom) {
+        children.push(el('div', { className: 'xl-callout', role: 'note', 'data-xl-custom-dataset': '1' }, [
+          el('div', null, [
+            el('span', { text: 'This configuration uses the dataset ' }),
+            el('span', { className: 'xl-mono', text: custom }),
+            el('span', { text: ', which is not a project dataset. It is sent as is; choose a project dataset below to replace it.' }),
+          ]),
+          el('button', {
+            type: 'button', className: 'xl-link-btn', text: 'Remove',
+            onClick: () => { useProjectDataset(''); },
+          }),
+        ]));
+      }
+      if (!st.datasets) {
+        children.push(el('div', { className: 'xl-hint', text: 'Loading datasets…' }));
+      } else if (!st.datasets.length && !st.datasetsError) {
+        children.push(el('div', { className: 'xl-hint', text: 'This project has no datasets yet. Add one under Datasets first.' }));
+      } else if (st.datasets.length) {
+        const projectName = st.datasetMode === 'project' ? st.datasetName : '';
+        const datasetSelect = el('select', {
+          className: 'qym-control qym-select xl-grow', 'aria-label': 'Dataset', 'data-xl-pointer': '/evaluator/dataset',
+          onChange: (e) => useProjectDataset(e.target.value),
+        }, [el('option', { value: '', text: 'Choose a dataset…' })].concat(st.datasets.map((ds) => el('option', {
+          value: ds.name, selected: ds.name === projectName, text: ds.name,
+        }))));
+        const info = st.versions[projectName];
+        const versionOptions = [el('option', { value: '', text: 'Latest version' })];
+        if (info && !info.loading) {
+          info.aliases.forEach((alias) => versionOptions.push(el('option', { value: 'a:' + alias, selected: st.datasetRef === 'a:' + alias, text: 'Alias: ' + alias })));
+          info.versions.forEach((v) => versionOptions.push(el('option', { value: 'v:' + v.version, selected: st.datasetRef === 'v:' + v.version, text: v.version + (v.status ? ' · ' + String(v.status).toLowerCase() : '') })));
         }
-      } else {
-        children.push(el('input', {
-          className: 'qym-control qym-input xl-wide xl-mono', type: 'text', maxlength: '2000',
-          placeholder: 'e.g. playground_set_v2', 'aria-label': 'Custom dataset string', 'data-xl-pointer': '/evaluator/dataset',
-          value: st.customDataset,
-          onInput: (e) => { st.customDataset = e.target.value; renderPreviewSoon(); schedulePreview(); },
-        }));
-        children.push(el('div', { className: 'xl-hint', text: 'Sent as evaluator.dataset, following the service\'s dataset loader convention. Custom strings are never ranked as best runs.' }));
+        const versionSelect = el('select', {
+          className: 'qym-control qym-select', 'aria-label': 'Dataset version or alias', 'data-xl-pointer': '/evaluator/dataset_version',
+          disabled: !projectName,
+          onChange: (e) => { st.datasetRef = e.target.value; renderBase(); schedulePreview(); },
+        }, versionOptions);
+        children.push(el('div', { className: 'xl-row' }, [datasetSelect, versionSelect]));
       }
       if (st.datasetsError) children.push(el('div', { className: 'xl-hint', text: st.datasetsError }));
       body.replaceChildren.apply(body, children);
@@ -1785,14 +1791,16 @@
       updateBaseMeta();
     }
 
+    // What each starting point is, in one sentence. EDITS_HINT says how edits relate to it.
     const BASE_HINTS = {
-      official: 'The environment\'s published defaults. Your edits are layered on top: a changed setting shows a dot and resets to the base value.',
-      saved: 'A saved preset of this environment. Your edits are layered on top: a changed setting shows a dot and resets to the base value.',
-      best_run: 'The configuration of a top-ranked official run, in the scope you choose above (dataset, version and versioning; Any leaves that part open), re-mapped onto the current schema. Your edits are layered on top: a changed setting shows a dot and resets to the base value.',
-      clone: 'A copy of an earlier experiment\'s configuration. Your edits are layered on top: a changed setting shows a dot and resets to the base value.',
+      official: 'The defaults this environment\'s managers published.',
+      saved: 'A configuration someone saved for this environment.',
+      best_run: 'The configuration of a top-scoring official run. Choose below what “best” means: dataset, version and versioning (Any leaves that part open).',
+      clone: 'An earlier experiment\'s configuration.',
       editor: 'What you publish is compared with this configuration: a changed setting shows a dot and resets to its value here.',
-      blank: 'Blank starts from the environment\'s own settings: only what you change below is sent.',
+      blank: 'Nothing preset: the environment uses its own settings, and only what you change below is sent.',
     };
+    const EDITS_HINT = 'Your changes below are applied on top of it. A changed setting shows a dot; Reset puts back the starting value.';
 
     function listCallout(tone, title, items, attr) {
       const attrs = { className: 'xl-callout' + (tone ? ' xl-callout--' + tone : ''), role: tone === 'error' ? 'alert' : 'note' };
@@ -1807,16 +1815,17 @@
       const info = st.baseInfo || {};
       const children = [];
       if (info.loading) {
-        children.push(el('div', { className: 'xl-hint', text: 'Loading the base…' }));
+        children.push(el('div', { className: 'xl-hint', text: 'Loading…' }));
       } else {
         children.push(el('div', { className: 'xl-row' }, [
           el('span', { className: 'xl-base-label', 'data-xl-base-label': '1', text: baseLabel() }),
           el('span', { className: 'xl-hint xl-mono', 'data-xl-diff-count': '1', text: diffText() }),
           el('span', { className: 'xl-spacer' }),
-          st.base !== 'blank' ? el('button', { type: 'button', className: 'xl-link-btn', 'data-xl-reset-base': '1', text: 'Reset all to base', onClick: resetAllToBase }) : null,
+          st.base !== 'blank' ? el('button', { type: 'button', className: 'xl-link-btn', 'data-xl-reset-base': '1', text: 'Undo all changes', onClick: resetAllToBase }) : null,
         ]));
       }
       children.push(el('div', { className: 'xl-hint', text: BASE_HINTS[st.base] || '' }));
+      if (st.base !== 'blank' && st.base !== 'editor') children.push(el('div', { className: 'xl-hint', text: EDITS_HINT }));
       if (info.releaseNotes) children.push(el('div', { className: 'xl-hint xl-base-notes', text: 'Release notes: ' + info.releaseNotes }));
       if (st.base === 'best_run' && bestRun && info.loaded) bestRun.status(info).forEach((node) => children.push(node));
       if (st.baseNote) children.push(el('div', { className: 'xl-callout', role: 'note', 'data-xl-base-note': '1', text: st.baseNote }));
@@ -1835,7 +1844,7 @@
 
     function updateBaseMeta() {
       const meta = root.querySelector('[data-xl-base-meta]');
-      if (meta) meta.textContent = 'Base: ' + baseLabel();
+      if (meta) meta.textContent = (editor ? 'Compared with: ' : 'Starting point: ') + baseLabel();
       const drift = root.querySelector('[data-xl-base-drift]');
       if (drift) drift.hidden = !(st.base === 'best_run' && bestRun && st.baseInfo.loaded && bestRun.drifted(st.baseInfo));
       root.querySelectorAll('[data-xl-diff-count]').forEach((node) => { node.textContent = diffText(); });
@@ -1923,7 +1932,7 @@
       const missing = st.selected.filter((id) => slot.envs.indexOf(id) < 0 && st.envData[id] && st.envData[id].form);
       const changed = bindingChanged(slot.slot_key);
       const head = el('div', { className: 'xl-model-head' }, [
-        changed ? el('span', { className: 'xl-dot', title: 'Changed from the base', 'data-xl-binding-changed': '1' }) : null,
+        changed ? el('span', { className: 'xl-dot', title: 'Changed from the starting point', 'data-xl-binding-changed': '1' }) : null,
         el('span', { className: 'xl-model-title', text: slot.label }),
         tag(slot.slot_key, 'data'),
         slot.required ? tag('required', 'role') : null,
@@ -1936,7 +1945,7 @@
         }) : null,
       ] : []).concat(changed ? [
         el('button', {
-          type: 'button', className: 'xl-link-btn', text: 'Reset', 'aria-label': 'Reset ' + slot.label + ' to the base model',
+          type: 'button', className: 'xl-link-btn', text: 'Reset', 'aria-label': 'Reset ' + slot.label + ' to the starting model',
           onClick: () => {
             const base = st.baseline.bindings[slot.slot_key];
             setBinding(slot.slot_key, base ? deepCopy(base) : null);
@@ -2396,7 +2405,7 @@
       const handler = () => onLeafInput(entry, pointer, control, wrapper);
       control.addEventListener(control.tagName === 'SELECT' ? 'change' : 'input', handler);
       const reset = el('button', {
-        type: 'button', className: 'xl-link-btn xl-reset', text: 'Reset', title: 'Reset to the base value',
+        type: 'button', className: 'xl-link-btn xl-reset', text: 'Reset', title: 'Put back the starting value',
         onClick: () => {
           delete st.invalid[pointer];
           if (has(st.baseline.values, pointer)) st.values[pointer] = deepCopy(st.baseline.values[pointer]);
@@ -2578,6 +2587,13 @@
       summary.textContent = changed + ' changed';
     }
 
+    /** Opens or closes a settings group; `auto` changes are not remembered as the user's. */
+    function setGroupOpen(details, open, auto) {
+      if (details.open === open) return;
+      if (auto) details._xlAuto = true;
+      details.open = open;
+    }
+
     function applyFilters() {
       const host = hosts.settings;
       if (!host) return;
@@ -2603,7 +2619,8 @@
       host.querySelectorAll('details[data-xl-group]').forEach((details) => {
         const visible = !!details.querySelector('[data-xl-leaf]:not([hidden]), [data-xl-row]:not([hidden])');
         details.hidden = filtering && !visible;
-        if (filtering && visible) details.open = true;
+        // While filtering, matching groups open; afterwards each is back to the user's choice.
+        setGroupOpen(details, filtering ? visible || !!st.groupOpen[details.getAttribute('data-xl-group')] : !!st.groupOpen[details.getAttribute('data-xl-group')], true);
       });
       const empty = host.querySelector('[data-xl-filter-empty]');
       if (empty) empty.hidden = !filtering || !!host.querySelector('details[data-xl-group]:not([hidden])');
@@ -2613,8 +2630,6 @@
       const host = hosts.settings;
       if (!host) return;
       const body = host.querySelector('[data-xl-body]');
-      const openState = {};
-      body.querySelectorAll('details[data-xl-group]').forEach((d) => { openState[d.getAttribute('data-xl-group')] = d.open; });
       const children = [];
       if (!st.selected.length) {
         body.replaceChildren(el('div', { className: 'xl-hint', text: 'Pick an environment to see its settings.' }));
@@ -2647,7 +2662,7 @@
         el('span', { className: 'xl-hint xl-mono', 'data-xl-changed-count': '1', text: countChanged() + ' changed' }),
         el('button', {
           type: 'button', className: 'xl-link-btn', text: 'Reset all',
-          title: 'Reset every setting to the base value',
+          title: 'Put back the starting value of every setting',
           onClick: () => {
             st.values = deepCopy(st.baseline.values);
             st.invalid = {};
@@ -2674,7 +2689,13 @@
           el('summary', null, [el('span', { text: group.label }), el('span', { className: 'xl-group-count', text: String(group.pointers.length) })]),
           groupBody,
         ]);
-        details.open = has(openState, group.id) ? openState[group.id] : group.id !== 'llm_routing' || !unionSlots().length;
+        // Closed unless the user opened it; a search opens matching groups for the
+        // moment only (setGroupOpen with auto), which is not remembered.
+        setGroupOpen(details, !!st.groupOpen[group.id], true);
+        details.addEventListener('toggle', () => {
+          if (details._xlAuto) { details._xlAuto = false; return; }
+          st.groupOpen[group.id] = details.open;
+        });
         children.push(details);
       });
       children.push(el('div', { className: 'xl-empty', 'data-xl-filter-empty': '1', hidden: true, text: 'No settings match.' }));
@@ -2962,9 +2983,9 @@
       const main = el('div', { className: 'xl-main' }, [
         section('run', 1, 'Name and priority', 'HIGH preempts other users\' jobs and needs a project manager.'),
         section('environments', 2, 'Environments', 'Where the jobs run. Each selected environment gets one job.', newEnvButton),
-        section('dataset', 3, 'Dataset', 'A project dataset (optionally pinned to a version or alias) or a custom dataset string.'),
-        section('base', 4, 'Start from', 'The base configuration your edits are layered on.'),
-        section('models', 5, 'Models', 'Bind each LLM slot to a project model, a temporary model, or leave it to the environment.'),
+        section('dataset', 3, 'Dataset', 'The project dataset to evaluate on, optionally pinned to a version or alias.'),
+        section('base', 4, 'Start from', 'Pick the configuration to begin with. You can still change anything afterwards.'),
+        section('models', 5, 'Models', 'Bind each LLM group to a project model, a temporary model, or leave it to the environment.'),
         advancedConfig,
       ]);
       const preview = el('aside', { className: 'xl-preview', 'aria-label': 'Preview' }, [
@@ -2984,7 +3005,7 @@
         }),
         el('h1', { className: 'xl-title', text: 'New experiment' }),
         el('p', { className: 'xl-description', text: 'Configure one Evaluation Service run per environment and launch it.' }),
-        el('div', { className: 'xl-meta' }, [el('span', { text: project.name || '' }), el('span', { className: 'xl-meta-sep', text: '·' }), el('span', { 'data-xl-base-meta': '1', text: 'Base: ' + baseLabel() }),
+        el('div', { className: 'xl-meta' }, [el('span', { text: project.name || '' }), el('span', { className: 'xl-meta-sep', text: '·' }), el('span', { 'data-xl-base-meta': '1', text: 'Starting point: ' + baseLabel() }),
           // #38: the environment's latest agent/KB versions differ from the base run's.
           el('span', { className: 'qym-tag qym-tag--warning xlb-drift-tag', 'data-xl-base-drift': '1', hidden: true, text: 'Versions changed since this run' })]),
         el('div', { className: 'xl-layout' }, [main, preview]),
@@ -3027,7 +3048,7 @@
         opts.description ? el('p', { className: 'xl-description', text: opts.description }) : null,
         el('div', { className: 'xl-meta' }, [
           el('span', { text: editor.env.name || '' }), el('span', { className: 'xl-meta-sep', text: '·' }),
-          el('span', { 'data-xl-base-meta': '1', text: 'Base: ' + baseLabel() }),
+          el('span', { 'data-xl-base-meta': '1', text: 'Compared with: ' + baseLabel() }),
         ]),
         el('div', { className: 'xl-layout' }, [main, panel]),
       ]));

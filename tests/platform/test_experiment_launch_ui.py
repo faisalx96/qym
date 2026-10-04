@@ -143,9 +143,11 @@ def test_start_from_options_with_extension_points():
 def test_form_sections_and_preview():
     for section in ("'environments'", "'dataset'", "'base'", "'models'", "'settings'", "'run'"):
         assert f"section({section}" in MODULE, section
-    # Dataset picker or custom string, both addressable by the dry-run error pointer.
-    assert "'Project dataset'" in MODULE and "'Custom string'" in MODULE
-    assert MODULE.count("'data-xl-pointer': '/evaluator/dataset'") == 2
+    # Project datasets only (no free-text string), addressable by the error pointer;
+    # a dataset string a base carries is shown with "Remove".
+    assert "'Custom string'" not in MODULE
+    assert MODULE.count("'data-xl-pointer': '/evaluator/dataset'") == 1
+    assert "'data-xl-custom-dataset': '1'" in MODULE and "function useProjectDataset(" in MODULE
     # Settings: grouped, searchable, "changed only", reset, union badges.
     assert "'Search settings'" in MODULE and "'Changed only'" in MODULE
     assert "details', { className: 'xl-group'" in MODULE

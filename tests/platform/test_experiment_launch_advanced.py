@@ -156,8 +156,8 @@ def test_evaluation_inputs_tab():
     assert "parseMetadataValue" in MODULE and "metadataText" in MODULE
     assert "isReservedKey(key)" in MODULE
     assert "'+ Add key'" in MODULE
-    # Custom dataset string edits the same state as the Dataset section.
-    assert "st.customDataset = e.target.value;" in MODULE
+    # No custom dataset string field; Raw JSON can still carry one (applyDataset).
+    assert "data-xa-custom-dataset" not in MODULE
     assert "st.datasetMode = 'custom';" in MODULE
     # Platform-owned fields are read-only.
     for text in (

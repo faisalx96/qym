@@ -393,15 +393,16 @@ def test_changed_dots_reset_to_base_diff_counter_and_switch_base():
     assert "(row._xlPointers || []).some(isChanged)" in MODULE
     # Reset puts the base value back.
     assert "st.values[pointer] = deepCopy(st.baseline.values[pointer])" in MODULE
-    assert "'Reset all to base'" in MODULE and "function resetAllToBase()" in MODULE
+    assert "'Undo all changes'" in MODULE and "function resetAllToBase()" in MODULE
     assert "'data-xl-binding-changed': '1'" in MODULE
     # Diff vs base in the base section, header meta and preview.
-    assert "' vs base'" in MODULE
+    assert "' on top'" in MODULE and "' vs this version'" in MODULE
     assert "'data-xl-diff-count': '1'" in MODULE
     assert "'data-xl-base-meta': '1'" in MODULE
     assert "baseLabel() + ' · ' + diffText()" in MODULE
     # Switch base: confirmed, keeps the edits that exist on the new base.
-    assert "title: 'Switch base?'" in MODULE and "confirmLabel: 'Switch base'" in MODULE
+    assert "title: 'Change the starting point?'" in MODULE
+    assert "confirmLabel: 'Change starting point'" in MODULE
     assert "const edits = captureEdits();" in MODULE
     assert "if (!matchTemplate(fields, p)) { dropped += 1; return; }" in MODULE
     assert "if (slotKeys.indexOf(k) < 0) { dropped += 1; return; }" in MODULE

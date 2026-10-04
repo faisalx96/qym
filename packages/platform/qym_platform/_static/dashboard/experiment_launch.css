@@ -44,15 +44,16 @@
 .xl-callout--error { border-color: var(--error); color: var(--text-primary); }
 
 /* Environment picker */
-.xl-env-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--space-sm); }
+.xl-env-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: var(--space-sm); }
 .xl-env-option { display: flex; align-items: flex-start; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); border: 1px solid var(--border-default); border-radius: var(--control-radius); background: var(--bg-elevated); cursor: pointer; }
 .xl-env-option:hover { border-color: var(--border-strong); }
 .xl-env-option--selected { border-color: var(--accent-primary); }
 .xl-env-option input { margin-top: 2px; accent-color: var(--accent-primary); }
-.xl-env-name { font-size: var(--font-md); font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
-.xl-env-sub { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-top: var(--space-xs); }
-.xl-env-main { flex: 1; min-width: 0; }
-.xl-env-refresh { flex: none; }
+.xl-env-main { display: grid; gap: var(--space-xs); flex: 1; min-width: 0; }
+.xl-env-head { display: flex; align-items: baseline; gap: var(--space-sm); min-width: 0; }
+.xl-env-name { flex: 1; min-width: 0; font-size: var(--font-md); font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.xl-env-refresh { flex: none; white-space: nowrap; }
+.xl-env-sub { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
 
 /* Model cards */
 .xl-models { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-sm); }

@@ -254,3 +254,44 @@ def test_all_entries_sets_a_setting_on_every_collection_entry(launch):
         assert settings.locator(f'[data-xl-pointer="{pointer}"]').input_value() == "30"
     # Keys are set through model slots: no "All" control for them.
     assert settings.get_by_label("All endpoints · Api Key", exact=True).count() == 0
+
+
+def test_settings_groups_stay_closed_unless_the_user_opens_them(launch):
+    launch.open()
+    page = launch.page
+    page.locator("[data-xl-advanced-config] summary").first.click()
+    settings = page.locator('[data-xl-section="settings"]')
+    page.wait_for_function("() => document.querySelector('[data-xa-edit-roles]')")
+    groups = settings.locator("details[data-xl-group]")
+    is_open = "ns => ns.map(n => n.open)"
+    assert not any(groups.evaluate_all(is_open))
+    # The user opens one; a re-render (e.g. a schema refresh) keeps exactly that.
+    first = groups.first.get_attribute("data-xl-group")
+    groups.first.locator("summary").click()
+    page.locator('[data-xl-env="e1"]').uncheck()
+    page.locator('[data-xl-env="e1"]').check()
+    page.wait_for_function("() => document.querySelector('[data-xa-edit-roles]')")
+    states = dict(
+        settings.locator("details[data-xl-group]").evaluate_all(
+            "ns => ns.map(n => [n.dataset.xlGroup, n.open])"
+        )
+    )
+    assert states.pop(first) is True and not any(states.values())
+    # A search opens matching groups only while it is active.
+    search = settings.get_by_placeholder("Search settings")
+    search.fill("temperature")
+    assert any(settings.locator("details[data-xl-group]").evaluate_all(is_open))
+    search.fill("")
+    states = dict(
+        settings.locator("details[data-xl-group]").evaluate_all(
+            "ns => ns.map(n => [n.dataset.xlGroup, n.open])"
+        )
+    )
+    assert states.pop(first) is True and not any(states.values())
+
+
+def test_dataset_has_no_custom_string(launch):
+    launch.open()
+    dataset = launch.page.locator('[data-xl-section="dataset"]')
+    assert dataset.get_by_role("button", name="Custom string").count() == 0
+    assert dataset.get_by_label("Custom dataset string").count() == 0
