@@ -9,7 +9,7 @@
  * One page with a sticky preview: name and priority (HIGH is gated) first, then
  * environments ("+ New environment" opens the QymEvalEnvironments add dialog
  * inline), dataset (project dataset + version or alias, or a custom string),
- * "Start from" (official defaults, a saved preset, blank or a clone; see below)
+ * "Start from" (default preset, a saved preset, blank or a clone; see below)
  * and one model card per confirmed slot (project model, temporary model via
  * QymTemporaryModel, or Inherit). A collapsed "Advanced configuration" holds the
  * generated grouped env_overrides form (search, "changed only"), sweeps and the
@@ -33,7 +33,7 @@
  *   GET  …/presets/{preset_id}/versions/{n}?remap=current            base config (§9.3)
  *   POST /v1/projects/{pid}/experiments/{xid}/clone  and  GET …/experiments/{xid}
  *
- * Bases (#31, plan §8.2/§9.2): "Official defaults" is the default when the base
+ * Bases (#31, plan §8.2/§9.2): "Default preset" is the default when the base
  * environment has a published version (otherwise Blank, with a note). Official and
  * saved presets load re-mapped onto the environment's current schema; dropped
  * settings and model warnings are listed. The base fills st.baseline (settings,
@@ -43,7 +43,7 @@
  * there are edits) keeps the edits whose setting or slot exists on the new base.
  * ?clone=<xid>[&job=<jid>] prefills from POST …/clone (or that job's qym_config)
  * with base kind "clone"; temporary models come without their key and ask for it
- * again. ?env=<eid> preselects an environment ("Run official defaults" fallback).
+ * again. ?env=<eid> preselects an environment ("Run default preset" fallback).
  *
  * Best run (#38, plan §10.3): experiment_launch_best_run.js (window.QymLaunchBestRun)
  * lists the base environment's top-5 official runs on the form's dataset version
@@ -94,13 +94,13 @@
   if (window.QymExperimentLaunch) return;
 
   const STYLESHEETS = [
-    'static/eval_environments.css?v=eval-environments-20261004-1',
+    'static/eval_environments.css?v=eval-environments-20261004-2',
     'static/eval_temporary_model.css?v=eval-temporary-model-20260930-1',
-    'static/experiment_launch.css?v=experiment-launch-20261004-2',
+    'static/experiment_launch.css?v=experiment-launch-20261004-4',
     'static/experiment_launch_json.css?v=experiment-launch-json-20261003-2',
     'static/experiment_launch_advanced.css?v=experiment-launch-advanced-20261003-2',
     'static/experiment_launch_sweeps.css?v=experiment-launch-sweeps-20260930-1',
-    'static/experiment_launch_best_run.css?v=experiment-launch-best-run-20261002-scope',
+    'static/experiment_launch_best_run.css?v=experiment-launch-best-run-20261004-1',
   ];
   const RUN_NAMES_SHOWN = 12;
   const PREVIEW_DELAY_MS = 600;
@@ -112,7 +112,7 @@
   // published version on the base environment; best run a ranked official run on the
   // form's project dataset (#38). "Clone" only appears for a ?clone= prefill.
   const BASE_OPTIONS = [
-    { kind: 'official', label: 'Official defaults', available: true },
+    { kind: 'official', label: 'Default preset', available: true },
     { kind: 'best_run', label: 'Best past run', available: true },
     { kind: 'saved', label: 'Saved preset', available: true },
     { kind: 'blank', label: 'From scratch', available: true },
@@ -402,9 +402,11 @@
       addedKeys: {}, // collection pointer → [keys]
       rawJson: {}, // env_overrides pointer → true: a JSON setting shown as raw text
       extraEndpoints: [], // LLM endpoints added for this experiment only (endpoint:<name> slots)
-      advancedOpen: false, // the "Advanced configuration" disclosure
       refreshingSchema: {}, // environment id → true while its schema refresh runs
       groupOpen: {}, // settings group id → true once the user opened it (closed by default)
+      view: 'entry', // 'entry' (pick a starting point) or 'customize' (the step-by-step wizard)
+      step: 1, // the wizard's current step (WIZARD_STEPS)
+      recent: null, // recent experiments for the "Copy an experiment" card
       search: '',
       changedOnly: false,
       priority: '',
@@ -835,7 +837,7 @@
       return !!(env && env.official_preset_id && env.official_preset_version != null);
     }
 
-    /** The first selected environment with official defaults, else the first one. */
+    /** The first selected environment with default preset, else the first one. */
     function pickBaseEnv() {
       const envs = selectedEnvs();
       const official = envs.find(hasOfficial);
@@ -877,7 +879,7 @@
         return { ok: true };
       }
       if (kind === 'official') {
-        return hasOfficial(env) ? { ok: true } : { ok: false, reason: 'No official defaults are published for ' + env.name };
+        return hasOfficial(env) ? { ok: true } : { ok: false, reason: 'No default preset is published for ' + env.name };
       }
       if (kind === 'saved') {
         const presets = presetsFor(env.id);
@@ -892,7 +894,7 @@
       const version = info.version != null ? ' v' + info.version : '';
       if (st.base === 'editor') return info.label || 'Blank';
       if (st.base === 'official') {
-        return 'Official defaults' + version + (st.selected.length > 1 && info.envId ? ' · ' + envName(info.envId) : '');
+        return 'Default preset' + version + (st.selected.length > 1 && info.envId ? ' · ' + envName(info.envId) : '');
       }
       if (st.base === 'saved') return 'Saved preset' + (info.presetName ? ' “' + info.presetName + '”' : '') + version;
       if (st.base === 'clone') {
@@ -1130,7 +1132,7 @@
         if (!preset) {
           info.loaded = false;
           info.error = (presets && presets.error) || (kind === 'official'
-            ? 'No official defaults are published for ' + envName(envId) + '.'
+            ? 'No default preset is published for ' + envName(envId) + '.'
             : 'There is no saved preset to start from.');
         } else {
           const res = await request(envPath(envId, '/presets/' + encodeURIComponent(preset.id) + '/versions/'
@@ -1249,7 +1251,7 @@
       return true;
     }
 
-    /** After an environment change: default to official defaults, else Blank (§9.2). */
+    /** After an environment change: default to default preset, else Blank (§9.2). */
     async function syncBase() {
       if (editor) { await syncEditorBase(); return; }
       if (!st.selected.length) { renderBase(); return; }
@@ -1556,8 +1558,17 @@
     }
 
     function focusError(error) {
+      // The entry screen only holds the essentials: anything else is fixed in Customize.
+      if (!editor && st.view === 'entry' && !entryHolds(error.pointer)) {
+        st.view = 'customize';
+        render();
+      }
       if (advanced) advanced.reveal(error.pointer);
       let target = findTarget(error.pointer);
+      if (target && !editor && st.view === 'customize') {
+        const group = target.closest('[data-xl-step-group]');
+        if (group && group.hidden) setStep(Number(group.getAttribute('data-xl-step-group')));
+      }
       if (target && target.closest('[hidden]') && (st.search || st.changedOnly)) {
         st.search = '';
         st.changedOnly = false;
@@ -1619,7 +1630,7 @@
           if (!env.schema_hash) tags.push(tag('No schema', 'danger'));
           if (env.model_slots && env.model_slots.needs_confirmation) tags.push(tag('Needs LLM grouping', 'warning'));
           tags.push(tag('Priority up to ' + String(env.max_priority || 'NORMAL').toLowerCase(), null, 'Highest priority allowed on this environment'));
-          if (hasOfficial(env)) tags.push(tag('Official defaults v' + env.official_preset_version, 'version', 'Published official defaults'));
+          if (hasOfficial(env)) tags.push(tag('Default preset v' + env.official_preset_version, 'version', 'Published default preset'));
           const refreshing = !!st.refreshingSchema[env.id];
           // Managers re-read the service's override schema without leaving the form.
           const refresh = isManager ? el('button', {
@@ -1628,11 +1639,19 @@
             title: 'Fetch the latest settings schema from this environment',
             onClick: (e) => { e.preventDefault(); e.stopPropagation(); refreshEnvSchema(env); },
           }) : null;
+          // The environment page, in a new tab so this form keeps its state.
+          const details = el('a', {
+            className: 'xl-link-btn xl-env-refresh', 'data-xl-env-details': env.id, target: '_blank', rel: 'noopener',
+            href: appRoot() + 'projects/' + encodeURIComponent(opts.slug || project.slug || '') + '/experiments?environment=' + encodeURIComponent(env.id),
+            text: 'Details', title: 'Open the environment page in a new tab',
+            onClick: (e) => e.stopPropagation(),
+          });
           return el('label', { className: 'xl-env-option' + (selected ? ' xl-env-option--selected' : '') }, [
             el('input', { type: 'checkbox', checked: selected, 'data-xl-env': env.id, onChange: (e) => toggleEnv(env.id, e.target.checked) }),
             el('span', { className: 'xl-env-main' }, [
               el('span', { className: 'xl-env-head' }, [
                 el('span', { className: 'xl-env-name', title: env.name, text: env.name }),
+                details,
                 refresh,
               ]),
               el('span', { className: 'xl-env-sub' }, tags),
@@ -1740,6 +1759,7 @@
 
     // ── Section: start from ─────────────────────────────────────────────
     function renderBase() {
+      if (!hosts.base && hosts.starts) { renderStarts(); return; }
       const host = hosts.base;
       if (!host) return;
       const body = host.querySelector('[data-xl-body]');
@@ -1776,7 +1796,7 @@
           }, selectedEnvs().map((env) => el('option', {
             value: env.id, selected: env.id === st.baseEnv,
             disabled: st.base === 'official' && !hasOfficial(env),
-            text: env.name + (hasOfficial(env) ? ' · official v' + env.official_preset_version : ''),
+            text: env.name + (hasOfficial(env) ? ' · default preset v' + env.official_preset_version : ''),
           }))),
         ]));
       }
@@ -1862,7 +1882,7 @@
     // ── Section: models ─────────────────────────────────────────────────
     /** Where env_overrides are edited: the launch form keeps them under Advanced configuration. */
     function overridesLocation() {
-      return editor ? 'Settings' : 'Advanced configuration › Environment overrides';
+      return editor ? 'Settings' : 'Customize › Settings';
     }
 
     function renderModels() {
@@ -2789,6 +2809,7 @@
     }
 
     function renderPreview() {
+      if (!hosts.preview && hosts.entryBar) { renderEntryBar(); return; }
       const host = hosts.preview;
       if (!host) return;
       if (editor) { renderEditorPanel(host); return; }
@@ -2955,7 +2976,7 @@
       const node = el('section', { className: 'xl-card', 'data-xl-section': key, tabindex: '-1' }, [
         el('div', { className: 'xl-card-header' }, [
           el('div', null, [
-            el('h2', { className: 'xl-section-title' }, [el('span', { className: 'xl-step', text: step + '.' }), title]),
+            el('h2', { className: 'xl-section-title' }, [step != null ? el('span', { className: 'xl-step', text: step + '.' }) : null, title]),
             el('p', { className: 'xl-section-description', text: description }),
           ]),
           extra || null,
@@ -2972,33 +2993,236 @@
         ? el('button', { type: 'button', className: 'qym-inline-action qym-inline-action--neutral', 'data-xl-new-env': '1', text: '+ New environment', onClick: openNewEnvironment })
         : null;
       if (editor) { renderEditorLayout(); return; }
-      // Environment overrides, sweeps and the Advanced panel sit in one collapsed
-      // disclosure below the essentials; focusError() opens it for a field inside.
-      const advancedConfig = el('details', { className: 'xl-advanced-config', 'data-xl-advanced-config': '1' }, [
-        el('summary', null, [
-          el('span', { className: 'xl-advanced-config-title', text: 'Advanced configuration' }),
-          el('span', { className: 'qym-tag qym-tag--count', 'data-xl-advanced-count': '1', hidden: true }),
-          el('span', { className: 'xl-hint', text: 'Environment and role overrides, sweeps, evaluation inputs and raw JSON.' }),
+      Object.keys(hosts).forEach((key) => { delete hosts[key]; }); // the layout is rebuilt
+      if (st.view === 'entry') renderEntryLayout(newEnvButton);
+      else renderWizardLayout(newEnvButton);
+    }
+
+    // ── Entry screen: pick a starting point (and where it runs) ─────────
+    /** Pointers the entry screen shows; any other problem is fixed in Customize. */
+    function entryHolds(pointer) {
+      return pointer === '#name' || pointer === '#environments' || pointer === '#base' || pointer === '' || pointer == null
+        || pointer === '/evaluator/dataset' || pointer === '/evaluator/dataset_version';
+    }
+
+    function backLink(text, onClick) {
+      return el('a', {
+        className: 'xl-back', href: opts.listUrl || '#', text,
+        onClick: (e) => { e.preventDefault(); onClick(); },
+      });
+    }
+
+    function renderEntryLayout(newEnvButton) {
+      const starts = el('section', { className: 'xl-starts', 'data-xl-starts': '1', 'data-xl-pointer': '#base', tabindex: '-1' });
+      hosts.starts = starts;
+      const bar = el('div', { className: 'xl-entry-bar', 'data-xl-entry-bar': '1' });
+      hosts.entryBar = bar;
+      root.replaceChildren(el('div', { className: 'xl-page xl-entry', 'data-xl-launch-form': '1', 'data-xl-view': 'entry' }, [
+        backLink('← Experiments', () => { if (opts.onCancel) opts.onCancel(); }),
+        el('h1', { className: 'xl-title', text: 'New experiment' }),
+        el('p', { className: 'xl-description', text: 'Pick where it runs and what to start from. You can change anything in Customize.' }),
+        el('div', { className: 'xl-entry-where' }, [
+          section('environments', null, 'Environment', 'Each selected environment gets one job.', newEnvButton),
+          section('dataset', null, 'Dataset', 'The project dataset to evaluate on, optionally pinned to a version or alias.'),
         ]),
-        el('div', { className: 'xl-advanced-config-body' }, [
-          section('settings', 6, 'Environment overrides', 'Generated from the environment schema. Only changed values are sent.'),
-          // Extension points: the Advanced panel's Role overrides card (#24) right under
-          // the overrides it belongs to, sweeps (#34), then its other cards.
+        starts,
+        bar,
+      ]));
+      renderEnvironments();
+      renderDataset();
+      renderStarts();
+      renderEntryBar();
+      loadRecent();
+    }
+
+    /** The three most recent experiments, for the "Copy an experiment" card. */
+    async function loadRecent() {
+      if (st.recent) return;
+      st.recent = [];
+      const res = await request(projectPath('/experiments?limit=3'));
+      if (!st.active) return;
+      st.recent = res.ok ? (res.data.experiments || []) : [];
+      if (hosts.starts) renderStarts();
+    }
+
+    async function copyExperiment(experimentId) {
+      await loadClone(experimentId, null);
+      if (!st.active) return;
+      render();
+      loadEnvironments();
+    }
+
+    /** One starting-point card (a button: it selects that base). */
+    function startCard(options) {
+      return el('button', {
+        type: 'button',
+        className: 'xl-start-card' + (options.selected ? ' xl-start-card--selected' : '') + (options.compact ? ' xl-start-card--compact' : ''),
+        'aria-pressed': options.selected ? 'true' : 'false',
+        disabled: !!options.disabled,
+        title: options.title || null,
+        'data-xl-start': options.kind,
+        onClick: options.onClick,
+      }, [
+        options.eyebrow ? el('span', { className: 'xl-start-eyebrow', text: options.eyebrow }) : null,
+        el('span', { className: 'xl-start-title', text: options.heading }),
+        options.body ? el('span', { className: 'xl-start-body', text: options.body }) : null,
+        options.meta ? el('span', { className: 'xl-start-meta', text: options.meta }) : null,
+      ]);
+    }
+
+    function renderStarts() {
+      const host = hosts.starts;
+      if (!host) return;
+      const env = envById(st.baseEnv);
+      const presets = presetsFor(st.baseEnv);
+      const choose = (kind, extra) => () => {
+        if (extra) extra();
+        chooseBase(kind, !!extra);
+      };
+      const official = presets && presets.official ? presets.official.current_version : null;
+      const dataset = datasetValue();
+      const cards = [
+        startCard({
+          kind: 'official', selected: st.base === 'official',
+          eyebrow: 'Recommended',
+          heading: env && hasOfficial(env) ? 'Default preset v' + env.official_preset_version : 'Default preset',
+          body: env && hasOfficial(env) ? 'What this environment’s managers published.' : (env ? 'No default preset is published for ' + env.name + ' yet.' : 'Pick an environment first.'),
+          meta: official && official.notes ? '“' + official.notes + '”' : null,
+          disabled: !baseAvailability('official').ok,
+          onClick: choose('official'),
+        }),
+        startCard({
+          kind: 'best_run', selected: st.base === 'best_run',
+          eyebrow: 'Best past run',
+          heading: 'Top-scoring run',
+          body: 'The configuration of a top-scoring official run' + (dataset ? ' on ' + dataset + '.' : '.'),
+          meta: st.base === 'best_run' ? baseLabel() : 'Choose what “best” means after picking it.',
+          disabled: !baseAvailability('best_run').ok,
+          onClick: choose('best_run'),
+        }),
+      ];
+      if (st.clone) {
+        cards.push(startCard({
+          kind: 'clone', selected: st.base === 'clone', eyebrow: 'Copy an experiment',
+          heading: st.clone.sourceName || 'Experiment', body: 'Its configuration, ready to change.',
+          onClick: choose('clone'),
+        }));
+      } else {
+        const recent = (st.recent || [])[0];
+        cards.push(startCard({
+          kind: 'clone', selected: false, eyebrow: 'Copy an experiment',
+          heading: recent ? recent.name : 'No experiments yet',
+          body: recent ? 'Your most recent experiment.' : 'Experiments you launch can be copied here.',
+          meta: recent ? (recent.environment_ids || []).map(envName).join(', ') : null,
+          disabled: !recent,
+          onClick: () => { if (recent) copyExperiment(recent.id); },
+        }));
+      }
+      const saved = (presets ? presets.saved : []).map((preset) => startCard({
+        kind: 'saved', compact: true,
+        selected: st.base === 'saved' && st.savedPresetId === preset.id,
+        heading: preset.name,
+        meta: 'v' + preset.current_version.version + (preset.created_by && preset.created_by.name ? ' · by ' + preset.created_by.name : ''),
+        onClick: choose('saved', () => { st.savedPresetId = preset.id; }),
+      }));
+      saved.push(startCard({
+        kind: 'blank', compact: true, selected: st.base === 'blank',
+        heading: 'From scratch', meta: 'The environment’s own settings',
+        onClick: choose('blank'),
+      }));
+      const children = [
+        el('div', { className: 'xl-starts-head' }, [
+          el('h2', { className: 'xl-section-title', text: 'Start from' }),
+          st.selected.length > 1 ? el('label', { className: 'xl-row xl-hint' }, ['Presets of', el('select', {
+            className: 'qym-control qym-select', 'data-xl-base-env': '1', 'aria-label': 'Environment whose presets are listed',
+            onChange: (e) => { st.baseEnv = e.target.value; loadPresets(st.baseEnv).then(() => { if (st.active) renderStarts(); }); chooseBase(st.base, true); },
+          }, selectedEnvs().map((e) => el('option', { value: e.id, selected: e.id === st.baseEnv, text: e.name })))]) : null,
+        ]),
+        el('div', { className: 'xl-start-grid' }, cards),
+        el('div', { className: 'xl-starts-sub', text: presets && presets.saved.length ? 'Saved presets' : 'Other' }),
+        el('div', { className: 'xl-start-grid xl-start-grid--compact' }, saved),
+      ];
+      const picker = st.base === 'best_run' ? bestRunPicker() : null;
+      if (picker) children.push(picker.render(st.bestRunEnv === st.baseEnv ? st.bestRunId : ''));
+      children.push(baseStatus());
+      host.replaceChildren.apply(host, children);
+      updateBaseMeta();
+    }
+
+    /** Name, readiness and the two ways forward: launch as is, or customize. */
+    function renderEntryBar() {
+      const host = hosts.entryBar;
+      if (!host) return;
+      const errors = localErrors().concat(serverErrors());
+      const overCap = overRunLimit();
+      const env = selectedEnvs().map((e) => e.name).join(', ');
+      let status;
+      if (!st.selected.length) status = 'Pick an environment.';
+      else if (st.previewLoading) status = 'Checking…';
+      else if (st.previewError) status = st.previewError;
+      else if (overCap) status = 'Over the run limit';
+      else if (errors.length) status = errors.length + ' problem' + (errors.length === 1 ? '' : 's') + ' to fix';
+      else if (st.preview) status = 'Ready: ' + baseLabel() + ' on ' + env;
+      else status = '';
+      const name = el('input', {
+        className: 'qym-control qym-input xl-entry-name', type: 'text', maxlength: '200', placeholder: 'Experiment name',
+        'aria-label': 'Experiment name', 'data-xl-pointer': '#name', value: st.name,
+        onInput: (e) => { st.name = e.target.value; schedulePreview(); },
+      });
+      const firstError = errors[0];
+      host.replaceChildren(
+        name,
+        el('div', { className: 'xl-entry-status', role: 'status', 'data-xl-status': '1' }, [
+          el('span', { text: status }),
+          firstError ? el('button', { type: 'button', className: 'xl-link-btn', 'data-xl-entry-fix': '1', text: 'Show', onClick: () => focusError(firstError) }) : null,
+        ]),
+        el('div', { className: 'xl-actions' }, [
+          el('button', {
+            type: 'button', className: 'qym-inline-action qym-inline-action--neutral', 'data-xl-launch': '1',
+            disabled: st.launching || !st.selected.length || overCap,
+            text: st.launching ? 'Launching…' : 'Launch as is', onClick: launchExperiment,
+          }),
+          el('button', {
+            type: 'button', className: 'qym-inline-action qym-inline-action--accent', 'data-xl-customize': '1',
+            text: 'Customize →', onClick: () => { st.view = 'customize'; render(); },
+          }),
+        ]),
+      );
+    }
+
+    // ── Customize: the step-by-step wizard ──────────────────────────────
+    const WIZARD_STEPS = [
+      { id: 1, label: 'Where it runs' },
+      { id: 2, label: 'Starting point' },
+      { id: 3, label: 'Models' },
+      { id: 4, label: 'Settings (optional)' },
+      { id: 5, label: 'Review and launch' },
+    ];
+
+    function renderWizardLayout(newEnvButton) {
+      const groups = {
+        1: [
+          section('run', null, 'Name and priority', 'HIGH preempts other users\' jobs and needs a project manager.'),
+          section('environments', null, 'Environments', 'Where the jobs run. Each selected environment gets one job.', newEnvButton),
+          section('dataset', null, 'Dataset', 'The project dataset to evaluate on, optionally pinned to a version or alias.'),
+        ],
+        2: [section('base', null, 'Start from', 'Pick the configuration to begin with. You can still change anything afterwards.')],
+        3: [section('models', null, 'Models', 'Bind each LLM group to a project model, a temporary model, or leave it to the environment.')],
+        4: [
+          section('settings', null, 'Environment overrides', 'Generated from the environment schema. Only changed values are sent.'),
+          // The Advanced panel's Role overrides card right under the overrides it
+          // belongs to, sweeps (#34), then its other cards.
           el('div', { 'data-xl-advanced-slot': 'roles', hidden: true }),
           el('div', { 'data-xl-sweeps': '1', hidden: true }),
           el('div', { 'data-xl-advanced': '1', hidden: true }),
-        ]),
-      ]);
-      advancedConfig.open = st.advancedOpen;
-      advancedConfig.addEventListener('toggle', () => { st.advancedOpen = advancedConfig.open; });
-      const main = el('div', { className: 'xl-main' }, [
-        section('run', 1, 'Name and priority', 'HIGH preempts other users\' jobs and needs a project manager.'),
-        section('environments', 2, 'Environments', 'Where the jobs run. Each selected environment gets one job.', newEnvButton),
-        section('dataset', 3, 'Dataset', 'The project dataset to evaluate on, optionally pinned to a version or alias.'),
-        section('base', 4, 'Start from', 'Pick the configuration to begin with. You can still change anything afterwards.'),
-        section('models', 5, 'Models', 'Bind each LLM group to a project model, a temporary model, or leave it to the environment.'),
-        advancedConfig,
-      ]);
+        ],
+        5: [],
+      };
+      const groupNodes = WIZARD_STEPS.map((step) => el('div', {
+        className: 'xl-step-group', 'data-xl-step-group': String(step.id), hidden: step.id !== st.step,
+      }, groups[step.id]));
+      const nav = el('div', { className: 'xl-step-nav', 'data-xl-step-nav': '1' });
+      const main = el('div', { className: 'xl-main' }, groupNodes.concat([nav]));
       const preview = el('aside', { className: 'xl-preview', 'aria-label': 'Preview' }, [
         el('div', { className: 'xl-card-header' }, [el('div', null, [
           el('h2', { className: 'xl-section-title', text: 'Preview' }),
@@ -3007,19 +3231,23 @@
         el('div', { className: 'xl-preview-body', 'data-xl-body': '1' }),
       ]);
       hosts.preview = preview;
+      const side = el('div', { className: 'xl-side', 'data-xl-side': '1' }, [preview]);
       mountSweeps(main.querySelector('[data-xl-sweeps]'));
       mountAdvanced(main.querySelector('[data-xl-advanced]'));
-      root.replaceChildren(el('div', { className: 'xl-page', 'data-xl-launch-form': '1' }, [
-        el('a', {
-          className: 'xl-back', href: opts.listUrl || '#', text: '← Experiments',
-          onClick: (e) => { if (opts.onCancel) { e.preventDefault(); opts.onCancel(); } },
-        }),
-        el('h1', { className: 'xl-title', text: 'New experiment' }),
-        el('p', { className: 'xl-description', text: 'Configure one Evaluation Service run per environment and launch it.' }),
+      const steps = el('ol', { className: 'xl-steps', 'aria-label': 'Steps', 'data-xl-steps': '1' }, WIZARD_STEPS.map((step) => el('li', null, [
+        el('button', {
+          type: 'button', className: 'xl-step-btn', 'data-xl-step': String(step.id),
+          onClick: () => setStep(step.id),
+        }, [el('span', { className: 'xl-step-bar' }), el('span', { className: 'xl-step-label' }, [el('span', { className: 'xl-mono', text: String(step.id) }), ' ' + step.label])]),
+      ])));
+      root.replaceChildren(el('div', { className: 'xl-page', 'data-xl-launch-form': '1', 'data-xl-view': 'customize' }, [
+        backLink('← Start', () => { st.view = 'entry'; render(); }),
+        el('h1', { className: 'xl-title', text: 'Customize experiment' }),
         el('div', { className: 'xl-meta' }, [el('span', { text: project.name || '' }), el('span', { className: 'xl-meta-sep', text: '·' }), el('span', { 'data-xl-base-meta': '1', text: 'Starting point: ' + baseLabel() }),
           // #38: the environment's latest agent/KB versions differ from the base run's.
           el('span', { className: 'qym-tag qym-tag--warning xlb-drift-tag', 'data-xl-base-drift': '1', hidden: true, text: 'Versions changed since this run' })]),
-        el('div', { className: 'xl-layout' }, [main, preview]),
+        steps,
+        el('div', { className: 'xl-layout' }, [main, side]),
       ]));
       renderEnvironments();
       renderDataset();
@@ -3028,6 +3256,40 @@
       renderSettings();
       renderRun();
       renderPreview();
+      setStep(st.step);
+    }
+
+    /** Shows one wizard step; Review and launch takes the preview into the main column. */
+    function setStep(n) {
+      st.step = Math.min(Math.max(1, n), WIZARD_STEPS.length);
+      const page = root.querySelector('[data-xl-view="customize"]');
+      if (!page) return;
+      page.querySelectorAll('[data-xl-step-group]').forEach((group) => {
+        group.hidden = Number(group.getAttribute('data-xl-step-group')) !== st.step;
+      });
+      page.querySelectorAll('[data-xl-step]').forEach((button) => {
+        const id = Number(button.getAttribute('data-xl-step'));
+        button.classList.toggle('xl-step-btn--current', id === st.step);
+        button.classList.toggle('xl-step-btn--done', id < st.step);
+        if (id === st.step) button.setAttribute('aria-current', 'step');
+        else button.removeAttribute('aria-current');
+      });
+      const review = page.querySelector('[data-xl-step-group="5"]');
+      const side = page.querySelector('[data-xl-side]');
+      if (st.step === 5) review.appendChild(hosts.preview);
+      else side.appendChild(hosts.preview);
+      side.hidden = st.step === 5;
+      page.querySelector('.xl-layout').classList.toggle('xl-layout--wide', st.step === 5);
+      const nav = page.querySelector('[data-xl-step-nav]');
+      nav.replaceChildren(
+        st.step > 1 ? el('button', { type: 'button', className: 'qym-inline-action qym-inline-action--neutral', 'data-xl-step-back': '1', text: 'Back', onClick: () => setStep(st.step - 1) }) : el('span'),
+        st.step < WIZARD_STEPS.length ? el('button', {
+          type: 'button', className: 'qym-inline-action qym-inline-action--accent', 'data-xl-step-next': '1',
+          text: 'Continue to ' + WIZARD_STEPS[st.step].label.replace(' (optional)', '').toLowerCase(),
+          onClick: () => setStep(st.step + 1),
+        }) : el('span'),
+      );
+      page.scrollIntoView({ block: 'start' });
     }
 
     // ── Editor mode (#30): layout, side panel and save ──────────────────
@@ -3080,7 +3342,7 @@
           }
         });
       }
-      // Promote to official (#39): slots whose temporary model was unbound need a project model.
+      // Promote to default preset (#39): slots whose temporary model was unbound need a project model.
       (opts.rebind || []).forEach((item) => {
         const key = item && item.slot_key;
         const b = key ? st.bindings[key] : null;
@@ -3339,7 +3601,7 @@
    * onSave({config, notes}) → Promise<{ok, errors?, message?}>, onCancel.
    */
   function mountEditor(options) {
-    // Official defaults can't hold sweeps (#30): the editor never mounts #34's UI.
+    // Default preset can't hold sweeps (#30): the editor never mounts #34's UI.
     return mount(Object.assign({}, options, { mode: 'editor', sweeps: false }));
   }
 

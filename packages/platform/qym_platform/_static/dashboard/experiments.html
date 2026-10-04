@@ -18,6 +18,8 @@
   -->
   <style>
     .exp-page { }
+    /* The new-experiment form is two columns: wider than the shell's 1120px page cap and with tighter outer padding. */
+    .shell-content > .exp-page:has(> [data-xl-launch-form]) { max-width: 1440px; padding: var(--space-md); }
     .exp-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-lg); margin-bottom: var(--space-lg); }
     .exp-header-text { min-width: 0; }
     .exp-title { margin: 0; font-size: var(--font-title); font-weight: 650; color: var(--text-primary); letter-spacing: -0.3px; overflow-wrap: anywhere; }

@@ -24,3 +24,4 @@
 
 /* Drift marker next to "Base: …" in the page meta line */
 .xlb-drift-tag { margin-left: var(--space-xs); }
+.xlb-drift-tag[hidden] { display: none; }

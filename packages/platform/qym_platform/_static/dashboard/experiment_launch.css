@@ -10,10 +10,10 @@
 .xl-back:hover { color: var(--accent-primary); }
 .xl-title { margin: 0; font-size: var(--font-title); font-weight: 650; color: var(--text-primary); letter-spacing: -0.3px; }
 .xl-description { margin: 6px 0 0; font-size: var(--font-base); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.xl-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-sm); margin: var(--space-sm) 0 var(--space-lg); font-size: var(--font-base); color: var(--text-muted); }
+.xl-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs) var(--space-sm); margin: var(--space-sm) 0 var(--space-md); font-size: var(--font-base); color: var(--text-muted); }
 .xl-meta-sep { color: var(--text-dim); }
 
-.xl-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--space-lg); align-items: start; }
+.xl-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--space-md); align-items: start; }
 .xl-main { min-width: 0; }
 @media (max-width: 1100px) {
   .xl-layout { grid-template-columns: minmax(0, 1fr); }
@@ -21,7 +21,7 @@
 }
 
 /* Sections */
-.xl-card { background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: 8px; margin-bottom: var(--space-lg); }
+.xl-card { background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: 8px; margin-bottom: var(--space-md); }
 .xl-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-md); padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--border-subtle); }
 .xl-card-body { padding: var(--space-md) var(--space-lg); display: grid; gap: var(--space-md); }
 .xl-section-title { margin: 0; font-size: var(--font-lg); font-weight: 600; color: var(--text-primary); }
@@ -122,7 +122,7 @@
 .xl-cell-sweep { display: flex; align-items: center; gap: var(--space-xs); }
 .xl-cell-sweep > :first-child { flex: 1; min-width: 0; }
 /* Advanced configuration: environment overrides, sweeps and the Advanced panel, collapsed. */
-.xl-advanced-config { margin-bottom: var(--space-lg); border: 1px solid var(--border-default); border-radius: 8px; background: var(--bg-surface); }
+.xl-advanced-config { margin-bottom: var(--space-md); border: 1px solid var(--border-default); border-radius: 8px; background: var(--bg-surface); }
 .xl-advanced-config > summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); padding: var(--space-md) var(--space-lg); cursor: pointer; list-style: none; }
 .xl-advanced-config > summary::-webkit-details-marker { display: none; }
 .xl-advanced-config > summary::before { content: "▶"; color: var(--text-dim); font-size: var(--font-sm); transition: transform 0.15s ease; }
@@ -136,3 +136,45 @@
 .xl-all-row td { background: var(--bg-elevated); }
 .xl-all-label { font-family: var(--font-sans); font-size: var(--font-sm); font-weight: 600; color: var(--text-muted); }
 .xl-all-block { background: var(--bg-elevated); border-radius: var(--control-radius); }
+
+/* ── Entry screen: where it runs, then pick a starting point ── */
+.xl-entry { display: grid; gap: var(--space-md); }
+.xl-entry .xl-description { margin-bottom: var(--space-xs); }
+.xl-entry-where { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-md); align-items: start; }
+.xl-entry-where > .xl-card { margin-bottom: 0; }
+.xl-starts { display: grid; gap: var(--space-md); }
+.xl-starts-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-sm); }
+.xl-starts-sub { font-size: var(--font-sm); font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.xl-start-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-md); }
+.xl-start-grid--compact { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-sm); }
+.xl-start-card { display: grid; gap: var(--space-xs); align-content: start; min-width: 0; padding: var(--space-lg); border: 1px solid var(--border-default); border-radius: 10px; background: var(--bg-surface); color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; }
+.xl-start-card:hover:not(:disabled) { border-color: var(--border-strong); }
+.xl-start-card:disabled { cursor: not-allowed; opacity: 0.6; }
+.xl-start-card--selected { border: 2px solid var(--accent-primary); background: var(--bg-elevated); }
+.xl-start-card--compact { padding: var(--space-sm) var(--space-md); border-radius: 8px; }
+.xl-start-eyebrow { font-size: var(--font-sm); font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.xl-start-card--selected .xl-start-eyebrow { color: var(--accent-primary); }
+.xl-start-title { font-size: var(--font-lg); font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
+.xl-start-card--compact .xl-start-title { font-size: var(--font-md); }
+.xl-start-body { font-size: var(--font-base); color: var(--text-secondary); }
+.xl-start-meta { font-size: var(--font-sm); color: var(--text-muted); overflow-wrap: anywhere; }
+.xl-entry-bar { position: sticky; bottom: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-md); padding: var(--space-md) var(--space-lg); border: 1px solid var(--border-default); border-radius: 10px; background: var(--bg-surface); }
+.xl-entry-name { flex: 0 1 320px; min-width: 0; }
+.xl-entry-status { display: flex; flex: 1 1 200px; align-items: center; gap: var(--space-sm); min-width: 0; font-size: var(--font-base); color: var(--text-secondary); }
+
+/* ── Customize: step-by-step wizard ── */
+.xl-steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-sm); margin: 0 0 var(--space-md); padding: 0; list-style: none; }
+.xl-step-btn { display: grid; gap: var(--space-xs); width: 100%; padding: 0; border: 0; background: none; color: var(--text-muted); font: inherit; font-size: var(--font-base); text-align: left; cursor: pointer; }
+.xl-step-bar { display: block; height: 4px; border-radius: 2px; background: var(--border-default); }
+.xl-step-btn--done .xl-step-bar, .xl-step-btn--current .xl-step-bar { background: var(--accent-primary); }
+.xl-step-btn--done { color: var(--text-secondary); }
+.xl-step-btn--current { color: var(--text-primary); font-weight: 600; }
+.xl-step-group[hidden] { display: none; }
+.xl-step-nav { display: flex; justify-content: space-between; gap: var(--space-sm); margin: var(--space-md) 0; }
+.xl-side[hidden] { display: none; }
+.xl-layout--wide { grid-template-columns: minmax(0, 1fr); }
+.xl-layout--wide .xl-preview { position: static; max-height: none; }
+
+@media (max-width: 960px) {
+  .xl-entry-where, .xl-start-grid, .xl-start-grid--compact, .xl-steps { grid-template-columns: minmax(0, 1fr); }
+}

@@ -79,6 +79,15 @@ class LaunchFixture:
             )
         elif path == "/v1/projects/p/eval-environments":
             route.fulfill(json={"environments": [dict(ENV)]})
+        elif path == "/v1/projects/p/eval-environments/e1" and method == "GET":
+            route.fulfill(
+                json=dict(
+                    ENV,
+                    base_url="https://staging.example",
+                    api_key_set=True,
+                    is_active=True,
+                )
+            )
         elif path == "/v1/projects/p/eval-environments/e1/form":
             self.form_loads += 1
             route.fulfill(
@@ -139,6 +148,20 @@ class LaunchFixture:
         )
         self.page.locator('[data-xl-env="e1"]').check()
 
+    def customize(self, step):
+        """Entry screen → Customize, on wizard step `step`."""
+        self.page.locator("[data-xl-customize]").click()
+        self.page.wait_for_selector('[data-xl-view="customize"]')
+        self.page.locator(f'[data-xl-step="{step}"]').click()
+
+    def wait(self, predicate, timeout=10):
+        """Polls a Python-side condition (route counters) while the page runs."""
+        for _ in range(int(timeout * 20)):
+            if predicate():
+                return
+            self.page.wait_for_timeout(50)
+        raise AssertionError("condition not met")
+
 
 @pytest.fixture
 def launch(browser):  # noqa: F811
@@ -150,33 +173,67 @@ def launch(browser):  # noqa: F811
         assert not view.errors
 
 
-def test_advanced_configuration_is_the_only_disclosure(launch):
+def test_entry_screen_then_customize_wizard(launch):
     launch.open()
     page = launch.page
-    outer = page.locator("[data-xl-advanced-config]")
-    # No disclosure or tabs inside it: one card per part, in this order.
-    assert outer.locator("details:not([data-xl-group])").count() == 0
-    assert outer.locator("[role=tablist]").count() == 0
-    order = outer.locator(
+    entry = page.locator('[data-xl-view="entry"]')
+    # Entry: where it runs (environment and dataset) and the starting points.
+    sections = entry.locator("[data-xl-section]").evaluate_all(
+        "ns => ns.map(n => n.dataset.xlSection)"
+    )
+    assert sections == ["environments", "dataset"]
+    for kind in ("official", "best_run", "clone", "blank"):
+        assert entry.locator(f'[data-xl-start="{kind}"]').count() == 1, kind
+    assert entry.locator("[data-xl-launch]").inner_text() == "Launch as is"
+    # From scratch is chosen with one click; the bar says what launches.
+    entry.locator('[data-xl-start="blank"]').click()
+    assert (
+        entry.locator('[data-xl-start="blank"]').get_attribute("aria-pressed") == "true"
+    )
+    # Customize: five steps, one shown at a time.
+    entry.locator("[data-xl-customize]").click()
+    wizard = page.locator('[data-xl-view="customize"]')
+    wizard.wait_for()
+    assert wizard.locator("[data-xl-step]").count() == 5
+    visible = "ns => ns.filter(n => !n.hidden).map(n => n.dataset.xlStepGroup)"
+    assert wizard.locator("[data-xl-step-group]").evaluate_all(visible) == ["1"]
+    wizard.locator("[data-xl-step-next]").click()
+    assert wizard.locator("[data-xl-step-group]").evaluate_all(visible) == ["2"]
+    # Settings: overrides, role overrides, sweeps, evaluation inputs, raw JSON.
+    wizard.locator('[data-xl-step="4"]').click()
+    step = wizard.locator('[data-xl-step-group="4"]')
+    assert step.locator("details:not([data-xl-group])").count() == 0
+    order = step.locator(
         "[data-xl-section], [data-xa-section], [data-xl-sweeps]"
     ).evaluate_all(
         "ns => ns.map(n => n.dataset.xlSection || n.dataset.xaSection || 'sweeps')"
     )
     assert order == ["settings", "roles", "sweeps", "inputs", "json"]
-    outer.locator("summary").first.click()
     page.wait_for_selector('[data-xa-panel="roles"] [data-xa-row]')
-    assert page.locator('[data-xa-panel="inputs"]').is_visible()
-    # Closing and reopening the one disclosure shows the cards again.
-    outer.locator("summary").first.click()
-    assert not outer.evaluate("n => n.open")
-    outer.locator("summary").first.click()
-    assert page.locator('[data-xa-panel="roles"] [data-xa-row]').first.is_visible()
+    # Review and launch takes the preview into the main column.
+    wizard.locator('[data-xl-step="5"]').click()
+    assert wizard.locator('[data-xl-step-group="5"] .xl-preview').count() == 1
+    assert wizard.locator("[data-xl-side]").is_hidden()
+    # Back to the entry screen keeps the choices.
+    wizard.locator(".xl-back").click()
+    assert (
+        page.locator('[data-xl-start="blank"]').get_attribute("aria-pressed") == "true"
+    )
+
+
+def test_a_problem_outside_the_entry_screen_opens_its_step(launch):
+    launch.open()
+    page = launch.page
+    page.locator('[data-xl-view="entry"] [data-xl-entry-fix]').wait_for()
+    # "Name the experiment" is on the entry screen itself.
+    page.locator("[data-xl-entry-fix]").click()
+    assert page.locator('[data-xl-view="entry"]').count() == 1
 
 
 def test_all_roles_sets_a_column_on_every_role_shown(launch):
     launch.open()
     page = launch.page
-    page.locator("[data-xl-advanced-config] summary").first.click()
+    launch.customize(4)
     panel = page.locator('[data-xa-panel="roles"]')
     page.wait_for_selector('[data-xa-panel="roles"] [data-xa-row]')
     all_temperature = panel.get_by_label("All roles · temperature", exact=True)
@@ -224,7 +281,8 @@ def test_all_roles_sets_a_column_on_every_role_shown(launch):
 def test_managers_refresh_the_schema_from_the_form(launch):
     launch.open()
     page = launch.page
-    page.wait_for_function("() => document.querySelector('[data-xa-edit-roles]')")
+    launch.wait(lambda: launch.form_loads >= 1)
+    page.wait_for_timeout(200)
     loads = launch.form_loads
     page.locator('[data-xl-env-refresh="e1"]').click()
     page.wait_for_function("() => window.toasts.length === 1")
@@ -244,8 +302,7 @@ def test_managers_refresh_the_schema_from_the_form(launch):
         "Schema updated for Staging (1 added, 0 removed)",
         "success",
     ]
-    page.wait_for_function("() => document.querySelector('[data-xa-edit-roles]')")
-    assert launch.form_loads == loads + 1
+    launch.wait(lambda: launch.form_loads == loads + 1)
     assert page.locator('[data-xl-env-refresh="e1"]').inner_text() == "Refresh schema"
 
 
@@ -253,14 +310,14 @@ def test_members_get_no_refresh_button(launch):
     launch.manager = False
     launch.open()
     page = launch.page
-    page.wait_for_function("() => document.querySelector('[data-xa-edit-roles]')")
+    launch.wait(lambda: launch.form_loads >= 1)
     assert page.locator("[data-xl-env-refresh]").count() == 0
 
 
 def test_all_entries_sets_a_setting_on_every_collection_entry(launch):
     launch.open()
     page = launch.page
-    page.locator("[data-xl-advanced-config] summary").first.click()
+    launch.customize(4)
     settings = page.locator('[data-xl-section="settings"]')
     page.wait_for_function("() => document.querySelector('[data-xa-edit-roles]')")
     settings.locator("details[data-xl-group]").evaluate_all(
@@ -281,7 +338,7 @@ def test_all_entries_sets_a_setting_on_every_collection_entry(launch):
 def test_settings_groups_stay_closed_unless_the_user_opens_them(launch):
     launch.open()
     page = launch.page
-    page.locator("[data-xl-advanced-config] summary").first.click()
+    launch.customize(4)
     settings = page.locator('[data-xl-section="settings"]')
     page.wait_for_function("() => document.querySelector('[data-xa-edit-roles]')")
     groups = settings.locator("details[data-xl-group]")
@@ -290,8 +347,10 @@ def test_settings_groups_stay_closed_unless_the_user_opens_them(launch):
     # The user opens one; a re-render (e.g. a schema refresh) keeps exactly that.
     first = groups.first.get_attribute("data-xl-group")
     groups.first.locator("summary").click()
+    page.locator('[data-xl-step="1"]').click()
     page.locator('[data-xl-env="e1"]').uncheck()
     page.locator('[data-xl-env="e1"]').check()
+    page.locator('[data-xl-step="4"]').click()
     page.wait_for_function("() => document.querySelector('[data-xa-edit-roles]')")
     states = dict(
         settings.locator("details[data-xl-group]").evaluate_all(
@@ -327,6 +386,7 @@ def test_llm_groups_pop_up_moves_keys_into_another_group(launch):
     ]
     launch.open()
     page = launch.page
+    launch.customize(3)
     page.locator('[data-xl-edit-groups="e1"]').click()
     dialog = page.locator("#env-grouping-dialog")
     primary = dialog.locator('[data-slot-key="endpoint:primary"]')
@@ -364,6 +424,7 @@ def test_llm_groups_pop_up_requires_a_model_in_every_key_set(launch):
     ]
     launch.open()
     page = launch.page
+    launch.customize(3)
     page.locator('[data-xl-edit-groups="e1"]').click()
     dialog = page.locator("#env-grouping-dialog")
     primary = dialog.locator('[data-slot-key="endpoint:primary"]')
@@ -375,3 +436,23 @@ def test_llm_groups_pop_up_requires_a_model_in_every_key_set(launch):
     assert launch.put_bodies == []
     page.keyboard.press("Escape")
     assert page.locator("#env-grouping-dialog").count() == 0
+
+
+def test_environments_tab_lists_and_opens_the_environment_page(launch):
+    page = launch.page
+    page.goto("https://qym.test/projects/demo/experiments?view=environments")
+    tab = page.locator('[data-exp-tab="environments"]')
+    tab.wait_for()
+    assert tab.get_attribute("aria-selected") == "true"
+    page.get_by_role("button", name="Manage").click()
+    page.wait_for_selector('[data-env-page="e1"] [data-sec="status"] .env-section')
+    assert "?environment=e1" in page.url
+    assert page.locator("[data-env-page-title]").text_content() == "Staging"
+    # The drawer's sections, as cards on the page; no drawer is opened.
+    sections = page.locator("[data-env-page-body] > [data-sec]").evaluate_all(
+        "ns => ns.map(n => n.dataset.sec)"
+    )
+    assert set(sections) == {"status", "schema", "slots", "presets", "settings"}
+    assert page.locator("#shell-drawer").count() == 0
+    page.locator("[data-env-page-back]").click()
+    page.wait_for_function("() => location.search === '?view=environments'")

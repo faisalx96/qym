@@ -396,22 +396,31 @@ JSON_STYLES = (DASHBOARD / "experiment_launch_json.css").read_text(encoding="utf
 SETTINGS_PAGE = (DASHBOARD / "project_settings.html").read_text(encoding="utf-8")
 
 
-def test_name_and_priority_first_and_overrides_under_advanced_configuration():
-    layout = MODULE[MODULE.index("    function render() {") :]
-    layout = layout[: layout.index("    function renderEditorLayout()")]
+def test_entry_screen_then_a_five_step_wizard():
+    # Entry (option E): environment, dataset, starting-point cards, Launch as is / Customize.
+    entry = MODULE[MODULE.index("    function renderEntryLayout(") :]
+    entry = entry[: entry.index("    async function loadRecent()")]
+    assert entry.index("section('environments'") < entry.index("section('dataset'")
+    assert "renderStarts();" in entry and "renderEntryBar();" in entry
+    assert "text: st.launching ? 'Launching…' : 'Launch as is'" in MODULE
+    assert "text: 'Customize →'" in MODULE
+    for kind in ("'official'", "'best_run'", "'clone'", "'saved'", "'blank'"):
+        assert f"kind: {kind}" in MODULE, kind
+    # Customize (option A): five steps; settings hold overrides, sweeps, the panel.
+    wizard = MODULE[MODULE.index("    function renderWizardLayout(") :]
+    wizard = wizard[: wizard.index("    function setStep(")]
     order = [
-        layout.index(f"section('{key}'")
-        for key in ("run", "environments", "dataset", "base", "models")
+        wizard.index(f"section('{key}'")
+        for key in ("run", "environments", "dataset", "base", "models", "settings")
     ]
     assert order == sorted(order)
-    assert "section('run', 1, 'Name and priority'" in layout
-    # env_overrides, sweeps and the Advanced panel live in one collapsed disclosure.
-    disclosure = layout[layout.index("const advancedConfig") : layout.index("const main")]
-    for host in ("section('settings'", "'data-xl-sweeps': '1'", "'data-xl-advanced': '1'"):
-        assert host in disclosure, host
-    assert "'Advanced configuration'" in disclosure
-    assert "advancedConfig.open = st.advancedOpen;" in layout
-    assert "summary.textContent = changed + ' changed';" in MODULE
+    for host in ("'data-xl-sweeps': '1'", "'data-xl-advanced': '1'"):
+        assert host in wizard, host
+    for label in ("Where it runs", "Starting point", "Models", "Settings (optional)", "Review and launch"):
+        assert f"label: '{label}'" in MODULE, label
+    # A problem in a hidden step (or off the entry screen) opens where it is fixed.
+    assert "if (group && group.hidden) setStep(" in MODULE
+    assert "if (!editor && st.view === 'entry' && !entryHolds(error.pointer))" in MODULE
 
 
 def test_json_settings_are_edited_as_fields():

@@ -1163,7 +1163,7 @@
       host.className = 'xa-host';
       host.replaceChildren.apply(host, SECTIONS.filter((section) => !(rolesSlot && section.id === 'roles')).map((section) => nodes.cards[section.id]));
       // Inside the launch form's "Advanced configuration" the cards follow that
-      // disclosure; elsewhere (the official defaults editor) they are always shown.
+      // disclosure; elsewhere (the default preset editor) they are always shown.
       adv.open = nested ? nested.open : true;
       if (nested) {
         nested.addEventListener('toggle', () => {
