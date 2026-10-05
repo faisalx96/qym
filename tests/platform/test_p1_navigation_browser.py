@@ -480,10 +480,31 @@ def test_compare_view_round_trips_through_its_url(app):
     page.evaluate("() => { const s = document.getElementById('sort-select'); s.value = 'index'; s.dispatchEvent(new Event('change')); }")
     page.wait_for_function("() => !new URLSearchParams(location.search).has('sort')")
     assert page.locator("#export-share-btn").inner_text().strip() == "Export HTML"
-    _stub_clipboard(page)
-    page.locator("#copy-compare-link-btn").click()
-    page.wait_for_function("() => window.__copied.length === 1")
-    assert page.evaluate("window.__copied[0]") == "http://qym.test/compare?runs=run-001&runs=run-002&item=item-3"
+    # The address bar is the link: no Copy link button.
+    assert page.locator("#copy-compare-link-btn").count() == 0
+    assert page.evaluate("location.href") == "http://qym.test/compare?runs=run-001&runs=run-002&item=item-3"
+
+
+def test_compare_rules_and_page_filters_round_trip_through_its_url(app):
+    """As on run detail, the rule tree and the filters set by clicking the
+    page live in ``filters``, so a link opens the same filtered view."""
+    filters = json.dumps({
+        "rules": {"op": "and", "children": [{"field": "error", "oper": "is", "value": "false"}]},
+        "approval": "not_approved",
+    }, separators=(",", ":"))
+    page = app.goto("/compare?runs=run-001&runs=run-002&filters=" + filters.replace('"', "%22"))
+    page.wait_for_function("() => document.getElementById('filter-trigger-count')?.textContent === '2'")
+    assert page.locator("#filter-approval").input_value() == "not_approved"
+    page.locator("#btn-item-filters").click()
+    assert page.locator("#builder-rule-count").inner_text() == "1 rule · 1 from the page"
+    chip = page.locator("#filter-builder-page [data-fb-page]")
+    assert chip.locator(".fb-page-chip__text").inner_text() == "Approval: Not Approved"
+    chip.click()
+    page.wait_for_function(
+        "() => JSON.parse(new URLSearchParams(location.search).get('filters')).approval === undefined"
+    )
+    kept = page.evaluate("JSON.parse(new URLSearchParams(location.search).get('filters'))")
+    assert kept == {"rules": {"op": "and", "children": [{"field": "error", "oper": "is", "value": "false"}]}}
 
 
 def test_reviews_keep_filters_in_the_url_and_link_to_the_run_item(app):

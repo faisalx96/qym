@@ -2111,12 +2111,10 @@ def test_compare_view_uses_current_run_detail_component_contracts() -> None:
     assert 'id="compare-subtitle"' in compare
     assert compare.count('class="compare-section-copy"') >= 3
     assert "container.hidden = tabs.length < 2;" in compare
+    # The address bar holds the whole view, so there is no Copy link.
+    assert 'id="copy-compare-link-btn"' not in compare
     assert (
-        'class="qym-inline-action qym-inline-action--accent" '
-        'id="copy-compare-link-btn"'
-    ) in compare
-    assert (
-        'class="export-html-btn qym-inline-action qym-inline-action--neutral" '
+        'class="export-html-btn qym-inline-action qym-inline-action--accent" '
         'id="export-share-btn"'
     ) in compare
 
@@ -2175,27 +2173,39 @@ def test_compare_view_uses_current_run_detail_component_contracts() -> None:
     assert "langfuseChip" not in compare
 
 
-def test_compare_category_breakdown_matches_run_detail_component() -> None:
+def test_compare_category_breakdown_compares_each_run() -> None:
+    """Compare's Performance by Category keeps the run-detail category cards
+    (a card per value, its score track) and lists every compared run inside
+    each card, in the Per-Run Averages columns and baseline: its average,
+    latency and change against the baseline, and a track with a tick at the
+    baseline's score. The pooled Cards and Compare views are gone: a pooled
+    number compared nothing."""
     compare = (DASHBOARD_DIR / "compare.html").read_text(encoding="utf-8")
     breakdown = compare.split("function renderMetadataBreakdown()", 1)[1].split(
         "function wireChipClicks", 1
     )[0]
 
-    assert "categoryBreakdownView: 'cards'" in compare
-    assert "categoryCompareKey: null" in compare
-    assert 'data-category-view="cards"' in breakdown
-    assert 'data-category-view="compare"' in breakdown
+    assert "const columns = compareMetricColumns();" in breakdown
+    assert "const baseline = resolveBaselineColumn(columns);" in breakdown
+    assert "compareCategoryRunGroups(key, selectedMetric, filteredItems, columns)" in breakdown
     assert 'class="comparison-stats metadata-breakdown-content"' in breakdown
-    assert "Overall metric average score" in breakdown
-    assert "categoryScoreTrack(group.avgScore, overallAverage)" in breakdown
-    assert 'class="category-compare-row"' in breakdown
-    assert '<span class="score-col-label">Average</span>' in breakdown
-    assert '<span class="score-col-label">Items</span>' in breakdown
-    assert '<span class="score-col-label">Latency</span>' in breakdown
+    assert '<div class="breakdown-card${cardValueClass}' in breakdown
+    assert '<span class="cmp-run-label">Change</span>' in breakdown
+    assert "compareRunsScoreDeltaHtml(column, baseline, selectedMetric, itemIds)" in breakdown
+    assert "categoryScoreTrack(cell.score, tick, selectedMetric, metricType)" in breakdown
+    assert "card.click();" in breakdown  # Enter or Space filters, as a click does
+    for gone in ("categoryBreakdownView", "categoryCompareKey", "category-compare-row",
+                 "Overall metric average score", "cmp-dot", "cmp-heat", "compareRunsScale"):
+        assert gone not in compare
     assert "Avg@" not in breakdown
     assert "Pass@" not in breakdown
     assert "Consistency" not in breakdown
     assert "#metadata-breakdown > .comparison-stats" not in compare
+    # Each column groups the items by its own runs' metadata.
+    groups = compare.split("function compareCategoryRunGroups(", 1)[1].split("\n      }\n", 1)[0]
+    assert "group.columnItemIds[columnIndex].add(item.itemId);" in groups
+    track = _rule(compare, ".category-pass-track.has-baseline::after {")
+    assert "left: var(--category-baseline);" in track
 
 
 def test_category_cards_hug_the_latency_column() -> None:
@@ -2656,6 +2666,26 @@ def test_trace_actions_use_shared_inline_treatment_and_precede_copy() -> None:
         in run
     )
     assert '<span class="output-actions">${traceButton}${copyBtn}</span>' in compare
+
+
+def test_compare_error_distribution_compares_each_run() -> None:
+    """Compare's Error Distribution keeps the run-detail error cards and lists
+    every compared run inside each card (the Per-Run Averages columns): its
+    count and the change against the baseline. A card filters the items, from
+    the mouse or the keyboard."""
+    compare = (DASHBOARD_DIR / "compare.html").read_text(encoding="utf-8")
+    section = compare.split("function renderErrorDistributionSection()", 1)[1].split(
+        "function renderRootCauseSection", 1
+    )[0]
+    assert "const columns = compareMetricColumns();" in section
+    assert "const baseline = resolveBaselineColumn(columns);" in section
+    assert "'<div class=\"breakdown-card error-card'" in section
+    assert "runLines(entry.counts)" in section
+    assert "section.querySelectorAll('.error-card[data-error-kind]')" in section
+    # Fewer errors than the baseline is the improvement.
+    assert "const verdict = delta < 0 ? 'improved' : delta > 0 ? 'regressed' : 'within_noise';" in section
+    lines = _rule(compare, ".error-card .cmp-run-lines {")
+    assert "border-top: 1px solid var(--border-subtle);" in lines
 
 
 def test_error_filter_cards_match_page_hover_and_keyboard_states() -> None:

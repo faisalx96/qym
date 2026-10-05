@@ -35,6 +35,7 @@ def run_compare_js(body: str, *, render: bool = False) -> None:
             "compareExecutionErrorInfo", "renderCompareErrorIndicator",
             "renderCompareMetricErrorIndicator", "renderCompareOutputGroup",
             "renderItemComparisonCard", "compareRunReadOnly", "compareRunScoresLocked", "scoreEditTitle",
+            "getCompareRunDataId",
         )
     functions = []
     if render:
@@ -77,6 +78,9 @@ RENDER_FIXTURE_JS = r"""
     const buildLangfuseTraceUrl = () => '';
     const buildLangfuseTraceUrlFromRun = () => '';
     const compareRootCauseScope = () => ({analysis:null,metricName:state.selectedItemsMetric});
+    // Run labels (naming only); the output group groups a run's passes by them.
+    const compareColumnLabel = key => String(key);
+    const compareRunShortLabel = runIdx => state.runs[runIdx]?.run?.run_name || 'Run ' + (runIdx + 1);
     const rootCauseIssues = () => [];
     const state = {
       runs:[], allMetrics:['accuracy','quality'], selectedItemsMetric:'accuracy',
@@ -373,3 +377,29 @@ def test_compare_renders_recomputed_summaries_and_metric_error_section() -> None
     assert "state.metricErrorFilter = null;" in source
     assert "state.taskErrorFilter || state.metricErrorFilter || state.traceErrorFilter" in source
     assert source.count("if (state.metricErrorFilter !== null) n++;") == 2
+
+
+def test_a_runs_passes_share_one_block_and_runs_stay_apart() -> None:
+    """Output cards: a repeat run's passes sit in one framed run block (its
+    header names the run once, its cards read "Pass N"); another run stays a
+    separate card, a wider gap away. The metric panels use the same blocks."""
+    run_compare_js(r"""
+      configureRuns([row(), row(), row()]);
+      Object.assign(state.runs[0].run, {file_path: 'run-a::pass1', pass_number: 1, run_name: 'support-agent · pass 1'});
+      Object.assign(state.runs[1].run, {file_path: 'run-a::pass2', pass_number: 2, run_name: 'support-agent · pass 2'});
+      Object.assign(state.runs[2].run, {file_path: 'run-b', run_name: 'text2sql'});
+      const html = renderCompareOutputGroup('item_2', state.runs.map(run => run.snapshot.rows[0]));
+      const grid = html.split('data-output-grid>')[1].split('<section class="qym-metric-compare')[0];
+      assert.match(html, /class="qym-output-grid visible-3 has-run-blocks"/);
+      assert.match(grid, /^<div class="compare-output-run" data-output-run style="grid-column:span 2">/);
+      assert.match(grid, /class="compare-output-run__name">[\s\S]*?support-agent<\/span>/);
+      assert.ok(grid.includes('2 passes'));
+      const names = Array.from(grid.matchAll(/class="qym-output-card__name"[^>]*>([^<]*)</g), match => match[1]);
+      assert.deepEqual(names, ['support-agent', 'Pass 1', 'Pass 2', 'text2sql']);
+      assert.match(grid, /<div class="compare-output-run compare-output-run--single" data-output-run><article/);
+      // Toggles: the run's passes under its name; the other run on its own.
+      assert.match(html, /class="compare-output-toggle-run" role="group" aria-label="run-a">[\s\S]*?>Pass 1<\/button>[\s\S]*?>Pass 2<\/button><\/span>/);
+      // Each metric panel keeps its cells in the same blocks.
+      const panel = html.split('data-metric-compare-grid>')[1];
+      assert.match(panel, /^<div class="compare-output-run compare-output-run--panel" data-output-run style="grid-column:span 2">/);
+    """, render=True)

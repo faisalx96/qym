@@ -348,8 +348,8 @@ def test_runs_list_run_page_and_compare_show_the_same_means(browser):
             fixture.api_client = client
             assert _run_page_means(fixture) == _approx(listed["run-1"])
 
-            # Compare splits the repeat run into its passes: their means are
-            # the server's per-pass means.
+            # Compare splits the repeat run into its passes. In "Each pass"
+            # columns their means are the server's per-pass means.
             passes = {
                 item["pass_number"]: item["metric_means"]
                 for item in client.get("/api/runs/run-1/passes").json()["passes"]
@@ -357,15 +357,14 @@ def test_runs_list_run_page_and_compare_show_the_same_means(browser):
             compare = ViewFixture(browser, "compare", count=5)
             fixtures.append(compare)
             compare.api_client = client
-            compare.goto()
-            table = compare.page.evaluate(
-                """() => Object.fromEntries(Array.from(
+            read_table = """() => Object.fromEntries(Array.from(
                   document.querySelectorAll('#metrics-table tr'),
                   row => [row.querySelector('.metric-name')?.textContent,
                           Array.from(row.querySelectorAll('td.metric-value-cell .metric-val'),
                                      cell => cell.textContent)],
                 ).filter(([name]) => name))"""
-            )
+            compare.goto("&columns=passes")
+            table = compare.page.evaluate(read_table)
             columns = compare.page.evaluate(
                 "__viewTest.state.runs.map(run => run.run.file_path)"
             )
@@ -378,6 +377,15 @@ def test_runs_list_run_page_and_compare_show_the_same_means(browser):
                 shown = {
                     ref: _percent(value) for ref, value in zip(columns, table[metric])
                 }
+                assert shown == _approx(expected), metric
+
+            # "Run average" (the default) shows one column per run: the
+            # repeat run's is its run mean, as the runs list shows it.
+            compare.goto()
+            table = compare.page.evaluate(read_table)
+            for metric in ("h", "q"):
+                shown = dict(zip(("run-1", "run-2"), (_percent(value) for value in table[metric])))
+                expected = {run_id: listed[run_id][metric] for run_id in ("run-1", "run-2")}
                 assert shown == _approx(expected), metric
     finally:
         for fixture in fixtures:

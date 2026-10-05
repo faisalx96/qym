@@ -388,6 +388,7 @@ def test_compare_displays_and_saves_the_same_scope(scope_kind: str) -> None:
             "scoreEditTitle",
             "wireRootCauseHandlers",
             "saveRootCauseIssues",
+            "getCompareRunDataId",
         )
     )
     _run_javascript(
@@ -398,6 +399,9 @@ def test_compare_displays_and_saves_the_same_scope(scope_kind: str) -> None:
         + f"\nconst scopeKind = '{scope_kind}';\n"
         + """
         const PASS_REF_SEP = '::pass';
+        // Run labels (naming only); the output group groups a run's passes by them.
+        const compareColumnLabel = key => String(key);
+        const compareRunShortLabel = runIdx => 'Run ' + (runIdx + 1);
         const MAX_ROOT_CAUSE_CATEGORIES = 3;
         const IS_COMPARE_EXPORT = false;
         const issues = finding => [{category: 'Agent', subcategory: 'Lookup', finding}];

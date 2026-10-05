@@ -13,8 +13,19 @@ def test_error_groups_appear_only_when_the_filtered_results_contain_them(page):
         "rowMatchesErrorFilter", "rowMatchesActiveErrorFilters",
         "renderErrorDetailHtml", "renderErrorDistributionSection",
     ))
-    _run_javascript("const window = {};\n" + (DASHBOARD / "metrics.js").read_text() + functions +
-        f"\nconst aggregateMetricErrors = {str(page == 'compare').lower()};\n" + r"""
+    # Compare counts each error per compared run, in run lines inside each card.
+    row_selector = ".error-card[data-error-kind]"
+    count_markup = 'class="error-card-count">2<span'
+    compare_columns = r"""
+        const COLORS = ['#00d4aa'];
+        const compareMetricColumns = () => [{key: 'run-1', base: 'run-1', runIdxs: [0], passNumber: null}];
+        const resolveBaselineColumn = columns => columns[0];
+        const compareColumnLabel = key => key;
+    """ if page == "compare" else ""
+    _run_javascript("const window = {};\n" + (DASHBOARD / "metrics.js").read_text(encoding="utf-8") + functions +
+        compare_columns +
+        f"\nconst aggregateMetricErrors = {str(page == 'compare').lower()};\n"
+        f"\nconst ROW_SELECTOR = {row_selector!r};\nconst COUNT_MARKUP = {count_markup!r};\n" + r"""
         const state = {
           runs: [{run: {run_name: 'Run 1'}}], page: 1,
           allMetrics: ['accuracy', 'quality'], selectedItemsMetric: 'accuracy',
@@ -40,7 +51,7 @@ def test_error_groups_appear_only_when_the_filtered_results_contain_them(page):
             }));
           },
           get innerHTML() { return this.html; },
-          querySelectorAll(selector) { return selector === '.error-card[data-error-kind]' ? cards : []; },
+          querySelectorAll(selector) { return selector === ROW_SELECTOR ? cards : []; },
         };
         const itemsMetricSelect = {value: 'accuracy'};
         const el = id => id === 'items-metric-select' ? itemsMetricSelect : section;
@@ -76,12 +87,12 @@ def test_error_groups_appear_only_when_the_filtered_results_contain_them(page):
           assert.equal(cards.length, 1);
           assert.equal(cards[0].dataset.errorLabel, 'accuracy');
           assert.ok(section.innerHTML.includes('Judge timed out · Judge quota exhausted'));
-          assert.ok(section.innerHTML.includes('class="error-card-count">2<span'));
+          assert.ok(section.innerHTML.includes(COUNT_MARKUP));
           cards[0].handlers.click({target: {closest: () => null}});
           assert.equal(state.metricErrorFilter.label, 'accuracy');
           assert.equal(state.selectedItemsMetric, 'accuracy');
           assert.equal(itemsMetricSelect.value, 'accuracy');
-          assert.ok(section.innerHTML.includes('class="error-card-count">2<span'));
+          assert.ok(section.innerHTML.includes(COUNT_MARKUP));
           state.metricErrorFilter = null;
 
           const qualityMetric = {item_id: 'quality-metric', status: 'completed', metric_meta: {quality: {status: 'error', error: 'Quality judge failed'}}};

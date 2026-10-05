@@ -216,31 +216,34 @@ def test_repeat_runs_group_their_pass_columns_or_show_one_run_average(browser):
     try:
         fixture.goto()
         page = fixture.page
+        # Run average is the default and the first choice; the link says
+        # nothing about it.
+        options = page.locator("[data-pass-columns]")
+        assert options.evaluate_all("buttons => buttons.map(b => b.dataset.passColumns)") == ["run", "each"]
+        assert page.locator('[data-pass-columns="run"]').get_attribute("aria-pressed") == "true"
+        page.wait_for_function(
+            "document.querySelectorAll('#metrics-tbody tr:first-child td.metric-value-cell').length === 2"
+        )
+        labels = [header["label"] for header in _headers(page)]
+        assert labels == ["qwen3-32b · Sep 2 ×3", "gpt-4o · Sep 5 ×3"]
+        assert "columns" not in parse_qs(urlparse(page.url).query)
+        # Run average: the mean over the passes (Avg@k) of each item.
+        means = page.evaluate(
+            """() => Array.from(document.querySelectorAll('#metrics-tbody tr:first-child td.metric-value-cell .metric-val'), cell => cell.textContent)"""
+        )
+        assert means[0] == means[1]  # both runs have the same pass scores
+
+        page.locator('[data-pass-columns="each"]').click()
+        page.wait_for_function(
+            "document.querySelectorAll('#metrics-tbody tr:first-child td.metric-value-cell').length === 6"
+        )
         groups = page.locator("#metrics-thead th.metric-run-group")
         assert groups.count() == 2
         assert groups.nth(0).get_attribute("colspan") == "3"
         assert groups.nth(0).inner_text().strip() == "qwen3-32b · Sep 2"
         passes = page.locator("#metrics-thead .metric-run-pass").all_text_contents()
         assert passes == ["Pass 1", "Pass 2", "Pass 3"] * 2
-        assert (
-            page.locator("#metrics-tbody tr")
-            .first.locator("td.metric-value-cell")
-            .count()
-            == 6
-        )
-
-        page.locator('[data-pass-columns="run"]').click()
-        page.wait_for_function(
-            "document.querySelectorAll('#metrics-tbody tr:first-child td.metric-value-cell').length === 2"
-        )
-        labels = [header["label"] for header in _headers(page)]
-        assert labels == ["qwen3-32b · Sep 2 ×3", "gpt-4o · Sep 5 ×3"]
-        assert parse_qs(urlparse(page.url).query)["columns"] == ["runs"]
-        # Run average: the mean over the passes (Avg@k) of each item.
-        means = page.evaluate(
-            """() => Array.from(document.querySelectorAll('#metrics-tbody tr:first-child td.metric-value-cell .metric-val'), cell => cell.textContent)"""
-        )
-        assert means[0] == means[1]  # both runs have the same pass scores
+        assert parse_qs(urlparse(page.url).query)["columns"] == ["passes"]
     finally:
         fixture.close()
 
@@ -255,7 +258,7 @@ def test_object_category_values_read_as_json_not_object_object(browser):
     try:
         fixture.goto()
         section = fixture.page.locator("#metadata-breakdown")
-        section.locator(".breakdown-card-label").first.wait_for()
+        section.locator(".breakdown-card .breakdown-card-label").first.wait_for()
         text = section.inner_text()
         assert "[object Object]" not in text
         assert '{"level":"hard"}' in text

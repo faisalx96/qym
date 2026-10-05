@@ -13,7 +13,7 @@
   <script src="./static/metrics.js?v=p0-20260930-3"></script>
   <script src="./static/run_details.js?v=p1-20261001"></script>
   <script src="./static/trace_viewer.js?v=p1-20261001"></script>
-  <script src="./static/step_latency.js?v=p1-20261001-3"></script>
+  <script src="./static/step_latency.js?v=p1-20261005-3"></script>
   <script src="./static/playground.js?v=p1-20261005-3"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
@@ -1347,6 +1347,14 @@
       margin-bottom: 0;
     }
 
+    /* Step latency uses run detail's card; here it heads its own section,
+       so its title reads as a section title. */
+    #step-latency-panel .trace-card-title {
+      font-size: var(--font-lg);
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
     .comparison-overview-heading .metric-tabs-row {
       justify-content: flex-start;
       margin-bottom: 0;
@@ -1534,145 +1542,104 @@
       margin-bottom: 0;
     }
 
-    .category-breakdown-controls {
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      gap: var(--space-sm);
-      flex-wrap: wrap;
-    }
-
-    .category-breakdown-view-toggle {
-      flex-shrink: 0;
-    }
-
-    .category-compare-tabs {
-      display: flex;
-      align-items: center;
-      gap: var(--space-xs);
-      margin-bottom: var(--space-md);
-      overflow-x: auto;
-    }
-
-    .category-compare-tab {
-      appearance: none;
-      border: 1px solid var(--border-default);
-      border-radius: 5px;
-      padding: var(--space-xs) var(--space-sm);
-      background: var(--bg-elevated);
-      color: var(--text-muted);
-      font-family: var(--font-sans);
-      font-size: var(--font-sm);
-      font-weight: 600;
-      white-space: nowrap;
-      cursor: pointer;
-    }
-
-    .category-compare-tab:hover {
-      color: var(--text-secondary);
-      background: var(--bg-hover);
-    }
-
-    .category-compare-tab.active {
-      color: var(--accent-primary);
-      background: var(--bg-active);
-      border-color: var(--border-strong);
-    }
-
-    .category-compare-scroll {
-      overflow-x: auto;
-      border: 1px solid var(--border-subtle);
-      border-radius: 6px;
-    }
-
-    .category-compare-head,
-    .category-compare-row {
+    /* ── Run lines in the category and error cards ──
+       Compare keeps the run-detail cards (Performance by Category, Error
+       Distribution) and lists every compared run inside each card, in the
+       Per-Run Averages columns and baseline: its average, latency and change
+       against the baseline, then its score track with a tick at the
+       baseline's score. */
+    .cmp-run-lines {
       display: grid;
-      grid-template-columns: minmax(140px, 1fr) minmax(220px, 3fr) 68px 54px 78px;
+      grid-template-columns: minmax(0, auto) auto auto auto;
       column-gap: var(--space-md);
-      align-items: center;
-      min-width: 680px;
+      row-gap: 2px;
+      align-items: baseline;
+      margin-top: var(--space-xs);
     }
-
-    .category-compare-head {
-      padding: var(--space-sm) var(--space-md);
-      background: var(--bg-elevated);
+    .cmp-run-lines--single {
+      grid-template-columns: minmax(0, auto) auto auto;
+    }
+    .cmp-run-label {
+      padding-bottom: 2px;
       color: var(--text-muted);
-      font-size: var(--font-sm);
-      font-weight: 650;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    .category-compare-head span:nth-child(2) { text-align: left; }
-    .category-compare-head span:nth-child(n + 3) { text-align: right; }
-
-    .category-compare-row {
-      appearance: none;
-      width: 100%;
-      min-height: 52px;
-      padding: 0 var(--space-md);
-      border: 0;
-      border-top: 1px solid var(--border-subtle);
-      background: var(--bg-surface);
-      color: var(--text-secondary);
       font-family: var(--font-sans);
-      font-size: var(--font-base);
-      text-align: left;
-      cursor: pointer;
-    }
-
-    .category-compare-row:hover { background: var(--bg-hover); }
-
-    .category-compare-name {
-      overflow: hidden;
-      color: var(--text-primary);
+      font-size: var(--font-sm);
       font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .cmp-run-label:not(:first-child) {
+      text-align: right;
+    }
+    .cmp-run-name {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      max-width: 220px;
+      color: var(--text-secondary);
+      font-size: var(--font-sm);
+      font-weight: 600;
+    }
+    .cmp-run-name__text {
+      min-width: 0;
+      overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-
-    .category-compare-number {
-      text-align: right;
+    .cmp-run-num {
       font-family: var(--font-mono);
+      font-size: var(--font-base);
       font-variant-numeric: tabular-nums;
+      text-align: right;
+      white-space: nowrap;
     }
-
-    .category-compare-number.muted { color: var(--text-muted); }
-
-    .category-baseline-note {
-      display: flex;
-      align-items: center;
-      gap: var(--space-sm);
-      margin-top: var(--space-sm);
+    .cmp-run-num.muted {
+      color: var(--text-muted);
+    }
+    .cmp-run-num.is-error {
+      color: var(--error);
+    }
+    .cmp-run-change {
+      font-family: var(--font-mono);
+      font-size: var(--font-sm);
+      text-align: right;
+      white-space: nowrap;
+    }
+    .cmp-run-change.is-baseline {
+      color: var(--text-muted);
+      font-family: var(--font-sans);
+    }
+    .cmp-run-missing {
+      grid-column: 2 / -1;
       color: var(--text-muted);
       font-size: var(--font-sm);
+      text-align: right;
+      white-space: nowrap;
     }
-
-    .category-baseline-marker {
-      width: 2px;
-      height: 16px;
-      background: var(--text-secondary);
+    .cmp-run-track {
+      grid-column: 1 / -1;
+      margin: 2px 0 var(--space-sm);
     }
-
-    .category-baseline-score {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      height: var(--space-lg);
-      padding: 0 var(--space-sm);
-      border: 1px solid var(--category-average-color);
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--category-average-color) 12%, transparent);
-      color: var(--category-average-color);
-      font-family: var(--font-mono);
-      font-size: var(--font-xs);
-      font-weight: 700;
-      font-variant-numeric: tabular-nums;
+    .cmp-run-track .category-pass-track {
+      margin-top: 0;
     }
-
-    .metadata-breakdown-content > .category-baseline-note {
-      margin: 0 0 var(--space-md);
+    .breakdown-card.active {
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary) 25%, transparent);
+    }
+    .breakdown-card[data-bd-category]:focus-visible {
+      outline: 1px solid var(--accent-primary);
+      outline-offset: 2px;
+    }
+    .error-card .cmp-run-lines {
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      margin-top: var(--space-sm);
+      padding-top: var(--space-sm);
+      border-top: 1px solid var(--border-subtle);
+    }
+    .error-card .cmp-run-lines--single {
+      grid-template-columns: minmax(0, 1fr) auto;
     }
 
     .category-empty-state,
@@ -1986,44 +1953,6 @@
       gap: var(--space-sm);
     }
 
-    .breakdown-card-scores {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, max-content));
-      column-gap: 16px;
-      row-gap: 0;
-      margin: 1px 0 0;
-    }
-    .breakdown-card-scores .score-col {
-      display: flex;
-      flex-direction: column;
-      gap: 1px;
-    }
-    .breakdown-card-scores .score-col-label {
-      font-family: var(--font-sans);
-      font-size: var(--font-xs);
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-      font-weight: 500;
-    }
-    .breakdown-card-scores .score-col-value {
-      font-family: var(--font-mono);
-      font-size: var(--font-md);
-      font-weight: 700;
-    }
-    .breakdown-card-scores .score-col-value.score-5 { color: var(--score-5); }
-    .breakdown-card-scores .score-col-value.score-4 { color: var(--score-4); }
-    .breakdown-card-scores .score-col-value.score-3 { color: var(--score-3); }
-    .breakdown-card-scores .score-col-value.score-2 { color: var(--score-2); }
-    .breakdown-card-scores .score-col-value.score-1 { color: var(--score-1); }
-
-    .score-col-performance {
-      display: flex;
-      align-items: baseline;
-      gap: var(--space-xs);
-      flex-wrap: wrap;
-    }
-
     .category-pass-track {
       position: relative;
       height: 8px;
@@ -2031,11 +1960,6 @@
       border-radius: 4px;
       background: var(--bg-elevated);
       overflow: visible;
-    }
-
-    .category-compare-row .category-pass-track {
-      margin-top: 0;
-      background: var(--bg-elevated);
     }
 
     .category-pass-track.has-baseline::after {
@@ -2289,6 +2213,44 @@
       font-family: var(--font-mono);
       color: var(--text-secondary);
     }
+
+    /* Trace rows wear run detail's Trace stats colours: each kind keeps one,
+       its glyph on a tint of it. */
+    .metrics-table .trace-row-label {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-sm);
+      max-width: 100%;
+      vertical-align: middle;
+    }
+    .metrics-table .trace-row-label > span:last-child {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .trace-row-icon {
+      --trace-tone: var(--text-primary);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+      border-radius: var(--control-radius);
+      font-size: var(--font-sm);
+      line-height: 1;
+      color: var(--trace-tone);
+      background: color-mix(in srgb, var(--trace-tone) 12%, transparent);
+    }
+    .trace-row-icon svg { width: 12px; height: 12px; }
+    .trace-row-icon--tokens { --trace-tone: var(--accent-primary); }
+    .trace-row-icon--llm { --trace-tone: var(--accent-secondary); }
+    .trace-row-icon--tool { --trace-tone: var(--warning); }
+    .trace-row-icon--success { --trace-tone: var(--success); }
+    .trace-row-icon--retriever { --trace-tone: var(--info); }
+    .trace-row-icon--agent { --trace-tone: var(--accent-primary); }
+    .trace-row-icon--evaluator { --trace-tone: var(--accent-tertiary-soft); }
+    .trace-row-icon--trace { background: color-mix(in srgb, var(--text-muted) 14%, transparent); }
 
     .metrics-table .metric-val {
       font-family: var(--font-mono);
@@ -3031,6 +2993,68 @@
       border-radius: 0 4px 4px 0;
       padding: var(--space-sm);
     }
+    /* Run blocks: a repeat run's passes share one framed block (subgrid
+       columns, so cards keep the grid's widths and the metric panels below
+       stay aligned). Runs sit a wide gap apart; passes a narrow one. */
+    .qym-output-grid.has-run-blocks,
+    .qym-metric-compare__grid.has-run-blocks {
+      column-gap: var(--space-lg);
+    }
+    .compare-output-run {
+      display: grid;
+      grid-template-columns: subgrid;
+      grid-auto-rows: auto;
+      align-content: start;
+      column-gap: var(--space-sm);
+      row-gap: var(--space-sm);
+      min-width: 0;
+      padding: var(--space-sm);
+      border: 1px solid var(--border-default);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--bg-surface) 70%, transparent);
+    }
+    .compare-output-run--single { display: contents; }
+    .compare-output-run.is-hidden { display: none; }
+    .compare-output-run__header {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      min-width: 0;
+      padding: 0 var(--space-xs);
+      font-size: var(--font-sm);
+    }
+    .compare-output-run__name {
+      display: flex;
+      min-width: 0;
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+    .compare-output-run__label {
+      overflow: hidden;
+      color: var(--text-muted);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .compare-output-run__passes { margin-left: auto; }
+    .compare-output-toggle-run {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-xs);
+      padding: 2px var(--space-xs) 2px var(--space-sm);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--control-radius);
+    }
+    .compare-output-toggle-run__name {
+      max-width: 220px;
+      overflow: hidden;
+      color: var(--text-secondary);
+      font-size: var(--font-sm);
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .qym-output-card.item-run-output.item-execution-error {
       border: 1px solid var(--error);
       border-left-width: 3px;
@@ -3239,8 +3263,7 @@
       color: var(--text-muted);
     }
 
-    /* Empty/loading states */
-    .compare-loading,
+    /* Empty state */
     .compare-empty {
       display: flex;
       flex-direction: column;
@@ -3250,14 +3273,97 @@
       color: var(--text-muted);
     }
 
-    .compare-loading .spinner {
-      width: 32px;
-      height: 32px;
-      border: 3px solid var(--border-default);
-      border-top-color: var(--accent-primary);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin-bottom: var(--space-md);
+    /* Loading: the page's shape, shimmering, as on run detail. It waits
+       0.35s, so a fast load goes straight to the comparison without a flash,
+       and it fades out under the comparison when it did show
+       (retireSkeleton). */
+    @keyframes compare-skeleton-in { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes compare-skeleton-shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+    .compare-skeleton {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-lg);
+      animation: compare-skeleton-in 0.25s ease-out 0.35s both;
+    }
+    .compare-skeleton__label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+    .compare-skeleton__row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--space-lg);
+    }
+    .compare-skeleton__bone,
+    .compare-skeleton__strip {
+      display: block;
+      border-radius: var(--control-radius);
+      background: linear-gradient(100deg, var(--bg-elevated) 30%, var(--bg-hover) 50%, var(--bg-elevated) 70%) 0 0 / 200% 100%;
+      animation: compare-skeleton-shimmer 1.6s ease-in-out infinite;
+    }
+    .compare-skeleton__cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: var(--space-md);
+    }
+    .compare-skeleton__card,
+    .compare-skeleton__table {
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      background: var(--bg-surface);
+    }
+    .compare-skeleton__card {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-md);
+      height: 180px;
+      padding: var(--space-lg);
+    }
+    .compare-skeleton__strip { height: 44px; }
+    .compare-skeleton__head {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-sm);
+    }
+    .compare-skeleton__table {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-sm);
+      padding: var(--space-lg);
+    }
+    .compare-skeleton__table .compare-skeleton__bone { height: 22px; }
+    .compare-skeleton__stats { height: 64px; }
+    @media (prefers-reduced-motion: reduce) {
+      .compare-skeleton__bone,
+      .compare-skeleton__strip { animation: none; }
+    }
+
+    /* ─── Page entrance, once per load (as on run detail) ───
+       The comparison takes the skeleton's place in one short crossfade, then
+       only its charts move: each run card's edge draws in and the win/loss
+       and distribution bars grow from the left, settled within about 0.6s.
+       #compare-content carries .is-entering until then or the reader's first
+       click or key, so a redraw (a filter, a removed run) never replays it.
+       Reduced motion keeps the crossfade only. */
+    @keyframes compare-enter-fade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes compare-enter-draw-x { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+    @keyframes compare-enter-draw-y { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+    #compare-content.is-entering { animation: compare-enter-fade 0.24s ease-out both; }
+    @media (prefers-reduced-motion: no-preference) {
+      #compare-content.is-entering { --enter-ease: cubic-bezier(0.16, 1, 0.3, 1); }
+      #compare-content.is-entering .compare-run-card::before {
+        transform-origin: center top;
+        animation: compare-enter-draw-y 0.7s var(--enter-ease) both;
+      }
+      #compare-content.is-entering :is(.win-loss-bar, .distribution-bar) {
+        transform-origin: left center;
+        animation: compare-enter-draw-x 0.55s var(--enter-ease) 0.04s both;
+      }
     }
 
     /* Formatted object/dict display styles */
@@ -5332,9 +5438,23 @@
 </head>
 <body>
   <main class="compare-container">
-    <div class="compare-loading" id="loading">
-      <div class="spinner"></div>
-      <span>Loading comparison data...</span>
+    <div class="compare-skeleton" id="loading" role="status">
+      <span class="compare-skeleton__label">Loading comparison data…</span>
+      <div class="compare-skeleton__row" aria-hidden="true">
+        <div><span class="compare-skeleton__bone" style="width:180px;height:22px"></span><span class="compare-skeleton__bone" style="width:420px;height:10px;margin-top:8px"></span></div>
+        <span class="compare-skeleton__bone" style="width:120px;height:24px"></span>
+      </div>
+      <div class="compare-skeleton__cards" aria-hidden="true">
+        <div class="compare-skeleton__card"><span class="compare-skeleton__bone" style="width:55%;height:18px"></span><span class="compare-skeleton__strip"></span><span class="compare-skeleton__bone" style="width:80%;height:10px"></span></div>
+        <div class="compare-skeleton__card"><span class="compare-skeleton__bone" style="width:55%;height:18px"></span><span class="compare-skeleton__strip"></span><span class="compare-skeleton__bone" style="width:80%;height:10px"></span></div>
+      </div>
+      <div class="compare-skeleton__head" aria-hidden="true"><span class="compare-skeleton__bone" style="width:150px;height:18px"></span><span class="compare-skeleton__bone" style="width:420px;height:10px"></span></div>
+      <div class="compare-skeleton__table" aria-hidden="true">
+        <span class="compare-skeleton__bone"></span><span class="compare-skeleton__bone"></span><span class="compare-skeleton__bone"></span>
+        <span class="compare-skeleton__bone"></span><span class="compare-skeleton__bone"></span>
+      </div>
+      <div class="compare-skeleton__head" aria-hidden="true"><span class="compare-skeleton__bone" style="width:170px;height:18px"></span><span class="compare-skeleton__bone" style="width:320px;height:10px"></span></div>
+      <span class="compare-skeleton__bone compare-skeleton__stats" aria-hidden="true"></span>
     </div>
 
     <div class="compare-empty" id="empty" style="display: none;">
@@ -5353,11 +5473,8 @@
           <p class="compare-subtitle" id="compare-subtitle">Review run configuration, performance, and item-level differences.</p>
         </div>
         <div class="compare-header-actions">
-          <button class="qym-inline-action qym-inline-action--accent" id="copy-compare-link-btn" type="button" title="Copy a link to this comparison, with its metric, filters, sort, page and open item">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-            Copy link
-          </button>
-          <button class="export-html-btn qym-inline-action qym-inline-action--neutral" id="export-share-btn" type="button" title="Download this comparison as a standalone HTML file">
+          <!-- No Copy link: the address bar holds the whole view (C045). -->
+          <button class="export-html-btn qym-inline-action qym-inline-action--accent" id="export-share-btn" type="button" title="Download this comparison as a standalone HTML file">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Export HTML
           </button>
@@ -5501,6 +5618,8 @@
                 <span class="fb-title">Filters</span>
                 <span class="fb-count" id="builder-rule-count"></span>
               </div>
+              <!-- Filters set by clicking charts and cards, removable here. -->
+              <div class="fb-page" id="filter-builder-page" hidden></div>
               <div id="filter-builder-body"></div>
               <div id="compare-legacy-filter-inputs" hidden aria-hidden="true">
                 <div class="fp-filter-row">
@@ -5713,8 +5832,6 @@
         allMetadataKeys: [],          // collected metadata keys across all items
         selectedCategories: new Set(),   // which metadata keys to show as breakdowns
         categoryFilters: {},             // custom category filters: key -> null|[values]
-        categoryBreakdownView: 'cards',
-        categoryCompareKey: null,
         visibleMetadataFields: {},    // #6: which metadata fields to show (key -> bool)
         allMetricMetaKeys: [],
         visibleMetricMetaFields: {},
@@ -5732,7 +5849,7 @@
         sortBy: 'index',              // index, score_asc, score_desc, latency_asc, latency_desc
         activeCompareTab: 'compare',
         baselineKey: null,            // Per-Run Averages baseline column (URL "baseline"); null = first
-        passColumns: 'each',          // repeat runs: 'each' pass column, or one 'run' average column
+        passColumns: 'run',           // repeat runs: one 'run' average column (default), or 'each' pass column
         baselineDeltaFilter: null,    // {metric, columnKey, baselineKey, kind} from a delta count
         columnScoreCache: {},
         compareAlignmentStatus: 'aligned',
@@ -8179,7 +8296,7 @@
           files.forEach(f => params.append('runs', f));
         }
         if (state.baselineKey) params.set('baseline', state.baselineKey);
-        if (state.passColumns === 'run') params.set('columns', 'runs');
+        if (state.passColumns === 'each') params.set('columns', 'passes');
         // Keep the view state (metric, filters, sort, page, tab, item).
         const current = new URLSearchParams(window.location.search);
         COMPARE_VIEW_PARAMS.forEach(key => current.getAll(key).forEach(value => params.append(key, value)));
@@ -8189,8 +8306,159 @@
 
       // ── View state in the URL ──
       // A Compare link opens the same view: metric, item filter, winner,
-      // search, sort, page, Compare/Sweep tab and the open item.
-      const COMPARE_VIEW_PARAMS = ['metric', 'filter', 'winner', 'q', 'sort', 'page', 'tab', 'item'];
+      // search, sort, page, Compare/Sweep tab, the open item, and (in
+      // ``filters``) the rules and the filters set by clicking the page, as on
+      // run detail. The address bar is the link to share.
+      const COMPARE_VIEW_PARAMS = ['metric', 'filter', 'winner', 'q', 'sort', 'page', 'tab', 'item', 'filters'];
+      const COMPARE_VIEW_ERROR_SLOTS = [
+        ['task', 'taskErrorFilter'], ['metric', 'metricErrorFilter'],
+        ['trace', 'traceErrorFilter'], ['analysis', 'analysisErrorFilter'],
+      ];
+      // An error label is the error's whole text, which can run to several KB.
+      // A long one goes in the URL as its first characters plus a hash of the
+      // whole label, and is matched back against the compared runs' errors.
+      const COMPARE_VIEW_ERROR_LABEL_MAX = 80;
+      const COMPARE_VIEW_ERROR_PREFIX = 40;
+
+      function compareErrorLabelHash(label) {
+        let hash = 0x811c9dc5;
+        for (let index = 0; index < label.length; index++) {
+          hash = Math.imul(hash ^ label.charCodeAt(index), 16777619);
+        }
+        return (hash >>> 0).toString(36) + '.' + label.length.toString(36);
+      }
+
+      function compareErrorFilterUrlValue(filter) {
+        const label = String(filter.label);
+        if (label.length <= COMPARE_VIEW_ERROR_LABEL_MAX) return { kind: filter.kind, label };
+        // Whole characters: a cut surrogate pair would not survive the URL.
+        const prefix = Array.from(label).slice(0, COMPARE_VIEW_ERROR_PREFIX).join('');
+        return { kind: filter.kind, prefix, hash: compareErrorLabelHash(label) };
+      }
+
+      // The compared runs' error label a shortened URL value names, or null
+      // when no compared run has such an error (the filter is then left off).
+      function compareErrorLabelFromUrlValue(kind, prefix, hash) {
+        for (const run of state.runs) {
+          for (const row of run.snapshot?.rows || []) {
+            const buckets = {};
+            collectRowErrors(row, buckets);
+            for (const bucket of Object.values(buckets)) {
+              if (bucket.kind === kind && bucket.label.length > COMPARE_VIEW_ERROR_LABEL_MAX
+                && bucket.label.startsWith(prefix) && compareErrorLabelHash(bucket.label) === hash) return bucket.label;
+            }
+          }
+        }
+        return null;
+      }
+
+      function compareViewFiltersParam() {
+        const out = {};
+        if (filterRuleCount(state.filterRoot) > 0) out.rules = state.filterRoot;
+        if (state.approvalFilter !== null) out.approval = state.approvalFilter;
+        if (state.complexityFilter !== null) out.complexity = state.complexityFilter;
+        if (state.domainFilter !== null) {
+          out.domain = state.domainFilter;
+          if (state.domainFilterMode === 'exclude') out.domainMode = 'exclude';
+          if (state.domainExclusive.size) out.domainOnly = Array.from(state.domainExclusive);
+        }
+        if (state.rootCauseFilter !== null) {
+          out.rootCause = state.rootCauseFilter;
+          if (state.rootCauseMetric !== 'all') out.rootCauseMetric = state.rootCauseMetric;
+        }
+        const errors = {};
+        COMPARE_VIEW_ERROR_SLOTS.forEach(([key, slot]) => {
+          if (state[slot]) errors[key] = compareErrorFilterUrlValue(state[slot]);
+        });
+        if (Object.keys(errors).length) out.errors = errors;
+        if (state.passRateOp) out.passRate = [state.passRateOp, state.passRateValue];
+        if (state.baselineDeltaFilter) out.baseline = state.baselineDeltaFilter;
+        const categories = {};
+        Object.entries(state.categoryFilters).forEach(([key, value]) => { if (value !== null) categories[key] = value; });
+        if (Object.keys(categories).length) out.categories = categories;
+        return Object.keys(out).length ? JSON.stringify(out) : null;
+      }
+
+      const _isStringList = value => Array.isArray(value) && value.length <= 500 && value.every(item => typeof item === 'string');
+      function _validFilterRule(node, depth) {
+        if (!node || typeof node !== 'object' || depth > 6) return false;
+        if (Array.isArray(node.children)) {
+          return (node.op === 'and' || node.op === 'or') && node.children.length <= 50
+            && node.children.every(child => _validFilterRule(child, depth + 1));
+        }
+        const value = node.value;
+        return typeof node.field === 'string' && typeof node.oper === 'string'
+          && (typeof value === 'string' || typeof value === 'number' || _isStringList(value));
+      }
+
+      // Category filters wait for the metadata keys (processRuns), so only
+      // the compared runs' own categories are restored.
+      let pendingCompareCategoryFilters = null;
+
+      function applyCompareViewFiltersParam(raw) {
+        let parsed = null;
+        try { parsed = JSON.parse(raw); } catch (error) { return; }
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+        if (_validFilterRule(parsed.rules, 0) && Array.isArray(parsed.rules.children)) state.filterRoot = parsed.rules;
+        if (parsed.approval === 'approved' || parsed.approval === 'not_approved') {
+          state.approvalFilter = parsed.approval;
+          if (el('filter-approval')) el('filter-approval').value = parsed.approval;
+        }
+        if (_isStringList(parsed.complexity)) state.complexityFilter = parsed.complexity;
+        if (_isStringList(parsed.domain)) {
+          state.domainFilter = parsed.domain;
+          state.domainFilterMode = parsed.domainMode === 'exclude' ? 'exclude' : 'include';
+          if (state.domainFilterMode === 'include' && _isStringList(parsed.domainOnly)) state.domainExclusive = new Set(parsed.domainOnly);
+        }
+        if (_isStringList(parsed.rootCause)) {
+          state.rootCauseFilter = parsed.rootCause;
+          if (state.allMetrics.includes(parsed.rootCauseMetric)) state.rootCauseMetric = parsed.rootCauseMetric;
+        }
+        const errors = parsed.errors && typeof parsed.errors === 'object' ? parsed.errors : {};
+        COMPARE_VIEW_ERROR_SLOTS.forEach(([key, slot]) => {
+          const value = errors[key];
+          if (!value || typeof value.kind !== 'string') return;
+          if (typeof value.label === 'string') {
+            state[slot] = { kind: value.kind, label: value.label };
+          } else if (typeof value.prefix === 'string' && typeof value.hash === 'string') {
+            const label = compareErrorLabelFromUrlValue(value.kind, value.prefix, value.hash);
+            if (label !== null) state[slot] = { kind: value.kind, label };
+          }
+        });
+        const passRate = parsed.passRate;
+        if (Array.isArray(passRate) && ['gte', 'lte', 'eq'].includes(passRate[0]) && Number.isInteger(passRate[1])
+          && passRate[1] >= 0 && passRate[1] <= state.runs.length) {
+          state.passRateOp = passRate[0];
+          state.passRateValue = passRate[1];
+          if (el('pass-rate-op')) el('pass-rate-op').value = passRate[0];
+          if (el('pass-rate-value')) { el('pass-rate-value').value = passRate[1]; el('pass-rate-value').style.display = ''; }
+          if (el('pass-rate-suffix')) el('pass-rate-suffix').style.display = '';
+        }
+        const baseline = parsed.baseline;
+        if (baseline && typeof baseline === 'object' && state.allMetrics.includes(baseline.metric)
+          && ['columnKey', 'baselineKey', 'kind'].every(key => typeof baseline[key] === 'string')) {
+          state.baselineDeltaFilter = {
+            metric: baseline.metric, columnKey: baseline.columnKey, baselineKey: baseline.baselineKey, kind: baseline.kind,
+          };
+        }
+        pendingCompareCategoryFilters = parsed.categories && typeof parsed.categories === 'object'
+          && !Array.isArray(parsed.categories) ? parsed.categories : {};
+      }
+
+      function applyPendingCompareCategoryFilters() {
+        const categories = pendingCompareCategoryFilters;
+        if (!categories) return;
+        pendingCompareCategoryFilters = null;
+        Object.entries(categories).forEach(([key, value]) => {
+          // Only the compared runs' own metadata categories. The filter shows
+          // on its category's chip, as a chip click leaves it.
+          if (!_isStringList(value) || key === '__proto__' || !state.allMetadataKeys.includes(key)
+            || ['approval', 'complexity', 'domain', 'root_cause'].includes(key)) return;
+          state.categoryFilters[key] = value;
+          state.selectedCategories.add(key);
+        });
+        ['complexity', 'domain', 'root_cause'].forEach(syncMultiselectUI);
+      }
       const INITIAL_COMPARE_VIEW = (() => {
         const params = new URLSearchParams(window.location.search);
         const view = {};
@@ -8225,6 +8493,7 @@
         const page = parseInt(view.page || '', 10);
         if (Number.isFinite(page) && page > 1) state.page = page;
         if (view.tab === 'sweep') state.activeCompareTab = 'sweep';
+        if (view.filters) applyCompareViewFiltersParam(view.filters);
         if (view.item) {
           compareTargetItem = view.item;
           lastOpenedCompareItem = view.item;
@@ -8247,6 +8516,7 @@
           page: state.page > 1 ? String(state.page) : null,
           tab: state.activeCompareTab === 'sweep' ? 'sweep' : null,
           item: openItem,
+          filters: compareViewFiltersParam(),
         });
       }
 
@@ -8298,7 +8568,8 @@
         });
         const runsFromUrl = urlParams.getAll('runs');
         state.baselineKey = urlParams.get('baseline') || null;
-        state.passColumns = urlParams.get('columns') === 'runs' ? 'run' : 'each';
+        // Run average is the default; older links name it with columns=runs.
+        state.passColumns = urlParams.get('columns') === 'passes' ? 'each' : 'run';
         if (explicitCohortsFromUrl) {
           files = [...explicitCohortsFromUrl.left, ...explicitCohortsFromUrl.right];
           sessionStorage.setItem('compareCohorts', JSON.stringify(explicitCohortsFromUrl));
@@ -8607,6 +8878,7 @@
             if (state.selectedCategories.size < 3) state.selectedCategories.add(k);
           }
         }
+        applyPendingCompareCategoryFilters();
 
         // Collect metric metadata keys. Lazy rows carry only short values, so
         // each snapshot lists every key once; a pass column shows the keys of
@@ -9231,8 +9503,11 @@
         if (!panel) return;
         // Use the same resolved pass entries and order as the run cards.
         const runIds = state.runs.map(getCompareRunDataId);
+        // Run detail's card (C143): "Step latency" with its step and trace
+        // count, the Agent and Eval groups starting collapsed.
         const opts = {
           pooled: true,
+          collapsible: true,
           runLabels: Object.fromEntries(state.runs.map((run, index) => [
             runIds[index], run.run?.run_name || `Run ${index + 1}`,
           ])),
@@ -9254,10 +9529,53 @@
         }
       }
 
+      // The loading skeleton leaves under the comparison, not before it: when
+      // it is on screen it is laid over the page and fades out while the
+      // comparison fades in, so there is no blank frame between them. A fast
+      // load never showed it (it waits 0.35s), so it simply goes.
+      function retireSkeleton() {
+        const skeleton = el('loading');
+        if (!skeleton || skeleton.style.display === 'none') return;
+        const opacity = parseFloat(getComputedStyle(skeleton).opacity) || 0;
+        if (opacity < 0.02) { skeleton.style.display = 'none'; return; }
+        const box = skeleton.getBoundingClientRect();
+        const props = { position: 'fixed', top: box.top + 'px', left: box.left + 'px', width: box.width + 'px',
+          zIndex: '5', pointerEvents: 'none', animation: 'none', opacity: String(opacity), transition: 'opacity 0.22s ease-out' };
+        Object.assign(skeleton.style, props);
+        skeleton.getBoundingClientRect();  // commit the start opacity
+        skeleton.style.opacity = '0';
+        setTimeout(() => {
+          skeleton.style.display = 'none';
+          Object.keys(props).forEach(key => { skeleton.style[key] = ''; });
+        }, 240);
+      }
+
+      // The page entrance plays once per load (see .is-entering): it ends
+      // when the beat is over or at the reader's first click or key. Removing
+      // a run renders again; that never replays it.
+      const ENTRANCE_MS = 700;
+      let comparisonEntered = false;
+      function startEntrance(content) {
+        if (comparisonEntered) return;
+        comparisonEntered = true;
+        content.classList.add('is-entering');
+        let timer = null;
+        const settle = () => {
+          clearTimeout(timer);
+          content.classList.remove('is-entering');
+          content.removeEventListener('pointerdown', settle, true);
+          content.removeEventListener('keydown', settle, true);
+        };
+        timer = setTimeout(settle, ENTRANCE_MS);
+        content.addEventListener('pointerdown', settle, true);
+        content.addEventListener('keydown', settle, true);
+      }
+
       function render() {
-        el('loading').style.display = 'none';
+        retireSkeleton();
         el('empty').style.display = 'none';
         el('compare-content').style.display = 'block';
+        startEntrance(el('compare-content'));
 
         syncStepLatency();
         renderCompareModeTabs();
@@ -9401,82 +9719,101 @@
         return keys;
       }
 
-      function categoryScoreColor(value, metricName = state.selectedOverviewMetric) {
-        // Direction-aware score color; neutral when no direction is declared.
-        const cls = metricColorClassFor(metricName, value);
-        return cls ? `var(--${cls})` : 'var(--text-muted)';
-      }
-
-      function categoryScoreTrack(score, baseline) {
+      // ── Run-by-run tables (Performance by Category, Error Distribution) ──
+      // Both compare the same columns as Per-Run Averages (Run average or
+      // Each pass, the same baseline), one column per run.
+      // A run's score track (the run-detail card's), with a tick at the
+      // baseline run's score when it has one.
+      function categoryScoreTrack(score, baselineScore, metricName, metricType) {
         if (score === null) return '';
-        const baselineStyle = baseline === null ? '' : `--category-baseline:${Math.round(baseline * 100)}%;`;
-        return `<div class="category-pass-track${baseline === null ? '' : ' has-baseline'}" style="--category-pass:${Math.round(score * 100)}%;${baselineStyle}--category-pass-color:${categoryScoreColor(score)}"><span class="category-pass-fill"></span></div>`;
+        const cls = metricColorClassFor(metricName, score, metricType);
+        const color = cls ? `var(--${cls})` : 'var(--text-muted)';
+        const baselineStyle = baselineScore === null ? '' : `--category-baseline:${Math.round(baselineScore * 100)}%;`;
+        return `<div class="category-pass-track${baselineScore === null ? '' : ' has-baseline'}" style="--category-pass:${Math.round(score * 100)}%;${baselineStyle}--category-pass-color:${color}"><span class="category-pass-fill"></span></div>`;
       }
 
-      function getCompareCategoryGroupStats(categoryKey, selectedMetric, filteredItemIds) {
-        const itemsByGroup = {};
-
-        for (const run of state.runs) {
-          const rows = run.snapshot?.rows || [];
-          const metricNames = run.snapshot?.metric_names || run.run?.metric_names || [];
-          const metricIndex = metricNames.indexOf(selectedMetric);
-
-          for (const row of rows) {
+      // Mean latency of each item in a column (finished executions; a
+      // run-average column averages the item's passes).
+      function compareColumnItemLatencies(column) {
+        const sums = new Map();
+        column.runIdxs.forEach(runIdx => {
+          for (const row of state.runs[runIdx]?.snapshot?.rows || []) {
             const itemId = getRowCompareId(row);
-            if (!itemId || !filteredItemIds.has(itemId)) continue;
-
-            const metadata = row.item_metadata || {};
-            const rawValue = metadata[categoryKey] ?? '';
-            const isListKey = isListCategoryKey(categoryKey);
-            const parsedValues = getMetadataCategoryValues(metadata, categoryKey);
-            const groupValues = parsedValues.length ? parsedValues : [categoryValueText(rawValue)];
-            if (groupValues.length === 0) groupValues.push('');
-            const domainIsSole = isListKey && groupValues.length === 1;
-
-            for (const groupValue of groupValues) {
-              if (isListKey && state.domainFilter !== null
-                  && state.domainFilter.some(filter => filter.toLowerCase() === groupValue.toLowerCase()) && !domainIsSole) continue;
-              const effective = groupValue || 'unknown';
-              if (!itemsByGroup[effective]) itemsByGroup[effective] = {};
-              if (!itemsByGroup[effective][itemId]) itemsByGroup[effective][itemId] = { scores: [], latencies: [] };
-
-              if (metricIndex >= 0) {
-                const { score } = rowScoreFor(row, metricIndex, selectedMetric);
-                if (score !== null) itemsByGroup[effective][itemId].scores.push(score);
-              }
-              if (row.latency_ms && row.status === 'completed') {
-                itemsByGroup[effective][itemId].latencies.push(row.latency_ms);
-              }
-            }
+            if (!itemId || row.status !== 'completed' || !Number.isFinite(row.latency_ms) || row.latency_ms < 0) continue;
+            const entry = sums.get(itemId) || { sum: 0, count: 0 };
+            entry.sum += row.latency_ms;
+            entry.count += 1;
+            sums.set(itemId, entry);
           }
-        }
+        });
+        const latencies = new Map();
+        sums.forEach((entry, itemId) => latencies.set(itemId, entry.sum / entry.count));
+        return latencies;
+      }
 
-        const stats = Object.entries(itemsByGroup).map(([groupValue, items]) => {
-          const itemIds = Object.keys(items);
-          const scores = itemIds.flatMap(itemId => items[itemId].scores);
-          const latencies = itemIds.flatMap(itemId => items[itemId].latencies);
-          if (!scores.length) return null;
-          return {
-            groupVal: groupValue,
-            itemCount: itemIds.length,
-            avgScore: scores.reduce((sum, score) => sum + score, 0) / scores.length,
-            avgLatency: latencies.length ? latencies.reduce((sum, latency) => sum + latency, 0) / latencies.length : null,
-          };
-        }).filter(Boolean);
-
-        if (categoryKey === 'complexity') {
-          const order = ['easy', 'medium', 'hard', 'expert'];
-          stats.sort((a, b) => {
-            const aIndex = order.indexOf(a.groupVal.toLowerCase().trim());
-            const bIndex = order.indexOf(b.groupVal.toLowerCase().trim());
-            return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
-          });
-        } else if (metricDirectionFor(selectedMetric) === 'minimize') {
-          stats.sort((a, b) => a.avgScore - b.avgScore);
-        } else {
-          stats.sort((a, b) => b.avgScore - a.avgScore);
+      // One category's values, each with every column's mean score and
+      // latency over its items. Each column groups the items by its own
+      // runs' metadata, so a cell is what that run's page shows for the
+      // value; an item without the key is "unknown". ``itemIds`` is every
+      // item any column puts in the value.
+      function compareCategoryRunGroups(categoryKey, metric, filteredItems, columns) {
+        const isListKey = isListCategoryKey(categoryKey);
+        const groups = new Map();
+        const groupOf = value => {
+          if (!groups.has(value)) groups.set(value, { value, itemIds: new Set(), columnItemIds: columns.map(() => new Set()) });
+          return groups.get(value);
+        };
+        for (const item of filteredItems) {
+          columns.forEach((column, columnIndex) => column.runIdxs.forEach(runIdx => {
+            const row = item.rowData?.[runIdx];
+            if (!row) return;
+            const values = getMetadataCategoryValues(row.item_metadata || {}, categoryKey);
+            if (!values.length) values.push('');
+            const sole = values.length === 1;
+            values.forEach(value => {
+              // A filtered domain shared by every item says nothing; its other
+              // domains still show.
+              if (isListKey && state.domainFilter !== null && !sole
+                  && state.domainFilter.some(filter => filter.toLowerCase() === value.toLowerCase())) return;
+              const group = groupOf(value || 'unknown');
+              group.itemIds.add(item.itemId);
+              group.columnItemIds[columnIndex].add(item.itemId);
+            });
+          }));
         }
-        return stats;
+        const columnScores = columns.map(column => compareColumnItemScores(column, metric));
+        const columnLatencies = columns.map(compareColumnItemLatencies);
+        const result = Array.from(groups.values(), group => ({
+          ...group,
+          cells: columns.map((column, index) => compareRunsCell(group.columnItemIds[index], columnScores[index], columnLatencies[index])),
+        })).filter(group => group.cells.some(cell => cell.score !== null));
+        const order = ['easy', 'medium', 'hard', 'expert'];
+        const rank = value => { const index = order.indexOf(value.toLowerCase().trim()); return index < 0 ? order.length : index; };
+        return result.sort((a, b) => categoryKey === 'complexity' && rank(a.value) !== rank(b.value)
+          ? rank(a.value) - rank(b.value)
+          : b.itemIds.size - a.itemIds.size || a.value.localeCompare(b.value, undefined, { numeric: true }));
+      }
+
+      function compareRunsCell(itemIds, scores, latencies) {
+        let sum = 0, count = 0, latencySum = 0, latencyCount = 0;
+        itemIds.forEach(itemId => {
+          if (scores.has(itemId)) { sum += scores.get(itemId); count += 1; }
+          if (latencies.has(itemId)) { latencySum += latencies.get(itemId); latencyCount += 1; }
+        });
+        return { score: count ? sum / count : null, latency: latencyCount ? latencySum / latencyCount : null, itemIds };
+      }
+
+      // A column's change against the baseline over some items: the paired
+      // change with its 95% noise band, worded as in Per-Run Averages.
+      function compareRunsScoreDeltaHtml(column, baseline, metric, itemIds) {
+        const paired = compareWithBaseline(column, baseline, metric, itemIds);
+        if (paired.mean === null) return '';
+        const verdict = window.QymMetrics.metricDeltaVerdict(paired.mean, paired.halfWidth ?? 0, metricDirectionFor(metric));
+        const band = paired.halfWidth !== null ? formatBaselineBand(paired.halfWidth, metric) : '';
+        const title = `vs baseline ${compareColumnLabel(baseline.key)}: ${formatBaselineDelta(paired.mean, metric)}`
+          + (verdict === 'within_noise' ? ', within noise' : '')
+          + (band ? ` (95% noise band ${band}, ${paired.paired} paired items)` : ` (${paired.paired} paired item${paired.paired === 1 ? '' : 's'}, too few for a noise band)`);
+        return `<span class="metric-delta metric-delta--${verdict}" title="${escapeAttr(title)}">${escapeHtml(formatBaselineDelta(paired.mean, metric))}</span>`;
       }
 
       function renderMetadataBreakdown() {
@@ -9504,29 +9841,16 @@
         const availableChipKeys = getCategoryChipKeys().filter(({ key }) => filteredItems.some(item =>
           (item.rowData || []).some(row => row && getMetadataCategoryValues(row.item_metadata || {}, key).length)
         ));
-        const statsByKey = new Map(availableChipKeys.map(({ key }) => [
+        // Every compared column side by side (the Per-Run Averages columns
+        // and baseline): one table per category, a row per value.
+        const columns = compareMetricColumns();
+        const baseline = resolveBaselineColumn(columns);
+        const groupsByKey = new Map(availableChipKeys.map(({ key }) => [
           key,
-          getCompareCategoryGroupStats(key, selectedMetric, filteredItemIds),
+          compareCategoryRunGroups(key, selectedMetric, filteredItems, columns),
         ]));
-        const chipKeys = availableChipKeys.filter(({ key }) => statsByKey.get(key)?.length);
+        const chipKeys = availableChipKeys.filter(({ key }) => groupsByKey.get(key)?.length);
         if (!chipKeys.length) { existingSection.innerHTML = ''; return; }
-
-        const overallScores = [];
-        for (const run of state.runs) {
-          const rows = run.snapshot?.rows || [];
-          const metricNames = run.snapshot?.metric_names || run.run?.metric_names || [];
-          const metricIndex = metricNames.indexOf(selectedMetric);
-          if (metricIndex < 0) continue;
-          for (const row of rows) {
-            const itemId = getRowCompareId(row);
-            if (!itemId || !filteredItemIds.has(itemId)) continue;
-            const { score } = rowScoreFor(row, metricIndex, selectedMetric);
-            if (score !== null) overallScores.push(score);
-          }
-        }
-        const overallAverage = overallScores.length
-          ? overallScores.reduce((sum, score) => sum + score, 0) / overallScores.length
-          : null;
 
         const breakdownKeys = chipKeys.filter(c => state.selectedCategories.has(c.key)).map(c => c.key);
         let html = breakdownKeys.length ? '<h3 class="section-title">Performance by Category</h3>' : '';
@@ -9535,15 +9859,9 @@
         html += '<span class="category-chip-bar-label">Categories</span>';
         for (const { key, count } of chipKeys) {
           const selected = state.selectedCategories.has(key);
-          const displayName = key;
-          html += `<button class="category-chip qym-chip${selected ? ' selected' : ''}" data-chip-key="${escapeAttr(key)}" aria-pressed="${selected}">${escapeHtml(displayName)} <span class="chip-count qym-chip__count">${count}</span></button>`;
+          html += `<button class="category-chip qym-chip${selected ? ' selected' : ''}" data-chip-key="${escapeAttr(key)}" aria-pressed="${selected}">${escapeHtml(key)} <span class="chip-count qym-chip__count">${count}</span></button>`;
         }
-        html += '</div>';
-        html += '<div class="category-breakdown-controls">' +
-          '<span class="samples-view-toggle qym-segmented category-breakdown-view-toggle" role="group" data-qym-segmented-key="category-breakdown-view" aria-label="Category view">' +
-            `<button type="button" class="samples-view-btn qym-segmented__option category-breakdown-view-btn${state.categoryBreakdownView === 'cards' ? ' active' : ''}" data-category-view="cards" aria-pressed="${state.categoryBreakdownView === 'cards'}">Cards</button>` +
-            `<button type="button" class="samples-view-btn qym-segmented__option category-breakdown-view-btn${state.categoryBreakdownView === 'compare' ? ' active' : ''}" data-category-view="compare" aria-pressed="${state.categoryBreakdownView === 'compare'}">Compare</button>` +
-          '</span></div></div>';
+        html += '</div></div>';
 
         if (breakdownKeys.length === 0) {
           existingSection.innerHTML = html;
@@ -9551,102 +9869,94 @@
           return;
         }
 
-        html += '<div class="comparison-stats metadata-breakdown-content">';
-        if (supportsScoreTrack && overallAverage !== null) {
-          html += `<div class="category-baseline-note"><span class="category-baseline-marker"></span><span>Overall metric average score</span><strong class="category-baseline-score" style="--category-average-color:${categoryScoreColor(overallAverage)}">${window.QymMetrics.formatMetricValue(overallAverage, metricType, 0)}</strong></div>`;
-        }
+        const compared = columns.length > 1 && baseline;
+        const baselineIndex = baseline ? columns.indexOf(baseline) : -1;
+        const runColor = column => COLORS[column.runIdxs[0] % COLORS.length];
+        const runLabel = column => compareColumnLabel(column.key) + (column.runIdxs.length > 1 ? ` ×${column.runIdxs.length}` : '');
+        const formatScore = value => window.QymMetrics.formatMetricValue(value, metricType, 0);
+        // A run that never scored the metric says so instead of a dash.
+        const columnHasMetric = columns.map(column => column.runIdxs.some(runIdx => {
+          const run = state.runs[runIdx];
+          return (run?.snapshot?.metric_names || run?.run?.metric_names || []).includes(selectedMetric);
+        }));
 
-        if (state.categoryBreakdownView === 'compare') {
-          if (!breakdownKeys.includes(state.categoryCompareKey)) state.categoryCompareKey = breakdownKeys[0];
-          html += '<div class="category-compare-tabs qym-segmented" role="group" data-qym-segmented-key="category-compare" aria-label="Category dimension">';
-          for (const key of breakdownKeys) {
-            html += `<button type="button" class="category-compare-tab qym-segmented__option${state.categoryCompareKey === key ? ' active' : ''}" data-category-compare-key="${escapeAttr(key)}" aria-pressed="${state.categoryCompareKey === key}">${escapeHtml(key)}</button>`;
-          }
-          html += '</div>';
-
-          const compareStats = statsByKey.get(state.categoryCompareKey) || [];
-          html += '<div class="category-compare-scroll"><div class="category-compare-head"><span>Category</span><span>Score</span><span>Average</span><span>Items</span><span>Latency</span></div>';
-          for (const group of compareStats) {
-            const averageDisplay = window.QymMetrics.formatMetricValue(group.avgScore, metricType, 0);
-            const latencyDisplay = group.avgLatency !== null ? formatLatency(group.avgLatency) : '&mdash;';
-            html += `<button type="button" class="category-compare-row" data-bd-category="${escapeAttr(state.categoryCompareKey)}" data-bd-value="${escapeAttr(group.groupVal)}" title="Click to filter by ${escapeAttr(group.groupVal)}">` +
-              `<span class="category-compare-name" title="${escapeAttr(group.groupVal)}">${escapeHtml(group.groupVal)}</span>` +
-              `<span>${supportsScoreTrack ? categoryScoreTrack(group.avgScore, overallAverage) : ''}</span>` +
-              `<span class="category-compare-number muted">${averageDisplay}</span>` +
-              `<span class="category-compare-number muted">${group.itemCount}</span>` +
-              `<span class="category-compare-number muted">${latencyDisplay}</span></button>`;
-          }
-          html += '</div>';
-        } else {
-          for (const bdKey of breakdownKeys) {
-            const groupStats = statsByKey.get(bdKey) || [];
-            if (groupStats.length === 0) continue;
-
-            const icon = bdKey === 'complexity' ? '\u2666' : (bdKey === 'domain' ? '\u25C6' : '\u25CB');
-            const colorClass = bdKey === 'complexity' ? 'breakdown-complexity' : (bdKey === 'domain' ? 'breakdown-domain' : 'breakdown-custom');
-            html += `<div class="breakdown-section ${colorClass}">`;
-            html += `<div class="breakdown-header"><span class="breakdown-icon">${icon}</span> ${escapeHtml(bdKey)} <span class="breakdown-metric">${escapeHtml(selectedMetric)}</span></div>`;
-            html += '<div class="breakdown-grid">';
-
-            for (const group of groupStats) {
-              const latencyDisplay = group.avgLatency !== null ? formatLatency(group.avgLatency) : '&mdash;';
-              let cardValueClass = '';
-              if (bdKey === 'complexity') {
-                const value = group.groupVal.toLowerCase().trim();
-                if (['easy', 'simple', 'basic', 'low'].includes(value)) cardValueClass = ' complexity-easy';
-                else if (['medium', 'moderate', 'intermediate', 'mid'].includes(value)) cardValueClass = ' complexity-medium';
-                else if (['hard', 'difficult', 'advanced', 'high', 'complex'].includes(value)) cardValueClass = ' complexity-hard';
-                else if (['very hard', 'very_hard', 'expert', 'extreme'].includes(value)) cardValueClass = ' complexity-expert';
-              }
-
-              const colorClassName = metricColorClassFor(selectedMetric, group.avgScore, metricType);
-              const averageDisplay = window.QymMetrics.formatMetricValue(group.avgScore, metricType, 0);
-              const performanceValueHtml = `<span class="score-col-value qym-score-value ${colorClassName}">${averageDisplay}</span>`;
-              html += `<div class="breakdown-card${cardValueClass}" data-bd-category="${escapeAttr(bdKey)}" data-bd-value="${escapeAttr(group.groupVal)}" style="cursor:pointer;" title="Click to filter by ${escapeAttr(group.groupVal)}">` +
-                `<div class="breakdown-card-label">${escapeHtml(group.groupVal)}</div>` +
-                '<div class="breakdown-card-scores">' +
-                  `<div class="score-col"><span class="score-col-label">Average</span><span class="score-col-performance">${performanceValueHtml}</span></div>` +
-                  `<div class="score-col"><span class="score-col-label">Items</span><span class="score-col-value" style="color:var(--text-muted);">${group.itemCount}</span></div>` +
-                  `<div class="score-col"><span class="score-col-label">Latency</span><span class="score-col-value" style="color:var(--text-secondary); font-weight:500;">${latencyDisplay}</span></div>` +
-                '</div>' +
-                (supportsScoreTrack ? categoryScoreTrack(group.avgScore, overallAverage) : '') +
-              '</div>';
+        // A card's run lines: each compared run's average, latency and change
+        // against the baseline, then its score track with a tick at the
+        // baseline's score. The change pairs the items both runs put in the value.
+        const runLines = cells => {
+          const baselineCell = baselineIndex >= 0 ? cells[baselineIndex] : null;
+          let lines = `<div class="cmp-run-lines${compared ? '' : ' cmp-run-lines--single'}">` +
+            '<span class="cmp-run-label">Run</span><span class="cmp-run-label">Average</span><span class="cmp-run-label">Latency</span>' +
+            (compared ? '<span class="cmp-run-label">Change</span>' : '');
+          columns.forEach((column, index) => {
+            const cell = cells[index];
+            const label = runLabel(column);
+            lines += `<span class="cmp-run-name" title="${escapeAttr(label)}"><span class="metric-run-marker" style="background:${runColor(column)}"></span><span class="cmp-run-name__text">${escapeHtml(label)}</span></span>`;
+            if (!columnHasMetric[index]) {
+              lines += `<span class="cmp-run-missing" title="${escapeAttr(`${label} has no ${selectedMetric} metric`)}">No ${escapeHtml(selectedMetric)} scores</span>`;
+              return;
             }
-            html += '</div></div>';
+            lines += cell.score === null
+              ? '<span class="cmp-run-num muted">—</span>'
+              : `<span class="cmp-run-num qym-score-value ${metricColorClassFor(selectedMetric, cell.score, metricType)}">${formatScore(cell.score)}</span>`;
+            lines += `<span class="cmp-run-num muted">${cell.latency !== null ? formatLatency(cell.latency) : '—'}</span>`;
+            if (compared) {
+              if (column === baseline) {
+                lines += '<span class="cmp-run-change is-baseline">Baseline</span>';
+              } else if (cell.score === null || !baselineCell || baselineCell.score === null) {
+                lines += '<span class="cmp-run-change is-baseline">—</span>';
+              } else {
+                const itemIds = new Set(Array.from(cell.itemIds).filter(itemId => baselineCell.itemIds.has(itemId)));
+                lines += `<span class="cmp-run-change">${compareRunsScoreDeltaHtml(column, baseline, selectedMetric, itemIds) || '—'}</span>`;
+              }
+            }
+            if (supportsScoreTrack && cell.score !== null) {
+              const tick = compared && column !== baseline && baselineCell && baselineCell.score !== null ? baselineCell.score : null;
+              lines += `<div class="cmp-run-track">${categoryScoreTrack(cell.score, tick, selectedMetric, metricType)}</div>`;
+            }
+          });
+          return lines + '</div>';
+        };
+
+        html += '<div class="comparison-stats metadata-breakdown-content">';
+        for (const bdKey of breakdownKeys) {
+          const groups = groupsByKey.get(bdKey) || [];
+          if (!groups.length) continue;
+          const activeValues = getCatFilter(bdKey) || [];
+          const icon = bdKey === 'complexity' ? '♦' : (bdKey === 'domain' ? '◆' : '○');
+          const colorClass = bdKey === 'complexity' ? 'breakdown-complexity' : (bdKey === 'domain' ? 'breakdown-domain' : 'breakdown-custom');
+          html += `<div class="breakdown-section ${colorClass}">`;
+          html += `<div class="breakdown-header"><span class="breakdown-icon">${icon}</span> ${escapeHtml(bdKey)} <span class="breakdown-metric">${escapeHtml(selectedMetric)}</span></div>`;
+          html += '<div class="breakdown-grid">';
+          for (const group of groups) {
+            let cardValueClass = '';
+            if (bdKey === 'complexity') {
+              const value = group.value.toLowerCase().trim();
+              if (['easy', 'simple', 'basic', 'low'].includes(value)) cardValueClass = ' complexity-easy';
+              else if (['medium', 'moderate', 'intermediate', 'mid'].includes(value)) cardValueClass = ' complexity-medium';
+              else if (['hard', 'difficult', 'advanced', 'high', 'complex'].includes(value)) cardValueClass = ' complexity-hard';
+              else if (['very hard', 'very_hard', 'expert', 'extreme'].includes(value)) cardValueClass = ' complexity-expert';
+            }
+            const active = activeValues.includes(group.value);
+            html += `<div class="breakdown-card${cardValueClass}${active ? ' active' : ''}" role="button" tabindex="0" aria-pressed="${active}" data-bd-category="${escapeAttr(bdKey)}" data-bd-value="${escapeAttr(group.value)}" title="Filter the items to ${escapeAttr(group.value)}">` +
+              `<div class="breakdown-card-label">${escapeHtml(group.value)}</div>` +
+              runLines(group.cells) +
+              '</div>';
           }
+          html += '</div></div>';
         }
 
         html += '</div>';
         existingSection.innerHTML = html;
         wireChipClicks(existingSection);
 
-        existingSection.querySelectorAll('.category-breakdown-view-btn[data-category-view]').forEach(button => {
-          button.addEventListener('click', () => {
-            const nextView = button.dataset.categoryView;
-            state.categoryBreakdownView = nextView;
-            renderMetadataBreakdown();
-            window.setTimeout(() => {
-              document.querySelector(`.category-breakdown-view-btn[data-category-view="${nextView}"]`)?.focus({ preventScroll: true });
-            }, 0);
+        // A value card filters the items to it (Enter or Space from the keyboard).
+        existingSection.querySelectorAll('.breakdown-card[data-bd-category]').forEach(card => {
+          card.addEventListener('keydown', event => {
+            if (event.target !== card || (event.key !== 'Enter' && event.key !== ' ')) return;
+            event.preventDefault();
+            card.click();
           });
-        });
-
-        existingSection.querySelectorAll('.category-compare-tab[data-category-compare-key]').forEach(button => {
-          button.addEventListener('click', () => {
-            const nextKey = button.dataset.categoryCompareKey;
-            state.categoryCompareKey = nextKey;
-            renderMetadataBreakdown();
-            window.setTimeout(() => {
-              const replacement = Array.from(document.querySelectorAll('.category-compare-tab[data-category-compare-key]')).find(candidate =>
-                candidate.dataset.categoryCompareKey === nextKey
-              );
-              replacement?.focus({ preventScroll: true });
-            }, 0);
-          });
-        });
-
-        // Wire breakdown card click-to-filter
-        existingSection.querySelectorAll('.breakdown-card[data-bd-category], .category-compare-row[data-bd-category]').forEach(card => {
           card.addEventListener('click', () => {
             const cat = card.dataset.bdCategory;
             const val = card.dataset.bdValue;
@@ -10285,14 +10595,15 @@
       // Paired comparison of a column with the baseline on one metric: the
       // per-item differences give the noise band (95%, normal approximation
       // of their mean) and the improved / regressed / unchanged counts.
-      function compareWithBaseline(column, baseline, metric) {
+      // ``itemIds`` limits it to some items (one category value's).
+      function compareWithBaseline(column, baseline, metric, itemIds = null) {
         const scores = compareColumnItemScores(column, metric);
         const base = compareColumnItemScores(baseline, metric);
         const diffs = [];
         const counts = { improved: 0, regressed: 0, same: 0 };
         const direction = metricDirectionFor(metric);
         scores.forEach((score, itemId) => {
-          if (!base.has(itemId)) return;
+          if (!base.has(itemId) || (itemIds && !itemIds.has(itemId))) return;
           const delta = score - base.get(itemId);
           diffs.push(delta);
           counts[baselineDeltaKind(delta, direction)] += 1;
@@ -10363,7 +10674,7 @@
         params.delete('baseline');
         params.delete('columns');
         if (state.baselineKey) params.set('baseline', state.baselineKey);
-        if (state.passColumns === 'run') params.set('columns', 'runs');
+        if (state.passColumns === 'each') params.set('columns', 'passes');
         window.history.replaceState(null, '', window.location.pathname + '?' + params.toString());
       }
 
@@ -10424,8 +10735,8 @@
         if (controls) {
           const passControl = hasPassColumns()
             ? `<div class="qym-segmented metrics-pass-mode" role="group" aria-label="Repeat run columns" data-qym-segmented-key="compare-pass-columns">
-                <button type="button" class="qym-segmented__option${state.passColumns !== 'run' ? ' active' : ''}" data-pass-columns="each" aria-pressed="${state.passColumns !== 'run'}" title="One column per pass of a repeat run">Each pass</button>
                 <button type="button" class="qym-segmented__option${state.passColumns === 'run' ? ' active' : ''}" data-pass-columns="run" aria-pressed="${state.passColumns === 'run'}" title="One column per repeat run: the mean over its passes (Avg@k)">Run average</button>
+                <button type="button" class="qym-segmented__option${state.passColumns !== 'run' ? ' active' : ''}" data-pass-columns="each" aria-pressed="${state.passColumns !== 'run'}" title="One column per pass of a repeat run">Each pass</button>
               </div>`
             : '';
           const options = columns.map(column => {
@@ -10629,39 +10940,64 @@
           return `<td class="metric-value-cell"><span class="metric-val ${isBest ? 'best' : ''}"${isBest ? ' title="Best across runs"' : ''}>${val === 0 ? '0ms' : formatLatency(val)}</span></td>`;
         }).join('');
 
+        // Trace rows read as run detail's Trace stats tiles: each kind keeps
+        // one glyph and colour, and rows sit by kind.
+        const traceLabel = (tone, glyph, label) =>
+          `<span class="trace-row-label"><span class="trace-row-icon trace-row-icon--${tone}" aria-hidden="true">${glyph}</span><span>${escapeHtml(label)}</span></span>`;
         const latencyRow = columnLatencyAvgs.some(value => value !== null) ? `
           <tr>
-            <td class="metric-name">⚡ Avg Latency</td>
+            <td class="metric-name">${traceLabel('trace', '⏱', 'Avg Latency')}</td>
             ${latencyCells}
           </tr>
         ` : '';
 
-        // ⚡ Trace stats rows (a run's passes share its trace statistics)
+        // Trace stats rows (a run's passes share its trace statistics). Only
+        // what a run captured gets a value (C143): a run without LLM or tool
+        // spans shows a dash on those rows, never 0.
         const columnTraceStats = columns.map(column => state.runs[column.runIdxs[0]]?.run?.trace_stats);
         const hasAnyTrace = columnTraceStats.some(stats => stats?.has_spans);
         let traceRows = '';
         if (hasAnyTrace) {
+          const finite = value => value != null && Number.isFinite(Number(value));
+          const positive = value => finite(value) && Number(value) > 0;
+          const hasLlm = columnTraceStats.map(ts => !!ts && (positive(ts.avg_llm_calls) || positive(ts.avg_tokens)));
+          const hasTool = columnTraceStats.map(ts => !!ts && positive(ts.avg_tool_calls));
+          const AGENT_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="4" r="3" fill="currentColor"/><path d="M2.5 14.5c0-3 2.5-5.5 5.5-5.5s5.5 2.5 5.5 5.5z" fill="currentColor" opacity=".75"/></svg>';
+          const count = value => Number(value).toFixed(1);
+          const latency = value => formatLatency(value);
           const traceDefs = [
-            { key: 'avg_tokens',     label: '⚡ Avg Tokens', fmt: v => v != null ? Math.round(v).toLocaleString() : '—', best: 'low' },
-            { key: 'avg_llm_calls',  label: '⚡ LLM Calls',  fmt: v => v != null ? v.toFixed(1) : '—', best: 'low' },
-            { key: 'avg_tool_calls', label: '⚡ Tool Calls',  fmt: v => v != null ? v.toFixed(1) : '—', best: 'low' },
-            { key: 'tool_success_rate', label: '⚡ Tool Success Rate', fmt: v => v != null ? (v * 100).toFixed(1) + '%' : '—', best: 'high' },
-            { key: 'avg_llm_ms', label: '⚡ Avg LLM Latency', fmt: v => v != null ? formatLatency(v) : '—', best: 'low' },
-            { key: 'avg_tool_ms', label: '⚡ Avg Tool Latency', fmt: v => v != null ? formatLatency(v) : '—', best: 'low' },
-            { key: 'avg_retriever_ms', label: '⚡ Avg Retriever Latency', fmt: v => v != null ? formatLatency(v) : '—', best: 'low' },
-            { key: 'avg_evaluator_ms', label: '⚡ Avg Evaluator Latency', fmt: v => v != null ? formatLatency(v) : '—', best: 'low' },
-            { key: 'avg_top_level_chain_ms', label: '⚡ Avg Trace Latency', fmt: v => v != null ? formatLatency(v) : '—', best: 'low' },
+            { tone: 'tokens', glyph: '📝', label: 'Avg Tokens', value: (ts, c) => hasLlm[c] && positive(ts.avg_tokens) ? ts.avg_tokens : null, fmt: v => Math.round(v).toLocaleString(), best: 'low' },
+            { tone: 'llm', glyph: '🧠', label: 'Avg LLM Calls', value: (ts, c) => hasLlm[c] ? ts.avg_llm_calls : null, fmt: count, best: 'low' },
+            { tone: 'llm', glyph: '⏱', label: 'Avg LLM Latency', value: (ts, c) => hasLlm[c] ? ts.avg_llm_ms : null, fmt: latency, best: 'low' },
+            { tone: 'tool', glyph: '🔧', label: 'Avg Tool Calls', value: (ts, c) => hasTool[c] ? ts.avg_tool_calls : null, fmt: count, best: 'low' },
+            { tone: 'tool', glyph: '⏱', label: 'Avg Tool Latency', value: (ts, c) => hasTool[c] ? ts.avg_tool_ms : null, fmt: latency, best: 'low' },
+            { tone: 'success', glyph: '✓', label: 'Tool Success', value: (ts, c) => hasTool[c] ? ts.tool_success_rate : null, fmt: v => `${(v * 100).toFixed(1)}%`, best: 'high' },
+            { tone: 'retriever', glyph: '🔎', label: 'Avg Retriever Latency', value: ts => ts.avg_retriever_ms, fmt: latency, best: 'low' },
+            { tone: 'trace', glyph: '⛓', label: 'Avg Trace Latency', value: ts => ts.avg_top_level_chain_ms, fmt: latency, best: 'low' },
           ];
+          // One row per agent span name any compared run carries.
+          const agentNames = [];
+          columnTraceStats.forEach(ts => (Array.isArray(ts?.outer_scope_parent_spans) ? ts.outer_scope_parent_spans : [])
+            .forEach(span => { if (span?.name && finite(span.avg_ms) && !agentNames.includes(span.name)) agentNames.push(span.name); }));
+          agentNames.forEach(name => traceDefs.push({
+            tone: 'agent', glyph: AGENT_ICON, label: `Avg ${name} latency`, fmt: latency, best: 'low',
+            value: ts => (Array.isArray(ts.outer_scope_parent_spans) ? ts.outer_scope_parent_spans : [])
+              .find(span => span?.name === name && finite(span.avg_ms))?.avg_ms ?? null,
+          }));
+          traceDefs.push({ tone: 'evaluator', glyph: '★', label: 'Avg Evaluator Latency', value: ts => ts.avg_evaluator_ms, fmt: latency, best: 'low' });
           for (const td of traceDefs) {
-            const vals = columnTraceStats.map(ts => (ts ? ts[td.key] : null));
-            const validVals = vals.filter(v => v != null && v >= 0);
+            const vals = columnTraceStats.map((ts, c) => {
+              const value = ts ? td.value(ts, c) : null;
+              return finite(value) && Number(value) >= 0 ? Number(value) : null;
+            });
+            const validVals = vals.filter(v => v !== null);
             if (!validVals.length) continue;
-            const bestVal = validVals.length > 0 ? (td.best === 'high' ? Math.max(...validVals) : Math.min(...validVals)) : null;
+            const bestVal = td.best === 'high' ? Math.max(...validVals) : Math.min(...validVals);
             const cells = vals.map(v => {
-              const isBest = v != null && bestVal != null && v === bestVal && validVals.length > 1;
-              return '<td class="metric-value-cell"><span class="metric-val' + (isBest ? ' best' : '') + '"' + (isBest ? ' title="Best across runs"' : '') + '>' + td.fmt(v) + '</span></td>';
+              const isBest = v !== null && v === bestVal && validVals.length > 1;
+              return '<td class="metric-value-cell"><span class="metric-val' + (isBest ? ' best' : '') + '"' + (isBest ? ' title="Best across runs"' : '') + '>' + (v === null ? '—' : td.fmt(v)) + '</span></td>';
             }).join('');
-            traceRows += '<tr class="trace-metric-row"><td class="metric-name">' + td.label + '</td>' + cells + '</tr>';
+            traceRows += '<tr class="trace-metric-row"><td class="metric-name" title="' + escapeAttr(td.label) + '">' + traceLabel(td.tone, td.glyph, td.label) + '</td>' + cells + '</tr>';
           }
         }
 
@@ -11209,16 +11545,33 @@
           return;
         }
 
-        const buckets = {};
+        // Each compared column's errors (the Per-Run Averages columns and
+        // baseline), counted over the filtered items, one bucket per error.
         const filteredItems = getFilteredItems();
-        for (const item of filteredItems) {
-          (item.rowData || []).forEach((row, runIdx) => {
-            const runName = state.runs[runIdx]?.run?.run_name || `Run ${runIdx + 1}`;
-            collectRowErrors(row, buckets, runName, item.itemId);
+        const columns = compareMetricColumns();
+        const baseline = resolveBaselineColumn(columns);
+        const entries = new Map();
+        columns.forEach((column, columnIndex) => {
+          const buckets = {};
+          for (const item of filteredItems) {
+            column.runIdxs.forEach(runIdx => {
+              const runName = state.runs[runIdx]?.run?.run_name || `Run ${runIdx + 1}`;
+              collectRowErrors(item.rowData?.[runIdx], buckets, runName, item.itemId);
+            });
+          }
+          Object.entries(buckets).forEach(([key, bucket]) => {
+            let entry = entries.get(key);
+            if (!entry) {
+              entry = { kind: bucket.kind, label: bucket.label, details: new Set(), counts: columns.map(() => 0), count: 0 };
+              entries.set(key, entry);
+            }
+            entry.counts[columnIndex] += bucket.count;
+            entry.count += bucket.count;
+            if (bucket.details instanceof Set) bucket.details.forEach(detail => entry.details.add(detail));
           });
-        }
+        });
 
-        const stats = Object.values(buckets).sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+        const stats = Array.from(entries.values()).sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
         const totalErrors = stats.reduce((sum, entry) => sum + entry.count, 0);
 
         if (totalErrors === 0) {
@@ -11227,18 +11580,38 @@
           return;
         }
 
+        const baselineIndex = baseline ? columns.indexOf(baseline) : -1;
+        const compared = columns.length > 1 && baselineIndex >= 0;
+        const runLabel = column => compareColumnLabel(column.key) + (column.runIdxs.length > 1 ? ` ×${column.runIdxs.length}` : '');
+        // An error card's run lines: each compared run's count and its change
+        // against the baseline's count (fewer errors is better).
+        const runLines = counts => {
+          let lines = `<div class="cmp-run-lines${compared ? '' : ' cmp-run-lines--single'}">`;
+          columns.forEach((column, index) => {
+            const label = runLabel(column);
+            const color = COLORS[column.runIdxs[0] % COLORS.length];
+            lines += `<span class="cmp-run-name" title="${escapeAttr(label)}"><span class="metric-run-marker" style="background:${color}"></span><span class="cmp-run-name__text">${escapeHtml(label)}</span></span>`;
+            lines += `<span class="cmp-run-num${counts[index] ? '' : ' muted'}">${counts[index]}</span>`;
+            if (!compared) return;
+            if (index === baselineIndex) {
+              lines += '<span class="cmp-run-change is-baseline">Baseline</span>';
+              return;
+            }
+            const delta = counts[index] - counts[baselineIndex];
+            const text = delta ? `${delta > 0 ? '+' : '−'}${Math.abs(delta)}` : '±0';
+            const verdict = delta < 0 ? 'improved' : delta > 0 ? 'regressed' : 'within_noise';
+            lines += `<span class="cmp-run-change"><span class="metric-delta metric-delta--${verdict}" title="${escapeAttr(`vs baseline ${runLabel(baseline)}: ${text}`)}">${text}</span></span>`;
+          });
+          return lines + '</div>';
+        };
+
         function renderErrorCards(entries) {
           if (!entries.length) return '';
           let cards = '<div class="breakdown-grid">';
           for (const entry of entries) {
             const labelParts = splitErrorLabel(entry.label);
-            const metricDetails = entry.kind === 'Metric error' && entry.details instanceof Set
-              ? Array.from(entry.details).filter(Boolean)
-              : [];
+            const metricDetails = entry.kind === 'Metric error' ? Array.from(entry.details).filter(Boolean) : [];
             const detailText = metricDetails.length ? metricDetails.join(' · ') : labelParts.detail;
-            const itemCount = entry.itemKeys.size;
-            const itemText = itemCount === 1 ? '1 item/run pair' : itemCount + ' item/run pairs';
-            const itemCountHtml = entry.kind === 'Task error' ? '' : '<div class="error-card-item-count">' + itemText + '</div>';
             const countLabel = entry.count === 1 ? 'error' : 'errors';
             const activeFilter = state[getErrorFilterSlot(entry.kind)];
             const isActive = activeFilter && activeFilter.kind === entry.kind &&
@@ -11249,7 +11622,7 @@
                 '<div class="error-card-count">' + entry.count + '<span class="error-card-count-label">' + countLabel + '</span></div>' +
               '</div>' +
               renderErrorDetailHtml(detailText) +
-              itemCountHtml +
+              runLines(entry.counts) +
             '</div>';
           }
           return cards + '</div>';
@@ -11514,6 +11887,79 @@
           : { value: String(value), label: formatFieldName(String(value)) });
       }
 
+      // The row sets a cached field list was built from; a new load, an added
+      // or removed run, or a score edit's new snapshot rebuilds it.
+      function compareRowSets() {
+        return state.runs.map(run => run.snapshot?.rows || []);
+      }
+      function sameRowSets(a, b) {
+        return !!a && a.length === b.length && a.every((rows, index) => rows === b[index]);
+      }
+
+      // Item metadata fields, as on run detail: every key the compared runs'
+      // items carry, a list value broken into its entries. Few values pick
+      // from chips; many numbers compare; anything else matches text. An item
+      // matches when any compared run's row does. Scanned once per row set.
+      const COMPARE_FILTER_SKIPPED_METADATA = new Set(['root_cause', 'root_causes', 'root_cause_issues',
+        'root_cause_detail', 'root_cause_reason', 'root_cause_note', 'root_cause_source',
+        'root_cause_confidence', 'root_cause_metric_name', 'solution', 'solution_note', 'solution_source',
+        'metric_analyses', 'analysis_error', 'task_started_at_ms', 'trace_stats', 'retry_count']);
+      function compareMetadataFilterDefs() {
+        const rowSets = compareRowSets();
+        const cached = state.metadataFilterDefs;
+        if (cached && sameRowSets(cached.rowSets, rowSets)) return cached.defs;
+        const MAX_CHOICES = 40;
+        const seen = new Map();
+        rowSets.forEach(rows => rows.forEach(row => {
+          const md = row.item_metadata;
+          if (!md || typeof md !== 'object') return;
+          Object.keys(md).forEach(key => {
+            if (COMPARE_FILTER_SKIPPED_METADATA.has(key)) return;
+            let info = seen.get(key);
+            if (!info) seen.set(key, info = { values: new Set(), numeric: true });
+            getMetadataCategoryValues(md, key).forEach(value => {
+              info.values.add(value);
+              if (info.numeric && (!value.trim() || !isFinite(Number(value)))) info.numeric = false;
+            });
+          });
+        }));
+        const ORDER = ['easy', 'medium', 'hard'];
+        const rank = value => { const index = ORDER.indexOf(value.toLowerCase()); return index < 0 ? ORDER.length : index; };
+        const defs = Array.from(seen.keys()).sort().flatMap(key => {
+          const values = Array.from(seen.get(key).values);
+          if (!values.length) return [];
+          const base = { id: `cat:${key}`, label: formatFieldName(key), group: 'Metadata' };
+          const valuesOf = context => context.rowData.flatMap(row => row ? getMetadataCategoryValues(row.item_metadata, key) : []);
+          if (values.length <= MAX_CHOICES) {
+            values.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, undefined, { numeric: true }));
+            return [{ ...base, kind: 'enum', choices: compareFilterChoices(values), get: valuesOf }];
+          }
+          if (seen.get(key).numeric) {
+            return [{ ...base, kind: 'number', get: context => valuesOf(context).map(Number).filter(Number.isFinite) }];
+          }
+          return [{ ...base, kind: 'text', get: context => valuesOf(context).join(', ') }];
+        });
+        state.metadataFilterDefs = { rowSets, defs };
+        return defs;
+      }
+
+      // Root causes the analyses applied to the compared items, custom ones
+      // included; catalog categories no item carries are not offered. An item
+      // matches through any analysis of any compared run.
+      function compareRowRootCauses(row) {
+        return row ? getRowRootCauseAnalyses(row, 'all').flatMap(analysis => rootCauseCategories(analysis)) : [];
+      }
+      function compareAppliedRootCauseValues() {
+        const rowSets = compareRowSets();
+        const cached = state.rootCauseFilterValues;
+        if (cached && sameRowSets(cached.rowSets, rowSets)) return cached.values;
+        const values = new Set();
+        rowSets.forEach(rows => rows.forEach(row => compareRowRootCauses(row).forEach(value => values.add(value))));
+        const sorted = Array.from(values).sort((a, b) => a.localeCompare(b));
+        state.rootCauseFilterValues = { rowSets, values: sorted };
+        return sorted;
+      }
+
       function compareFilterFieldDefs() {
         const defs = [{
           id: 'outcome',
@@ -11548,6 +11994,9 @@
           get: context => context.passCount,
         });
 
+        // A score shows as a percentage, so its rule is written as one; the
+        // rule keeps the stored 0–1 value (as on run detail).
+        const scorePercent = (state.metricTypes?.[state.selectedItemsMetric] || 'score') === 'score';
         state.runs.forEach((run, index) => {
           const name = compareRunShortLabel(index);
           defs.push({
@@ -11555,24 +12004,19 @@
             label: `${name} · ${state.selectedItemsMetric || 'score'}`,
             group: 'Scores',
             kind: 'number',
-            step: 0.05,
+            percent: scorePercent,
             get: context => context.scores[index],
           });
         });
 
-        [
-          ['complexity', 'Complexity', state.complexityValues],
-          ['domain', 'Domain', state.domainValues],
-          ['root_cause', 'Root cause', state.rootCauseValues],
-        ].forEach(([key, label, values]) => {
-          const choices = compareFilterChoices((values || []).map(String));
-          if (key === 'root_cause') choices.push({ value: '__none__', label: 'Unassigned' });
-          if (!choices.length) return;
+        const rootCauses = compareAppliedRootCauseValues();
+        if (rootCauses.length) {
           defs.push({
-            id: `meta:${key}`, label, group: 'Metadata', kind: 'enum', choices,
-            get: context => context.metadata[key],
+            id: 'cat:root_cause', label: 'Root cause', group: 'Metadata', kind: 'enum',
+            choices: compareFilterChoices(rootCauses), get: context => context.rootCauses,
           });
-        });
+        }
+        defs.push(...compareMetadataFilterDefs());
 
         defs.push({
           id: 'approval', label: 'Approval', group: 'Review', kind: 'enum',
@@ -11625,12 +12069,6 @@
         else if (Number.isInteger(winner)) winners.push(`win_${winner}`);
         if (correctRuns.length === 1) winners.push(`only_${correctRuns[0]}`);
 
-        const inputRow = rowData.find(Boolean);
-        const itemMetadata = (typeof inputRow?.item_metadata === 'object' && inputRow.item_metadata) || {};
-        const rootCauses = rowData.map(row => {
-          const metadata = (typeof row?.item_metadata === 'object' && row.item_metadata) || {};
-          return metadata.root_cause ? String(metadata.root_cause) : '__none__';
-        });
         const approvals = rowData.filter(Boolean).map(row =>
           matchesApprovalFilter(row, 'approved', state.selectedItemsMetric) ? 'approved' : 'not_approved');
         const latencies = rowData.map(row => Number(row?.latency_ms) || 0);
@@ -11646,11 +12084,8 @@
           approvals,
           outputText: outputs.join('\n'),
           maxLatency: latencies.length ? Math.max(...latencies) : 0,
-          metadata: {
-            complexity: String(itemMetadata.complexity ?? ''),
-            domain: parseMetaList(itemMetadata.domain).map(String),
-            root_cause: rootCauses,
-          },
+          // Read only when a root-cause rule asks.
+          get rootCauses() { return rowData.flatMap(compareRowRootCauses); },
         };
       }
 
@@ -11679,7 +12114,10 @@
         const field = compareFilterFieldById(node.field);
         if (!field) return true;
         const value = field.get(context);
-        if (field.kind === 'number') return compareNumberMatches(node.oper, value, node.value);
+        // A metadata number holds one value per compared run: any may match.
+        if (field.kind === 'number') {
+          return (Array.isArray(value) ? value : [value]).some(item => compareNumberMatches(node.oper, item, node.value));
+        }
         if (field.kind === 'enum') {
           const wanted = (Array.isArray(node.value) ? node.value : [node.value]).map(item => String(item).toLowerCase());
           const actual = (Array.isArray(value) ? value : [value]).map(item => String(item).toLowerCase());
@@ -11734,7 +12172,14 @@
         let input = '';
         if (field.kind === 'number') {
           operator = compareFilterOperator(path, node, numberOperators);
-          input = `<input type="number" min="0" step="${field.step || 1}" value="${escapeAttr(String(node.value ?? ''))}" data-fb-p="${escapeAttr(path)}" data-fb-k="value" placeholder="value">`;
+          // A score is written as a percentage (60 for a stored 0.6).
+          const stored = node.value ?? '';
+          const shown = field.percent && stored !== '' && !Number.isNaN(Number(stored))
+            ? String(Number((Number(stored) * 100).toFixed(4)))
+            : String(stored);
+          input = field.percent
+            ? `<input type="number" min="0" max="100" step="any" value="${escapeAttr(shown)}" data-fb-p="${escapeAttr(path)}" data-fb-k="value" placeholder="value" aria-label="Percent"><span class="fb-unit" aria-hidden="true">%</span>`
+            : `<input type="number" min="0" step="any" value="${escapeAttr(shown)}" data-fb-p="${escapeAttr(path)}" data-fb-k="value" placeholder="value">`;
         } else if (field.kind === 'enum') {
           operator = compareFilterOperator(path, node, [['in', 'is any of'], ['notin', 'is none of']]);
           const values = Array.isArray(node.value) ? node.value : [node.value];
@@ -11766,13 +12211,152 @@
         return `<div class="fb-grp${depth === 0 ? ' fb-root' : ''}">${header}${children}${actions}</div>`;
       }
 
+      // Filters set by clicking the page (outcome, winner and baseline-change
+      // counts, pass rate, error, category and root-cause cards) live outside
+      // the rule tree. The panel lists them, as on run detail, so it accounts
+      // for everything the Clear count holds except search and sort, which keep
+      // their own controls in the items toolbar.
+      function comparePageFilterValues(cat, values, separator) {
+        if (!values.length) return 'none selected';
+        const shown = values.slice(0, 3).map(value => String(getCatOptionLabel(cat, value)));
+        return shown.join(separator || ', ') + (values.length > 3 ? ` +${values.length - 3}` : '');
+      }
+      function comparePageFilterEntries() {
+        const entries = [];
+        const clearCat = cat => () => { setCatFilter(cat, null, 'include'); syncMultiselectUI(cat); };
+        if (state.itemFilter !== 'all') {
+          const bucket = state.itemFilter.startsWith(GROUPED_OUTCOME_ITEM_FILTER_PREFIX)
+            ? getGroupedOutcomeBucket(state.itemFilter.slice(GROUPED_OUTCOME_ITEM_FILTER_PREFIX.length))
+            : null;
+          const option = Array.from(el('item-filter')?.options || []).find(item => item.value === state.itemFilter);
+          entries.push({
+            key: 'show',
+            label: bucket ? `Cohorts: ${bucket.title}` : (option ? option.textContent.trim() : formatFieldName(state.itemFilter)),
+            clear: () => { state.itemFilter = 'all'; if (el('item-filter')) el('item-filter').value = 'all'; },
+          });
+        }
+        if (state.winnerFilter !== 'any') {
+          const [kind, index] = state.winnerFilter.split('_');
+          const name = index !== undefined ? compareRunShortLabel(Number(index)) : '';
+          entries.push({
+            key: 'winner',
+            label: kind === 'win' ? `${name} won` : kind === 'only' ? `Only ${name} solved` : 'Ties only',
+            clear: () => { state.winnerFilter = 'any'; if (el('run-winner-filter')) el('run-winner-filter').value = 'any'; },
+          });
+        }
+        if (state.baselineDeltaFilter) {
+          const filter = state.baselineDeltaFilter;
+          const kind = baselineKindLabel(filter.kind, metricDirectionFor(filter.metric));
+          const verb = {
+            improved: 'improved', regressed: 'regressed', higher: 'scored higher',
+            lower: 'scored lower', unchanged: 'did not change', same: 'did not change',
+          }[kind] || kind;
+          entries.push({
+            key: 'baseline',
+            label: `${compareColumnLabel(filter.columnKey)} ${verb} on ${filter.metric}`,
+            clear: () => { state.baselineDeltaFilter = null; renderMetricsTable(); },
+          });
+        }
+        if (state.passRateOp) {
+          const symbol = { gte: '≥', lte: '≤', eq: '=' }[state.passRateOp] || state.passRateOp;
+          entries.push({
+            key: 'pass_rate',
+            label: `Passing runs ${symbol} ${state.passRateValue} of ${state.runs.length}`,
+            clear: () => {
+              state.passRateOp = '';
+              state.passRateValue = 0;
+              if (el('pass-rate-op')) el('pass-rate-op').value = '';
+              if (el('pass-rate-value')) el('pass-rate-value').style.display = 'none';
+              if (el('pass-rate-suffix')) el('pass-rate-suffix').style.display = 'none';
+            },
+          });
+        }
+        ['taskErrorFilter', 'metricErrorFilter', 'traceErrorFilter', 'analysisErrorFilter'].forEach(slot => {
+          const filter = state[slot];
+          if (filter) entries.push({ key: slot, label: `${filter.kind}: ${filter.label}`, clear: () => { state[slot] = null; } });
+        });
+        if (state.approvalFilter !== null) {
+          entries.push({
+            key: 'approval',
+            label: `Approval: ${getCatOptionLabel('approval', state.approvalFilter)}`,
+            clear: () => { state.approvalFilter = null; if (el('filter-approval')) el('filter-approval').value = ''; },
+          });
+        }
+        if (state.complexityFilter !== null) {
+          entries.push({ key: 'cat:complexity', label: `Complexity: ${comparePageFilterValues('complexity', state.complexityFilter)}`, clear: clearCat('complexity') });
+        }
+        if (state.domainFilter !== null) {
+          const exclude = state.domainFilterMode === 'exclude';
+          entries.push({
+            key: 'cat:domain',
+            label: `Domain: ${exclude ? 'not ' : ''}${comparePageFilterValues('domain', state.domainFilter, exclude ? ', ' : ' + ')}`,
+            clear: clearCat('domain'),
+          });
+        }
+        if (state.rootCauseFilter !== null) {
+          entries.push({ key: 'cat:root_cause', label: `Root cause: ${comparePageFilterValues('root_cause', state.rootCauseFilter)}`, clear: clearCat('root_cause') });
+        }
+        Object.entries(state.categoryFilters).forEach(([cat, values]) => {
+          if (values === null) return;
+          entries.push({ key: `cat:${cat}`, label: `${formatFieldName(cat)}: ${comparePageFilterValues(cat, values)}`, clear: clearCat(cat) });
+        });
+        return entries;
+      }
+
+      // The panel count covers rules and page filters (the Filters badge
+      // counts the same, in updateClearButton).
+      function updateFilterBuilderCounts(pageCount) {
+        const count = el('builder-rule-count');
+        if (!count) return;
+        const rules = filterRuleCount(state.filterRoot);
+        const parts = [];
+        if (rules) parts.push(`${rules} rule${rules === 1 ? '' : 's'}`);
+        if (pageCount) parts.push(`${pageCount} from the page`);
+        count.textContent = parts.length ? parts.join(' · ') : 'no rules yet';
+      }
+
+      function renderPageFilters() {
+        const entries = comparePageFilterEntries();
+        updateFilterBuilderCounts(entries.length);
+        const holder = el('filter-builder-page');
+        if (!holder || !state.filterBuilderOpen) return;
+        holder.hidden = entries.length === 0;
+        const html = entries.length
+          ? '<span class="fb-page-lab">Set on the page</span><span class="fb-page-chips">' + entries.map(entry => {
+              const full = entry.label.length > 500 ? `${entry.label.slice(0, 500)}…` : entry.label;
+              const shown = entry.label.length > 60 ? `${entry.label.slice(0, 60)}…` : entry.label;
+              return `<button type="button" class="qym-chip active fb-page-chip" data-fb-page="${escapeAttr(entry.key)}" title="${escapeAttr(`${full} — click to remove`)}" aria-label="${escapeAttr(`Remove filter: ${full}`)}">`
+                + `<span class="fb-page-chip__text">${escapeHtml(shown)}</span><span class="qym-chip__remove" aria-hidden="true">×</span></button>`;
+            }).join('') + '</span>'
+          : '';
+        if (holder.dataset.html !== html) {
+          holder.innerHTML = html;
+          holder.dataset.html = html;
+        }
+      }
+
+      el('filter-builder-page')?.addEventListener('click', event => {
+        const chip = event.target.closest('[data-fb-page]');
+        if (!chip) return;
+        const entry = comparePageFilterEntries().find(candidate => candidate.key === chip.dataset.fbPage);
+        if (!entry) return;
+        const chips = Array.from(el('filter-builder-page').querySelectorAll('[data-fb-page]'));
+        const index = chips.indexOf(chip);
+        entry.clear();
+        state.page = 1;
+        renderItems();
+        // Keep keyboard users in the panel: the next chip, else + Condition.
+        const left = Array.from(el('filter-builder-page').querySelectorAll('[data-fb-page]'));
+        const next = left[Math.min(index, left.length - 1)] || el('filter-builder-body')?.querySelector('[data-fb-addc]');
+        next?.focus({ preventScroll: true });
+      });
+
       function renderFilterBuilder() {
         const holder = el('item-filter-builder');
         const body = el('filter-builder-body');
         if (!holder || !body) return;
         holder.hidden = !state.filterBuilderOpen;
         const button = el('btn-item-filters');
-        const ruleCount = filterRuleCount(state.filterRoot);
         const expandedCount = countExpandedItemFilters();
         if (button) {
           button.classList.toggle('on', state.filterBuilderOpen);
@@ -11784,20 +12368,37 @@
           badge.textContent = expandedCount;
           badge.classList.toggle('is-empty', expandedCount === 0);
         }
-        const count = el('builder-rule-count');
-        if (count) count.textContent = ruleCount ? `${ruleCount} rule${ruleCount === 1 ? '' : 's'}` : 'no rules yet';
+        renderPageFilters();
         if (!state.filterBuilderOpen) return;
         body.innerHTML = compareFilterGroupHtml(state.filterRoot);
 
-        body.querySelectorAll('select[data-fb-p], input[data-fb-p]').forEach(input => {
-          input.addEventListener('change', () => {
+        // A typed value filters as it is typed (debounced); the builder is
+        // not redrawn, so the cursor stays in the box.
+        body.querySelectorAll('input[data-fb-p]').forEach(input => {
+          input.addEventListener('input', () => {
             const node = filterNodeAt(input.dataset.fbP);
-            if (input.dataset.fbK === 'field') {
-              Object.assign(node, defaultCompareFilterCondition(compareFilterFieldById(input.value)));
-            } else if (input.dataset.fbK === 'oper') {
-              node.oper = input.value;
+            if (input.type === 'number' && input.value !== '') {
+              const field = compareFilterFieldById(node.field);
+              node.value = field && field.percent ? Number((Number(input.value) / 100).toFixed(6)) : Number(input.value);
             } else {
-              node.value = input.type === 'number' && input.value !== '' ? Number(input.value) : input.value;
+              node.value = input.value;
+            }
+            clearTimeout(state.filterInputTimer);
+            state.filterInputTimer = setTimeout(() => {
+              state.page = 1;
+              renderItems();
+            }, 150);
+          });
+        });
+        body.querySelectorAll('select[data-fb-p]').forEach(select => {
+          select.addEventListener('change', () => {
+            const node = filterNodeAt(select.dataset.fbP);
+            if (select.dataset.fbK === 'field') {
+              Object.assign(node, defaultCompareFilterCondition(compareFilterFieldById(select.value)));
+            } else if (select.dataset.fbK === 'oper') {
+              node.oper = select.value;
+            } else {
+              node.value = select.value;
             }
             state.page = 1;
             renderFilterBuilder();
@@ -12478,20 +13079,65 @@
           const query = params.toString();
           return query ? `${path}?${query}` : path;
         };
-        const toggles = rowData.map((row, runIdx) => {
-          const on = !hidden.has(runIdx);
+        // Passes of one run sit together in a run block: its header names the
+        // run once and its cards read "Pass N". Runs are set apart by a frame
+        // and a wider gap than passes, so a pass never reads as another run.
+        const runGroups = [];
+        const groupByBase = new Map();
+        rowData.forEach((row, runIdx) => {
+          const base = passRefBase(getCompareRunDataId(state.runs[runIdx]) || `run-${runIdx}`);
+          let group = groupByBase.get(base);
+          if (!group) {
+            group = { base, runIdxs: [] };
+            groupByBase.set(base, group);
+            runGroups.push(group);
+          }
+          group.runIdxs.push(runIdx);
+        });
+        const passNumberOf = runIdx => Number(state.runs[runIdx]?.run?.pass_number) || null;
+        const isPassGroup = group => group.runIdxs.length > 1;
+        const runGroupOf = new Map(runGroups.flatMap(group => group.runIdxs.map(runIdx => [runIdx, group])));
+        const visibleIn = group => group.runIdxs.filter(runIdx => !hidden.has(runIdx)).length;
+        const runBlocksClass = runGroups.some(isPassGroup) ? ' has-run-blocks' : '';
+        const runBlock = (group, inner, header = '') => {
+          if (!isPassGroup(group)) return `<div class="compare-output-run compare-output-run--single" data-output-run>${inner}</div>`;
+          const visible = visibleIn(group);
+          return `<div class="compare-output-run${visible ? '' : ' is-hidden'}${header ? '' : ' compare-output-run--panel'}" data-output-run style="grid-column:span ${Math.max(1, visible)}">${header}${inner}</div>`;
+        };
+        const toggleButton = (runIdx, label, title) => {
           const color = COLORS[runIdx % COLORS.length];
-          return `<button type="button" class="qym-output-toggle" data-output-toggle="run-${runIdx}" aria-pressed="${on}"><span class="qym-output-swatch" style="background:${color}"></span>Run ${runIdx + 1}</button>`;
+          return `<button type="button" class="qym-output-toggle" data-output-toggle="run-${runIdx}" aria-pressed="${!hidden.has(runIdx)}"${title ? ` title="${escapeAttr(title)}" aria-label="${escapeAttr(title)}"` : ''}><span class="qym-output-swatch" style="background:${color}"></span>${escapeHtml(label)}</button>`;
+        };
+        const toggles = runGroups.map(group => {
+          const runLabel = compareColumnLabel(group.base);
+          if (!isPassGroup(group)) return toggleButton(group.runIdxs[0], compareRunShortLabel(group.runIdxs[0]));
+          return `<span class="compare-output-toggle-run" role="group" aria-label="${escapeAttr(runLabel)}"><span class="compare-output-toggle-run__name" title="${escapeAttr(runLabel)}">${escapeHtml(runLabel)}</span>` +
+            group.runIdxs.map(runIdx => toggleButton(runIdx, `Pass ${passNumberOf(runIdx) ?? runIdx + 1}`, `${runLabel} · pass ${passNumberOf(runIdx) ?? runIdx + 1}`)).join('') + '</span>';
         }).join('');
-        const cards = rowData.map((row, runIdx) => {
+        const runHeader = group => {
+          const runInfo = state.runs[group.runIdxs[0]]?.run || {};
+          // A pass entry's name carries its pass ("… · pass 1"): the block names the run.
+          const name = String(runInfo.run_name || runInfo.run_id || group.base).replace(/\s+·\s+pass\s+\d+$/i, '');
+          const firstRow = rowData[group.runIdxs[0]];
+          const url = canonicalRunUrl(passRefBase(runInfo.file_path || ''), runInfo.project?.slug || '', firstRow?.item_id || '');
+          const nameHtml = url
+            ? `<a class="qym-output-card__link" href="${escapeAttr(url)}" title="Open in run"><span class="qym-output-card__name">${escapeHtml(name)}</span>${OPEN_LINK_ICON}</a>`
+            : `<span class="qym-output-card__name">${escapeHtml(name)}</span>`;
+          return `<div class="compare-output-run__header"><span class="compare-output-run__name">${nameHtml}</span><span class="compare-output-run__label">${escapeHtml(compareColumnLabel(group.base))}</span><span class="qym-tag compare-output-run__passes">${group.runIdxs.length} passes</span></div>`;
+        };
+        const cardFor = (row, runIdx) => {
           const runInfo = state.runs[runIdx]?.run || {};
           const color = COLORS[runIdx % COLORS.length];
           const outputId = `run-${runIdx}`;
-          const identity = runInfo.run_name || runInfo.run_id || `Run ${runIdx + 1}`;
+          const runName = runInfo.run_name || runInfo.run_id || `Run ${runIdx + 1}`;
+          const cardPass = passNumberOf(runIdx);
+          // In a run block the header names the run: a card names its pass.
+          const shownName = isPassGroup(runGroupOf.get(runIdx)) ? `Pass ${cardPass ?? runIdx + 1}` : runName;
+          const identity = cardPass && !/·\s+pass\s+\d+$/i.test(runName) ? `${runName} · pass ${cardPass}` : runName;
           const runUrl = canonicalRunUrl(runInfo.file_path || '', runInfo.project?.slug || '', row?.item_id || '');
           const identityHtml = runUrl
-            ? `<a class="qym-output-card__link" href="${escapeAttr(runUrl)}" title="Open in run"><span class="qym-output-card__name">${escapeHtml(identity)}</span>${OPEN_LINK_ICON}</a>`
-            : `<span class="qym-output-card__name">${escapeHtml(identity)}</span>`;
+            ? `<a class="qym-output-card__link" href="${escapeAttr(runUrl)}" title="${escapeAttr('Open ' + identity)}"><span class="qym-output-card__name">${escapeHtml(shownName)}</span>${OPEN_LINK_ICON}</a>`
+            : `<span class="qym-output-card__name" title="${escapeAttr(identity)}">${escapeHtml(shownName)}</span>`;
           if (!row) {
             return `<article class="item-run-output qym-output-card${hidden.has(runIdx) ? ' is-hidden' : ''}" data-output-card="${outputId}" style="border-left-color:${color}"><div class="qym-output-card__header"><span class="qym-output-card__identity"><span class="qym-output-swatch" style="background:${color}"></span>${identityHtml}</span></div><div class="output-text qym-metric-compare__empty">No data</div></article>`;
           }
@@ -12514,9 +13160,13 @@
           const executionErrorClass = errorInfo.hasTaskError ? ' item-execution-error' : '';
           const borderColor = errorInfo.hasTaskError ? 'var(--error)' : color;
           return `<article class="item-run-output qym-output-card${executionErrorClass}${hidden.has(runIdx) ? ' is-hidden' : ''}" data-output-card="${outputId}" style="border-left-color:${borderColor}"><div class="qym-output-card__header"><span class="qym-output-card__identity"><span class="qym-output-swatch" style="background:${color}"></span>${identityHtml}${verdictFor(row, runIdx)}</span>${row.latency_ms ? `<span class="qym-output-card__duration">${CLOCK_ICON}<span>${formatLatency(row.latency_ms)}</span></span>` : '<span class="qym-output-card__duration">\u2014</span>'}<span class="qym-output-card__actions">${traceButton}${copyButton}</span></div><div class="output-text ${errorInfo.hasTaskError ? 'score-1' : ''}">${renderMarkdownSafe(output)}</div>${metricStripFor(row, runIdx)}${rootCauseBlockFor(row, runIdx)}</article>`;
-        }).join('');
+        };
+        const cards = runGroups.map(group => runBlock(group,
+          group.runIdxs.map(runIdx => cardFor(rowData[runIdx], runIdx)).join(''),
+          isPassGroup(group) ? runHeader(group) : '')).join('');
         const panels = state.allMetrics.map(name => {
-          const cells = rowData.map((row, runIdx) => {
+          // The same run blocks (no header) keep each cell under its card.
+          const cellFor = (row, runIdx) => {
             const color = COLORS[runIdx % COLORS.length];
             const score = scoreData(row, runIdx, name);
             const detail = {};
@@ -12531,10 +13181,12 @@
               ? formatObjectAsHtml(detail)
               : '<span class="qym-metric-compare__empty">No details available.</span>';
             return `<article class="qym-metric-compare__cell${hidden.has(runIdx) ? ' is-hidden' : ''}" data-panel-item="run-${runIdx}" style="border-left-color:${color}"><div class="qym-metric-compare__content">${content}</div></article>`;
-          }).join('');
-          return `<section class="qym-metric-compare${activeMetric === name ? '' : ' hidden'}${visibleCount ? '' : ' no-visible'}" data-metric-panel="${escapeAttr(name)}" aria-label="${escapeAttr(name)} metric details"><div class="qym-metric-compare__grid ${visibleClass}" data-metric-compare-grid>${cells}</div></section>`;
+          };
+          const cells = runGroups.map(group => runBlock(group,
+            group.runIdxs.map(runIdx => cellFor(rowData[runIdx], runIdx)).join(''))).join('');
+          return `<section class="qym-metric-compare${activeMetric === name ? '' : ' hidden'}${visibleCount ? '' : ' no-visible'}" data-metric-panel="${escapeAttr(name)}" aria-label="${escapeAttr(name)} metric details"><div class="qym-metric-compare__grid ${visibleClass}${runBlocksClass}" data-metric-compare-grid>${cells}</div></section>`;
         }).join('');
-        return `<section class="qym-output-group" data-output-group data-output-item="${escapeAttr(itemId)}"><div class="qym-output-group__header"><span class="qym-output-group__title">Output</span><div class="qym-output-toggles" role="group" aria-label="Visible runs">${toggles}</div></div><div class="qym-output-grid ${visibleClass}" data-output-grid>${cards}</div>${panels}<div class="qym-output-empty${visibleCount ? ' hidden' : ''}" data-output-empty>Turn on at least one run to view its output.</div></section>`;
+        return `<section class="qym-output-group" data-output-group data-output-item="${escapeAttr(itemId)}"><div class="qym-output-group__header"><span class="qym-output-group__title">Output</span><div class="qym-output-toggles" role="group" aria-label="Visible runs">${toggles}</div></div><div class="qym-output-grid ${visibleClass}${runBlocksClass}" data-output-grid>${cards}</div>${panels}<div class="qym-output-empty${visibleCount ? ' hidden' : ''}" data-output-empty>Turn on at least one run to view its output.</div></section>`;
       }
 
       function renderItemComparisonCard(itemId, rowData, options = {}) {
@@ -13383,6 +14035,13 @@
             });
             cards.forEach(card => card.classList.toggle('is-hidden', !visibleIds.has(card.dataset.outputCard)));
             group.querySelectorAll('[data-panel-item]').forEach(cell => cell.classList.toggle('is-hidden', !visibleIds.has(cell.dataset.panelItem)));
+            // A run block spans its visible passes; with none it goes.
+            group.querySelectorAll('[data-output-run]:not(.compare-output-run--single)').forEach(block => {
+              const shown = Array.from(block.querySelectorAll('[data-output-card], [data-panel-item]'))
+                .filter(node => !node.classList.contains('is-hidden')).length;
+              block.style.gridColumn = `span ${Math.max(1, shown)}`;
+              block.classList.toggle('is-hidden', shown === 0);
+            });
             const count = visibleIds.size;
             const sizeClass = count > 3 ? 'visible-many' : `visible-${Math.max(1, count)}`;
             [grid, ...group.querySelectorAll('[data-metric-compare-grid]')].filter(Boolean).forEach(node => {
@@ -14798,6 +15457,10 @@
           filterBadge.textContent = filterCount;
           filterBadge.classList.toggle('is-empty', filterCount === 0);
         }
+        el('btn-item-filters')?.classList.toggle('has-rules', filterCount > 0);
+        // The panel's page-filter chips follow every filter change, including
+        // chart and card clicks.
+        renderPageFilters();
       }
 
       function clearAllFilters() {
@@ -14849,6 +15512,18 @@
             renderFilterBuilder();
           });
         }
+        // Escape closes the panel and returns to Filters, after any open list
+        // inside it, including a select's own option list where it is drawn
+        // in the page (appearance: base-select).
+        document.addEventListener('keydown', event => {
+          if (event.key !== 'Escape' || event.defaultPrevented || !state.filterBuilderOpen) return;
+          const builder = el('item-filter-builder');
+          if (builder?.querySelector('.qym-dropdown.is-open, .multi-select-dropdown.open')) return;
+          if (CSS.supports('selector(:open)') && builder?.querySelector('select:open')) return;
+          state.filterBuilderOpen = false;
+          renderFilterBuilder();
+          el('btn-item-filters')?.focus();
+        }, pageListen());
 
         const displayBtn = el('btn-item-display');
         const displayPop = el('item-display-pop');
@@ -15803,23 +16478,6 @@
         html = html.replace(/\s*<script\s+src="(?:\.\/|\/)static\/(?:auth|shell|playground|run_details|step_latency)\.js(?:\?[^"]*)?"><\/script>\s*/g, '\n');
         html = html.replace(/\s*<link\s+rel="icon"\s+type="image\/png"\s+href="(?:\.\/|\/)static\/qym_icon\.png(?:\?[^"]*)?">\s*/g, '\n');
         return html;
-      }
-
-      // ── Copy link (the URL carries the whole view) ──
-      const copyCompareLinkBtn = el('copy-compare-link-btn');
-      if (copyCompareLinkBtn) {
-        if (IS_COMPARE_EXPORT) copyCompareLinkBtn.remove();
-        else copyCompareLinkBtn.addEventListener('click', () => {
-          syncCompareViewUrl();
-          const url = window.location.href;
-          const copy = window.QymShell && window.QymShell.copyText
-            ? window.QymShell.copyText(url)
-            : Promise.resolve(false);
-          copy.then(ok => {
-            if (ok) showToast('success', 'Link copied', 'The link opens this comparison as you see it.');
-            else showToast('error', 'Could not copy', url);
-          });
-        });
       }
 
       // ── Export HTML (comparison as a self-contained file) ──

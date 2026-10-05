@@ -217,7 +217,8 @@ def test_compare_pass_columns_name_their_pass_first(browser):
         fixture = ViewFixture(browser, "compare", count=5)
         fixture.api_client = client
         try:
-            fixture.goto()
+            # Pass columns are the "Each pass" view (Run average is the default).
+            fixture.goto("&columns=passes")
             headers = fixture.page.locator("#metrics-table th[title]")
             titles = headers.evaluate_all("nodes => nodes.map(node => node.getAttribute('title'))")
             assert [title.split(" · ")[-1] for title in titles if " · pass " in title] == [
