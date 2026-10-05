@@ -62,8 +62,10 @@
     .trash-table th.trash-col-actions { z-index: 6; }
     .trash-table td.trash-col-actions { background: var(--bg-surface); overflow: visible; }
     .trash-table tbody tr:hover td.trash-col-actions { background: var(--bg-hover); }
-    .trash-table input[type="checkbox"] { width: 14px; height: 14px; margin: 0; cursor: pointer; accent-color: var(--accent-primary); }
-    .trash-table input[type="checkbox"]:disabled { cursor: not-allowed; }
+    /* Same .custom-checkbox as the Runs list; dashboard.css has no disabled state. */
+    .trash-table .custom-checkbox { vertical-align: middle; }
+    .trash-table .custom-checkbox input:disabled { cursor: not-allowed; }
+    .trash-table .custom-checkbox input:disabled + .checkmark { border-color: var(--border-strong); background: var(--bg-base); opacity: 0.45; }
 
     .trash-run { display: flex; flex-direction: column; min-width: 0; }
     .trash-run-name,
@@ -334,9 +336,9 @@
         tr.id = `row-${run.id}`;
         if (purge && purge.soon) tr.className = 'trash-row--purge-soon';
         tr.innerHTML = `
-          <td class="trash-col-select">${restorable
+          <td class="trash-col-select"><label class="custom-checkbox">${restorable
             ? `<input type="checkbox" data-select-run="${escapeHtml(run.id)}" aria-label="Select ${escapeHtml(runName)}"${view.selected.has(run.id) ? ' checked' : ''}>`
-            : `<input type="checkbox" disabled aria-label="${escapeHtml(runName)} cannot be restored while its project is archived" title="Unarchive the project to restore this run">`}</td>
+            : `<input type="checkbox" disabled aria-label="${escapeHtml(runName)} cannot be restored while its project is archived" title="Unarchive the project to restore this run">`}<span class="checkmark" aria-hidden="true"></span></label></td>
           <td class="trash-col-run">
             <div class="trash-run" title="${escapeHtml(`${runName}\n${run.id}\nCreated ${created.primary} ${created.secondary}`)}">
               <span class="trash-run-name">${escapeHtml(runName)}</span>
@@ -414,7 +416,7 @@
         if (selectHeader) {
           selectHeader.textContent = '';
           selectHeader.removeAttribute('title');
-          selectHeader.innerHTML = '<input type="checkbox" id="trash-select-page" aria-label="Select every restorable run on this page">';
+          selectHeader.innerHTML = '<label class="custom-checkbox"><input type="checkbox" id="trash-select-page" aria-label="Select every restorable run on this page"><span class="checkmark" aria-hidden="true"></span></label>';
         }
         const actionsHeader = host.querySelector('thead th.trash-col-actions');
         if (actionsHeader) actionsHeader.innerHTML = '<span class="trash-visually-hidden">Actions</span>';

@@ -24,10 +24,27 @@
     #analysis-run-view,
     #analysis-project-view,
     #analysis-diagnosis-view,
-    .analysis-landing {
+    .analysis-landing,
+    .analysis-status,
+    .analysis-loading,
+    .analysis-error,
+    .analysis-page .playground-page-content > .playground-banner {
       width: min(100%, var(--page-constrained-width));
       margin-right: auto;
       margin-left: auto;
+    }
+    /* playground.js banners render edge-to-edge for the modal; here they are
+       callouts inside the page column, like .analysis-status. */
+    .analysis-page .playground-page-content > .playground-banner {
+      margin-bottom: var(--space-md);
+      padding: var(--space-sm) var(--space-md);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      line-height: 1.5;
+    }
+    .analysis-page .playground-page-content > .playground-banner-warn {
+      border-color: var(--warning-dim);
+      background: var(--bg-surface);
     }
     .analysis-hero,
     .analysis-tabs {
