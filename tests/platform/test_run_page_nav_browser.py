@@ -228,6 +228,41 @@ def test_a_direct_link_uses_the_default_order_and_the_ends_are_disabled(app):
     assert before == after
 
 
+def test_the_pager_previews_each_arrow_and_follows_j_and_k(app):
+    """One capsule, ‹ position ›: hovering an arrow previews the run it opens
+    (name, model, primary metric, its key); J and K step through the list,
+    except while typing. The arrows hold still from run to run."""
+    page = app.goto("/projects/pa/runs/run-001")
+    assert _pager_ready(page, "run-001") == f"2 of {RUNS + 1}"
+    page.evaluate("window.__noReload = true")
+    before = _step(page, "next").bounding_box()
+
+    _step(page, "next").hover()
+    peek = page.locator("#run-pager-peek.is-open")
+    peek.wait_for()
+    text = peek.inner_text()
+    assert "Next run" in text and "Run 002" in text, text
+    assert "m-gamma" in text and "accuracy" in text, text
+    assert page.locator("#run-pager-peek .hero-pager__key").inner_text() == "J"
+    assert _step(page, "next").get_attribute("title") is None  # no second tooltip
+    page.mouse.move(5, 5)
+    page.wait_for_function("() => !document.querySelector('#run-pager-peek.is-open')")
+
+    page.keyboard.press("j")
+    assert _pager_ready(page, "run-002") == f"3 of {RUNS + 1}"
+    assert _step(page, "next").bounding_box() == before
+    page.keyboard.press("k")
+    assert _pager_ready(page, "run-001") == f"2 of {RUNS + 1}"
+
+    # Typing a J in a field types it.
+    search = page.locator("#items-search")
+    search.focus()
+    page.keyboard.press("j")
+    page.wait_for_timeout(300)
+    assert urlparse(page.url).path.endswith("/runs/run-001")
+    assert page.evaluate("window.__noReload === true")
+
+
 def test_a_run_no_longer_in_its_list_falls_back_to_the_default_order(app):
     failed = next(f"run-{n:03d}" for n in range(RUNS) if _status(n) == RunWorkflowStatus.FAILED)
     page = app.goto(f"/projects/pa/runs/{failed}?list=" + quote("status=COMPLETED", safe=""))
@@ -264,13 +299,6 @@ def test_run_view_lives_in_the_url_and_opens_on_the_first_paint(app):
     assert json.loads(state["filters"]) == {"score": [0.1, 0.2]}
     count = page.locator("#filter-count").inner_text()
     assert count.startswith("2 of 25")  # items 1 and 11
-
-    # Copy link shares the view on screen.
-    page.evaluate("() => { window.__copied = []; QymShell.copyText = text => { window.__copied.push(String(text)); return Promise.resolve(true); }; }")
-    page.locator("#copy-run-link-btn").click()
-    page.wait_for_function("() => window.__copied.length === 1")
-    copied = urlparse(page.evaluate("window.__copied[0]"))
-    assert {key: values[0] for key, values in parse_qs(copied.query).items()} == state
 
     # A new tab on that URL opens the same view, filtered from the first paint.
     url = page.url
@@ -551,12 +579,6 @@ def test_display_columns_live_in_the_url(app, factory):
     page.wait_for_function("() => !new URLSearchParams(location.search).has('hide_metric_field')")
     assert parse_qs(urlparse(page.url).query) == {"hide_field": ["lang", "tier"]}
 
-    # Copy link carries every hidden field.
-    page.evaluate("() => { window.__copied = []; QymShell.copyText = text => { window.__copied.push(String(text)); return Promise.resolve(true); }; }")
-    page.locator("#copy-run-link-btn").click()
-    page.wait_for_function("() => window.__copied.length === 1")
-    assert parse_qs(urlparse(page.evaluate("window.__copied[0]")).query) == {"hide_field": ["lang", "tier"]}
-
 
 def test_a_category_filter_in_the_url_shows_on_its_chip(app, factory):
     """A category filter only exists on a shown category (a chip click turns
@@ -641,12 +663,6 @@ def test_an_error_card_filter_keeps_the_link_short_and_round_trips(app, factory)
     assert stored["kind"] == "Task error" and "label" not in stored
     assert stored["prefix"] == LONG_ERROR[:40]
     assert re.fullmatch(r"[0-9a-z]+\.[0-9a-z]+", stored["hash"]), stored
-
-    # Copy link shares the same short URL.
-    page.evaluate("() => { window.__copied = []; QymShell.copyText = text => { window.__copied.push(String(text)); return Promise.resolve(true); }; }")
-    page.locator("#copy-run-link-btn").click()
-    page.wait_for_function("() => window.__copied.length === 1")
-    assert urlparse(page.evaluate("window.__copied[0]")).query == query
 
     # A reload opens the same view: the same items, the card shown active,
     # and the URL written back unchanged.

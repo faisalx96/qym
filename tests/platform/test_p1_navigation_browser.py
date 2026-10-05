@@ -7,8 +7,8 @@
   the same view in a new tab.
 - C051: run names, chart run labels and dataset cards are real links; sort
   headers are buttons with aria-sort; j/k move real focus.
-- C059: ?item= opens and lands on the item; Copy link on runs, items and
-  Compare; the HTML file is "Export HTML".
+- C059: ?item= opens and lands on the item; Copy link on items (a run or a
+  comparison is linked by its address bar); the HTML file is "Export HTML".
 - C069: in-app navigation leaves no document/window listeners behind and no
   stale handler acts on a later page; the latest click wins.
 """
@@ -311,7 +311,7 @@ def test_run_names_chart_labels_and_dataset_cards_are_links(app):
     assert run_link.get_attribute("href").endswith("/projects/pa/runs/run-000")
 
 
-def test_run_header_links_copy_link_and_export(app):
+def test_run_header_links_and_export(app):
     data = app.client.get("/api/runs/run-000?view=compact").json()["run"]
     assert (data["dataset_slug"], data["dataset_version"]) == ("golden-set", "v1")
     assert app.client.get("/api/runs/run-001?view=compact").json()["run"]["dataset_slug"] is None
@@ -328,10 +328,7 @@ def test_run_header_links_copy_link_and_export(app):
     assert links["Task"] == "/projects/pa?task=support-qa"
     assert links["Owner"] == "/projects/pa?owner=dev"
     assert page.locator("#export-share-btn").inner_text().strip() == "Export HTML"
-    _stub_clipboard(page)
-    page.locator("#copy-run-link-btn").click()
-    page.wait_for_function("() => window.__copied.length === 1")
-    assert page.evaluate("window.__copied[0]") == "http://qym.test/projects/pa/runs/run-000"
+    assert page.locator("#copy-run-link-btn").count() == 0
 
     page = app.goto("/projects/pa/runs/run-001")
     page.locator(".hero-meta-link").first.wait_for()

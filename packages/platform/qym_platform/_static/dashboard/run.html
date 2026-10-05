@@ -386,66 +386,131 @@
       min-width: 0;
       flex-shrink: 0;
     }
-    .hero-previous-delta {
-      margin-left: 6px;
-      font-family: var(--font-mono);
-      font-variant-numeric: tabular-nums;
-      color: var(--text-muted);
-    }
-    .hero-previous-delta--improved { color: var(--success); }
-    .hero-previous-delta--regressed { color: var(--error); }
-    /* Previous / next run in the Runs list order (C044): a second row on the
-       header's right, opposite the run name. The arrows sit at the right
-       edge, so they stay under the pointer from run to run; the position
-       grows to their left. */
-    .hero-top.hero-top--paged {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      grid-template-areas: "identity right" "identity pager";
-      column-gap: 10px;
-      row-gap: 6px;
-      align-items: start;
-    }
-    .hero-top--paged > .hero-identity { grid-area: identity; }
-    .hero-top--paged > .hero-right { grid-area: right; }
+    /* Previous / next run in the Runs list order (C044): one capsule ending
+       the header's action row, "‹ 8 of 63 ›". The position is sized to the
+       list's length, so the arrows stay under the pointer from run to run.
+       Like the icon actions, hover turns only the glyph green; the run each
+       arrow opens shows in a preview, with its key (J / K). */
     .hero-pager {
-      grid-area: pager;
-      justify-self: end;
-      display: flex;
-      align-items: center;
-      gap: 2px;
-      min-height: var(--control-height);
+      position: relative;
+      display: inline-flex;
+      align-items: stretch;
+      height: var(--control-height);
+      border-radius: 999px;
+      background: var(--bg-elevated);
+      box-shadow: inset 0 0 0 1px var(--border-default);
     }
     .hero-pager__pos {
-      margin-right: var(--space-xs);
+      display: inline-block;
+      line-height: var(--control-height);
+      text-align: center;
+      font-family: var(--font-mono);
       font-size: var(--font-sm);
+      font-variant-numeric: tabular-nums;
       color: var(--text-muted);
       white-space: nowrap;
     }
+    .hero-pager__pos:empty { display: none; }
     .hero-pager__num {
-      font-family: var(--font-mono);
-      font-variant-numeric: tabular-nums;
-      color: var(--text-secondary);
+      color: var(--text-primary);
+      font-weight: 600;
     }
     .hero-pager__step {
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      width: 28px;
+      border-radius: 999px;
+      color: var(--text-secondary);
       text-decoration: none;
+      transition: color 0.15s;
     }
+    .hero-pager__step[href]:hover,
+    .hero-pager__step[href]:focus-visible { color: var(--accent-primary); }
+    .hero-pager__step[href]:active { background: var(--bg-hover); }
     .hero-pager__step svg {
-      width: 14px;
-      height: 14px;
+      width: 8px;
+      height: 12px;
+      overflow: visible;
       fill: none;
       stroke: currentColor;
-      stroke-width: 1.75;
+      stroke-width: 1.9;
       stroke-linecap: round;
       stroke-linejoin: round;
     }
-    .hero-pager__step[aria-disabled="true"],
-    .hero-pager__step[aria-disabled="true"]:hover {
+    .hero-pager__step[aria-disabled="true"] {
       color: var(--text-dim);
       cursor: default;
+    }
+    /* Fixed, placed under the capsule when shown (the header card clips),
+       above the sticky section nav (z 30) it can overlap. */
+    .hero-pager__peek {
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: 40;
+      width: max-content;
+      min-width: 220px;
+      max-width: 380px;
+      padding: var(--space-sm) var(--space-md);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-md);
+      background: var(--bg-elevated);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+      pointer-events: none;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-2px);
+      transition: opacity 0.14s, transform 0.14s, visibility 0s linear 0.14s;
+    }
+    .hero-pager__peek.is-open {
+      opacity: 1;
+      visibility: visible;
+      transform: none;
+      transition: opacity 0.14s, transform 0.14s;
+    }
+    .hero-pager__peek-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-sm);
+      font-size: var(--font-sm);
+      color: var(--text-muted);
+    }
+    .hero-pager__key {
+      min-width: 18px;
+      padding: 0 5px;
+      border: 1px solid var(--border-default);
+      border-radius: var(--control-radius);
+      font-family: var(--font-mono);
+      font-size: var(--font-xs);
+      line-height: 16px;
+      text-align: center;
+      color: var(--text-secondary);
+    }
+    .hero-pager__peek-name {
+      margin-top: 6px;
+      overflow: hidden;
+      font-family: var(--font-mono);
+      font-size: var(--font-base);
+      font-weight: 600;
+      color: var(--text-primary);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .hero-pager__peek-meta {
+      margin-top: 3px;
+      overflow: hidden;
+      font-size: var(--font-sm);
+      color: var(--text-muted);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .hero-pager__peek-score {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      font-weight: 600;
+      color: var(--text-primary);
     }
     .hero-actions > a.qym-inline-action { text-decoration: none; }
     .hero-actions {
@@ -1026,13 +1091,6 @@
       .system-metrics-grid { grid-template-columns: 1fr; }
       .hero-top {
         flex-direction: column;
-      }
-      .hero-top.hero-top--paged {
-        grid-template-columns: minmax(0, 1fr);
-        grid-template-areas: "identity" "right" "pager";
-      }
-      .hero-pager {
-        justify-self: start;
       }
       .hero-right {
         width: 100%;
@@ -8849,19 +8907,12 @@
         };
       }
 
-      // The link a teammate can open: this run (and pass) in the view on
-      // screen (C045), or one item.
+      // The link a teammate can open to one item of this run (and pass).
+      // The run itself, in the view on screen, is the page URL (C045).
       function runShareUrl(itemId) {
         const url = new URL(window.location.pathname, window.location.origin);
         if (VIEW_PASS) url.searchParams.set('pass', String(VIEW_PASS));
-        if (itemId) url.searchParams.set('item', itemId);
-        else {
-          Object.entries(runViewParams()).forEach(([key, value]) => {
-            (Array.isArray(value) ? value : [value]).forEach(item => {
-              if (item) url.searchParams.append(key, item);
-            });
-          });
-        }
+        url.searchParams.set('item', itemId);
         return url.toString();
       }
 
@@ -8920,21 +8971,14 @@
           '</div>';
         }
 
-        // Share = a link to this run (the URL); the standalone HTML file is
-        // an export, named as one.
+        // The page URL is the link to this run (and the view on screen); the
+        // standalone HTML file is an export, named as one.
         let actionsHtml =
           '<button class="qym-inline-action qym-inline-action--neutral" id="export-download-btn" style="display:none;" title="Download a new file with your edits baked in">' +
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' +
             'Download with Changes' +
           '</button>' +
-          // Filled in by syncComparePrevious() once the previous run is known (C057).
-          '<a class="qym-inline-action qym-inline-action--neutral" id="compare-previous-btn" href="#" hidden></a>' +
-          (IS_EXPORT ? '' :
-          '<button class="qym-inline-action qym-inline-action--accent" id="copy-run-link-btn" type="button" title="Copy a link to this run">' +
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>' +
-            'Copy link' +
-          '</button>') +
-          '<button class="qym-inline-action qym-inline-action--neutral" id="export-share-btn" type="button" title="Download this run as a standalone HTML file">' +
+          '<button class="qym-inline-action qym-inline-action--accent" id="export-share-btn" type="button" title="Download this run as a standalone HTML file">' +
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' +
             'Export HTML' +
           '</button>';
@@ -9016,9 +9060,8 @@
               ? '<a class="hero-pass-pill" href="' + escapeAttr(window.location.pathname + '?pass=1') + '" title="View the remaining pass and its reviews">Pass 1</a>'
               : '');
 
-        const pagerHtml = runPagerHtml();
         el('run-summary').innerHTML = '<div class="run-summary-card">' +
-          '<div class="hero-top' + (pagerHtml ? ' hero-top--paged' : '') + '">' +
+          '<div class="hero-top">' +
             '<div class="hero-identity">' +
               '<div class="hero-eyebrow">Run Detail</div>' +
               '<div class="hero-headline">' +
@@ -9034,14 +9077,13 @@
                   : '') +
               '</div>' +
               '<div class="hero-actions">' + actionsHtml + '</div>' +
+              runPagerHtml() +
             '</div>' +
-            pagerHtml +
           '</div>' +
           ingestWarningHtml +
           '<div class="hero-meta-grid">' + metaHtml + '</div>' +
           executionContextHtml +
         '</div>';
-        syncComparePrevious();
         syncRunPager();
       }
 
@@ -9049,10 +9091,10 @@
       // The runs before and after this one in the Runs list order the reader
       // came from: the list's filters, range, search and sort travel in
       // ?list= (runs_order.js). With no list (a direct link) it is the
-      // project's default order, newest first with no filters. The arrows are
-      // real links that carry ?list= on; they are disabled at the ends. The
-      // pager renders in place from the first paint (arrows disabled), so its
-      // answer moves nothing.
+      // project's default order, newest first with no filters. Previous and
+      // Next are real links that carry ?list= on; they are disabled at the
+      // ends. The pager renders in place from the first paint (both
+      // disabled), so its answer moves nothing.
       const RUNS_LIST_CONTEXT = window.QymRunsOrder
         ? window.QymRunsOrder.normalizeContext(new URLSearchParams(window.location.search).get(window.QymRunsOrder.PARAM))
         : '';
@@ -9063,16 +9105,21 @@
         return (state.run && state.run.project && state.run.project.slug) || CURRENT_PROJECT_SLUG;
       }
 
+      // J and K, as in GitHub and Gmail lists.
+      const RUN_PAGER_KEYS = { previous: 'K', next: 'J' };
+
       function runPagerHtml() {
         if (IS_EXPORT || !RUN_ID || !window.QymRunsOrder || !runPagerSlug()) return '';
+        // The viewBox hugs the chevron, so the step's width is its only space.
         const step = (key, label, path) =>
-          '<a class="hero-pager__step qym-icon-action" data-run-pager="' + key + '" role="link" aria-disabled="true" aria-label="' + label + '" title="' + label + '">' +
-            '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="' + path + '"/></svg>' +
+          '<a class="hero-pager__step" data-run-pager="' + key + '" role="link" aria-disabled="true" aria-label="' + label + '" aria-keyshortcuts="' + RUN_PAGER_KEYS[key] + '" aria-describedby="run-pager-peek">' +
+            '<svg viewBox="5 3 6 10" aria-hidden="true"><path d="' + path + '"/></svg>' +
           '</a>';
         return '<nav class="hero-pager" id="run-pager" aria-label="Previous and next run">' +
+          step('previous', 'Previous run', 'M10 4l-4 4 4 4') +
           '<span class="hero-pager__pos" id="run-pager-pos"></span>' +
-          step('previous', 'Previous run', 'M4 10l4-4 4 4') +
-          step('next', 'Next run', 'M4 6l4 4 4-4') +
+          step('next', 'Next run', 'M6 4l4 4-4 4') +
+          '<div class="hero-pager__peek" id="run-pager-peek" role="tooltip"></div>' +
         '</nav>';
       }
 
@@ -9097,8 +9144,12 @@
         const position = el('run-pager-pos');
         if (position) {
           if (context && data.position) {
+            const total = Number(data.total).toLocaleString('en-US');
             position.innerHTML = '<span class="hero-pager__num">' + escapeHtml(Number(data.position).toLocaleString('en-US')) + '</span> of ' +
-              '<span class="hero-pager__num">' + escapeHtml(Number(data.total).toLocaleString('en-US')) + '</span>';
+              escapeHtml(total);
+            // Wide enough for the longest position in this list, so the
+            // arrows hold still from run to run.
+            position.style.minWidth = (total.length * 2 + 4) + 'ch';
             position.title = listContext
               ? 'This run’s place in the Runs list you came from (its filters, search and sort).'
               : (RUNS_LIST_CONTEXT
@@ -9127,9 +9178,86 @@
           link.href = window.QymRunsOrder.runHref(base, listContext);
           link.removeAttribute('role');
           link.removeAttribute('aria-disabled');
+          // The preview names the run; a native tooltip would repeat it.
+          link.removeAttribute('title');
           link.setAttribute('aria-label', noun + ': ' + (target.run_name || target.run_id));
-          link.title = noun + ': ' + (target.run_name || target.run_id);
         });
+      }
+
+      // The run an arrow opens: name, then model, start and primary metric.
+      function runPagerPeekHtml(which, target) {
+        const primary = target.primary;
+        let score = '';
+        if (primary && Number.isFinite(primary.value) && window.QymMetrics) {
+          const spec = primary.spec || {};
+          const type = window.QymMetrics.metricTypeFromSpec(spec, primary.value);
+          const value = type === 'boolean' ? window.QymMetrics.formatMetricValue(primary.value, 'score')
+            : window.QymMetrics.formatMetricObservation(primary.value, type, spec);
+          score = escapeHtml(primary.metric) + ' <span class="hero-pager__peek-score">' + escapeHtml(value) + '</span>';
+        }
+        const started = target.started_at ? new Date(target.started_at) : null;
+        const when = started && !Number.isNaN(started.getTime())
+          ? started.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+          : '';
+        const meta = [target.model ? escapeHtml(target.model) : '', escapeHtml(when), score].filter(Boolean).join(' · ');
+        return '<div class="hero-pager__peek-head"><span>' + (which === 'previous' ? 'Previous run' : 'Next run') + '</span>' +
+            '<kbd class="hero-pager__key">' + RUN_PAGER_KEYS[which] + '</kbd></div>' +
+          '<div class="hero-pager__peek-name">' + escapeHtml(target.run_name || target.run_id) + '</div>' +
+          (meta ? '<div class="hero-pager__peek-meta">' + meta + '</div>' : '');
+      }
+
+      // Hover or keyboard focus on an arrow previews its run. Delegated, since
+      // the header redraws: a short delay keeps a passing pointer quiet.
+      if (!IS_EXPORT) {
+        let peekTimer = null;
+        const hidePeek = () => {
+          clearTimeout(peekTimer);
+          el('run-pager-peek')?.classList.remove('is-open');
+        };
+        const showPeek = (link, delay) => {
+          clearTimeout(peekTimer);
+          const target = runPagerData && runPagerData[link.dataset.runPager];
+          const peek = el('run-pager-peek');
+          if (!target || !peek) { hidePeek(); return; }
+          peekTimer = setTimeout(() => {
+            peek.innerHTML = runPagerPeekHtml(link.dataset.runPager, target);
+            // Right-aligned under the capsule, kept inside the window.
+            const anchor = el('run-pager').getBoundingClientRect();
+            peek.style.top = Math.round(anchor.bottom + 6) + 'px';
+            peek.style.left = Math.max(8, Math.round(anchor.right - peek.offsetWidth)) + 'px';
+            peek.classList.add('is-open');
+          }, delay);
+        };
+        // A scroll would leave it behind.
+        document.addEventListener('scroll', hidePeek, pageListen({ capture: true, passive: true }));
+        document.addEventListener('pointerover', event => {
+          const link = event.target.closest?.('#run-pager [data-run-pager]');
+          if (link) showPeek(link, 120);
+          else if (!event.target.closest?.('#run-pager')) hidePeek();
+        }, pageListen());
+        document.addEventListener('focusin', event => {
+          const link = event.target.closest?.('#run-pager [data-run-pager]');
+          if (link && link.matches(':focus-visible')) showPeek(link, 0);
+          else hidePeek();
+        }, pageListen());
+        document.addEventListener('pointerleave', hidePeek, pageListen());
+        // J / K open the next / previous run, unless the reader is typing,
+        // holds a modifier, or a dialog is open.
+        document.addEventListener('keydown', event => {
+          if (event.defaultPrevented || event.repeat || event.isComposing) return;
+          if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+          const key = event.key.toLowerCase();
+          if (key !== 'j' && key !== 'k') return;
+          const target = event.target;
+          if (target.closest?.('input, textarea, select, [contenteditable=""], [contenteditable="true"], [role="dialog"], dialog')) return;
+          // Modals stay in the page while closed: only a rendered one counts.
+          if (Array.from(document.querySelectorAll('[aria-modal="true"]')).some(node => node.getClientRects().length)) return;
+          const link = document.querySelector('#run-pager [data-run-pager="' + (key === 'j' ? 'next' : 'previous') + '"][href]');
+          if (!link) return;
+          event.preventDefault();
+          hidePeek();
+          link.click();
+        }, pageListen());
       }
 
       function syncRunPager() {
@@ -9140,49 +9268,6 @@
           if (pageGone()) return;
           runPagerData = data || { failed: true };
           applyRunPager(runPagerData);
-        });
-      }
-
-      // ── Compare with the previous run (C057) ──
-      // The previous finished run of the same task, model and dataset, opened
-      // on Compare as the baseline. The button notes the change in this run's
-      // primary metric (published run means; Compare adds the noise band).
-      let previousRunRequest = null;
-      function syncComparePrevious() {
-        if (IS_EXPORT || !RUN_ID || !el('compare-previous-btn')) return;
-        if (!previousRunRequest) {
-          previousRunRequest = fetch(apiUrl('api/dashboard/previous-run?run_id=' + encodeURIComponent(RUN_ID)))
-            .then(response => (response.ok ? response.json() : null))
-            .catch(() => null);
-        }
-        previousRunRequest.then(data => {
-          const button = el('compare-previous-btn');
-          const previous = data && data.previous;
-          if (!button || !previous) return;
-          const params = new URLSearchParams();
-          params.append('runs', previous.run_id);
-          params.append('runs', RUN_ID);
-          params.set('baseline', previous.run_id);
-          params.set('columns', 'runs');
-          button.href = apiUrl('compare?' + params.toString());
-          const primary = data.primary;
-          let deltaHtml = '';
-          if (primary && primary.delta != null && Number.isFinite(primary.delta)) {
-            const verdict = window.QymMetrics ? window.QymMetrics.metricDeltaVerdict(primary.delta, 0, primary.direction) : 'changed';
-            const abs = Math.abs(primary.delta);
-            const sign = primary.delta > 0 ? '+' : primary.delta < 0 ? '−' : '';
-            const pct = primary.value != null && primary.previous_value != null
-              && primary.value >= 0 && primary.value <= 1 && primary.previous_value >= 0 && primary.previous_value <= 1;
-            const text = escapeHtml(primary.metric) + ' ' + sign + (pct ? (abs * 100).toFixed(1) + ' pts' : String(Math.round(abs * 1000) / 1000));
-            deltaHtml = '<span class="hero-previous-delta hero-previous-delta--' + escapeAttr(verdict) + '">' + text + '</span>';
-          }
-          const started = previous.started_at ? new Date(previous.started_at).toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
-          button.title = 'Compare with ' + (previous.run_name || previous.run_id) + (started ? ' (' + started + ')' : '')
-            + ', the previous finished run of this task, model and dataset, as the baseline.'
-            + (data.dataset_version_mismatch ? ' It used another dataset version (' + (previous.dataset_version || '?') + ').' : '')
-            + (deltaHtml ? ' The change is between the two run means, not tested for noise.' : '');
-          button.innerHTML = 'Compare with previous' + deltaHtml;
-          button.hidden = false;
         });
       }
 
@@ -9887,13 +9972,6 @@
         if (analyzeBtn && !analyzeBtn.dataset.boundAnalyze) {
           analyzeBtn.dataset.boundAnalyze = '1';
           analyzeBtn.addEventListener('click', openAnalyzerPage);
-        }
-        const copyLinkBtn = el('copy-run-link-btn');
-        if (copyLinkBtn && !copyLinkBtn.dataset.boundCopy) {
-          copyLinkBtn.dataset.boundCopy = '1';
-          copyLinkBtn.addEventListener('click', () => {
-            copyLinkWithFeedback(runShareUrl(''), 'A link to this run is on your clipboard.');
-          });
         }
         const shareBtn = el('export-share-btn');
         if (shareBtn && !shareBtn.dataset.boundShare && !IS_EXPORT) {

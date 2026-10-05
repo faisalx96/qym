@@ -1878,15 +1878,20 @@ def test_run_header_status_and_actions_share_one_height() -> None:
         'class="qym-inline-action qym-inline-action--neutral" '
         'id="export-download-btn"'
     ) in run
-    # Copy link is the primary action; the HTML file is an export (C059).
+    # The page URL is the run's link and the HTML file an export (C059), the
+    # header's accent action like the items' CSV export; there is no Copy
+    # link or Compare with previous button.
     assert (
         'class="qym-inline-action qym-inline-action--accent" '
-        'id="copy-run-link-btn"'
-    ) in run
-    assert (
-        'class="qym-inline-action qym-inline-action--neutral" '
         'id="export-share-btn"'
     ) in run
+    assert "copy-run-link-btn" not in run
+    assert "compare-previous-btn" not in run
+    # Previous and next are one capsule, ‹ position ›, with a preview and
+    # J / K keys.
+    assert '<nav class="hero-pager" id="run-pager"' in run
+    assert "const RUN_PAGER_KEYS = { previous: 'K', next: 'J' };" in run
+    assert 'role="tooltip"' in run.split("function runPagerHtml()", 1)[1].split("\n      }\n", 1)[0]
     assert "qym-inline-action--langfuse" not in run
     assert "View in Langfuse" not in run
     assert "langfuseChip" not in run

@@ -607,24 +607,45 @@ def _list_position(db, project, run_id: str, filters, sort: str, collation):
     if row is None:
         return None
     keys = [key for key in (row.previous_key, row.next_key) if key]
-    descriptors = (
-        dict(
-            db.execute(
-                select(Dimension.run_key, Dimension.descriptor).where(
-                    Dimension.run_key.in_(keys)
+    found = (
+        {
+            key: (descriptor, averages)
+            for key, descriptor, averages in db.execute(
+                select(
+                    Dimension.run_key,
+                    Dimension.descriptor,
+                    Summary.data["metric_averages"],
                 )
+                .outerjoin(Summary, Summary.run_key == Dimension.run_key)
+                .where(Dimension.run_key.in_(keys))
             ).all()
-        )
+        }
         if keys
         else {}
     )
 
     def neighbor(key):
+        # What the pager's hover preview shows: the run's name, model, start
+        # and its primary metric's published mean, with the spec to format it.
         if not key:
             return None
-        descriptor = descriptors.get(key) or {}
+        descriptor, averages = found.get(key) or ({}, None)
+        descriptor = descriptor or {}
         name = descriptor.get("run_name") or descriptor.get("external_run_id") or key
-        return {"run_id": key, "run_name": name}
+        specs = descriptor.get("metric_specs") or {}
+        metric = primary_metric(descriptor.get("metrics") or [], specs)
+        value = _number((averages or {}).get(metric)) if metric else None
+        return {
+            "run_id": key,
+            "run_name": name,
+            "model": descriptor.get("model_name") or None,
+            "started_at": descriptor.get("started_at") or descriptor.get("timestamp"),
+            "primary": (
+                {"metric": metric, "value": value, "spec": specs.get(metric) or {}}
+                if metric and value is not None
+                else None
+            ),
+        }
 
     return {
         "position": int(row.position),

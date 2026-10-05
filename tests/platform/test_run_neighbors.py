@@ -206,6 +206,23 @@ def test_neighbors_follow_the_list_order_across_page_ends(client, filters, sort,
     assert middle["previous"]["run_name"] == "Run " + order[0].split("-")[1]
 
 
+def test_a_neighbor_carries_what_the_pager_preview_shows(client):
+    """The arrow's preview: the run's model, start and primary metric mean,
+    with the metric's spec to format it."""
+    order = _list_order(client, {}, "time-desc")
+    data = _neighbors(client, order[1], {}, "time-desc").json()
+    previous = data["previous"]
+    n = int(order[0].split("-")[1])
+    # The model as the Runs list names it.
+    assert previous["model"] == MODELS[(n // 2) % 3].split("/")[-1]
+    assert previous["started_at"].startswith(
+        (datetime.utcnow() - timedelta(hours=n // 2)).strftime("%Y-%m-%d")
+    )
+    assert previous["primary"]["metric"] == "accuracy"
+    assert previous["primary"]["value"] == pytest.approx((n * 7 % 10) / 10)
+    assert previous["primary"]["spec"]["score_type"] == "score"
+
+
 def test_a_text_sort_without_collation_asks_for_one(client):
     data = _neighbors(client, "run-001", {"statuses": ["FAILED"]}, "dataset-asc").json()
     assert data["collation_needed"] is True

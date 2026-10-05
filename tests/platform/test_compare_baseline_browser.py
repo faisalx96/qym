@@ -263,68 +263,6 @@ def test_object_category_values_read_as_json_not_object_object(browser):
         fixture.close()
 
 
-def _previous_run_route(body):
-    return lambda route: route.fulfill(json=body)
-
-
-def test_run_page_offers_compare_with_the_previous_run(browser):
-    fixture = ViewFixture(browser, "run", count=20)
-    fixture.page.route(
-        "**/api/dashboard/previous-run*",
-        _previous_run_route(
-            {
-                "run_id": "run-1",
-                "previous": {
-                    "run_id": "run-0",
-                    "run_name": "spider2_prev",
-                    "status": "COMPLETED",
-                    "started_at": "2026-09-01T10:00:00+00:00",
-                    "dataset_version": "v1",
-                },
-                "dataset_version": "v2",
-                "dataset_version_mismatch": True,
-                "primary": {
-                    "metric": "accuracy",
-                    "direction": "maximize",
-                    "value": 0.5,
-                    "previous_value": 0.62,
-                    "delta": -0.12,
-                },
-            }
-        ),
-    )
-    try:
-        fixture.goto()
-        button = fixture.page.locator("#compare-previous-btn")
-        button.wait_for()
-        assert "Compare with previous" in button.inner_text()
-        assert "accuracy −12.0 pts" in button.inner_text()
-        assert "hero-previous-delta--regressed" in button.locator(
-            ".hero-previous-delta"
-        ).get_attribute("class")
-        query = parse_qs(urlparse(button.get_attribute("href")).query)
-        assert query["runs"] == ["run-0", "run-1"]
-        assert query["baseline"] == ["run-0"] and query["columns"] == ["runs"]
-        assert "another dataset version (v1)" in button.get_attribute("title")
-    finally:
-        fixture.close()
-
-
-def test_run_page_without_an_earlier_run_shows_no_compare_button(browser):
-    fixture = ViewFixture(browser, "run", count=20)
-    fixture.page.route(
-        "**/api/dashboard/previous-run*",
-        _previous_run_route({"run_id": "run-1", "previous": None}),
-    )
-    try:
-        fixture.goto()
-        fixture.page.wait_for_timeout(300)
-        assert fixture.page.locator("#compare-previous-btn").count() == 1
-        assert fixture.page.locator("#compare-previous-btn").is_hidden()
-    finally:
-        fixture.close()
-
-
 def test_the_change_and_its_verdict_come_from_the_items_both_runs_scored(browser):
     # run-2 stopped half way: it scored items 0..19 only. Every one of them
     # improved on the baseline (0 -> 0.2/0.3), yet its average (0.25) is
