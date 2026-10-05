@@ -513,6 +513,10 @@ html.qym-shell-pending body > * { visibility: hidden; }
   padding: var(--space-xl) var(--space-lg);
   width: 100%;
   box-sizing: border-box;
+  /* They scroll with .shell-content, so they never shrink below their
+     content: the global main { flex: 1; min-height: 0 } squeezed the page to
+     the viewport, its content overflowed and the bottom padding was lost. */
+  flex: 1 0 auto;
 }
 
 /* Full-width pages (charts, runs, models, reviews) use their own layout */
