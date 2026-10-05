@@ -15,7 +15,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from test_performance_views_browser import STATIC, ViewFixture, browser  # noqa: F401
+from test_performance_views_browser import STATIC, ViewFixture
 
 
 class RunPage(ViewFixture):

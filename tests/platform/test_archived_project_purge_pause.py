@@ -12,14 +12,16 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, event, text
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
@@ -30,12 +32,14 @@ for src in (ROOT / "packages" / "platform", ROOT / "packages" / "sdk"):
 if "openai" not in sys.modules:
     sys.modules["openai"] = MagicMock()
 
+from qym_platform.api import projects as projects_api
 from qym_platform.app import create_app
 from qym_platform.auth import clear_api_key_cache
 from qym_platform.db import dashboard_models, maintenance_models  # noqa: F401  (tables)
 from qym_platform.db.base import Base
 from qym_platform.db.models import (
     ApiKey,
+    AuditLog,
     Project,
     ProjectMembership,
     ProjectRole,
@@ -281,6 +285,117 @@ def test_archiving_through_the_project_update_pauses_and_resumes_too(engine, mak
     # 10 days of grace were left at archive: still about 10 days after unarchive.
     due = retention.purge_due_at(deleted, GRACE, _clock(make, "r"))
     assert before + timedelta(days=9) < due < datetime.utcnow() + timedelta(days=10, seconds=1)
+
+
+def test_lifecycle_requests_lock_the_project_before_reading_it(make, client):
+    """PATCH, archive and unarchive read is_active and archived_at under the
+    project row lock, freshly loaded, before they credit clocks or audit."""
+    locked = []
+
+    def _capture(state):
+        statement = state.statement
+        if state.is_select and getattr(statement, "_for_update_arg", None) is not None:
+            locked.extend(
+                (desc["entity"].__tablename__, bool(state.load_options._populate_existing))
+                for desc in statement.column_descriptions
+                if desc.get("entity") is not None
+            )
+
+    requests = [
+        ("patch", "/v1/admin/projects/pb", {"name": "Project B2"}),
+        ("patch", "/v1/admin/projects/pb", {"is_active": False}),
+        ("post", "/v1/admin/projects/pb/archive", None),
+        ("post", "/v1/admin/projects/pb/unarchive", None),
+        ("post", "/v1/admin/projects/pb/unarchive", None),
+        ("post", "/v1/admin/projects/pb/archive", None),
+        ("patch", "/v1/admin/projects/pb", {"is_active": True}),
+    ]
+    event.listen(Session, "do_orm_execute", _capture)
+    try:
+        for method, path, body in requests:
+            locked.clear()
+            response = client.request(method, path, headers=ADMIN, json=body)
+            assert response.status_code == 200, response.text
+            assert locked[:1] == [("projects", True)], (method, path, body)
+    finally:
+        event.remove(Session, "do_orm_execute", _capture)
+
+
+@pytest.mark.parametrize(
+    "second",
+    [
+        pytest.param(("post", "/v1/admin/projects/pb/unarchive", None), id="post-post"),
+        pytest.param(("patch", "/v1/admin/projects/pb", {"is_active": True}), id="post-patch"),
+    ],
+)
+def test_concurrent_unarchives_credit_the_pause_once(engine, make, client, monkeypatch, second):
+    """Both requests start while the project is archived. The second waits for
+    the first to commit, then finds the project active and changes nothing."""
+    if engine.dialect.name != "postgresql":
+        pytest.skip("needs real row locks")
+    deleted = NOW - timedelta(days=120)
+    _trash(make, _run("r", "pb", deleted))
+    archived_at = deleted + timedelta(days=20)
+    _archive(client, "pb", at=archived_at)
+
+    pids = []
+    entered, release = threading.Event(), threading.Event()
+    get_for_update = projects_api._get_project_for_update
+    resume = projects_api.resume_purge_clocks
+
+    def record_pid(db, project_id):
+        pids.append(db.scalar(text("SELECT pg_backend_pid()")))
+        return get_for_update(db, project_id)
+
+    def pause_first(*args, **kwargs):
+        if not entered.is_set():
+            entered.set()
+            assert release.wait(10), "the first unarchive was not released"
+        return resume(*args, **kwargs)
+
+    monkeypatch.setattr(projects_api, "_get_project_for_update", record_pid)
+    monkeypatch.setattr(projects_api, "resume_purge_clocks", pause_first)
+    results = {}
+
+    def call(name, method, path, body):
+        results[name] = client.request(method, path, headers=ADMIN, json=body)
+
+    before = datetime.utcnow()
+    first = threading.Thread(target=call, args=("first", "post", "/v1/admin/projects/pb/unarchive", None))
+    later = threading.Thread(target=call, args=("second", *second))
+    try:
+        first.start()
+        assert entered.wait(10), "the first unarchive did not reach the clock credit"
+        later.start()
+        # Unlocked, the second request completes and credits the pause too;
+        # locked, it waits on the project row until the first commits.
+        deadline = time.monotonic() + 10
+        while later.is_alive():
+            if len(pids) == 2:
+                with engine.connect() as conn:
+                    waiting = conn.scalar(
+                        text("SELECT wait_event_type = 'Lock' FROM pg_stat_activity WHERE pid = :pid"),
+                        {"pid": pids[1]},
+                    )
+                if waiting:
+                    break
+            assert time.monotonic() < deadline, "the second request neither completed nor waited"
+            time.sleep(0.01)
+    finally:
+        release.set()
+        first.join(30)
+        later.join(30)
+    unarchived = datetime.utcnow()
+
+    assert results["first"].status_code == 200, results["first"].text
+    assert results["second"].status_code == 200, results["second"].text
+    clock = _clock(make, "r")
+    assert deleted + (before - archived_at) <= clock <= deleted + (unarchived - archived_at)
+    with make() as db:
+        project = db.get(Project, "pb")
+        assert project.is_active and project.archived_at is None
+        audits = db.query(AuditLog).filter_by(entity_id="pb", action="project.unarchived")
+        assert audits.count() == 1
 
 
 def test_deleting_and_restoring_reset_the_purge_clock(make, client):

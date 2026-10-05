@@ -81,6 +81,7 @@ from qym_platform.services.run_means import (
     errors_left_out,
     is_task_error_pass,
     reduce_pass_scores,
+    scored_pass_meta,
     task_error_pass_meta,
 )
 from qym_platform.services.ingest_completeness import (
@@ -588,37 +589,6 @@ def _refresh_live_trace_stats(
         touched_trace_ids=touched_trace_ids,
         touched_item_ids=touched_item_ids,
     )
-
-
-def _upsert_trace_aggregate(
-    db: Session, run_id: str, trace_id: str, bucket: Dict[str, Any]
-) -> None:
-    agg = (
-        db.query(RunTraceAggregate)
-        .filter(
-            RunTraceAggregate.run_id == run_id,
-            RunTraceAggregate.trace_id == trace_id,
-        )
-        .first()
-    )
-    if not agg:
-        agg = RunTraceAggregate(run_id=run_id, trace_id=trace_id)
-        db.add(agg)
-        db.flush()
-
-    agg.span_count = int(bucket["span_count"])
-    agg.tokens = int(bucket["tokens"])
-    agg.cost = float(bucket["cost"])
-    agg.llm_calls = int(bucket["llm_calls"])
-    agg.tool_calls = int(bucket["tool_calls"])
-    agg.tool_errors = int(bucket["tool_errors"])
-    agg.malformed_tool_calls = int(bucket["malformed_tool_calls"])
-    agg.noisy_reasoning = int(bucket["noisy_reasoning"])
-    agg.provider_errors = int(bucket["provider_errors"])
-    agg.has_reasoning = bool(bucket["has_reasoning"])
-    agg.has_reasoning_tokens = bool(bucket["has_reasoning_tokens"])
-    agg.reasoning_tokens = int(bucket["reasoning_tokens"])
-    agg.raw_bucket = _sanitize_for_json(bucket)
 
 
 def _store_trace_stats(db: Session, run: Run) -> None:
@@ -1341,9 +1311,7 @@ def _ingest_events_sync(
             except (TypeError, ValueError) as exc:
                 raise _EventRejected(f"Invalid metric spec for {name}: {exc}")
             current = metric_spec_cache.get(name)
-            if current and {
-                key: getattr(current, key) for key in normalized
-            } != normalized:
+            if current and not _metric_spec_unchanged(current, normalized):
                 raise _EventRejected(f"Metric spec changed during run: {name}")
 
     accepted = []
@@ -1748,7 +1716,8 @@ def _ingest_events_sync(
             ]
             # item_failed may have stored the pass as a failed task already.
             if failed and not all(
-                row is not None and is_task_error_pass(row.label, row.meta)
+                row is not None
+                and is_task_error_pass(row.label, row.meta, row.explanation)
                 for row in passes
             ):
                 _record_failed_pass(payload.item_id, payload.pass_number)
@@ -2045,7 +2014,9 @@ def _ingest_events_sync(
                         pass_number=payload.pass_number,
                         score_numeric=payload.score_numeric,
                         label=payload.label,
-                        meta=_sanitize_for_json(payload.meta),
+                        meta=scored_pass_meta(
+                            payload.label, _sanitize_for_json(payload.meta)
+                        ),
                         explanation=payload.explanation,
                     )
                     _remember_pass_score(pass_score)
@@ -2053,7 +2024,9 @@ def _ingest_events_sync(
                 else:
                     pass_score.score_numeric = payload.score_numeric
                     pass_score.label = payload.label
-                    pass_score.meta = _sanitize_for_json(payload.meta)
+                    pass_score.meta = scored_pass_meta(
+                        payload.label, _sanitize_for_json(payload.meta)
+                    )
                     pass_score.explanation = payload.explanation
                 reduced_numeric, reduced_observations = _reduce_pass_scores(
                     payload.item_id, payload.metric_name

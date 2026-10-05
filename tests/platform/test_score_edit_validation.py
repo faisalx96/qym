@@ -22,7 +22,7 @@ from qym_platform.services.score_edits import (
     parse_score_edit,
 )
 from sqlalchemy.orm import Session
-from test_dashboard_durable_summaries import database, item, run
+from test_dashboard_durable_summaries import item, run
 
 REPO = Path(__file__).resolve().parents[2]
 

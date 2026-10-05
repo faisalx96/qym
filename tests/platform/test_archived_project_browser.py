@@ -235,6 +235,23 @@ def test_settings_archive_dialog_lists_runs_in_progress(app, factory):
     assert app.errors == []
 
 
+def test_archive_instead_shows_the_running_run_warning_too(app, factory):
+    _add_running_runs(factory, 1)
+    page = app.goto("/projects/pa/settings")
+    page.locator("#settings-tab-danger").click()
+    for confirm in (False, True):
+        page.locator("#delete-project-btn").click()
+        page.locator("#shell-confirm-submit", has_text="Archive instead").click()
+        warning = page.locator("#shell-confirm-dialog .shell-modal-warning")
+        warning.wait_for()
+        assert "1 run is still in progress." in warning.inner_text()
+        page.locator("#shell-confirm-submit" if confirm else "#shell-confirm-cancel").click()
+        page.wait_for_function("() => !document.getElementById('shell-confirm-dialog')")
+        page.wait_for_timeout(300)
+        assert _is_active(factory) is (not confirm)
+    assert app.errors == []
+
+
 def test_settings_archive_dialog_without_running_runs_stays_as_it_was(app, factory):
     _page, dialog = _open_settings_archive(app)
     assert dialog.locator(".shell-modal-warning").count() == 0
@@ -576,6 +593,26 @@ def test_archived_project_opens_read_only_for_a_manager(browser, factory, monkey
         app.close()
 
 
+def test_archived_datasets_turn_read_only_when_the_shell_loads_late(app, factory):
+    """The page stops waiting for the shell after 250 ms; when the shell then
+    says the project is archived, the create controls go away."""
+    assert app.client.post("/v1/admin/projects/pa/archive").status_code == 200
+    app.page.add_init_script(
+        """(() => {
+      const realFetch = window.fetch;
+      window.fetch = (url, options) => String(url).includes('v1/me')
+        ? new Promise(resolve => setTimeout(resolve, 800)).then(() => realFetch(url, options))
+        : realFetch(url, options);
+    })()"""
+    )
+    page = app.goto("/projects/pa/datasets")
+    # Drawn before the shell answers, with the placeholder project.
+    page.get_by_text("+ New dataset").first.wait_for(state="attached")
+    _archived_notice(page)
+    page.wait_for_function("() => ![...document.querySelectorAll('button')].some(b => b.textContent.includes('New dataset'))")
+    assert app.errors == []
+
+
 def test_archived_project_datasets_are_read_only(app, factory):
     upload = app.client.post(
         "/v1/datasets:upload",
@@ -626,12 +663,18 @@ def test_unarchive_names_the_keys_that_start_working_again(app, factory):
     assert "Deleted runs of the project in Trash resume their purge countdown" in dialog.inner_text()
     assert dialog.locator("#shell-confirm-submit").inner_text() == "Unarchive anyway"
     app.shot("unarchive-dialog")
-    dialog.locator("#shell-confirm-cancel").click()
+    # Enter on a focused Cancel cancels; it does not confirm.
+    dialog.locator("#shell-confirm-cancel").focus()
+    page.keyboard.press("Enter")
+    page.wait_for_function("() => !document.getElementById('shell-confirm-dialog')")
+    page.wait_for_timeout(200)
     assert _is_active(factory) is False
 
-    # "Revoke keys first" opens the project's API keys, still archived.
+    # "Revoke keys first" opens the project's API keys, still archived. Enter
+    # on it does the same.
     page.locator('[data-project-unarchive="pa"]').click()
-    page.locator("#shell-confirm-alt").click()
+    page.locator("#shell-confirm-alt").focus()
+    page.keyboard.press("Enter")
     page.wait_for_function("() => location.pathname === '/projects/pa/settings'")
     page.wait_for_function("() => document.getElementById('settings-tab-apikeys').classList.contains('active')")
     assert "tab=apikeys" in page.url

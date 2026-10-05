@@ -10,9 +10,8 @@ from __future__ import annotations
 import pytest
 from test_dashboard_paging_browser import (
     DashboardFixture,
-    browser,
     make_runs,
-)  # noqa: F401
+)
 from test_performance_views_browser import ViewFixture
 from test_xss_rendering_browser import assert_inert, payload
 

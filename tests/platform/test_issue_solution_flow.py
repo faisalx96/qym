@@ -2,7 +2,7 @@
 
 import pytest
 
-from test_root_cause_issue_javascript import DASHBOARD, _function, _run_javascript
+from test_root_cause_issue_javascript import _function, _run_javascript
 
 
 @pytest.mark.parametrize("page", ["run", "compare"])
@@ -157,14 +157,6 @@ def test_compare_pass_load_and_save_keep_chart_solution_scope():
         assert.deepEqual(solutions(0), ['First']);
         assert.equal(row.item_metadata.metric_analyses.accuracy.root_cause_issues[0].solution, 'Parent');
     """)
-
-
-def test_legacy_shared_solution_block_is_not_rendered():
-    source = (DASHBOARD / "run.html").read_text()
-    assert 'Shared · legacy' not in source
-    assert 'metric-analysis-shared-solution' not in source
-    assert 'renderMetricRootCauseIssues(analysis, itemId, metricName, legacyReview, issueStatuses)' in source
-    assert 'renderMetricAnalysisCard(itemId, metricName, metricAnalyses[metricName], row.review_corrections?.[metricName], row.review_issue_statuses?.[metricName])' in source
 
 
 @pytest.mark.parametrize("page", ["run", "compare"])

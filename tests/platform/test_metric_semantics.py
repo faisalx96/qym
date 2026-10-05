@@ -26,7 +26,6 @@ from qym_platform.services.metric_semantics import declared_direction
 from sqlalchemy.orm import Session
 from test_compare_error_counts import run_compare_js
 from test_dashboard_durable_summaries import (
-    database,
     drain,
     item,
     legacy,

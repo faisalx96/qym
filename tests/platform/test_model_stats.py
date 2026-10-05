@@ -22,7 +22,7 @@ from qym_platform.db.models import Run, RunItemScore, RunWorkflowStatus
 from qym_platform.services import model_stats
 from qym_platform.services.dashboard_cache import DashboardSnapshotCache
 from qym_platform.services.model_stats import group_stats, k_run_stats
-from test_dashboard_durable_summaries import database, drain, item, run  # noqa: F401
+from test_dashboard_durable_summaries import drain, item, run
 from test_lost_outcome_events import emitter, rid  # noqa: F401
 from test_minimize_errors import _node, _principal, _spec
 from test_repeat_task_errors_per_pass import _run as _repeat_run

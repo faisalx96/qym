@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import pytest
 
-from test_dashboard_paging_browser import browser  # noqa: F401
 from test_p1_a11y_visual_browser import PageFixture
 
 pytestmark = pytest.mark.browser

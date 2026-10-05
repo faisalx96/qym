@@ -7,7 +7,7 @@ import pytest
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite://")
 
-from test_performance_views_browser import ViewFixture, browser  # noqa: F401
+from test_performance_views_browser import ViewFixture
 
 pytestmark = pytest.mark.browser
 

@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 
 import pytest
 
-from test_dashboard_paging_browser import DashboardFixture, browser  # noqa: F401
+from test_dashboard_paging_browser import DashboardFixture
 
 pytestmark = pytest.mark.browser
 

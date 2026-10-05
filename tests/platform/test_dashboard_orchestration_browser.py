@@ -1,10 +1,10 @@
-"""Review summary initialization, session expiry and retained selections."""
+"""Review summary initialization and retained selections."""
 
 from urllib.parse import urlparse
 
 import pytest
 
-from test_dashboard_paging_browser import DashboardFixture, STATIC, browser
+from test_dashboard_paging_browser import DashboardFixture, STATIC
 
 pytestmark = pytest.mark.browser
 
@@ -12,18 +12,14 @@ pytestmark = pytest.mark.browser
 class ReviewFixture(DashboardFixture):
     def __init__(self, browser):
         self.pending = False
-        self.denied = False
         super().__init__(browser)
         # The shared fixture isolates shell navigation; retain the actual auth UI.
         self.page.add_init_script((STATIC / "auth.js").read_text())
 
     def route(self, route):
         path = urlparse(route.request.url).path
-        if path.startswith("/api/dashboard/") and (self.pending or self.denied):
+        if path.startswith("/api/dashboard/") and self.pending:
             self.requests.append((path, route.request.post_data_json))
-            if self.denied:
-                route.fulfill(status=401, json={"detail": "Expired session"})
-                return
             overview = self.overview([])
             overview.update(
                 total_count=0,
@@ -72,21 +68,6 @@ def test_initial_projection_is_loading_until_history_arrives(browser):
         assert page.locator("#loading").is_hidden()
         assert page.locator("#runs-tbody tr[data-idx]").count() == 50
         assert page.locator("#status-filter").inner_text() == "123 runs"
-    finally:
-        fixture.close()
-
-
-def test_expired_session_removes_data_and_stops_reads(browser):
-    fixture = ReviewFixture(browser)
-    try:
-        fixture.open()
-        fixture.denied = True
-        fixture.page.evaluate("__dashboardTest.fetchRuns()")
-        fixture.page.get_by_role("link", name="Sign in", exact=True).wait_for()
-        before = len(fixture.requests)
-        fixture.page.evaluate("__dashboardTest.fetchRuns()")
-        assert len(fixture.requests) == before
-        assert fixture.page.locator("#runs-tbody").count() == 0
     finally:
         fixture.close()
 

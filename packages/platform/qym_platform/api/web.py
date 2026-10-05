@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
+from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -181,7 +182,12 @@ def admin_update_user(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_admin(principal)
-    user = db.query(User).filter(User.id == user_id).first()
+    # Lock the target and the active admins in id order before reading them,
+    # so two concurrent demotions cannot both count the other admin as active.
+    db.query(User.id).filter(
+        or_(User.id == user_id, and_(User.role == UserRole.ADMIN, User.is_active.is_(True)))
+    ).order_by(User.id).with_for_update().all()
+    user = db.query(User).filter(User.id == user_id).populate_existing().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 

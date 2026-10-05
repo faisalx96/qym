@@ -13,7 +13,8 @@ from qym_platform.db.models import Run, RunItem, RunItemScore, RunMetricSpec, Sp
 from qym_platform.services.approved_diagnoses import load_approved_diagnoses
 from qym_platform.services.insights_data import InsightData, RootCauseData
 from qym_platform.services.run_means import (
-    errored_pass_items,
+    errored_repeat_items,
+    execution_outcomes,
     is_metric_error,
     item_not_received,
 )
@@ -114,6 +115,7 @@ def _metric_result(
     spec: Optional[RunMetricSpec],
     run: Optional[Run] = None,
     pass_errored: bool = False,
+    ran: Any = None,
 ) -> Optional[str]:
     # A repeat run judges task errors per pass (services/run_means.py): its
     # RunItem error is only the pass that arrived last, and its item value
@@ -121,17 +123,28 @@ def _metric_result(
     repeat = run is not None and int(run.samples or 1) > 1
     if item.error and not repeat:
         return "fail"
+    # ``ran``: how the run ran (run_means.execution_outcomes), by default its
+    # status; a failed run in review is still a failed run.
     if run is not None and item_not_received(
-        run.status, run.samples, item.error, item.output, item.latency_ms
+        run.status if ran is None else ran,
+        run.samples,
+        item.error,
+        item.output,
+        item.latency_ms,
     ):
         return None
     direction = _clean_label(spec.direction).lower() if spec is not None else ""
+    if pass_errored:
+        # A repeat item whose passes errored (errored_repeat_items): any of
+        # them for a lower-is-better metric, every one otherwise. Its stored
+        # value is no measurement and would read as a pass at a threshold
+        # of 0 or below.
+        return "fail"
     if direction in {"minimize", "lower", "lower_is_better"} and (
-        pass_errored or (score is not None and is_metric_error(score.meta))
+        score is not None and is_metric_error(score.meta)
     ):
-        # A lower-is-better metric leaves scorer errors (and a repeat item's
-        # errored passes) out of its mean; its stored 0 would otherwise read
-        # as a pass (services/run_means.py).
+        # A lower-is-better metric leaves scorer errors out of its mean; its
+        # stored 0 would otherwise read as a pass (services/run_means.py).
         return "fail"
     if score is None or score.score_numeric is None:
         return None
@@ -259,6 +272,7 @@ def _populate_data(
     specs: Mapping[tuple[str, str], RunMetricSpec],
     tools_by_trace: Mapping[tuple[str, str], Mapping[str, int]],
     extra_data_by_run: Mapping[str, Mapping[str, Any]],
+    outcomes: Mapping[str, Any],
     errored_passes: frozenset = frozenset(),
 ) -> None:
     contributing_run_ids: set[str] = set()
@@ -288,6 +302,7 @@ def _populate_data(
                 specs.get((run.id, metric_name)),
                 run,
                 (run.id, item.item_id, metric_name) in errored_passes,
+                outcomes[run.id],
             )
             if result is None:
                 continue
@@ -370,19 +385,9 @@ def build_insight_data(
         db.query(RunMetricSpec).filter(RunMetricSpec.run_id.in_(loaded_run_ids)).all()
     )
     specs = {(spec.run_id, spec.metric_name): spec for spec in spec_rows}
-    # Only lower-is-better metrics judge a repeat item by its errored passes.
-    minimize_specs = [
-        spec
-        for spec in spec_rows
-        if _clean_label(spec.direction).lower()
-        in {"minimize", "lower", "lower_is_better"}
-    ]
-    errored_passes = frozenset(
-        errored_pass_items(
-            db,
-            sorted({spec.run_id for spec in minimize_specs}),
-            metrics={spec.metric_name for spec in minimize_specs},
-        )
+    repeat_run_ids = {run.id for run in runs if int(run.samples or 1) > 1}
+    errored_passes = errored_repeat_items(
+        db, [spec for spec in spec_rows if spec.run_id in repeat_run_ids]
     )
     trace_keys = {
         (item.run_id, item.trace_id)
@@ -391,6 +396,7 @@ def build_insight_data(
     }
     tools_by_trace = _load_tools_by_trace(db, trace_keys)
     runs_by_id = {run.id: run for run in runs}
+    outcomes = execution_outcomes(db, runs)
     supplied_extra_data = extra_data_by_run or {}
 
     qualifying_categories.sort(
@@ -423,6 +429,7 @@ def build_insight_data(
                     specs=specs,
                     tools_by_trace=tools_by_trace,
                     extra_data_by_run=supplied_extra_data,
+                    outcomes=outcomes,
                     errored_passes=errored_passes,
                 )
                 insight.root_causes[root_cause.label] = root_cause_data
@@ -438,6 +445,7 @@ def build_insight_data(
             specs=specs,
             tools_by_trace=tools_by_trace,
             extra_data_by_run=supplied_extra_data,
+            outcomes=outcomes,
             errored_passes=errored_passes,
         )
         insights.append(insight)

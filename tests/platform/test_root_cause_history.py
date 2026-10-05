@@ -97,7 +97,7 @@ from qym_platform.services.llm_analyzer import (
     analyze_single_item,
     build_analysis_prompt,
     get_all_approved_examples,
-    get_few_shot_examples,
+    get_selected_approved_examples,
     normalize_analysis_rules,
     parse_llm_response,
     prompt_character_count,
@@ -352,7 +352,9 @@ def test_latest_approved_revision_supersedes_previous_example(
     assert first_candidate.is_active is True
     assert [
         c.id
-        for c in get_few_shot_examples(db_session, run.task, run.project_id, limit=10)
+        for c in get_all_approved_examples(
+            db_session, task=run.task, project_id=run.project_id
+        )
     ] == [first_candidate.id]
 
     second_change = apply_root_cause_change(
@@ -373,7 +375,12 @@ def test_latest_approved_revision_supersedes_previous_example(
     db_session.refresh(first_candidate)
     assert first_candidate.status == CorrectionStatus.APPROVED
     assert first_candidate.is_active is False
-    assert get_few_shot_examples(db_session, run.task, run.project_id, limit=10) == []
+    assert (
+        get_all_approved_examples(
+            db_session, task=run.task, project_id=run.project_id
+        )
+        == []
+    )
 
     _approve_candidate(
         db_session,
@@ -392,11 +399,13 @@ def test_latest_approved_revision_supersedes_previous_example(
     assert second_candidate.is_active is True
     assert [
         c.id
-        for c in get_few_shot_examples(db_session, run.task, run.project_id, limit=10)
+        for c in get_all_approved_examples(
+            db_session, task=run.task, project_id=run.project_id
+        )
     ] == [second_candidate.id]
 
 
-def test_few_shot_examples_are_scoped_to_the_run_project(
+def test_approved_examples_are_scoped_to_the_run_project(
     db_session: Session,
 ) -> None:
     actor, _reviewer, run, _item = _seed_run(db_session)
@@ -439,17 +448,19 @@ def test_few_shot_examples_are_scoped_to_the_run_project(
     db_session.add_all([other_project, other_run, local, foreign])
     db_session.commit()
 
-    examples = get_few_shot_examples(db_session, run.task, run.project_id, limit=10)
-    selected = get_few_shot_examples(
+    examples = get_all_approved_examples(
+        db_session, task=run.task, project_id=run.project_id
+    )
+    selected, missing = get_selected_approved_examples(
         db_session,
-        run.task,
-        run.project_id,
-        limit=10,
-        correction_ids=[foreign.id],
+        task=run.task,
+        project_id=run.project_id,
+        correction_ids=[local.id, foreign.id],
     )
 
     assert [example.id for example in examples] == [local.id]
-    assert selected == []
+    assert [example.id for example in selected] == [local.id]
+    assert missing == [foreign.id]
 
 
 def test_feedback_only_edit_creates_new_pending_revision(db_session: Session) -> None:
@@ -822,7 +833,9 @@ def test_editing_approved_human_only_candidate_returns_it_to_pending_and_does_no
     )
 
     # Unreviewed text never reaches the analyzer as an approved example.
-    approved = get_few_shot_examples(db_session, run.task, run.project_id, limit=10)
+    approved = get_all_approved_examples(
+        db_session, task=run.task, project_id=run.project_id
+    )
     assert [c.id for c in approved] == []
 
 
@@ -1009,91 +1022,10 @@ def test_ai_analysis_creates_pending_ai_only_candidate_and_approval_copies_ai_to
     assert candidate.human_solution == "Query Fix"
     assert candidate.human_solution_note == "Add the missing predicate"
 
-    approved = get_few_shot_examples(db_session, run.task, run.project_id, limit=10)
+    approved = get_all_approved_examples(
+        db_session, task=run.task, project_id=run.project_id
+    )
     assert [c.id for c in approved] == [candidate.id]
-
-
-def test_get_few_shot_examples_without_limit_returns_active_examples_within_cap(
-    db_session: Session,
-) -> None:
-    actor, reviewer, run, item = _seed_run(db_session)
-
-    first_change = apply_root_cause_change(
-        db_session,
-        run=run,
-        item=item,
-        actor_user_id=actor.id,
-        actor_source="human",
-        human_patch={
-            "root_cause": "Wrong Format",
-            "root_cause_detail": "First approved example",
-        },
-    )
-    db_session.commit()
-    first_candidate = first_change.candidate
-    assert first_candidate is not None
-    _approve_candidate(
-        db_session,
-        correction=first_candidate,
-        reviewer_id=reviewer.id,
-        comment="Approve first example",
-        reviewed_at=datetime.utcnow(),
-    )
-
-    second_run = Run(
-        id="run-2",
-        project_id=run.project_id,
-        created_by_user_id=actor.id,
-        owner_user_id=actor.id,
-        task=run.task,
-        dataset="dataset-2",
-        metrics=["accuracy"],
-        status=RunWorkflowStatus.COMPLETED,
-    )
-    second_item = RunItem(
-        run_id=second_run.id,
-        item_id="item-2",
-        index=0,
-        input={"question": "q2"},
-        expected={"answer": "expected-2"},
-        output={"answer": "actual-2"},
-        item_metadata={},
-    )
-    second_score = RunItemScore(
-        run_id=second_run.id,
-        item_id=second_item.item_id,
-        metric_name="accuracy",
-        score_numeric=0.2,
-        meta={"reason": "second wrong answer"},
-    )
-    db_session.add_all([second_run, second_item, second_score])
-    db_session.commit()
-
-    second_change = apply_root_cause_change(
-        db_session,
-        run=second_run,
-        item=second_item,
-        actor_user_id=actor.id,
-        actor_source="human",
-        human_patch={
-            "root_cause": "Context Missing",
-            "root_cause_detail": "Second approved example",
-        },
-    )
-    db_session.commit()
-    second_candidate = second_change.candidate
-    assert second_candidate is not None
-    _approve_candidate(
-        db_session,
-        correction=second_candidate,
-        reviewer_id=reviewer.id,
-        comment="Approve second example",
-        reviewed_at=datetime.utcnow(),
-    )
-    db_session.commit()
-
-    approved = get_few_shot_examples(db_session, run.task, run.project_id, limit=None)
-    assert {c.id for c in approved} == {first_candidate.id, second_candidate.id}
 
 
 def test_build_analysis_prompt_resolves_custom_variable_from_selected_metric_metadata() -> (
@@ -1119,7 +1051,6 @@ def test_build_analysis_prompt_resolves_custom_variable_from_selected_metric_met
     messages = build_analysis_prompt(
         item,
         {"accuracy": score},
-        [],
         config={
             "additional_instructions": "Use signal: {metric_reason}",
             "custom_variable_mapping": {"metric_reason": "metric_metadata.reason"},
@@ -1208,7 +1139,7 @@ def test_build_analysis_prompt_organizes_native_trace_payload(
     )
     db_session.commit()
 
-    messages = build_analysis_prompt(item, {}, [])
+    messages = build_analysis_prompt(item, {})
     system_content = next(
         message["content"] for message in messages if message["role"] == "system"
     )
@@ -1236,7 +1167,6 @@ def test_build_analysis_prompt_organizes_native_trace_payload(
     without_trace_messages = build_analysis_prompt(
         item,
         {},
-        [],
         config={"include_fields": {"trace": False}},
     )
     without_trace = next(
@@ -1293,7 +1223,6 @@ def test_large_trace_preserves_late_tools_evaluation_and_other_context(
     messages = build_analysis_prompt(
         item,
         {"accuracy": score},
-        [],
         metric_name="accuracy",
         config={
             "reference_documents": [
@@ -1338,7 +1267,7 @@ def test_trace_is_sent_in_full_without_changing_stored_spans(
     db_session.add(span)
     db_session.commit()
     organized = llm_analyzer_service._organize_trace_content(item.trace_content)
-    messages = build_analysis_prompt(item, {}, [])
+    messages = build_analysis_prompt(item, {})
     content = "\n".join(message["content"] for message in messages)
     assert organized in content
     assert "TRACE_END" in content
@@ -1350,7 +1279,6 @@ def test_trace_is_sent_in_full_without_changing_stored_spans(
     excluded = build_analysis_prompt(
         item,
         {},
-        [],
         config={"include_fields": {"trace": False}},
     )
     assert "TRACE_START" not in "\n".join(message["content"] for message in excluded)
@@ -1496,7 +1424,6 @@ def test_build_analysis_prompt_ignores_legacy_project_description(
     messages = build_analysis_prompt(
         item,
         {},
-        [],
         config={
             "project_description": "A text-to-SQL assistant for read-only analytics."
         },
@@ -1552,7 +1479,6 @@ def test_build_analysis_prompt_omits_redundant_system_contexts(
     messages = build_analysis_prompt(
         item,
         {"accuracy": score},
-        [],
         config={
             "project_description": "A regulated financial support assistant.",
             "root_cause_categories": ["Reasoning Error"],
@@ -1627,7 +1553,6 @@ def test_build_analysis_prompt_removes_legacy_context_fields_and_preserves_liter
     messages = build_analysis_prompt(
         item,
         {},
-        [],
         config={
             "system_prompt": (
                 "Categories:\n{categories}\n\n"
@@ -1682,7 +1607,6 @@ def test_custom_system_prompt_appends_all_omitted_analyzer_context() -> None:
     messages = build_analysis_prompt(
         item,
         {"accuracy": score},
-        [],
         config={
             "system_prompt": "Classify the item and return JSON.",
             "business_context": "Billing support",
@@ -1710,9 +1634,7 @@ def test_custom_system_prompt_appends_all_omitted_analyzer_context() -> None:
     assert "ITEM RECORD" not in user_content
 
 
-def test_prompt_redacts_item_and_metric_secrets_and_excludes_correction_context() -> (
-    None
-):
+def test_prompt_redacts_item_and_metric_secrets() -> None:
     item = RunItem(
         run_id="run-1",
         item_id="item-1",
@@ -1727,22 +1649,12 @@ def test_prompt_redacts_item_and_metric_secrets_and_excludes_correction_context(
         score_numeric=0.2,
         meta={"reason": "bad join", "judge": {"api_key": "metric-secret"}},
     )
-    correction = ReviewCorrection(
-        run_id="run-1",
-        item_id="item-2",
-        task="task",
-        input_snapshot={"question": "example", "password": "correction-secret"},
-        human_root_cause="Reasoning Error",
-        status=CorrectionStatus.APPROVED,
-        is_active=True,
-    )
 
-    messages = build_analysis_prompt(item, {"accuracy": score}, [correction])
+    messages = build_analysis_prompt(item, {"accuracy": score})
     prompt_content = "\n".join(message["content"] for message in messages)
 
     assert "item-secret" not in prompt_content
     assert "metric-secret" not in prompt_content
-    assert "correction-secret" not in prompt_content
     assert prompt_content.count('"[REDACTED]"') >= 2
 
 
@@ -1753,7 +1665,6 @@ def test_default_prompt_requests_only_diagnosis_fields() -> (
     messages = build_analysis_prompt(
         item,
         {},
-        [],
         config={"solution_categories": ["Add Validation"]},
     )
     system_content = next(
@@ -1778,38 +1689,6 @@ def test_default_prompt_requests_only_diagnosis_fields() -> (
         in system_content
     )
     assert "recommendation or remediation fields" in system_content
-
-
-def test_approved_correction_is_excluded_from_analysis_prompt() -> None:
-    item = RunItem(run_id="run-1", item_id="item-1", index=0, input={"q": "x"})
-    correction = ReviewCorrection(
-        run_id="run-1",
-        item_id="item-2",
-        task="task",
-        input_snapshot={"question": "private example question"},
-        expected_snapshot={"answer": "private expected answer"},
-        output_snapshot={"answer": "private actual answer"},
-        human_root_cause="Private Correction Category",
-        human_root_cause_detail="Missing account policy",
-        human_root_cause_note="The private reviewer diagnosis.",
-        human_solution="Improve Retrieval Context",
-        human_solution_note="Retrieve the account policy before answering.",
-        status=CorrectionStatus.APPROVED,
-        is_active=True,
-    )
-
-    messages = build_analysis_prompt(item, {}, [correction])
-    prompt = "\n".join(message["content"] for message in messages)
-
-    assert "--- Example ---" not in prompt
-    assert "private example question" not in prompt
-    assert "private expected answer" not in prompt
-    assert "private actual answer" not in prompt
-    assert "Private Correction Category" not in prompt
-    assert "Missing account policy" not in prompt
-    assert "The private reviewer diagnosis." not in prompt
-    assert "Improve Retrieval Context" not in prompt
-    assert "Retrieve the account policy before answering." not in prompt
 
 
 def test_analysis_prompt_excludes_redundant_telemetry_and_duplicate_context() -> None:
@@ -1845,29 +1724,10 @@ def test_analysis_prompt_excludes_redundant_telemetry_and_duplicate_context() ->
         },
         meta={"reason": "Result rows differ"},
     )
-    correction = ReviewCorrection(
-        run_id="other-run",
-        item_id="example-item",
-        task="text2sql",
-        metric_name="execution_accuracy",
-        input_snapshot={"sql_prompt": "Count customers"},
-        scores_snapshot={
-            "execution_accuracy": 0.0,
-            "format": 1.0,
-        },
-        human_root_cause="Reasoning Error",
-        human_root_cause_detail="Missing filter predicate",
-        human_root_cause_note="The query omitted the required active filter.",
-        human_solution="Refine Prompt Instructions",
-        human_solution_note="Tell the model to preserve all filters.",
-        status=CorrectionStatus.APPROVED,
-        is_active=True,
-    )
 
     messages = build_analysis_prompt(
         item,
         {"execution_accuracy": score},
-        [correction],
         config={
             "root_cause_categories": [
                 *ROOT_CAUSE_CATEGORIES,
@@ -1891,7 +1751,6 @@ def test_analysis_prompt_excludes_redundant_telemetry_and_duplicate_context() ->
     assert "retry_count" not in prompt
     assert "trace_stats" not in prompt
     assert "token_count" not in prompt
-    assert '"format": 1.0' not in prompt
     assert "solution" not in prompt.casefold()
 
 
@@ -1916,13 +1775,11 @@ def test_analysis_prompt_scopes_category_root_cause_and_feedback_to_selected_met
     accuracy_messages = build_analysis_prompt(
         item,
         scores,
-        [],
         metric_name="accuracy",
     )
     format_messages = build_analysis_prompt(
         item,
         scores,
-        [],
         metric_name="format",
     )
 
@@ -2013,7 +1870,6 @@ async def test_analyze_single_item_sends_max_tokens_and_records_provenance() -> 
         "test-model",
         item,
         {},
-        [],
         max_tokens=321,
     )
 
@@ -2588,14 +2444,6 @@ def test_analysis_results_are_saved_by_metric_with_legacy_item_summary(
         "The metric explanation identifies the join mismatch.",
         "The output omitted the required response wrapper.",
     ]
-    candidates[0].human_root_cause = candidates[0].ai_root_cause
-    candidates[0].human_root_cause_note = "APPROVED ACCURACY EXAMPLE"
-    candidates[1].human_root_cause = candidates[1].ai_root_cause
-    candidates[1].human_root_cause_note = "APPROVED FORMAT EXAMPLE"
-    prompt = build_analysis_prompt(item, {}, candidates, metric_name="accuracy")
-    prompt_text = "\n".join(message["content"] for message in prompt)
-    assert "APPROVED ACCURACY EXAMPLE" not in prompt_text
-    assert "APPROVED FORMAT EXAMPLE" not in prompt_text
 
     _approve_candidate(
         db_session,
@@ -2786,8 +2634,8 @@ async def test_approved_metric_analysis_is_immutable_to_new_ai_analysis(
     assert candidate.is_active is True
     assert [
         correction.id
-        for correction in get_few_shot_examples(
-            db_session, run.task, run.project_id, limit=10
+        for correction in get_all_approved_examples(
+            db_session, task=run.task, project_id=run.project_id
         )
     ] == [candidate.id]
     picker = _list_analysis_examples(
@@ -3504,7 +3352,7 @@ def test_analysis_rules_are_normalized_and_included_in_prompt() -> None:
         }
     ]
     item = RunItem(run_id="run-1", item_id="item-1", index=0, input={"question": "q"})
-    messages = build_analysis_prompt(item, {}, [], config={"analysis_rules": rules})
+    messages = build_analysis_prompt(item, {}, config={"analysis_rules": rules})
     system_content = next(
         message["content"] for message in messages if message["role"] == "system"
     )
@@ -3584,7 +3432,7 @@ def test_rule_inference_metadata_is_validated_persisted_and_not_injected() -> No
     assert model.explanation == explanation
 
     item = RunItem(run_id="run-1", item_id="item-1", index=0, input={"question": "q"})
-    messages = build_analysis_prompt(item, {}, [], config={"analysis_rules": rules})
+    messages = build_analysis_prompt(item, {}, config={"analysis_rules": rules})
     system_content = next(
         message["content"] for message in messages if message["role"] == "system"
     )
@@ -5314,7 +5162,6 @@ def test_build_analysis_prompt_includes_uploaded_reference_documents(
     messages = build_analysis_prompt(
         item,
         {},
-        [],
         config={
             "reference_documents": [
                 {
@@ -5342,7 +5189,6 @@ def test_build_analysis_prompt_includes_all_configured_document_content(
     messages = build_analysis_prompt(
         item,
         {},
-        [],
         config={
             "reference_documents": [
                 {"name": "first.md", "content": "a" * 40_000},
@@ -5370,7 +5216,6 @@ def test_build_analysis_prompt_does_not_shorten_the_final_prompt(
     messages = build_analysis_prompt(
         item,
         {},
-        [],
         config={
             "system_prompt": "System guidance " * 21_000,
             "reference_documents": [
@@ -5408,7 +5253,6 @@ def test_large_item_keeps_full_output_and_selected_metric_evidence() -> None:
     messages = build_analysis_prompt(
         item,
         {"accuracy": score},
-        [],
         metric_name="accuracy",
     )
     prompt = "\n".join(message["content"] for message in messages)
@@ -5456,7 +5300,6 @@ def test_analyzer_reports_provider_context_rejection_without_shortening(
             "test-model",
             item,
             {},
-            [],
             config={"system_prompt": "System guidance " * 10_000},
         )
     )
@@ -5469,9 +5312,40 @@ def test_analyzer_reports_provider_context_rejection_without_shortening(
     assert "System guidance " * 10_000 in first_messages[0]["content"]
 
 
-def test_analyzer_retries_timeout_once_with_higher_timeout(
+@pytest.mark.parametrize(
+    ("request_timeout_seconds", "max_timeout_retries", "failures", "expected_timeouts"),
+    [
+        pytest.param(
+            45,
+            None,
+            [RuntimeError("provider request timed out")],
+            [45.0, 90.0],
+            id="default-single-retry-doubles-timeout",
+        ),
+        pytest.param(
+            30,
+            2,
+            [TimeoutError("first"), TimeoutError("second")],
+            [30.0, 60.0, 120.0],
+            id="configured-retry-count",
+        ),
+        pytest.param(
+            # Doubling would give 2000 -> 4000 -> 8000; the ceiling holds it at 3600.
+            2000,
+            2,
+            [TimeoutError("first"), TimeoutError("second")],
+            [2000.0, 3600.0, 3600.0],
+            id="capped-at-deployment-ceiling",
+        ),
+    ],
+)
+def test_analyzer_retries_timeouts_with_growing_timeout(
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
+    request_timeout_seconds: float,
+    max_timeout_retries: int | None,
+    failures: list[Exception],
+    expected_timeouts: list[float],
 ) -> None:
     _, _, _, item = _seed_run(db_session)
     completion = SimpleNamespace(
@@ -5493,9 +5367,7 @@ def test_analyzer_retries_timeout_once_with_higher_timeout(
             )
         ],
     )
-    create_completion = AsyncMock(
-        side_effect=[RuntimeError("provider request timed out"), completion]
-    )
+    create_completion = AsyncMock(side_effect=[*failures, completion])
     monkeypatch.setattr(
         llm_analyzer_service,
         "create_chat_completion_compat",
@@ -5509,6 +5381,9 @@ def test_analyzer_retries_timeout_once_with_higher_timeout(
 
     monkeypatch.setattr(llm_analyzer_service.asyncio, "wait_for", record_wait_for)
     retry_events: list[dict[str, Any]] = []
+    retry_kwargs: dict[str, int] = {}
+    if max_timeout_retries is not None:
+        retry_kwargs["max_timeout_retries"] = max_timeout_retries
 
     result = asyncio.run(
         analyze_single_item(
@@ -5516,30 +5391,32 @@ def test_analyzer_retries_timeout_once_with_higher_timeout(
             "test-model",
             item,
             {},
-            [],
-            request_timeout_seconds=45,
+            request_timeout_seconds=request_timeout_seconds,
             retry_callback=retry_events.append,
+            **retry_kwargs,
         )
     )
 
+    retries = len(failures)
     assert result.error is None
-    assert result.retry_count == 1
+    assert result.retry_count == retries
     assert result.retry_reason == "timeout"
-    assert result.request_timeout_seconds == 90.0
+    assert result.request_timeout_seconds == expected_timeouts[-1]
     assert "succeeded on retry" in str(result.warning)
-    assert create_completion.await_count == 2
-    assert wait_timeouts == [45.0, 90.0]
+    assert create_completion.await_count == retries + 1
+    assert wait_timeouts == expected_timeouts
     assert retry_events == [
         {
             "item_id": item.item_id,
             "metric_name": "",
             "reason": "timeout",
-            "retry_count": 1,
-            "attempt": 2,
-            "max_attempts": 2,
-            "previous_timeout_seconds": 45.0,
-            "timeout_seconds": 90.0,
+            "retry_count": retry,
+            "attempt": retry + 1,
+            "max_attempts": retries + 1,
+            "previous_timeout_seconds": expected_timeouts[retry - 1],
+            "timeout_seconds": expected_timeouts[retry],
         }
+        for retry in range(1, retries + 1)
     ]
 
 
@@ -5558,7 +5435,7 @@ def test_analyzer_reports_error_after_both_timeout_attempts(
     )
 
     result = asyncio.run(
-        analyze_single_item(SimpleNamespace(), "test-model", item, {}, [])
+        analyze_single_item(SimpleNamespace(), "test-model", item, {})
     )
 
     assert result.error_code == "analysis_timeout"
@@ -5566,134 +5443,6 @@ def test_analyzer_reports_error_after_both_timeout_attempts(
     assert "first used a 120-second timeout" in result.error
     assert "retry used a 240-second timeout" in result.error
     assert create_completion.await_count == 2
-
-
-def test_analyzer_uses_configured_timeout_retry_count(
-    db_session: Session,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _, _, _, item = _seed_run(db_session)
-    completion = SimpleNamespace(
-        id="retry-success",
-        usage=None,
-        choices=[
-            SimpleNamespace(
-                finish_reason="stop",
-                message=SimpleNamespace(
-                    content=json.dumps(
-                        {
-                            "root_cause": "Reasoning Error",
-                            "root_cause_detail": "evidence gap",
-                            "root_cause_note": "The answer was not grounded.",
-                            "confidence": 0.8,
-                        }
-                    )
-                ),
-            )
-        ],
-    )
-    create_completion = AsyncMock(
-        side_effect=[TimeoutError("first"), TimeoutError("second"), completion]
-    )
-    monkeypatch.setattr(
-        llm_analyzer_service,
-        "create_chat_completion_compat",
-        create_completion,
-    )
-    wait_timeouts: list[float] = []
-
-    async def record_wait_for(awaitable: Any, timeout: float) -> Any:
-        wait_timeouts.append(timeout)
-        return await awaitable
-
-    monkeypatch.setattr(llm_analyzer_service.asyncio, "wait_for", record_wait_for)
-    retry_events: list[dict[str, Any]] = []
-
-    result = asyncio.run(
-        analyze_single_item(
-            SimpleNamespace(),
-            "test-model",
-            item,
-            {},
-            [],
-            request_timeout_seconds=30,
-            max_timeout_retries=2,
-            retry_callback=retry_events.append,
-        )
-    )
-
-    assert result.error is None
-    assert result.retry_count == 2
-    assert result.request_timeout_seconds == 120.0
-    assert wait_timeouts == [30.0, 60.0, 120.0]
-    assert [event["attempt"] for event in retry_events] == [2, 3]
-    assert [event["max_attempts"] for event in retry_events] == [3, 3]
-
-
-def test_analyzer_caps_each_timeout_attempt_at_the_deployment_ceiling(
-    db_session: Session,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _, _, _, item = _seed_run(db_session)
-    completion = SimpleNamespace(
-        id="capped-retry-success",
-        usage=None,
-        choices=[
-            SimpleNamespace(
-                finish_reason="stop",
-                message=SimpleNamespace(
-                    content=json.dumps(
-                        {
-                            "root_cause": "Reasoning Error",
-                            "root_cause_detail": "evidence gap",
-                            "root_cause_note": "The answer was not grounded.",
-                            "confidence": 0.8,
-                        }
-                    )
-                ),
-            )
-        ],
-    )
-    create_completion = AsyncMock(
-        side_effect=[TimeoutError("first"), TimeoutError("second"), completion]
-    )
-    monkeypatch.setattr(
-        llm_analyzer_service,
-        "create_chat_completion_compat",
-        create_completion,
-    )
-    wait_timeouts: list[float] = []
-
-    async def record_wait_for(awaitable: Any, timeout: float) -> Any:
-        wait_timeouts.append(timeout)
-        return await awaitable
-
-    monkeypatch.setattr(llm_analyzer_service.asyncio, "wait_for", record_wait_for)
-    retry_events: list[dict[str, Any]] = []
-
-    result = asyncio.run(
-        analyze_single_item(
-            SimpleNamespace(),
-            "test-model",
-            item,
-            {},
-            [],
-            request_timeout_seconds=2000,
-            max_timeout_retries=2,
-            retry_callback=retry_events.append,
-        )
-    )
-
-    # Doubling would give 2000 -> 4000 -> 8000; the ceiling holds it at 3600.
-    assert result.error is None
-    assert result.retry_count == 2
-    assert result.request_timeout_seconds == 3600.0
-    assert wait_timeouts == [2000.0, 3600.0, 3600.0]
-    assert [event["timeout_seconds"] for event in retry_events] == [3600.0, 3600.0]
-    assert [event["previous_timeout_seconds"] for event in retry_events] == [
-        2000.0,
-        3600.0,
-    ]
 
 
 def test_approved_corrections_are_ordered_newest_first(
@@ -5752,7 +5501,6 @@ def test_analyzer_can_disable_timeout_retries(
             "test-model",
             item,
             {},
-            [],
             max_timeout_retries=0,
             retry_callback=retry_events.append,
         )
@@ -5802,7 +5550,6 @@ def test_analyzer_sends_complete_prompt_without_a_local_character_ceiling(
             "test-model",
             item,
             {},
-            [],
             config={"system_prompt": large_guidance},
         )
     )
@@ -5902,11 +5649,11 @@ def test_run_context_toggles_control_prompt_sources(db_session: Session) -> None
 
     enabled_prompt = "\n".join(
         message["content"]
-        for message in build_analysis_prompt(item, {}, [], config=enabled_config)
+        for message in build_analysis_prompt(item, {}, config=enabled_config)
     )
     disabled_prompt = "\n".join(
         message["content"]
-        for message in build_analysis_prompt(item, {}, [], config=disabled_config)
+        for message in build_analysis_prompt(item, {}, config=disabled_config)
     )
 
     assert "Context-only rule" in enabled_prompt
@@ -5949,7 +5696,7 @@ def test_analyzer_accepts_more_than_five_reference_documents() -> None:
         input={"question": "q"},
         output={"answer": "a"},
     )
-    messages = build_analysis_prompt(item, {}, [], config=analyzer_config)
+    messages = build_analysis_prompt(item, {}, config=analyzer_config)
     user_content = next(
         message["content"] for message in messages if message["role"] == "user"
     )
@@ -6240,7 +5987,6 @@ def test_build_analysis_prompt_projects_nested_output_mapping() -> None:
     messages = build_analysis_prompt(
         item,
         {},
-        [],
         config={
             "field_mapping": {
                 "output": [
@@ -6260,50 +6006,6 @@ def test_build_analysis_prompt_projects_nested_output_mapping() -> None:
     assert '"tokens": 42' not in system_content
 
 
-def test_build_analysis_prompt_does_not_project_correction_examples() -> None:
-    item = RunItem(
-        run_id="run-1",
-        item_id="item-1",
-        index=0,
-        input={"question": "q"},
-        expected={"answer": "expected"},
-        output={
-            "answer": "actual",
-            "debug": {"trace": "target-noise"},
-        },
-    )
-    correction = ReviewCorrection(
-        run_id="run-1",
-        item_id="item-2",
-        task="insightor_api",
-        input_snapshot={"question": "example q"},
-        expected_snapshot={"answer": "example expected"},
-        output_snapshot={
-            "answer": "example actual",
-            "debug": {"trace": "example-noise"},
-        },
-        human_root_cause="Private Example Category",
-        status=CorrectionStatus.APPROVED,
-        is_active=True,
-    )
-
-    messages = build_analysis_prompt(
-        item,
-        {},
-        [correction],
-        config={"field_mapping": {"output": ["output.answer"]}},
-    )
-
-    prompt_content = "\n\n".join(message["content"] for message in messages)
-    assert '"answer": "actual"' in prompt_content
-    assert '"answer": "example actual"' not in prompt_content
-    assert "example q" not in prompt_content
-    assert "example expected" not in prompt_content
-    assert "Private Example Category" not in prompt_content
-    assert "target-noise" not in prompt_content
-    assert "example-noise" not in prompt_content
-
-
 def test_build_analysis_prompt_projects_python_literal_output_string() -> None:
     item = RunItem(
         run_id="run-1",
@@ -6316,7 +6018,6 @@ def test_build_analysis_prompt_projects_python_literal_output_string() -> None:
     messages = build_analysis_prompt(
         item,
         {},
-        [],
         config={"field_mapping": {"output": ["output.sql", "output.agent_response"]}},
     )
 
@@ -6350,7 +6051,6 @@ def test_build_analysis_prompt_projects_nested_metric_metadata() -> None:
     messages = build_analysis_prompt(
         item,
         {"accuracy": score},
-        [],
         config={
             "metadata_fields": [
                 "metric_metadata.reason",
@@ -6396,7 +6096,6 @@ def test_build_analysis_prompt_projects_metric_metadata_by_metric_name() -> None
     messages = build_analysis_prompt(
         item,
         {"judge.accuracy": accuracy, "format": format_score},
-        [],
         config={
             "metadata_fields": [
                 "metric_metadata:judge%2Eaccuracy.reason",
@@ -6443,7 +6142,6 @@ def test_build_analysis_prompt_includes_only_selected_metric_metadata_by_default
     messages = build_analysis_prompt(
         item,
         {"accuracy": accuracy, "format": format_score},
-        [],
         metric_name="accuracy",
     )
 
@@ -6502,7 +6200,7 @@ def test_task_root_cause_catalog_includes_defaults_and_task_history(
     assert analyzer_config["category_example_counts"]["Reasoning Error"] == 1
     prompt = "\n".join(
         message["content"]
-        for message in build_analysis_prompt(item, {}, [], config=analyzer_config)
+        for message in build_analysis_prompt(item, {}, config=analyzer_config)
     )
     assert "Approved examples: 1" in prompt
 

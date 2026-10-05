@@ -22,6 +22,7 @@ from qym_platform.api import runs as runs_api
 from qym_platform.auth import Principal
 from qym_platform.db.dashboard_models import DashboardRunSummary as Summary
 from qym_platform.db.models import (
+    Run,
     RunItemAttempt,
     RunItemPassScore,
     RunItemScore,
@@ -35,6 +36,8 @@ from qym_platform.services.repeat_analysis import build_repeat_analysis
 from qym_platform.services.run_means import (
     MetricTotals,
     apply_repeat_pass_errors,
+    is_metric_error,
+    is_task_error_pass,
     mean_without_metric_errors,
     metric_mean_fields,
     reduce_pass_scores,
@@ -44,7 +47,6 @@ from qym_platform.services.run_means import (
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 from test_dashboard_durable_summaries import (
-    database,
     drain,
     item,
     legacy,
@@ -386,6 +388,155 @@ def test_sweep_counts_errored_items_and_passes_as_failures():
     assert result["repeatScores"] == [0.1]
 
 
+EMPTY_AVERAGES = """
+const run = (id, values) => ({ run: { run_id: id, samples: 1 }, snapshot: { metric_names: ['h'],
+  rows: values.map((value, i) => ({ item_id: 'item-' + i, status: 'completed',
+    metric_values: [value === null ? 0 : value],
+    metric_meta: value === null ? { h: { status: 'error' } } : {} })) } });
+const runs = [run('E', [null, null]), run('M', [0.6, 0.1]), run('Z', [0, 0])];
+const cohort = (left, right, direction) => {
+  const result = m.calculateGroupedCohortComparison({
+    runsData: runs, leftRunIds: [left], rightRunIds: [right],
+    threshold: 0.2, direction, isBoolean: false, metricName: 'h',
+    getMetricIndex: () => 0, getItemId: row => row.item_id, getRunId: data => data.run.run_id });
+  return [result.left.avgAtK, result.right.avgAtK, result.deltas.avgAtK,
+    result.left.passAtK, result.right.passAtK];
+};
+process.stdout.write(JSON.stringify({
+  left: cohort('E', 'M', 'minimize'),
+  right: cohort('M', 'E', 'minimize'),
+  both: cohort('E', 'E', 'minimize'),
+  zero: cohort('Z', 'M', 'minimize'),
+  maximize: cohort('E', 'M', 'maximize'),
+}));
+"""
+
+
+def test_sweep_cohort_without_a_score_has_no_average_and_no_delta():
+    result = _node(EMPTY_AVERAGES, {})
+    # [left avg, right avg, avg delta, left Pass@k, right Pass@k]. Every h
+    # entry of run E errored: no average and no delta, never 0.0 -> 0.35;
+    # its errors still fail in the pass rates.
+    assert result["left"] == [None, pytest.approx(0.35), None, 0, 0.5]
+    assert result["right"] == [pytest.approx(0.35), None, None, 0.5, 0]
+    assert result["both"] == [None, None, None, 0, 0]
+    # Measured zeros are scores.
+    assert result["zero"] == [0, pytest.approx(0.35), pytest.approx(0.35), 1, 0.5]
+    # Higher is better: errors still count as 0.
+    assert result["maximize"] == [0, pytest.approx(0.35), pytest.approx(0.35), 0, 0.5]
+
+
+PASS_TOOLTIPS = """
+const out = {};
+for (const [name, args] of Object.entries(input)) {
+  const tips = m.getMetricTooltips(...args);
+  out[name] = [tips.passAtK, tips.passHatK, tips.maxAtK, tips.failedCount];
+}
+process.stdout.write(JSON.stringify(out));
+"""
+
+
+def test_pass_tooltips_follow_the_metric_direction():
+    """getMetricTooltips (the repeat run page): lower is better passes at or
+    below the threshold, its boolean best is 0%, and its errors are left out.
+    Callers without a direction keep the higher-is-better wording."""
+    tips = _node(
+        PASS_TOOLTIPS,
+        {
+            "maximize": [3, False, 80, "maximize"],
+            "minimize": [3, False, 20, "minimize"],
+            "boolean maximize": [3, True, 80, "maximize"],
+            "boolean minimize": [3, True, 20, "minimize"],
+            "omitted": [3, False, 80],
+            "undeclared": [3, False, 80, None],
+        },
+    )
+    at_least = "Percentage of items where at least one of the 3 runs "
+    every = "Percentage of items where all 3 runs "
+    best = "Average of the best score across all 3 runs for each item"
+    zero = (
+        "Item evaluations that returned a task or scorer error, across all "
+        "passes of the selected runs. Errors are scored as 0%."
+    )
+    maximize = [at_least + "scored ≥80%.", every + "scored ≥80%.", best + ".", zero]
+    assert tips["maximize"] == tips["omitted"] == tips["undeclared"] == maximize
+    assert tips["minimize"] == [
+        at_least + "scored ≤20%.",
+        every + "scored ≤20%.",
+        best + " (the lowest, since lower is better).",
+        "Item evaluations that returned a task or scorer error, across all "
+        "passes of the selected runs. Lower is better for this metric, so "
+        "errors are left out of its scores and count as fails.",
+    ]
+    assert tips["boolean maximize"][:2] == [
+        at_least + "achieved a perfect score (100%).",
+        every + "achieved a perfect score (100%).",
+    ]
+    assert tips["boolean minimize"][:2] == [
+        at_least + "achieved the best score (0%).",
+        every + "achieved the best score (0%).",
+    ]
+
+
+def test_compare_sweep_shows_no_average_and_no_verdict_for_a_side_without_scores():
+    from test_metric_semantics import _compare_functions, run_metrics_js
+
+    functions = _compare_functions(
+        "sweepPassAtK", "sweepPassHatK", "sweepBinomPmf", "sweepLutMoments",
+        "sweepPassMetricLuts", "normalCdf", "SWEEP_Z_95", "computeSweepNoise",
+        "summarizeSweepItems", "escapeHtml", "getDeltaClass", "getNoiseDeltaClass",
+        "renderSweepDelta", "formatSweepMetricValue", "renderSweepStatCard",
+        "formatSweepCompactMetricValue", "formatSweepCompactDelta",
+        "renderSweepMetadataMetricCell",
+    )
+    run_metrics_js(
+        "const document = {createElement: () => ({set textContent(v) { this.v = String(v); }, get innerHTML() { return this.v; }})};\n"
+        "var state = {selectedOverviewMetric: 'h'};\n"
+        "function metricDirectionFor() { return 'minimize'; }\n"
+        + functions
+        + r"""
+    // h is lower-is-better (pass at <= 0.2). Item a errored on the left (no
+    // score, a fail); item b passed on both sides.
+    const entry = (left, right) => ({
+      leftScores: left === null ? [] : [left], rightScores: [right],
+      leftPasses: [left !== null && left <= 0.2], rightPasses: [right <= 0.2],
+      leftAttempts: [1], rightAttempts: [1], move: 0,
+    });
+    const a = entry(null, 0.6), b = entry(0.1, 0.1);
+    const all = summarizeSweepItems([a, b], 1, 1, null);
+    assert.equal(all.left.avgAtK, 0.1);
+    assert.ok(Math.abs(all.deltas.avgAtK - 0.25) < 1e-9);
+    // A filter that leaves only item a: no left average, delta or verdict.
+    const only = summarizeSweepItems([a], 1, 1, null);
+    assert.equal(only.left.avgAtK, null);
+    assert.equal(only.right.avgAtK, 0.6);
+    assert.equal(only.deltas.avgAtK, null);
+    assert.equal(only.noise.avgAtK, null);
+    assert.ok(only.noise.passAtK);
+    assert.deepEqual([only.left.passAtK, only.right.passAtK], [0, 0]);
+    assert.equal(summarizeSweepItems([], 1, 1, null).left.avgAtK, null);
+    // A measured zero is a score.
+    const zero = summarizeSweepItems([entry(0, 0.6)], 1, 1, null);
+    assert.equal(zero.left.avgAtK, 0);
+    assert.equal(zero.deltas.avgAtK, 0.6);
+
+    const card = renderSweepStatCard('Avg@1', only.left.avgAtK, only.right.avgAtK,
+      only.deltas.avgAtK, only.noise.avgAtK, 'minimize');
+    assert.match(card, /sweep-stat-card qym-stat-strip__item neutral/);
+    assert.match(card, /sweep-stat-from">—</);
+    assert.match(card, /sweep-stat-to">60.0%</);
+    assert.match(card, /sweep-delta-pill neutral">—</);
+    const cell = renderSweepMetadataMetricCell(only.left.avgAtK, only.right.avgAtK,
+      only.deltas.avgAtK, 'minimize');
+    assert.match(cell, /class="from">—</);
+    assert.match(cell, /sweep-metadata-delta neutral">—</);
+    // The zero side still compares (a regression for lower-is-better).
+    assert.match(renderSweepStatCard('Avg@1', 0, 0.6, 0.6, null, 'minimize'),
+      /sweep-delta-pill negative">\+60.0%</);
+    """
+    )
+
+
 def _repeat(db, run_id="rr"):
     """Three passes; h lower-is-better (primary), q higher-is-better.
 
@@ -526,7 +677,7 @@ def test_models_payload_judges_repeat_items_without_their_errored_passes(databas
     # markers), so Models keeps one entry per item.
     assert sorted(rows["a"]["pass_scores"]) == ["h", "q"]
     assert rows["a"]["pass_metric_meta"]["h"][1] == {"status": "error"}
-    assert rows["b"]["pass_metric_meta"]["h"][1] == {"label": "error"}
+    assert rows["b"]["pass_metric_meta"]["h"][1] == {"label": "error", "task_error": True}
     assert "pass_scores" not in rows["c"]
     assert models["snapshot"]["pass_scores_scope"] == "errored"
     verdicts = _node(PASS_VERDICTS, {"run": models})
@@ -852,6 +1003,129 @@ def test_root_cause_dashboard_and_insight_verdicts_follow_the_rule(database):
         assert result == "fail"
 
 
+def test_repeat_items_whose_every_pass_failed_never_pass_a_zero_threshold(database):
+    """A higher-is-better metric at a declared threshold of 0: an item whose
+    passes all failed stores 0 and read as a pass on Insights and the
+    root-cause dashboard. A mixed item stays a real measurement."""
+    from qym_platform.db.models import RunItem
+    from qym_platform.services import insights_engine
+    from qym_platform.services.root_cause_dashboard import (
+        DashboardFilters,
+        _load_snapshot,
+        _score_outcome,
+    )
+    from qym_platform.services.run_means import errored_repeat_items
+
+    with Session(database) as db:
+        run(
+            db,
+            run_id="zt",
+            metrics=["q"],
+            samples=2,
+            status=RunWorkflowStatus.COMPLETED,
+            run_metadata={"total_items": 4},
+        )
+        db.add(_spec("zt", "q", 0, "maximize", score_type="number", pass_threshold=0.0))
+        task, scorer, ok = ({}, "error"), ({"status": "error"}, None), ({}, None)
+        passes = {
+            "tasks": [task, task],
+            "scorer": [scorer, scorer],
+            "mixed": [task, ok],
+            "zero": [ok, ok],
+        }
+        for index, (item_id, outcomes) in enumerate(passes.items()):
+            item(db, item_id=item_id, run_id="zt", index=index)
+            for number, (meta, label) in enumerate(outcomes, start=1):
+                db.add(
+                    RunItemPassScore(
+                        run_id="zt",
+                        item_id=item_id,
+                        metric_name="q",
+                        pass_number=number,
+                        score_numeric=0.0,
+                        meta=dict(meta),
+                        label=label,
+                    )
+                )
+            db.add(
+                RunItemScore(
+                    run_id="zt",
+                    item_id=item_id,
+                    metric_name="q",
+                    score_numeric=0.0,
+                    score_raw=0.0,
+                    meta={"sample_reducer": "mean", "samples_observed": 2},
+                )
+            )
+        db.commit()
+
+        specs = db.query(RunMetricSpec).filter_by(run_id="zt").all()
+        assert errored_repeat_items(db, specs) == {
+            ("zt", "tasks", "q"),
+            ("zt", "scorer", "q"),
+        }
+        snapshot = _load_snapshot(db, "p", DashboardFilters(), include_changes=False)
+        assert snapshot.errored_passes == {("zt", "tasks", "q"), ("zt", "scorer", "q")}
+        items = {row.item_id: row for row in db.query(RunItem).filter_by(run_id="zt")}
+        scores = {
+            row.item_id: row for row in db.query(RunItemScore).filter_by(run_id="zt")
+        }
+        zt = db.get(Run, "zt")
+        verdicts = {
+            item_id: (
+                _score_outcome(
+                    items[item_id],
+                    scores[item_id],
+                    specs[0],
+                    ("zt", item_id, "q") in snapshot.errored_passes,
+                    zt,
+                ),
+                insights_engine._metric_result(
+                    items[item_id],
+                    scores[item_id],
+                    specs[0],
+                    zt,
+                    ("zt", item_id, "q") in snapshot.errored_passes,
+                ),
+            )
+            for item_id in passes
+        }
+        assert verdicts == {
+            "tasks": ("failed", "fail"),
+            "scorer": ("failed", "fail"),
+            "mixed": ("passed", "success"),
+            "zero": ("passed", "success"),
+        }
+        assert {("zt", "tasks"), ("zt", "scorer")} <= snapshot.failed_pairs
+        assert ("zt", "mixed") not in snapshot.failed_pairs
+
+        group = runs_api.run_group_metrics(
+            "zt", metric=None, threshold=None, db=db, principal=_principal(db)
+        )
+    # Only the scored zeros pass: mixed once, zero twice.
+    assert group["group"]["pass_at_k"] == pytest.approx(2 / 4)
+    assert group["group"]["pass_hat_k"] == pytest.approx(1 / 4)
+    assert group["group"]["avg_at_k"] == 0.0
+    assert group["distribution"] == [2, 1, 1]
+
+
+def test_repeat_analysis_cache_signature_holds_each_pass_error():
+    from qym_platform.services.repeat_analysis import (
+        METHOD_VERSION,
+        score_signature,
+    )
+
+    assert METHOD_VERSION == 2
+    scored = score_signature([("a", 1, 0.0, False)])
+    assert scored != score_signature([("a", 1, 0.0, True)])
+    assert build_repeat_analysis(
+        {"a": [0.0, 0.0]},
+        threshold=0.0,
+        samples=2,
+        eligible={"a": [False, True]},
+    )["distribution"] == [0, 1, 0]
+
+
 def test_scorer_label_error_and_reviewed_task_failures_are_scores():
     # A scorer's own "error" label comes with its metadata: a judged pass.
     scorer_label = _Pass(0.2, {"reason": "judged"}, "error")
@@ -892,6 +1166,212 @@ def test_scorer_label_error_and_reviewed_task_failures_are_scores():
         {"score": pytest.approx(0.3), "isError": False},
         {"score": pytest.approx(0.3), "isError": False},
     ]
+
+
+@pytest.mark.parametrize(
+    "label, meta, explanation, expected",
+    [
+        # A scorer error keeps its own status, even under the marker.
+        ("error", {"status": "error", "task_error": True}, None, False),
+        # A reviewer's edit replaces the zero-fill.
+        ("error", {"task_error": True, "modified": "true"}, None, False),
+        # The marker decides before the explanation and the metadata.
+        ("error", {"task_error": True, "reason": "judged"}, "judged", True),
+        ("error", {"task_error": False}, None, False),
+        # Unmarked rows: an explanation or scorer metadata is a verdict; a
+        # pass diagnosis is not scorer metadata.
+        ("error", None, "Off topic", False),
+        ("error", {"details": {"tone": "rude"}}, None, False),
+        ("error", {"root_cause_analysis": {"cause": "x"}}, None, True),
+        (" Error ", None, None, True),
+        ("pass", {"task_error": True}, None, False),
+    ],
+)
+def test_error_labeled_pass_classification_order(label, meta, explanation, expected):
+    assert is_task_error_pass(label, meta, explanation) is expected
+
+
+# Pass rows as stored: (label column, meta, explanation, final attempt).
+_LABELED_PASSES = {
+    "long_reason": ("error", {"reason": "r" * 500}, None, "completed"),
+    "nested": ("error", {"details": {"tone": {"score": 2}}}, None, "completed"),
+    "explained": ("error", None, "Off topic " * 40, "completed"),
+    "verdict_marked": ("error", {"task_error": False}, None, "completed"),
+    "failed": ("error", {"task_error": True, "reason": "partial"}, "partial", "error"),
+    "legacy_zero_fill": ("error", None, None, "error"),
+    "reviewed": ("error", {"task_error": True, "modified": "true"}, None, "error"),
+    "scorer_error": ("error", {"status": "timeout"}, None, "completed"),
+    # An imported run keeps the label in the metadata only.
+    "imported": (None, {"label": "error", "reason": "judged"}, "Off topic", "completed"),
+}
+
+
+def _labeled(db, run_id="lp"):
+    """A lower-is-better h over three passes: pass 1 of each item is a
+    _LABELED_PASSES case (0.2 when judged, 0 when it failed), passes 2 and 3
+    score 0.4 and 0.6. Judged items mean 0.4; failed ones 0.5."""
+    run(
+        db,
+        run_id=run_id,
+        metrics=["h"],
+        samples=3,
+        status=RunWorkflowStatus.COMPLETED,
+        run_metadata={"total_items": len(_LABELED_PASSES), "last_completed_pass": 3},
+    )
+    db.add(_spec(run_id, "h", 0, "minimize", is_primary=True))
+    for index, (item_id, case) in enumerate(_LABELED_PASSES.items()):
+        label, meta, explanation, attempt = case
+        item(db, item_id=item_id, run_id=run_id, index=index)
+        errored = is_metric_error(meta) or is_task_error_pass(label, meta, explanation)
+        rows = [
+            RunItemPassScore(
+                run_id=run_id,
+                item_id=item_id,
+                metric_name="h",
+                pass_number=1,
+                score_numeric=0.0 if errored else 0.2,
+                label=label,
+                meta=dict(meta) if meta is not None else None,
+                explanation=explanation,
+            )
+        ] + [
+            RunItemPassScore(
+                run_id=run_id,
+                item_id=item_id,
+                metric_name="h",
+                pass_number=number,
+                score_numeric=score,
+                meta={},
+            )
+            for number, score in ((2, 0.4), (3, 0.6))
+        ]
+        db.add_all(rows)
+        reduced, observed = reduce_pass_scores(rows, "minimize")
+        db.add(
+            RunItemScore(
+                run_id=run_id,
+                item_id=item_id,
+                metric_name="h",
+                score_numeric=reduced,
+                score_raw=reduced,
+                meta={"sample_reducer": "mean", "samples_observed": observed},
+            )
+        )
+        for number in (1, 2, 3):
+            failed = number == 1 and attempt == "error"
+            db.add(
+                RunItemAttempt(
+                    run_id=run_id,
+                    item_id=item_id,
+                    pass_number=number,
+                    attempt_number=1,
+                    status="failed" if failed else "completed",
+                    error="boom" if failed else None,
+                    is_last_attempt=True,
+                    latency_ms=10.0,
+                    output=None if failed else "answer",
+                )
+            )
+    db.commit()
+
+
+# Six judged items at 0.4; the failed, zero-filled and scorer-error items 0.5.
+LABELED_H = (6 * 0.4 + 3 * 0.5) / 9
+
+
+def test_run_payload_flag_keeps_the_classification_through_compaction():
+    """The page reads the server's verdict, not what the index leaves of the
+    evidence: full rows, index rows and released rows agree with the means."""
+    from qym_platform.services.run_payloads import compact_row
+
+    rows, expected = [], []
+    for label, meta, explanation, attempt in _LABELED_PASSES.values():
+        # As _build_run_data builds the pass metadata.
+        payload_meta = dict(meta) if meta else {}
+        runs_api._set_task_error_flag(payload_meta, label, meta, explanation)
+        if label:
+            payload_meta.setdefault("label", label)
+        if explanation:
+            payload_meta.setdefault("explanation", explanation)
+        rows.append(
+            {
+                "status": "completed",
+                "metric_values": [0.4],
+                "metric_meta": {},
+                "pass_scores": {"h": [0.2]},
+                "pass_metric_meta": {"h": [payload_meta]},
+                "pass_attempts": [{"status": attempt, "output": "answer"}],
+            }
+        )
+        expected.append(
+            is_metric_error(meta) or is_task_error_pass(label, meta, explanation)
+        )
+    compact = [compact_row(row) for row in rows]
+    for row in compact:
+        meta = row["pass_metric_meta"]["h"][0]
+        assert "explanation" not in meta and "details" not in meta
+    script = (
+        "process.stdout.write(JSON.stringify(input.rows.map(r => [\n"
+        "  m.isTaskErrorPass(r, 'h', 0) || m.isMetricErrorMeta(r.pass_metric_meta.h[0]),\n"
+        "  m.getRowScore(r, 0, 'h', 'minimize').isError,\n"
+        "])));"
+    )
+    for view in (rows, compact):
+        out = _node(script, {"rows": view})
+        assert dict(zip(_LABELED_PASSES, (verdict for verdict, _ in out))) == dict(
+            zip(_LABELED_PASSES, expected)
+        )
+    assert dict(zip(_LABELED_PASSES, expected)) == {
+        "long_reason": False,
+        "nested": False,
+        "explained": False,
+        "verdict_marked": False,
+        "failed": True,
+        "legacy_zero_fill": True,
+        "reviewed": False,
+        "scorer_error": True,
+        "imported": False,
+    }
+    # The flag is the platform's, never a scorer field.
+    hidden = _node(
+        "process.stdout.write(JSON.stringify(['task_error', 'modified', "
+        "'original_score', 'reason'].map(m.isInternalMetaKey)));",
+        {},
+    )
+    assert hidden == [True, True, True, False]
+
+
+def test_ingest_stores_a_scorer_error_label_as_a_verdict():
+    """A scorer may label its own verdict "error" with no metadata or
+    explanation. Ingest marks it, so it is not read as a failed task: the
+    lower-is-better item keeps every pass, (0.2 + 0.4 + 0.6) / 3."""
+    app, SessionLocal = _ingest_env(3)
+    lines = [
+        _event(1, "item_started", {"item_id": "item-1", "index": 0, "pass_number": 1}),
+        _event(
+            2,
+            "metric_scored",
+            {
+                "item_id": "item-1",
+                "pass_number": 1,
+                "metric_name": "h",
+                "score_numeric": 0.2,
+                "label": "error",
+            },
+        ),
+        _scored(3, 2, 0.4),
+        _scored(4, 3, 0.6),
+    ]
+    with TestClient(app) as client:
+        _ingest(client, "\n".join(lines) + "\n", "test-token")
+    with SessionLocal() as session:
+        first = session.query(RunItemPassScore).filter_by(pass_number=1).one()
+        assert first.label == "error"
+        assert first.meta == {"task_error": False}
+        assert not is_task_error_pass(first.label, first.meta, first.explanation)
+        score = session.query(RunItemScore).one()
+        assert score.score_numeric == pytest.approx(0.4)
+        assert score.meta["samples_observed"] == 3
 
 
 def test_editing_a_task_failed_pass_counts_the_reviewer_score(database):

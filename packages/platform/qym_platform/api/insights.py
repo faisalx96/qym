@@ -34,6 +34,7 @@ from qym_platform.services.execution_errors import (
 )
 from qym_platform.services.run_means import (
     MetricTotals,
+    completed_review_runs,
     mean_task_errors,
     not_received_clause,
     raw_metric_totals,
@@ -245,9 +246,16 @@ def project_insights(
             func.count(case((RunItem.error.isnot(None), 1))).label("errors"),
             func.coalesce(func.sum(RunItem.retry_count), 0).label("retries"),
             func.avg(RunItem.latency_ms).label("avg_latency"),
-            func.count(case((not_received_clause(RunItem, Run), 1))).label(
-                "not_received"
-            ),
+            func.count(
+                case(
+                    (
+                        not_received_clause(
+                            RunItem, Run, completed_review_runs(db, run_ids)
+                        ),
+                        1,
+                    )
+                )
+            ).label("not_received"),
         )
         .join(Run, Run.id == RunItem.run_id)
         .filter(RunItem.run_id.in_(run_ids))

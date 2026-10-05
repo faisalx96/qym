@@ -18,7 +18,6 @@ from test_dashboard_durable_summaries import (
     RunItem,
     RunWorkflowStatus,
     Summary,
-    database,
     drain,
     item,
     projected,

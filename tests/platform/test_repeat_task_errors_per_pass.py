@@ -20,8 +20,7 @@ from qym_platform.api import runs as runs_api
 from qym_platform.db.dashboard_models import DashboardRunSummary as Summary
 from qym_platform.db.models import Run, RunItem
 from qym_platform.services import dashboard_summaries as summaries_service
-from test_dashboard_durable_summaries import (  # noqa: F401
-    database,
+from test_dashboard_durable_summaries import (
     drain,
     legacy,
     projected,

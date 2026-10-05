@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from qym_platform.api import dashboard
 from qym_platform.db.models import RunItemScore, RunWorkflowStatus
 from qym_platform.services.dashboard_cache import DashboardSnapshotCache
-from test_dashboard_durable_summaries import database, run, item, drain
+from test_dashboard_durable_summaries import run, item, drain
 
 
 def test_concurrent_misses_compute_once_and_failed_work_can_retry():

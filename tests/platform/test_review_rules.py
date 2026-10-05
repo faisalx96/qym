@@ -438,7 +438,7 @@ def test_edit_record_stays_in_the_lean_run_index():
 
     assert _keep_index_meta_value("last_edit", {"by": "x" * 300})
     details_js = (DASHBOARD / "run_details.js").read_text(encoding="utf-8")
-    assert "new Set(['error', 'status', 'last_edit'])" in details_js
+    assert "new Set(['error', 'status', 'task_error', 'last_edit'])" in details_js
 
 
 # ---------------------------------------------------------------------------

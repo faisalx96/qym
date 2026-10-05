@@ -35,7 +35,7 @@ from qym_platform.services.dashboard_overview import (
     facts_select,
     store_overview_facts,
 )
-from test_dashboard_durable_summaries import database, drain  # noqa: F401
+from test_dashboard_durable_summaries import drain
 from test_lost_outcome_events import emitter, rid  # noqa: F401
 from test_overview_sql_equivalence import _diff, _seed_projection, pg  # noqa: F401
 

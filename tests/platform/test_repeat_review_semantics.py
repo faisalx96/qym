@@ -4,6 +4,8 @@ Final review of the P0 series (C008, C015, C009, C011, C024):
 
 - a reviewer's item-level score on a repeat run reaches every mean (it was
   accepted, marked Edited, and then re-derived from the passes);
+- so do the run page's Category Performance groups, with the item's pass
+  weight;
 - a pass whose metric was scored before its task was cancelled is a failed
   task in the source rows too, as in the published projection;
 - a pass slice keeps a reviewer's score on a failed task;
@@ -14,6 +16,9 @@ Final review of the P0 series (C008, C015, C009, C011, C024):
 """
 
 from __future__ import annotations
+
+import re
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -35,8 +40,7 @@ from qym_platform.services.run_means import (
 )
 from sqlalchemy import event
 from sqlalchemy.orm import Session
-from test_dashboard_durable_summaries import (  # noqa: F401
-    database,
+from test_dashboard_durable_summaries import (
     drain,
     item,
     legacy,
@@ -140,6 +144,113 @@ def test_item_level_edit_on_a_repeat_item_reaches_every_mean(database):
         assert payload["metric_averages"]["h"] == pytest.approx(expected["h"]), name
 
 
+RUN_HTML = Path(__file__).resolve().parents[2] / "packages/platform/qym_platform/_static/dashboard/run.html"
+
+
+def _run_page_functions(*names):
+    source = RUN_HTML.read_text()
+    chunks = []
+    for name in names:
+        match = re.search(rf"^      function {name}\([^\n]*\n.*?^      }}$", source, re.M | re.S)
+        assert match, f"Missing production function: {name}"
+        chunks.append(match.group())
+    return "\n".join(chunks)
+
+
+# The run page's Category Performance groups (run.html getCategoryGroupStats).
+JS_CATEGORIES = (
+    "const window = ctx.window;\n"
+    + _run_page_functions(
+        "metricDirectionOf", "metricPassesFor", "rowScoreFor", "errorsLeftOutFor",
+        "passValuesFor", "passVectorFor", "getCategoryMetricScores",
+        "categoryValueText", "isListCategoryKey", "getMetadataCategoryValues",
+        "getCategoryGroupStats",
+    )
+    + """
+const parseMetaList = raw => (Array.isArray(raw) ? raw : [raw]);
+const state = {
+  viewPass: input.viewPass || null, domainFilter: null, categoryBreakdownSort: 'name',
+  metricDirections: { h: 'minimize', q: 'maximize' },
+  metricThresholds: { h: 0.3, q: 0.8 }, metricIsBoolean: {},
+};
+const ids = new Set(input.rows.map(row => row.item_id || String(row.index)));
+const out = {};
+for (const key of ['topic', 'complexity']) {
+  out[key] = {};
+  ['h', 'q'].forEach((metric, index) => {
+    for (const stat of getCategoryGroupStats(key, input.rows, ids, metric, index, null, true)) {
+      out[key][stat.groupVal + ':' + metric] = [stat.avgScore, stat.passRate];
+    }
+  });
+}
+process.stdout.write(JSON.stringify(out));
+"""
+)
+
+
+def _categories(engine, view_pass=None):
+    """Item a alone is "easy", b-d "hard"; every item is topic "all"."""
+    rows = _rows(engine, "rr")["rows"]
+    for row in rows:
+        row["item_metadata"] = {
+            "complexity": "easy" if row["item_id"] == "a" else "hard",
+            "topic": "all",
+        }
+    if view_pass:
+        # The pass view's rows (run.html scopeRowToPass): the pass's own
+        # values and metadata.
+        rows = [
+            {
+                **row,
+                "metric_values": [row["pass_scores"][name][view_pass - 1] for name in ("h", "q")],
+                "metric_meta": {},
+                "pass_metric_meta": None,
+            }
+            for row in rows
+            if row["item_id"] == "a"
+        ]
+    return _node(JS_CATEGORIES, {"rows": rows, "viewPass": view_pass})
+
+
+def test_item_level_edit_on_a_repeat_item_reaches_the_category_means(database):
+    """Category Performance read an edited repeat item's passes, so a 0.9
+    item over passes it scored lower showed their mean, not 0.9."""
+    with Session(database) as db:
+        _repeat(db)
+        _edit(db, 0, "h", "0.9")
+        _edit(db, 0, "q", "0.1")
+    # Item a's passes: h [0.2, scorer error, 0.4], q [1, 0 (error), 1].
+    # Its reviewer value fills each of its 3 pass slots, like every other
+    # item's passes: h b [0.1, 0.3] + 1 error, c [0.5] * 3, d [0.2, 0.2]
+    # + 1 error; q b [1, 0, 0.5], c [0.5] * 3, d [1, 1, 0].
+    assert _categories(database) == {
+        "topic": {
+            "all:h": pytest.approx([(0.9 * 3 + 0.4 + 1.5 + 0.4) / 10, 4 / 12]),
+            "all:q": pytest.approx([(0.1 * 3 + 1.5 + 1.5 + 2) / 12, 3 / 12]),
+        },
+        "complexity": {
+            "easy:h": pytest.approx([0.9, 0]),
+            "hard:h": pytest.approx([2.3 / 7, 4 / 9]),
+            "easy:q": pytest.approx([0.1, 0]),
+            "hard:q": pytest.approx([5 / 9, 3 / 9]),
+        },
+    }
+    # The pass view shows that pass's own value, not the item's.
+    assert _categories(database, view_pass=3)["complexity"] == {
+        "easy:h": pytest.approx([0.4, 0]),
+        "easy:q": pytest.approx([1.0, 1]),
+    }
+
+    # A pass edit makes the item its passes again (the server drops
+    # item_edit), so h of item a is [0.2, 0.6] + 1 error.
+    with Session(database) as db:
+        _edit(db, 0, "h", "0.6", pass_number=3)
+    out = _categories(database)
+    assert out["complexity"]["easy:h"] == pytest.approx([0.4, 1 / 3])
+    assert out["topic"]["all:h"] == pytest.approx([(0.8 + 0.4 + 1.5 + 0.4) / 9, 5 / 12])
+    assert out["complexity"]["easy:q"] == pytest.approx([0.1, 0])
+
+
 def test_metric_scored_before_a_cancel_is_a_failed_task_in_every_view():
     """The SDK sends metric_scored as each metric finishes; a cancel mid-scoring
     then sends item_failed for the same pass. The zero-filled pass kept the
@@ -183,8 +294,13 @@ def test_metric_scored_before_a_cancel_is_a_failed_task_in_every_view():
         assert group["group"]["pass_at_k"] == 1.0
         data = runs_api.legacy_run_data(RUN_ID, db=db, principal=principal, view="compact")
     [row] = data["snapshot"]["rows"]
-    # The marker is internal: the page reads the failed pass attempt.
-    assert row["pass_metric_meta"]["h"][0] == {"reasoning": "judge says 0.9", "label": "error"}
+    # The page reads the server's classification (task_error), which the
+    # index keeps once it drops the reasoning.
+    assert row["pass_metric_meta"]["h"][0] == {
+        "reasoning": "judge says 0.9",
+        "task_error": True,
+        "label": "error",
+    }
     js = _node(JS_MEANS, {"rows": [row], "metrics": ["h"], "specs": data["snapshot"]["metric_specs"]})
     assert js == _approx({"h": 0.3})
     drain(engine)
@@ -298,14 +414,23 @@ def test_item_without_a_stored_completion_is_marked_in_the_run_payload(database)
 def test_group_metrics_read_pass_metadata_only_for_lower_is_better_metrics(database):
     with Session(database) as db:
         _repeat(db)
-    for metric, reads_meta in (("q", False), ("h", True)):
+    # A failed pass's 0 passes a threshold of 0 or below: only there does a
+    # higher-is-better metric need the error verdicts.
+    for metric, threshold, reads_meta in (
+        ("q", None, False),
+        ("h", None, True),
+        ("q", 0.0, True),
+    ):
         with Session(database) as db, _Statements(database) as sql:
             runs_api.run_group_metrics(
-                "rr", metric=metric, threshold=None, db=db, principal=_principal(db)
+                "rr", metric=metric, threshold=threshold, db=db, principal=_principal(db)
             )
         pass_reads = [s for s in sql if "from run_item_pass_scores" in s]
         assert pass_reads, metric
-        assert any("run_item_pass_scores.meta" in s for s in pass_reads) is reads_meta, metric
+        assert any("run_item_pass_scores.meta" in s for s in pass_reads) is reads_meta, (
+            metric,
+            threshold,
+        )
 
 
 def test_source_and_projection_reads_stay_within_the_run(database):

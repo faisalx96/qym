@@ -11,7 +11,7 @@ diagnoses (review corrections) are audited here too.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -32,6 +32,14 @@ from qym_platform.db.models import (
 # can restore. REJECTED runs are resubmitted without re-running.
 EXECUTION_OUTCOMES = frozenset({RunWorkflowStatus.COMPLETED, RunWorkflowStatus.FAILED})
 SUBMITTABLE_STATUSES = EXECUTION_OUTCOMES | {RunWorkflowStatus.REJECTED}
+# Review states: runs.status shows the review, not how the run ran.
+REVIEW_STATUSES = frozenset(
+    {
+        RunWorkflowStatus.SUBMITTED,
+        RunWorkflowStatus.APPROVED,
+        RunWorkflowStatus.REJECTED,
+    }
+)
 
 # action -> audit_logs action name
 AUDIT_ACTIONS = {
@@ -107,19 +115,74 @@ def resolve_execution_outcome(
     stored = _as_status(approval.execution_status if approval else None)
     if stored is not None:
         return stored
-    # Reviews started before outcomes were recorded: the runner's own
-    # completion event is authoritative (same mapping as ingest).
-    payload = (
-        db.query(RunEvent.payload)
-        .filter(RunEvent.run_id == run.id, RunEvent.type == "run_completed")
-        .order_by(RunEvent.sequence.desc())
-        .limit(1)
-        .scalar()
-    )
-    if isinstance(payload, dict) and payload.get("final_status") is not None:
-        return _FINAL_STATUS.get(str(payload["final_status"]), RunWorkflowStatus.FAILED)
-    # Uploaded and imported runs have no event stream; they only exist complete.
-    return RunWorkflowStatus.COMPLETED
+    return _event_outcomes(db, [run.id]).get(run.id, RunWorkflowStatus.COMPLETED)
+
+
+def _event_outcomes(
+    db: Session, run_ids: Sequence[str]
+) -> Dict[str, RunWorkflowStatus]:
+    """The outcome in each run's last ``run_completed`` event.
+
+    Reviews started before outcomes were recorded: the runner's own
+    completion event is authoritative (same mapping as ingest). Uploaded and
+    imported runs have no event stream and are left out; they only exist
+    complete.
+    """
+    latest: Dict[str, tuple] = {}
+    for start in range(0, len(run_ids), 400):
+        for run_id, sequence, payload in db.query(
+            RunEvent.run_id, RunEvent.sequence, RunEvent.payload
+        ).filter(
+            RunEvent.run_id.in_(run_ids[start : start + 400]),
+            RunEvent.type == "run_completed",
+        ):
+            if run_id not in latest or sequence > latest[run_id][0]:
+                latest[run_id] = (sequence, payload)
+    return {
+        run_id: _FINAL_STATUS.get(
+            str(payload["final_status"]), RunWorkflowStatus.FAILED
+        )
+        for run_id, (_, payload) in latest.items()
+        if isinstance(payload, dict) and payload.get("final_status") is not None
+    }
+
+
+def execution_outcomes(
+    db: Session, runs: Iterable[Any]
+) -> Dict[str, RunWorkflowStatus]:
+    """How each run ran, in a few queries (``runs`` need ``id`` and ``status``).
+
+    A run in review keeps the outcome it had when it was submitted
+    (``resolve_execution_outcome``), so a failed run counts its items as a
+    failed run while it is reviewed. Every other status is the run's own,
+    also RUNNING or STOPPED: the event fallback would call a live run
+    COMPLETED. Nothing is cached on the runs; a transition changes them.
+    """
+    outcomes: Dict[str, RunWorkflowStatus] = {}
+    review: List[str] = []
+    for run in runs:
+        if run.status in REVIEW_STATUSES:
+            review.append(run.id)
+        else:
+            outcomes[run.id] = run.status
+    pending: List[str] = []
+    for start in range(0, len(review), 400):
+        chunk = review[start : start + 400]
+        stored = dict(
+            db.query(Approval.run_id, Approval.execution_status).filter(
+                Approval.run_id.in_(chunk)
+            )
+        )
+        for run_id in chunk:
+            status = _as_status(stored.get(run_id))
+            if status is not None:
+                outcomes[run_id] = status
+            else:
+                pending.append(run_id)
+    from_events = _event_outcomes(db, pending)
+    for run_id in pending:
+        outcomes[run_id] = from_events.get(run_id, RunWorkflowStatus.COMPLETED)
+    return outcomes
 
 
 def record_transition(

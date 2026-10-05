@@ -16,7 +16,7 @@ from qym_platform.db.dashboard_models import (
 )
 from qym_platform.db.models import RunItemScore, RunWorkflowStatus
 
-from test_dashboard_durable_summaries import database, drain, item, run
+from test_dashboard_durable_summaries import drain, item, run
 from test_dashboard_projection_api import dataset, get
 
 

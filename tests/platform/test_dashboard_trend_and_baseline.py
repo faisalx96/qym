@@ -16,7 +16,7 @@ from qym_platform.db.models import (
     RunItemScore,
     RunWorkflowStatus,
 )
-from test_dashboard_durable_summaries import database, drain, item, run  # noqa: F401
+from test_dashboard_durable_summaries import drain, item, run
 from test_minimize_errors import _principal, _spec
 
 NOW = datetime.utcnow().replace(microsecond=0)

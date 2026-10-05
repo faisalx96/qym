@@ -26,13 +26,14 @@ from rich.console import Console
 from rich.live import Live
 from rich.table import Table
 
-from .results import METRIC_ERROR_STATUSES, EvaluationResult
+from .results import METRIC_ERROR_STATUSES, EvaluationResult, score_outcome
 from .checkpoint import (
+    UNREADABLE_SCORE_KEY,
     CheckpointWriter,
+    checkpoint_score,
     load_checkpoint_state,
     iter_checkpoint_rows,
     parse_checkpoint_row,
-    parse_metric_score,
     serialize_checkpoint_row,
 )
 from .progress import ProgressTracker, ProgressObserver
@@ -1330,16 +1331,22 @@ class Evaluator:
                 completed_pairs = set(checkpoint_state.completed_pairs)
                 resume_failed = len(checkpoint_state.error_item_ids)
                 resume_completed = max(0, len(completed_item_ids) - resume_failed)
+                unreadable_scores = 0
                 for row in iter_checkpoint_rows(checkpoint_path):
                     checkpoint_rows.append(row)
-                    for m in metric_names:
-                        val = parse_metric_score(row.get(f"{m}_score", ""))
-                        if val is not None:
-                            resume_metric_totals[m] += float(val)
-                            resume_metric_counts[m] += 1
                     item_id, row_result, is_error = parse_checkpoint_row(
                         row, metric_names
                     )
+                    for m in metric_names:
+                        restored = row_result["scores"].get(m)
+                        val, _ = score_outcome(restored)
+                        if val is not None and not is_error:
+                            resume_metric_totals[m] += float(val)
+                            resume_metric_counts[m] += 1
+                        if isinstance(restored, dict) and (
+                            restored.get("metadata") or {}
+                        ).get(UNREADABLE_SCORE_KEY):
+                            unreadable_scores += 1
                     if not item_id:
                         continue
                     row_pass = int(row_result.get("pass_number") or 1)
@@ -1372,6 +1379,14 @@ class Evaluator:
                             result.add_pass_result(item_id, row_pass, row_result)
                         else:
                             result.add_result(item_id, row_result)
+
+                if unreadable_scores:
+                    logger.warning(
+                        "%d score(s) in checkpoint %s could not be read; they "
+                        "are left out of the resumed statistics",
+                        unreadable_scores,
+                        checkpoint_path,
+                    )
 
             checkpoint_writer = CheckpointWriter(
                 checkpoint_path,
@@ -1455,14 +1470,6 @@ class Evaluator:
                         break
                     checkpoint_writer.append_row(row)
                     write_queue.task_done()
-
-            def _main_score(val: Any) -> Any:
-                if isinstance(val, dict):
-                    if "error" in val:
-                        return f"ERROR: {val['error']}"
-                    if "score" in val:
-                        return val.get("score")
-                return val
 
             def _checkpoint_run_metadata() -> Dict[str, Any]:
                 md = dict(self.run_metadata or {})
@@ -1591,12 +1598,9 @@ class Evaluator:
                         metric_meta: Dict[str, Dict[str, Any]] = {}
                         score_row: Dict[str, Any] = {}
                         for m in metric_names:
-                            sc = scores.get(m)
-                            score_row[m] = _main_score(sc)
-                            if isinstance(sc, dict) and isinstance(
-                                sc.get("metadata"), dict
-                            ):
-                                metric_meta[m] = sc["metadata"]
+                            score_row[m], meta = checkpoint_score(scores.get(m))
+                            if meta:
+                                metric_meta[m] = meta
                         row = serialize_checkpoint_row(
                             pass_number=pass_number,
                             dataset_name=self.dataset_name,

@@ -9,6 +9,7 @@ import unicodedata
 from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict, Iterable, Optional
+from urllib.parse import quote
 from uuid import uuid4
 
 from fastapi import APIRouter, Body, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
@@ -49,6 +50,7 @@ from qym_platform.services.dataset_versions import (
     change_counts_for,
     store_change_counts,
 )
+from qym_platform.services.run_means import metric_directions
 
 
 router = APIRouter()
@@ -77,6 +79,23 @@ def _slugify(value: str) -> str:
             chars.append("-")
     slug = "".join(chars)[:_MAX_SLUG_LENGTH].strip("-")
     return slug or f"dataset-{uuid4().hex[:8]}"
+
+
+def _ascii_name(value: str, default: str) -> str:
+    """ASCII letters, digits, ".", "_" and "-" from value (accents folded)."""
+    folded = unicodedata.normalize("NFKD", value or "").encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", folded).strip("-._") or default
+
+
+def _attachment_disposition(filename: str, fallback: str) -> str:
+    """Content-Disposition for a file name in any script (RFC 6266).
+
+    Header values are Latin-1, so a Unicode name goes in ``filename*`` as UTF-8.
+    ``filename`` keeps an ASCII fallback for clients that ignore ``filename*``.
+    """
+    if filename == fallback:
+        return f'attachment; filename="{filename}"'
+    return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(filename, safe='')}"
 
 
 def _labels(value: Any) -> list[str]:
@@ -743,6 +762,43 @@ def _item_result_summaries(
     return summaries
 
 
+def _shared_metric_directions(
+    db: Session, run_metrics: Iterable[tuple[str, str]]
+) -> Dict[str, Optional[str]]:
+    """Each metric's declared direction, when all its runs declare the same one.
+
+    ``run_metrics`` holds the (run id, metric name) pairs behind a value that
+    spans runs. A run that declares no direction, or runs that disagree, give
+    the metric None, so the page shows its value without a colour.
+    """
+    pairs = set(run_metrics)
+    declared = metric_directions(db, {run_id for run_id, _ in pairs})
+    found: Dict[str, set[Optional[str]]] = defaultdict(set)
+    for run_id, metric in pairs:
+        found[metric].add(declared.get(run_id, {}).get(metric))
+    return {
+        metric: next(iter(values)) if len(values) == 1 else None
+        for metric, values in sorted(found.items())
+    }
+
+
+def _version_metric_directions(
+    db: Session, version: DatasetVersion
+) -> Dict[str, Optional[str]]:
+    """The shared direction of each metric the version's runs scored."""
+    pairs = (
+        db.query(RunItemScore.run_id, RunItemScore.metric_name)
+        .join(Run, Run.id == RunItemScore.run_id)
+        .filter(
+            Run.deleted_at.is_(None),
+            Run.dataset_version_id == version.id,
+        )
+        .distinct()
+        .all()
+    )
+    return _shared_metric_directions(db, (tuple(pair) for pair in pairs))
+
+
 def _version_metric_names(db: Session, version: DatasetVersion) -> list[str]:
     names: set[str] = set()
     score_rows = (
@@ -924,9 +980,10 @@ _LEGACY_CSV_ENCODINGS = ("windows-1252", "windows-1256", "iso-8859-6")
 _ENCODING_SAMPLE_CHARS = 262144
 _CSV_ENCODING_HELP = "Save the file as 'CSV UTF-8' (Excel: File > Save As > CSV UTF-8) and upload it again."
 # Non-letter characters that are normal in real text in any of the legacy encodings.
+# "\u00d7" and "\u00ac" are Arabic letters in ISO-8859-6, so they are no evidence either way.
 _NEUTRAL_TEXT_CHARS = frozenset(
     "\u00a0\u00ab\u00bb\u201c\u201d\u2018\u2019\u201e\u2013\u2014\u2026\u2022\u20ac\u00a3\u00a5"
-    "\u00b0\u00a9\u00ae\u2122\u00a7\u00b7\u00bf\u00a1\u060c\u061b\u061f\u066a\u066b\u066c"
+    "\u00b0\u00a9\u00ae\u2122\u00a7\u00b7\u00bf\u00a1\u00d7\u00ac\u060c\u061b\u061f\u066a\u066b\u066c"
 )
 
 
@@ -942,6 +999,10 @@ def _legacy_text_score(text: str) -> int:
     run of accented Latin letters, and Latin text read as Windows-1256 mixes Arabic
     letters into Latin words. Real text has words in one script, with accented
     letters in the minority for Latin words.
+
+    A one-letter word is no evidence: French "à" is a lone Arabic letter in
+    ISO-8859-6. Text whose only non-ASCII words are lone Arabic letters therefore
+    keeps Windows-1252; such a file needs an explicit encoding.
     """
     total = 0
     word: list[str] = []
@@ -949,7 +1010,7 @@ def _legacy_text_score(text: str) -> int:
     def flush() -> None:
         nonlocal total
         non_ascii = [ch for ch in word if ord(ch) > 0x7F]
-        if non_ascii:
+        if non_ascii and len(word) > 1:
             arabic = any(_is_arabic_char(ch) for ch in word)
             latin = any(ord(ch) < 0x0250 for ch in word)
             other = any(ord(ch) >= 0x0250 and not _is_arabic_char(ch) for ch in word)
@@ -1578,6 +1639,7 @@ def list_dataset_runs(
     avg_latencies: Dict[str, float] = {}
     metric_values_by_run: Dict[str, Dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     eval_values_by_run: Dict[str, list[float]] = defaultdict(list)
+    run_directions = metric_directions(db, run_ids)
     if run_ids:
         items_counts = dict(
             db.query(RunItem.run_id, func.count(RunItem.id))
@@ -1640,6 +1702,7 @@ def list_dataset_runs(
                 "avg_latency_ms": avg_latencies.get(run.id),
                 "eval_score": run_eval_score(run.id),
                 "metric_averages": run_metric_averages(run.id),
+                "metric_directions": run_directions.get(run.id, {}),
                 "version_label": version_labels.get(run.dataset_version_id),
                 "items_count": int(items_counts.get(run.id, 0)),
             }
@@ -2071,6 +2134,8 @@ def list_items(
     edit_counts = _item_edit_counts(db, version, items)
     metric_names = _version_metric_names(db, version)
     response: Dict[str, Any] = {
+        # Each metric's direction across the version's runs, for the item means.
+        "metric_directions": _version_metric_directions(db, version),
         "items": [
             _item_payload(
                 item,
@@ -2425,6 +2490,7 @@ def item_runs(
             scores_by_key[key].append(score)
     users = _user_map(db, [run.owner_user_id for run, _ in rows])
     numeric_scores_by_metric: Dict[str, list[float]] = defaultdict(list)
+    scored_run_metrics: set[tuple[str, str]] = set()
     all_numeric_scores: list[float] = []
     latencies: list[float] = []
     error_count = 0
@@ -2439,6 +2505,8 @@ def item_runs(
                 continue
             all_numeric_scores.append(value)
             numeric_scores_by_metric[score.metric_name].append(value)
+            scored_run_metrics.add((run.id, score.metric_name))
+    run_directions = metric_directions(db, run_ids)
     metric_aggregates = {
         metric: {
             "count": len(values),
@@ -2457,6 +2525,7 @@ def item_runs(
             "avg_latency_ms": round(sum(latencies) / len(latencies), 2) if latencies else None,
             "avg_score": round(sum(all_numeric_scores) / len(all_numeric_scores), 4) if all_numeric_scores else None,
             "metrics": metric_aggregates,
+            "metric_directions": _shared_metric_directions(db, scored_run_metrics),
         },
         "runs": [
             {
@@ -2484,6 +2553,7 @@ def item_runs(
                 "error": run_item.error,
                 "latency_ms": run_item.latency_ms,
                 "retry_count": run_item.retry_count,
+                "metric_directions": run_directions.get(run.id, {}),
                 "scores": [
                     {
                         "metric_name": score.metric_name,
@@ -3056,10 +3126,11 @@ def download_version(
         for item in items
     ]
     filename = f"{dataset.slug}-{version.version}.jsonl"
+    fallback = f"{_ascii_name(dataset.slug, 'dataset')}-{_ascii_name(version.version, 'version')}.jsonl"
     return Response(
         "\n".join(lines) + ("\n" if lines else ""),
         media_type="application/x-ndjson",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": _attachment_disposition(filename, fallback)},
     )
 
 

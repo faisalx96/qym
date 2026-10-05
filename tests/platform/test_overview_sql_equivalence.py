@@ -33,7 +33,7 @@ from qym_platform.services.dashboard_overview import (
     build_overview_postgres,
     store_overview_facts,
 )
-from test_dashboard_durable_summaries import database, drain  # noqa: F401
+from test_dashboard_durable_summaries import drain
 from test_lost_outcome_events import emitter  # noqa: F401
 
 PROJECT = {"id": "p"}

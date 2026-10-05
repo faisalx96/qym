@@ -743,16 +743,32 @@ def _in_own_transaction(ctx: JobContext, work: Callable[[Session], Any], *, atte
 
 def _mark_task_error_passes(ctx: JobContext, cursor: int, window: int) -> int:
     """Mark pass scores that ingest zero-filled for a failed task while they
-    still carried the scorer's metadata (a cancel mid-scoring stored before
-    the marker existed). The dashboard already reads those passes as failed
-    tasks from their attempts; the marker makes the source rows agree."""
-    from qym_platform.db.models import RunItemAttempt, RunItemPassScore
+    still carried the scorer's metadata or explanation (a cancel mid-scoring
+    stored before the marker existed). The dashboard already reads those
+    passes as failed tasks from their attempts; the marker makes the source
+    rows agree. The pass's execution outcome decides before the explanation
+    or metadata does: a failed final attempt, or an item_failed event (older
+    SDKs sent no final attempt)."""
+    from qym_platform.db.models import RunEvent, RunItemAttempt, RunItemPassScore
     from qym_platform.services.run_means import (
         METRIC_ERROR_STATUSES,
         TASK_ERROR_PASS_LABEL,
+        TASK_ERROR_PASS_MARKER,
+        is_metric_error,
         is_task_error_pass,
         task_error_pass_meta,
     )
+
+    def unmarked_verdict(row) -> bool:
+        # Rows the source rule already reads as failed tasks, scorer errors,
+        # reviewer scores and marked scorer verdicts stay as they are.
+        meta = row.meta if isinstance(row.meta, dict) else {}
+        return (
+            not is_task_error_pass(row.label, row.meta, row.explanation)
+            and not is_metric_error(meta)
+            and str(meta.get("modified") or "").strip().lower() != "true"
+            and not isinstance(meta.get(TASK_ERROR_PASS_MARKER), bool)
+        )
 
     def work(db: Session) -> int:
         rows = [
@@ -764,27 +780,40 @@ def _mark_task_error_passes(ctx: JobContext, cursor: int, window: int) -> int:
                     func.lower(func.trim(RunItemPassScore.label)) == TASK_ERROR_PASS_LABEL,
                 )
             ).scalars()
-            # Rows the source rule already reads as failed tasks, scorer
-            # errors and reviewer scores stay as they are.
-            if not is_task_error_pass(row.label, row.meta)
-            and isinstance(row.meta, dict)
-            and str(row.meta.get("status") or "").strip().lower() not in METRIC_ERROR_STATUSES
-            and str(row.meta.get("modified") or "").strip().lower() != "true"
+            if unmarked_verdict(row)
         ]
         if not rows:
             return 0
-        failed = set(
-            db.execute(
+        run_ids = {row.run_id for row in rows}
+        item_ids = {row.item_id for row in rows}
+        failed = {
+            tuple(row)
+            for row in db.execute(
                 select(
                     RunItemAttempt.run_id, RunItemAttempt.item_id, RunItemAttempt.pass_number
                 ).where(
-                    RunItemAttempt.run_id.in_({row.run_id for row in rows}),
-                    RunItemAttempt.item_id.in_({row.item_id for row in rows}),
+                    RunItemAttempt.run_id.in_(run_ids),
+                    RunItemAttempt.item_id.in_(item_ids),
                     RunItemAttempt.is_last_attempt.is_(True),
                     func.lower(RunItemAttempt.status).in_(METRIC_ERROR_STATUSES),
                 )
-            ).tuples()
-        )
+            )
+        }
+        for run_id, item_id, pass_number in db.execute(
+            select(
+                RunEvent.run_id,
+                RunEvent.payload["item_id"].as_string(),
+                RunEvent.payload["pass_number"].as_string(),
+            ).where(
+                RunEvent.run_id.in_(run_ids),
+                RunEvent.type == "item_failed",
+                RunEvent.payload["item_id"].as_string().in_(item_ids),
+            )
+        ):
+            try:
+                failed.add((run_id, item_id, max(1, int(pass_number or 1))))
+            except (TypeError, ValueError):
+                failed.add((run_id, item_id, 1))
         marked = 0
         for row in rows:
             if (row.run_id, row.item_id, int(row.pass_number)) in failed:
@@ -902,6 +931,7 @@ def _project_item_failure_events(ctx: JobContext) -> bool:
     window = max(1, int(ctx.params.get("window", 200)))
     cursor = str(ctx.progress.get("cursor") or "")
     repaired = set(ctx.progress.get("runs") or [])
+    affected = set()
     with ctx.session() as db:
         run_ids = list(
             db.scalars(
@@ -963,10 +993,13 @@ def _project_item_failure_events(ctx: JobContext) -> bool:
                 if (run_id, item_id, pass_number) not in failed
                 and (run_id, "legacy_event:" + event_id) not in projected
             }
-            for run_id in sorted(affected - repaired):
-                if request_dashboard_repair(db, run_id, publish=False):
-                    repaired.add(run_id)
-        db.commit()
+    # Each repair commits alone: holding one run's dashboard locks while
+    # requesting the next can deadlock with the worker publishing that run.
+    for run_id in sorted(affected - repaired):
+        if _in_own_transaction(
+            ctx, lambda db, run_id=run_id: request_dashboard_repair(db, run_id, publish=False)
+        ):
+            repaired.add(run_id)
     ctx.progress["runs"] = sorted(repaired)
     ctx.progress["runs_repaired"] = len(repaired)
     if len(run_ids) < window:

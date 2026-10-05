@@ -16,15 +16,6 @@ STATIC = (
 )
 
 
-@pytest.fixture(scope="module")
-def browser():
-    api = pytest.importorskip("playwright.sync_api")
-    with api.sync_playwright() as playwright:
-        instance = playwright.chromium.launch()
-        yield instance
-        instance.close()
-
-
 @pytest.fixture()
 def page(browser):
     context = browser.new_context()

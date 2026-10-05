@@ -11,7 +11,7 @@
   <script src="/static/auth.js?v=p1-20261005"></script>
   <script src="/static/shell.js?v=p1-20261005-8"></script>
   <script src="/static/qym_table.js"></script>
-  <script src="/static/metrics.js?v=p0-20260930-3"></script>
+  <script src="/static/metrics.js?v=p1-20261005"></script>
   <script src="/static/trace_viewer.js?v=p1-20261001"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
@@ -1134,7 +1134,9 @@
       if (!Number.isFinite(n)) return String(v);
       return Math.abs(n) >= 10 ? n.toFixed(1) : n.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
     }
-    function metricScoreNode(value, peerValues){
+    // `direction` is the metric's declared direction from the payload. A metric
+    // without one (or whose runs disagree) stays neutral, as on every other page.
+    function metricScoreNode(value, peerValues, direction){
       if (value == null || value === '') return el('span', { className: 'metric-na' }, '—');
       const parsed = window.QymMetrics && window.QymMetrics.parseScoreValue
         ? window.QymMetrics.parseScoreValue(value)
@@ -1144,7 +1146,7 @@
         ? window.QymMetrics.detectMetricTypeFromAvg(parsed)
         : (parsed > 1 || parsed < 0 ? 'numeric' : 'score');
       const cls = window.QymMetrics && window.QymMetrics.getMetricColorClass
-        ? window.QymMetrics.getMetricColorClass(parsed, metricType)
+        ? window.QymMetrics.getMetricColorClass(parsed, metricType, direction)
         : '';
       const parsedPeers = Array.isArray(peerValues) && window.QymMetrics && window.QymMetrics.parseScoreValue
         ? peerValues.map(v => window.QymMetrics.parseScoreValue(v)).filter(v => v != null)
@@ -1320,6 +1322,7 @@
       dsxDisposed = true;
       document.removeEventListener('qym:popstate', handleShellPopstate);
       document.removeEventListener('qym:before-navigate', cleanupDatasetPageEvents);
+      document.removeEventListener('qym:shell-ready', reconcileLateShellProject);
     }
     document.addEventListener('qym:popstate', handleShellPopstate);
     document.addEventListener('qym:before-navigate', cleanupDatasetPageEvents);
@@ -1389,6 +1392,18 @@
         setTimeout(finish, 250);
       });
     }
+    // A slow shell load fires qym:shell-ready after ensureShellReady stopped
+    // waiting, so the page rendered with a placeholder project. Take the real
+    // project then, and redraw if that makes the page read-only (or not).
+    function reconcileLateShellProject(){
+      if (dsxDisposed) return;
+      const project = resolveProjectFromShell();
+      if (!project || project.slug !== state.slug || project === state.project) return;
+      const wasReadOnly = projectReadOnly();
+      state.project = project;
+      if (projectReadOnly() !== wasReadOnly) route();
+    }
+    document.addEventListener('qym:shell-ready', reconcileLateShellProject);
     async function route(){
       const p = parsePath();
       if (p.mode === 'unknown') {
@@ -1915,7 +1930,7 @@
     // Tried in this order when a file is not UTF-8; ties keep the historic Windows-1252.
     const LEGACY_CSV_ENCODINGS = ['windows-1252', 'windows-1256', 'iso-8859-6'];
     const ENCODING_SAMPLE_CHARS = 262144;
-    const NEUTRAL_TEXT_CHARS = new Set(Array.from('\u00a0\u00ab\u00bb\u201c\u201d\u2018\u2019\u201e\u2013\u2014\u2026\u2022\u20ac\u00a3\u00a5\u00b0\u00a9\u00ae\u2122\u00a7\u00b7\u00bf\u00a1\u060c\u061b\u061f\u066a\u066b\u066c'));
+    const NEUTRAL_TEXT_CHARS = new Set(Array.from('\u00a0\u00ab\u00bb\u201c\u201d\u2018\u2019\u201e\u2013\u2014\u2026\u2022\u20ac\u00a3\u00a5\u00b0\u00a9\u00ae\u2122\u00a7\u00b7\u00bf\u00a1\u00d7\u00ac\u060c\u061b\u061f\u066a\u066b\u066c'));
     // Keys the importer reads from a JSON/JSONL record (same aliases as the server).
     const JSON_ITEM_KEYS = ['item_id', 'id', 'input', 'expected_output', 'expected', 'metadata', 'labels'];
     function encodingLabel(encoding){
@@ -1929,12 +1944,13 @@
     // Mirrors _legacy_text_score in api/datasets.py. Arabic read with the wrong code page
     // becomes words made of accented Latin letters; Latin read as Arabic mixes scripts
     // inside a word. Real text keeps one script per word, so it scores higher.
+    // A one-letter word is no evidence (French "à" is an Arabic letter in ISO-8859-6).
     function legacyTextScore(text){
       let total = 0;
       let word = [];
       const flush = () => {
         const nonAscii = word.filter(ch => ch.codePointAt(0) > 0x7f);
-        if (nonAscii.length) {
+        if (nonAscii.length && word.length > 1) {
           const arabic = word.some(ch => isArabicCodePoint(ch.codePointAt(0)));
           const latin = word.some(ch => ch.codePointAt(0) < 0x250);
           const other = word.some(ch => { const cp = ch.codePointAt(0); return cp >= 0x250 && !isArabicCodePoint(cp); });
@@ -3381,7 +3397,7 @@
           const metricNames = (resp.metric_names && resp.metric_names.length)
             ? resp.metric_names
             : Array.from(new Set(items.flatMap(item => Object.keys(((item.result_summary || {}).metrics) || {})))).sort();
-          state.itemsList = { items, total: resp.total || 0, metricNames };
+          state.itemsList = { items, total: resp.total || 0, metricNames, metricDirections: resp.metric_directions || {} };
           renderItemsTable({ scrollLeft: keepTable ? scrollLeft : null });
           renderPager();
         } catch(e) {
@@ -3508,7 +3524,8 @@
         (metricNames || []).forEach(metric => {
           const value = (metrics[metric] || {}).avg;
           const peers = ((state.itemsList && state.itemsList.items) || []).map(i => (((i.result_summary || {}).metrics || {})[metric] || {}).avg);
-          tr.appendChild(el('td', { className: 'col-metric' }, metricScoreNode(value, peers)));
+          const direction = ((state.itemsList && state.itemsList.metricDirections) || {})[metric];
+          tr.appendChild(el('td', { className: 'col-metric' }, metricScoreNode(value, peers, direction)));
         });
         tr.appendChild(el('td', { className: 'col-latency' }, fmtSeconds(summary.avg_latency_ms)));
         tr.appendChild(el('td', { className: 'col-edits' }, String(item.edit_count || 0)));
@@ -3925,7 +3942,7 @@
         });
         Object.keys(agg.metrics || {}).sort().forEach(metric => {
           const m = agg.metrics[metric] || {};
-          aggWrap.appendChild(el('div', { className: 'tile qym-stat-strip__item' }, [el('div', { className: 'label qym-stat-strip__label' }, metric), el('div', { className: 'value qym-stat-strip__value' }, metricScoreNode(m.avg))]));
+          aggWrap.appendChild(el('div', { className: 'tile qym-stat-strip__item' }, [el('div', { className: 'label qym-stat-strip__label' }, metric), el('div', { className: 'value qym-stat-strip__value' }, metricScoreNode(m.avg, null, (agg.metric_directions || {})[metric]))]));
         });
         host.appendChild(aggWrap);
 
@@ -4024,7 +4041,7 @@
               const peerScore = runScoreByMetric(run)[metric];
               return peerScore ? (peerScore.score_numeric != null ? peerScore.score_numeric : peerScore.score_raw) : null;
             });
-            row.appendChild(el('td', { className: 'col-metric', title: score ? (score.explanation || score.label || '') : '' }, metricScoreNode(value, peers)));
+            row.appendChild(el('td', { className: 'col-metric', title: score ? (score.explanation || score.label || '') : '' }, metricScoreNode(value, peers, (r.metric_directions || {})[metric])));
           });
           const traceEndpoint = apiUrl('/api/runs/' + encodeURIComponent(r.run_id) + '/items/' + encodeURIComponent(r.item_id) + '/trace');
           row.appendChild(el('td', { className: 'col-run-trace' }, el('button', {
@@ -4348,7 +4365,7 @@
           ];
           Object.keys(agg.metrics || {}).sort().forEach(metric => {
             const m = agg.metrics[metric] || {};
-            aggTiles.push(['Avg ' + metric, metricScoreNode(m.avg)]);
+            aggTiles.push(['Avg ' + metric, metricScoreNode(m.avg, null, (agg.metric_directions || {})[metric])]);
           });
           aggTiles.forEach(([label, value]) => {
             aggWrap.appendChild(el('div', { className: 'tile qym-stat-strip__item' }, [
@@ -4381,7 +4398,7 @@
             (r.scores || []).forEach(s => { scoresByMetric[s.metric_name] = s; });
             metricNames.forEach(metric => {
               const score = scoresByMetric[metric];
-              row.appendChild(el('td', { style: { fontFamily: 'var(--font-mono)' } }, metricScoreNode(score ? (score.score_numeric != null ? score.score_numeric : score.score_raw) : null)));
+              row.appendChild(el('td', { style: { fontFamily: 'var(--font-mono)' } }, metricScoreNode(score ? (score.score_numeric != null ? score.score_numeric : score.score_raw) : null, null, (r.metric_directions || {})[metric])));
             });
             row.appendChild(el('td', { style: { fontFamily: 'var(--font-mono)' } }, fmtSeconds(r.latency_ms)));
             tbody.appendChild(row);
@@ -4630,7 +4647,7 @@
             metricNames.forEach(metric => {
               const value = (r.metric_averages || {})[metric];
               const peers = runs.map(candidate => (candidate.metric_averages || {})[metric]);
-              tr.appendChild(el('td', { className: 'col-metric' }, metricScoreNode(value, peers)));
+              tr.appendChild(el('td', { className: 'col-metric' }, metricScoreNode(value, peers, (r.metric_directions || {})[metric])));
             });
             tr.appendChild(el('td', { className: 'col-actions', 'aria-hidden': 'true' }, '→'));
             return tr;

@@ -10,8 +10,8 @@
   <script src="./static/qym_safe.js?v=p1-20261001"></script>
   <script src="./static/auth.js?v=p1-20261005"></script>
   <script src="./static/shell.js?v=p1-20261005-8"></script>
-  <script src="./static/metrics.js?v=p0-20260930-3"></script>
-  <script src="./static/run_details.js?v=p1-20261001"></script>
+  <script src="./static/metrics.js?v=p1-20261005"></script>
+  <script src="./static/run_details.js?v=p1-20261005"></script>
   <script src="./static/trace_viewer.js?v=p1-20261001"></script>
   <script src="./static/step_latency.js?v=p1-20261005-3"></script>
   <script src="./static/playground.js?v=p1-20261005-3"></script>
@@ -6537,6 +6537,9 @@
       }
 
       function renderSweepDelta(value, noise, direction = 'maximize') {
+        if (value === null || value === undefined || Number.isNaN(Number(value))) {
+          return '<span class="sweep-delta-pill neutral">—</span>';
+        }
         const deltaClass = getNoiseDeltaClass(value, noise, direction);
         const rounded = Math.abs(value) < 0.0005 ? 0 : value;
         const prefix = rounded > 0 ? '+' : '';
@@ -7060,7 +7063,7 @@
           left: {
             passAtK: 0,
             passHatK: 0,
-            avgAtK: 0,
+            avgAtK: null,
             consistency: null,
             reliability: null,
             avgAttempts: 0,
@@ -7068,7 +7071,7 @@
           right: {
             passAtK: 0,
             passHatK: 0,
-            avgAtK: 0,
+            avgAtK: null,
             consistency: null,
             reliability: null,
             avgAttempts: 0,
@@ -7076,7 +7079,7 @@
           deltas: {
             passAtK: 0,
             passHatK: 0,
-            avgAtK: 0,
+            avgAtK: null,
             consistency: 0,
             reliability: 0,
           },
@@ -7138,7 +7141,9 @@
           return {
             passAtK: items.length ? agg.passAtKSum / items.length : 0,
             passHatK: items.length ? agg.passHatKSum / items.length : 0,
-            avgAtK: agg.totalScoreCount ? agg.totalScoreSum / agg.totalScoreCount : 0,
+            // No score on this side (every entry errored on a lower-is-better
+            // metric, or none is left after filters): no average, not 0.
+            avgAtK: agg.totalScoreCount ? agg.totalScoreSum / agg.totalScoreCount : null,
             consistency: agg.itemsWithMultipleRuns ? agg.totalConsistencySum / agg.itemsWithMultipleRuns : null,
             reliability: agg.itemsWithAtLeastOnePass ? agg.totalReliabilitySum / agg.itemsWithAtLeastOnePass : null,
             avgAttempts: agg.totalAttemptsCount ? agg.totalAttemptsSum / agg.totalAttemptsCount : 0,
@@ -7150,7 +7155,9 @@
         summary.deltas = {
           passAtK: summary.right.passAtK - summary.left.passAtK,
           passHatK: summary.right.passHatK - summary.left.passHatK,
-          avgAtK: summary.right.avgAtK - summary.left.avgAtK,
+          avgAtK: summary.left.avgAtK === null || summary.right.avgAtK === null
+            ? null
+            : summary.right.avgAtK - summary.left.avgAtK,
           consistency: (summary.right.consistency ?? 0) - (summary.left.consistency ?? 0),
           reliability: (summary.right.reliability ?? 0) - (summary.left.reliability ?? 0),
         };
@@ -8896,7 +8903,7 @@
               : Object.values(snapshot.pass_metric_meta_keys || {}));
           for (const keys of schema) {
             for (const k of keys || []) {
-              if (!['modified', 'original_score', 'original_score_numeric', 'last_edit'].includes(k)) mmKeySet.add(k);
+              if (!window.QymMetrics.isInternalMetaKey(k)) mmKeySet.add(k);
             }
           }
           for (const row of (run?.snapshot?.rows || [])) {
@@ -8904,7 +8911,7 @@
             for (const metricName of Object.keys(mm)) {
               const meta = mm[metricName] || {};
               for (const k of Object.keys(meta)) {
-                if (!['modified', 'original_score', 'original_score_numeric', 'last_edit'].includes(k)) mmKeySet.add(k);
+                if (!window.QymMetrics.isInternalMetaKey(k)) mmKeySet.add(k);
               }
             }
           }
@@ -9174,6 +9181,7 @@
           itemsWithMultipleRuns: 0, // Count of items with K > 1 for consistency
           itemsWithAtLeastOnePass: 0, // Count of items where at least one run passed (for reliability)
           maxAtK: 0, // Sum of max scores across all items (best possible if you pick best run per item)
+          itemsWithBest: 0, // Items that add a best score to maxAtK (its denominator)
           failedCount: 0, // Task or metric errors, counted once per item/run execution
           correctDistribution: [], // How many items had 0, 1, 2, ... N runs correct
           overallAvgScore: 0,
@@ -9271,6 +9279,7 @@
           // Max@K: track the best score for this item across all runs (not affected by threshold)
           if (validScores.length > 0 && direction) {
             stats.maxAtK += direction === 'minimize' ? Math.min(...validScores) : Math.max(...validScores);
+            stats.itemsWithBest++;
           }
 
           // Count distribution for ALL items (even those with missing data)
@@ -10116,9 +10125,10 @@
         // For numeric metrics, show avg/max instead of pass@K/consistency
         const avgScoreDisplay = window.QymMetrics.formatMetricValue(stats.overallAvgScore, overviewMType);
         const avgScoreColor = metricColorClassFor(overviewMetric, stats.overallAvgScore, overviewMType);
-        const maxAtKVal = stats.totalCompared > 0 ? stats.maxAtK / stats.totalCompared : 0;
-        const maxAtKDisplay = window.QymMetrics.formatMetricValue(maxAtKVal, overviewMType);
-        const maxAtKColor = metricColorClassFor(overviewMetric, maxAtKVal, overviewMType);
+        // Average only the items with a best score: an item whose every
+        // run errored on a lower-is-better metric has none (metrics.js).
+        const maxAtKVal = stats.itemsWithBest > 0 ? stats.maxAtK / stats.itemsWithBest : null;
+        const maxAtKColor = maxAtKVal === null ? '' : metricColorClassFor(overviewMetric, maxAtKVal, overviewMType);
 
         const fmtN = window.QymMetrics.formatNumericValue;
         const fmtValue = isNumeric ? fmtN : (value => window.QymMetrics.formatMetricValue(value, overviewMType));
@@ -10171,7 +10181,7 @@
 
             <div class="stat-box qym-stat-strip__item">
               <div class="stat-title qym-stat-strip__label">${lowerIsBetter ? 'Min' : 'Max'}@${K} ${infoIcon(tooltips.maxAtK)}</div>
-              <div class="stat-main qym-stat-strip__value qym-score-value ${maxAtKColor}">${formatPercent(stats.maxAtK / stats.totalCompared)}</div>
+              <div class="stat-main qym-stat-strip__value qym-score-value ${maxAtKColor}">${formatPercent(maxAtKVal)}</div>
             </div>
 
             <div class="stat-box qym-stat-strip__item">
@@ -12871,7 +12881,7 @@
         const blocks = metricNames.map((name, i) => {
           const meta = metricMeta[name] || {};
           const metaKeys = Object.keys(meta).filter(k =>
-            !['modified', 'original_score', 'original_score_numeric', 'last_edit'].includes(k)
+            !window.QymMetrics.isInternalMetaKey(k)
             && state.visibleMetricMetaFields[k] !== false
             && meta[k] !== undefined && meta[k] !== null && meta[k] !== '');
           if (!metaKeys.length) return '';
@@ -13037,7 +13047,7 @@
           const buttons = state.allMetrics.map(name => {
             const score = scoreData(row, runIdx, name);
             const hasMeta = Object.keys(score.meta).some(key =>
-              !['modified', 'original_score', 'original_score_numeric', 'last_edit'].includes(key)
+              !window.QymMetrics.isInternalMetaKey(key)
               && state.visibleMetricMetaFields[key] !== false
               && score.meta[key] !== undefined && score.meta[key] !== null && score.meta[key] !== '');
             const hasMetricExecutionError = window.QymMetrics.hasMetricError(row, name);
@@ -13171,7 +13181,7 @@
             const score = scoreData(row, runIdx, name);
             const detail = {};
             Object.keys(score.meta).forEach(key => {
-              if (!['modified', 'original_score', 'original_score_numeric', 'last_edit'].includes(key)
+              if (!window.QymMetrics.isInternalMetaKey(key)
                   && state.visibleMetricMetaFields[key] !== false
                   && score.meta[key] !== undefined && score.meta[key] !== null && score.meta[key] !== '') {
                 detail[window.QymMetrics.metricMetaDisplayKey(key, score.meta)] = _parseMetaDeep(score.meta[key]);
@@ -16129,7 +16139,7 @@
             for (const m of metricNames) {
               const meta = mm[m] || {};
               for (const k of Object.keys(meta)) {
-                if (!['modified', 'original_score', 'original_score_numeric', 'last_edit'].includes(k)) metricMetaKeys[m].add(k);
+                if (!window.QymMetrics.isInternalMetaKey(k)) metricMetaKeys[m].add(k);
               }
             }
           }

@@ -42,6 +42,8 @@ TASK_ERROR_PASS_LABEL = "error"
 # ...and marks them with this metadata key, which also covers a pass whose
 # metric was scored before the task failed (a cancel mid-scoring): the
 # scorer's metadata stays on the row but no longer reads as a scored pass.
+# A scorer's own "error" verdict is marked False, and run payloads send the
+# key, True or False, with every "error"-labeled pass.
 TASK_ERROR_PASS_MARKER = "task_error"
 # A reviewer's item-level score on a repeat run (update_metric without a
 # pass): the item keeps that value in every mean instead of being re-derived
@@ -64,12 +66,8 @@ def mean_task_errors(samples: Any, task_errors: Any) -> int:
     return int(task_errors or 0) if int(samples or 1) <= 1 else 0
 
 
-# A completed run, also while it is in review (its data stays as it completed).
-COMPLETED_RUN_STATUSES = ("COMPLETED", "SUBMITTED", "APPROVED", "REJECTED")
-
-
 def item_not_received(
-    run_status: Any, samples: Any, error: Any, output: Any, latency_ms: Any
+    outcome: Any, samples: Any, error: Any, output: Any, latency_ms: Any
 ) -> bool:
     """A classic item of a completed run whose outcome never reached the platform.
 
@@ -79,12 +77,14 @@ def item_not_received(
     It shows as not received and is left out of Execution success and of the
     means; it is neither a success nor a task error. Items of a run still in
     progress, stopped or failed are not judged, and a repeat run's items are
-    judged per pass. ``not_received_clause`` is the same rule in SQL, and
-    ``metrics.js`` (``isNotReceivedRow``) reads the row state it produces.
+    judged per pass. ``outcome`` is how the run ran (``execution_outcomes``),
+    not its review state: a failed run in review is still a failed run.
+    ``not_received_clause`` is the same rule in SQL, and ``metrics.js``
+    (``isNotReceivedRow``) reads the row state it produces.
     """
-    status = str(getattr(run_status, "value", run_status) or "").upper()
+    status = str(getattr(outcome, "value", outcome) or "").upper()
     return (
-        status in COMPLETED_RUN_STATUSES
+        status == "COMPLETED"
         and int(samples or 1) <= 1
         and error is None
         and output is None
@@ -92,14 +92,50 @@ def item_not_received(
     )
 
 
-def not_received_clause(item_model, run_model):
-    """``item_not_received`` in SQL, for item rows joined to their run."""
+def execution_outcomes(db, runs) -> Dict[str, Any]:
+    """Each run's execution outcome, the status ``item_not_received`` reads
+    (run_review.execution_outcomes)."""
+    from qym_platform.services.run_review import execution_outcomes as resolve
+
+    return resolve(db, runs)
+
+
+def completed_review_runs(db, run_ids) -> frozenset:
+    """The runs in review among ``run_ids`` whose execution completed: the
+    ``completed_in_review`` of ``not_received_clause``."""
+    from qym_platform.db.models import Run, RunWorkflowStatus
+    from qym_platform.services.run_review import REVIEW_STATUSES
+
+    run_ids = list(run_ids)
+    review = []
+    for start in range(0, len(run_ids), 400):
+        review.extend(
+            db.query(Run.id, Run.status).filter(
+                Run.id.in_(run_ids[start : start + 400]),
+                Run.status.in_(REVIEW_STATUSES),
+            )
+        )
+    return frozenset(
+        run_id
+        for run_id, outcome in execution_outcomes(db, review).items()
+        if outcome == RunWorkflowStatus.COMPLETED
+    )
+
+
+def not_received_clause(item_model, run_model, completed_in_review):
+    """``item_not_received`` in SQL, for item rows joined to their run.
+
+    ``completed_in_review`` holds the runs in review that completed
+    (``completed_review_runs``): their status shows the review, so SQL
+    cannot tell them from a failed run in review.
+    """
     from qym_platform.db.models import RunWorkflowStatus
 
+    completed = run_model.status == RunWorkflowStatus.COMPLETED
+    if completed_in_review:
+        completed = or_(completed, run_model.id.in_(sorted(completed_in_review)))
     return and_(
-        run_model.status.in_(
-            [RunWorkflowStatus(status) for status in COMPLETED_RUN_STATUSES]
-        ),
+        completed,
         func.coalesce(run_model.samples, 1) <= 1,
         item_model.error.is_(None),
         item_model.latency_ms.is_(None),
@@ -113,6 +149,7 @@ def not_received_items(db, run_ids) -> Dict[str, set]:
     from qym_platform.db.models import Run, RunItem
 
     run_ids = list(run_ids)
+    completed_in_review = completed_review_runs(db, run_ids)
     found: Dict[str, set] = {}
     for start in range(0, len(run_ids), 400):
         for run_id, item_id in (
@@ -120,7 +157,7 @@ def not_received_items(db, run_ids) -> Dict[str, set]:
             .join(Run, Run.id == RunItem.run_id)
             .filter(
                 RunItem.run_id.in_(run_ids[start : start + 400]),
-                not_received_clause(RunItem, Run),
+                not_received_clause(RunItem, Run, completed_in_review),
             )
         ):
             found.setdefault(run_id, set()).add(item_id)
@@ -167,27 +204,47 @@ def task_error_pass_meta(meta: Any) -> Dict[str, Any]:
     return marked
 
 
-def is_task_error_pass(label: Any, meta: Any) -> bool:
+def scored_pass_meta(label: Any, meta: Any) -> Any:
+    """Metadata ingest stores with a scorer's pass score.
+
+    A scorer's own "error" label is a verdict, not a failed task, so it is
+    marked False: without metadata or an explanation it would read as an
+    unmarked zero-fill (``is_task_error_pass``).
+    """
+    if str(label or "").strip().lower() != TASK_ERROR_PASS_LABEL or is_metric_error(meta):
+        return meta
+    marked = dict(meta) if isinstance(meta, dict) else {}
+    marked[TASK_ERROR_PASS_MARKER] = False
+    return marked
+
+
+def is_task_error_pass(label: Any, meta: Any, explanation: Any = None) -> bool:
     """Return whether a repeat-run pass score stands for a failed task.
 
     Ingest stores 0 with the label "error" for every metric of a pass whose
-    task failed, marked with ``TASK_ERROR_PASS_MARKER``. A scorer error keeps
-    its own status and is not a task error; a reviewer's edit ("modified")
-    replaces it. The run page applies the same rule in ``metrics.js``
-    (``isTaskErrorPass``).
+    task failed, marked with ``TASK_ERROR_PASS_MARKER``. In this order: a
+    scorer error keeps its own status and is not a task error; a reviewer's
+    edit ("modified") replaces it; the marker, True or False, decides; then
+    an explanation or scorer metadata shows a scorer's verdict. The run page
+    applies the same rule in ``metrics.js`` (``isTaskErrorPass``) to the
+    marker the run payload sends.
     """
     if str(label or "").strip().lower() != TASK_ERROR_PASS_LABEL or is_metric_error(meta):
         return False
+    if isinstance(meta, dict):
+        if str(meta.get("modified") or "").strip().lower() == "true":
+            return False
+        marker = meta.get(TASK_ERROR_PASS_MARKER)
+        if isinstance(marker, bool):
+            return marker
+    # Unmarked rows (stored before the marker): ingest's zero-fill carried no
+    # explanation or metadata, while a scorer's own "error" label comes with
+    # them. A pass diagnosis is stored beside the score and says nothing about
+    # it (the run payload moves it out of the pass metadata).
+    if str(explanation or "").strip():
+        return False
     if not isinstance(meta, dict):
         return True
-    if str(meta.get("modified") or "").strip().lower() == "true":
-        return False
-    if meta.get(TASK_ERROR_PASS_MARKER) is True:
-        return True
-    # Unmarked rows (stored before the marker): ingest's zero-fill carried no
-    # metadata, while a scorer's own "error" label comes with its metadata. A
-    # pass diagnosis is stored beside the score and says nothing about it
-    # (the run payload moves it out of the pass metadata).
     return not any(
         value not in (None, "")
         for key, value in meta.items()
@@ -229,7 +286,9 @@ def reduce_pass_scores(
             for row in passes
             if row.score_numeric is not None
             and not is_metric_error(row.meta)
-            and not is_task_error_pass(getattr(row, "label", None), row.meta)
+            and not is_task_error_pass(
+                getattr(row, "label", None), row.meta, getattr(row, "explanation", None)
+            )
         ]
     else:
         values = [
@@ -479,7 +538,7 @@ def raw_metric_totals(
     counted = and_(
         # A repeat run's RunItem error is only its last pass's outcome.
         or_(Run.samples > 1, RunItem.error.is_(None)),
-        ~not_received_clause(RunItem, Run),
+        ~not_received_clause(RunItem, Run, completed_review_runs(db, run_ids)),
     )
     totals: Dict[str, Dict[str, MetricTotals]] = {}
     for run_id, metric, score_sum, score_count in (
@@ -609,18 +668,23 @@ def _repeat_pass_outcomes(db, run_id, affected):
     edited = set()
     for start in range(0, len(item_ids), 400):
         chunk = item_ids[start : start + 400]
-        for item_id, metric, score, meta, label in db.query(
+        for item_id, metric, score, meta, label, explanation in db.query(
             RunItemPassScore.item_id,
             RunItemPassScore.metric_name,
             RunItemPassScore.score_numeric,
             RunItemPassScore.meta,
             RunItemPassScore.label,
+            RunItemPassScore.explanation,
         ).filter(
             RunItemPassScore.run_id == run_id, RunItemPassScore.item_id.in_(chunk)
         ):
             if (item_id, metric) in affected:
                 passes.setdefault((item_id, metric), []).append(
-                    (score, is_metric_error(meta), is_task_error_pass(label, meta))
+                    (
+                        score,
+                        is_metric_error(meta),
+                        is_task_error_pass(label, meta, explanation),
+                    )
                 )
         for item_id, metric, score, item_edit in db.query(
             RunItemScore.item_id,
@@ -643,12 +707,17 @@ def _repeat_pass_outcomes(db, run_id, affected):
     ]
 
 
-def errored_pass_items(db, run_ids, metrics=None) -> set:
+def errored_pass_items(db, run_ids, metrics=None, *, every_pass=False) -> set:
     """``(run_id, item_id, metric)`` of repeat items with an errored pass.
 
     A pass whose scorer or task failed. Item-level verdicts of a
     lower-is-better metric treat such an item as errored (never a pass),
     like ``metrics.js`` ``getRowScore``. ``metrics`` limits the metrics read.
+
+    ``every_pass`` keeps only the items whose every counted pass errored (a
+    pass not scored yet does not count). A higher-is-better item value is
+    then only the 0s of failed passes, which a threshold of 0 or below would
+    read as a pass.
     """
     from qym_platform.db.models import RunItemPassScore
 
@@ -661,6 +730,7 @@ def errored_pass_items(db, run_ids, metrics=None) -> set:
         RunItemPassScore.metric_name,
         RunItemPassScore.meta,
         RunItemPassScore.label,
+        RunItemPassScore.explanation,
     ).filter(
         RunItemPassScore.run_id.in_(run_ids),
         or_(
@@ -671,9 +741,11 @@ def errored_pass_items(db, run_ids, metrics=None) -> set:
     if metrics is not None:
         query = query.filter(RunItemPassScore.metric_name.in_(sorted(metrics)))
     errored = set()
-    for run_id, item_id, metric, meta, label in query:
-        if is_metric_error(meta) or is_task_error_pass(label, meta):
+    for run_id, item_id, metric, meta, label, explanation in query:
+        if is_metric_error(meta) or is_task_error_pass(label, meta, explanation):
             errored.add((run_id, item_id, metric))
+    if errored and every_pass:
+        errored -= _items_with_a_healthy_pass(db, errored)
     if errored:
         # An item a reviewer scored as a whole is judged by that score.
         from qym_platform.db.models import RunItemScore
@@ -694,6 +766,71 @@ def errored_pass_items(db, run_ids, metrics=None) -> set:
                 if is_item_edit({ITEM_EDIT_KEY: item_edit}):
                     errored.discard((run_id, item_id, metric))
     return errored
+
+
+def _items_with_a_healthy_pass(db, keys) -> set:
+    """The ``(run_id, item_id, metric)`` keys with a scored pass that did not
+    error."""
+    from qym_platform.db.models import RunItemPassScore
+
+    healthy = set()
+    keys = sorted(keys)
+    for start in range(0, len(keys), 400):
+        chunk = set(keys[start : start + 400])
+        for run_id, item_id, metric, meta, label, explanation in db.query(
+            RunItemPassScore.run_id,
+            RunItemPassScore.item_id,
+            RunItemPassScore.metric_name,
+            RunItemPassScore.meta,
+            RunItemPassScore.label,
+            RunItemPassScore.explanation,
+        ).filter(
+            RunItemPassScore.run_id.in_({key[0] for key in chunk}),
+            RunItemPassScore.item_id.in_({key[1] for key in chunk}),
+            RunItemPassScore.metric_name.in_({key[2] for key in chunk}),
+            RunItemPassScore.score_numeric.isnot(None),
+        ):
+            key = (run_id, item_id, metric)
+            if (
+                key in chunk
+                and not is_metric_error(meta)
+                and not is_task_error_pass(label, meta, explanation)
+            ):
+                healthy.add(key)
+    return healthy
+
+
+def errored_repeat_items(db, specs) -> frozenset:
+    """``(run_id, item_id, metric)`` of repeat items an item verdict reads
+    as an error, never a pass.
+
+    ``specs`` are the runs' ``RunMetricSpec`` rows. A lower-is-better item
+    with any errored pass is errored (its errors are left out of its value).
+    Any other item is errored only when every counted pass errored: a mixed
+    item's value is a real measurement in which failed passes count as 0.
+    Those are read only where that 0 meets the threshold, a declared
+    ``pass_threshold`` of 0 or below; elsewhere the item fails anyway.
+    """
+    minimize, others = set(), set()
+    for spec in specs:
+        key = (spec.run_id, spec.metric_name)
+        direction = str(spec.direction or "").strip().lower()
+        if direction in {"minimize", "lower", "lower_is_better"}:
+            minimize.add(key)
+        elif spec.pass_threshold is not None and float(spec.pass_threshold) <= 0:
+            others.add(key)
+    errored = set()
+    for pairs, every_pass in ((minimize, False), (others, True)):
+        if not pairs:
+            continue
+        found = errored_pass_items(
+            db,
+            sorted({run_id for run_id, _ in pairs}),
+            metrics={metric for _, metric in pairs},
+            every_pass=every_pass,
+        )
+        errored.update(key for key in found if (key[0], key[2]) in pairs)
+    return frozenset(errored)
 
 
 def pass_metric_totals(db, run_ids) -> Dict[str, Dict[Tuple[int, str], MetricTotals]]:
@@ -727,7 +864,7 @@ def pass_metric_totals(db, run_ids) -> Dict[str, Dict[Tuple[int, str], MetricTot
         totals.setdefault(run_id, {})[(int(pass_number), metric)] = MetricTotals(
             score_sum=float(score_sum or 0.0), score_count=int(score_count or 0)
         )
-    for run_id, pass_number, metric, score, meta, label in (
+    for run_id, pass_number, metric, score, meta, label, explanation in (
         db.query(
             RunItemPassScore.run_id,
             RunItemPassScore.pass_number,
@@ -735,6 +872,7 @@ def pass_metric_totals(db, run_ids) -> Dict[str, Dict[Tuple[int, str], MetricTot
             RunItemPassScore.score_numeric,
             RunItemPassScore.meta,
             RunItemPassScore.label,
+            RunItemPassScore.explanation,
         )
         .filter(
             RunItemPassScore.run_id.in_(run_ids),
@@ -754,7 +892,7 @@ def pass_metric_totals(db, run_ids) -> Dict[str, Dict[Tuple[int, str], MetricTot
             else:
                 metric_totals.error_score_sum += float(score)
                 metric_totals.error_score_count += 1
-        elif is_task_error_pass(label, meta) and score is not None:
+        elif is_task_error_pass(label, meta, explanation) and score is not None:
             metric_totals.task_error_score_sum += float(score)
             metric_totals.task_error_score_count += 1
     directions = metric_directions(db, run_ids)

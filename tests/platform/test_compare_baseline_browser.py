@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from urllib.parse import parse_qs, urlparse
 
-from test_performance_views_browser import ViewFixture, browser, payload  # noqa: F401
+from test_performance_views_browser import ViewFixture, payload
 
 NAMES = {
     "run-1": (

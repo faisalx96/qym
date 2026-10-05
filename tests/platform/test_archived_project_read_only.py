@@ -22,7 +22,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi import HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -44,6 +44,7 @@ from qym_platform.db.models import (
     AnalyzerDocument,
     ApiKey,
     Approval,
+    AuditLog,
     Project,
     ProjectLlmConnection,
     ProjectMembership,
@@ -595,15 +596,53 @@ def _ids(rows):
     return [f"{row[0]} {row[1]}" for row in rows]
 
 
+def _write_routes(routes, prefix=""):
+    """Every (method, path) write route, inside included routers too.
+
+    Older FastAPI (0.110) copies included routes into ``app.routes`` as
+    APIRoute objects; newer FastAPI (0.142) keeps each included router as one
+    entry that holds ``original_router`` and its include prefix.
+    """
+    found = set()
+    for route in routes:
+        if isinstance(route, APIRoute):
+            found.update(
+                (method, prefix + route.path)
+                for method in route.methods - {"GET", "HEAD", "OPTIONS"}
+            )
+        elif hasattr(route, "original_router"):
+            context = getattr(route, "include_context", None)
+            found |= _write_routes(
+                route.original_router.routes,
+                prefix + getattr(context, "prefix", ""),
+            )
+    return found
+
+
+def test_route_inventory_finds_included_and_hidden_write_routes():
+    """The guard below is only as good as this inventory."""
+    inner = APIRouter()
+    inner.add_api_route("/hidden", lambda: None, methods=["DELETE"], include_in_schema=False)
+    outer = APIRouter()
+    outer.add_api_route("/write", lambda: None, methods=["POST", "PUT"])
+    outer.add_api_route("/read", lambda: None, methods=["GET"])
+    outer.include_router(inner, prefix="/inner")
+    app = FastAPI()
+    app.include_router(outer, prefix="/api")
+
+    assert _write_routes(app.routes) == {
+        ("POST", "/api/write"),
+        ("PUT", "/api/write"),
+        ("DELETE", "/api/inner/hidden"),
+    }
+
+
 def test_every_write_route_is_classified():
     """A new write route must be listed as refused, key-only or allowed."""
-    app = create_app()
-    routes = {
-        (method, route.path)
-        for route in app.routes
-        if isinstance(route, APIRoute)
-        for method in route.methods - {"GET", "HEAD", "OPTIONS"}
-    }
+    routes = _write_routes(create_app().routes)
+    # An empty inventory would report every listed route as stale and hide
+    # any new, unclassified one.
+    assert len(routes) > 100, len(routes)
     classified = [
         *((m, t) for m, t, *_ in REFUSED),
         *((m, t) for m, t, *_ in KEY_ONLY),
@@ -743,9 +782,30 @@ def test_access_removal_and_job_cancel_stay_allowed(archived, session_factory):
         assert db.query(ProjectMembership).filter_by(project_id="pa", user_id="member").count() == 0
 
 
-def test_archiving_stops_the_projects_running_jobs(client, session_factory):
+POST_ARCHIVE = ("post", "/v1/admin/projects/pa/archive", None)
+PATCH_ARCHIVE = ("patch", "/v1/admin/projects/pa", {"is_active": False})
+
+
+@pytest.mark.parametrize(
+    "before, request_",
+    [
+        pytest.param([], POST_ARCHIVE, id="post"),
+        pytest.param([], PATCH_ARCHIVE, id="patch"),
+        # The project is archived already when the jobs show up.
+        pytest.param([POST_ARCHIVE], POST_ARCHIVE, id="post-repeated"),
+        pytest.param([PATCH_ARCHIVE], PATCH_ARCHIVE, id="patch-repeated"),
+        # The rule job started under the old slug's scope, "project:pa".
+        pytest.param(
+            [],
+            ("patch", "/v1/admin/projects/pa", {"is_active": False, "slug": "pa-renamed"}),
+            id="patch-rename",
+        ),
+    ],
+)
+def test_archiving_stops_the_projects_running_jobs(client, session_factory, before, request_):
     """Archived keys cannot call the product-eval stop routes, and nothing an
-    analysis job produces can be saved: archiving stops that work itself."""
+    analysis job produces can be saved: archiving stops that work itself,
+    through POST .../archive and PATCH {is_active: false} alike."""
     from qym_platform.api.product_evals import job_manager
     from qym_platform.services.analysis_jobs import (
         AnalysisJob,
@@ -754,6 +814,8 @@ def test_archiving_stops_the_projects_running_jobs(client, session_factory):
     )
     from qym_platform.services.product_evals import ProductEvalJob
 
+    for method, path, body in before:
+        assert client.request(method, path, headers=ADMIN, json=body).status_code == 200
     with session_factory() as db:
         db.add(_run("r-live", status=RunWorkflowStatus.RUNNING, started_at=datetime.utcnow()))
         db.commit()
@@ -776,7 +838,8 @@ def test_archiving_stops_the_projects_running_jobs(client, session_factory):
         for job in jobs.values():
             manager._jobs[job.job_id] = job
     try:
-        response = client.post("/v1/admin/projects/pa/archive", headers=ADMIN)
+        method, path, body = request_
+        response = client.request(method, path, headers=ADMIN, json=body)
         assert response.status_code == 200, response.text
         assert evals["pa"].stop_requested() and evals["pa"].to_dict()["status"] == "STOPPED"
         assert not evals["other"].stop_requested()
@@ -787,6 +850,9 @@ def test_archiving_stops_the_projects_running_jobs(client, session_factory):
             live = db.get(Run, "r-live")
             assert live.status == RunWorkflowStatus.STOPPED
             assert live.status_reason == "product_eval_stopped"
+            # A repeated request records no second transition.
+            archived = db.query(AuditLog).filter_by(entity_id="pa", action="project.archived")
+            assert archived.count() == 1
     finally:
         for job in evals.values():
             job_manager._jobs.pop(job.job_id, None)
@@ -1146,5 +1212,10 @@ def test_docs_describe_archived_projects_as_decided() -> None:
         assert "signs the user out of every browser" in text
         assert "read-only" in text
     operations = (ROOT / "docs" / "internal" / "OPERATIONS.md").read_text(encoding="utf-8")
-    assert "alembic stamp 0058 && alembic upgrade head" in operations
+    assert (
+        "--entrypoint /bin/sh api -ec \\\n"
+        "  'alembic -c packages/platform/qym_platform/migrations/alembic.ini stamp 0058"
+        " && alembic -c packages/platform/qym_platform/migrations/alembic.ini upgrade head'"
+    ) in operations
+    assert "before this version's API or\nworker starts against it" in operations
     assert "Production never ran the pre-release branch" in operations

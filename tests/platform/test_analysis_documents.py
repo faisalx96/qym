@@ -99,7 +99,10 @@ def test_extract_pdf_reads_page_text() -> None:
         document = extract_document_text("requirements.pdf", bytes(pdf))
     except DocumentExtractionError as exc:
         assert "requires OS memory and CPU resource limits" in str(exc)
-        return
+        pytest.skip(
+            "PDF worker cannot set RLIMIT_AS/RLIMIT_CPU on this host "
+            "(for example macOS), so text extraction is not exercised"
+        )
 
     assert document.content == "Reference requirement text"
 

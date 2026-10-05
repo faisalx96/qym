@@ -10,9 +10,9 @@
   <script src="/static/qym_safe.js?v=p1-20261001"></script>
   <script src="/static/auth.js?v=p1-20261005"></script>
   <script src="/static/shell.js?v=p1-20261005-8"></script>
-  <script src="/static/metrics.js?v=p0-20260930-3"></script>
+  <script src="/static/metrics.js?v=p1-20261005"></script>
   <script src="/static/runs_order.js?v=p1-20261002"></script>
-  <script src="/static/run_details.js?v=p1-20261001"></script>
+  <script src="/static/run_details.js?v=p1-20261005"></script>
   <script src="/static/qym_live.js?v=p1-20261001"></script>
   <script src="/static/trace_viewer.js?v=p1-20261001"></script>
   <script src="/static/step_latency.js?v=p1-20261005-3"></script>
@@ -8390,7 +8390,7 @@
         ];
         for (const keys of schemaKeys) {
           for (const k of keys || []) {
-            if (!['modified', 'original_score', 'original_score_numeric', 'last_edit'].includes(k)) mmKeySet.add(k);
+            if (!window.QymMetrics.isInternalMetaKey(k)) mmKeySet.add(k);
           }
         }
         for (const row of (snap.rows || [])) {
@@ -8398,7 +8398,7 @@
           for (const metricName of Object.keys(mm)) {
             const meta = mm[metricName] || {};
             for (const k of Object.keys(meta)) {
-              if (!['modified', 'original_score', 'original_score_numeric', 'last_edit'].includes(k)) mmKeySet.add(k);
+              if (!window.QymMetrics.isInternalMetaKey(k)) mmKeySet.add(k);
             }
           }
         }
@@ -9510,12 +9510,12 @@
         const groupMetric = group.metric || metricName;
         const thresholdPct = Math.round((group.threshold != null ? group.threshold : 0.8) * 100);
         const isBool = !!state.metricIsBoolean[groupMetric];
-        const tooltips = window.QymMetrics.getMetricTooltips(samplesCount, isBool, thresholdPct);
+        const groupDirection = metricDirectionOf(groupMetric);
+        const tooltips = window.QymMetrics.getMetricTooltips(samplesCount, isBool, thresholdPct, groupDirection);
         const fp = v => (typeof v === 'number' ? window.QymMetrics.formatPercent(v) : 'NA');
         const mTypeOf = m => state.metricTypes[m] || 'score';
         const fmtMetric = (v, m) => window.QymMetrics.formatMetricValue(v, mTypeOf(m));
         const groupMetricType = mTypeOf(groupMetric);
-        const groupDirection = metricDirectionOf(groupMetric);
         const passBased = groupMetricType !== 'numeric' && Boolean(groupDirection);
         const groupMetricLabel = String(groupMetric || 'Metric')
           .replace(/[_-]+/g, ' ')
@@ -12229,15 +12229,25 @@
       // and counts them as fails in the pass rate.
       function getCategoryMetricScores(row, metric, metricIndex) {
         if (!state.viewPass && row.pass_scores && Array.isArray(row.pass_scores[metric])) {
+          let passes = null;
           if (errorsLeftOutFor(metric)) {
             const vector = passVectorFor(row, metric);
-            if (vector.values.length || vector.errors) return { scores: vector.values, errors: vector.errors };
+            if (vector.values.length || vector.errors) passes = { scores: vector.values, errors: vector.errors };
           } else {
             const passValues = row.pass_scores[metric]
               .map(value => window.QymMetrics.parseScoreValue(value))
               .filter(value => value !== null);
-            if (passValues.length > 0) return { scores: passValues, errors: 0 };
+            if (passValues.length > 0) passes = { scores: passValues, errors: 0 };
           }
+          // A repeat item a reviewer scored as a whole keeps that value in
+          // every mean (getRowScore). It fills each of the item's pass
+          // slots, so the item keeps its weight in the group.
+          if (passes && window.QymMetrics.isItemEdit(row.metric_meta?.[metric])) {
+            const { score } = rowScoreFor(row, metricIndex, metric);
+            const slots = passes.scores.length + passes.errors;
+            return { scores: score === null ? [] : new Array(slots).fill(score), errors: 0 };
+          }
+          if (passes) return passes;
         }
         const { score, isError } = rowScoreFor(row, metricIndex, metric);
         if (score === null) return { scores: [], errors: isError ? 1 : 0 };
@@ -14206,7 +14216,7 @@
             const passMetricMeta = metaFor(name, att.pass_number);
             const hasMetricExecutionError = window.QymMetrics.isMetricErrorMeta(passMetricMeta);
             const hasMeta = Object.keys(passMetricMeta).some(key =>
-              !['modified', 'original_score', 'original_score_numeric', 'last_edit'].includes(key)
+              !window.QymMetrics.isInternalMetaKey(key)
               && state.visibleMetricMetaFields[key] !== false
               && passMetricMeta[key] !== undefined
               && passMetricMeta[key] !== null
@@ -14257,7 +14267,7 @@
           const detailForMeta = (meta) => {
             const detail = {};
             Object.keys(meta || {}).forEach(key => {
-              if (!['modified', 'original_score', 'original_score_numeric', 'last_edit'].includes(key)
+              if (!window.QymMetrics.isInternalMetaKey(key)
                   && state.visibleMetricMetaFields[key] !== false
                   && meta[key] !== undefined && meta[key] !== null && meta[key] !== '') {
                 detail[window.QymMetrics.metricMetaDisplayKey(key, meta)] = _parseMetaDeep(meta[key]);
@@ -14310,7 +14320,7 @@
         const blocks = state.allMetrics.map((name, i) => {
           const meta = metricMeta[name] || {};
           const metaKeys = Object.keys(meta).filter(k =>
-            !['modified', 'original_score', 'original_score_numeric', 'last_edit'].includes(k)
+            !window.QymMetrics.isInternalMetaKey(k)
             && state.visibleMetricMetaFields[k] !== false
             && meta[k] !== undefined && meta[k] !== null && meta[k] !== '');
           if (!metaKeys.length) return '';
@@ -14352,7 +14362,7 @@
           const fullMetricMeta = (fullMeta || {})[name] || {};
           const hasMetricExecutionError = window.QymMetrics.isMetricErrorMeta(fullMetricMeta);
           const metaKeys = Object.keys(meta).filter(k =>
-            !['modified', 'original_score', 'original_score_numeric', 'last_edit'].includes(k)
+            !window.QymMetrics.isInternalMetaKey(k)
             && state.visibleMetricMetaFields[k] !== false
             && meta[k] !== undefined && meta[k] !== null && meta[k] !== '');
           const rawValue = ((metricVals || [])[i] == null || (metricVals || [])[i] === '') ? '' : String((metricVals || [])[i]);
@@ -17255,7 +17265,7 @@
           for (var m of state.allMetrics) {
             var meta = mm[m] || {};
             for (var k of Object.keys(meta)) {
-              if (!['modified', 'original_score', 'original_score_numeric', 'last_edit'].includes(k)) metricMetaKeys[m].add(k);
+              if (!window.QymMetrics.isInternalMetaKey(k)) metricMetaKeys[m].add(k);
             }
           }
         }

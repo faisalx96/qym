@@ -281,7 +281,6 @@ def _fake_llm(monkeypatch, tracker):
         client,
         model,
         items,
-        corrections,
         concurrency=20,
         config=None,
         metric_name=None,

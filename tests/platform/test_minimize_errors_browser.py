@@ -10,7 +10,7 @@ import pytest
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite://")
 
 from test_dashboard_paging_browser import DashboardFixture, make_runs  # noqa: E402
-from test_performance_views_browser import ViewFixture, browser  # noqa: E402,F401
+from test_performance_views_browser import ViewFixture  # noqa: E402
 
 pytestmark = pytest.mark.browser
 
@@ -110,6 +110,65 @@ def test_compare_leaves_errors_out_and_never_counts_them_as_passes(browser):
         assert filtered("unique_solve") == [2, 4]
         stats = page.evaluate("__viewTest.state.comparisonStats.accuracy")
         assert stats["correctDistribution"] == [5, 2, 3]
+        assert fixture.errors == []
+    finally:
+        fixture.close()
+
+
+def _best_scores(fixture, scores):
+    """accuracy is a lower-is-better percentage that passes at or below 0.7;
+    ``scores`` maps an item index to its run-1 and run-2 scores, None for a
+    scorer error."""
+    for run_index, data in enumerate(fixture.data.values()):
+        data["snapshot"]["metric_specs"] = {
+            "accuracy": {
+                "score_type": "percentage",
+                "direction": "minimize",
+                "pass_threshold": 0.7,
+                "schema_version": 2,
+            },
+            "count": MINIMIZE["count"],
+        }
+        for row in data["snapshot"]["rows"]:
+            row["status"], row["error"] = "completed", ""
+            score = scores[row["index"]][run_index]
+            row["metric_values"][0] = 0 if score is None else score
+            row["metric_meta"]["accuracy"] = (
+                {"status": "error", "error": "judge 429"} if score is None else {}
+            )
+
+
+def _stat(page, label):
+    tile = page.locator("#stats-grid .qym-stat-strip__item").filter(has_text=label)
+    return tile.locator(".qym-stat-strip__value").inner_text()
+
+
+@pytest.mark.parametrize(
+    "measured, best",
+    [((0.6, 0.8), "60.0%"), ((0.0, 0.8), "0.0%")],
+    ids=["measured", "genuine-zero"],
+)
+def test_compare_averages_min_at_k_over_items_with_a_best_score(browser, measured, best):
+    fixture = ViewFixture(browser, "compare", count=2)
+    # Item 1 errored in both runs: it has no best score, but still fails.
+    _best_scores(fixture, {0: measured, 1: (None, None)})
+    try:
+        fixture.goto()
+        page = fixture.page
+        page.wait_for_function("__viewTest.state.metricThresholds.accuracy === 0.7")
+        page.wait_for_selector("#stats-grid .qym-stat-strip__item")
+        assert _stat(page, "Min@2") == best
+        # The errored item still counts in the pass-rate denominators.
+        assert _stat(page, "Pass@2") == "50.0%"
+        assert _stat(page, "Pass^2") == "0.0%"
+        stats = page.evaluate("__viewTest.state.comparisonStats.accuracy")
+        assert (stats["totalCompared"], stats["itemsWithBest"]) == (2, 1)
+        # Only the errored item: no best score to average, so no zero.
+        errored = page.evaluate(
+            "__viewTest.calculateComparisonStatsForMetric('accuracy', ['aligned-1'])"
+        )
+        assert (errored["totalCompared"], errored["itemsWithBest"], errored["maxAtK"]) == (1, 0, 0)
+        assert errored["correctDistribution"] == [1, 0, 0]
         assert fixture.errors == []
     finally:
         fixture.close()
@@ -286,6 +345,52 @@ def test_run_page_pass_distribution_filter_counts_errored_passes_as_fails(browse
             fixture.close()
 
 
+def _pass_tooltips(page):
+    """The repeat section's Pass@K and Pass^K help texts, by tile title."""
+    return page.evaluate(
+        """() => Object.fromEntries(
+          Array.from(document.querySelectorAll(
+            '#samples-analysis-section .model-stat-box'
+          ))
+            .map(box => [
+              box.querySelector('.stat-title').firstChild.textContent.trim(),
+              box.querySelector('.stat-info-tooltip')?.textContent || '',
+            ])
+            .filter(([title]) => title.startsWith('Pass'))
+        )"""
+    )
+
+
+def test_run_page_pass_tooltips_follow_the_metric_direction(browser):
+    """Pass@K and Pass^K say which scores pass: at or below the threshold for
+    the lower-is-better h, at or above it for q."""
+    from test_minimize_errors import _repeat
+
+    with _runs_api(lambda db: _repeat(db, "run-1")) as client:
+        fixture = ViewFixture(browser, "run", count=4, samples=3)
+        fixture.api_client = client
+        try:
+            fixture.goto()
+            page = fixture.page
+            page.locator("#samples-analysis-section .model-stat-box").first.wait_for()
+            at_least = "Percentage of items where at least one of the 3 runs scored "
+            every = "Percentage of items where all 3 runs scored "
+            assert _pass_tooltips(page) == {
+                "Pass@3": at_least + "≤30%.",
+                "Pass^3": every + "≤30%.",
+            }
+            page.locator('.samples-metric-tab[data-samples-metric="q"]').click()
+            page.locator(
+                '.samples-metric-tab[data-samples-metric="q"][aria-pressed="true"]'
+            ).wait_for()
+            assert _pass_tooltips(page) == {
+                "Pass@3": at_least + "≥80%.",
+                "Pass^3": every + "≥80%.",
+            }
+        finally:
+            fixture.close()
+
+
 def _percent(text):
     # "33.3%", or a plain number where the runs' specs differ (Compare then
     # shows the metric neutrally).
@@ -390,3 +495,71 @@ def test_runs_list_run_page_and_compare_show_the_same_means(browser):
     finally:
         for fixture in fixtures:
             fixture.close()
+
+
+def _metric_cards(page):
+    return page.evaluate(
+        """() => Object.fromEntries(Array.from(
+          document.querySelectorAll('.metric-card'),
+          card => [card.querySelector('.metric-card-name')?.textContent,
+                   card.textContent.replace(/\\s+/g, ' ').trim()],
+        ).filter(([name]) => name))"""
+    )
+
+
+def test_error_labeled_passes_read_the_same_in_full_compact_and_released_rows(browser):
+    """A scorer's own "error" label with a long reason, nested metadata or
+    only an explanation is a judged pass; a failed task is not. Full rows,
+    index rows, loaded and then released rows give the runs list's mean,
+    and the platform's task_error flag is never offered as a metric field."""
+    from test_minimize_errors import LABELED_H, _labeled
+
+    shown = {}
+    with _runs_api(lambda db: _labeled(db, "run-1")) as client:
+        assert _listed_means(client)["run-1"]["h"] == pytest.approx(LABELED_H)
+        for compact in (False, True):
+            fixture = ViewFixture(browser, "run", compact=compact, count=9, samples=3)
+            fixture.api_client = client
+            try:
+                assert _run_page_means(fixture) == _approx({"h": LABELED_H})
+                page = fixture.page
+                assert "task_error" not in page.evaluate(
+                    "__viewTest.state.allMetricMetaKeys"
+                )
+                shown[compact, "index"] = _metric_cards(page)
+                if compact:
+                    # The CSV export loads every row; closing it releases
+                    # them back to the index form.
+                    page.evaluate("document.getElementById('export-filtered-btn').click()")
+                    page.locator("#export-modal-cancel").wait_for()
+                    assert page.evaluate(
+                        "__viewTest.state.snapshot.rows.every(row => row.__details_loaded)"
+                    )
+                    page.evaluate("__viewTest.renderItems()")
+                    fixture.settled()
+                    shown[compact, "loaded"] = _metric_cards(page)
+                    page.locator("#export-modal-cancel").click()
+                    page.wait_for_function(
+                        "__viewTest.state.snapshot.rows.every(row => !row.__details_loaded)"
+                    )
+                    page.evaluate("__viewTest.renderItems()")
+                    fixture.settled()
+                    shown[compact, "released"] = _metric_cards(page)
+                    flags = page.evaluate(
+                        "__viewTest.state.snapshot.rows.map(row => "
+                        "[row.item_id, row.pass_metric_meta?.h?.[0]?.task_error ?? null])"
+                    )
+                    assert dict(flags) == {
+                        "long_reason": False,
+                        "nested": False,
+                        "explained": False,
+                        "verdict_marked": False,
+                        "failed": True,
+                        "legacy_zero_fill": True,
+                        "reviewed": False,
+                        "scorer_error": False,
+                        "imported": False,
+                    }
+            finally:
+                fixture.close()
+    assert len({str(cards) for cards in shown.values()}) == 1, shown

@@ -35,7 +35,6 @@ from test_review_rules import (  # noqa: F401  (fixtures)
     session_factory,
 )
 from test_root_cause_issue_javascript import _function, _run_javascript
-from test_root_cause_issue_persistence import db_session  # noqa: F401  (fixture)
 
 ROOT = Path(__file__).resolve().parents[2]
 DASHBOARD = ROOT / "packages/platform/qym_platform/_static/dashboard"

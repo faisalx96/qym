@@ -14,7 +14,6 @@ import time
 
 import pytest
 
-from test_performance_views_browser import browser  # noqa: F401
 from test_run_page_structure_browser import StructureFixture
 
 pytestmark = pytest.mark.browser

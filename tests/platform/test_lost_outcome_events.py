@@ -17,12 +17,15 @@ ingest endpoint:
   task-failed pass in the means (0, or left out when lower is better), in
   source rows and the published projection alike.
 
-The Incomplete flag stays on every such run.
+The Incomplete flag stays on every such run. A run in review is judged by
+how it ran, not by its review status: a failed run's item without an outcome
+is never "not received", before, during or after review.
 """
 
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import pytest
@@ -31,9 +34,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from qym_platform.api import ingest
+from qym_platform.api import insights as insights_api
 from qym_platform.api import runs as runs_api
 from qym_platform.auth import Principal, require_api_key_principal
 from qym_platform.db.models import (
+    CorrectionStatus,
+    ReviewCorrection,
     Run,
     RunItem,
     RunItemPassScore,
@@ -42,9 +48,11 @@ from qym_platform.db.models import (
     User,
 )
 from qym_platform.deps import get_db
+from qym_platform.services import dashboard_summaries
+from qym_platform.services.insights_engine import build_insight_data
+from qym_platform.services.root_cause_dashboard import DashboardFilters, _load_snapshot
 from qym_platform.services.run_means import item_not_received
-from test_dashboard_durable_summaries import (  # noqa: F401
-    database,
+from test_dashboard_durable_summaries import (
     drain,
     legacy,
     projected,
@@ -167,13 +175,13 @@ class Emitter:
         )
         return events
 
-    def completed(self, total_items, rejected):
+    def completed(self, total_items, rejected, final_status="COMPLETED"):
         return [
             self.event(
                 "run_completed",
                 {
                     "ended_at": "2026-09-30T00:01:00Z",
-                    "final_status": "COMPLETED",
+                    "final_status": final_status,
                     "summary": {"total_items": total_items, "rejected_events": rejected},
                 },
             )
@@ -459,33 +467,283 @@ def test_repeat_pass_without_any_outcome_stays_out_of_the_means(database, emitte
 
 def test_not_received_rule_matches_in_python_and_sql(database):
     """An output set to None is stored as JSON null, one never set as SQL
-    NULL: both are no output. Review states are completed runs too."""
-    from qym_platform.services.run_means import not_received_items
+    NULL: both are no output. A run in review is judged by how it ran: its
+    recorded outcome, else its run_completed event, else completed (uploads
+    and imports). Live and stopped runs keep their own status."""
+    from qym_platform.db.models import Approval, RunEvent
+    from qym_platform.services.run_review import REVIEW_STATUSES
+    from qym_platform.services.run_means import execution_outcomes, not_received_items
     from test_dashboard_durable_summaries import item, run
 
+    def event(db, run_id, sequence, final_status):
+        db.add(
+            RunEvent(
+                run_id=run_id,
+                event_id=f"{run_id}-{sequence}",
+                sequence=sequence,
+                type="run_completed",
+                sent_at=datetime(2026, 9, 30),
+                payload={"final_status": final_status},
+            )
+        )
+
+    runs = (
+        ("done", RunWorkflowStatus.COMPLETED, 1),
+        ("approved", RunWorkflowStatus.APPROVED, 1),
+        ("failed", RunWorkflowStatus.FAILED, 1),
+        ("submitted-failed", RunWorkflowStatus.SUBMITTED, 1),
+        ("approved-failed-event", RunWorkflowStatus.APPROVED, 1),
+        ("rejected-done-event", RunWorkflowStatus.REJECTED, 1),
+        ("live", RunWorkflowStatus.RUNNING, 1),
+        ("stopped", RunWorkflowStatus.STOPPED, 1),
+        ("repeat", RunWorkflowStatus.COMPLETED, 2),
+    )
     with Session(database) as db:
-        for run_id, status, samples in (
-            ("done", RunWorkflowStatus.COMPLETED, 1),
-            ("approved", RunWorkflowStatus.APPROVED, 1),
-            ("live", RunWorkflowStatus.RUNNING, 1),
-            ("stopped", RunWorkflowStatus.STOPPED, 1),
-            ("repeat", RunWorkflowStatus.COMPLETED, 2),
-        ):
+        for run_id, status, samples in runs:
             run(db, run_id=run_id, status=status, samples=samples)
             item(db, item_id="answered", run_id=run_id)
             item(db, item_id="failed", run_id=run_id, output=None, error="boom")
             item(db, item_id="none", run_id=run_id, output=None, latency_ms=None)
             db.add(RunItem(run_id=run_id, item_id="unset", input="x"))
-        db.commit()
-        found = not_received_items(
-            db, ["done", "approved", "live", "stopped", "repeat"]
+        db.add(
+            Approval(
+                run_id="submitted-failed",
+                submitted_by_user_id="u",
+                execution_status="FAILED",
+            )
         )
-        assert found == {"done": {"none", "unset"}, "approved": {"none", "unset"}}
+        # Reviews started before outcomes were recorded: the last event wins.
+        event(db, "approved-failed-event", 1, "COMPLETED")
+        event(db, "approved-failed-event", 2, "FAILED")
+        event(db, "rejected-done-event", 1, "COMPLETED")
+        # A live run's event cannot make it completed before it ends.
+        event(db, "live", 1, "COMPLETED")
+        db.commit()
+        found = not_received_items(db, [run_id for run_id, _, _ in runs])
+        assert found == {
+            "done": {"none", "unset"},
+            "approved": {"none", "unset"},
+            "rejected-done-event": {"none", "unset"},
+        }
+        outcomes = execution_outcomes(db, db.query(Run).all())
+        assert outcomes["submitted-failed"] == RunWorkflowStatus.FAILED
+        assert outcomes["approved-failed-event"] == RunWorkflowStatus.FAILED
+        assert outcomes["live"] == RunWorkflowStatus.RUNNING
+        # A review status is not an outcome: it does not say the run completed.
+        for status in REVIEW_STATUSES:
+            assert not item_not_received(status, 1, None, None, None), status
         for row in db.query(RunItem):
             run_row = db.get(Run, row.run_id)
             assert item_not_received(
-                run_row.status, run_row.samples, row.error, row.output, row.latency_ms
+                outcomes[row.run_id],
+                run_row.samples,
+                row.error,
+                row.output,
+                row.latency_ms,
             ) == (row.item_id in found.get(row.run_id, ())), (row.run_id, row.item_id)
+
+
+COUNTED = (
+    "not_received_count",
+    "execution_count",
+    "execution_success_count",
+    "success_count",
+    "error_count",
+    "task_error_count",
+    "success_rate",
+    "metric_averages",
+)
+
+
+def _counts(engine, run_id, *, repair=False):
+    """The execution counts and means of one run in every view that shows
+    them. ``repair`` rebuilds its published summary from the source first."""
+    if repair:
+        with Session(engine) as db:
+            assert dashboard_summaries.request_dashboard_repair(db, run_id)
+            db.commit()
+    views, snapshot = _views(engine, run_id)
+    found = {
+        name: {key: payload[key] for key in COUNTED} for name, payload in views.items()
+    }
+    found["run page"] = {
+        "stats": {
+            key: snapshot["stats"][key]
+            for key in ("not_received", "execution_count", "success_rate")
+        },
+        "rows": {row["item_id"]: row["status"] for row in snapshot["rows"]},
+        "means": _js_means(snapshot, ["q", "h"]),
+    }
+    with Session(engine) as db:
+        principal = _principal(db)
+        models = runs_api.models_runs_data(files=[run_id], db=db, principal=principal)
+        stats = models["runs"][0]["snapshot"]["stats"]
+        found["models"] = {
+            key: stats[key] for key in ("not_received", "execution_count")
+        }
+        point = next(
+            point
+            for point in insights_api.project_insights(
+                project_slug="test",
+                period="all",
+                task=None,
+                dataset=None,
+                dataset_version_id=None,
+                model=None,
+                status=None,
+                db=db,
+                principal=principal,
+            )["runs"]
+            if point["run_id"] == run_id
+        )
+        found["insights"] = {
+            key: point[key] for key in ("success_rate", "metric_averages")
+        }
+        snapshot = _load_snapshot(db, "p", DashboardFilters(), include_changes=False)
+        found["root cause"] = {
+            metric: dict(stat)
+            for (stat_run, metric), stat in snapshot.score_stats.items()
+            if stat_run == run_id
+        }
+        found["insights engine"] = {
+            insight.category: {
+                metric: dict(counts) for metric, counts in insight.metrics.items()
+            }
+            for insight in build_insight_data(
+                db, "p", run_ids=[run_id], minimum_category_items=1
+            )
+        }
+    return found
+
+
+def _review(engine, run_id, *actions):
+    """Apply review transitions (and trash/restore) through the endpoints;
+    returns the run's status after the last one."""
+    with Session(engine) as db:
+        principal = _principal(db)
+        for action in actions:
+            if action == "submit":
+                runs_api.submit_run(run_id, None, db=db, principal=principal)
+            elif action == "trash":
+                runs_api.delete_run({"file_path": run_id}, db=db, principal=principal)
+            elif action == "restore":
+                runs_api.restore_run({"run_id": run_id}, db=db, principal=principal)
+            else:
+                decide = getattr(runs_api, f"{action}_run")
+                decide(run_id, {}, db=db, principal=principal)
+        db.expire_all()
+        return db.get(Run, run_id).status
+
+
+def _reviewed(database, emitter, name, final_status):
+    """item-0 answers (q 1.0, h 0.2), item-1 fails, item-2's completion
+    events are refused while its scores arrived (q 0.0, h 0.0). Every item
+    has one root-cause category, so the Insights engine judges them."""
+    run = emitter(name, 1, ["q", "h"])
+    events = run.started(3)
+    events += run.passed("item-0", 0, 1, {"q": 1.0, "h": 0.2})
+    events += run.failed(
+        "item-1", 1, 1, error="tool crashed", attempt_error="tool crashed"
+    )
+    events += run.passed("item-2", 2, 1, {"q": 0.0, "h": 0.0}, output=REFUSED)
+    body = run.post(events)
+    run.post(run.completed(3, body["rejected"], final_status))
+    with Session(database) as db:
+        for row in db.query(RunItem).filter_by(run_id=run.run_id):
+            row.item_metadata = {
+                "metric_analyses": {"q": {"root_causes": ["Reasoning-Error"]}}
+            }
+            db.add(
+                ReviewCorrection(
+                    run_id=run.run_id,
+                    item_id=row.item_id,
+                    metric_name="q",
+                    task="t",
+                    ai_root_cause="Reasoning-Error",
+                    ai_root_causes=["Reasoning-Error"],
+                    human_root_cause="Reasoning-Error",
+                    human_root_causes=["Reasoning-Error"],
+                    status=CorrectionStatus.APPROVED,
+                    is_active=True,
+                )
+            )
+        db.commit()
+
+
+def test_review_transitions_keep_a_failed_runs_counts(database, emitter):
+    """runs.status shows the review while a run is in review. A failed run
+    in review is still a failed run: its item without an outcome is not
+    "not received", so its counts and means stay as they were. A completed
+    run in review keeps counting it as not received."""
+    lifecycle = [
+        (("submit",), "SUBMITTED"),
+        (("approve",), "APPROVED"),
+        # Withdrawing returns the run to how it ran.
+        (("unapprove",), None),
+        (("submit", "reject"), "REJECTED"),
+        (("unreject",), None),
+        (("submit", "reject", "submit"), "SUBMITTED"),
+        (("approve", "trash", "restore"), "APPROVED"),
+    ]
+    # item-1's task error counts as 0 for q and is left out of h (lower is
+    # better); item-2 counts only in the failed run.
+    for name, outcome, not_received, means, judged in (
+        (
+            "c-review-failed",
+            "FAILED",
+            0,
+            {"q": 1 / 3, "h": 0.1},
+            {"q": {"success": 1, "fail": 2}, "h": {"success": 2, "fail": 1}},
+        ),
+        (
+            "c-review-done",
+            "COMPLETED",
+            1,
+            {"q": 0.5, "h": 0.2},
+            {"q": {"success": 1, "fail": 1}, "h": {"success": 1, "fail": 1}},
+        ),
+    ):
+        _reviewed(database, emitter, name, outcome)
+        run_id = rid(name)
+        before = _counts(database, run_id)
+        # item-1 is a task error; item-2 is a success where it was executed.
+        success_rate = (2 - not_received) / (3 - not_received)
+        for view in ("legacy", "projected", "detail"):
+            assert before[view]["not_received_count"] == not_received, (name, view)
+            assert before[view]["execution_count"] == 3 - not_received, (name, view)
+            assert before[view]["success_rate"] == pytest.approx(success_rate)
+            assert before[view]["metric_averages"] == _approx(means), (name, view)
+        assert before["run page"]["rows"]["item-2"] == (
+            "not_received" if not_received else "completed"
+        )
+        assert before["models"]["not_received"] == not_received
+        assert before["insights"]["success_rate"] == pytest.approx(success_rate)
+        assert before["insights"]["metric_averages"] == _approx(means)
+        assert before["insights engine"] == {"Reasoning-Error": judged}
+        for actions, status in lifecycle:
+            assert _review(database, run_id, *actions) == (status or outcome), (
+                name,
+                actions,
+            )
+            assert _counts(database, run_id) == before, (name, actions)
+            # The published summary rebuilt from the source while in review.
+            assert _counts(database, run_id, repair=True) == before, (name, actions)
+        # A score edit in review returns the row as the run page shows it.
+        # Scores are locked while submitted or approved (C041); a rejected
+        # run is in review and open to edits.
+        assert _review(database, run_id, "unapprove", "submit", "reject") == "REJECTED"
+        with Session(database) as db:
+            edited = runs_api.update_metric(
+                {
+                    "file_path": run_id,
+                    "row_index": 2,
+                    "metric_name": "h",
+                    "new_score": 0.0,
+                },
+                db=db,
+                principal=_principal(db),
+            )
+        assert edited["row"]["status"] == before["run page"]["rows"]["item-2"]
 
 
 def test_models_reads_run_items_once_when_no_item_can_be_not_received(

@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from test_dashboard_paging_browser import DashboardFixture, browser, make_runs
+from test_dashboard_paging_browser import DashboardFixture, make_runs
 from test_performance_views_browser import ViewFixture
 
 pytestmark = pytest.mark.browser

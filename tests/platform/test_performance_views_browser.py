@@ -18,17 +18,10 @@ from qym_platform.services.run_payloads import (
     new_meta_key_index,
 )
 
+pytestmark = pytest.mark.browser
+
 ROOT = Path(__file__).resolve().parents[2]
 STATIC = ROOT / "packages/platform/qym_platform/_static/dashboard"
-
-
-@pytest.fixture(scope="module")
-def browser():
-    api = pytest.importorskip("playwright.sync_api")
-    with api.sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
-        yield browser
-        browser.close()
 
 
 def payload(run_id="run-1", count=260, samples=1):
@@ -344,7 +337,11 @@ class ViewFixture:
                 if self.kind == "compare"
                 else "      loadRunData();"
             )
-            helpers = "openItemComparisonModal, render," if self.kind == "compare" else ""
+            helpers = (
+                "openItemComparisonModal, render, calculateComparisonStatsForMetric,"
+                if self.kind == "compare"
+                else ""
+            )
             source = source.replace(
                 init,
                 "window.__viewTest = {state, renderItems, getFilteredItems, "
@@ -1105,6 +1102,7 @@ def test_compare_html_export_contains_every_body_and_opens_offline(browser, tmp_
         assert "needle-259" in exported
         assert "Judge explanation 259" in exported
         assert not re.search(r"<script\s+src=", exported)
+        assert not re.search(r'<link\s+rel="stylesheet"\s+href=', exported)
         offline = browser.new_context(offline=True)
         page = offline.new_page()
         errors = []

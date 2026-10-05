@@ -6329,12 +6329,15 @@
         addStatTile('avgLatency', '⚡ Avg Latency', formatLatency(stats.avgLatency), '', tooltips.avgLatency);
         addStatTile('medianLatency', '⚡ Median Latency', formatLatency(stats.medianLatency), '', tooltips.medianLatency);
       } else {
+        // A lower-is-better metric with no score left (every item errored)
+        // has no average or best score: "—", not 0% (the best value).
+        const fmtScore = value => (value === null || value === undefined ? '—' : formatPercent(value));
         addStatTile('passAtK', `Pass@${K}`, formatPercent(stats.passAtK), getSuccessClass(stats.passAtK), tooltips.passAtK);
         addStatTile('passHatK', `Pass^${K}`, formatPercent(stats.passHatK), getSuccessClass(stats.passHatK), tooltips.passHatK);
-        addStatTile('maxAtK', `${direction === 'minimize' ? 'Min' : 'Max'}@${K}`, formatPercent(stats.maxAtK), scoreClassFor(stats.maxAtK), tooltips.maxAtK);
+        addStatTile('maxAtK', `${direction === 'minimize' ? 'Min' : 'Max'}@${K}`, fmtScore(stats.maxAtK), scoreClassFor(stats.maxAtK), tooltips.maxAtK);
         addStatTile('consistency', 'Consistency', stats.consistency !== null ? formatPercent(stats.consistency) : 'NA', stats.consistency !== null ? getSuccessClass(stats.consistency) : '', tooltips.consistency);
         addStatTile('reliability', 'Reliability', stats.reliability !== null ? formatPercent(stats.reliability) : 'NA', stats.reliability !== null ? getSuccessClass(stats.reliability) : '', tooltips.reliability);
-        addStatTile('avgScore', 'Avg Score', formatPercent(stats.avgScore), scoreClassFor(stats.avgScore), tooltips.avgScore);
+        addStatTile('avgScore', 'Avg Score', fmtScore(stats.avgScore), scoreClassFor(stats.avgScore), tooltips.avgScore);
         addStatTile('failedCount', 'Errors', String(stats.failedCount), stats.failedCount > 0 ? 'failed-count' : '', tooltips.failedCount);
         addStatTile('totalRetries', 'Retries', String(stats.totalRetries || 0), stats.totalRetries > 0 ? 'retry-count' : '', tooltips.totalRetries);
         addStatTile('avgLatency', '⚡ Avg Latency', formatLatency(stats.avgLatency), '', tooltips.avgLatency);

@@ -209,6 +209,37 @@ def test_declared_pass_threshold_is_the_default():
     assert result.group_stats(threshold=0.4)["pass_at_k"] == 0.0
 
 
+@pytest.mark.parametrize("threshold", [0.0, -1.0])
+def test_a_failed_pass_never_passes_at_a_zero_or_negative_threshold(threshold):
+    """A failed pass counts as 0.0 in a higher-is-better mean, but it is no
+    success: at a declared threshold of 0 or below, only the scored 0 passes
+    (Pass@2, Pass^2 and Reliability read 1.0 before)."""
+    spec = MetricSpec(score_type="number", direction="maximize", pass_threshold=threshold)
+    result = _repeat(spec, {"a": [None, None], "b": [SCORER_ERROR, 0.0]})
+    group = result.group_stats()
+    assert group["threshold"] == threshold
+    assert group["pass_at_k"] == pytest.approx(0.5)  # b passes once
+    assert group["pass_hat_k"] == 0.0
+    assert group["reliability"] == pytest.approx(0.5)
+    assert group["consistency"] == pytest.approx((1 + 0) / 2)
+    assert group["avg_at_k"] == 0.0 and group["max_at_k"] == 0.0
+    assert result.pass_at(1) == pytest.approx((0 + 0.5) / 2)
+    assert result.pass_hat(2) == 0.0
+    # The public score lists keep a failed pass at 0.0.
+    assert result.item_pass_scores() == {"a": [0.0, 0.0], "b": [0.0, 0.0]}
+    # Every task failed: no pass anywhere, whatever the threshold.
+    failed = _repeat(spec, {"a": [None, None], "b": [None, None]}).group_stats()
+    assert (failed["pass_at_k"], failed["pass_hat_k"]) == (0.0, 0.0)
+    assert failed["reliability"] is None
+
+
+def test_pass_eligibility_needs_one_flag_per_score():
+    from qym.core.reducers import group_stats
+
+    with pytest.raises(ValueError, match="one flag per score"):
+        group_stats({"a": [0.0, 0.0]}, threshold=0.0, eligible={"a": [True]})
+
+
 # ── repeat runs judge each pass ──────────────────────────────────────
 
 

@@ -27,12 +27,10 @@ from qym_platform.services import repeat_passes
 from qym_platform.services.approved_diagnoses import load_approved_diagnoses
 from qym_platform.services.llm_analyzer import AnalysisResult
 from qym_platform.services.root_cause_changes import PASS_ANALYSIS_META_KEY
-from sqlalchemy import event
+from sqlalchemy import event, update
 from sqlalchemy.orm import Session, sessionmaker
 from test_issue_reviews import act
-from test_pass_review_records import records, repeat, reviews, score
-from test_retention import migrated_postgres
-from test_root_cause_issue_persistence import db_session
+from test_pass_review_records import records, reviews, score
 
 
 def _add_third_pass(db, run, item):
@@ -593,3 +591,21 @@ def test_concurrent_approval_and_deletion_share_item_lock(
             survivor.pass_number == 1 and survivor.status == CorrectionStatus.APPROVED
         )
         assert survivor.output_snapshot == "Output 2"
+
+
+def test_correction_deletion_audits_the_state_it_deleted(db_session, repeat):
+    """Another reviewer's committed comment shows in the deletion audit, not
+    the copy this session loaded before the item lock."""
+    run, item, principal, _ = repeat
+    act(db_session, run, item, principal, "approve", pass_number=1)
+    correction = records(db_session, run, 1)[0]
+    db_session.connection().execute(
+        update(ReviewCorrection.__table__)
+        .where(ReviewCorrection.__table__.c.id == correction.id)
+        .values(review_comment="Approved by the other reviewer")
+    )
+    api.delete_correction(correction.id, db=db_session, principal=principal)
+    audit = db_session.query(AuditLog).filter_by(action="correction.deleted").one()
+    assert audit.before["review_comment"] == "Approved by the other reviewer"
+    assert audit.before["status"] == "approved"
+    assert audit.after["status"] == "rejected"
