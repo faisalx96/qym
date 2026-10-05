@@ -6483,11 +6483,12 @@
     .rdi-reason-help__pop li + li { margin-top: 2px; }
     .rdi-reason-help__pop strong { color: var(--text-primary); font-weight: 600; }
   </style>
-  <script defer src="/static/ui_components.js?v=p1-20261001"></script>
   <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261005-2">
+  <script defer src="/static/ui_components.js?v=p1-20261005"></script>
 </head>
 <body>
-  <main class="run-container">
+  <!-- The run keeps its own place on re-renders (C028), not the shared hold. -->
+  <main class="run-container" data-qym-scroll-hold="off">
     <!-- The page's shape while it loads, so the run arrives in place. -->
     <div class="run-skeleton" id="loading" role="status" data-qym-skeleton-root>
       <span class="run-skeleton__label">Loading run data…</span>

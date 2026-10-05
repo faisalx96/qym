@@ -553,7 +553,10 @@ def test_spa_navigation_leaves_no_listeners_or_stale_handlers(app):
     cycle()
     cycle()
     assert _listener_counts(cdp) == after_one
-    assert after_one.get("document:keydown", 0) <= 3
+    # Shared document keydown listeners, each installed once: the shell's
+    # and ui_components.js's, including the scroll hold's (a key on a
+    # control keeps it in place while the page redraws). Pages add none.
+    assert after_one.get("document:keydown", 0) <= 4
 
     # No runs-list handler survives on the run page: arrow keys scroll it.
     page.evaluate("QymShell.navigateTo('/projects/pa/runs/run-001')")

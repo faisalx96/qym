@@ -2255,15 +2255,15 @@ def test_clear_filter_control_has_aligned_label_and_soft_count_pill() -> None:
     for page in DASHBOARD_DIR.glob("*.html"):
         source = page.read_text(encoding="utf-8")
         if page.name == "analyzer.html":
-            assert "ui_components.css?v=p1-20261001" in source
-            assert "ui_components.js?v=p1-20261001" in source
             assert "dashboard.css?v=p1-20261005-3" in source
             assert "playground.js?v=p1-20261005-3" in source
+            assert "ui_components.css?v=p1-20261005-2" in source
+            assert "ui_components.js?v=p1-20261005" in source
             continue
         if "ui_components.css?v=" in source:
-            assert "ui_components.css?v=p1-20261001" in source
+            assert "ui_components.css?v=p1-20261005-2" in source
         if "ui_components.js?v=" in source:
-            assert "ui_components.js?v=p1-20261001" in source
+            assert "ui_components.js?v=p1-20261005" in source
 
 
 def test_operational_statistics_use_connected_strip_contract() -> None:
@@ -4200,3 +4200,22 @@ def test_signing_out_forgets_the_remembered_user() -> None:
     assert "localStorage.removeItem('qym:me')" in logout
     unauthorized = shell.split("if (res.status === 401) {", 1)[1].split("}", 1)[0]
     assert "forgetCachedMe();" in unauthorized
+
+
+def test_pressed_controls_keep_their_place_on_every_page() -> None:
+    """A toggle near the end of a scroller jumped away from the pointer when
+    its section got shorter (the browser clamped the scroll). The shared
+    hold in ui_components.js, loaded on every page, keeps what was pressed
+    in place; run.html keeps its own place (C028) and opts out."""
+    behavior = (DASHBOARD_DIR / "ui_components.js").read_text(encoding="utf-8")
+    assert "document.addEventListener('pointerdown', function (event) {" in behavior
+    assert "scroller.style.overflowAnchor = 'none';" in behavior
+    assert "function reserveScrollRoom(scroller, top)" in behavior
+    assert "[data-qym-scroll-hold=\"off\"]" in behavior
+    run = (DASHBOARD_DIR / "run.html").read_text(encoding="utf-8")
+    assert '<main class="run-container" data-qym-scroll-hold="off">' in run
+    # Constrained pages grow with their content, so nothing at their end
+    # is cut off by the scroller.
+    shell_css = (DASHBOARD_DIR / "shell.css").read_text(encoding="utf-8")
+    constrained = shell_css.split(".shell-content > .overview {", 1)[1].split("\n}", 1)[0]
+    assert "flex: 1 0 auto;" in constrained

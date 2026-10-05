@@ -1127,6 +1127,264 @@
     });
   }
 
+  // ── Scroll hold ───────────────────────────────────────────────────────
+  // What the reader pressed (a toggle, an expander, a range or view switch,
+  // a filter) stays where it is on screen while the page redraws around it.
+  // When a section got shorter near the end of a scroller, even for a moment
+  // mid-render, the browser clamped the scroll and the control jumped away
+  // from the pointer; browser scroll anchoring keeps the first visible node,
+  // not the control. Only the browser's own moves are undone: the hold ends
+  // when the reader scrolls (wheel, touch, keys, scrollbar, a drag) or page
+  // code places the view (scrollTop, scrollTo, scrollIntoView, a focus that
+  // scrolls), and SCROLL_HOLD_MS after the press (the data a control asks
+  // for arrives within it). A scroller whose page keeps its own place opts
+  // out with data-qym-scroll-hold="off".
+  var SCROLL_HOLD_MS = 4000;
+  var SCROLL_KEYS = { ArrowUp: 1, ArrowDown: 1, PageUp: 1, PageDown: 1, Home: 1, End: 1, ' ': 1 };
+  var scrollHolds = new Map();
+  var scrollRooms = new WeakMap();
+  var nativeScrollTop = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop');
+
+  function isScrollable(el) {
+    var overflowY = getComputedStyle(el).overflowY;
+    return (overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight;
+  }
+
+  function holdScroller(node) {
+    for (var el = node.parentElement; el && el !== document.body; el = el.parentElement) {
+      if (isScrollable(el)) return el;
+    }
+    return null;
+  }
+
+  function setScrollTop(scroller, top) {
+    nativeScrollTop.set.call(scroller, top);
+  }
+
+  function startScrollHold(target, scroller, point) {
+    if (scroller.closest('[data-qym-scroll-hold="off"]')) return;
+    var marks = [];
+    for (var node = target; node && node !== scroller; node = node.parentElement) {
+      // A sticky or fixed control stays in view on its own; the content
+      // under it is what moves, as it should when a filter shortens it.
+      var position = getComputedStyle(node).position;
+      if (position === 'sticky' || position === 'fixed') return;
+      marks.push({ node: node, top: node.getBoundingClientRect().top });
+    }
+    if (!marks.length) return;
+    var hold = {
+      scroller: scroller,
+      marks: marks,
+      point: point,
+      top: scroller.scrollTop,
+      until: Date.now() + SCROLL_HOLD_MS,
+      anchor: scroller.style.overflowAnchor,
+      observer: null,
+      timer: 0,
+    };
+    hold.onScroll = function () { settleScrollHold(hold); };
+    scrollHolds.set(scroller, hold);
+    // The hold replaces browser anchoring, which would move the view first.
+    scroller.style.overflowAnchor = 'none';
+    scroller.addEventListener('scroll', hold.onScroll, { passive: true });
+    if (window.ResizeObserver) {
+      hold.observer = new ResizeObserver(function () { settleScrollHold(hold); });
+      Array.prototype.forEach.call(scroller.children, function (child) { hold.observer.observe(child); });
+      marks.forEach(function (mark) { hold.observer.observe(mark.node); });
+    }
+    armScrollHold(hold);
+  }
+
+  function armScrollHold(hold) {
+    clearTimeout(hold.timer);
+    hold.timer = setTimeout(function () {
+      if (Date.now() < hold.until) armScrollHold(hold);
+      else endScrollHold(hold);
+    }, Math.max(0, hold.until - Date.now()));
+  }
+
+  function endScrollHold(hold) {
+    if (scrollHolds.get(hold.scroller) !== hold) return;
+    scrollHolds.delete(hold.scroller);
+    clearTimeout(hold.timer);
+    if (hold.observer) hold.observer.disconnect();
+    hold.scroller.removeEventListener('scroll', hold.onScroll);
+    hold.scroller.style.overflowAnchor = hold.anchor;
+  }
+
+  // End the holds of the scrollers that hold `node` (or are it).
+  function endScrollHoldsAround(node) {
+    if (!scrollHolds.size || !node || node.nodeType !== 1) return;
+    scrollHolds.forEach(function (hold, scroller) {
+      if (scroller === node || scroller.contains(node)) endScrollHold(hold);
+    });
+  }
+
+  function settleScrollHold(hold) {
+    var scroller = hold.scroller;
+    if (scrollHolds.get(scroller) !== hold) return;
+    if (!scroller.isConnected || Date.now() > hold.until) { endScrollHold(hold); return; }
+    trimScrollRoom(scroller);
+    // The pressed element, else the nearest block around it still shown (a
+    // control that redraws its own section is gone by now).
+    var mark = null;
+    for (var i = 0; i < hold.marks.length && !mark; i++) {
+      if (hold.marks[i].node.isConnected && hold.marks[i].node.getClientRects().length) mark = hold.marks[i];
+    }
+    if (mark) {
+      var delta = mark.node.getBoundingClientRect().top - mark.top;
+      if (Math.abs(delta) >= 1) {
+        reserveScrollRoom(scroller, scroller.scrollTop + delta);
+        setScrollTop(scroller, scroller.scrollTop + delta);
+      }
+    }
+    hold.top = scroller.scrollTop;
+  }
+
+  // Room at the end of a scroller for a place its content no longer
+  // reaches: extra bottom padding, given back as the reader scrolls up.
+  function reserveScrollRoom(scroller, top) {
+    if (top <= scroller.scrollHeight - scroller.clientHeight) return;
+    var room = scrollRooms.get(scroller);
+    if (!room) {
+      // Padding inside a content-box scroller would grow the box instead.
+      if (getComputedStyle(scroller).boxSizing !== 'border-box') return;
+      room = {
+        size: 0,
+        inline: scroller.style.paddingBottom,
+        base: parseFloat(getComputedStyle(scroller).paddingBottom) || 0,
+      };
+      scrollRooms.set(scroller, room);
+      scroller.addEventListener('scroll', trimScrollRoomOnScroll, { passive: true });
+    }
+    // Where the content ends on its own, measured under more room than any
+    // place needs: a page that stretches to fill its scroller (a short one)
+    // would take the room in instead. The room then keeps it unstretched.
+    setScrollRoom(scroller, room, top + scroller.clientHeight);
+    var contentEnd = scroller.scrollHeight - room.size;
+    setScrollRoom(scroller, room, top + scroller.clientHeight - contentEnd);
+  }
+
+  function setScrollRoom(scroller, room, size) {
+    room.size = Math.max(0, Math.ceil(size));
+    if (room.size) {
+      scroller.style.paddingBottom = (room.base + room.size) + 'px';
+      return;
+    }
+    scroller.style.paddingBottom = room.inline;
+    scrollRooms.delete(scroller);
+    scroller.removeEventListener('scroll', trimScrollRoomOnScroll);
+  }
+
+  function trimScrollRoom(scroller) {
+    var room = scrollRooms.get(scroller);
+    if (!room) return;
+    // Only the part of the room the view reaches is still needed.
+    var contentEnd = scroller.scrollHeight - room.size;
+    var needed = scroller.scrollTop > 0 ? scroller.scrollTop + scroller.clientHeight - contentEnd : 0;
+    if (needed < room.size) setScrollRoom(scroller, room, needed);
+  }
+
+  function trimScrollRoomOnScroll(event) {
+    trimScrollRoom(event.currentTarget);
+  }
+
+  function isEditable(node) {
+    return !!node.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]');
+  }
+
+  function pressScrollHold(target, point) {
+    if (!target || target.nodeType !== 1) return;
+    scrollHolds.forEach(function (hold, scroller) {
+      if (scroller.contains(target)) {
+        endScrollHold(hold);
+      } else {
+        // A press outside the held scroller (a menu or dialog laid over the
+        // page) is the same interaction: what it picks redraws under the
+        // control that opened it.
+        hold.until = Date.now() + SCROLL_HOLD_MS;
+        armScrollHold(hold);
+      }
+    });
+    // A press on a scroller itself is its scrollbar; a link scrolls to
+    // where it goes.
+    if (isScrollable(target) || target.closest('a[href]')) return;
+    var scroller = holdScroller(target);
+    if (scroller) startScrollHold(target, scroller, point);
+  }
+
+  if (nativeScrollTop && nativeScrollTop.set) installScrollHold();
+
+  function installScrollHold() {
+    document.addEventListener('pointerdown', function (event) {
+      if (event.button === 0) pressScrollHold(event.target, { x: event.clientX, y: event.clientY });
+      else endScrollHoldsAround(event.target);  // middle-button autoscroll
+    }, true);
+    // A drag (selecting text past the edge, resizing) scrolls on purpose.
+    document.addEventListener('pointermove', function (event) {
+      if (!event.buttons || !scrollHolds.size) return;
+      scrollHolds.forEach(function (hold) {
+        if (hold.point && Math.abs(event.clientX - hold.point.x) + Math.abs(event.clientY - hold.point.y) > 6) endScrollHold(hold);
+      });
+    }, true);
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Tab') endScrollHoldsAround(event.target);  // focus moves into view
+      else pressScrollHold(event.target, null);
+    }, true);
+    // Keys the page left to the browser scroll the view.
+    window.addEventListener('keydown', function (event) {
+      if (!SCROLL_KEYS[event.key] || event.defaultPrevented || !scrollHolds.size) return;
+      var target = event.target;
+      if (target.nodeType !== 1 || isEditable(target)) return;
+      if (event.key === ' ' && target.closest('button, summary, [role="button"], [role="tab"], [role="switch"], [role="checkbox"], [role="radio"], [role="option"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]')) return;
+      endScrollHoldsAround(target);
+    });
+    ['wheel', 'touchmove'].forEach(function (type) {
+      document.addEventListener(type, function (event) { endScrollHoldsAround(event.target); }, { capture: true, passive: true });
+    });
+
+    // Page code placing the view ends the hold where it scrolls.
+    Object.defineProperty(Element.prototype, 'scrollTop', {
+      configurable: true,
+      enumerable: nativeScrollTop.enumerable,
+      get: nativeScrollTop.get,
+      set: function (value) {
+        if (scrollHolds.size) { var hold = scrollHolds.get(this); if (hold) endScrollHold(hold); }
+        nativeScrollTop.set.call(this, value);
+      },
+    });
+    ['scroll', 'scrollTo', 'scrollBy'].forEach(function (name) {
+      var native = Element.prototype[name];
+      if (typeof native !== 'function') return;
+      Element.prototype[name] = function () {
+        if (scrollHolds.size) { var hold = scrollHolds.get(this); if (hold) endScrollHold(hold); }
+        return native.apply(this, arguments);
+      };
+    });
+    ['scrollIntoView', 'scrollIntoViewIfNeeded'].forEach(function (name) {
+      var native = Element.prototype[name];
+      if (typeof native !== 'function') return;
+      Element.prototype[name] = function () {
+        endScrollHoldsAround(this);
+        return native.apply(this, arguments);
+      };
+    });
+    var nativeFocus = HTMLElement.prototype.focus;
+    HTMLElement.prototype.focus = function (options) {
+      if (scrollHolds.size && !(options && options.preventScroll)) {
+        // Only a focus that has to bring its element into view places it.
+        var self = this;
+        scrollHolds.forEach(function (hold, scroller) {
+          if (!scroller.contains(self)) return;
+          var box = self.getBoundingClientRect();
+          var view = scroller.getBoundingClientRect();
+          if (box.top < view.top || box.bottom > view.bottom) endScrollHold(hold);
+        });
+      }
+      return nativeFocus.apply(this, arguments);
+    };
+  }
+
   // ── Request failures ──────────────────────────────────────────────────
   // A failed request is never an empty or "not found" state. classifyError
   // sorts any thrown error (fetch rejection, an error carrying .status, or a
