@@ -688,6 +688,26 @@
     return select._qymReviewSelector;
   }
 
+  // The rule builder's selects use appearance: base-select (ui_components.css),
+  // which sizes a select to its chosen option; a native select keeps the width
+  // of its widest one. Hold that width so a row does not shift as values change.
+  var BASE_SELECT_WIDTH_SCOPE = '.qym-item-builder .fb-token select';
+
+  function holdBaseSelectWidth(select) {
+    if (select.dataset.qymWidthHeld === 'true') return;
+    if (window.getComputedStyle(select).appearance !== 'base-select') return;
+    if (!select.getBoundingClientRect().width) return;
+    var chosen = select.selectedIndex;
+    var widest = 0;
+    for (var i = 0; i < select.options.length; i += 1) {
+      select.selectedIndex = i;
+      widest = Math.max(widest, select.getBoundingClientRect().width);
+    }
+    select.selectedIndex = chosen;
+    select.style.minWidth = widest + 'px';
+    select.dataset.qymWidthHeld = 'true';
+  }
+
   function enhanceSelects(root, selector, options) {
     var scope = root && root.querySelectorAll ? root : document;
     return Array.prototype.map.call(scope.querySelectorAll(selector || 'select[data-qym-review-select]'), function (select) {
@@ -717,6 +737,8 @@
       ensureDropdownButton(wrapper && wrapper.querySelector('.multi-select-btn'));
     }
     scope.querySelectorAll('.multi-select-btn').forEach(ensureDropdownButton);
+    if (scope.matches && scope.matches(BASE_SELECT_WIDTH_SCOPE)) holdBaseSelectWidth(scope);
+    scope.querySelectorAll(BASE_SELECT_WIDTH_SCOPE).forEach(holdBaseSelectWidth);
     if (scope.matches && scope.matches('[data-qym-scroll-mirror-for]')) {
       setupScrollMirror(scope);
     }

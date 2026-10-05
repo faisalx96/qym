@@ -6370,6 +6370,8 @@
             <span class="fb-title">Filters</span>
             <span class="fb-count" id="builder-rule-count"></span>
           </div>
+          <!-- Filters set by clicking charts and cards, removable here. -->
+          <div class="fb-page" id="filter-builder-page" hidden></div>
           <div id="filter-builder-body"></div>
         </div>
       </nav>
@@ -12660,6 +12662,75 @@
       // ═══ Item filter rules ═══
       // Field registry: every filterable thing on the page. Built per call
       // so metric lists and category values stay fresh.
+      // Item metadata fields: every key the run's items carry, a list value
+      // broken into its entries as Performance by category does. Few values
+      // pick from chips; many numbers compare; anything else matches text.
+      // Scanned once per row set, since a rule looks its field up per row.
+      // Ids stay "cat:<key>", so links with complexity/domain rules still open.
+      function itemMetadataFilterDefs() {
+        const rows = (state.snapshot && state.snapshot.rows) || [];
+        const cached = state.metadataFilterDefs;
+        if (cached && cached.rows === rows) return cached.defs;
+        // Root causes have their own field; the rest is bookkeeping.
+        const skip = new Set(['root_cause', 'root_causes', 'root_cause_issues', 'root_cause_detail',
+          'root_cause_reason', 'root_cause_note', 'root_cause_source', 'root_cause_confidence',
+          'root_cause_metric_name', 'solution', 'solution_note', 'solution_source', 'metric_analyses',
+          'analysis_error', 'task_started_at_ms', 'trace_stats', 'retry_count']);
+        const MAX_CHOICES = 40;
+        const seen = new Map();
+        for (const row of rows) {
+          const md = row.item_metadata;
+          if (!md || typeof md !== 'object') continue;
+          for (const key of Object.keys(md)) {
+            if (skip.has(key)) continue;
+            let info = seen.get(key);
+            if (!info) seen.set(key, info = { values: new Set(), numeric: true });
+            for (const value of getMetadataCategoryValues(md, key)) {
+              info.values.add(value);
+              if (info.numeric && (!value.trim() || !isFinite(Number(value)))) info.numeric = false;
+            }
+          }
+        }
+        const ORDER = ['easy', 'medium', 'hard'];
+        const rank = value => { const i = ORDER.indexOf(value.toLowerCase()); return i < 0 ? ORDER.length : i; };
+        const defs = Array.from(seen.keys()).sort().flatMap(key => {
+          const values = Array.from(seen.get(key).values);
+          if (!values.length) return [];
+          const base = { id: 'cat:' + key, label: formatFieldName(key), group: 'Metadata' };
+          const valuesOf = row => getMetadataCategoryValues(row.item_metadata, key);
+          if (values.length <= MAX_CHOICES) {
+            values.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, undefined, { numeric: true }));
+            return [Object.assign(base, { kind: 'enum', values: values, get: valuesOf })];
+          }
+          if (seen.get(key).numeric) {
+            return [Object.assign(base, { kind: 'number', get: row => {
+              const first = valuesOf(row)[0];
+              return first === undefined ? null : Number(first);
+            } })];
+          }
+          return [Object.assign(base, { kind: 'text', get: row => valuesOf(row).join(', ') })];
+        });
+        state.metadataFilterDefs = { rows: rows, defs: defs };
+        return defs;
+      }
+
+      // Root causes the analyses applied to this run's items, custom ones
+      // included; catalog categories no item carries are not offered. An item
+      // matches through any of its analyses, as a root-cause card click does.
+      function itemRootCauses(row) {
+        return getRowRootCauseAnalyses(row, 'all').flatMap(analysis => rootCauseCategories(analysis));
+      }
+      function appliedRootCauseValues() {
+        const rows = (state.snapshot && state.snapshot.rows) || [];
+        const cached = state.rootCauseFilterValues;
+        if (cached && cached.rows === rows && cached.pass === state.viewPass) return cached.values;
+        const values = new Set();
+        rows.forEach(row => itemRootCauses(row).forEach(value => values.add(value)));
+        const sorted = Array.from(values).sort((a, b) => a.localeCompare(b));
+        state.rootCauseFilterValues = { rows: rows, pass: state.viewPass, values: sorted };
+        return sorted;
+      }
+
       function itemFilterFieldDefs() {
         const defs = [];
         state.allMetrics.forEach((name, i) => {
@@ -12668,28 +12739,26 @@
             id: 'metric:' + name, label: name, group: 'Metrics',
             // passed/failed needs a declared direction; otherwise compare values.
             kind: mType === 'numeric' || !metricDirectionOf(name) ? 'number' : 'metric',
+            // A score shows as a percentage, so its rule is written as one;
+            // the rule keeps the stored 0–1 value.
+            percent: mType === 'score',
             get: row => window.QymMetrics.parseScoreValue((row.metric_values || [])[i]),
             // "is passed/failed" judges the item by the metric's error rule:
             // an errored item never passes when lower is better.
             verdict: row => rowPassesFor(name, rowScoreFor(row, i, name)),
           });
         });
-        [['complexity', 'Complexity'], ['domain', 'Domain'], ['root_cause', 'Root cause']].forEach(([cat, label]) => {
-          const values = (getCatValues(cat) || []).map(String);
-          if (!values.length) return;
-          defs.push({
-            id: 'cat:' + cat, label: label, group: 'Item', kind: 'enum', values: values,
-            get: row => {
-              const md = (typeof row.item_metadata === 'object' && row.item_metadata) || {};
-              return cat === 'domain' ? parseMetaList(md.domain) : String(md[cat] ?? '');
-            },
-          });
-        });
+        const rootCauses = appliedRootCauseValues();
+        if (rootCauses.length) {
+          defs.push({ id: 'cat:root_cause', label: 'Root cause', group: 'Item', kind: 'enum',
+            values: rootCauses, get: itemRootCauses });
+        }
         defs.push({ id: 'approval', label: 'Approval', group: 'Item', kind: 'enum',
           values: ['approved', 'not_approved'],
           get: row => (matchesApprovalFilter(row, 'approved', state.selectedMetric) ? 'approved' : 'not_approved') });
         defs.push({ id: 'output', label: 'Output text', group: 'Item', kind: 'text',
           get: row => stringify(row.output_full || row.output || '') });
+        defs.push(...itemMetadataFilterDefs());
         defs.push({ id: 'error', label: 'Has error', group: 'State', kind: 'bool',
           get: row => window.QymMetrics.isErrorRow(row) });
         defs.push({ id: 'edited', label: 'Edited metrics', group: 'State', kind: 'bool',
@@ -12815,6 +12884,17 @@
             + '</span><button type="button" class="fb-rm qym-icon-action action-icon delete-run" data-fb-rm="' + path + '" title="Delete condition" aria-label="Delete condition">' + FILTER_TRASH_ICON + '</button></div>';
         }
         const NUM_OPERS = [['gte', '\u2265'], ['gt', '>'], ['lte', '\u2264'], ['lt', '<'], ['eq', '='], ['neq', '\u2260']];
+        // A score is written as a percentage (60 for a stored 0.6).
+        const numberInput = () => {
+          const stored = node.value ?? '';
+          const shown = f.percent && stored !== '' && !isNaN(Number(stored))
+            ? String(Number((Number(stored) * 100).toFixed(4)))
+            : String(stored);
+          return f.percent
+            ? '<input type="number" min="0" max="100" step="any" value="' + escapeAttr(shown) + '" data-fb-p="' + path + '" data-fb-k="value" placeholder="value" aria-label="Percent">'
+              + '<span class="fb-unit" aria-hidden="true">%</span>'
+            : '<input type="number" min="0" step="any" value="' + escapeAttr(shown) + '" data-fb-p="' + path + '" data-fb-k="value" placeholder="value">';
+        };
         let operSel = '', valueInp = '';
         if (f.kind === 'metric') {
           operSel = _fbOperSelect(path, node, [['is', 'is']].concat(NUM_OPERS));
@@ -12824,11 +12904,11 @@
               + ['passed', 'failed'].map(v => '<option' + (v === node.value ? ' selected' : '') + '>' + v + '</option>').join('')
               + '</select>';
           } else {
-            valueInp = '<input type="number" min="0" max="1" step="0.05" value="' + escapeAttr(String(node.value ?? '')) + '" data-fb-p="' + path + '" data-fb-k="value" placeholder="value">';
+            valueInp = numberInput();
           }
         } else if (f.kind === 'number') {
           operSel = _fbOperSelect(path, node, NUM_OPERS);
-          valueInp = '<input type="number" min="0" step="1" value="' + escapeAttr(String(node.value ?? '')) + '" data-fb-p="' + path + '" data-fb-k="value" placeholder="value">';
+          valueInp = numberInput();
         } else if (f.kind === 'enum') {
           operSel = _fbOperSelect(path, node, [['in', 'is any of'], ['notin', 'is none of']]);
           const arr = Array.isArray(node.value) ? node.value : [node.value];
@@ -12865,6 +12945,139 @@
         return '<div class="fb-grp' + (depth === 0 ? ' fb-root' : '') + '">' + head + kids + adds + '</div>';
       }
 
+      // Filters set by clicking the page (chart bars, error, category and
+      // root-cause cards) live outside the rule tree. The panel lists them so
+      // it accounts for everything the Clear count holds except search and
+      // sort, which keep their own controls in the items toolbar.
+      function _pageFilterValues(cat, values, separator) {
+        if (!values.length) return 'none selected';
+        const shown = values.slice(0, 3).map(v => String(getCatOptionLabel(cat, v)));
+        return shown.join(separator || ', ') + (values.length > 3 ? ' +' + (values.length - 3) : '');
+      }
+      function _latencyRangeLabel(min, max) {
+        if (!(max < Infinity)) return '≥ ' + formatLatency(min);
+        if (!(min > 0)) return '< ' + formatLatency(max);
+        return formatLatency(min) + '–' + formatLatency(max);
+      }
+      function pageFilterEntries() {
+        const entries = [];
+        const metric = state.selectedMetric || '';
+        const clearCat = cat => () => { setCatFilter(cat, null, 'include'); syncMultiselectUI(cat); };
+        if (state.itemFilter !== 'all') {
+          const label = {
+            passed: () => 'Passes ' + metric,
+            failed: () => 'Fails ' + metric,
+            metric_errors: () => metric + ' errored',
+            errors: () => 'Has an error',
+            edited_metrics: () => 'Edited metrics',
+            retries: () => 'Retried',
+            trace_errors: () => 'Trace errors',
+          }[state.itemFilter];
+          entries.push({ key: 'show', label: label ? label(metric) : formatFieldName(state.itemFilter),
+            clear: () => { state.itemFilter = 'all'; } });
+        }
+        if (state.scoreDistFilter) {
+          const lo = Math.round(state.scoreDistFilter.min * 100);
+          const hi = Math.round(Math.min(state.scoreDistFilter.max, 1) * 100);
+          entries.push({ key: 'score', label: metric + ' ' + (lo >= 100 ? '100%' : lo + '–' + hi + '%'),
+            clear: () => { state.scoreDistFilter = null; } });
+        }
+        if (state.repeatDistFilter) {
+          const r = state.repeatDistFilter;
+          const share = r.samples <= 10 ? r.bucket + ' of ' + r.samples
+            : (r.bucket >= 10 ? '100%' : (r.bucket * 10) + '–' + (r.bucket * 10 + 9) + '%') + ' of';
+          entries.push({ key: 'repeat', label: r.metric + ': ' + share + ' attempts passed',
+            clear: () => { state.repeatDistFilter = null; } });
+        }
+        if (state.latencyDistFilter) {
+          entries.push({ key: 'latency',
+            label: 'Latency ' + _latencyRangeLabel(state.latencyDistFilter.min, state.latencyDistFilter.max),
+            clear: () => { state.latencyDistFilter = null; } });
+        }
+        ['taskErrorFilter', 'metricErrorFilter', 'traceErrorFilter', 'analysisErrorFilter'].forEach(slot => {
+          const f = state[slot];
+          if (f) entries.push({ key: slot, label: f.kind + ': ' + f.label, clear: () => { state[slot] = null; } });
+        });
+        if (state.approvalFilter !== null) {
+          entries.push({ key: 'approval', label: 'Approval: ' + getCatOptionLabel('approval', state.approvalFilter),
+            clear: () => { state.approvalFilter = null; const sel = el('filter-approval'); if (sel) sel.value = ''; } });
+        }
+        if (state.complexityFilter !== null) {
+          entries.push({ key: 'cat:complexity', label: 'Complexity: ' + _pageFilterValues('complexity', state.complexityFilter),
+            clear: clearCat('complexity') });
+        }
+        if (state.domainFilter !== null) {
+          const exclude = state.domainFilterMode === 'exclude';
+          entries.push({ key: 'cat:domain',
+            label: 'Domain: ' + (exclude ? 'not ' : '') + _pageFilterValues('domain', state.domainFilter, exclude ? ', ' : ' + '),
+            clear: clearCat('domain') });
+        }
+        if (state.rootCauseFilter !== null) {
+          entries.push({ key: 'cat:root_cause', label: 'Root cause: ' + _pageFilterValues('root_cause', state.rootCauseFilter),
+            clear: clearCat('root_cause') });
+        }
+        Object.entries(state.categoryFilters).forEach(([cat, values]) => {
+          if (values === null) return;
+          entries.push({ key: 'cat:' + cat, label: formatFieldName(cat) + ': ' + _pageFilterValues(cat, values),
+            clear: clearCat(cat) });
+        });
+        return entries;
+      }
+
+      // The Filters badge and the panel count cover rules and page filters.
+      function updateFilterBuilderCounts(pageCount) {
+        const rules = filterRuleCount(state.filterRoot);
+        const n = rules + pageCount;
+        const badge = el('active-filter-count');
+        if (badge) { badge.textContent = n; badge.classList.toggle('zero', n === 0); }
+        el('btn-item-filters')?.classList.toggle('has-rules', n > 0);
+        const countEl = el('builder-rule-count');
+        if (!countEl) return;
+        const parts = [];
+        if (rules) parts.push(rules + ' rule' + (rules === 1 ? '' : 's'));
+        if (pageCount) parts.push(pageCount + ' from the page');
+        countEl.textContent = parts.length ? parts.join(' · ') : 'no rules yet';
+      }
+
+      function renderPageFilters() {
+        const entries = pageFilterEntries();
+        updateFilterBuilderCounts(entries.length);
+        const holder = el('filter-builder-page');
+        if (!holder || !state.filterBuilderOpen) return;
+        holder.hidden = entries.length === 0;
+        const html = entries.length
+          ? '<span class="fb-page-lab">Set on the page</span><span class="fb-page-chips">' + entries.map(entry => {
+              const full = entry.label.length > 500 ? entry.label.slice(0, 500) + '…' : entry.label;
+              const shown = entry.label.length > 60 ? entry.label.slice(0, 60) + '…' : entry.label;
+              return '<button type="button" class="qym-chip active fb-page-chip" data-fb-page="' + escapeAttr(entry.key) + '"'
+                + ' title="' + escapeAttr(full + ' — click to remove') + '" aria-label="' + escapeAttr('Remove filter: ' + full) + '">'
+                + '<span class="fb-page-chip__text">' + escapeHtml(shown) + '</span>'
+                + '<span class="qym-chip__remove" aria-hidden="true">×</span></button>';
+            }).join('') + '</span>'
+          : '';
+        if (holder.dataset.html !== html) {
+          holder.innerHTML = html;
+          holder.dataset.html = html;
+        }
+      }
+
+      el('filter-builder-page')?.addEventListener('click', event => {
+        const chip = event.target.closest('[data-fb-page]');
+        if (!chip) return;
+        const entry = pageFilterEntries().find(candidate => candidate.key === chip.dataset.fbPage);
+        if (!entry) return;
+        const chips = Array.from(el('filter-builder-page').querySelectorAll('[data-fb-page]'));
+        const index = chips.indexOf(chip);
+        entry.clear();
+        state.page = 1;
+        renderItems(false, { viewOnly: true });
+        updateClearButton();
+        // Keep keyboard users in the panel: the next chip, else + Condition.
+        const left = Array.from(el('filter-builder-page').querySelectorAll('[data-fb-page]'));
+        const next = left[Math.min(index, left.length - 1)] || el('filter-builder-body')?.querySelector('[data-fb-addc]');
+        next?.focus({ preventScroll: true });
+      });
+
       function renderFilterBuilder() {
         const holder = el('item-filter-builder');
         const body = el('filter-builder-body');
@@ -12875,16 +13088,29 @@
           btn.classList.toggle('on', state.filterBuilderOpen);
           btn.setAttribute('aria-expanded', state.filterBuilderOpen ? 'true' : 'false');
         }
-        const n = filterRuleCount(state.filterRoot);
-        const badge = el('active-filter-count');
-        if (badge) { badge.textContent = n; badge.classList.toggle('zero', n === 0); }
-        if (btn) btn.classList.toggle('has-rules', n > 0);
-        const countEl = el('builder-rule-count');
-        if (countEl) countEl.textContent = n ? n + ' rule' + (n === 1 ? '' : 's') : 'no rules yet';
+        renderPageFilters();
         if (!state.filterBuilderOpen) return;
         body.innerHTML = _fbGroupHtml(state.filterRoot, '', 0);
 
-        body.querySelectorAll('select[data-fb-p],input[data-fb-p]').forEach(inp => {
+        // A typed value filters as it is typed (debounced); the builder is
+        // not redrawn, so the cursor stays in the box.
+        body.querySelectorAll('input[data-fb-p]').forEach(inp => {
+          inp.oninput = () => {
+            const node = _filterNodeAt(inp.dataset.fbP);
+            if (inp.type === 'number' && inp.value !== '') {
+              const f = itemFilterFieldById(node.field);
+              node.value = f && f.percent ? Number((+inp.value / 100).toFixed(6)) : +inp.value;
+            } else {
+              node.value = inp.value;
+            }
+            clearTimeout(state.filterInputTimer);
+            state.filterInputTimer = setTimeout(() => {
+              state.page = 1;
+              renderItems(false, { viewOnly: true });
+            }, 150);
+          };
+        });
+        body.querySelectorAll('select[data-fb-p]').forEach(inp => {
           inp.onchange = () => {
             const node = _filterNodeAt(inp.dataset.fbP);
             if (inp.dataset.fbK === 'field') {
@@ -12899,7 +13125,7 @@
                 if (node.oper !== 'is' && wasIs) node.value = '';
               }
             } else {
-              node.value = inp.type === 'number' && inp.value !== '' ? +inp.value : inp.value;
+              node.value = inp.value;
             }
             state.page = 1;
             renderFilterBuilder();
@@ -16560,7 +16786,9 @@
         const n = countActiveFilters();
         if (clearBtn) clearBtn.classList.toggle('visible', n > 0);
         if (clearCount) clearCount.textContent = n;
-        // The rail badge counts builder rules only; renderFilterBuilder owns it.
+        // The Filters badge and the panel's page-filter chips follow every
+        // filter change, including chart and card clicks.
+        renderPageFilters();
       }
 
       function clearAllFilters() {
@@ -16618,8 +16846,11 @@
       }, pageListen({ capture: true }));
       document.addEventListener('keydown', event => {
         if (event.key !== 'Escape' || event.defaultPrevented || !state.filterBuilderOpen) return;
-        // An open list inside the builder closes first.
-        if (el('item-filter-builder')?.querySelector('.qym-dropdown.is-open, .multi-select-dropdown.open')) return;
+        // An open list inside the builder closes first, including a select's
+        // own option list where it is drawn in the page (appearance: base-select).
+        const builder = el('item-filter-builder');
+        if (builder?.querySelector('.qym-dropdown.is-open, .multi-select-dropdown.open')) return;
+        if (CSS.supports('selector(:open)') && builder?.querySelector('select:open')) return;
         closeFilterBuilder(true);
       }, pageListen());
       {

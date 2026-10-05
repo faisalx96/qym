@@ -297,6 +297,41 @@ def test_run_view_lives_in_the_url_and_opens_on_the_first_paint(app):
     assert page.evaluate(VIEW_URL_STATE) == {"metric": "faithfulness"}
 
 
+def test_a_chart_click_filter_shows_in_the_filters_panel_and_removes_from_there(app):
+    page = app.goto("/projects/pa/runs/run-003?metric=faithfulness")
+    page.locator("#items-grid .item-card").first.wait_for()
+    assert page.locator("#active-filter-count").inner_text().strip() == "0"
+
+    page.locator('.dist-chart-col[data-metric="faithfulness"][data-bucket-min]').nth(1).click()
+    page.wait_for_function("() => new URLSearchParams(location.search).has('filters')")
+    assert page.locator("#active-filter-count").inner_text().strip() == "1"
+
+    page.locator("#btn-item-filters").click()
+    chips = page.locator("#filter-builder-page [data-fb-page]")
+    assert chips.count() == 1
+    assert chips.first.inner_text().startswith("faithfulness 10–20%")
+    assert page.locator("#builder-rule-count").inner_text() == "1 from the page"
+
+    # A second filter set from the page joins it while the panel is open.
+    page.keyboard.press("Escape")
+    page.locator(".dist-chart-col[data-lat-min]").first.click()
+    page.locator("#btn-item-filters").click()
+    assert chips.count() == 2
+    assert page.locator("#active-filter-count").inner_text().strip() == "2"
+
+    # Removing a chip clears that filter only; the panel stays open.
+    chips.first.click()
+    page.wait_for_function("() => !(new URLSearchParams(location.search).get('filters') || '').includes('score')")
+    assert page.locator("#item-filter-builder").is_visible()
+    assert chips.count() == 1
+    assert page.locator("#active-filter-count").inner_text().strip() == "1"
+    chips.first.click()
+    page.wait_for_function("() => !new URLSearchParams(location.search).has('filters')")
+    assert page.locator("#filter-builder-page").is_hidden()
+    assert page.locator("#builder-rule-count").inner_text() == "no rules yet"
+    assert page.locator("#filter-count").inner_text().startswith("25 of 25")
+
+
 def test_rules_bar_filters_and_page_round_trip_through_the_url(app):
     rules = {"op": "and", "children": [{"field": "latency", "oper": "gte", "value": 110}]}
     filters = quote(json.dumps({"rules": rules, "complexity": ["easy", "hard"]}), safe="")
@@ -304,7 +339,8 @@ def test_rules_bar_filters_and_page_round_trip_through_the_url(app):
     page.locator("#items-grid .item-card").first.wait_for()
     # Latency 110..124 (items 10-24) that are easy or hard: 10 items.
     assert page.locator("#filter-count").inner_text().startswith("10 of 25")
-    assert page.locator("#active-filter-count").inner_text().strip() == "1"
+    # The Filters badge counts the rule and the complexity filter.
+    assert page.locator("#active-filter-count").inner_text().strip() == "2"
     assert json.loads(page.evaluate(VIEW_URL_STATE)["filters"]) == {"rules": rules, "complexity": ["easy", "hard"]}
 
     # show= (a Pass / Fail bar click) and page= reopen as written.
