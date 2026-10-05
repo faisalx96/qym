@@ -1,6 +1,7 @@
 // Step Latency panel — per-step latency distributions as an interval plot.
 // One row per (phase, step type): p5–p95 whisker, p25–p75 bar, median tick,
-// mean diamond, "n · err" annotation. Vanilla JS + inline SVG, no external
+// mean diamond, "n · err" annotation; each phase header plots the phase's
+// parent span the same way. Vanilla JS + inline SVG, no external
 // dependencies. Mounted from run.html into the Latency and Trace Analysis
 // section; also usable from the compare page with multiple run ids.
 (function () {
@@ -30,7 +31,11 @@
   // Collapsible grouping. Keys: "p:<phase>" for a phase header, and
   // "k:<phase>|<kind>" for a kind sub-header. Phase collapse only applies
   // where a phase header is drawn (All view); kind collapse only in By-step,
-  // where kinds group step rows rather than being rows themselves.
+  // where kinds group step rows rather than being rows themselves. The run
+  // page starts with both phases collapsed to their headers, which carry the
+  // phase parent span's own interval (C143); the Agent and Eval views draw no
+  // phase header, so their steps always show.
+  const PHASE_KEYS = ["p:task", "p:eval"];
   const phaseKeyOf = (g) => "p:" + g.phase;
   const kindKeyOf = (g) => "k:" + g.phase + "|" + g.kind;
 
@@ -71,7 +76,7 @@
         items.push({
           header: e.phase === "task" ? "Agent" : "Eval",
           iconKey: e.phase === "task" ? "AGENT" : "EVALUATOR",
-          level: 1, key: pKey, collapsed: pDown, count: phaseCount[pKey],
+          level: 1, key: pKey, phase: e.phase, collapsed: pDown, count: phaseCount[pKey],
         });
         lastPhase = e.phase;
         lastKind = "";
@@ -97,16 +102,19 @@
   }
 
   // Header row markup: chevron + kind icon + label, wrapped in a click
-  // target spanning the label column.
-  function headerMarkup(it, yTop, h, labelWidth) {
-    const hb = yTop + h - 8;
+  // target spanning the label column. `baseline` centres the label on a
+  // header taller than usual (one carrying comparison lanes).
+  function headerMarkup(it, yTop, h, labelWidth, baseline) {
+    const hb = baseline != null ? baseline : yTop + h - 8;
     const l1 = it.level === 1;
     const cx = l1 ? 12 : 24;
     const ix = l1 ? 26 : 38;
     const tx = l1 ? 46 : 54;
     const suffix = it.collapsed ? "  \u00b7 " + it.count : "";
-    return '<g data-sl-collapse="' + esc(it.key) + '" style="cursor:pointer">' +
-      '<rect x="0" y="' + yTop + '" width="' + (labelWidth + 24) +
+    // A real button for the keyboard too: the run page opens collapsed.
+    return '<g data-sl-collapse="' + esc(it.key) + '" role="button" tabindex="0" ' +
+        'aria-expanded="' + !it.collapsed + '" style="cursor:pointer">' +
+      '<rect class="sl-collapse-hit" x="0" y="' + yTop + '" width="' + (labelWidth + 24) +
         '" height="' + h + '" fill="transparent"/>' +
       collapseChevron(cx, hb - 4, it.collapsed, "var(--text-muted, #888)") +
       kindIconSvg(it.iconKey, ix, hb - (l1 ? 11 : 9.5), l1 ? 13 : 11) +
@@ -126,6 +134,46 @@
         "err=" + g.error_count + "</tspan>"
       : "";
     return esc(lead) + err;
+  }
+
+  // A phase header's own distribution: the phase parent span of each trace
+  // (the task/agent span, eval_metrics), which steps leave out (C143).
+  function phaseStatsOf(phase) {
+    return (state.phaseData || []).find((p) => p.phase === phase) || null;
+  }
+
+  function phaseLaneOf(seriesKey, phase) {
+    const lanes = (state.runPhases[state.rollup] || {})[seriesKey] || [];
+    return lanes.find((p) => p.phase === phase) || null;
+  }
+
+  // Interval tooltip: name, counts, then the distribution.
+  function intervalTitle(name, g) {
+    return "<title>" + esc(name) + "\n" +
+      "n=" + g.n + ", err=" + g.error_count + "\n" +
+      "p5 " + FMT(g.p5_ms) + " \u00b7 p25 " + FMT(g.p25_ms) +
+      " \u00b7 median " + FMT(g.median_ms) + " \u00b7 p75 " + FMT(g.p75_ms) +
+      " \u00b7 p95 " + FMT(g.p95_ms) + "\nmean " + FMT(g.mean_ms) +
+      " \u00b7 min " + FMT(g.min_ms) + " \u00b7 max " + FMT(g.max_ms) +
+      (g.cv != null ? " \u00b7 cv " + g.cv.toFixed(2) : "") + "</title>";
+  }
+
+  // One interval glyph: p5–p95 whisker, p25–p75 box, median tick, mean
+  // diamond. Step rows and phase headers draw the same one.
+  function intervalMarkup(g, cy, scale, color, name) {
+    if (!(g.n > 0)) return "";
+    const p5 = scale.x(g.p5_ms), p25 = scale.x(g.p25_ms), p75 = scale.x(g.p75_ms),
+      p95 = scale.x(g.p95_ms), med = scale.x(g.median_ms), mean = scale.x(g.mean_ms);
+    return "<g>" + intervalTitle(name, g) +
+      '<line x1="' + p5 + '" y1="' + cy + '" x2="' + p95 + '" y2="' + cy +
+        '" stroke="' + color + '" stroke-width="1.5" opacity="0.55"/>' +
+      '<rect x="' + p25 + '" y="' + (cy - 6) + '" width="' + Math.max(p75 - p25, 1.5) +
+        '" height="12" rx="2" fill="' + color + '" opacity="0.75"/>' +
+      '<line x1="' + med + '" y1="' + (cy - 8) + '" x2="' + med + '" y2="' + (cy + 8) +
+        '" stroke="var(--text-primary, #fff)" stroke-width="2"/>' +
+      '<path d="M ' + mean + " " + (cy - 5) + " l 5 5 l -5 5 l -5 -5 Z" +
+        '" fill="none" stroke="' + color + '" stroke-width="1.5"/>' +
+      "</g>";
   }
 
   const PHASE_COLORS = {
@@ -193,13 +241,16 @@
     phase: "all",      // all | task | eval
     scale: "linear",   // linear | log
     data: null,        // groups from the API for current rollup
+    phaseData: [],     // phase parent spans' distributions (API `phases`)
     cache: {},         // groups per rollup for the current pass scope
+    phaseCache: {},    // phases per rollup, alongside `cache`
     traceCount: 0,     // distinct traces behind the current data
     hasUnscopedGroups: false, // keep pass controls usable after an empty selection
     collapsed: {},     // group keys collapsed in the plot (client-side only)
     series: [],        // [{key, label, refs}] one lane each: a run, or a cohort
     activeSeries: [],  // series keys currently drawn
     runData: {},       // groups keyed by rollup then series key
+    runPhases: {},     // phases keyed by rollup then series key
     error: null,
     seq: 0,            // request generation; stale responses are discarded
     pending: {},       // shared requests for each rollup in this generation
@@ -227,8 +278,8 @@
 
   async function loadGroups(rollup, seq) {
     if (state.cache[rollup]) {
-      return { groups: state.cache[rollup], passes: state.passes,
-        trace_count: state.traceCount };
+      return { groups: state.cache[rollup], phases: state.phaseCache[rollup] || [],
+        passes: state.passes, trace_count: state.traceCount };
     }
     const pending = state.pending;
     if (!pending[rollup]) pending[rollup] = (async () => {
@@ -242,14 +293,19 @@
       const payload = await resp.json();
       if (seq !== state.seq) return null;
       payload.groups = (payload.groups || []).filter(hasGroupData);
+      payload.phases = (payload.phases || []).filter(hasGroupData);
       const byRef = payload.groups_by_ref;
       if (lanes && byRef && typeof byRef === "object") {
         const bucket = state.runData[rollup] || (state.runData[rollup] = {});
+        const phaseBucket = state.runPhases[rollup] || (state.runPhases[rollup] = {});
+        const phasesByRef = payload.phases_by_ref || {};
         state.series.forEach((s) => {
           bucket[s.key] = (byRef[s.refs[0]] || []).filter(hasGroupData);
+          phaseBucket[s.key] = (phasesByRef[s.refs[0]] || []).filter(hasGroupData);
         });
       }
       state.cache[rollup] = payload.groups;
+      state.phaseCache[rollup] = payload.phases;
       state.passes = payload.passes || [];
       state.traceCount = payload.trace_count || 0;
       return payload;
@@ -269,7 +325,7 @@
     } else {
       state.data = null;
       // A quiet remount (the run page when a live run ends) keeps what is on
-      // screen, nothing or the closed summary, until the data arrives: a
+      // screen, an empty panel's nothing, until the data arrives: a
       // "Loading" card must not flash in and push the sections below down
       // and back (C039, C028).
       if (!state.quietReload) render();
@@ -283,6 +339,7 @@
       state.quietReload = false;
       state.refreshing = false;
       state.data = payload.groups || [];
+      state.phaseData = payload.phases || [];
       if (state.passNum == null) state.hasUnscopedGroups = state.data.length > 0;
     } catch (err) {
       if (seq !== state.seq) return;
@@ -301,6 +358,7 @@
     if (lanesFromPooled()) await loadGroups(rollup, seq);
     if (seq !== state.seq) return;
     const bucket = state.runData[rollup] || (state.runData[rollup] = {});
+    const phaseBucket = state.runPhases[rollup] || (state.runPhases[rollup] = {});
     const pending = state.runPending[rollup] || (state.runPending[rollup] = {});
     const missing = state.activeSeries.filter((key) => !bucket[key]);
     await Promise.all(missing.map(async (key) => {
@@ -320,7 +378,9 @@
         });
         if (!resp.ok) throw new Error("HTTP " + resp.status);
         const payload = await resp.json();
-        if (seq === state.seq) bucket[key] = (payload.groups || []).filter(hasGroupData);
+        if (seq !== state.seq) return;
+        bucket[key] = (payload.groups || []).filter(hasGroupData);
+        phaseBucket[key] = (payload.phases || []).filter(hasGroupData);
       })().catch((err) => {
         if (seq === state.seq && state.activeSeries.includes(key)) throw err;
       }).finally(() => { delete pending[key]; });
@@ -450,9 +510,6 @@
   // ── SVG interval plot ─────────────────────────────────────────────────
   function plotSvg(groups) {
     const LABEL_W = 210;
-    // annotation gutter sized to the widest annotation string (~6.6px/char)
-    const annLen = Math.max(4, ...groups.map((g) => annPlain(g).length));
-    const RIGHT_PAD = 24 + Math.ceil(annLen * 6.6);
     const ROW_H = 30;
     const HEADER_H = 22;
     const PHASE_HEADER_H = 30;
@@ -461,17 +518,26 @@
 
     // Two-level grouping (collapsible): one phase header encompassing its
     // kind sub-headers in By-step view; phase headers only in By-kind view.
+    // A phase header plots its parent span, collapsed or not.
     const items = groupedItems(groups);
+    items.forEach((it) => { if (it.level === 1) it.stats = phaseStatsOf(it.phase); });
+    const phaseRows = items.map((it) => it.stats).filter(Boolean);
+    const plotted = groups.concat(phaseRows);
 
+    // annotation gutter sized to the widest annotation string (~6.6px/char)
+    const annLen = Math.max(4, ...plotted.map((g) => annPlain(g).length));
+    const RIGHT_PAD = 24 + Math.ceil(annLen * 6.6);
     const bodyH = items.reduce((h, it) =>
       h + (it.header ? (it.level === 1 ? PHASE_HEADER_H : HEADER_H) : ROW_H), 0);
     const height = TOP + bodyH + 34;
     const x0 = LABEL_W;
     const x1 = width - RIGHT_PAD;
-    const scale = makeScale(groups, x0, x1);
+    // Phase parents share the steps' axis, so their longer bars fit too.
+    const scale = makeScale(plotted, x0, x1);
 
+    // A group, not an image: its group headers are buttons.
     let s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + width + " " + height +
-      '" width="' + width + '" height="' + height + '" role="img" aria-label="Step latency interval plot" ' +
+      '" width="' + width + '" height="' + height + '" role="group" aria-label="Step latency interval plot" ' +
       'font-family="inherit" font-size="11">';
 
     // axis + gridlines
@@ -491,6 +557,15 @@
       if (it.header) {
         const h = it.level === 1 ? PHASE_HEADER_H : HEADER_H;
         s += headerMarkup(it, yCur, h, LABEL_W);
+        if (it.stats) {
+          // centred on the header label (baseline yCur + h - 8)
+          const cy = yCur + h - 12;
+          s += intervalMarkup(it.stats, cy, scale,
+            PHASE_COLORS[it.phase] || "var(--text-primary, #ddd)",
+            it.header + " phase, parent span per trace");
+          s += '<text x="' + (x1 + 8) + '" y="' + (cy + 4) +
+            '" fill="var(--text-muted, #888)">' + annMarkup(it.stats) + "</text>";
+        }
         yCur += h;
         return;
       }
@@ -515,27 +590,7 @@
         (shown !== label ? "<title>" + esc(label) + "</title>" : "") + esc(shown) + "</text>";
       }
 
-      if (g.n > 0) {
-        const p5 = scale.x(g.p5_ms), p25 = scale.x(g.p25_ms), p75 = scale.x(g.p75_ms),
-          p95 = scale.x(g.p95_ms), med = scale.x(g.median_ms), mean = scale.x(g.mean_ms);
-        const title = "<title>" + esc(g.step_type) + " (" + esc(g.phase) + ")\n" +
-          "n=" + g.n + ", err=" + g.error_count + "\n" +
-          "p5 " + FMT(g.p5_ms) + " \u00b7 p25 " + FMT(g.p25_ms) +
-          " \u00b7 median " + FMT(g.median_ms) + " \u00b7 p75 " + FMT(g.p75_ms) +
-          " \u00b7 p95 " + FMT(g.p95_ms) + "\nmean " + FMT(g.mean_ms) +
-          " \u00b7 min " + FMT(g.min_ms) + " \u00b7 max " + FMT(g.max_ms) +
-          (g.cv != null ? " \u00b7 cv " + g.cv.toFixed(2) : "") + "</title>";
-        s += "<g>" + title +
-          '<line x1="' + p5 + '" y1="' + cy + '" x2="' + p95 + '" y2="' + cy +
-            '" stroke="' + color + '" stroke-width="1.5" opacity="0.55"/>' +
-          '<rect x="' + p25 + '" y="' + (cy - 6) + '" width="' + Math.max(p75 - p25, 1.5) +
-            '" height="12" rx="2" fill="' + color + '" opacity="0.75"/>' +
-          '<line x1="' + med + '" y1="' + (cy - 8) + '" x2="' + med + '" y2="' + (cy + 8) +
-            '" stroke="var(--text-primary, #fff)" stroke-width="2"/>' +
-          '<path d="M ' + mean + " " + (cy - 5) + " l 5 5 l -5 5 l -5 -5 Z" +
-            '" fill="none" stroke="' + color + '" stroke-width="1.5"/>' +
-          "</g>";
-      }
+      s += intervalMarkup(g, cy, scale, color, g.step_type + " (" + g.phase + ")");
 
       s += '<text x="' + (x1 + 8) + '" y="' + (cy + 4) +
         '" fill="var(--text-muted, #888)">' + ann + "</text>";
@@ -548,9 +603,6 @@
   function plotSvgByRun(rows) {
     const LABEL_W = 210;
     const laneCount = Math.max(state.activeSeries.length, 1);
-    const annLen = Math.max(4, ...rows.flatMap((r) =>
-      r.lanes.map((g) => (g ? annPlain(g).length : 0))));
-    const RIGHT_PAD = 24 + Math.ceil(annLen * 6.2);
     const LANE_H = 16;
     const ROW_PAD = 8;
     const rowH = ROW_PAD + laneCount * LANE_H;
@@ -559,18 +611,32 @@
     const TOP = 26;
     const width = plotWidth();
 
+    // A phase header carries one lane per run for its parent span, so it
+    // grows to a row's height when it has any.
     const items = groupedItems(rows);
+    items.forEach((it) => {
+      if (it.level !== 1) return;
+      const lanes = state.activeSeries.map((key) => phaseLaneOf(key, it.phase));
+      if (lanes.some(Boolean)) it.lanes = lanes;
+    });
+    const itemH = (it) => !it.header ? rowH
+      : it.level !== 1 ? HEADER_H
+      : it.lanes ? Math.max(PHASE_HEADER_H, rowH) : PHASE_HEADER_H;
+    const laneSets = rows.map((r) => r.lanes)
+      .concat(items.filter((it) => it.lanes).map((it) => it.lanes));
 
-    const bodyH = items.reduce((h, it) =>
-      h + (it.header ? (it.level === 1 ? PHASE_HEADER_H : HEADER_H) : rowH), 0);
+    const annLen = Math.max(4, ...laneSets.flatMap((lanes) =>
+      lanes.map((g) => (g ? annPlain(g).length : 0))));
+    const RIGHT_PAD = 24 + Math.ceil(annLen * 6.2);
+    const bodyH = items.reduce((h, it) => h + itemH(it), 0);
     const height = TOP + bodyH + 34;
     const x0 = LABEL_W;
     const x1 = width - RIGHT_PAD;
-    const flat = rows.flatMap((r) => r.lanes).filter(Boolean);
+    const flat = laneSets.flat().filter(Boolean);
     const scale = makeScale(flat, x0, x1);
 
     let s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + width + " " + height +
-      '" width="' + width + '" height="' + height + '" role="img" aria-label="Step latency comparison by run" ' +
+      '" width="' + width + '" height="' + height + '" role="group" aria-label="Step latency comparison by run" ' +
       'font-family="inherit" font-size="11">';
     scale.ticks.forEach((t) => {
       const tx = scale.x(t);
@@ -582,11 +648,54 @@
     s += '<line x1="' + x0 + '" y1="' + (height - 28) + '" x2="' + x1 + '" y2="' +
       (height - 28) + '" stroke="var(--border-strong, #444)" stroke-width="1"/>';
 
+    // One run's lane per line, laid out as a row's lanes from `yTop`.
+    function lanesMarkup(lanes, yTop, name) {
+      let out = "";
+      lanes.forEach((g, li) => {
+        const cy = yTop + ROW_PAD / 2 + li * LANE_H + LANE_H / 2;
+        const color = runColor(state.activeSeries[li]);
+        if (!g || !(g.n > 0)) {
+          if (g && g.error_count) {
+            out += '<text x="' + (x1 + 8) + '" y="' + (cy + 3.5) +
+              '" font-size="11" fill="var(--danger, #ef4444)">err=' +
+              g.error_count + "</text>";
+          }
+          return;
+        }
+        const p5 = scale.x(g.p5_ms), p25 = scale.x(g.p25_ms), p75 = scale.x(g.p75_ms),
+          p95 = scale.x(g.p95_ms), medX = scale.x(g.median_ms), meanX = scale.x(g.mean_ms);
+        const title = "<title>" + esc(name) + " \u2014 " +
+          esc(seriesLabel(state.activeSeries[li])) + "\nn=" + g.n + ", err=" + g.error_count +
+          "\nmedian " + FMT(g.median_ms) + " \u00b7 mean " + FMT(g.mean_ms) +
+          "\np5 " + FMT(g.p5_ms) + " \u00b7 p95 " + FMT(g.p95_ms) + "</title>";
+        out += "<g>" + title +
+          '<line x1="' + p5 + '" y1="' + cy + '" x2="' + p95 + '" y2="' + cy +
+            '" stroke="' + color + '" stroke-width="1.2" opacity="0.55"/>' +
+          '<rect x="' + p25 + '" y="' + (cy - 4) + '" width="' + Math.max(p75 - p25, 1.2) +
+            '" height="8" rx="1.5" fill="' + color + '" opacity="0.8"/>' +
+          '<line x1="' + medX + '" y1="' + (cy - 6) + '" x2="' + medX + '" y2="' + (cy + 6) +
+            '" stroke="var(--text-primary, #fff)" stroke-width="1.6"/>' +
+          '<path d="M ' + meanX + " " + (cy - 3.5) + ' l 3.5 3.5 l -3.5 3.5 l -3.5 -3.5 Z' +
+            '" fill="none" stroke="' + color + '" stroke-width="1.2"/>' +
+          "</g>";
+        out += '<text x="' + (x1 + 8) + '" y="' + (cy + 3.5) +
+          '" font-size="11" fill="' + color + '">' + annMarkup(g) + "</text>";
+      });
+      return out;
+    }
+
     let yCur = TOP;
     items.forEach((it) => {
       if (it.header) {
-        const h = it.level === 1 ? PHASE_HEADER_H : HEADER_H;
-        s += headerMarkup(it, yCur, h, LABEL_W);
+        const h = itemH(it);
+        if (it.lanes) {
+          // label centred like a row's, lanes centred under it
+          s += headerMarkup(it, yCur, h, LABEL_W, yCur + h / 2 + 4);
+          s += lanesMarkup(it.lanes, yCur + (h - rowH) / 2,
+            it.header + " phase, parent span per trace");
+        } else {
+          s += headerMarkup(it, yCur, h, LABEL_W);
+        }
         yCur += h;
         return;
       }
@@ -605,36 +714,7 @@
           (shown !== r.step_type ? "<title>" + esc(r.step_type) + "</title>" : "") +
           esc(shown) + "</text>";
       }
-      r.lanes.forEach((g, li) => {
-        const cy = yCur + ROW_PAD / 2 + li * LANE_H + LANE_H / 2;
-        const color = runColor(state.activeSeries[li]);
-        if (!g || !(g.n > 0)) {
-          if (g && g.error_count) {
-            s += '<text x="' + (x1 + 8) + '" y="' + (cy + 3.5) +
-              '" font-size="11" fill="var(--danger, #ef4444)">err=' +
-              g.error_count + "</text>";
-          }
-          return;
-        }
-        const p5 = scale.x(g.p5_ms), p25 = scale.x(g.p25_ms), p75 = scale.x(g.p75_ms),
-          p95 = scale.x(g.p95_ms), medX = scale.x(g.median_ms), meanX = scale.x(g.mean_ms);
-        const title = "<title>" + esc(r.step_type) + " (" + esc(r.phase) + ") \u2014 " +
-          esc(seriesLabel(state.activeSeries[li])) + "\nn=" + g.n + ", err=" + g.error_count +
-          "\nmedian " + FMT(g.median_ms) + " \u00b7 mean " + FMT(g.mean_ms) +
-          "\np5 " + FMT(g.p5_ms) + " \u00b7 p95 " + FMT(g.p95_ms) + "</title>";
-        s += "<g>" + title +
-          '<line x1="' + p5 + '" y1="' + cy + '" x2="' + p95 + '" y2="' + cy +
-            '" stroke="' + color + '" stroke-width="1.2" opacity="0.55"/>' +
-          '<rect x="' + p25 + '" y="' + (cy - 4) + '" width="' + Math.max(p75 - p25, 1.2) +
-            '" height="8" rx="1.5" fill="' + color + '" opacity="0.8"/>' +
-          '<line x1="' + medX + '" y1="' + (cy - 6) + '" x2="' + medX + '" y2="' + (cy + 6) +
-            '" stroke="var(--text-primary, #fff)" stroke-width="1.6"/>' +
-          '<path d="M ' + meanX + " " + (cy - 3.5) + ' l 3.5 3.5 l -3.5 3.5 l -3.5 -3.5 Z' +
-            '" fill="none" stroke="' + color + '" stroke-width="1.2"/>' +
-          "</g>";
-        s += '<text x="' + (x1 + 8) + '" y="' + (cy + 3.5) +
-          '" font-size="11" fill="' + color + '">' + annMarkup(g) + "</text>";
-      });
+      s += lanesMarkup(r.lanes, yCur, r.step_type + " (" + r.phase + ")");
       yCur += rowH;
     });
     s += "</svg>";
@@ -768,12 +848,7 @@
       ).join("") + "</div>";
   }
 
-  // Run page: whether the collapsible panel is open (per viewer, remembered).
-  const OPEN_KEY = "qym.stepLatency.open";
-  const DISCLOSURE_ICON =
-    '<svg class="sl-disclosure-icon" viewBox="0 0 16 16" aria-hidden="true">' +
-    '<path d="m6 3.5 4.5 4.5L6 12.5"/></svg>';
-
+  // Run page card header: "7 steps · 421 traces".
   function panelSummaryHtml() {
     let text;
     if (state.error) text = "Could not load";
@@ -806,7 +881,7 @@
   function render() {
     if (!container) return;
     // While new data loads, the plot on screen belongs to the previous
-    // settings: a redraw in between (a resize, the disclosure) keeps those
+    // settings: a redraw in between (a resize, a group toggle) keeps those
     // nodes as they are instead of drawing old rows under new labels.
     const stalePlot = state.refreshing
       ? Array.from(container.querySelectorAll(".sl-legend, .sl-plot"))
@@ -878,20 +953,16 @@
       "Errors are excluded from distributions and counted separately.";
 
     if (state.collapsible) {
-      // Run page: a disclosure that starts closed (C143). Closed, it is one
-      // header line with a short summary; the plot renders only when open.
-      const open = state.panelOpen;
-      container.innerHTML = '<div class="metric-card sl-card sl-collapsible' + (open ? " is-open" : "") + '">' +
-        '<div class="ri-header sl-header"><div>' +
-          // The run page's section header already names the section, so
-          // the disclosure is an action label, not a second title (C058, C143).
-          '<div class="sl-title"><button type="button" class="sl-disclosure" ' +
-            'data-sl-disclosure aria-expanded="' + open + '">' + DISCLOSURE_ICON +
-            "<span>" + (open ? "Hide distributions" : "Show distributions") +
-            "</span></button></div>" +
-          '<div class="ri-header-copy">' + copy + "</div>" +
-        "</div>" + panelSummaryHtml() + "</div>" +
-        (open ? '<div class="sl-body">' + controls + body + "</div>" : "") +
+      // Run page: a card of the Latency and traces section, under Trace
+      // stats and titled like it, then the controls and plot; the plot's
+      // phase groups start collapsed (C143).
+      container.innerHTML = '<div class="metric-card sl-card sl-run-card">' +
+        '<div class="ri-header">' +
+          '<div><span class="sl-card-title">Step latency</span>' +
+          '<div class="ri-header-copy">' + copy + "</div></div>" +
+          panelSummaryHtml() +
+        "</div>" +
+        controls + body +
       "</div>";
     } else {
       container.innerHTML =
@@ -935,17 +1006,6 @@
       menu.addEventListener("toggle", () => { if (!menu.open) stopWatching(); });
     });
 
-    const disclosure = container.querySelector("[data-sl-disclosure]");
-    if (disclosure) {
-      disclosure.addEventListener("click", () => {
-        state.panelOpen = !state.panelOpen;
-        try { window.localStorage.setItem(OPEN_KEY, state.panelOpen ? "1" : "0"); } catch (err) { /* private mode */ }
-        render();
-        const next = container.querySelector("[data-sl-disclosure]");
-        if (next) next.focus({ preventScroll: true });
-      });
-    }
-
     container.querySelectorAll("[data-sl-seg]").forEach((group) => {
       const name = group.getAttribute("data-sl-seg");
       group.querySelectorAll("[data-sl-val]").forEach((btn) => {
@@ -961,7 +1021,10 @@
             option.classList.toggle("active", on);
             option.setAttribute("aria-pressed", String(on));
           });
-          if (name === "passNum") { state.cache = {}; state.runData = {}; }
+          if (name === "passNum") {
+            state.cache = {}; state.phaseCache = {};
+            state.runData = {}; state.runPhases = {};
+          }
           if (name === "rollup" || name === "passNum") {
             state.seq += 1;
             state.pending = {};
@@ -975,12 +1038,22 @@
     });
 
     // Collapse/expand a phase or kind group (pure client-side re-render).
+    // From the keyboard, focus stays on the redrawn header.
     container.querySelectorAll("[data-sl-collapse]").forEach((node) => {
-      node.addEventListener("click", () => {
-        const key = node.getAttribute("data-sl-collapse");
+      const key = node.getAttribute("data-sl-collapse");
+      const toggle = () => {
         if (state.collapsed[key]) delete state.collapsed[key];
         else state.collapsed[key] = true;
         render();
+      };
+      node.addEventListener("click", toggle);
+      node.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        toggle();
+        const next = Array.from(container.querySelectorAll("[data-sl-collapse]"))
+          .find((header) => header.getAttribute("data-sl-collapse") === key);
+        if (next) next.focus({ preventScroll: true });
       });
     });
 
@@ -1153,20 +1226,18 @@
       ".sl-plot svg text,.sl-legend svg text{font-size:var(--font-sm, 11px)}" +
       ".sl-refreshing .sl-plot,.sl-refreshing .sl-legend{opacity:.55;" +
         "transition:opacity .12s ease .08s}" +
-      // Run page disclosure (C143).
-      ".sl-collapsible .ri-header{display:flex;align-items:flex-start;" +
-        "justify-content:space-between;gap:var(--space-md, 14px);margin-bottom:0}" +
-      ".sl-collapsible.is-open .ri-header{margin-bottom:var(--space-md, 14px)}" +
-      ".sl-title{margin:0;font-size:var(--font-md, 13px);font-weight:600;color:var(--text-primary, #eee)}" +
-      ".sl-disclosure{display:inline-flex;align-items:center;gap:var(--space-xs, 4px);" +
-        "padding:0;border:0;background:none;color:inherit;font:inherit;cursor:pointer}" +
-      ".sl-disclosure:focus-visible{outline:1px solid var(--accent-primary, #34d399);" +
-        "outline-offset:2px;border-radius:var(--control-radius, 5px)}" +
-      ".sl-disclosure-icon{width:14px;height:14px;fill:none;stroke:var(--text-muted, #888);" +
-        "stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;transition:transform .15s}" +
-      ".sl-disclosure[aria-expanded=\"true\"] .sl-disclosure-icon{transform:rotate(90deg)}" +
-      ".sl-summary{flex-shrink:0;color:var(--text-muted, #888);font-size:var(--font-sm, 11px);" +
+      // Run page card: title and copy left, the summary right (C143).
+      // Its own title class: metric-card-name marks a metric's card (C143).
+      ".sl-run-card .sl-card-title{display:block;margin-bottom:2px;color:var(--text-primary, #eee);" +
+        "font-size:var(--font-md, 13px);font-weight:600}" +
+      ".sl-run-card .ri-header{display:flex;align-items:baseline;" +
+        "justify-content:space-between;gap:var(--space-md, 14px);margin-bottom:var(--space-md, 14px)}" +
+      ".sl-summary{flex-shrink:0;margin-left:auto;color:var(--text-muted, #888);font-size:var(--font-sm, 11px);" +
         "font-family:var(--font-mono, monospace);font-variant-numeric:tabular-nums;white-space:nowrap}" +
+      // Group headers are keyboard buttons; focus shows on their hit area.
+      ".sl-plot [data-sl-collapse]{outline:none}" +
+      ".sl-plot [data-sl-collapse]:focus-visible .sl-collapse-hit{" +
+        "stroke:var(--accent-primary, #34d399);stroke-width:1}" +
       // One Export menu instead of three buttons (C143).
       ".sl-export{position:relative}" +
       ".sl-export>summary{list-style:none}" +
@@ -1422,10 +1493,13 @@
       state.seq += 1;
       state.refreshing = false;
       state.runData = {};
+      state.runPhases = {};
       state.cache = {};
+      state.phaseCache = {};
       state.pending = {};
       state.runPending = {};
       state.data = null;
+      state.phaseData = [];
       state.error = null;
       state.passes = [];
       state.traceCount = 0;
@@ -1470,12 +1544,13 @@
         }));
       }
       state.activeSeries = state.pooled ? state.series.map((s) => s.key) : [];
-      // The run page shows the panel as a disclosure that starts closed
-      // (C143); the viewer's last choice is remembered.
+      // The run page (`collapsible`) always shows the plot, opening on its
+      // two phase headers with their parent spans' intervals (C143). A
+      // quiet remount (a live run ending) keeps what the reader expanded.
       state.collapsible = !!(opts && opts.collapsible);
-      state.panelOpen = false;
-      if (state.collapsible) {
-        try { state.panelOpen = window.localStorage.getItem(OPEN_KEY) === "1"; } catch (err) { /* private mode */ }
+      if (state.collapsible && !state.quietReload) {
+        state.collapsed = {};
+        PHASE_KEYS.forEach((key) => { state.collapsed[key] = true; });
       }
       injectStyles();
       watchWidth();

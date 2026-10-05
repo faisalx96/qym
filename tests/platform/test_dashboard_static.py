@@ -1378,10 +1378,12 @@ def test_run_detail_includes_non_redundant_intelligence_charts() -> None:
     )
     assert "grid-column: auto;" in system_grid_children
     assert "align-self: stretch;" in system_grid_children
-    trace_grid = _rule(
+    trace_strip = _rule(
         source, ".system-trace-row .trace-pills-row.qym-stat-strip {"
     )
-    assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in trace_grid
+    # Tiles wrap and the last row stretches: no empty cells.
+    assert "flex-wrap: wrap;" in trace_strip
+    assert "grid-template-columns" not in trace_strip
     assert "Qym Metrics" not in source
     assert "system-metrics-label" not in source
 

@@ -423,26 +423,31 @@ def test_category_controls_near_the_page_end_keep_their_section_still(browser):
         view.close()
 
 
-def test_closing_step_latency_near_the_page_end_keeps_its_header_still(browser):
+def test_collapsing_a_step_latency_phase_near_the_page_end_keeps_its_header_still(browser):
     view = RunPage(browser, count=4)
     try:
         view.page.set_viewport_size({"width": 1440, "height": 1700})
-        view.page.add_init_script(
-            "try { localStorage.setItem('qym.stepLatency.open', '1'); } catch (e) {}"
-        )
         view.goto()
         page = view.page
-        page.wait_for_selector("#step-latency-panel .sl-plot")
+        header = '#step-latency-panel [data-sl-collapse="p:task"]'
+        page.wait_for_selector(header)
+        page.locator(header).click()
+        page.wait_for_selector(header + '[aria-expanded="true"]')
         page.wait_for_timeout(1200)
-        _scroll_to_the_end(page)
-        disclosure = "#step-latency-panel [data-sl-disclosure]"
-        before = _on_screen(view, disclosure)
-        page.locator(disclosure).click()
-        page.wait_for_function(
-            "() => !document.querySelector('#step-latency-panel .sl-plot')"
-        )
+        # The panel sits in Latency and traces now, not at the page end:
+        # bring its header near the bottom of the screen, where a shrinking
+        # panel used to pull the page.
+        page.evaluate("""(sel) => {
+          const host = document.querySelector('.run-container');
+          const top = document.querySelector(sel).getBoundingClientRect().top;
+          host.scrollTop += top - (window.innerHeight - 220);
+        }""", header)
+        page.wait_for_timeout(150)
+        before = _on_screen(view, header)
+        page.locator(header).click()
+        page.wait_for_selector(header + '[aria-expanded="false"]')
         page.wait_for_timeout(100)
-        assert abs(view.top(disclosure) - before) < 2
+        assert abs(view.top(header) - before) < 2
     finally:
         view.close()
 
@@ -647,12 +652,12 @@ def test_trace_stats_show_only_what_was_captured(browser):
         note = card.locator(".trace-not-captured")
         assert "LLM and tool spans were not captured for this run" in note.inner_text()
         assert "#sdk-guide/results" in note.locator("a").get_attribute("href")
-        text = card.inner_text()
-        for emoji in ("⚡", "\U0001f4dd", "\U0001f9e0", "\U0001f527", "\U0001f50e"):
-            assert emoji not in text
-        # Values read in the primary text color, not decorative tints.
+        # Each kind keeps its glyph; colour comes from its tone class, never
+        # an inline style.
+        assert card.locator(".trace-pill-icon").all_text_contents() == ["⛓", "★"]
+        assert card.locator(".trace-pill--trace").count() == 1
+        assert card.locator(".trace-pill--evaluator").count() == 1
         assert card.locator(".trace-pill-val[style]").count() == 0
-        assert card.locator(".trace-pill-icon svg").count() == 2
     finally:
         view.close()
 
@@ -678,13 +683,29 @@ def test_trace_stats_keep_captured_llm_and_tool_tiles(browser):
         assert card.locator(".trace-pill-label").all_text_contents() == [
             "Avg Tokens",
             "Avg LLM Calls",
-            "Avg Tool Calls",
-            "Tool Success",
             "Avg LLM Latency",
+            "Avg Tool Calls",
             "Avg Tool Latency",
+            "Tool Success",
             "Avg Trace Latency",
         ]
         assert card.locator(".trace-not-captured").count() == 0
+        # Tiles sit by kind, each in its own colour.
+        tones = card.locator(".trace-pill").evaluate_all(
+            "pills => pills.map(p => [...p.classList].find(c => c.startsWith('trace-pill--')))"
+        )
+        assert tones == [
+            "trace-pill--tokens", "trace-pill--llm", "trace-pill--llm",
+            "trace-pill--tool", "trace-pill--tool", "trace-pill--success", "trace-pill--trace",
+        ]
+        # Seven tiles leave no empty cell: every row reaches the strip's edge.
+        assert card.locator(".trace-pills-row").evaluate(
+            """row => [...row.children].every(pill => {
+              const box = pill.getBoundingClientRect(), strip = row.getBoundingClientRect();
+              const last = [...row.children].filter(o => Math.abs(o.getBoundingClientRect().top - box.top) < 2).pop();
+              return Math.abs(last.getBoundingClientRect().right - strip.right) < 3;
+            })"""
+        )
     finally:
         view.close()
 
@@ -700,32 +721,37 @@ def test_execution_context_has_no_decorative_dots(browser):
         view.close()
 
 
-def test_step_latency_starts_collapsed_on_the_run_page(browser):
+def test_step_latency_opens_on_collapsed_phases_on_the_run_page(browser):
     view = RunPage(browser)
     try:
         view.goto()
         page = view.page
-        disclosure = page.locator("#step-latency-panel [data-sl-disclosure]")
-        disclosure.wait_for()
-        assert disclosure.get_attribute("aria-expanded") == "false"
-        assert page.locator("#step-latency-panel .sl-plot").count() == 0
-        assert "1 step" in page.locator("#step-latency-panel .sl-summary").inner_text()
-        # One title only: the section header names it, the disclosure is an action.
-        assert disclosure.inner_text().strip() == "Show distributions"
-        assert "Step latency distributions" not in page.locator("#step-latency-panel").inner_text()
-        disclosure.click()
+        panel = page.locator("#step-latency-panel")
         page.wait_for_selector("#step-latency-panel .sl-plot svg")
-        assert (
-            page.locator("#step-latency-panel [data-sl-disclosure]").get_attribute(
-                "aria-expanded"
-            )
-            == "true"
+        # No section disclosure: the controls and plot always show (C143).
+        assert panel.locator("[data-sl-disclosure]").count() == 0
+        assert panel.locator(".sl-controls").is_visible()
+        assert "1 step" in panel.locator(".sl-summary").inner_text()
+        # A card of Latency and traces, titled like Trace stats and right
+        # under it; no section of its own.
+        assert page.locator("#run-section-steps").count() == 0
+        assert page.evaluate("""() => {
+          const panel = document.getElementById('step-latency-panel');
+          const trace = document.querySelector('.system-trace-card');
+          return !!panel.closest('.system-metrics-section')
+            && (!trace || trace.closest('.system-trace-row').nextElementSibling === panel);
+        }""")
+        assert panel.locator(".sl-card-title").inner_text() == "Step latency"
+        for label in ("Step latency distributions", "Show distributions", "Hide distributions"):
+            assert label not in panel.inner_text()
+        header = panel.locator('[data-sl-collapse="p:task"]')
+        assert header.get_attribute("aria-expanded") == "false"
+        assert "lookup" not in panel.locator(".sl-plot").text_content()
+        header.click()
+        page.wait_for_function(
+            "() => document.querySelector('#step-latency-panel .sl-plot').textContent.includes('lookup')"
         )
-        assert (
-            page.locator("#step-latency-panel [data-sl-disclosure]").inner_text().strip()
-            == "Hide distributions"
-        )
-        # Opening it used the data already loaded.
+        # Expanding used the data already loaded.
         assert len(view.latency_selections()) == 1
     finally:
         view.close()

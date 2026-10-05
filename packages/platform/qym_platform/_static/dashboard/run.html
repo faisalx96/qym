@@ -15,7 +15,7 @@
   <script src="/static/run_details.js?v=p1-20261001"></script>
   <script src="/static/qym_live.js?v=p1-20261001"></script>
   <script src="/static/trace_viewer.js?v=p1-20261001"></script>
-  <script src="/static/step_latency.js?v=p1-20261001-3"></script>
+  <script src="/static/step_latency.js?v=p1-20261005-3"></script>
   <script src="/static/review_history.js?v=p1-20261001"></script>
   <script src="/static/item_reasons.js?v=p1-20261001"></script>
   <script src="/static/run_section_nav.js?v=p1-20261001-2"></script>
@@ -1013,14 +1013,17 @@
     .system-trace-row > .metric-card {
       width: 100%;
     }
+    /* Tiles wrap at their natural width and the last row stretches to the
+       edge, so the strip never shows empty cells whatever the tile count. */
     .system-trace-row .trace-pills-row.qym-stat-strip {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      display: flex;
+      flex-wrap: wrap;
+    }
+    .system-trace-row .trace-pills-row.qym-stat-strip > .trace-pill {
+      flex: 1 1 210px;
     }
     @media (max-width: 900px) {
       .system-metrics-grid { grid-template-columns: 1fr; }
-      .system-trace-row .trace-pills-row.qym-stat-strip {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
       .hero-top {
         flex-direction: column;
       }
@@ -1068,9 +1071,6 @@
       .trace-pills-row {
         grid-template-columns: 1fr;
       }
-      .system-trace-row .trace-pills-row.qym-stat-strip {
-        grid-template-columns: 1fr;
-      }
     }
     @media (max-width: 520px) {
       .overview-summary-strip.qym-stat-strip,
@@ -1107,8 +1107,16 @@
     .trace-pill:hover {
       background: var(--bg-hover);
     }
-    /* One monochrome line-icon family, muted; colour stays for meaning
-       (pass/fail) elsewhere on the page (C143). */
+    /* Each kind of trace stat keeps one colour: its glyph sits on a tint of
+       it and its value reads in it. */
+    .trace-pill { --trace-tone: var(--text-primary); }
+    .trace-pill--tokens { --trace-tone: var(--accent-primary); }
+    .trace-pill--llm { --trace-tone: var(--accent-secondary); }
+    .trace-pill--tool { --trace-tone: var(--warning); }
+    .trace-pill--success { --trace-tone: var(--success); }
+    .trace-pill--retriever { --trace-tone: var(--info); }
+    .trace-pill--agent { --trace-tone: var(--accent-primary); }
+    .trace-pill--evaluator { --trace-tone: var(--accent-tertiary-soft); }
     .trace-pill-icon {
       width: 28px;
       height: 28px;
@@ -1117,8 +1125,13 @@
       justify-content: center;
       border-radius: 6px;
       flex-shrink: 0;
-      color: var(--text-muted);
-      background: var(--bg-hover);
+      font-size: var(--font-lg);
+      line-height: 1;
+      color: var(--trace-tone);
+      background: color-mix(in srgb, var(--trace-tone) 12%, transparent);
+    }
+    .trace-pill--trace .trace-pill-icon {
+      background: color-mix(in srgb, var(--text-muted) 14%, transparent);
     }
     .metric-card-name.trace-card-title {
       margin-top: 0;
@@ -6097,18 +6110,9 @@
     #overview-deep-section > .system-metrics-section,
     #overview-deep-section > .ri-insights,
     #samples-analysis-section:not(:empty),
-    #error-distribution-section:not(:empty),
-    #step-latency-panel.system-trace-row {
+    #error-distribution-section:not(:empty) {
       margin-top: 0;
       margin-bottom: 0;
-    }
-    /* Step latency: the run page names the section; its card keeps the
-       controls. Hidden while the panel has nothing to show. */
-    #step-latency-panel .sl-card > .ri-header :is(.section-title, .ri-header-copy) { display: none; }
-    /* Collapsed by default (C143): the card keeps its disclosure row. */
-    #step-latency-panel .sl-card.sl-collapsible > .ri-header .sl-title { display: block; }
-    .run-section-head[data-run-section="steps"]:has(+ #step-latency-panel:is(:empty, [style*="display: none"])) {
-      display: none;
     }
     @media (max-width: 900px) {
       .run-section-head {
@@ -6304,8 +6308,8 @@
     .rdi-reason-help__pop li + li { margin-top: 2px; }
     .rdi-reason-help__pop strong { color: var(--text-primary); font-weight: 600; }
   </style>
-  <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261001">
   <script defer src="/static/ui_components.js?v=p1-20261001"></script>
+  <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261005-2">
 </head>
 <body>
   <main class="run-container">
@@ -6345,7 +6349,6 @@
           <a class="run-section-nav__link" href="#run-section-latency" data-run-section-link="latency">Latency and traces</a>
           <a class="run-section-nav__link" href="#run-section-deep" data-run-section-link="deep">Deep analysis</a>
           <a class="run-section-nav__link" href="#run-section-categories" data-run-section-link="categories">Categories</a>
-          <a class="run-section-nav__link" href="#run-section-steps" data-run-section-link="steps">Step latency</a>
           <a class="run-section-nav__link" href="#run-section-errors" data-run-section-link="errors">Errors <span class="run-section-nav__count qym-tag qym-tag--count" hidden></span></a>
           <a class="run-section-nav__link" href="#run-section-items" data-run-section-link="items">Items <span class="run-section-nav__count qym-tag qym-tag--count" hidden></span></a>
           <span class="run-section-nav__ink" aria-hidden="true"></span>
@@ -6385,14 +6388,11 @@
 
       <div id="metadata-breakdown"></div>
 
-      <!-- Step latency distributions -->
-      <header class="run-section-head" data-run-section="steps" id="run-section-steps">
-        <div class="run-section-head__copy">
-          <h2 class="run-section-head__title">Step latency</h2>
-          <p class="run-section-head__desc">Percentile latency for each agent and eval step. Errors are counted separately.</p>
-        </div>
-      </header>
-      <div id="step-latency-panel" class="system-trace-row"></div>
+      <!-- Step latency distributions: mounted once here, then shown in
+           Latency and traces under Trace stats (renderOverview moves it). -->
+      <div id="step-latency-home" hidden>
+        <div id="step-latency-panel" class="system-trace-row"></div>
+      </div>
 
       <div id="error-distribution-section"></div>
 
@@ -8805,7 +8805,7 @@
 
       // Step latency loads once per page load (and again when a live run
       // ends), never on a filter, sort, page or expand (C028). On the run
-      // page it starts collapsed (C143).
+      // page its Agent and Eval groups start collapsed (C143).
       function mountStepLatency(extra = {}) {
         try {
           const slPanel = el('step-latency-panel');
@@ -11083,41 +11083,31 @@
         if (total > 0 && ts && ts.has_spans && hasTraceValues) {
           // Only what was captured gets a tile (C143): a run without LLM or
           // tool spans says so once instead of showing 0, 0.0 and dashes.
-          // Icons are one monochrome line set; values stay --text-primary.
+          // Each kind keeps its own glyph and colour (tokens, LLM, tools,
+          // retriever, trace, agent, evaluator), and tiles sit by kind.
           const finite = v => v != null && Number.isFinite(Number(v));
           const positive = v => finite(v) && Number(v) > 0;
           const hasLlm = positive(ts.avg_llm_calls) || positive(ts.avg_tokens);
           const hasTool = positive(ts.avg_tool_calls);
-          const icon = paths => '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>';
-          const ICONS = {
-            tokens: icon('<path d="M3.5 4.5h9M3.5 8h9M3.5 11.5h5.5"/>'),
-            llm: icon('<path d="M2.75 3.75h10.5v7h-6l-3 2.5v-2.5h-1.5z"/>'),
-            tool: icon('<path d="M9.6 6.4 4.1 11.9a1.4 1.4 0 0 1-2-2L7.6 4.4a3 3 0 0 1 4-3.4L9.8 2.8l.4 1.6 1.6.4 1.8-1.8a3 3 0 0 1-3.4 4z"/>'),
-            success: icon('<circle cx="8" cy="8" r="5.75"/><path d="m5.5 8.2 1.7 1.7 3.3-3.4"/>'),
-            clock: icon('<circle cx="8" cy="8" r="5.75"/><path d="M8 5v3.2l2 1.3"/>'),
-            retriever: icon('<ellipse cx="8" cy="3.75" rx="4.5" ry="1.75"/><path d="M3.5 3.75v8.5c0 1 2 1.75 4.5 1.75s4.5-.75 4.5-1.75v-8.5M3.5 8c0 1 2 1.75 4.5 1.75S12.5 9 12.5 8"/>'),
-            trace: icon('<path d="M4 2.5v11M4 5.5h4.5M4 10.5h6.5"/><circle cx="10" cy="5.5" r="1.25"/><circle cx="12" cy="10.5" r="1.25"/>'),
-            agent: icon('<circle cx="8" cy="5" r="2.5"/><path d="M3 13.5c.4-2.6 2.5-4.25 5-4.25s4.6 1.65 5 4.25"/>'),
-            evaluator: icon('<path d="m8 2 1.8 3.7 4 .6-2.9 2.8.7 4L8 11.2l-3.6 1.9.7-4-2.9-2.8 4-.6z"/>'),
-          };
-          const tile = (iconKey, label, value, title) =>
-            '<div class="trace-pill qym-stat-strip__item"' + (title ? ' title="' + escapeAttr(title) + '"' : '') + '>' +
-              '<div class="trace-pill-icon">' + ICONS[iconKey] + '</div>' +
+          const AGENT_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="4" r="3" fill="currentColor"/><path d="M2.5 14.5c0-3 2.5-5.5 5.5-5.5s5.5 2.5 5.5 5.5z" fill="currentColor" opacity=".75"/></svg>';
+          const tile = (tone, glyph, label, value, title) =>
+            '<div class="trace-pill qym-stat-strip__item trace-pill--' + tone + '"' + (title ?' title="' + escapeAttr(title) + '"' : '') + '>' +
+              '<div class="trace-pill-icon" aria-hidden="true">' + glyph + '</div>' +
               '<div class="trace-pill-text"><span class="trace-pill-label qym-stat-strip__label">' + escapeHtml(label) + '</span>' +
               '<span class="trace-pill-val qym-stat-strip__value">' + value + '</span></div></div>';
           const tiles = [];
-          if (positive(ts.avg_tokens)) tiles.push(tile('tokens', 'Avg Tokens', _fmtTraceNum(ts.avg_tokens)));
-          if (hasLlm && finite(ts.avg_llm_calls)) tiles.push(tile('llm', 'Avg LLM Calls', Number(ts.avg_llm_calls).toFixed(1)));
-          if (hasTool) tiles.push(tile('tool', 'Avg Tool Calls', Number(ts.avg_tool_calls).toFixed(1)));
-          if (hasTool && finite(ts.tool_success_rate)) tiles.push(tile('success', 'Tool Success', (ts.tool_success_rate * 100).toFixed(1) + '%'));
-          if (hasLlm && finite(ts.avg_llm_ms)) tiles.push(tile('clock', 'Avg LLM Latency', formatLatency(ts.avg_llm_ms)));
-          if (hasTool && finite(ts.avg_tool_ms)) tiles.push(tile('clock', 'Avg Tool Latency', formatLatency(ts.avg_tool_ms)));
-          if (finite(ts.avg_retriever_ms)) tiles.push(tile('retriever', 'Avg Retriever Latency', formatLatency(ts.avg_retriever_ms)));
-          if (finite(ts.avg_top_level_chain_ms)) tiles.push(tile('trace', 'Avg Trace Latency', formatLatency(ts.avg_top_level_chain_ms)));
+          if (positive(ts.avg_tokens)) tiles.push(tile('tokens', '📝', 'Avg Tokens', _fmtTraceNum(ts.avg_tokens)));
+          if (hasLlm && finite(ts.avg_llm_calls)) tiles.push(tile('llm', '🧠', 'Avg LLM Calls', Number(ts.avg_llm_calls).toFixed(1)));
+          if (hasLlm && finite(ts.avg_llm_ms)) tiles.push(tile('llm', '⏱', 'Avg LLM Latency', formatLatency(ts.avg_llm_ms)));
+          if (hasTool) tiles.push(tile('tool', '🔧', 'Avg Tool Calls', Number(ts.avg_tool_calls).toFixed(1)));
+          if (hasTool && finite(ts.avg_tool_ms)) tiles.push(tile('tool', '⏱', 'Avg Tool Latency', formatLatency(ts.avg_tool_ms)));
+          if (hasTool && finite(ts.tool_success_rate)) tiles.push(tile('success', '✓', 'Tool Success', (ts.tool_success_rate * 100).toFixed(1) + '%'));
+          if (finite(ts.avg_retriever_ms)) tiles.push(tile('retriever', '🔎', 'Avg Retriever Latency', formatLatency(ts.avg_retriever_ms)));
+          if (finite(ts.avg_top_level_chain_ms)) tiles.push(tile('trace', '⛓', 'Avg Trace Latency', formatLatency(ts.avg_top_level_chain_ms)));
           (Array.isArray(ts.outer_scope_parent_spans) ? ts.outer_scope_parent_spans : [])
             .filter(s => s && s.name && finite(s.avg_ms))
-            .forEach(s => tiles.push(tile('agent', 'Avg ' + s.name + ' latency', formatLatency(s.avg_ms), 'Avg ' + s.name + ' latency')));
-          if (finite(ts.avg_evaluator_ms)) tiles.push(tile('evaluator', 'Avg Evaluator Latency', formatLatency(ts.avg_evaluator_ms)));
+            .forEach(s => tiles.push(tile('agent', AGENT_ICON, 'Avg ' + s.name + ' latency', formatLatency(s.avg_ms), 'Avg ' + s.name + ' latency')));
+          if (finite(ts.avg_evaluator_ms)) tiles.push(tile('evaluator', '★', 'Avg Evaluator Latency', formatLatency(ts.avg_evaluator_ms)));
           const docsRoot = (window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '');
           const notCapturedHtml = !hasLlm && !hasTool
             ? '<p class="trace-not-captured">LLM and tool spans were not captured for this run. ' +
@@ -11145,6 +11135,7 @@
                   'Response latency, quality tradeoffs and trace-level execution behavior.') +
                 (latencyPanels ? '<div class="system-metrics-grid">' + latencyPanels + '</div>' : '') +
                 (traceCard ? '<div class="system-trace-row">' + traceCard + '</div>' : '') +
+                '<div data-step-latency-slot></div>' +
               '</div>'
             : '');
 
@@ -11154,7 +11145,16 @@
             'Score distributions per metric and response latency. Click a bar to filter the items.',
             runSummaryHtml) +
           (cards ? '<div class="metric-cards-grid">' + cards + '</div>' : '') : '';
+        // Step latency is mounted once per load (C028): the same node moves
+        // into each new Latency and traces section, under Trace stats, and
+        // back to its hidden home when the section has nothing to show.
+        const stepLatencyPanel = el('step-latency-panel');
         deepSection.innerHTML = systemCards + intelligenceCharts;
+        if (stepLatencyPanel) {
+          const slot = deepSection.querySelector('[data-step-latency-slot]');
+          if (slot) slot.replaceWith(stepLatencyPanel);
+          else el('step-latency-home')?.appendChild(stepLatencyPanel);
+        }
 
         // Step latency is mounted once per load (mountStepLatency); a new
         // Trace Stats strip only needs its breakdowns re-attached (C028).
@@ -13438,7 +13438,7 @@
         return result && typeof result.then === 'function' ? result.then(settle) : settle(result);
       }
 
-      // Step latency redraws itself (its disclosure, and its toggles once
+      // Step latency redraws itself (its group headers, and its toggles once
       // their data arrives): the panel keeps its place while the reader is
       // using it, also when it shrinks near the page end (C028).
       {

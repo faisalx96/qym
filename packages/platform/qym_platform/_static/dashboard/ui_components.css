@@ -2205,6 +2205,8 @@ button:is(.qym-select, .multi-select-btn)[aria-expanded="true"] {
   margin-top: var(--space-sm);
   font-size: var(--font-xl);
   font-weight: 700;
+  /* The run page gives each kind of trace stat its colour (--trace-tone). */
+  color: var(--trace-tone, var(--text-primary));
 }
 
 /* 8. Explanation/confidence affordance — approved option A. */
