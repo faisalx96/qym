@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Dashboard</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261002">
   <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261005-3">
   <script src="/static/qym_safe.js?v=p1-20261001"></script>
-  <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p1-20261001"></script>
+  <script src="/static/auth.js?v=p1-20261005"></script>
+  <script src="/static/shell.js?v=p1-20261005-8"></script>
   <script src="/static/kpis.js?v=p0-20260930"></script>
   <style>
     .overview { }
@@ -96,18 +96,18 @@
 <body>
   <main class="overview">
     <div class="overview-header">
-      <h1 id="overview-title">Dashboard</h1>
+      <h1 id="overview-title" data-qym-project-name>Dashboard</h1>
       <p id="overview-subtitle">Project overview and recent activity.</p>
     </div>
 
     <!-- Names, definitions and values come from QymKpis.entries() (kpis.js),
          the same source as the Runs/Charts/Models topbar. -->
     <div class="overview-stats qym-stat-strip" id="overview-stats">
-      <div class="stat-card qym-stat-strip__item" data-kpi="runs"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Runs</span><button type="button" class="qym-help-marker" aria-label="Explain Runs" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">All runs in this project.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-runs">—</div><div class="stat-card-sub" id="ov-runs-sub"></div></div>
-      <div class="stat-card qym-stat-strip__item" data-kpi="execution_success"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Execution success</span><button type="button" class="qym-help-marker" aria-label="Explain Execution success" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">Share of item executions that ran without a task error. A repeat run counts each item once per pass.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-success">—</div><div class="stat-card-sub" id="ov-success-sub"></div></div>
-      <div class="stat-card qym-stat-strip__item" data-kpi="runs_with_errors"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Runs with errors</span><button type="button" class="qym-help-marker" aria-label="Explain Runs with errors" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">Runs with at least one task or metric error.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-errors">—</div><div class="stat-card-sub" id="ov-errors-sub"></div></div>
-      <div class="stat-card qym-stat-strip__item" data-kpi="models"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Models</span><button type="button" class="qym-help-marker" aria-label="Explain Models" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">Distinct model names.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-models">—</div><div class="stat-card-sub" id="ov-models-sub"></div></div>
-      <div class="stat-card qym-stat-strip__item" data-kpi="items"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Items</span><button type="button" class="qym-help-marker" aria-label="Explain Items" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">Items evaluated.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-items">—</div><div class="stat-card-sub" id="ov-items-sub"></div></div>
+      <div class="stat-card qym-stat-strip__item" data-kpi="runs"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Runs</span><button type="button" class="qym-help-marker" aria-label="Explain Runs" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">All runs in this project.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-runs" data-qym-arrive><span data-qym-skeleton="value" data-qym-skeleton-label="Loading…"></span></div><div class="stat-card-sub" id="ov-runs-sub">&nbsp;</div></div>
+      <div class="stat-card qym-stat-strip__item" data-kpi="execution_success"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Execution success</span><button type="button" class="qym-help-marker" aria-label="Explain Execution success" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">Share of item executions that ran without a task error. A repeat run counts each item once per pass.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-success" data-qym-arrive><span data-qym-skeleton="value" data-qym-skeleton-label="Loading…"></span></div><div class="stat-card-sub" id="ov-success-sub">&nbsp;</div></div>
+      <div class="stat-card qym-stat-strip__item" data-kpi="runs_with_errors"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Runs with errors</span><button type="button" class="qym-help-marker" aria-label="Explain Runs with errors" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">Runs with at least one task or metric error.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-errors" data-qym-arrive><span data-qym-skeleton="value" data-qym-skeleton-label="Loading…"></span></div><div class="stat-card-sub" id="ov-errors-sub">&nbsp;</div></div>
+      <div class="stat-card qym-stat-strip__item" data-kpi="models"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Models</span><button type="button" class="qym-help-marker" aria-label="Explain Models" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">Distinct model names.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-models" data-qym-arrive><span data-qym-skeleton="value" data-qym-skeleton-label="Loading…"></span></div><div class="stat-card-sub" id="ov-models-sub">&nbsp;</div></div>
+      <div class="stat-card qym-stat-strip__item" data-kpi="items"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Items</span><button type="button" class="qym-help-marker" aria-label="Explain Items" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">Items evaluated.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-items" data-qym-arrive><span data-qym-skeleton="value" data-qym-skeleton-label="Loading…"></span></div><div class="stat-card-sub" id="ov-items-sub">&nbsp;</div></div>
     </div>
 
     <div class="overview-card live-card">
@@ -118,8 +118,8 @@
       <div class="overview-card-body">
         <table class="recent-table">
           <thead><tr><th>Run</th><th>Owner</th><th>Status</th><th>Progress</th><th>Updated</th></tr></thead>
-          <tbody id="live-runs-body">
-            <tr><td colspan="5" class="empty-state">Loading...</td></tr>
+          <tbody id="live-runs-body" data-qym-arrive>
+            <tr><td colspan="5"><div data-qym-skeleton="lines" data-qym-skeleton-rows="1" data-qym-skeleton-height="16" data-qym-skeleton-label="Loading live runs…"></div></td></tr>
           </tbody>
         </table>
       </div>
@@ -134,8 +134,8 @@
         <div class="overview-card-body">
           <table class="recent-table" id="recent-runs-table">
             <thead><tr><th>Run</th><th>User</th><th>Status</th><th>Items</th><th>Date</th></tr></thead>
-            <tbody id="recent-runs-body">
-              <tr><td colspan="5" class="empty-state">Loading...</td></tr>
+            <tbody id="recent-runs-body" data-qym-arrive>
+              <tr><td colspan="5"><div data-qym-skeleton="lines" data-qym-skeleton-rows="5" data-qym-skeleton-height="246" data-qym-skeleton-label="Loading recent runs…"></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -148,8 +148,8 @@
         <div class="overview-card-body">
           <table class="recent-table" id="approved-runs-table">
             <thead><tr><th>Run</th><th>User</th><th>Items</th><th>Date</th></tr></thead>
-            <tbody id="approved-runs-body">
-              <tr><td colspan="4" class="empty-state">Loading...</td></tr>
+            <tbody id="approved-runs-body" data-qym-arrive>
+              <tr><td colspan="4"><div data-qym-skeleton="lines" data-qym-skeleton-rows="1" data-qym-skeleton-height="16" data-qym-skeleton-label="Loading approved runs…"></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -159,8 +159,8 @@
           <span class="overview-card-title">Pending Reviews</span>
           <a class="overview-card-link" id="view-all-reviews" href="#">View all →</a>
         </div>
-        <div class="overview-card-body" id="pending-reviews-body">
-          <div class="empty-state">Loading...</div>
+        <div class="overview-card-body" id="pending-reviews-body" data-qym-arrive>
+          <div style="padding: 0 var(--space-lg)" data-qym-skeleton="lines" data-qym-skeleton-rows="2" data-qym-skeleton-height="79" data-qym-skeleton-label="Loading pending reviews…"></div>
         </div>
       </div>
     </div>
@@ -180,8 +180,8 @@
           </div>
         </div>
       </div>
-      <div class="ovt-body" id="trend-body" aria-busy="true">
-        <div class="ovt-empty">Loading trend…</div>
+      <div class="ovt-body" id="trend-body" aria-busy="true" data-qym-arrive>
+        <div data-qym-skeleton="chart" data-qym-skeleton-label="Loading trend…"></div>
       </div>
     </div>
   </main>
@@ -409,7 +409,7 @@
         points.forEach((point, index) => {
           if (!point.runs) return;
           const h = Math.max(2, (point.runs / maxRuns) * barHeight);
-          svg += '<rect class="ovt-bar" x="' + (xAt(index) - barWidth / 2).toFixed(1) + '" y="' + (barTop + barHeight - h).toFixed(1) + '" width="' + barWidth.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="2"></rect>';
+          svg += '<rect class="ovt-bar qym-arrive-bar" x="' + (xAt(index) - barWidth / 2).toFixed(1) + '" y="' + (barTop + barHeight - h).toFixed(1) + '" width="' + barWidth.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="2"></rect>';
         });
         const labelEvery = Math.max(1, Math.ceil(points.length / Math.max(2, Math.floor(plotWidth / 70))));
         points.forEach((point, index) => {
@@ -695,12 +695,18 @@
 
         const kpisUpdating = loadKpis(slug);
         if (!trendView.data) loadTrend(slug);
-        await loadLiveRuns(slug);
-        if (!overviewActive) return;
+        // Every section loads at once and arrives as its answer lands; one
+        // after another, the last waited on all the others.
+        await Promise.all([loadLiveRuns(slug), loadRunLists(slug, kpisUpdating), loadPendingReviews(slug)]);
+      }
 
-        // Fetch recent runs
+      async function loadRunLists(slug, kpisUpdating) {
+        if (!overviewActive) return;
         try {
-          const data = await summaryRuns(slug, { statuses: ['DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED', 'COMPLETED', 'FAILED', 'STOPPED'] }, 5);
+          const [data, approvedData] = await Promise.all([
+            summaryRuns(slug, { statuses: ['DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED', 'COMPLETED', 'FAILED', 'STOPPED'] }, 5),
+            summaryRuns(slug, { statuses: ['APPROVED'] }, 5),
+          ]);
           if (!overviewActive) return;
           const runs = flattenRunsPayload(data);
 
@@ -710,8 +716,6 @@
           tbody.innerHTML = renderRunRows(runs.slice(0, 5), slug, { includeStatus: true, emptyText: data.freshness?.updating ? 'Updating runs…' : 'No runs yet' });
 
           // Approved runs table
-          const approvedData = await summaryRuns(slug, { statuses: ['APPROVED'] }, 5);
-          if (!overviewActive) return;
           const approvedRuns = flattenRunsPayload(approvedData);
           const approvedTotal = approvedData.total_runs != null ? approvedData.total_runs : approvedRuns.length;
           const approvedBody = document.getElementById('approved-runs-body');
@@ -732,8 +736,10 @@
           document.getElementById('recent-runs-body').innerHTML = '<tr><td colspan="5" class="empty-state">Failed to load</td></tr>';
           document.getElementById('approved-runs-body').innerHTML = '<tr><td colspan="4" class="empty-state">Failed to load</td></tr>';
         }
+      }
 
-        // Fetch pending reviews count
+      async function loadPendingReviews(slug) {
+        if (!overviewActive) return;
         try {
           const reviewLimit = 12;
           const corrUrl = slug ? `api/corrections?limit=${reviewLimit}&status=pending&project_slug=${encodeURIComponent(slug)}` : `api/corrections?limit=${reviewLimit}&status=pending`;

@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Admin</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261002">
   <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261005-3">
   <script src="/static/qym_safe.js?v=p1-20261001"></script>
-  <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p1-20261001"></script>
+  <script src="/static/auth.js?v=p1-20261005"></script>
+  <script src="/static/shell.js?v=p1-20261005-8"></script>
   <style>
     .admin-page { }
     .admin-header { margin-bottom: var(--space-xl); }
@@ -133,9 +133,9 @@
     </div>
 
     <div class="admin-stats qym-stat-strip">
-      <div class="stat-card qym-stat-strip__item"><div class="stat-card-label qym-stat-strip__label">Total Users</div><div class="stat-card-value qym-stat-strip__value" id="stat-users">—</div></div>
-      <div class="stat-card qym-stat-strip__item"><div class="stat-card-label qym-stat-strip__label">Projects</div><div class="stat-card-value qym-stat-strip__value" id="stat-projects">—</div></div>
-      <div class="stat-card qym-stat-strip__item"><div class="stat-card-label qym-stat-strip__label">Total Runs</div><div class="stat-card-value qym-stat-strip__value" id="stat-runs">—</div></div>
+      <div class="stat-card qym-stat-strip__item"><div class="stat-card-label qym-stat-strip__label">Total Users</div><div class="stat-card-value qym-stat-strip__value" id="stat-users" data-qym-arrive><span data-qym-skeleton="value" data-qym-skeleton-width="48"></span></div></div>
+      <div class="stat-card qym-stat-strip__item"><div class="stat-card-label qym-stat-strip__label">Projects</div><div class="stat-card-value qym-stat-strip__value" id="stat-projects" data-qym-arrive><span data-qym-skeleton="value" data-qym-skeleton-width="48"></span></div></div>
+      <div class="stat-card qym-stat-strip__item"><div class="stat-card-label qym-stat-strip__label">Total Runs</div><div class="stat-card-value qym-stat-strip__value" id="stat-runs" data-qym-arrive><span data-qym-skeleton="value" data-qym-skeleton-width="48"></span></div></div>
     </div>
 
     <div class="admin-tabs qym-tabs" role="tablist" aria-label="Admin sections">
@@ -154,8 +154,8 @@
         <div class="card-body">
           <table class="data-table">
             <thead><tr><th>Project</th><th>Run</th><th>Owner</th><th>Status</th><th>Progress</th><th>Updated</th><th>Actions</th></tr></thead>
-            <tbody id="live-runs-tbody">
-              <tr><td colspan="7" style="text-align:center;color:var(--text-muted)">Loading...</td></tr>
+            <tbody id="live-runs-tbody" data-qym-arrive>
+              <tr><td colspan="7"><div data-qym-skeleton="lines" data-qym-skeleton-rows="1" data-qym-skeleton-height="16" data-qym-skeleton-label="Loading live runs…"></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -168,8 +168,8 @@
         <div class="card-body">
           <table class="data-table">
             <thead><tr><th>Project</th><th>Run</th><th>Owner</th><th>Status</th><th>Items</th><th>Created</th><th>Actions</th></tr></thead>
-            <tbody id="recent-runs-tbody">
-              <tr><td colspan="7" style="text-align:center;color:var(--text-muted)">Loading...</td></tr>
+            <tbody id="recent-runs-tbody" data-qym-arrive>
+              <tr><td colspan="7"><div data-qym-skeleton="lines" data-qym-skeleton-rows="6" data-qym-skeleton-height="355" data-qym-skeleton-label="Loading recent runs…"></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -187,7 +187,7 @@
         <div class="card-body">
           <table class="data-table">
             <thead><tr><th>Project</th><th>Slug</th><th>Status</th><th>Members</th><th style="text-align:right">Actions</th></tr></thead>
-            <tbody id="projects-tbody"></tbody>
+            <tbody id="projects-tbody" data-qym-arrive><tr><td colspan="5"><div data-qym-skeleton="lines" data-qym-skeleton-rows="4" data-qym-skeleton-label="Loading projects…"></div></td></tr></tbody>
           </table>
         </div>
       </div>
@@ -236,7 +236,7 @@
         <div class="card-body">
           <table class="data-table">
             <thead><tr><th>User</th><th>Email</th><th>Role</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead>
-            <tbody id="users-tbody"></tbody>
+            <tbody id="users-tbody" data-qym-arrive><tr><td colspan="5"><div data-qym-skeleton="lines" data-qym-skeleton-rows="4" data-qym-skeleton-label="Loading users…"></div></td></tr></tbody>
           </table>
         </div>
       </div>

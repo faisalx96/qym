@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Project Settings</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261002">
   <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261005-3">
   <script src="/static/qym_safe.js?v=p1-20261001"></script>
-  <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p1-20261001"></script>
+  <script src="/static/auth.js?v=p1-20261005"></script>
+  <script src="/static/shell.js?v=p1-20261005-8"></script>
   <style>
     .settings-page { }
     .settings-header { margin-bottom: var(--space-xl); }
@@ -216,7 +216,8 @@
   <script defer src="/static/ui_components.js?v=p1-20261001"></script>
 </head>
 <body>
-  <main class="settings-page">
+  <div class="settings-page" id="settings-skeleton" data-qym-skeleton="list" data-qym-skeleton-rows="5" data-qym-skeleton-label="Loading project settings…"></div>
+  <main class="settings-page" id="settings-main" hidden>
     <div class="settings-header">
       <h1 id="project-title">Project Settings</h1>
       <p id="project-subtitle">Manage members, API keys, and integrations for this project.</p>
@@ -1763,12 +1764,21 @@
         }
       });
 
+      // The settings are built hidden behind a skeleton, then take its place
+      // in one fade (QymShell.reveal), so their fields never fill in one by one.
+      const showSettings = () => {
+        const main = document.getElementById('settings-main');
+        if (window.QymShell?.reveal) window.QymShell.reveal(document.getElementById('settings-skeleton'), main);
+        else { document.getElementById('settings-skeleton')?.remove(); main.hidden = false; }
+      };
       load().then(() => {
         // ?tab=apikeys opens a tab directly (Admin > Projects: "Revoke keys first").
         const wanted = new URLSearchParams(window.location.search).get('tab');
         const tab = wanted ? document.getElementById('settings-tab-' + wanted) : null;
         if (tab && !tab.hidden && !tab.disabled) tab.click();
+        showSettings();
       }).catch(err => {
+        showSettings();
         document.querySelector('main').innerHTML = `<div class="settings-page"><div class="card"><div class="card-body">${escapeHtml(err.message)}</div></div></div>`;
       });
     })();

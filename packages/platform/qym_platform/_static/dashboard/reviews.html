@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Reviews</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261002">
   <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261005-3">
   <script src="/static/qym_safe.js?v=p1-20261001"></script>
-  <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p1-20261001"></script>
+  <script src="/static/auth.js?v=p1-20261005"></script>
+  <script src="/static/shell.js?v=p1-20261005-8"></script>
   <style>
     /* Typography/color rules: docs/DESIGN_LANGUAGE.md — tokens only (var(--font-*), var(--text-*)). */
     /* ═══════════════════════════════════════════════════
@@ -1480,19 +1480,19 @@
     <div class="reviews-stats qym-stat-strip" role="tablist" aria-label="Review status">
       <button type="button" role="tab" class="stat-card qym-stat-strip__item stat-pending active" data-filter="pending" aria-selected="true" aria-controls="correction-list" tabindex="0">
         <span class="stat-lbl qym-stat-strip__label">To review</span>
-        <span class="stat-num qym-stat-strip__value" id="stat-pending">-</span>
+        <span class="stat-num qym-stat-strip__value" id="stat-pending" data-qym-arrive><span data-qym-skeleton="value" data-qym-skeleton-width="36"></span></span>
       </button>
       <button type="button" role="tab" class="stat-card qym-stat-strip__item stat-approved" data-filter="approved" aria-selected="false" aria-controls="correction-list" tabindex="-1">
         <span class="stat-lbl qym-stat-strip__label">Approved</span>
-        <span class="stat-num qym-stat-strip__value" id="stat-approved">-</span>
+        <span class="stat-num qym-stat-strip__value" id="stat-approved" data-qym-arrive><span data-qym-skeleton="value" data-qym-skeleton-width="36"></span></span>
       </button>
       <button type="button" role="tab" class="stat-card qym-stat-strip__item stat-rejected" data-filter="rejected" aria-selected="false" aria-controls="correction-list" tabindex="-1">
         <span class="stat-lbl qym-stat-strip__label">Rejected</span>
-        <span class="stat-num qym-stat-strip__value" id="stat-rejected">-</span>
+        <span class="stat-num qym-stat-strip__value" id="stat-rejected" data-qym-arrive><span data-qym-skeleton="value" data-qym-skeleton-width="36"></span></span>
       </button>
       <button type="button" role="tab" class="stat-card qym-stat-strip__item stat-total" data-filter="" aria-selected="false" aria-controls="correction-list" tabindex="-1">
         <span class="stat-lbl qym-stat-strip__label">All</span>
-        <span class="stat-num qym-stat-strip__value" id="stat-total">-</span>
+        <span class="stat-num qym-stat-strip__value" id="stat-total" data-qym-arrive><span data-qym-skeleton="value" data-qym-skeleton-width="36"></span></span>
       </button>
     </div>
 
@@ -1586,11 +1586,7 @@
 
     <!-- Corrections List -->
     <div class="reviews-body" id="reviews-body">
-      <div class="loading-spinner" id="loading">
-        <span class="spinner-dot"></span>
-        <span class="spinner-dot"></span>
-        <span class="spinner-dot"></span>
-      </div>
+      <div id="loading" data-qym-skeleton="list" data-qym-skeleton-rows="5" data-qym-skeleton-label="Loading reviews…"></div>
       <div class="correction-list" id="correction-list" style="display:none;" aria-busy="false" aria-label="Corrections"></div>
       <div class="list-error" id="list-error" hidden>
         <div id="reviews-load-error"></div>
@@ -2794,12 +2790,19 @@
 
       updateResultCount();
       updateLoadMore();
+      // The first result takes the skeleton's place (QymShell, once per load).
+      const loading = el('loading');
+      if (loading.style.display !== 'none') {
+        window.QymShell?.liftSkeleton?.(loading);
+        loading.style.display = 'none';
+      }
       if (state.filtered.length === 0) {
         list.style.display = 'none';
         list.innerHTML = '';
         empty.style.display = 'flex';
         updateEmptyState();
         updateBulkBar();
+        window.QymShell?.arrive?.(empty);
         return;
       }
 
@@ -2808,6 +2811,7 @@
       const focusInList = list.contains(document.activeElement) || document.activeElement === document.body;
       if (!state.filtered.some(c => c.id === state.currentId)) state.currentId = null;
       list.innerHTML = state.filtered.map(renderCard).join('');
+      window.QymShell?.arrive?.(list);
       updateBulkBar();
       if (state.currentId !== null && focusInList) focusCurrentCard();
     }

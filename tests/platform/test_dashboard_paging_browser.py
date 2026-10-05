@@ -410,6 +410,9 @@ def test_keyboard_page_boundary_and_filtered_empty(dashboard):
 
 
 def test_charts_load_complete_open_dataset_history_and_evict_hidden_tab(browser):
+    """The open tab's points load in full; a tab left keeps its points
+    within the row budget (going back makes no request) and drops them
+    beyond it."""
     rows = make_runs(650)
     for row in rows:
         row["task_name"] = "task"
@@ -437,10 +440,31 @@ def test_charts_load_complete_open_dataset_history_and_evict_hidden_tab(browser)
             "() => window.__dashboardTest.state.flatRuns.length === 50"
         )
         assert page.locator(".chart-bar-label.clickable-run").count() == 50
-        assert page.evaluate("window.__dashboardTest.state.chartHistory.size") == 1
+        assert page.evaluate("window.__dashboardTest.state.chartHistory.size") == 2
         assert (
             page.evaluate("window.__dashboardTest.state.aggregations.totalRuns") == 650
         )
+
+        def point_request_count():
+            return sum(1 for path, _ in view.requests if path.endswith("/points"))
+
+        requests_before = point_request_count()
+        page.locator('[data-dataset="Opened"]').click()
+        page.wait_for_function(
+            "() => window.__dashboardTest.state.flatRuns.length === 600"
+        )
+        assert page.locator(".chart-bar-label.clickable-run").count() == 600
+        assert point_request_count() == requests_before
+
+        # Beyond the budget the tab left drops its points.
+        page.evaluate("window.__dashboardTest.state.chartHistoryRowBudget = 100")
+        page.locator('[data-dataset="Hidden"]').click()
+        page.wait_for_function(
+            "() => window.__dashboardTest.state.flatRuns.length === 50"
+        )
+        assert page.evaluate(
+            "Array.from(window.__dashboardTest.state.chartHistory.keys())"
+        ) == ['["task","Hidden"]']
     finally:
         view.close()
 

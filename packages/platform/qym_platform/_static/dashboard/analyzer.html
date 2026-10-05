@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Auto-analysis</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261002">
   <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261005-3">
   <script src="/static/qym_safe.js?v=p1-20261001"></script>
-  <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p1-20261001"></script>
+  <script src="/static/auth.js?v=p1-20261005"></script>
+  <script src="/static/shell.js?v=p1-20261005-8"></script>
   <script src="/static/metrics.js?v=p0-20260930-3"></script>
   <script src="/static/qym_table.js"></script>
-  <script src="/static/playground.js?v=p1-20261002"></script>
+  <script src="/static/playground.js?v=p1-20261005-3"></script>
   <style>
     /* Typography and color roles follow docs/DESIGN_LANGUAGE.md. */
     .analysis-page {
@@ -86,6 +86,13 @@
       background: var(--bg-surface);
       color: var(--text-secondary);
       text-align: center;
+    }
+    /* The workspace's shape while it loads (QymShell skeleton). */
+    .analysis-loading.analysis-loading--skeleton {
+      padding: 0;
+      border: 0;
+      background: none;
+      text-align: left;
     }
     .analysis-landing {
       max-width: 680px;
@@ -3577,7 +3584,7 @@
     </header>
 
     <div class="analysis-status" id="analysis-status" role="status" aria-live="polite"></div>
-    <div class="analysis-loading" id="analysis-loading">Loading the analysis workspace…</div>
+    <div class="analysis-loading analysis-loading--skeleton" id="analysis-loading" data-qym-skeleton="cards" data-qym-skeleton-count="3" data-qym-skeleton-min-width="340" data-qym-skeleton-height="220" data-qym-skeleton-label="Loading the analysis workspace…"></div>
     <div class="analysis-error" id="analysis-error" role="alert" hidden>
       <h2 id="analysis-error-title">Unable to load auto-analysis</h2>
       <p id="analysis-error-message"></p>
@@ -5967,9 +5974,9 @@
           }
           document.getElementById('analysis-go-runs').href = projectSlug ? analysisRunsPickerUrl() : rootPath + '/';
           state.contextRunId = '';
-          document.getElementById('analysis-loading').hidden = true;
           document.getElementById('analyzer-host').hidden = false;
           await initializePlayground(true);
+          revealWorkspace();
           return;
         }
         // The run header (no item rows) loads first; only a repeat run then
@@ -6022,10 +6029,19 @@
         const data = state.data;
         data.snapshot.rows = await fetchAnalyzerRows(state.passNumber);
         document.title = 'قيِّم • Auto-analysis • ' + (data.run.run_name || runId);
-        document.getElementById('analysis-loading').hidden = true;
         document.getElementById('analyzer-host').hidden = false;
         await initializePlayground(false);
+        revealWorkspace();
         wirePassSelector();
+      }
+
+      // The skeleton stays until the workspace is built (its config loads
+      // after the rows), then the workspace takes its place in one fade.
+      function revealWorkspace() {
+        const loading = document.getElementById('analysis-loading');
+        if (!loading.hidden) window.QymShell?.liftSkeleton?.(loading);
+        loading.hidden = true;
+        window.QymShell?.arrive?.(document.getElementById('analyzer-host'));
       }
 
       // Compact rows (scores, flags, metadata; no text bodies), scoped to

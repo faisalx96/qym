@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Run Detail</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261002">
   <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261005-3">
   <script src="/static/qym_safe.js?v=p1-20261001"></script>
-  <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p1-20261001"></script>
+  <script src="/static/auth.js?v=p1-20261005"></script>
+  <script src="/static/shell.js?v=p1-20261005-8"></script>
   <script src="/static/metrics.js?v=p0-20260930-3"></script>
   <script src="/static/runs_order.js?v=p1-20261002"></script>
   <script src="/static/run_details.js?v=p1-20261001"></script>
@@ -1272,21 +1272,60 @@
       gap: var(--space-md);
       margin-bottom: var(--space-xl);
     }
-    @keyframes card-enter {
-      from { opacity: 0; transform: translateY(8px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
     .metric-card {
       padding: var(--space-lg);
       display: flex;
       flex-direction: column;
       gap: var(--space-lg);
       transition: border-color 0.2s, box-shadow 0.2s;
-      animation: card-enter 0.35s cubic-bezier(0.4, 0, 0.2, 1) both;
     }
-    /* Cards enter once, on load; later redraws (filters, live refresh)
-       update in place without replaying it (C028). */
-    #run-content.is-settled .metric-card { animation: none; }
+
+    /* ─── Page entrance, once per load ───
+       The run arrives whole, so nothing empties and refills: simply there
+       after a quick load, or, where the reader saw the loading skeleton, in
+       one short crossfade under it once its minimum is up (.is-entering--fade,
+       --enter-wait). Only the charts move after it: each gauge sweeps to its
+       score and the bars grow from the baseline, all settled within about
+       0.6s. Only opacity, transform and the gauge's dash animate. #run-content carries
+       .is-entering until then or the reader's first click or key, so a
+       redraw (a filter, a live refresh) never replays it (C028). Reduced
+       motion keeps the crossfade only. */
+    @keyframes run-enter-fade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes run-enter-draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+    @keyframes run-enter-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+    @keyframes run-enter-sweep { from { stroke-dasharray: 0 113.1; } }
+    .dist-chart-col:nth-child(2) { --bar-i: 1; }
+    .dist-chart-col:nth-child(3) { --bar-i: 2; }
+    .dist-chart-col:nth-child(4) { --bar-i: 3; }
+    .dist-chart-col:nth-child(5) { --bar-i: 4; }
+    .dist-chart-col:nth-child(6) { --bar-i: 5; }
+    .dist-chart-col:nth-child(7) { --bar-i: 6; }
+    .dist-chart-col:nth-child(8) { --bar-i: 7; }
+    .dist-chart-col:nth-child(9) { --bar-i: 8; }
+    .dist-chart-col:nth-child(10) { --bar-i: 9; }
+    .dist-chart-col:nth-child(n+11) { --bar-i: 10; }
+    #run-content.is-entering.is-entering--fade { animation: run-enter-fade 0.24s ease-out var(--enter-wait, 0s) both; }
+    @media (prefers-reduced-motion: no-preference) {
+      #run-content.is-entering { --enter-ease: cubic-bezier(0.16, 1, 0.3, 1); }
+      #run-content.is-entering .run-summary-card::before {
+        transform-origin: left center;
+        animation: run-enter-draw 0.7s var(--enter-ease) var(--enter-wait, 0s) both;
+      }
+      #run-content.is-entering .gauge-fill {
+        animation: run-enter-sweep 0.7s var(--enter-ease) calc(var(--enter-wait, 0s) + 0.04s) both;
+      }
+      #run-content.is-entering .dist-chart-col .bar-fill {
+        transform-origin: center bottom;
+        animation: run-enter-grow 0.46s cubic-bezier(0.22, 1.18, 0.36, 1) calc(var(--enter-wait, 0s) + 0.04s + var(--bar-i, 0) * 14ms) both;
+      }
+      #run-content.is-entering .dist-chart-col .bar-count {
+        animation: run-enter-fade 0.24s ease-out calc(var(--enter-wait, 0s) + 0.2s + var(--bar-i, 0) * 14ms) both;
+      }
+      #run-content.is-entering :is(.metric-bool-track, .latency-ruler-track) {
+        transform-origin: left center;
+        animation: run-enter-draw 0.55s var(--enter-ease) calc(var(--enter-wait, 0s) + 0.04s) both;
+      }
+    }
     /* A refresh keeps the current rows, dimmed, until the new ones replace
        them: the list never collapses to a loading line (C028). */
     .items-grid.is-refreshing {
@@ -4662,23 +4701,101 @@
     .items-grid + .qym-pagination { margin-top: var(--space-md); }
     .items-grid + .qym-pagination:empty { display: none; }
 
-    /* Loading/empty */
-    .run-loading, .run-empty, .run-error {
+    /* Loading: the page's shape, shimmering. Timed like every page's
+       skeleton (shell.css "PAGE ARRIVAL"): it fades in only once the load
+       has taken 0.3s, stays at least 0.4s once shown, and fades out under
+       the run (retireSkeleton). */
+    @keyframes run-skeleton-in { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes run-skeleton-shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+    .run-skeleton {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-lg);
+      animation: run-skeleton-in 0.2s ease-out var(--qym-skeleton-wait, 0.3s) both;
+    }
+    .run-skeleton__label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+    .run-skeleton__hero,
+    .run-skeleton__card {
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      background: var(--bg-surface);
+    }
+    .run-skeleton__hero {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-lg);
+      padding: var(--space-lg);
+    }
+    .run-skeleton__row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--space-lg);
+    }
+    .run-skeleton__meta {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: var(--space-lg);
+    }
+    .run-skeleton__meta .run-skeleton__bone { height: 30px; }
+    .run-skeleton__bone,
+    .run-skeleton__ring,
+    .run-skeleton__bars {
+      display: block;
+      border-radius: var(--control-radius);
+      background: linear-gradient(100deg, var(--bg-elevated) 30%, var(--bg-hover) 50%, var(--bg-elevated) 70%) 0 0 / 200% 100%;
+      animation: run-skeleton-shimmer 1.6s ease-in-out infinite;
+    }
+    .run-skeleton__nav { height: 30px; }
+    .run-skeleton__head {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-sm);
+      margin-top: var(--space-md);
+    }
+    .run-skeleton__cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: var(--space-md);
+    }
+    .run-skeleton__card {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-lg);
+      height: 260px;
+      padding: var(--space-lg);
+    }
+    .run-skeleton__ring {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+    }
+    .run-skeleton__bars {
+      flex: 1;
+      -webkit-mask: linear-gradient(transparent 55%, #000 55%);
+      mask: linear-gradient(transparent 55%, #000 55%);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .run-skeleton__bone,
+      .run-skeleton__ring,
+      .run-skeleton__bars { animation: none; }
+    }
+
+    /* Empty and error states */
+    .run-empty, .run-error {
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       height: 300px;
       color: var(--text-muted);
-    }
-    .run-loading .spinner {
-      width: 32px;
-      height: 32px;
-      border: 3px solid var(--border-default);
-      border-top-color: var(--accent-primary);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin-bottom: var(--space-md);
     }
 
     /* Export Column Selector Modal */
@@ -6371,9 +6488,26 @@
 </head>
 <body>
   <main class="run-container">
-    <div class="run-loading" id="loading">
-      <div class="spinner"></div>
-      <span>Loading run data...</span>
+    <!-- The page's shape while it loads, so the run arrives in place. -->
+    <div class="run-skeleton" id="loading" role="status" data-qym-skeleton-root>
+      <span class="run-skeleton__label">Loading run data…</span>
+      <div class="run-skeleton__hero" aria-hidden="true">
+        <div class="run-skeleton__row">
+          <div><span class="run-skeleton__bone" style="width:72px;height:10px"></span><span class="run-skeleton__bone" style="width:240px;height:22px;margin-top:8px"></span></div>
+          <span class="run-skeleton__bone" style="width:300px;height:24px"></span>
+        </div>
+        <div class="run-skeleton__meta">
+          <span class="run-skeleton__bone"></span><span class="run-skeleton__bone"></span><span class="run-skeleton__bone"></span>
+          <span class="run-skeleton__bone"></span><span class="run-skeleton__bone"></span><span class="run-skeleton__bone"></span>
+        </div>
+      </div>
+      <span class="run-skeleton__bone run-skeleton__nav" aria-hidden="true"></span>
+      <div class="run-skeleton__head" aria-hidden="true"><span class="run-skeleton__bone" style="width:110px;height:18px"></span><span class="run-skeleton__bone" style="width:360px;height:10px"></span></div>
+      <div class="run-skeleton__cards" aria-hidden="true">
+        <div class="run-skeleton__card"><span class="run-skeleton__ring"></span><span class="run-skeleton__bars"></span></div>
+        <div class="run-skeleton__card"><span class="run-skeleton__ring"></span><span class="run-skeleton__bars"></span></div>
+        <div class="run-skeleton__card"><span class="run-skeleton__ring"></span><span class="run-skeleton__bars"></span></div>
+      </div>
     </div>
 
     <div class="run-error" id="error-state" style="display:none;">
@@ -7678,8 +7812,10 @@
         // the loaded run is reported as such. Leaving the page cancels both.
         let loaded = false;
         try {
+          // The shell asked for it at the click, when it could (takePrefetch).
+          const runDataUrl = apiUrl('api/runs/' + RUN_ID + '?view=compact');
           const [res, passRes] = await Promise.all([
-            fetch(apiUrl('api/runs/' + RUN_ID + '?view=compact'), { signal: pageSignal }),
+            window.QymShell?.takePrefetch?.(runDataUrl) || fetch(runDataUrl, { signal: pageSignal }),
             VIEW_PASS
               ? fetch(apiUrl('api/runs/' + RUN_ID + '/passes'), { signal: pageSignal }).catch(() => null)
               : Promise.resolve(null),
@@ -8831,11 +8967,49 @@
         }).observe(el('items-grid'));
       }
 
+      // The loading skeleton leaves under the run, not before it: one the
+      // reader can see is laid over the page, stays its minimum and fades
+      // out while the run fades in (QymShell.liftSkeleton), so there is no
+      // blank frame between them. One still waiting to show simply goes.
+      function retireSkeleton() {
+        const skeleton = el('loading');
+        if (!skeleton || skeleton.style.display === 'none') return;
+        window.QymShell?.liftSkeleton?.(skeleton);
+        skeleton.style.display = 'none';
+      }
+
+      // The page entrance plays once per load (see .is-entering): it ends
+      // when the beat is over or at the reader's first click or key, so
+      // nothing they cause replays it. It fades only where the skeleton
+      // was seen (QymShell.pendingArrival), after that skeleton's minimum.
+      const ENTRANCE_MS = 700;
+      function startEntrance(content) {
+        const arrival = window.QymShell?.pendingArrival?.() || null;
+        const wait = arrival ? arrival.wait : 0;
+        content.classList.remove('is-settled');
+        content.style.setProperty('--enter-wait', wait + 'ms');
+        content.classList.toggle('is-entering--fade', Boolean(arrival));
+        content.classList.add('is-entering');
+        let timer = null;
+        const settle = () => {
+          clearTimeout(timer);
+          content.classList.remove('is-entering', 'is-entering--fade');
+          content.style.removeProperty('--enter-wait');
+          content.classList.add('is-settled');
+          content.removeEventListener('pointerdown', settle, true);
+          content.removeEventListener('keydown', settle, true);
+        };
+        timer = setTimeout(settle, ENTRANCE_MS + wait);
+        content.addEventListener('pointerdown', settle, true);
+        content.addEventListener('keydown', settle, true);
+      }
+
       function render() {
-        el('loading').style.display = 'none';
+        retireSkeleton();
         el('empty').style.display = 'none';
         el('error-state').style.display = 'none';
         el('run-content').style.display = 'block';
+        startEntrance(el('run-content'));
         ensureSectionNav();
         renderSummary();
         applyScoreLockMode();
@@ -8855,8 +9029,6 @@
         populateMetricMetaFieldsDropdown();
         renderItems();
         mountStepLatency();
-        // Cards play their entrance once; later redraws stay still.
-        setTimeout(() => el('run-content')?.classList.add('is-settled'), 1000);
         // Auto-open trace if ?trace=itemId is in the URL
         if (window.QymTraceViewer) window.QymTraceViewer.restoreFromUrl();
       }
@@ -10860,7 +11032,7 @@
           if (avg === null) {
             // Every item or pass errored on a lower-is-better metric: it has
             // no mean (0 would read as its best value); say so.
-            cards += '<div class="metric-card" style="animation-delay:' + (cardIdx * 50) + 'ms;">' +
+            cards += '<div class="metric-card">' +
               '<div class="metric-card-header">' +
                 '<div class="metric-card-gauge">' +
                   '<div class="metric-card-info">' +
@@ -10879,7 +11051,7 @@
           if (mType === 'numeric') {
             // ── Numeric: show min / avg / max / total ──
             const fmtN = window.QymMetrics.formatNumericValue;
-            cards += '<div class="metric-card" style="animation-delay:' + (cardIdx * 50) + 'ms;">' +
+            cards += '<div class="metric-card">' +
               '<div class="metric-card-header">' +
                 '<div class="metric-card-gauge">' +
                   '<div class="metric-card-info">' +
@@ -10956,7 +11128,7 @@
             const errorTitle = direction === 'minimize'
               ? errorKinds + ': not counted in the mean, since lower is better and an error would read as clean, and counted as fails. Click to filter them.'
               : errorKinds + ': counted as False (0) in the mean' + (direction === 'maximize' ? ' and as fails' : '') + '. Click to filter them.';
-            cards += '<div class="metric-card" style="animation-delay:' + (cardIdx * 50) + 'ms;">' +
+            cards += '<div class="metric-card">' +
               '<div class="metric-card-header">' +
                 '<div class="metric-card-gauge">' +
                   buildGaugeRing(avg, metric) +
@@ -11025,7 +11197,7 @@
             }
             barsHtml += '</div>';
 
-            cards += '<div class="metric-card" style="animation-delay:' + (cardIdx * 50) + 'ms;">' +
+            cards += '<div class="metric-card">' +
               '<div class="metric-card-header">' +
                 '<div class="metric-card-gauge">' +
                   buildGaugeRing(avg, metric) +
@@ -11132,7 +11304,7 @@
           // Format mean as rounded integer seconds if >= 1s
           const meanFmt = meanLat >= 1000 ? Math.round(meanLat / 1000) + 's' : (meanLat === 0 ? '0ms' : formatLatency(meanLat));
 
-          latencyCard = '<div class="metric-card system-latency-card" style="animation-delay:' + (cardIdx * 50) + 'ms;">' +
+          latencyCard = '<div class="metric-card system-latency-card">' +
             '<div class="latency-hero">' +
               '<div class="latency-p50-block">' +
                 '<div class="latency-p50-val">' + meanFmt + '</div>' +
@@ -11191,7 +11363,7 @@
             ? '<p class="trace-not-captured">LLM and tool spans were not captured for this run. ' +
                 '<a href="' + escapeAttr(docsRoot + '/docs-guide#sdk-guide/results') + '">How tracing works</a></p>'
             : '';
-          traceCard = '<div class="metric-card system-trace-card" style="animation-delay:' + (cardIdx * 50) + 'ms;">' +
+          traceCard = '<div class="metric-card system-trace-card">' +
             '<div class="metric-card-header">' +
               '<div class="metric-card-gauge">' +
                 '<div class="metric-card-info">' +

@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Datasets</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261002">
   <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261005-3">
   <script src="/static/qym_safe.js?v=p1-20261001"></script>
-  <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p1-20261001"></script>
+  <script src="/static/auth.js?v=p1-20261005"></script>
+  <script src="/static/shell.js?v=p1-20261005-8"></script>
   <script src="/static/qym_table.js"></script>
   <script src="/static/metrics.js?v=p0-20260930-3"></script>
   <script src="/static/trace_viewer.js?v=p1-20261001"></script>
@@ -172,6 +172,7 @@
     }
     .dsx-cat-bar h1 { font-size: var(--font-title); font-weight: 650; margin: 0; color: var(--text-primary); letter-spacing: -0.01em; }
     .dsx-cat-sub { color: var(--text-muted); font-size: var(--font-md); padding-top: 4px; }
+    .dsx-cat-sub-loading { display: inline-block; width: 110px; height: 10px; vertical-align: middle; }
     .dsx-cat-bar .grow { flex: 1; min-width: 20px; }
     .dsx-cat-controls { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
     .dsx-cat-controls .dsx-search-wrap { min-width: 240px; }
@@ -690,7 +691,8 @@
 </head>
 <body>
   <main class="dsx-page" id="dsx-root">
-    <div class="dsx-empty"><div class="icon">·</div><h3>Loading...</h3></div>
+    <div class="dsx-grid" data-qym-skeleton="cards" data-qym-skeleton-count="6" data-qym-skeleton-min-width="260" data-qym-skeleton-height="190" data-qym-skeleton-label="Loading datasets…"
+         data-qym-skeleton-match="/datasets/[^/]+/?$" data-qym-skeleton-match-kind="table" style="display:block"></div>
   </main>
 
   <script>
@@ -1331,6 +1333,13 @@
       if (!project && window.__QYM_USER__ && Array.isArray(window.__QYM_USER__.projects)) {
         project = window.__QYM_USER__.projects.find(p => p.slug === state.slug) || null;
       }
+      // Before /v1/me answers: the project as the shell last saw it, so the
+      // page draws at once instead of waiting on the shell (it is replaced
+      // with the full project when the shell is ready).
+      if (!project) {
+        try { project = (Shell.getRememberedProject && Shell.getRememberedProject()) || null; } catch(_) {}
+        if (project) project = Object.assign({ remembered: true }, project);
+      }
       return project;
     }
     // An archived project opens read-only: its datasets, versions and items stay
@@ -1354,7 +1363,15 @@
       state.project = project;
       return { label: project.name || state.slug, projectSwitcher: true };
     }
+    // The shell draws its generic crumbs when /v1/me answers: the page's own
+    // go back on at once, with the project now known in full.
+    let datasetCrumbParts = null;
+    document.addEventListener('qym:shell-ready', () => {
+      if (state.project && state.project.remembered) state.project = resolveProjectFromShell() || state.project;
+      if (datasetCrumbParts) setDatasetBreadcrumbs(datasetCrumbParts);
+    }, { once: true, signal: Shell.pageSignal ? Shell.pageSignal() : undefined });
     function setDatasetBreadcrumbs(parts){
+      datasetCrumbParts = parts;
       const crumbs = [projectCrumb()].concat(parts || []);
       if (crumbs.length && !crumbs[crumbs.length - 1].href) crumbs[crumbs.length - 1].current = true;
       Shell.setBreadcrumbs(crumbs);
@@ -1476,9 +1493,24 @@
       setDatasetBreadcrumbs([{ label: 'Datasets' }]);
       root.appendChild(catalogView());
     }
+    // A dataset's name, from the catalog the reader came from or the last
+    // visit in this tab, so the breadcrumb is whole while the dataset loads.
+    function datasetNameKey(){ return 'qym:dataset-name:' + state.slug + '/' + state.datasetRef; }
+    function knownDatasetName(){
+      const listed = (state.datasets || []).find(d => d && (d.slug === state.datasetRef || d.id === state.datasetRef));
+      if (listed && listed.name) return listed.name;
+      try { return sessionStorage.getItem(datasetNameKey()) || ''; } catch(_) { return ''; }
+    }
     async function renderDetail(){
       const root = document.getElementById('dsx-root');
       if (!root.children.length) root.innerHTML = '';
+      const knownName = knownDatasetName();
+      if (knownName) {
+        setDatasetBreadcrumbs([
+          { label: 'Datasets', href: appPath('/projects/' + state.slug + '/datasets') },
+          { label: knownName },
+        ]);
+      }
       const ok = await ensureDatasetDetailLoaded();
       if (!ok) {
         renderDatasetLoadError(root, 'Couldn\u2019t load this dataset', state.detailError, () => renderDetail());
@@ -1489,12 +1521,16 @@
         { label: 'Datasets', href: appPath('/projects/' + state.slug + '/datasets') },
         { label: state.dataset.name },
       ]);
+      try { sessionStorage.setItem(datasetNameKey(), state.dataset.name || ''); } catch(_) { /* private mode */ }
       if (window.QymTraceViewer) window.QymTraceViewer.init({ exportMode: false });
       if (state.itemId) {
         return renderItemPage();
       }
       itemPageRenderSeq++;
+      // The dataset takes the loading skeleton's place in one fade (QymShell).
+      window.QymShell?.liftSkeleton?.(root);
       root.replaceChildren(detailView());
+      window.QymShell?.arrive?.(root);
       // Start tab loaders after mounting, so their connection guards allow the first request.
       renderTabContent(root.querySelector('#dsx-tab-content'));
     }
@@ -1547,7 +1583,14 @@
       bar.appendChild(el('h1', null, 'Datasets'));
       const sub = el('span', { className: 'dsx-cat-sub' });
       sub.id = 'dsx-catalog-sub';
-      sub.textContent = 'Curated examples you version, compare, and run against any model.';
+      // While loading, the counts' slot holds a short placeholder: the long
+      // description used to push the controls onto a second line, and they
+      // jumped back up (and the page with them) when the counts arrived.
+      if (window.QymShell?.skeletonHTML) {
+        sub.innerHTML = '<span class="qym-skeleton__bone dsx-cat-sub-loading" aria-hidden="true"></span>';
+      } else {
+        sub.textContent = 'Curated examples you version, compare, and run against any model.';
+      }
       bar.appendChild(sub);
       bar.appendChild(el('div', { className: 'grow' }));
       const controls = el('div', { className: 'dsx-cat-controls' });
@@ -1565,20 +1608,32 @@
       controls.appendChild(sortSel);
       controls.appendChild(spaLink(buildUrl({ mode: 'catalog', ref: null, view: 'deleted', q: '' }), () => navigate({ mode: 'catalog', ref: null, view: 'deleted', q: '' }), { className: 'shell-btn shell-btn-secondary qym-inline-action qym-inline-action--neutral dsx-deleted-link' }, 'Deleted datasets'));
       if (!projectReadOnly()) controls.appendChild(newBtn);
+      // Held back (its space kept) until the catalog loads: an empty project
+      // hides them, so they would otherwise show and then vanish.
+      controls.style.visibility = 'hidden';
       bar.appendChild(controls);
       container.appendChild(bar);
 
       const grid = el('div', { className: 'dsx-grid', id: 'dsx-catalog-grid' });
-      // Skeletons while loading
-      for (let i = 0; i < 6; i++) {
-        const card = el('div', { className: 'dsx-card' });
-        card.appendChild(el('div', { className: 'dsx-skeleton', style: { width: '62px', height: '62px' } }));
-        card.appendChild(el('div', { className: 'dsx-skeleton', style: { width: '60%', height: '16px' } }));
-        card.appendChild(el('div', { className: 'dsx-skeleton', style: { width: '90%', height: '12px' } }));
-        card.appendChild(el('div', { className: 'dsx-skeleton', style: { width: '80%', height: '12px' } }));
-        grid.appendChild(card);
+      // Skeletons while loading; the first cards take their place in one
+      // fade (QymShell watchArrivals / arrive).
+      if (window.QymShell?.skeletonHTML) {
+        const skeleton = el('div', { style: { gridColumn: '1 / -1' } });
+        skeleton.innerHTML = window.QymShell.skeletonHTML('cards', { count: 6, minWidth: 260, height: 190, label: 'Loading datasets…' });
+        grid.appendChild(skeleton);
+        grid.setAttribute('data-qym-arrive', '');
+      } else {
+        for (let i = 0; i < 6; i++) {
+          const card = el('div', { className: 'dsx-card' });
+          card.appendChild(el('div', { className: 'dsx-skeleton', style: { width: '62px', height: '62px' } }));
+          card.appendChild(el('div', { className: 'dsx-skeleton', style: { width: '60%', height: '16px' } }));
+          card.appendChild(el('div', { className: 'dsx-skeleton', style: { width: '90%', height: '12px' } }));
+          card.appendChild(el('div', { className: 'dsx-skeleton', style: { width: '80%', height: '12px' } }));
+          grid.appendChild(card);
+        }
       }
       container.appendChild(grid);
+      window.QymShell?.watchArrivals?.(container);
 
       // Load + render. A failed load is an error with Retry, never "No datasets yet"
       // (and never the create-your-first-dataset CTA).
@@ -1593,6 +1648,7 @@
         }
         if (state.datasetsError) {
           controls.style.display = 'none';
+          controls.style.visibility = '';
           sub.textContent = 'Curated examples you version, compare, and run against any model.';
           renderDatasetLoadError(grid, 'Couldn\u2019t load datasets', state.datasetsError, () => {
             grid.replaceChildren();
@@ -1606,9 +1662,13 @@
         // and the search/sort toolbar are noise when there's nothing to act on yet.
         const isEmpty = totalCount === 0;
         controls.style.display = isEmpty ? 'none' : '';
+        controls.style.visibility = '';
         sub.textContent = isEmpty
           ? 'Curated examples you version, compare, and run against any model.'
           : pluralize(totalCount, 'dataset') + ' · ' + pluralize(state.datasets.reduce((s, d) => s + (d.run_count || 0), 0), 'run');
+        // They arrive with the cards, in the same fade (QymShell).
+        window.QymShell?.arrive?.(sub);
+        if (!isEmpty) window.QymShell?.arrive?.(controls);
       };
       loadCatalog();
 
@@ -3292,10 +3352,17 @@
           tableWrap.setAttribute('aria-busy', 'true');
         } else {
           tableWrap.innerHTML = '';
-          for (let i = 0; i < 5; i++) {
-            const r = el('div', { className: 'dsx-skel-row' });
-            ['40%','15%','25%','30%','10%'].forEach(w => r.appendChild(el('div', { className: 'dsx-skeleton', style: { width: w } })));
-            tableWrap.appendChild(r);
+          if (window.QymShell?.skeletonHTML) {
+            // The first rows take the skeleton's place in one fade.
+            tableWrap.innerHTML = window.QymShell.skeletonHTML('table', { toolbar: false, rows: 6, label: 'Loading items…' });
+            tableWrap.setAttribute('data-qym-arrive', '');
+            window.QymShell.watchArrivals(tableWrap.parentElement || tableWrap);
+          } else {
+            for (let i = 0; i < 5; i++) {
+              const r = el('div', { className: 'dsx-skel-row' });
+              ['40%','15%','25%','30%','10%'].forEach(w => r.appendChild(el('div', { className: 'dsx-skeleton', style: { width: w } })));
+              tableWrap.appendChild(r);
+            }
           }
         }
         try {

@@ -16,6 +16,25 @@
   // ── Prevent double-init ──
   if (window.QymShell) return;
 
+  // ── The shell's frame from the first paint ──
+  // This runs in <head>, before the page's content parses. Until init builds
+  // the shell, shell.css draws its frame (in the remembered sidebar width)
+  // and hides the content, which would otherwise paint bare, full width,
+  // and jump when the shell wraps it. A failed init shows the page anyway.
+  (function markShellPending() {
+    var root = document.documentElement;
+    root.classList.add('qym-shell-pending');
+    try {
+      var narrow = window.matchMedia && window.matchMedia('(max-width: 760px)').matches;
+      if (narrow || localStorage.getItem('qym:sidebar-collapsed') === '1') root.classList.add('qym-shell-pending-collapsed');
+    } catch (_err) { /* private mode */ }
+    setTimeout(endShellPending, 4000);
+  })();
+
+  function endShellPending() {
+    document.documentElement.classList.remove('qym-shell-pending', 'qym-shell-pending-collapsed');
+  }
+
   // ── Cached state ──
   let _user = null;
   let _projects = [];
@@ -25,6 +44,51 @@
   // projects), but admins and its members open it read-only from Admin or a
   // link: the shell loads it by slug and keeps it here.
   let _archivedProject = null;
+
+  // What the last /v1/me said, for the first frame of the next load: the
+  // role (the Platform section), the name (the user menu) and the project
+  // names (the breadcrumb), which otherwise pop in a round trip later. It is
+  // display only (the server checks every request), replaced as soon as
+  // /v1/me answers, and cleared on sign-out (auth.js).
+  var ME_CACHE_KEY = 'qym:me';
+  var _cachedMe = null;
+
+  function readCachedMe() {
+    try {
+      var cached = JSON.parse(localStorage.getItem(ME_CACHE_KEY) || 'null');
+      return cached && typeof cached === 'object' && Array.isArray(cached.projects) ? cached : null;
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  function cacheMe(user) {
+    try {
+      localStorage.setItem(ME_CACHE_KEY, JSON.stringify({
+        role: user.role || '',
+        display_name: user.display_name || '',
+        email: user.email || '',
+        projects: (user.projects || []).filter(Boolean).map(function (project) {
+          return { slug: project.slug, name: project.name };
+        }),
+      }));
+    } catch (_err) { /* private mode */ }
+  }
+
+  function forgetCachedMe() {
+    _cachedMe = null;
+    try { localStorage.removeItem(ME_CACHE_KEY); } catch (_err) { /* private mode */ }
+  }
+
+  // The project a /projects/{slug}/ URL names, by its remembered name, until
+  // /v1/me answers. A guessed project (a legacy /run/{id} link) is never
+  // shown from memory: it can be the wrong one.
+  function rememberedRouteProject(ctx) {
+    if (_user || !_cachedMe || !ctx || !ctx.explicitProject || !ctx.projectSlug) return null;
+    return _cachedMe.projects.find(function (project) {
+      return project && project.slug === ctx.projectSlug && project.name;
+    }) || null;
+  }
 
   // ══════════════════════════════════════════════════
   // URL PARSING
@@ -353,7 +417,7 @@
     if (!content) return;
     closeShellPopovers();
     updateCurrentProjectForRoute();
-    setTopbarStats([]);
+    clearTopbarStats();
     renderBreadcrumbs([{ label: 'Project Not Found', current: true }]);
     content.innerHTML = ''
       + '<div style="max-width:640px;margin:56px auto;padding:0 20px;">'
@@ -487,8 +551,9 @@
       // Logo
       + '<div class="sidebar-logo">'
       +   '<a href="' + esc(root) + '">'
-      +     '<img src="' + esc(root) + 'static/qym_icon.png" alt="قيِّم" class="logo-icon-img" />'
-      +     '<img src="' + esc(root) + 'static/qym_text.png" alt="قيِّم" class="logo-text-img" />'
+      // Embedded in shell.css, so the logo paints with the sidebar.
+      +     '<span class="logo-icon-img" role="img" aria-label="قيِّم"></span>'
+      +     '<span class="logo-text-img" aria-hidden="true"></span>'
       +   '</a>'
       + '</div>'
 
@@ -576,10 +641,11 @@
 
   function computeBreadcrumbs(ctx) {
     var crumbs = [];
+    var project = _currentProject || rememberedRouteProject(ctx);
 
-    if (ctx.projectSlug && _currentProject) {
+    if (ctx.projectSlug && project) {
       // First crumb = project switcher
-      crumbs.push({ label: _currentProject.name, projectSwitcher: true });
+      crumbs.push({ label: project.name, projectSwitcher: true, project: project });
 
       if (ctx.page === 'analysis' || ctx.page === 'analyzer') {
         crumbs.push({ label: 'Auto-analysis', current: true });
@@ -612,12 +678,14 @@
       if (i > 0) html += '<span class="breadcrumb-sep">/</span>';
       var c = crumbs[i];
       if (c.projectSwitcher) {
-        // Embedded project switcher as breadcrumb segment
+        // Embedded project switcher as breadcrumb segment. Its project is the
+        // crumb's (a remembered one before /v1/me answers), else the current.
+        var crumbProject = c.project || _currentProject;
         html += '<div class="breadcrumb-project" id="breadcrumb-project">'
           + '<button class="breadcrumb-project-btn" id="shell-project-trigger">'
           +   '<span class="project-trigger-icon">'
-          +     (_currentProject && _currentProject.slug
-                  ? identiconHTML(_currentProject.slug, { cell: 2, gap: 1, showEmpty: false })
+          +     (crumbProject && crumbProject.slug
+                  ? identiconHTML(crumbProject.slug, { cell: 2, gap: 1, showEmpty: false })
                   : iconRaw('project', 10, 10))
           +   '</span>'
           +   '<span class="project-trigger-text">' + esc(c.label) + '</span>'
@@ -1728,8 +1796,38 @@
   var _navSwapping = false;
   var _queuedNav = null;
 
+  // The run page's data, asked for at the click: the page itself only asks
+  // once its HTML and scripts are in, ~250ms later. It takes this response
+  // (takePrefetch) when it asks for the same URL; anything else fetches as
+  // usual.
+  var _prefetch = null;
+  function prefetchPageData(url, signal) {
+    _prefetch = null;
+    var path;
+    try { path = new URL(url, window.location.href).pathname.replace(/\/+$/, ''); } catch (_err) { return; }
+    var match = path.match(/\/projects\/[^/]+\/runs\/(.+)$/) || path.match(/\/run\/(.+)$/);
+    if (!match || /\/analyzer$/.test(match[1])) return;
+    var runId;
+    try { runId = decodeURIComponent(match[1]); } catch (_err) { return; }
+    var dataUrl = new URL(apiUrl('api/runs/' + runId + '?view=compact'), window.location.href).href;
+    var response = fetch(dataUrl, signal ? { signal: signal } : undefined);
+    response.catch(function () { /* the page asks again */ });
+    _prefetch = { url: dataUrl, response: response };
+  }
+
+  function takePrefetch(url) {
+    var entry = _prefetch;
+    if (!entry) return null;
+    var wanted;
+    try { wanted = new URL(url, window.location.href).href; } catch (_err) { return null; }
+    if (entry.url !== wanted) return null;
+    _prefetch = null;
+    return entry.response;
+  }
+
   function navigateTo(url, opts) {
     opts = opts || {};
+    _loadStartedAt = performance.now();
     if (_navSwapping) {
       _queuedNav = { url: url, opts: opts };
       return;
@@ -1749,6 +1847,7 @@
 
     closeShellPopovers();
     setNavigationPending(true);
+    prefetchPageData(url, fetchController ? fetchController.signal : undefined);
 
     fetchAndSwap(url, opts, { seq: seq, signal: fetchController ? fetchController.signal : undefined }).then(function (swapped) {
       if (seq !== _navSeq) return;
@@ -1841,6 +1940,19 @@
       });
       script.remove();
     });
+    // Scripts run in order, each after the one before has loaded; fetched
+    // one at a time that way, the run page's seven cost ~400ms. All of them
+    // start loading now, in parallel, so each is in hand when its turn comes.
+    document.querySelectorAll('link[data-shell-preload]').forEach(function (link) { link.remove(); });
+    scriptInfos.forEach(function (info) {
+      if (!info.src) return;
+      var preload = document.createElement('link');
+      preload.rel = 'preload';
+      preload.as = 'script';
+      preload.href = info.src;
+      preload.setAttribute('data-shell-preload', '');
+      document.head.appendChild(preload);
+    });
 
     // Get the content area
     var content = document.getElementById('shell-content');
@@ -1866,7 +1978,9 @@
     }
     // The incoming page owns everything registered from here on.
     mountPage();
+    expandSkeletonMarkers(fragment);
     content.replaceChildren(fragment);
+    watchArrivals(content);
 
     if (opts.historyMode !== 'none') {
       history.pushState({ qym: true }, '', url);
@@ -1888,7 +2002,9 @@
     }
 
     renderBreadcrumbs(computeBreadcrumbs(_routeCtx));
-    setTopbarStats([]);
+    // The new page's numbers as last seen, until it loads its own.
+    clearTopbarStats();
+    showRememberedTopbarStats();
     // A new page starts at the top; Back/Forward put the saved offsets back
     // once the page has rendered (restoreScrollPositions in navigateTo).
     content.scrollTop = 0;
@@ -1977,10 +2093,57 @@
     return esc(s).replace(/"/g, '&quot;');
   }
 
+  // The top bar's numbers as last shown at this URL in this tab, painted when
+  // the shell is built so a reload does not blank them until the page's
+  // numbers load. The page's first numbers replace them. Pages also report
+  // "no numbers yet" while loading, so an empty set clears remembered
+  // numbers only after a grace period; leaving the page clears them at once.
+  var TOPBAR_STATS_KEY = 'qym:topbar-stats:';
+  var _topbarStatsRemembered = false;
+  var _topbarStatsClearTimer = null;
+
+  // Runs, Dashboard, Charts and Models show the same project numbers when
+  // unfiltered: one remembered entry serves all four, so moving between
+  // them never blanks the numbers.
+  function topbarStatsKey() {
+    var path = window.location.pathname;
+    var search = window.location.search;
+    var family = path.match(/^(.*\/projects\/[^/]+)(?:\/(?:overview|charts|models))?\/?$/);
+    if (family && !search) return TOPBAR_STATS_KEY + family[1] + '|all';
+    return TOPBAR_STATS_KEY + path + search;
+  }
+
+  function showRememberedTopbarStats() {
+    var remembered = null;
+    try { remembered = JSON.parse(sessionStorage.getItem(topbarStatsKey()) || 'null'); } catch (_err) { /* private mode */ }
+    if (!remembered || !Array.isArray(remembered.stats) || !remembered.stats.length) return;
+    setTopbarStats(remembered.stats, remembered.options);
+    _topbarStatsRemembered = true;
+    _topbarStatsClearTimer = setTimeout(clearTopbarStats, 5000);
+  }
+
+  // Off the screen only: what this URL showed stays remembered.
+  function clearTopbarStats() {
+    _topbarStatsRemembered = false;
+    clearTimeout(_topbarStatsClearTimer);
+    var el = document.getElementById('shell-topbar-stats');
+    if (el) el.innerHTML = '';
+  }
+
   function setTopbarStats(stats, options) {
     var el = document.getElementById('shell-topbar-stats');
     if (!el) return;
-    if (!stats || !stats.length) { el.innerHTML = ''; return; }
+    if (!stats || !stats.length) {
+      if (_topbarStatsRemembered) return;  // still loading: keep them for now
+      el.innerHTML = '';
+      try { sessionStorage.removeItem(topbarStatsKey()); } catch (_err) { /* private mode */ }
+      return;
+    }
+    _topbarStatsRemembered = false;
+    clearTimeout(_topbarStatsClearTimer);
+    try {
+      sessionStorage.setItem(topbarStatsKey(), JSON.stringify({ stats: stats, options: options || null }));
+    } catch (_err) { /* private mode or full */ }
     var html = '';
     if (options && options.scope) {
       html += '<span class="topbar-stats-scope"'
@@ -2062,6 +2225,7 @@
 
     // Parse current route
     _routeCtx = parseRoute();
+    _cachedMe = readCachedMe();
 
     // Build shell DOM
     var wrapper = document.createElement('div');
@@ -2072,7 +2236,7 @@
     var sidebar = document.createElement('aside');
     sidebar.className = 'sidebar';
     sidebar.id = 'qym-sidebar';
-    sidebar.dataset.userRole = '';
+    sidebar.dataset.userRole = _cachedMe ? (_cachedMe.role || '') : '';
     if (!_routeCtx.projectSlug) sidebar.classList.add('no-project');
     sidebar.innerHTML = buildSidebarHTML();
 
@@ -2125,8 +2289,19 @@
     // Set active nav
     setActiveNav(_routeCtx.page);
 
+    // The user menu as last seen, until /v1/me answers.
+    if (_cachedMe) populateUser(_cachedMe);
+
     // Render initial breadcrumbs
     renderBreadcrumbs(computeBreadcrumbs(_routeCtx));
+    showRememberedTopbarStats();
+
+    // The page's loading spots become skeletons before its first frame.
+    expandSkeletonMarkers(document);
+    watchArrivals(document);
+
+    // The shell is whole: the page shows inside it from this frame on.
+    endShellPending();
 
     // Keep the entry's saved view state across a reload, and keep saving the
     // scroll offsets while the reader scrolls (Back from the next page can
@@ -2156,12 +2331,14 @@
     try {
       var res = await fetch(apiUrl('v1/me'), { credentials: 'same-origin' });
       if (res.status === 401) {
+        forgetCachedMe();
         if (window.QymAuth) window.QymAuth.redirectToLogin();
         return;
       }
       if (!res.ok) return;
       _user = await res.json();
       _projects = _user.projects || [];
+      cacheMe(_user);
       // An archived project named in the URL opens read-only. Load it before
       // pages see the user, so they start from the right project.
       if (_routeCtx.explicitProject && !projectExists(_routeCtx.projectSlug)) {
@@ -2271,14 +2448,341 @@
     return html;
   }
 
+  // ══════════════════════════════════════════════════
+  // PAGE ARRIVAL (shell.css "PAGE ARRIVAL")
+  // ══════════════════════════════════════════════════
+
+  // Loading, timed so a quick load never flashes (shell.css "PAGE ARRIVAL"):
+  // a skeleton waits SKELETON_DELAY_MS before it fades in, so a load quicker
+  // than that shows none; one that did show stays at least SKELETON_MIN_MS;
+  // and content fades in only where a skeleton the reader saw leaves
+  // (arrive), otherwise it is simply there and only its charts move.
+  var SKELETON_DELAY_MS = 300;
+  var SKELETON_MIN_MS = 400;
+  var SKELETON_FADE_MS = 200;
+  // When the current load started: the page's navigation (0 on a full load).
+  var _loadStartedAt = 0;
+  function skeletonWait(since) {
+    return Math.round(SKELETON_DELAY_MS - (performance.now() - since)) + 'ms';
+  }
+
+  // A loading skeleton in a page's own layout: 'table' (a toolbar line and
+  // rows), 'cards' (a grid of cards), 'list' (stacked rows), 'lines' (rows
+  // inside a table or card), 'chart' (a headline and bars) or 'value' (one
+  // number). `label` is
+  // what a screen reader hears ("Loading runs…"). Its wait counts from
+  // `since` (a performance.now() time; default now), or from the page's
+  // navigation when `immediate` (one drawn after the page's first frame as
+  // part of its load, e.g. redrawn with its section: it shows when the
+  // page's other skeletons do, never blinking out and back).
+  function skeletonHTML(kind, options) {
+    var opts = options || {};
+    var bone = function (style) { return '<span class="qym-skeleton__bone"' + (style ? ' style="' + style + '"' : '') + '></span>'; };
+    var html = '';
+    var i;
+    var wrapperClass = '';
+    var wrapperStyle = '';
+    if (kind === 'value') {
+      // Inline, in the text's own line: the number replaces it without the
+      // line growing or shrinking.
+      wrapperClass = ' qym-skeleton--inline';
+      html = bone('display:inline-block;vertical-align:-0.1em;width:' + (opts.width || 64) + 'px;height:0.8em');
+    } else if (kind === 'lines') {
+      for (i = 0; i < (opts.rows || 3); i++) {
+        html += '<div class="qym-skeleton__row">' + bone('width:' + (30 + (i * 19) % 25) + '%') + bone('width:14%') + bone('width:12%;margin-left:auto') + '</div>';
+      }
+      // `height`: the content's usual height, so it neither grows nor shrinks
+      // when the rows arrive.
+      if (opts.height) wrapperStyle = 'height:' + opts.height + 'px;gap:0;justify-content:space-evenly';
+    } else if (kind === 'chart') {
+      var bars = '';
+      for (i = 0; i < (opts.count || 14); i++) {
+        bars += bone('flex:1;height:' + (28 + (i * 37) % 62) + '%;border-radius:3px 3px 1px 1px');
+      }
+      html = '<div class="qym-skeleton__row">' + bone('width:120px;height:18px') + bone('width:80px') + '</div>'
+        + '<div class="qym-skeleton__row" style="align-items:flex-end;height:' + (opts.height || 160) + 'px">' + bars + '</div>';
+    } else if (kind === 'cards') {
+      var count = opts.count || 6;
+      var cards = '';
+      for (i = 0; i < count; i++) {
+        cards += '<div class="qym-skeleton__card">'
+          + '<div class="qym-skeleton__row">' + bone('width:36px;height:36px;border-radius:8px') + bone('width:40%;height:14px') + '</div>'
+          + bone('width:70%') + bone('width:55%')
+          + '<div class="qym-skeleton__row" style="margin-top:auto">' + bone('width:30%;height:10px') + bone('width:20%;height:10px') + '</div>'
+          + '</div>';
+      }
+      html = '<div class="qym-skeleton__grid"'
+        + (opts.minWidth ? ' style="--qym-skeleton-card-min:' + opts.minWidth + 'px;--qym-skeleton-card-h:' + (opts.height || 160) + 'px"'
+          : (opts.height ? ' style="--qym-skeleton-card-h:' + opts.height + 'px"' : ''))
+        + '>' + cards + '</div>';
+    } else if (kind === 'list') {
+      for (i = 0; i < (opts.rows || 6); i++) {
+        html += '<div class="qym-skeleton__card" style="min-height:0;padding:var(--space-md)">'
+          + '<div class="qym-skeleton__row">' + bone('width:' + (38 + (i * 17) % 30) + '%;height:13px') + bone('width:12%;margin-left:auto') + '</div>'
+          + bone('width:' + (55 + (i * 23) % 35) + '%;height:10px')
+          + '</div>';
+      }
+    } else {
+      var rows = '<div class="qym-skeleton__table-row qym-skeleton__table-row--head">' + bone() + bone() + bone() + bone() + bone() + bone() + '</div>';
+      for (i = 0; i < (opts.rows || 10); i++) {
+        rows += '<div class="qym-skeleton__table-row">'
+          + bone('width:' + (55 + (i * 29) % 40) + '%') + bone('width:70%') + bone('width:60%') + bone('width:50%') + bone('width:65%') + bone('width:40%')
+          + '</div>';
+      }
+      html = (opts.toolbar === false ? '' : '<div class="qym-skeleton__row">' + bone('width:220px;height:24px') + bone('width:90px;height:24px') + bone('width:90px;height:24px') + '</div>')
+        + '<div class="qym-skeleton__table">' + rows + '</div>';
+    }
+    var since = typeof opts.since === 'number' ? opts.since : (opts.immediate ? _loadStartedAt : performance.now());
+    wrapperStyle = '--qym-skeleton-wait:' + skeletonWait(since) + (wrapperStyle ? ';' + wrapperStyle : '');
+    var tag = kind === 'value' ? 'span' : 'div';
+    return '<' + tag + ' class="qym-skeleton' + wrapperClass + '" role="status"'
+      + ' style="' + wrapperStyle + '">'
+      + '<span class="qym-skeleton__label">' + esc(opts.label || 'Loading…') + '</span>'
+      + '<' + tag + ' aria-hidden="true" style="display:contents">' + html + '</' + tag + '>'
+      + '</' + tag + '>';
+  }
+
+  // A page marks where its content will load with data-qym-skeleton="table"
+  // (or "cards" / "list"), plus data-qym-skeleton-label, -rows, -count,
+  // -height; the shell fills each with its skeleton before the page's first
+  // frame, on a full load (init) and on in-app navigation (swapPage).
+  function expandSkeletonMarkers(root) {
+    if (!root || !root.querySelectorAll) return;
+    // A heading that names the project shows the name from its first frame
+    // (the remembered one until /v1/me answers), not a placeholder title.
+    var project = _currentProject || rememberedRouteProject(_routeCtx);
+    if (project && project.name) {
+      root.querySelectorAll('[data-qym-project-name]').forEach(function (node) { node.textContent = project.name; });
+    }
+    root.querySelectorAll('[data-qym-skeleton]').forEach(function (marker) {
+      var number = function (name) { var value = parseInt(marker.getAttribute('data-qym-skeleton-' + name), 10); return value > 0 ? value : undefined; };
+      // One page, two layouts by route: data-qym-skeleton-match (a pattern
+      // on the path) picks data-qym-skeleton-match-kind instead.
+      var kind = marker.getAttribute('data-qym-skeleton');
+      var match = marker.getAttribute('data-qym-skeleton-match');
+      try {
+        if (match && new RegExp(match).test(window.location.pathname)) kind = marker.getAttribute('data-qym-skeleton-match-kind') || kind;
+      } catch (_err) { /* a bad pattern keeps the default */ }
+      marker.innerHTML = skeletonHTML(kind, {
+        since: _loadStartedAt,
+        label: marker.getAttribute('data-qym-skeleton-label') || undefined,
+        rows: number('rows'), count: number('count'), height: number('height'), minWidth: number('min-width'), width: number('width'),
+        toolbar: marker.getAttribute('data-qym-skeleton-toolbar') !== 'false',
+      });
+      marker.removeAttribute('data-qym-skeleton');
+    });
+    // A page's own skeleton (data-qym-skeleton-root) keeps the same clock.
+    root.querySelectorAll('[data-qym-skeleton-root]').forEach(function (skeleton) {
+      skeleton.style.setProperty('--qym-skeleton-wait', skeletonWait(_loadStartedAt));
+    });
+  }
+
+  // A skeleton is "shown" once its fade-in starts (after its wait).
+  document.addEventListener('animationstart', function (event) {
+    var target = event.target;
+    if (!target || !target.classList) return;
+    if (target.classList.contains('qym-skeleton') || target.hasAttribute('data-qym-skeleton-root')) {
+      target.dataset.qymShownAt = String(performance.now() - (event.elapsedTime || 0) * 1000);
+    }
+  }, true);
+  function shownFor(skeleton) {
+    return skeleton.dataset.qymShownAt ? performance.now() - Number(skeleton.dataset.qymShownAt) : 0;
+  }
+
+  // A skeleton the reader saw, leaving (`ghost`: it, or a copy of it):
+  // laid over the page at `box`, kept until it has been up SKELETON_MIN_MS,
+  // then faded out while the content fades in under it (arrive, which
+  // waits as long).
+  var _seenSkeleton = null;
+  function retireShownSkeleton(ghost, box, opacity, visibleFor) {
+    var wait = Math.max(0, Math.round(SKELETON_MIN_MS - visibleFor));
+    ghost.removeAttribute('id');
+    ghost.removeAttribute('role');
+    ghost.setAttribute('aria-hidden', 'true');
+    ghost.classList.add('qym-skeleton-leaving');
+    Object.assign(ghost.style, {
+      top: box.top + 'px', left: box.left + 'px', width: box.width + 'px',
+      animation: 'none', opacity: String(opacity),
+    });
+    document.body.appendChild(ghost);
+    ghost.getBoundingClientRect();  // commit the start opacity
+    ghost.style.opacity = wait > 0 ? '1' : '0';
+    if (wait > 0) setTimeout(function () { ghost.style.opacity = '0'; }, wait);
+    setTimeout(function () { ghost.remove(); }, wait + 260);
+    // What arrives in this same task fades in, after that wait.
+    if (!_seenSkeleton) {
+      _seenSkeleton = { wait: 0 };
+      setTimeout(function () { _seenSkeleton = null; }, 0);
+    }
+    _seenSkeleton.wait = Math.max(_seenSkeleton.wait, wait);
+  }
+
+  // A skeleton just replaced by the content (watchArrivals): laid back over
+  // its container if the reader saw it.
+  function fadeOutRemovedSkeleton(skeleton, container) {
+    var visibleFor = shownFor(skeleton);
+    var opacity = Math.min(1, visibleFor / SKELETON_FADE_MS);
+    if (opacity < 0.05) return;
+    var box = container.getBoundingClientRect();
+    var style = getComputedStyle(container);
+    retireShownSkeleton(skeleton, {
+      top: box.top + parseFloat(style.paddingTop || 0),
+      left: box.left + parseFloat(style.paddingLeft || 0),
+      width: Math.max(0, box.width - parseFloat(style.paddingLeft || 0) - parseFloat(style.paddingRight || 0)),
+    }, opacity, visibleFor);
+  }
+
+  // For a page that redraws a region in place: the skeletons on screen in
+  // it before the redraw, then those the redraw removed, laid back where
+  // they stood (as fadeOutRemovedSkeleton).
+  function noteSkeletons(root) {
+    if (!root || !root.querySelectorAll) return [];
+    return Array.prototype.map.call(root.querySelectorAll('.qym-skeleton'), function (skeleton) {
+      return { skeleton: skeleton, box: skeleton.getBoundingClientRect(), opacity: parseFloat(getComputedStyle(skeleton).opacity) || 0 };
+    }).filter(function (note) { return note.opacity >= 0.05 && note.box.width > 0; });
+  }
+  function retireRemovedSkeletons(notes) {
+    (notes || []).forEach(function (note) {
+      if (!note.skeleton.isConnected) retireShownSkeleton(note.skeleton, note.box, note.opacity, shownFor(note.skeleton));
+    });
+  }
+
+  // Containers marked data-qym-arrive arrive (QymShell.arrive) the moment
+  // the page first renders into them, i.e. when their last skeleton is
+  // replaced: no page code needed. Set up when the page's DOM is placed,
+  // before its scripts render (init; swapPage).
+  function watchArrivals(root) {
+    if (!root || !root.querySelectorAll || typeof MutationObserver !== 'function') return;
+    root.querySelectorAll('[data-qym-arrive]').forEach(function (container) {
+      if (container.dataset.qymArriveWatched || !container.querySelector('.qym-skeleton')) return;
+      container.dataset.qymArriveWatched = '1';
+      var observer = new MutationObserver(function (mutations) {
+        var removed = null;
+        mutations.forEach(function (mutation) {
+          mutation.removedNodes.forEach(function (node) {
+            if (removed || node.nodeType !== 1) return;
+            removed = node.classList.contains('qym-skeleton') ? node : node.querySelector('.qym-skeleton');
+          });
+        });
+        if (!removed || container.querySelector('.qym-skeleton')) return;
+        observer.disconnect();
+        if (container.isConnected) fadeOutRemovedSkeleton(removed, container);
+        arrive(container);
+      });
+      observer.observe(container, { childList: true, subtree: true });
+    });
+  }
+
+  // Before content replaces a skeleton: one the reader can see is laid over
+  // the page and stays its minimum, then fades out while the content fades
+  // in, so there is no blank frame between them. One still waiting to show
+  // simply goes. `container` may itself be the skeleton (a page's own, with
+  // data-qym-skeleton-root).
+  function liftSkeleton(container) {
+    var root = container || document;
+    var skeletons = [];
+    if (root.matches && root.matches('.qym-skeleton, [data-qym-skeleton-root]')) skeletons.push(root);
+    if (root.querySelectorAll) Array.prototype.push.apply(skeletons, root.querySelectorAll('.qym-skeleton'));
+    skeletons.forEach(function (skeleton) {
+      if (!skeleton.isConnected) return;
+      var opacity = parseFloat(getComputedStyle(skeleton).opacity) || 0;
+      var box = skeleton.getBoundingClientRect();
+      if (opacity < 0.05 || !box.width) return;
+      retireShownSkeleton(skeleton.cloneNode(true), box, opacity, shownFor(skeleton));
+    });
+  }
+
+  // The content's arrival, once per element per page load: its bars grow
+  // and tracks draw (shell.css); where a skeleton the reader saw just left,
+  // it also fades in, once that skeleton's minimum is up. Ends when the
+  // beat is over or at the reader's first click or key, so nothing they
+  // cause replays it. Bars that grow get their place for the left-to-right
+  // sweep.
+  var ARRIVE_MS = 700;
+  function arrive(element) {
+    if (!element || element.dataset.qymArrived) return;
+    element.dataset.qymArrived = '1';
+    element.classList.remove('qym-await');
+    var groups = new Map();
+    element.querySelectorAll('.qym-arrive-bar, .dist-chart-col .bar-fill').forEach(function (bar) {
+      var group = bar.closest('.dist-chart, [data-qym-arrive-group]') || bar.parentElement;
+      var index = groups.get(group) || 0;
+      groups.set(group, index + 1);
+      bar.style.setProperty('--qym-arrive-i', String(Math.min(index, 10)));
+    });
+    var wait = _seenSkeleton ? _seenSkeleton.wait : 0;
+    element.style.setProperty('--qym-arrive-wait', wait + 'ms');
+    if (_seenSkeleton) element.classList.add('qym-arriving--fade');
+    element.classList.add('qym-arriving');
+    var timer = null;
+    var settle = function () {
+      clearTimeout(timer);
+      element.classList.remove('qym-arriving', 'qym-arriving--fade');
+      element.style.removeProperty('--qym-arrive-wait');
+      document.removeEventListener('pointerdown', settle, true);
+      document.removeEventListener('keydown', settle, true);
+    };
+    timer = setTimeout(settle, ARRIVE_MS + wait);
+    document.addEventListener('pointerdown', settle, true);
+    document.addEventListener('keydown', settle, true);
+  }
+
+  // For a page with its own entrance (the run page): whether content
+  // arriving now replaces a skeleton the reader saw ({ wait } in ms before
+  // it fades in), or null.
+  function pendingArrival() {
+    return _seenSkeleton ? { wait: _seenSkeleton.wait } : null;
+  }
+
+  // A page whose content is built hidden behind a separate skeleton block:
+  // the skeleton goes (fading out under it if it was on screen) and the
+  // content shows and arrives.
+  function reveal(skeleton, content) {
+    if (skeleton && skeleton.isConnected) {
+      liftSkeleton(skeleton);
+      skeleton.remove();
+    }
+    if (!content) return;
+    content.hidden = false;
+    arrive(content);
+  }
+
+  // Ends an arrival now: content redrawn during it shows in its final state
+  // instead of fading and drawing again.
+  function settleArrival(element) {
+    if (element) element.classList.remove('qym-arriving');
+  }
+
+  // Both, around a page's first render of its content.
+  function arriveWith(container, render) {
+    liftSkeleton(container);
+    var result = render();
+    arrive(container);
+    return result;
+  }
+
   window.QymShell = {
     init: init,
+    skeletonHTML: skeletonHTML,
+    liftSkeleton: liftSkeleton,
+    arrive: arrive,
+    arriveWith: arriveWith,
+    watchArrivals: watchArrivals,
+    reveal: reveal,
+    settleArrival: settleArrival,
+    noteSkeletons: noteSkeletons,
+    retireRemovedSkeletons: retireRemovedSkeletons,
+    pendingArrival: pendingArrival,
+    takePrefetch: takePrefetch,
     identicon: identicon,
     identiconHTML: identiconHTML,
     datasetVersionInline: datasetVersionInline,
     datasetAliasTags: datasetAliasTags,
     getUser: function () { return _user; },
     getProject: function () { return _currentProject; },
+    // The current project, or before /v1/me answers the one this URL names
+    // as last seen ({slug, name}): for labels a page draws at once.
+    getRememberedProject: function () { return _currentProject || rememberedRouteProject(_routeCtx); },
     getPageContext: function () { return _routeCtx; },
     switchProject: switchProject,
     setTopbarStats: setTopbarStats,

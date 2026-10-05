@@ -363,7 +363,7 @@ def test_runs_badges_separate_error_types_without_changing_item_math() -> None:
     assert "run.samples > 1 ? ' across all passes' : ''" in source
     assert "const retryScope = run.samples > 1 ? ' across all passes' : ' across all items';" in source
     assert "${retryScope}" in source
-    assert "dashboard.js?v=p1-20261002" in index
+    assert "dashboard.js?v=p1-20261005-8" in index
 
 
 def test_repeat_run_rows_show_each_pass_retry_count() -> None:
@@ -450,7 +450,7 @@ def test_repeat_parent_checkbox_selects_its_current_scope() -> None:
     assert "isPartiallySelected" not in source
     assert "state.selectedRuns.delete(filePath);" in source
     assert "if (!allSelected) refs.forEach(ref => state.selectedRuns.add(ref));" in source
-    assert "dashboard.js?v=p1-20261002" in index
+    assert "dashboard.js?v=p1-20261005-8" in index
 
 
 def test_repeat_comparison_selection_expands_to_exact_passes() -> None:
@@ -1770,10 +1770,10 @@ def test_changed_route_assets_are_cache_versioned() -> None:
     assert "/static/docs.js?v=p0-20260930" in docs
     # The project-not-found page loads the same shared shell assets as the
     # dashboard pages, every one of them versioned.
-    assert '{static_root}/auth.js?v=p0-20260930"' in runs_api
     assert '{static_root}/shell.css?v=p1-20261001"' in runs_api
-    assert '{static_root}/dashboard.css?v=p1-20261002"' in runs_api
-    assert '{static_root}/shell.js?v=p1-20261001"' in runs_api
+    assert '{static_root}/auth.js?v=p1-20261005"' in runs_api
+    assert '{static_root}/dashboard.css?v=p1-20261005-3"' in runs_api
+    assert '{static_root}/shell.js?v=p1-20261005-8"' in runs_api
 
 
 def test_every_page_versions_the_shared_shell_assets() -> None:
@@ -2255,10 +2255,10 @@ def test_clear_filter_control_has_aligned_label_and_soft_count_pill() -> None:
     for page in DASHBOARD_DIR.glob("*.html"):
         source = page.read_text(encoding="utf-8")
         if page.name == "analyzer.html":
-            assert "dashboard.css?v=p1-20261002" in source
-            assert "playground.js?v=p1-20261002" in source
             assert "ui_components.css?v=p1-20261001" in source
             assert "ui_components.js?v=p1-20261001" in source
+            assert "dashboard.css?v=p1-20261005-3" in source
+            assert "playground.js?v=p1-20261005-3" in source
             continue
         if "ui_components.css?v=" in source:
             assert "ui_components.css?v=p1-20261001" in source
@@ -3463,7 +3463,7 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert '"type": "retrying"' in analysis_api
     assert "state.phase === 'retrying'" in playground
     assert "Retrying timed-out analysis…" in playground
-    assert "playground.js?v=p1-20261002" in (
+    assert "playground.js?v=p1-20261005-3" in (
         DASHBOARD_DIR / "analyzer.html"
     ).read_text(encoding="utf-8")
     assert "Timeout retries: <strong>" in playground
@@ -4187,3 +4187,16 @@ def test_category_subcategories_preserve_catalog_editing_and_approved_suggestion
     assert "categoryApprovedDetails(issue.category)" in run
     assert "await loadProjectCategoryCatalog();" in run
     assert "data-subcategory-select" not in run
+
+
+def test_signing_out_forgets_the_remembered_user() -> None:
+    """The shell paints the last /v1/me answer before the next one (shell.js
+    ME_CACHE_KEY); signing out, or a 401, clears it so the next person never
+    sees the previous user's name or Platform section."""
+    shell = (DASHBOARD_DIR / "shell.js").read_text(encoding="utf-8")
+    auth = (DASHBOARD_DIR / "auth.js").read_text(encoding="utf-8")
+    assert "var ME_CACHE_KEY = 'qym:me';" in shell
+    logout = auth.split("async function logout()", 1)[1].split("\n  }\n", 1)[0]
+    assert "localStorage.removeItem('qym:me')" in logout
+    unauthorized = shell.split("if (res.status === 401) {", 1)[1].split("}", 1)[0]
+    assert "forgetCachedMe();" in unauthorized

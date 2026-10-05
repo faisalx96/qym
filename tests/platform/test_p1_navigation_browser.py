@@ -311,6 +311,76 @@ def test_run_names_chart_labels_and_dataset_cards_are_links(app):
     assert run_link.get_attribute("href").endswith("/projects/pa/runs/run-000")
 
 
+def test_the_shell_paints_the_remembered_user_before_me_answers(app):
+    """The Platform section, the user menu and the project breadcrumb used to
+    pop in a round trip after the sidebar. The shell now paints them from the
+    last /v1/me answer, and the sidebar logo comes with the stylesheet."""
+    page = app.goto("/projects/pa")
+    _runs_ready(page)
+    remembered = page.evaluate("JSON.parse(localStorage.getItem('qym:me'))")
+    assert remembered["role"] == "ADMIN"
+    assert {"slug": "pa", "name": "Support bot"} in remembered["projects"]
+
+    held = []
+    page.route("**/v1/me", lambda route: held.append(route))  # unanswered: only memory can paint
+    page.goto("http://qym.test/projects/pa/runs/run-000", wait_until="domcontentloaded")
+    page.wait_for_selector("#qym-sidebar")
+    assert page.locator('#qym-sidebar .nav-item[data-page="admin"]').is_visible()
+    assert page.locator("#shell-user-name").inner_text() == "Dev"
+    crumbs = page.locator("#shell-breadcrumbs").inner_text()
+    assert "Support bot" in crumbs and "Runs" in crumbs and "run-000" in crumbs, crumbs
+    logo = page.evaluate("getComputedStyle(document.querySelector('.logo-icon-img')).backgroundImage")
+    assert logo.startswith('url("data:image/png;base64,'), logo[:40]
+
+    page.unroute("**/v1/me")
+    for route in held:
+        app._forward(route)
+    page.wait_for_function("() => document.getElementById('shell-breadcrumbs').innerText.includes('run-000')")
+    assert "Support bot" in page.locator("#shell-breadcrumbs").inner_text()
+
+
+def test_a_reload_keeps_the_frame_and_the_topbar_numbers_in_place(app):
+    """A list page used to paint bare (full width, no sidebar or top bar)
+    before the shell wrapped it, then blanked the top bar's numbers until
+    they reloaded. The shell's frame now stands in from the first paint, and
+    the numbers last shown at the URL stay until the page's own arrive."""
+    page = app.goto("/projects/pa")
+    _runs_ready(page)
+    page.wait_for_function("() => document.querySelector('#shell-topbar-stats .topbar-stat-value')")
+    numbers = page.locator("#shell-topbar-stats").inner_text()
+    assert page.evaluate("document.documentElement.classList.contains('qym-shell-pending')") is False
+
+    held = []
+    page.route("**/api/dashboard/runs*", lambda route: held.append(route))
+    page.reload(wait_until="domcontentloaded")
+    page.wait_for_selector("#qym-sidebar")
+    for _ in range(50):  # the page has asked for its numbers, unanswered
+        if held:
+            break
+        page.wait_for_timeout(100)
+    assert held
+    page.wait_for_timeout(300)
+    assert page.locator("#shell-topbar-stats").inner_text() == numbers
+    assert page.evaluate("document.documentElement.classList.contains('qym-shell-pending')") is False
+    # Before the shell is built, shell.css hides the page behind its frame.
+    hidden = page.evaluate("""() => {
+      const probe = document.createElement('div');
+      document.documentElement.classList.add('qym-shell-pending');
+      document.body.appendChild(probe);
+      const visibility = getComputedStyle(probe).visibility;
+      probe.remove();
+      document.documentElement.classList.remove('qym-shell-pending');
+      return visibility;
+    }""")
+    assert hidden == "hidden"
+
+    page.unroute("**/api/dashboard/runs*")
+    for route in held:
+        app._forward(route)
+    _runs_ready(page)
+    assert page.locator("#shell-topbar-stats").inner_text() == numbers
+
+
 def test_run_header_links_and_export(app):
     data = app.client.get("/api/runs/run-000?view=compact").json()["run"]
     assert (data["dataset_slug"], data["dataset_version"]) == ("golden-set", "v1")

@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Charts</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261002">
   <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261005-3">
   <script src="/static/qym_safe.js?v=p1-20261001"></script>
-  <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p1-20261001"></script>
+  <script src="/static/auth.js?v=p1-20261005"></script>
+  <script src="/static/shell.js?v=p1-20261005-8"></script>
   <script src="/static/kpis.js?v=p0-20260930"></script>
   <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261001">
   <script defer src="/static/ui_components.js?v=p1-20261001"></script>
@@ -76,10 +76,7 @@
   </div>
 
   <main class="dashboard-page-main">
-    <div id="loading" class="loading">
-      <div class="loading-spinner"></div>
-      <span>Loading charts...</span>
-    </div>
+    <div id="loading" class="loading loading--skeleton" data-qym-skeleton="cards" data-qym-skeleton-label="Loading charts…" data-qym-skeleton-count="2" data-qym-skeleton-min-width="560" data-qym-skeleton-height="300"></div>
     <div id="empty" class="empty" style="display:none;">
       <div class="empty-state">
         <div class="empty-icon">∅</div>
@@ -111,6 +108,6 @@
   <script>window.__QYM_INITIAL_VIEW__ = 'charts';</script>
   <script src="/static/runs_order.js?v=p1-20261002"></script>
   <script src="/static/metrics.js?v=p0-20260930-3"></script>
-  <script src="/static/dashboard.js?v=p1-20261002"></script>
+  <script src="/static/dashboard.js?v=p1-20261005-8"></script>
 </body>
 </html>

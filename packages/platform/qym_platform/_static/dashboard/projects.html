@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Projects</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261002">
   <link rel="stylesheet" href="/static/shell.css?v=p1-20261001">
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261005-3">
   <script src="/static/qym_safe.js?v=p1-20261001"></script>
-  <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p1-20261001"></script>
+  <script src="/static/auth.js?v=p1-20261005"></script>
+  <script src="/static/shell.js?v=p1-20261005-8"></script>
   <style>
     .projects-page { }
     .projects-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-md); margin-bottom: var(--space-lg); }
@@ -67,7 +67,7 @@
     </div>
 
     <div class="project-grid" id="project-grid">
-      <div class="empty-state" id="loading-state">Loading projects...</div>
+      <div id="loading-state" style="grid-column: 1 / -1" data-qym-skeleton="cards" data-qym-skeleton-label="Loading projects…" data-qym-skeleton-count="3" data-qym-skeleton-min-width="300" data-qym-skeleton-height="170"></div>
     </div>
   </main>
 
@@ -116,16 +116,21 @@
 
         // Show new project button for admins/managers
         const canCreate = user.role === 'ADMIN' || allProjects.some(p => p.role === 'MANAGER');
-        document.getElementById('new-project-btn').style.display = canCreate ? 'inline-flex' : 'none';
+        const newProjectButton = document.getElementById('new-project-btn');
+        newProjectButton.style.display = canCreate ? 'inline-flex' : 'none';
+        if (canCreate) window.QymShell?.arrive?.(newProjectButton);
 
         renderProjects(allProjects);
       }
 
       function renderProjects(projects) {
         const grid = document.getElementById('project-grid');
+        // The first render takes the skeleton's place (QymShell, once per load).
+        window.QymShell?.liftSkeleton?.(grid);
 
         if (!projects.length) {
           grid.innerHTML = '<div class="empty-state"><h2>No projects yet</h2><p>Create a project to get started with evaluations.</p></div>';
+          window.QymShell?.arrive?.(grid);
           return;
         }
 
@@ -151,6 +156,7 @@
             </div>
           </a>`;
         }).join('');
+        window.QymShell?.arrive?.(grid);
       }
 
       // Search

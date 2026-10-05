@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Deleted Runs</title>
   <link rel="icon" type="image/png" href="./static/qym_icon.png">
-  <link rel="stylesheet" href="./static/dashboard.css?v=p1-20261002">
   <link rel="stylesheet" href="./static/shell.css?v=p1-20261001">
+  <link rel="stylesheet" href="./static/dashboard.css?v=p1-20261005-3">
   <script src="./static/qym_safe.js?v=p1-20261001"></script>
-  <script src="./static/auth.js?v=p0-20260930"></script>
-  <script src="./static/shell.js?v=p1-20261001"></script>
+  <script src="./static/auth.js?v=p1-20261005"></script>
+  <script src="./static/shell.js?v=p1-20261005-8"></script>
   <script src="./static/qym_table.js"></script>
   <style>
     .trash-page {
@@ -134,7 +134,7 @@
         <span class="trash-selection-label" id="trash-selection-label" aria-live="polite"></span>
         <button class="qym-inline-action qym-inline-action--accent" id="trash-restore-selected" type="button" disabled>Restore selected</button>
       </div>
-      <div id="trash-content"></div>
+      <div id="trash-content" data-qym-arrive><div data-qym-skeleton="table" data-qym-skeleton-toolbar="false" data-qym-skeleton-rows="8" data-qym-skeleton-label="Loading deleted runs…"></div></div>
       <div class="trash-footer" id="trash-footer" hidden>
         <div id="trash-pagination"></div>
       </div>

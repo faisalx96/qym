@@ -195,6 +195,8 @@
     dashboardRequestKey: null,
     dashboardPinnedRuns: new Map(),
     chartHistory: new Map(),
+    // Points kept for datasets no longer open (trimChartHistory).
+    chartHistoryRowBudget: 5000,
     chartHistoryQueue: [],
     chartHistoryActive: 0,
     chartHistoryObserver: null,
@@ -566,13 +568,20 @@
     return nextWidth;
   }
 
+  // One formatter each: toLocale*String builds a new one per call, which
+  // made dates the slowest part of drawing a chart table.
+  const DATE_FORMATS = {
+    date: new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }),
+    time: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+    full: new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+  };
   function formatDate(isoStr) {
     try {
       const d = new Date(isoStr);
       return {
-        date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        time: d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
-        full: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+        date: DATE_FORMATS.date.format(d),
+        time: DATE_FORMATS.time.format(d),
+        full: DATE_FORMATS.full.format(d),
         iso: d.toISOString().split('T')[0],
       };
     } catch {
@@ -2139,7 +2148,7 @@
     return `
       <div class="${escapeHtml(cellClass)}"${titleAttr}>
         <div class="chart-mini-bar-track">
-          <div class="chart-mini-bar-fill${aggregateClass}"${modelAttr} style="width:${width}%">
+          <div class="chart-mini-bar-fill qym-arrive-track${aggregateClass}"${modelAttr} style="width:${width}%">
             <span class="chart-mini-bar-label">${escapeHtml(label)}</span>
           </div>
         </div>
@@ -2169,6 +2178,82 @@
   // ═══════════════════════════════════════════════════
   // RENDERING: CHARTS VIEW
   // ═══════════════════════════════════════════════════
+
+  // A chart card's last rendered height in this tab, by task and dataset;
+  // a card never seen yet takes the usual height of a chart.
+  const CHART_CARD_HEIGHT_KEY = 'qym:chart-card-h:';
+  function rememberedChartCardHeight(historyKey) {
+    let height = 0;
+    try { height = Number(sessionStorage.getItem(CHART_CARD_HEIGHT_KEY + historyKey)) || 0; } catch (_) { /* private mode */ }
+    return Math.max(160, Math.min(height || 520, 2400));
+  }
+  function rememberChartCardHeight(historyKey, height) {
+    if (!(height > 0)) return;
+    try { sessionStorage.setItem(CHART_CARD_HEIGHT_KEY + historyKey, String(Math.round(height))); } catch (_) { /* private mode */ }
+  }
+
+  // A chart section is patched in place to match its new markup. Nodes
+  // match by tag, component (first) class, id and keys; a match keeps its
+  // element and takes the new attributes and children, anything else is
+  // replaced. What the page adds at runtime stays: qym-* classes,
+  // data-qym-* attributes and --qym-* style properties.
+  function chartNodeIdentity(node) {
+    if (node.nodeType !== 1) return String(node.nodeType);
+    return [node.tagName, node.classList[0] || '', node.id, node.getAttribute('data-morph-key') || '',
+      node.getAttribute('data-qym-segmented-key') || ''].join('\u0001');
+  }
+  const chartStyleScratch = document.createElement('div');
+  function morphChartAttributes(from, to) {
+    const toAttributes = to.attributes;
+    if (from.attributes.length === toAttributes.length) {
+      let same = true;
+      for (let i = 0; same && i < toAttributes.length; i++) same = from.getAttribute(toAttributes[i].name) === toAttributes[i].value;
+      if (same) return;
+    }
+    Array.from(from.attributes).forEach(({ name }) => {
+      if (name === 'class' || name === 'style' || name.startsWith('data-qym-') || to.hasAttribute(name)) return;
+      from.removeAttribute(name);
+    });
+    Array.from(to.attributes).forEach(({ name, value }) => {
+      if (name !== 'class' && name !== 'style' && from.getAttribute(name) !== value) from.setAttribute(name, value);
+    });
+    const classes = Array.from(to.classList)
+      .concat(Array.from(from.classList).filter(name => name.startsWith('qym-') && !to.classList.contains(name)))
+      .join(' ');
+    if (Array.from(from.classList).join(' ') !== classes) {
+      if (classes) from.setAttribute('class', classes);
+      else from.removeAttribute('class');
+    }
+    const runtimeStyle = Array.from(from.style).filter(prop => prop.startsWith('--qym-'));
+    let style = to.getAttribute('style');
+    if (runtimeStyle.length) {
+      chartStyleScratch.setAttribute('style', style || '');
+      runtimeStyle.forEach(prop => chartStyleScratch.style.setProperty(prop, from.style.getPropertyValue(prop)));
+      style = chartStyleScratch.getAttribute('style');
+    }
+    if (from.getAttribute('style') !== style) {
+      if (style == null) from.removeAttribute('style');
+      else from.setAttribute('style', style);
+    }
+  }
+  function morphChartNode(from, to) {
+    if (from.nodeType !== 1) {
+      if (from.nodeValue !== to.nodeValue) from.nodeValue = to.nodeValue;
+      return from;
+    }
+    morphChartAttributes(from, to);
+    const fromKids = Array.from(from.childNodes);
+    const toKids = Array.from(to.childNodes);
+    toKids.forEach((toKid, index) => {
+      const fromKid = fromKids[index];
+      if (!fromKid) from.appendChild(toKid);
+      else if (fromKid.isEqualNode(toKid)) return;
+      else if (chartNodeIdentity(fromKid) === chartNodeIdentity(toKid)) morphChartNode(fromKid, toKid);
+      else from.replaceChild(toKid, fromKid);
+    });
+    fromKids.slice(toKids.length).forEach(kid => kid.remove());
+    return from;
+  }
 
   function renderChartsView() {
     // A column's first sort direction: names A-Z, numbers highest first. The
@@ -2233,7 +2318,7 @@
 
     // Render chart cards - one per task, with dataset tabs
     const gridEl = el('charts-grid');
-    gridEl.innerHTML = (chartData.tasks || []).map((taskGroup, taskIndex) => {
+    const sectionHtml = (chartData.tasks || []).map((taskGroup, taskIndex) => {
       const taskName = taskGroup.task;
       const datasets = taskGroup.datasets;
       const totalTaskRuns = datasets.reduce((s, d) => s + d.totalRuns, 0);
@@ -2277,10 +2362,10 @@
             <div class="chart-card">
               ${datasetTabsHtml}
               <div class="chart-card-body" id="${chartPanelId}" role="tabpanel" aria-labelledby="${activeDatasetTabId}">
-                <div class="chart-no-data" data-chart-history="${encodeURIComponent(historyKey)}" role="status">
+                ${failed || !window.QymShell?.skeletonHTML ? `<div class="chart-no-data" data-chart-history="${encodeURIComponent(historyKey)}" role="status">
                   ${failed ? 'Could not load chart history.' : 'Loading chart history…'}
                   ${failed ? `<button type="button" class="qym-inline-action" data-chart-history-retry="${encodeURIComponent(historyKey)}">Retry</button>` : ''}
-                </div>
+                </div>` : `<div class="chart-history-loading" data-chart-history="${encodeURIComponent(historyKey)}" style="min-height:${rememberedChartCardHeight(historyKey)}px">${window.QymShell.skeletonHTML('list', { label: 'Loading chart history…', rows: 4, immediate: true, since: state.chartTabSwitchAt?.[taskName] })}</div>`}
               </div>
             </div>
           </div>`;
@@ -2495,23 +2580,23 @@
         const isActive = sortState.key === key;
         const arrow = isActive ? (sortState.dir === 'desc' ? '\u2193' : '\u2191') : '';
         const title = `${label} for grouped runs`;
-        return `<span class="chart-col-header chart-group-stat-header sortable-col ${isActive ? 'active' : ''}" data-card="${cardId}" data-sort="${escapeHtml(key)}" title="${escapeHtml(title)}"><span class="chart-col-header-label">${escapeHtml(label)}</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
+        return `<span class="chart-col-header chart-group-stat-header sortable-col ${isActive ? 'active' : ''}" role="button" tabindex="0" data-card="${cardId}" data-sort="${escapeHtml(key)}" title="${escapeHtml(title)}"><span class="chart-col-header-label">${escapeHtml(label)}</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
       }).join('');
       const headerCells = displayColumns.map(column => {
         if (column === AVG_LATENCY_COLUMN_KEY) {
           const isActive = sortState.key === 'latency';
           const arrow = isActive ? (sortState.dir === 'desc' ? '\u2193' : '\u2191') : '';
-          return `<span class="chart-col-header chart-col-header-latency sortable-col ${isActive ? 'active' : ''}" data-card="${cardId}" data-sort="latency" title="Avg Latency"><span class="chart-col-header-label">\u26A1 Avg Latency</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
+          return `<span class="chart-col-header chart-col-header-latency sortable-col ${isActive ? 'active' : ''}" role="button" tabindex="0" data-card="${cardId}" data-sort="latency" title="Avg Latency"><span class="chart-col-header-label">\u26A1 Avg Latency</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
         }
         if (column === MEDIAN_LATENCY_COLUMN_KEY) {
           const isActive = sortState.key === 'median-latency';
           const arrow = isActive ? (sortState.dir === 'desc' ? '\u2193' : '\u2191') : '';
-          return `<span class="chart-col-header chart-col-header-latency sortable-col ${isActive ? 'active' : ''}" data-card="${cardId}" data-sort="median-latency" title="Median Latency"><span class="chart-col-header-label">\u26A1 Median Latency</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
+          return `<span class="chart-col-header chart-col-header-latency sortable-col ${isActive ? 'active' : ''}" role="button" tabindex="0" data-card="${cardId}" data-sort="median-latency" title="Median Latency"><span class="chart-col-header-label">\u26A1 Median Latency</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
         }
         const label = getMetricDisplayName(column);
         const isActive = sortState.key === column;
         const arrow = isActive ? (sortState.dir === 'desc' ? '\u2193' : '\u2191') : '';
-        return `<span class="chart-col-header sortable-col ${isActive ? 'active' : ''}" data-card="${cardId}" data-sort="${escapeHtml(column)}" title="${escapeHtml(label)}"><span class="chart-col-header-label">${escapeHtml(label)}</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
+        return `<span class="chart-col-header sortable-col ${isActive ? 'active' : ''}" role="button" tabindex="0" data-card="${cardId}" data-sort="${escapeHtml(column)}" title="${escapeHtml(label)}"><span class="chart-col-header-label">${escapeHtml(label)}</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
       }).join('');
 
       function renderMetricValueCell(metricName, value, modelIdx, isAggregate = false) {
@@ -3021,7 +3106,7 @@
         <div class="chart-table-shell">
           ${controlsHtml}
           <div class="chart-table-scroll">
-            <div class="chart-table ${isGrouped ? 'chart-table-grouped' : ''}" data-card-id="${cardId}">
+            <div class="chart-table ${isGrouped ? 'chart-table-grouped' : ''}" data-card-id="${cardId}" data-morph-key="${encodeURIComponent(historyKey)}|${isGrouped ? groupMode : 'run'}">
               <div class="chart-table-header">
                 ${firstColHtml}
                 ${showGroupStatColumns ? groupStatHeaderCells : ''}
@@ -3043,18 +3128,87 @@
             </div>
           <div class="chart-card">
             ${datasetTabsHtml}
-            <div class="chart-card-body" id="${chartPanelId}" role="tabpanel" aria-labelledby="${activeDatasetTabId}">
+            <div class="chart-card-body" id="${chartPanelId}" role="tabpanel" aria-labelledby="${activeDatasetTabId}" data-history-key="${encodeURIComponent(historyKey)}">
               ${metricChartsHtml}
             </div>
           </div>
         </div>
       `;
-    }).join('');
+    });
+
+    // A task section whose markup changed is patched in place, the others
+    // are left as they are. Its toggles and dataset tabs keep their elements
+    // (the active pill slides over), its scroll and focus stay; its table is
+    // keyed by dataset and row mode, so switching either draws a new one,
+    // while a sort or a group collapse updates the rows it has.
+    const previousSections = new Map(Array.from(gridEl.children)
+      .filter(node => node.dataset && node.dataset.chartTask)
+      .map(node => [node.dataset.chartTask, node]));
+    const tablesBefore = new Set(gridEl.querySelectorAll('.chart-table'));
+    const skeletonsBefore = window.QymShell?.noteSkeletons?.(gridEl) || [];
+    const barCellsBefore = new Set(Array.from(gridEl.querySelectorAll('.chart-mini-bar-track'), track => track.parentElement));
+    const touchedSections = [];
+    const sections = sectionHtml.map((html, index) => {
+      if (!html) return null;
+      const key = String((chartData.tasks || [])[index]?.task ?? index);
+      const kept = previousSections.get(key);
+      if (kept && kept._qymChartHtml === html) return kept;
+      const template = document.createElement('template');
+      template.innerHTML = html.trim();
+      let node = template.content.firstElementChild;
+      if (!node) return null;
+      node.dataset.chartTask = key;
+      if (kept && chartNodeIdentity(kept) === chartNodeIdentity(node)) node = morphChartNode(kept, node);
+      node._qymChartHtml = html;
+      touchedSections.push(node);
+      return node;
+    }).filter(Boolean);
+    const wanted = new Set(sections);
+    Array.from(gridEl.childNodes).forEach(node => { if (!wanted.has(node)) node.remove(); });
+    sections.forEach((node, index) => {
+      if (gridEl.children[index] !== node) gridEl.insertBefore(node, gridEl.children[index] || null);
+    });
+    const touchedAll = selector => touchedSections.flatMap(node => Array.from(node.querySelectorAll(selector)));
+    // A history skeleton the reader saw leaves under its chart (QymShell).
+    window.QymShell?.retireRemovedSkeletons?.(skeletonsBefore);
+    // Listeners go on each element once, however many renders it lives through.
+    state.chartWired = state.chartWired || new Map();
+    const freshAll = selector => {
+      if (!state.chartWired.has(selector)) state.chartWired.set(selector, new WeakSet());
+      const wired = state.chartWired.get(selector);
+      return touchedAll(selector).filter(element => {
+        if (wired.has(element)) return false;
+        wired.add(element);
+        return true;
+      });
+    };
+
+    // A table drawn new (its history arrived, or another dataset or row
+    // mode) fades in and draws its bars, on its own beat: the view's
+    // arrival may end while those bars are still drawing. Only the tables
+    // of the first render are left to the view's arrival, which follows it.
+    // So does a bar that appears in a table already shown (a group's stats
+    // coming in after it); a bar that was there slides to its new length.
+    const chartsView = el('charts-view');
+    touchedAll('.chart-table').forEach(table => {
+      if (tablesBefore.has(table)) {
+        table.querySelectorAll('.chart-mini-bar-track').forEach(track => {
+          if (!barCellsBefore.has(track.parentElement)) window.QymShell?.arrive?.(track.parentElement);
+        });
+      } else if (!chartsView || chartsView.dataset.qymArrived) {
+        window.QymShell?.arrive?.(table);
+      }
+    });
+    // Each card's height with its chart, so its loading skeleton next time
+    // takes the same room and the cards below do not jump when it arrives.
+    touchedAll('.chart-card-body[data-history-key]').forEach(body => {
+      rememberChartCardHeight(decodeURIComponent(body.dataset.historyKey), body.offsetHeight);
+    });
 
     observeChartHistory();
 
     // Wire up click events for run labels
-    gridEl.querySelectorAll('.chart-bar-label.clickable-run').forEach(label => {
+    freshAll('.chart-bar-label.clickable-run').forEach(label => {
       label.addEventListener('click', (e) => {
         if (isModifiedEvent(e)) return; // native new tab / window
         const target = e.target.closest('.chart-bar-label');
@@ -3067,7 +3221,7 @@
     });
 
     // Wire up sortable column headers
-    gridEl.querySelectorAll('.sortable-col').forEach(header => {
+    freshAll('.sortable-col').forEach(header => {
       if (header.tagName !== 'BUTTON') {
         header.setAttribute('role', 'button');
         header.tabIndex = 0;
@@ -3092,7 +3246,7 @@
     });
 
     // Wire up segmented control (Run / Version / Model)
-    gridEl.querySelectorAll('.chart-segment-btn').forEach(btn => {
+    freshAll('.chart-segment-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const control = e.currentTarget.closest('.chart-segment-control');
         const cardId = control?.dataset.card;
@@ -3121,7 +3275,7 @@
     });
 
     // Wire up group expand/collapse
-    gridEl.querySelectorAll('.chart-table-group-header').forEach(header => {
+    freshAll('.chart-table-group-header').forEach(header => {
       header.addEventListener('click', () => {
         const groupId = header.dataset.groupId;
         const card = header.closest('.chart-table')?.dataset.cardId;
@@ -3136,7 +3290,7 @@
     });
 
     // Wire up expand/collapse all buttons
-    gridEl.querySelectorAll('.chart-expand-collapse-btn').forEach(btn => {
+    freshAll('.chart-expand-collapse-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const cardId = btn.dataset.card;
         const card = btn.closest('.chart-card');
@@ -3157,13 +3311,41 @@
     });
 
     // Wire up dataset tab clicks
-    gridEl.querySelectorAll('.chart-dataset-tab').forEach(tab => {
+    freshAll('.chart-dataset-tab').forEach(tab => {
       tab.addEventListener('click', () => {
         const taskName = tab.dataset.task;
         const dataset = tab.dataset.dataset;
         if (taskName && dataset) {
           state.chartDatasetTab[taskName] = dataset;
-          renderChartsView();
+          clearTimeout(state.chartSwitchTimer);
+          const historyKey = JSON.stringify([taskName, dataset]);
+          const history = state.chartHistory.get(historyKey);
+          if (!usesDashboardSummary()) {
+            renderChartsView();
+          } else if (history?.status === 'ready') {
+            applyChartHistory();
+          } else {
+            // A chart still to load: the tab moves now and the last chart
+            // stays until the new one lands, dimmed if that takes a moment
+            // (the switch's own loading sign); only a load still going after
+            // a second gives it up for the skeleton.
+            tab.closest('.chart-dataset-tabs')?.querySelectorAll('.chart-dataset-tab').forEach(other => {
+              other.classList.toggle('active', other === tab);
+              other.setAttribute('aria-selected', String(other === tab));
+            });
+            const section = tab.closest('[data-chart-task]');
+            if (section) section._qymChartHtml = null; // edited by hand: the next render patches it
+            section?.querySelector('.chart-card-body')?.classList.add('is-switching');
+            if (history?.status === 'error') state.chartHistory.delete(historyKey);
+            // Until then a redraw's skeleton for it waits its usual time.
+            (state.chartTabSwitchAt ||= {})[taskName] = performance.now();
+            enqueueChartHistory(historyKey);
+            state.chartSwitchTimer = setTimeout(() => {
+              if (state.chartDatasetTab[taskName] !== dataset || state.chartHistory.get(historyKey)?.status === 'ready') return;
+              state.chartTabSwitchAt[taskName] = performance.now() - 300; // fades in now
+              renderChartsView();
+            }, 1000);
+          }
           const replacement = Array.from(document.querySelectorAll('.chart-dataset-tab')).find(candidate =>
             candidate.dataset.task === taskName && candidate.dataset.dataset === dataset
           );
@@ -3176,7 +3358,7 @@
     });
 
     // Wire up first-column resize handles
-    gridEl.querySelectorAll('.chart-col-resizer').forEach(handle => {
+    freshAll('.chart-col-resizer').forEach(handle => {
       handle.addEventListener('dblclick', (e) => {
         e.preventDefault();
         applyChartFirstColWidth(CHART_FIRST_COL_DEFAULT_WIDTH);
@@ -5366,6 +5548,9 @@
       return;
     }
 
+    // The first content takes the loading skeleton's place in one crossfade
+    // (QymShell.liftSkeleton / arrive, once per page load).
+    if (loading.style.display !== 'none') window.QymShell?.liftSkeleton?.(loading);
     loading.style.display = 'none';
 
     const runs = filterRuns();
@@ -5390,6 +5575,7 @@
       }
       empty.style.display = 'flex';
       hideViews();
+      window.QymShell?.arrive?.(empty);
       return;
     }
 
@@ -5443,6 +5629,7 @@
         renderModelsView();
         break;
     }
+    window.QymShell?.arrive?.({ charts: chartsView, table: tableView, models: modelsView }[state.currentView]);
 
     renderStatsBar();
     renderStatusBar();
@@ -5546,6 +5733,13 @@
     const renderToken = (mvs.renderToken || 0) + 1;
     const scopeKey = getTableFilterKey();
     mvs.renderToken = renderToken;
+    // The view's first frame shows the cards' shape while the candidates
+    // load; what comes next takes its place in one fade (QymShell).
+    if (modelsGrid && !modelsGrid.childElementCount && window.QymShell?.skeletonHTML) {
+      // The grid's own columns would squeeze it: it spans them all.
+      modelsGrid.innerHTML = '<div style="grid-column: 1 / -1">'
+        + window.QymShell.skeletonHTML('cards', { label: 'Loading models…', count: 6, minWidth: 320, height: 260, immediate: true }) + '</div>';
+    }
     let candidates = null;
     if (usesDashboardSummary()) {
       try {
@@ -5576,7 +5770,11 @@
 
     // If no task+dataset selected, show empty state
     if (!selectedTask || !selectedDataset) {
-      if (modelsEmpty) modelsEmpty.style.display = 'flex';
+      window.QymShell?.liftSkeleton?.(modelsGrid);
+      if (modelsEmpty) {
+        modelsEmpty.style.display = 'flex';
+        window.QymShell?.arrive?.(modelsEmpty);
+      }
       if (modelsGrid) modelsGrid.innerHTML = '';
       if (modelsRanking) modelsRanking.style.display = 'none';
       if (modelsStatVisibilityWrapper) modelsStatVisibilityWrapper.style.display = 'none';
@@ -5594,7 +5792,9 @@
     });
 
     if (matchingRuns.length === 0) {
+      window.QymShell?.liftSkeleton?.(modelsGrid);
       if (modelsGrid) modelsGrid.innerHTML = '<div class="models-empty"><h3>No runs found</h3><p>No runs match the selected task and dataset</p></div>';
+      window.QymShell?.arrive?.(modelsGrid);
       if (modelsRanking) modelsRanking.style.display = 'none';
       if (modelsStatVisibilityWrapper) modelsStatVisibilityWrapper.style.display = 'none';
       return;
@@ -5690,7 +5890,11 @@
     }
 
     // Show loading state only when the Models payload actually needs to change.
-    if (modelsGrid) modelsGrid.innerHTML = '<div class="models-loading"><img src="/static/qym_icon.png" alt="" class="loading-icon" /><span>Loading run data...</span></div>';
+    if (modelsGrid) {
+      modelsGrid.innerHTML = window.QymShell?.skeletonHTML
+        ? '<div style="grid-column: 1 / -1">' + window.QymShell.skeletonHTML('cards', { label: 'Loading models…', count: 6, minWidth: 320, height: 260 }) + '</div>'
+        : '<div class="models-loading"><img src="/static/qym_icon.png" alt="" class="loading-icon" /><span>Loading run data...</span></div>';
+    }
 
     let combinedRunsPromise = null;
     if (mvs.inFlightRequestKey === requestKey && mvs.inFlightRequestPromise) {
@@ -6049,6 +6253,8 @@
       return better ? -better : String(a).localeCompare(String(b));
     });
 
+    // The first cards take the skeleton's place (QymShell, once per load).
+    window.QymShell?.liftSkeleton?.(container);
     container.innerHTML = models.map((model, idx) => {
       const stats = mvs.modelStats[model];
       const color = CHART_COLORS[idx % CHART_COLORS.length];
@@ -6167,7 +6373,7 @@
 
           ${showDistribution ? `<div class="model-stat-box-wide">
             <div class="stat-title">Correct Distribution ${infoIcon(tooltips.correctDist)}</div>
-            <div class="distribution-bar">${distBar}</div>
+            <div class="distribution-bar qym-arrive-track">${distBar}</div>
             <div class="distribution-legend">
               <span class="dist-legend-item"><span style="color:var(--error)">■</span> 0 runs</span>
               <span class="dist-legend-item"><span style="color:var(--warning)">■</span> 1-${K-1} runs</span>
@@ -6182,6 +6388,7 @@
         </div>
       `;
     }).join('');
+    window.QymShell?.arrive?.(container);
 
     // Wire up event listeners
     container.querySelectorAll('.customize-btn').forEach(btn => {
@@ -7463,7 +7670,9 @@
       clearRunsStale();
       const loading = el('loading');
       if (loading && !state.runsEverLoaded) {
-        loading.innerHTML = '<div class="loading-spinner"></div><span>Loading runs...</span>';
+        loading.innerHTML = window.QymShell?.skeletonHTML
+          ? window.QymShell.skeletonHTML('table', { label: 'Loading runs…', toolbar: false })
+          : '<div class="loading-spinner"></div><span>Loading runs...</span>';
       }
       fetchRuns({ refreshAllPages: true });
     };
@@ -7810,33 +8019,85 @@
     state.tableFilterKey = getTableFilterKey();
     state.runsFetchMeta.totalCount = overview.total_count;
     const tasks = {};
-    for (const entry of state.chartHistory.values()) if (entry.status === 'ready') {
+    for (const entry of openChartHistoryEntries()) {
       for (const row of entry.rows) ((tasks[row.task_name] ||= {})[row.model_name || ''] ||= []).push(row);
     }
     _applyRunsData({ tasks, project: state.currentProject, total_count: overview.total_count });
     renderDashboardFreshness(overview.freshness);
   }
 
+  // Each task's open dataset (its selected tab, else its first).
+  function openChartDataset(task) {
+    return state.chartDatasetTab[task] || state.dashboardOverview?.chart_data?.tasks?.find(t => t.task === task)?.datasets?.[0]?.dataset;
+  }
+  function openChartHistoryEntries() {
+    return Array.from(state.chartHistory.values()).filter(entry => {
+      if (entry.status !== 'ready') return false;
+      const [task, dataset] = JSON.parse(entry.key);
+      return dataset === openChartDataset(task);
+    });
+  }
+
+  // Complete points are kept for the open charts and, within a row budget,
+  // for the datasets shown last, so going back to a tab redraws at once
+  // instead of loading again; a dataset still loading that is no longer
+  // open is dropped.
+  function trimChartHistory() {
+    let rows = 0;
+    const closed = [];
+    for (const [key, entry] of state.chartHistory) {
+      const [task, dataset] = JSON.parse(key);
+      if (dataset === openChartDataset(task)) rows += entry.rows.length;
+      else if (entry.status === 'ready') closed.push(entry);
+      else {
+        entry.controller?.abort();
+        state.chartHistory.delete(key);
+      }
+    }
+    closed.sort((a, b) => (b.shownAt || 0) - (a.shownAt || 0)).forEach(entry => {
+      rows += entry.rows.length;
+      if (rows > state.chartHistoryRowBudget) state.chartHistory.delete(entry.key);
+    });
+  }
+
+  // The page reads the open datasets' points and draws them.
+  function applyChartHistory() {
+    trimChartHistory();
+    const open = openChartHistoryEntries();
+    const now = performance.now();
+    open.forEach(entry => { entry.shownAt = now; });
+    const loadedRuns = open.flatMap(entry => entry.rows);
+    reconcilePassVersions(loadedRuns);
+    state.flatRuns = loadedRuns;
+    state.chartData = buildDashboardChartData();
+    render();
+  }
+
+  function enqueueChartHistory(key) {
+    if (state.chartHistory.has(key)) return;
+    const entry = { status: 'queued', controller: new AbortController(), rows: [], key };
+    state.chartHistory.set(key, entry);
+    state.chartHistoryQueue.push(entry);
+    drainChartHistory();
+  }
+
   function observeChartHistory() {
     state.chartHistoryObserver?.disconnect();
     if (!usesDashboardSummary()) return;
-    const enqueue = node => {
-      const key = decodeURIComponent(node.dataset.chartHistory);
-      if (state.chartHistory.has(key)) return;
-      const entry = { status: 'queued', controller: new AbortController(), rows: [], key };
-      state.chartHistory.set(key, entry);
-      state.chartHistoryQueue.push(entry);
-      drainChartHistory();
-    };
+    const enqueue = node => enqueueChartHistory(decodeURIComponent(node.dataset.chartHistory));
     state.chartHistoryObserver = new IntersectionObserver(entries => {
       for (const entry of entries) if (entry.isIntersecting) enqueue(entry.target);
     }, { rootMargin: '200px' });
     document.querySelectorAll('[data-chart-history]').forEach(node => state.chartHistoryObserver.observe(node));
-    document.querySelectorAll('[data-chart-history-retry]').forEach(button => button.addEventListener('click', () => {
-      const key = decodeURIComponent(button.dataset.chartHistoryRetry);
-      state.chartHistory.delete(key);
-      enqueue(button.closest('[data-chart-history]'));
-    }));
+    document.querySelectorAll('[data-chart-history-retry]').forEach(button => {
+      if (button._qymRetryWired) return; // a patched card keeps its button
+      button._qymRetryWired = true;
+      button.addEventListener('click', () => {
+        const key = decodeURIComponent(button.dataset.chartHistoryRetry);
+        state.chartHistory.delete(key);
+        enqueue(button.closest('[data-chart-history]'));
+      });
+    });
   }
 
   async function drainChartHistory() {
@@ -7864,21 +8125,7 @@
           }
           if (entry.controller.signal.aborted || requestKey !== state.dashboardRequestKey || state.chartHistory.get(entry.key) !== entry) return;
           entry.status = 'ready';
-          // Keep complete points for the opened chart; unopened datasets are
-          // summary-only. Drop earlier datasets when switching a task's tab.
-          for (const [key, cached] of state.chartHistory) {
-            const [cachedTask, cachedDataset] = JSON.parse(key);
-            const active = state.chartDatasetTab[cachedTask] || state.dashboardOverview?.chart_data?.tasks?.find(t => t.task === cachedTask)?.datasets?.[0]?.dataset;
-            if (cachedDataset !== active) {
-              cached.controller?.abort();
-              state.chartHistory.delete(key);
-            }
-          }
-          const loadedRuns = Array.from(state.chartHistory.values()).filter(item => item.status === 'ready').flatMap(item => item.rows);
-          reconcilePassVersions(loadedRuns);
-          state.flatRuns = loadedRuns;
-          state.chartData = buildDashboardChartData();
-          render();
+          applyChartHistory();
         } catch (error) {
           if (error.name === 'AbortError' || !dashboardActive || requestKey !== state.dashboardRequestKey) return;
           entry.status = 'error';

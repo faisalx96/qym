@@ -1502,6 +1502,13 @@ main {
   color: var(--text-muted);
 }
 
+/* A page's loading skeleton (QymShell.skeletonHTML) fills the width. */
+.loading.loading--skeleton {
+  align-items: stretch;
+  justify-content: flex-start;
+  height: auto;
+}
+
 .loading-spinner {
   width: 24px;
   height: 24px;
@@ -1699,6 +1706,14 @@ main {
 
 .chart-card-body {
   padding: var(--space-lg);
+}
+
+/* A dataset tab whose chart is still loading: the last chart stays until
+   the new one arrives (renderChartsView patches the class away), dimmed
+   only if that takes a moment, so a quick switch never flickers. */
+.chart-card-body.is-switching .chart-table-shell {
+  opacity: 0.5;
+  transition: opacity 0.2s ease-out 0.15s;
 }
 
 /* Dataset tabs (flush inside card top) */
