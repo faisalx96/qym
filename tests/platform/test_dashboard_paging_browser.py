@@ -20,15 +20,6 @@ STATIC = (
 pytestmark = pytest.mark.browser
 
 
-@pytest.fixture(scope="module")
-def browser():
-    api = pytest.importorskip("playwright.sync_api")
-    with api.sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
-        yield browser
-        browser.close()
-
-
 def make_runs(count=123):
     now = datetime.now(timezone.utc)
     return [
@@ -410,6 +401,9 @@ def test_keyboard_page_boundary_and_filtered_empty(dashboard):
 
 
 def test_charts_load_complete_open_dataset_history_and_evict_hidden_tab(browser):
+    """The open tab's points load in full; a tab left keeps its points
+    within the row budget (going back makes no request) and drops them
+    beyond it."""
     rows = make_runs(650)
     for row in rows:
         row["task_name"] = "task"
@@ -437,10 +431,31 @@ def test_charts_load_complete_open_dataset_history_and_evict_hidden_tab(browser)
             "() => window.__dashboardTest.state.flatRuns.length === 50"
         )
         assert page.locator(".chart-bar-label.clickable-run").count() == 50
-        assert page.evaluate("window.__dashboardTest.state.chartHistory.size") == 1
+        assert page.evaluate("window.__dashboardTest.state.chartHistory.size") == 2
         assert (
             page.evaluate("window.__dashboardTest.state.aggregations.totalRuns") == 650
         )
+
+        def point_request_count():
+            return sum(1 for path, _ in view.requests if path.endswith("/points"))
+
+        requests_before = point_request_count()
+        page.locator('[data-dataset="Opened"]').click()
+        page.wait_for_function(
+            "() => window.__dashboardTest.state.flatRuns.length === 600"
+        )
+        assert page.locator(".chart-bar-label.clickable-run").count() == 600
+        assert point_request_count() == requests_before
+
+        # Beyond the budget the tab left drops its points.
+        page.evaluate("window.__dashboardTest.state.chartHistoryRowBudget = 100")
+        page.locator('[data-dataset="Hidden"]').click()
+        page.wait_for_function(
+            "() => window.__dashboardTest.state.flatRuns.length === 50"
+        )
+        assert page.evaluate(
+            "Array.from(window.__dashboardTest.state.chartHistory.keys())"
+        ) == ['["task","Hidden"]']
     finally:
         view.close()
 
@@ -503,3 +518,38 @@ def test_runs_and_charts_use_actual_post_api_scope_sort_and_selection(
             assert not any(path == "/api/runs" for path, _ in chart.requests)
         finally:
             chart.close()
+
+
+def test_charts_sort_by_another_column_on_the_first_click(browser):
+    """The sort-direction helper lived inside each card's render, out of the
+    header click handler's reach: the first click threw and left the sort
+    half-changed (the new column with the old direction)."""
+    rows = make_runs(6)
+    for i, row in enumerate(rows):
+        row["metrics"] = ["accuracy", "faithfulness"]
+        row["metric_averages"] = {"accuracy": i / 10, "faithfulness": (6 - i) / 10}
+        row["metric_specs"]["faithfulness"] = {"score_type": "continuous", "direction": "maximize"}
+    view = DashboardFixture(browser, view="charts", runs=rows)
+    try:
+        view.open()
+        page = view.page
+        header = page.locator('.sortable-col[data-sort="faithfulness"]').first
+        header.wait_for()
+        card = header.get_attribute("data-card")
+        header.click()
+        page.wait_for_function(
+            f"() => (window.__dashboardTest.state.chartSortState[{card!r}] || {{}}).key === 'faithfulness'"
+        )
+        # A metric column starts highest first, whatever the previous column did.
+        assert page.evaluate(f"window.__dashboardTest.state.chartSortState[{card!r}]") == {
+            "key": "faithfulness",
+            "dir": "desc",
+        }
+        page.locator('.sortable-col[data-sort="model"]').first.click()
+        assert page.evaluate(f"window.__dashboardTest.state.chartSortState[{card!r}]") == {
+            "key": "model",
+            "dir": "asc",
+        }
+        assert view.errors == []
+    finally:
+        view.close()

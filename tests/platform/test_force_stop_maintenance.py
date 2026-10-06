@@ -1,17 +1,24 @@
 """Compatibility checks: PR47 maintenance responses and local SDK closure."""
 
-import json
 import threading
 from urllib.error import HTTPError
 
 import pytest
 
-from test_run_lifecycle import client, session_factory, _seed_run, _ui_headers
+from test_run_lifecycle import _configure_env, _seed_run, _ui_headers
 from qym_platform.api import ingest
 from qym_platform.db.models import Run, RunEvent, RunWorkflowStatus
 from qym_platform.settings import PlatformSettings
 from qym.platform import client as sdk_client
 from qym.platform.client import PlatformEventStream
+from _helpers import sqlite_session_factory
+
+
+@pytest.fixture()
+def session_factory(monkeypatch):
+    _configure_env(monkeypatch)
+    with sqlite_session_factory() as factory:
+        yield factory
 
 
 @pytest.mark.parametrize("force_stop", [False, True])
@@ -82,16 +89,5 @@ def test_maintenance_and_terminal_closure_coexist(
             else:
                 assert run.status == RunWorkflowStatus.RUNNING
                 assert count == 1
-        print(
-            json.dumps(
-                {
-                    "force_stop": force_stop,
-                    "responses": responses,
-                    "remote_closed": stream._remote_closed.is_set(),
-                    "sent": stream.sent_events,
-                    "dropped": stream.dropped_events,
-                }
-            )
-        )
     finally:
         stream.close()

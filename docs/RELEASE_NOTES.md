@@ -1,3 +1,66 @@
+# Unreleased — Evaluation Service and private test sets
+
+## Before you update
+
+- **Migrations `0072`–`0082` (head `0082`).** Evaluation Service environments, experiments, presets and best-run scores, filterable run versioning, admin-only private test sets and dataset read tokens. All are quick DDL. These revisions were numbered `0060`–`0070` before `main`'s `0060`–`0071` were merged; a database stamped with one of the old ids needs the one-time re-stamp in `docs/internal/OPERATIONS.md` ("Databases that ran the pre-merge eval branch").
+
+# October 2026 — Platform 0.5.0 (SDK 1.8.0 unchanged)
+
+Fixes the P1 issues of the September design review: a run page you can read and filter without the page moving, a Reviews queue with project approval rules, faster dataset search and comparisons, and safer admin and sign-in. It needs no SDK update: SDK 1.8.0 works as is.
+
+## Before you update
+
+- **Migrations `0066`–`0071` (head then `0071`).** `0066` adds `background_jobs`, `0067` the project review rules (defaults keep today's behaviour), `0068` dataset search text and stored lineage counts, `0069` each run's stored overview inputs and the overview cache shared by every pod, `0070` the Runs search index job, `0071` each run's stored search text. All are quick DDL. `0068` queues the `backfill_dataset_search_text` job on every database: it fills search text, stores lineage counts, then builds the search indexes (the trigram index needs the privilege to create `pg_trgm`; without it search stays correct, only unindexed). `0069` queues `backfill_dashboard_overview`, which stores the overview inputs of existing runs (until it reaches a run, the overview reads that run as before, with the same numbers). `0070` and `0071` queue `build_runs_search_index` (one job runs), which fills each run's search text and builds the Runs search's trigram index over it CONCURRENTLY (without `pg_trgm` it logs that the index was skipped and finishes; the search stays correct, only unindexed). See `docs/internal/OPERATIONS.md`.
+- **Scores of reviewed runs are locked.** Score edits and resets on a SUBMITTED or APPROVED run answer 403 ("Scores are locked…"); deleting passes of such a run answers 409. Reject or unapprove the run first. Scripts that override scores on reviewed runs need that step.
+- **Dataset rights.** Moving the `production` alias and changing a dataset's slug need a project manager (or admin); members create, publish and delete their own datasets. Renaming a dataset's display name is audited (`dataset.renamed`); SDK/CI uploads that still use the old name keep failing with `409`, and the error now names the new name.
+- **Paged dataset compare.** `GET …:compare` with `include_diffs=1&limit=N` now returns `summary`, `page` and that page's rows only; the full `added` / `removed` / `changed` / `unchanged` lists and `timestamps` come only without `limit`, as before.
+- **Proxy trust for password sign-in.** With `QYM_AUTH_LOCAL_ENABLED=true` behind an ingress, set `FORWARDED_ALLOW_IPS` (or `--forwarded-allow-ips` in `QYM_UVICORN_ARGS`) so the sign-in limits see real clients; the API warns at startup when it is missing. Five wrong passwords pause sign-in for that email only from the client that sent them; one email allows 50 failures from all clients together in 15 minutes (`QYM_AUTH_LOGIN_EMAIL_CEILING`, `QYM_AUTH_LOGIN_EMAIL_CEILING_WINDOW_SECONDS`).
+- **Optional `QYM_WEB_WORKERS`** (default 1) runs several web processes per pod; see the sizing notes in `OPERATIONS.md`.
+
+## What changed
+
+- Run page: a sticky section nav with counts and the item Filters, one header recipe for every section, filters and view changes that keep the reader's place, the reason each failing item failed, item deep links (`?item=`), the item view (filters, search, sort, page, layout, columns) in the address, previous / next run arrows in the order of the Runs list you came from, collapsed step latency and live updates while a run is running. The Overview trend keeps its range and task in the address.
+- Reviews: opens on the Pending queue with progress, sorting and keyboard review; bulk actions refuse a stale selection and return the decided rows. Approve and reject decide only pending corrections and reset only approved or rejected ones (`409` otherwise, on Reviews, the run page and the API, checked under a row lock); in the All tab each bulk button acts only on the rows it fits and names how many it skipped. The run page shows each root-cause issue with its correction's status (older data could say pending in the issue while the correction was decided), so it offers Approve only where it applies.
+- Approval rules per project: who may approve corrections (all members by default, or managers) and an optional "different reviewer" rule, enforced for approve, reject, reset, delete and bulk, with Self-approved shown.
+- Submitting a run asks for confirmation with an optional comment; several runs submit in one request; managers and admins submit on behalf of the owner and can transfer a run to another active member, or all of a member's runs from the member-removal dialog.
+- Datasets: indexed search over IDs, inputs, outputs and metadata; stored lineage counts; compare ordered by time with timestamps and paged diffs; Deleted datasets with restore.
+- Runs list: keyed rows, stable menus, a run search (served by a trigram index), a custom date range; Deleted Runs lists every deleted run, page by page.
+- Runs list: runs checked for Compare stay checked after Back and on return to Runs until you clear them or sign out, and the pager stays beside the selection actions; frozen columns that would cover more than about half the table scroll with it until they fit (date first, never the run name), and the Columns menu names them; your saved choice is kept.
+- Runs, Charts and Models: the project overview is aggregated in the database from each run's stored inputs and shared by every web process and pod, once per published change, with the same numbers as before.
+- Admin: confirm-and-undo when disabling users, never zero active admins, no self-disable or self-demotion.
+- Compare and Models: a baseline with noise bands, short labels, server-side model stats.
+
+---
+
+# September 2026 — SDK 1.8.0 / Platform 0.4.0
+
+Fixes every P0 issue from the September design review: scores mean the same on every page, big runs open fast, reviews and archived projects stay as decided, and access ends when it should. The platform now requires `qym>=1.8.0`.
+
+## Before you update
+
+- **Everyone signs in once.** Sessions now live on the server (sign-out, password changes, resets and disabling a user end them everywhere). Cookies issued before the update carry no session and are refused. During a rolling deploy, users who sign in through an old pod are asked again by a new one.
+- **Some API keys stop working at deploy.** Keys of archived projects answer 409 (`project_archived`); keys whose owner is no longer a member of the key's project (and is not an admin) answer 403 (`owner_removed`), including members removed before this release. `docs/internal/OPERATIONS.md` has a query that lists them.
+- **Background work starts by itself after migrating to `0065`.** Every dashboard summary is republished once from its numeric records (`0060`, summary shape 5). `reclassify_metric_errors` (`0063`) and `project_item_failure_events` (`0064`) rebuild only the runs they find affected. `publish_ingest_flags` is manual: start it from Admin → Maintenance so runs finished before the update show the Incomplete tag in the runs list. The runbook lists each migration and job.
+- **Metric errors change meaning for old SDKs.** Only `meta.status` (error, failed, timeout) marks a scorer error now. Judge failures from SDK 1.7.0 and older carried only `metadata.error`, so they read as a reason with a score of 0, also for history once the reclassify job has run.
+- **Directions matter.** A metric with `direction="minimize"` leaves task and scorer errors out of its mean (0 is its best value) and never counts them as passes. Other metrics count errors as 0, but an errored pass never counts as a pass, also at a `pass_threshold` of 0 or below. A metric without a direction is shown neutrally (no red/green, no Pass/Fail). On the Datasets page, a score that spans runs is coloured only when all those runs declare the same direction.
+- **Local summaries follow the same rule.** `get_metric_stats()`, `group_stats()`, `summary()`, `to_dict()` and the summary panel now read the same means and Pass@k as the platform. Scripts that gate on them can see different numbers than with SDK 1.7.0: a scorer error or failed task now lowers a higher-is-better mean (it was skipped), a lower-is-better metric no longer counts an errored pass as its best score 0, and its Pass@k passes lower scores (default threshold: its `pass_threshold`, else 0.2). A lower-is-better metric on which every item errored has no mean (`None`).
+- **Repeat-run means change where a pass failed.** A repeat run judges task errors per pass: each item is the mean over its passes, a failed pass counting as 0 (left out when lower is better). Before, the pass that arrived last decided for the whole item, so the same passes gave a different mean when the last one failed.
+- **Runs with rejected events complete, flagged Incomplete, with SDK 1.8.0.** Older SDKs hold `run_completed` when a refused event was the only line in its request (in practice a slow LLM-judge `metric_scored` the platform refuses), so such a run ends STOPPED instead.
+- **A rejected outcome is not a clean result.** When the platform rejects an item's `item_failed`, its failed final attempt makes it a task error (a failed pass, in a repeat run). A completed run's item with no outcome at all shows as **Not received**: counted apart (`not_received_count`), and left out of Execution success and of the means.
+
+## What changed
+
+- Run means, pass means and error counts agree on the runs list, run page, Compare, Models, Overview, Charts and Insights. A reviewer's score counts everywhere it was given: on a pass, on a failed task, or on a repeat item as a whole.
+- Execution success counts every pass of a repeat run; the KPI strip (Execution success, Runs with errors, Models, Items) covers the whole project or the active filter.
+- Reviews: approved runs are locked against late data, each run keeps a review history, and withdrawing a decision restores the real execution outcome.
+- Archived projects are read-only: they leave the project list, but admins and members still open their runs, dashboard, datasets and settings from Admin → Projects or a link, under a read-only notice. Every change answers 409, except revoking API keys, removing members and deleting the project. Archiving stops the project's running product evals and analyses, and the Archive dialog lists runs still in progress. Unarchive asks first and names the API keys that start working again. Trash purging of an archived project's deleted runs pauses until it is unarchived (migration `0065`).
+- An admin password reset signs the user out of every browser, and its confirmation says so.
+- Ingest judges each line on its own: one refused event no longer fails its batch, and the response lists `rejected_events`. A request whose every line is refused answers 422.
+- Run and Compare text shows exactly as stored by default, with a Raw/Rendered switch; the Runs table lets you choose frozen columns.
+- SDK 1.8.0: `direction` and `primary_metric`, verdict reasons under `metadata.reason`, rejected-event reporting and completion flagged incomplete. The local summary uses the platform's error rule and reports `error_count`, `task_error_count`, `metric_error_count` and `errors_left_out` per metric; metrics that return a `MetricResult` (LLM judges) count in it (they read 0.0 before). A metric that returns its own `metadata.status` of error, failed or timeout is recorded with score 0, like one that raises, so the error never lifts a mean or counts as a pass.
+
+---
+
 # September 2026 — SDK 1.7.0 / Platform 0.3.0
 
 - Runs distinguish task failures from failed metric checks with the original ⚠ symbol: red for tasks, yellow for metrics. Retries use blue ↻. Counts open a breakdown; affected metric scores carry a warning.

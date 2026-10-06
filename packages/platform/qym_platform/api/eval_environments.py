@@ -36,6 +36,7 @@ from qym_platform.llm_endpoint_security import (
     LlmEndpointValidationError,
     validate_llm_base_url,
 )
+from qym_platform.permissions import require_project_writable
 from qym_platform.secrets import (
     decrypt_llm_api_key,
     encrypt_llm_api_key,
@@ -610,6 +611,7 @@ async def create_environment(
     client_factory: EvalClientFactory = Depends(get_eval_client_factory),
 ) -> Dict[str, Any]:
     _require_project_manager(db, principal, project_id)
+    require_project_writable(db, project_id)
     settings = PlatformSettings()
     if not encryption_available(settings):
         raise HTTPException(
@@ -678,6 +680,7 @@ def update_environment(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_project_manager(db, principal, project_id)
+    require_project_writable(db, project_id)
     settings = PlatformSettings()
     env = _get_environment(db, project_id, env_id)
     fields = req.model_fields_set
@@ -751,6 +754,7 @@ def delete_environment(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_project_manager(db, principal, project_id)
+    require_project_writable(db, project_id)
     env = _get_environment(db, project_id, env_id)
     if _environment_in_use(db, env):
         env.is_active = False
@@ -817,6 +821,7 @@ async def refresh_environment_schema(
     # Any project member: the new-experiment page refreshes the schema of the
     # environments it opens on (it only re-reads the service; slots stay manager-edited).
     _require_project_access(db, principal, project_id)
+    require_project_writable(db, project_id)
     settings = PlatformSettings()
     env = _get_environment(db, project_id, env_id)
     api_key = _stored_key(env, settings)
@@ -939,6 +944,7 @@ def put_model_slots(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_project_manager(db, principal, project_id)
+    require_project_writable(db, project_id)
     env = _get_environment(db, project_id, env_id)
     schema = _current_schema(db, env)
     if req.schema_id and req.schema_id != schema.id:

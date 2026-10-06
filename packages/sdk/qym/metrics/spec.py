@@ -14,10 +14,16 @@ Reducer = Literal["mean", "sum", "min", "max"]
 
 @dataclass(frozen=True)
 class MetricSpec:
-    """Immutable semantics used to validate, aggregate, and display a metric."""
+    """Immutable semantics used to validate, aggregate, and display a metric.
+
+    ``direction`` says whether a higher (``"maximize"``) or lower
+    (``"minimize"``) score is better. Leave it ``None`` when neither is true:
+    the platform then shows the metric neutrally, with no good/bad colors,
+    pass/fail verdicts, winners or improved/regressed labels.
+    """
 
     score_type: ScoreType
-    direction: Direction = "maximize"
+    direction: Optional[Direction] = None
     pass_threshold: Optional[float] = None
     sample_reducer: Reducer = "mean"
     run_reducer: Reducer = "mean"
@@ -33,7 +39,7 @@ class MetricSpec:
             "legacy",
         }:
             raise ValueError(f"Unsupported metric score_type: {self.score_type!r}")
-        if self.direction not in {"maximize", "minimize"}:
+        if self.direction not in {None, "maximize", "minimize"}:
             raise ValueError(f"Unsupported metric direction: {self.direction!r}")
         for field_name in ("sample_reducer", "run_reducer"):
             if getattr(self, field_name) not in {"mean", "sum", "min", "max"}:
@@ -88,7 +94,10 @@ class MetricSpec:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "schema_version": 1,
+            # 2: ``direction`` is None unless declared. Schema 1 SDKs sent
+            # "maximize" by default, so the platform reads a schema 1
+            # "maximize" on a legacy metric as undeclared.
+            "schema_version": 2,
             "score_type": self.score_type,
             "direction": self.direction,
             "pass_threshold": self.pass_threshold,
@@ -114,7 +123,7 @@ class Metric:
         name: Optional[str] = None,
         spec: Optional[MetricSpec] = None,
         score_type: Optional[ScoreType] = None,
-        direction: Direction = "maximize",
+        direction: Optional[Direction] = None,
         pass_threshold: Optional[float] = None,
         sample_reducer: Reducer = "mean",
         run_reducer: Reducer = "mean",

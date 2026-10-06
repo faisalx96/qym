@@ -459,6 +459,71 @@ class TestCheckpointPasses:
         assert r2.total_items == 3
 
 
+class TestJudgeResume:
+    """A resumed run read MetricResult rows back as text and lost their scores."""
+
+    @staticmethod
+    def _judge(scores):
+        from qym.metrics.result import MetricResult
+
+        def judge(output, expected):
+            # Pass one scores 0.1 and pass two 0.9, across a resume too.
+            scores["calls"] = scores.get("calls", 0) + 1
+            score = 0.1 if scores["calls"] % 2 else 0.9
+            # A healthy verdict whose label contains the text "ERROR".
+            return MetricResult(
+                score=score, label="NO_ERROR", explanation="ERROR: none", kind="llm"
+            )
+
+        return judge
+
+    def _run(self, tmp_path, samples, stop_after=None, ckpt="judge.csv", judged=None):
+        calls = {"n": 0}
+
+        def task(q):
+            calls["n"] += 1
+            return q
+
+        return Evaluator(
+            task=task,
+            dataset=_dataset(1),
+            metrics=[self._judge({} if judged is None else judged)],
+            samples=samples,
+            config=_local_config(
+                tmp_path,
+                checkpoint_enabled=True,
+                resume_from=str(tmp_path / ckpt),
+                run_name=ckpt,
+                should_stop=(lambda: calls["n"] >= stop_after) if stop_after else None,
+            ),
+        ).run(show_tui=False)
+
+    def test_resumed_judge_run_keeps_every_scored_pass(self, tmp_path):
+        whole = self._run(tmp_path, samples=2, ckpt="whole.csv")
+        judged = {}
+        first = self._run(tmp_path, samples=2, stop_after=1, ckpt="resumed.csv", judged=judged)
+        assert first.interrupted and judged["calls"] == 1
+        resumed = self._run(tmp_path, samples=2, ckpt="resumed.csv", judged=judged)
+
+        assert whole.item_pass_scores("judge") == {"q0": [0.1, 0.9]}
+        assert resumed.item_pass_scores("judge") == whole.item_pass_scores("judge")
+        assert resumed.group_stats("judge") == whole.group_stats("judge")
+        assert resumed.pass_at(2, "judge") == whole.pass_at(2, "judge")
+        assert resumed.pass_hat(2, "judge") == whole.pass_hat(2, "judge")
+        assert not any("error" in entry for entry in resumed.passes["q0"].values())
+
+    def test_single_run_resume_reads_the_judge_score_and_label(self, tmp_path):
+        self._run(tmp_path, samples=1, ckpt="single.csv")
+        with open(tmp_path / "single.csv", encoding="utf-8") as f:
+            row = next(csv.DictReader(f))
+        assert row["judge_score"] == "0.1"
+        resumed = self._run(tmp_path, samples=1, ckpt="single.csv")
+        assert resumed.item_pass_scores("judge") == {"q0": [0.1]}
+        score = resumed.results["q0"]["scores"]["judge"]
+        assert score["metadata"]["label"] == "NO_ERROR"
+        assert score["metadata"]["explanation"] == "ERROR: none"
+
+
 # ── duplicate-spec warning ───────────────────────────────────────────
 
 

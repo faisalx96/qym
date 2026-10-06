@@ -7,6 +7,16 @@
   'use strict';
 
   let dashboardActive = true;
+  // Listeners on document/window are removed when the shell unmounts this
+  // page (QymShell.pageSignal); without it every visit left a live copy of
+  // the shortcuts behind, acting on later pages.
+  const pageSignal = window.QymShell && typeof window.QymShell.pageSignal === 'function'
+    ? window.QymShell.pageSignal()
+    : undefined;
+  const pageListen = (options = {}) => (pageSignal ? { ...options, signal: pageSignal } : options);
+  // The project this page was mounted for. Per-project storage keys use it:
+  // on Back the address already names the next page while this one saves.
+  const mountedProjectSlug = getProjectSlugFromPath();
 
   // ═══════════════════════════════════════════════════
   // BASE URL HANDLING (for proxy/subpath compatibility)
@@ -108,6 +118,13 @@
     } catch {}
   }
 
+  // An archived project opens read-only: its runs, charts and models stay
+  // readable, every change answers 409, so no write control is offered.
+  function isProjectReadOnly() {
+    if (state.currentProject && state.currentProject.is_active === false) return true;
+    return !!(window.QymShell && window.QymShell.isProjectArchived && window.QymShell.isProjectArchived());
+  }
+
   function projectUrl(slug, suffix = '') {
     const encoded = encodeURIComponent(slug || '');
     const cleanSuffix = String(suffix || '').replace(/^\/+/, '');
@@ -178,6 +195,8 @@
     dashboardRequestKey: null,
     dashboardPinnedRuns: new Map(),
     chartHistory: new Map(),
+    // Points kept for datasets no longer open (trimChartHistory).
+    chartHistoryRowBudget: 5000,
     chartHistoryQueue: [],
     chartHistoryActive: 0,
     chartHistoryObserver: null,
@@ -186,6 +205,8 @@
     tablePage: 1,
     tableFilterKey: '',
     quickFilter: 'all',
+    customRange: { from: '', to: '' },  // quickFilter 'custom': local YYYY-MM-DD dates, both inclusive
+    searchQuery: '',  // Runs page text search (name or id), kept in ?q=
     filterTasks: new Set(),
     filterModels: new Set(),  // Multi-select for models
     filterDatasets: new Set(),
@@ -208,6 +229,8 @@
     chartFirstColWidth: 320,
     allMetrics: [],   // All unique metric names across runs
     visibleMetrics: null, // null = all visible; Set of visible metric names
+    runsFrozenColumns: null, // Runs identity columns frozen on scroll; null = not loaded yet
+    runsUnfrozenToFit: [], // frozen columns scrolling for now: the block was too wide
     allModels: [],    // All unique model names
     currentUser: null,
     availableProjects: [],
@@ -219,6 +242,7 @@
       selectedMetric: '',
       globalK: 5,
       threshold: 0.8,
+      thresholdByMetric: {},  // metric -> pass threshold the user chose
       metricIsBoolean: false,
       metricIsNumeric: false,
       visibleStatKeys: null,  // null = all visible; [] = none; otherwise explicit keys
@@ -248,6 +272,8 @@
     '#2dd4bf', '#c084fc', '#fcd34d', '#6ee7b7'
   ];
   const TABLE_PAGE_SIZE = 50;
+  // Per-browser switch for the Runs single-key shortcuts (WCAG 2.1.4).
+  const SINGLE_KEY_SHORTCUTS_KEY = 'qym:single-key-shortcuts';
   const CHART_FIRST_COL_DEFAULT_WIDTH = 320;
   const CHART_FIRST_COL_MIN_WIDTH = 280;
   const CHART_FIRST_COL_MAX_WIDTH = 720;
@@ -369,6 +395,23 @@
     });
   }
 
+  // Metric semantics (C008): a metric's declared direction in a run's spec
+  // decides colors, "best" and ranking; without one it is shown neutrally.
+  function runMetricDirection(run, metric) {
+    return window.QymMetrics.metricDirection(run?.metric_specs?.[metric]);
+  }
+
+  // One direction for a set of runs: the one they declare, null if none or
+  // if runs disagree.
+  function runsMetricDirection(runs, metric) {
+    const directions = new Set();
+    for (const run of runs || []) {
+      const direction = runMetricDirection(run, metric);
+      if (direction) directions.add(direction);
+    }
+    return directions.size === 1 ? Array.from(directions)[0] : null;
+  }
+
   function getTraceMetricConfig(metricKey) {
     return TRACE_METRICS.find(tm => tm.key === metricKey) || null;
   }
@@ -382,7 +425,7 @@
       return '<td class="col-trace-metric-value">—</td>';
     }
     if (traceMetric.key === 'tool_success_rate') {
-      const metricClass = window.QymMetrics.getMetricColorClass(value, 'score');
+      const metricClass = window.QymMetrics.getMetricColorClass(value, 'score', 'maximize');
       return `<td class="col-trace-metric-value"><span class="metric-score ${metricClass}">${traceMetric.fmt(value)}</span></td>`;
     }
     return `<td class="col-trace-metric-value">${traceMetric.fmt(value)}</td>`;
@@ -419,14 +462,9 @@
     };
   }
 
+  // One shared escaping rule (qym_safe.js): & < > " ' so it is attribute-safe.
   function escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+    return QymSafe.escapeHtml(str || '');
   }
 
   // Origin (plan §11): "Official run" is the badge for a platform-dispatched,
@@ -531,7 +569,7 @@
   }
 
   function renderModelReasoningBadge() {
-    return `<span class="model-reasoning-badge" title="${escapeHtml(MODEL_REASONING_BADGE_TITLE)}" aria-label="${escapeHtml(MODEL_REASONING_BADGE_TITLE)}">${MODEL_REASONING_BADGE_ICON}</span>`;
+    return `<span class="model-reasoning-badge" role="img" title="${escapeHtml(MODEL_REASONING_BADGE_TITLE)}" aria-label="${escapeHtml(MODEL_REASONING_BADGE_TITLE)}">${MODEL_REASONING_BADGE_ICON}</span>`;
   }
 
   function renderModelLabel(displayLabel, hasReasoning) {
@@ -565,13 +603,20 @@
     return nextWidth;
   }
 
+  // One formatter each: toLocale*String builds a new one per call, which
+  // made dates the slowest part of drawing a chart table.
+  const DATE_FORMATS = {
+    date: new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }),
+    time: new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+    full: new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+  };
   function formatDate(isoStr) {
     try {
       const d = new Date(isoStr);
       return {
-        date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        time: d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
-        full: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+        date: DATE_FORMATS.date.format(d),
+        time: DATE_FORMATS.time.format(d),
+        full: DATE_FORMATS.full.format(d),
         iso: d.toISOString().split('T')[0],
       };
     } catch {
@@ -621,22 +666,73 @@
     return totalSeconds + 's';
   }
 
-  function isToday(isoStr) {
-    const d = new Date(isoStr);
-    const now = new Date();
-    return d.toDateString() === now.toDateString();
+  // Time range of the segmented filter as [since, until) instants; null = open.
+  function parseLocalDate(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+    if (!match) return null;
+    const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    return Number.isNaN(date.getTime()) ? null : date;
   }
 
-  function isWithinDays(isoStr, days) {
-    const d = new Date(isoStr);
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - days);
-    return d >= cutoff;
+  function timeFilterBounds(now = new Date()) {
+    let since = null;
+    let until = null;
+    if (state.quickFilter === 'today') {
+      since = new Date(now);
+      since.setHours(0, 0, 0, 0);
+      until = new Date(since);
+      until.setDate(until.getDate() + 1);
+    } else if (state.quickFilter === 'week' || state.quickFilter === 'month') {
+      since = new Date(now);
+      since.setDate(since.getDate() - (state.quickFilter === 'week' ? 7 : 30));
+    } else if (state.quickFilter === 'custom') {
+      since = parseLocalDate(state.customRange.from);
+      const last = parseLocalDate(state.customRange.to);
+      if (last) {
+        until = new Date(last);
+        until.setDate(until.getDate() + 1);
+      }
+    }
+    return { since, until };
+  }
+
+  function runMatchesTimeFilter(run, bounds = timeFilterBounds()) {
+    if (!bounds.since && !bounds.until) return true;
+    const date = new Date(run.timestamp);
+    if (Number.isNaN(date.getTime())) return false;
+    return (!bounds.since || date >= bounds.since) && (!bounds.until || date < bounds.until);
+  }
+
+  // The Runs search applies to the Runs table only (Charts and Models share
+  // the other filters but have no search box).
+  function activeSearchQuery() {
+    return state.currentView === 'table' ? state.searchQuery : '';
+  }
+
+  function runMatchesSearch(run, query = activeSearchQuery()) {
+    if (!query) return true;
+    const needle = query.toLowerCase();
+    return [run.external_run_id, run.run_name].some(value => String(value || '').toLowerCase().includes(needle))
+      || String(run.run_id || '').toLowerCase().startsWith(needle);
+  }
+
+  function formatRangeDate(value) {
+    const date = parseLocalDate(value);
+    return date ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+  }
+
+  function customRangeLabel() {
+    const from = formatRangeDate(state.customRange.from);
+    const to = formatRangeDate(state.customRange.to);
+    if (from && to) return from === to ? from : `${from} – ${to}`;
+    if (from) return `From ${from}`;
+    if (to) return `Until ${to}`;
+    return 'Range';
   }
 
   function truncateText(text, maxLen = null) {
-    // No truncation - return full text
-    return text || '';
+    // No truncation (CSS clips long names); the result is escaped HTML text.
+    return escapeHtml(text || '');
   }
 
   function getInitials(name) {
@@ -680,6 +776,8 @@
   function getTableFilterKey() {
     return JSON.stringify({
       quickFilter: state.quickFilter,
+      customRange: state.quickFilter === 'custom' ? state.customRange : null,
+      q: activeSearchQuery(),
       tasks: [...state.filterTasks].sort(),
       models: [...state.filterModels].sort(),
       datasets: [...state.filterDatasets].sort(),
@@ -844,7 +942,8 @@
   // GENERIC MULTI-SELECT BUILDER
   // ═══════════════════════════════════════════════════
 
-  function buildMultiSelect({ btnId, dropdownId, stateSet, values, labelFn, htmlLabelFn, defaultLabel, showSearch, searchPlaceholder, colorFn, onchange }) {
+  function buildMultiSelect(options) {
+    const { btnId, dropdownId, stateSet, values, labelFn, htmlLabelFn, defaultLabel, showSearch, searchPlaceholder, colorFn, onchange } = options;
     const btn = el(btnId);
     const dropdown = el(dropdownId);
     if (!btn || !dropdown) return;
@@ -867,7 +966,7 @@
 
     let html = '';
     if (showSearch) {
-      html += `<div class="model-search-box qym-dropdown__search"><input type="text" class="model-search-input qym-control qym-search" placeholder="${searchPlaceholder || 'Search...'}" value="${escapeHtml(searchValue)}" /></div>`;
+      html += `<div class="model-search-box qym-dropdown__search"><input type="text" class="model-search-input qym-control qym-search" placeholder="${escapeHtml(searchPlaceholder || 'Search...')}" value="${escapeHtml(searchValue)}" /></div>`;
     }
     html += '<div class="ms-actions qym-dropdown__actions"><button class="ms-action-btn qym-dropdown__action" data-action="all">Select All</button><button class="ms-action-btn qym-dropdown__action" data-action="none">None</button></div>';
     html += values.map((v, idx) => {
@@ -880,6 +979,30 @@
       const labelHtml = htmlLabelFn ? htmlLabelFn(v, label) : escapeHtml(label);
       return `<div class="multi-select-option qym-dropdown__option${emptyClass}" data-value="${escapeHtml(v)}" data-search-label="${escapeHtml(label)}" title="${escapeHtml(label)}"${hidden}>${colorDot}<input type="checkbox" aria-label="${escapeHtml(label)}" ${checked} /><span>${labelHtml}</span><button type="button" class="ms-only-btn qym-dropdown__only" aria-label="Show only ${escapeHtml(label)}" title="Show only this option">Only</button></div>`;
     }).join('');
+    // Never rebuild a menu the user has open: a background refresh would drop
+    // focus and the search caret. Its options refresh when it closes.
+    const syncArgs = { btnId, dropdownId, stateSet, values, defaultLabel, labelFn, htmlLabelFn };
+    if (dropdown._qymOptionsHtml !== undefined && dropdown.classList.contains('open')) {
+      dropdown._qymPendingOptions = dropdown._qymOptionsHtml === html ? null : options;
+      syncMultiSelect(syncArgs);
+      return;
+    }
+    dropdown._qymPendingOptions = null;
+    if (dropdown._qymOptionsHtml === html) {
+      syncMultiSelect(syncArgs);
+      return;
+    }
+    if (!dropdown._qymCloseWatch) {
+      dropdown._qymCloseWatch = new MutationObserver(() => {
+        const pending = dropdown._qymPendingOptions;
+        if (pending && !dropdown.classList.contains('open')) {
+          dropdown._qymPendingOptions = null;
+          buildMultiSelect(pending);
+        }
+      });
+      dropdown._qymCloseWatch.observe(dropdown, { attributes: true, attributeFilter: ['class'] });
+    }
+    dropdown._qymOptionsHtml = html;
     dropdown.innerHTML = html;
 
     // Wire search
@@ -1116,6 +1239,7 @@
       btn.title = 'Columns will appear when metrics are available';
       dropdown.classList.remove('open');
       dropdown.innerHTML = '';
+      dropdown._qymOptionsHtml = undefined;
       return;
     }
     btn.disabled = false;
@@ -1124,7 +1248,13 @@
     const visibleMetrics = new Set(getVisibleMetrics(metricOptions));
     const allVisible = visibleMetrics.size === metricOptions.length;
     const searchValue = dropdown.querySelector('.model-search-input')?.value || '';
-    dropdown.innerHTML =
+    // A refresh that rebuilds the list keeps keyboard focus on a Frozen
+    // columns control (they change the table without re-rendering).
+    const focusedFrozen = dropdown.contains(document.activeElement) ? document.activeElement : null;
+    const restoreFrozenFocus = focusedFrozen?.dataset?.frozenColumn
+      ? `input[data-frozen-column="${focusedFrozen.dataset.frozenColumn}"]`
+      : (focusedFrozen?.id === 'mv-frozen-reset' ? '#mv-frozen-reset' : '');
+    const html =
       '<div class="model-search-box qym-dropdown__search"><input type="text" class="model-search-input qym-control qym-search" placeholder="Search columns..." value="' + escapeHtml(searchValue) + '" /></div>' +
       '<div class="ms-actions qym-dropdown__actions">' +
         '<button class="ms-action-btn qym-dropdown__action" id="mv-select-all">All</button>' +
@@ -1155,10 +1285,33 @@
           const checked = allVisible || visibleMetrics.has(tm.key) ? 'checked' : '';
           const hidden = searchValue && !tm.label.toLowerCase().includes(searchValue.toLowerCase()) ? ' style="display:none"' : '';
           return `<label class="multi-select-option qym-dropdown__option"${hidden}><input type="checkbox" ${checked} data-mv-metric="${escapeHtml(tm.key)}" /><span>${escapeHtml(tm.label)}</span></label>`;
-        }).join('') : '');
+        }).join('') : '') +
+      renderRunsFrozenColumnsSection(searchValue);
 
     // Update button text
     updateMetricVisibilityBtn(metricOptions);
+
+    // As for the filter menus: an open or unchanged Columns menu is synced in
+    // place, never rebuilt under the user; an open one refreshes on close.
+    if (dropdown._qymOptionsHtml !== undefined && (dropdown.classList.contains('open') || dropdown._qymOptionsHtml === html)) {
+      dropdown._qymPendingOptions = dropdown._qymOptionsHtml === html ? null : [availableMetrics, runs];
+      syncMetricVisibilityDropdownState(metricOptions);
+      syncRunsFrozenColumnControls();
+      return;
+    }
+    dropdown._qymPendingOptions = null;
+    if (!dropdown._qymCloseWatch) {
+      dropdown._qymCloseWatch = new MutationObserver(() => {
+        const pending = dropdown._qymPendingOptions;
+        if (pending && !dropdown.classList.contains('open')) {
+          dropdown._qymPendingOptions = null;
+          populateMetricVisibility(...pending);
+        }
+      });
+      dropdown._qymCloseWatch.observe(dropdown, { attributes: true, attributeFilter: ['class'] });
+    }
+    dropdown._qymOptionsHtml = html;
+    dropdown.innerHTML = html;
 
     // Wire search input for metrics
     const mvSearchInput = dropdown.querySelector('.model-search-input');
@@ -1167,16 +1320,22 @@
         const q = e.target.value.toLowerCase();
         dropdown.querySelectorAll('.multi-select-option').forEach(opt => {
           const metricCb = opt.querySelector('input[data-mv-metric]');
-          if (!metricCb) return;
-          const m = metricCb.dataset.mvMetric || '';
-          opt.style.display = getMetricDisplayName(m).toLowerCase().includes(q) ? '' : 'none';
+          const frozenCb = opt.querySelector('input[data-frozen-column]');
+          if (!metricCb && !frozenCb) return;
+          const label = metricCb
+            ? getMetricDisplayName(metricCb.dataset.mvMetric || '')
+            : opt.textContent.trim();
+          opt.style.display = label.toLowerCase().includes(q) ? '' : 'none';
         });
       });
       mvSearchInput.addEventListener('click', (e) => e.stopPropagation());
       mvSearchInput.addEventListener('keydown', (e) => e.stopPropagation());
     }
 
-    dropdown.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    wireRunsFrozenColumnControls(dropdown);
+    if (restoreFrozenFocus) dropdown.querySelector(restoreFrozenFocus)?.focus({ preventScroll: true });
+
+    dropdown.querySelectorAll('input[data-mv-metric]').forEach(cb => {
       cb.addEventListener('change', () => {
         const metric = cb.dataset.mvMetric;
         applyMetricVisibilityFromCheckboxes(metricOptions);
@@ -1272,7 +1431,8 @@
         case 'passHatK':
           return { key, label: `Pass^${K}` };
         case 'maxAtK':
-          return { key, label: `Max@${K}` };
+          // The best value per item follows the metric's direction.
+          return { key, label: `${mvs.metricDirection === 'minimize' ? 'Min' : 'Max'}@${K}` };
         case 'consistency':
           return { key, label: 'Consistency' };
         case 'reliability':
@@ -1485,7 +1645,11 @@
   // DATA PROCESSING
   // ═══════════════════════════════════════════════════
 
-  function renderExecutionErrors(run, scope = '', onlyMetric = null) {
+  // `scoredDisplay` is the metric's mean without its scorer errors, shown in
+  // the tooltip so readers can see how far counting errors as 0 moved it.
+  // `direction` overrides the metric direction read from `run` (pass rows
+  // carry no metric specs of their own).
+  function renderExecutionErrors(run, scope = '', onlyMetric = null, scoredDisplay = null, direction = undefined) {
     const known = run.task_error_count != null && run.metric_error_count != null;
     if (!known) {
       const count = Number(run.execution_error_count ?? run.error_count ?? 0);
@@ -1493,16 +1657,47 @@
         ? `<span class="status-errors status-errors-pending" title="${count} execution errors${scope}; task/metric breakdown is updating">${count}⚠</span>`
         : '';
     }
+    // A lower-is-better metric leaves task and scorer errors out of its mean
+    // (services/run_means.py): its cell says how many were left out.
+    const metricDirection = direction === undefined && onlyMetric ? runMetricDirection(run, onlyMetric) : direction;
+    if (onlyMetric && window.QymMetrics.errorsLeftOut(metricDirection)) {
+      const scorer = Number(run.metric_error_counts?.[onlyMetric] || 0);
+      const task = Number(run.task_error_count || 0);
+      const count = scorer + task;
+      if (!count) return '';
+      const plural = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
+      // Task errors are the run's: a failed task that a reviewer then scored
+      // counts in the mean at that score, so they are not a count of what
+      // this mean left out.
+      const label = [
+        scorer ? `${plural(scorer, 'scorer error')}${scope} ${scorer === 1 ? 'is' : 'are'} not counted in the ${onlyMetric} mean (lower is better).` : '',
+        task && scorer ? `The run also has ${plural(task, 'task error')}${scope}, left out too unless a reviewer scored them.` : '',
+        task && !scorer ? `The run has ${plural(task, 'task error')}${scope}. Lower is better for ${onlyMetric}, so they are left out of its mean unless a reviewer scored them.` : '',
+      ].filter(Boolean).join(' ');
+      const details = { kind: 'metric', count, scope, leftOut: true, metric: onlyMetric, task, metrics: { [onlyMetric]: scorer } };
+      return `<button type="button" class="status-errors status-error-detail status-metric-errors metric-error-indicator" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" data-execution-errors="${escapeHtml(JSON.stringify(details))}">⚠</button>`;
+    }
     return (onlyMetric ? ['metric'] : ['task', 'metric']).map(kind => {
       const count = Number(onlyMetric
         ? run.metric_error_counts?.[onlyMetric] || 0
         : run[`${kind}_error_count`] || 0);
       if (!count) return '';
-      const label = `${count} ${kind} error${count === 1 ? '' : 's'}${onlyMetric ? ` in ${onlyMetric}` : ''}${scope}`;
+      const label = onlyMetric
+        ? `${count} ${onlyMetric} scorer error${count === 1 ? '' : 's'}${scope}, counted as 0%${scoredDisplay ? `. Mean without ${count === 1 ? 'it' : 'them'}: ${scoredDisplay}` : ''}`
+        : `${count} ${kind} error${count === 1 ? '' : 's'}${scope}`;
       const details = { kind, count, scope, metrics: onlyMetric
         ? { [onlyMetric]: count } : run.metric_error_counts || {} };
       return `<button type="button" class="status-errors status-error-detail${kind === 'metric' ? ' status-metric-errors' : ''}${onlyMetric ? ' metric-error-indicator' : ''}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" data-execution-errors="${escapeHtml(JSON.stringify(details))}">${onlyMetric ? '' : count}⚠</button>`;
     }).join('');
+  }
+
+  // A finished run whose items did not all arrive, or whose events the
+  // platform rejected, is flagged; the run page lists the details.
+  function renderIngestIncomplete(run) {
+    const flag = run.ingest_incomplete;
+    if (!flag || typeof flag !== 'object') return '';
+    const label = `Incomplete data. ${flag.reason || 'Not all of this run reached the platform.'}`;
+    return `<span class="status-incomplete qym-tag qym-tag--warning" style="display: flex; width: fit-content; margin-top: var(--space-xs);" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">Incomplete</span>`;
   }
 
   function showExecutionErrorDetails(button) {
@@ -1516,7 +1711,10 @@
     modal.setAttribute('role', 'dialog');
     modal.setAttribute('aria-modal', 'true');
     modal.setAttribute('aria-labelledby', 'execution-error-title');
-    modal.innerHTML = `<div class="modal-content modal-small"><div class="modal-header"><h2 id="execution-error-title">${task ? 'Task' : 'Metric'} errors</h2><button class="modal-close qym-icon-action" aria-label="Close error details">×</button></div><div class="modal-body"><p>${details.count} ${task ? 'task execution' : 'metric check'}${details.count === 1 ? '' : 's'} failed${escapeHtml(details.scope)}.</p>${task ? '' : `<dl class="execution-error-breakdown">${Object.entries(details.metrics).map(([name, count]) => `<div><dt>${escapeHtml(name)}</dt><dd>${Number(count)}</dd></div>`).join('')}</dl>`}<p class="execution-error-note">${task ? 'Metrics skipped after a task failure are not metric errors.' : 'Task outputs are available. Each failed metric check is counted once per item and pass.'}</p></div></div>`;
+    modal.innerHTML = details.leftOut
+      // A lower-is-better metric: its task and scorer errors are left out.
+      ? `<div class="modal-content modal-small"><div class="modal-header"><h2 id="execution-error-title">${escapeHtml(details.metric)} errors</h2><button class="modal-close qym-icon-action" aria-label="Close error details">×</button></div><div class="modal-body"><p>Errors${escapeHtml(details.scope)} are not counted in the ${escapeHtml(details.metric)} mean.</p><dl class="execution-error-breakdown"><div><dt>Scorer errors</dt><dd>${Number(details.metrics?.[details.metric] || 0)}</dd></div><div><dt>Task errors in the run</dt><dd>${Number(details.task || 0)}</dd></div></dl><p class="execution-error-note">Lower is better for this metric, so an error counted as 0 would read as its best score. Errors are left out of its mean and count as fails in pass rates. Each is counted once per item and pass; a failed task that a reviewer scored counts at that score.</p></div></div>`
+      : `<div class="modal-content modal-small"><div class="modal-header"><h2 id="execution-error-title">${task ? 'Task' : 'Metric'} errors</h2><button class="modal-close qym-icon-action" aria-label="Close error details">×</button></div><div class="modal-body"><p>${details.count} ${task ? 'task execution' : 'metric check'}${details.count === 1 ? '' : 's'} failed${escapeHtml(details.scope)}.</p>${task ? '' : `<dl class="execution-error-breakdown">${Object.entries(details.metrics).map(([name, count]) => `<div><dt>${escapeHtml(name)}</dt><dd>${Number(count)}</dd></div>`).join('')}</dl>`}<p class="execution-error-note">${task ? 'Metrics skipped after a task failure are not metric errors.' : 'Task outputs are available. Each failed metric check is counted once per item and pass, and counts as 0% in the run mean.'}</p></div></div>`;
     document.body.appendChild(modal);
     const close = () => { modal.remove(); if (button.isConnected) button.focus(); };
     const closeButton = modal.querySelector('button');
@@ -1702,6 +1900,10 @@
         file_path: run.file_path,
         timestamp: run.timestamp,
         metric_averages: run.metric_averages || {},
+        // Grouped Pass@K, consistency and reliability need the declared
+        // direction and the primary metric (C008, C035).
+        metric_specs: run.metric_specs || {},
+        metrics: run.metrics || [],
         trace_stats: run.trace_stats || null,
         avg_latency_ms: run.avg_latency_ms,
         median_latency_ms: run.median_latency_ms,
@@ -1804,15 +2006,9 @@
     }
     let runs = [...state.flatRuns];
 
-    // Quick filter (time-based)
-    switch (state.quickFilter) {
-      case 'today':
-        runs = runs.filter(r => isToday(r.timestamp));
-        break;
-      case 'week':
-        runs = runs.filter(r => isWithinDays(r.timestamp, 7));
-        break;
-    }
+    // Quick filter (time-based) and the Runs search
+    const bounds = timeFilterBounds();
+    runs = runs.filter(r => runMatchesTimeFilter(r, bounds) && runMatchesSearch(r));
 
     // Dropdown filters
     if (state.filterTasks.size > 0 && !state.filterTasks.has('__none__')) {
@@ -1928,11 +2124,16 @@
         runs.sort((a, b) => b.execution_error_count - a.execution_error_count);
         break;
       case 'run-asc':
-        runs.sort((a, b) => a.run_id.localeCompare(b.run_id));
+      case 'run-desc': {
+        // Same key as the server and the Run cell: external id, else run id.
+        const runLabel = run => String(run.external_run_id || run.run_id || '');
+        const sign = state.sortKey === 'run-desc' ? -1 : 1;
+        runs.sort((a, b) => sign * (
+          runLabel(a).localeCompare(runLabel(b), undefined, { sensitivity: 'base' })
+          || String(a.run_id || '').localeCompare(String(b.run_id || ''))
+        ));
         break;
-      case 'run-desc':
-        runs.sort((a, b) => b.run_id.localeCompare(a.run_id));
-        break;
+      }
       case 'latency-desc':
         runs.sort((a, b) => (b.avg_latency_ms || 0) - (a.avg_latency_ms || 0));
         break;
@@ -1981,18 +2182,9 @@
   // ═══════════════════════════════════════════════════
 
   function renderStatsBar() {
-    const agg = state.aggregations;
-    if (!agg) return;
-
-    // Push stats to the shell topbar
-    if (window.QymShell) {
-      window.QymShell.setTopbarStats([
-        { label: 'runs', value: formatNumber(agg.totalRuns), color: 'var(--accent-primary)' },
-        { label: 'success', value: formatPercent(agg.avgSuccess), color: 'var(--success)' },
-        { label: 'models', value: formatNumber(agg.totalModels), color: 'var(--accent-secondary)' },
-        { label: 'items', value: formatNumber(agg.totalItems), color: 'var(--accent-tertiary)' },
-      ]);
-    }
+    // Server KPIs for the active filter (or the whole project), rendered with
+    // the Overview's labels. Never derive headline numbers from loaded rows.
+    window.QymKpis?.renderTopbar(state.dashboardOverview?.kpis || null);
   }
 
   function isLatencyLikeMetric(metricName) {
@@ -2027,12 +2219,12 @@
     const width = value === null || value === undefined ? 0 : Math.max(safeRatio * 100, 2);
     const aggregateClass = isAggregate && !Number.isInteger(modelIdx) ? ' aggregate' : '';
     const modelAttr = Number.isInteger(modelIdx) ? ` data-model-idx="${modelIdx}"` : '';
-    const titleAttr = title ? ` title="${title}"` : '';
+    const titleAttr = title ? ` title="${escapeHtml(title)}"` : '';
     return `
-      <div class="${cellClass}"${titleAttr}>
+      <div class="${escapeHtml(cellClass)}"${titleAttr}>
         <div class="chart-mini-bar-track">
-          <div class="chart-mini-bar-fill${aggregateClass}"${modelAttr} style="width:${width}%">
-            <span class="chart-mini-bar-label">${label}</span>
+          <div class="chart-mini-bar-fill qym-arrive-track${aggregateClass}"${modelAttr} style="width:${width}%">
+            <span class="chart-mini-bar-label">${escapeHtml(label)}</span>
           </div>
         </div>
       </div>
@@ -2062,7 +2254,88 @@
   // RENDERING: CHARTS VIEW
   // ═══════════════════════════════════════════════════
 
+  // A chart card's last rendered height in this tab, by task and dataset;
+  // a card never seen yet takes the usual height of a chart.
+  const CHART_CARD_HEIGHT_KEY = 'qym:chart-card-h:';
+  function rememberedChartCardHeight(historyKey) {
+    let height = 0;
+    try { height = Number(sessionStorage.getItem(CHART_CARD_HEIGHT_KEY + historyKey)) || 0; } catch (_) { /* private mode */ }
+    return Math.max(160, Math.min(height || 520, 2400));
+  }
+  function rememberChartCardHeight(historyKey, height) {
+    if (!(height > 0)) return;
+    try { sessionStorage.setItem(CHART_CARD_HEIGHT_KEY + historyKey, String(Math.round(height))); } catch (_) { /* private mode */ }
+  }
+
+  // A chart section is patched in place to match its new markup. Nodes
+  // match by tag, component (first) class, id and keys; a match keeps its
+  // element and takes the new attributes and children, anything else is
+  // replaced. What the page adds at runtime stays: qym-* classes,
+  // data-qym-* attributes and --qym-* style properties.
+  function chartNodeIdentity(node) {
+    if (node.nodeType !== 1) return String(node.nodeType);
+    return [node.tagName, node.classList[0] || '', node.id, node.getAttribute('data-morph-key') || '',
+      node.getAttribute('data-qym-segmented-key') || ''].join('\u0001');
+  }
+  const chartStyleScratch = document.createElement('div');
+  function morphChartAttributes(from, to) {
+    const toAttributes = to.attributes;
+    if (from.attributes.length === toAttributes.length) {
+      let same = true;
+      for (let i = 0; same && i < toAttributes.length; i++) same = from.getAttribute(toAttributes[i].name) === toAttributes[i].value;
+      if (same) return;
+    }
+    Array.from(from.attributes).forEach(({ name }) => {
+      if (name === 'class' || name === 'style' || name.startsWith('data-qym-') || to.hasAttribute(name)) return;
+      from.removeAttribute(name);
+    });
+    Array.from(to.attributes).forEach(({ name, value }) => {
+      if (name !== 'class' && name !== 'style' && from.getAttribute(name) !== value) from.setAttribute(name, value);
+    });
+    const classes = Array.from(to.classList)
+      .concat(Array.from(from.classList).filter(name => name.startsWith('qym-') && !to.classList.contains(name)))
+      .join(' ');
+    if (Array.from(from.classList).join(' ') !== classes) {
+      if (classes) from.setAttribute('class', classes);
+      else from.removeAttribute('class');
+    }
+    const runtimeStyle = Array.from(from.style).filter(prop => prop.startsWith('--qym-'));
+    let style = to.getAttribute('style');
+    if (runtimeStyle.length) {
+      chartStyleScratch.setAttribute('style', style || '');
+      runtimeStyle.forEach(prop => chartStyleScratch.style.setProperty(prop, from.style.getPropertyValue(prop)));
+      style = chartStyleScratch.getAttribute('style');
+    }
+    if (from.getAttribute('style') !== style) {
+      if (style == null) from.removeAttribute('style');
+      else from.setAttribute('style', style);
+    }
+  }
+  function morphChartNode(from, to) {
+    if (from.nodeType !== 1) {
+      if (from.nodeValue !== to.nodeValue) from.nodeValue = to.nodeValue;
+      return from;
+    }
+    morphChartAttributes(from, to);
+    const fromKids = Array.from(from.childNodes);
+    const toKids = Array.from(to.childNodes);
+    toKids.forEach((toKid, index) => {
+      const fromKid = fromKids[index];
+      if (!fromKid) from.appendChild(toKid);
+      else if (fromKid.isEqualNode(toKid)) return;
+      else if (chartNodeIdentity(fromKid) === chartNodeIdentity(toKid)) morphChartNode(fromKid, toKid);
+      else from.replaceChild(toKid, fromKid);
+    });
+    fromKids.slice(toKids.length).forEach(kid => kid.remove());
+    return from;
+  }
+
   function renderChartsView() {
+    // A column's first sort direction: names A-Z, numbers highest first. The
+    // header click handlers below use it too, outside each card's render.
+    function getChartSortDirection(key) {
+      return key === 'model' ? 'asc' : 'desc';
+    }
     const chartData = state.chartData;
     const visibleSystemColumns = _visibleSystemColumns();
     
@@ -2094,10 +2367,10 @@
     legendEl.innerHTML = state.allModels.map((model, idx) => {
       const isActive = state.filterModels.size === 0 || state.filterModels.has(model);
       return `
-        <div class="legend-item ${isActive ? '' : 'inactive'}" data-model="${model}" title="${getModelFilterOptionLabel(model)}">
+        <button type="button" class="legend-item ${isActive ? '' : 'inactive'}" data-model="${escapeHtml(model)}" aria-pressed="${isActive ? 'true' : 'false'}" title="${escapeHtml(getModelFilterOptionLabel(model))} (click to show or hide; double-click to show only this model)">
           <span class="legend-color" style="background:${CHART_COLORS[idx % CHART_COLORS.length]}"></span>
           ${renderModelLabelForModelName(model)}
-        </div>
+        </button>
       `;
     }).join('');
 
@@ -2120,7 +2393,7 @@
 
     // Render chart cards - one per task, with dataset tabs
     const gridEl = el('charts-grid');
-    gridEl.innerHTML = (chartData.tasks || []).map((taskGroup, taskIndex) => {
+    const sectionHtml = (chartData.tasks || []).map((taskGroup, taskIndex) => {
       const taskName = taskGroup.task;
       const datasets = taskGroup.datasets;
       const totalTaskRuns = datasets.reduce((s, d) => s + d.totalRuns, 0);
@@ -2138,10 +2411,10 @@
 
       // Dataset tabs HTML
       const datasetTabsHtml = `
-        <div class="chart-dataset-tabs qym-tabs" id="${chartTabsetId}" role="tablist" aria-label="Datasets for ${taskName}">
+        <div class="chart-dataset-tabs qym-tabs" id="${chartTabsetId}" role="tablist" aria-label="Datasets for ${escapeHtml(taskName)}">
           ${datasets.map((d, datasetIndex) => `
-            <button type="button" role="tab" id="${chartTabsetId}-tab-${datasetIndex}" aria-controls="${chartPanelId}" class="chart-dataset-tab qym-tabs__tab ${d.dataset === combo.dataset ? 'active' : ''}" data-task="${taskName}" data-dataset="${d.dataset}" aria-selected="${d.dataset === combo.dataset}">
-              ${d.dataset} <span class="tab-count qym-tag qym-tag--count">${d.totalRuns}</span>
+            <button type="button" role="tab" id="${chartTabsetId}-tab-${datasetIndex}" aria-controls="${chartPanelId}" class="chart-dataset-tab qym-tabs__tab ${d.dataset === combo.dataset ? 'active' : ''}" data-task="${escapeHtml(taskName)}" data-dataset="${escapeHtml(d.dataset)}" aria-selected="${d.dataset === combo.dataset}">
+              ${escapeHtml(d.dataset)} <span class="tab-count qym-tag qym-tag--count">${Number(d.totalRuns) || 0}</span>
             </button>
           `).join('')}
         </div>
@@ -2164,10 +2437,10 @@
             <div class="chart-card">
               ${datasetTabsHtml}
               <div class="chart-card-body" id="${chartPanelId}" role="tabpanel" aria-labelledby="${activeDatasetTabId}">
-                <div class="chart-no-data" data-chart-history="${encodeURIComponent(historyKey)}" role="status">
+                ${failed || !window.QymShell?.skeletonHTML ? `<div class="chart-no-data" data-chart-history="${encodeURIComponent(historyKey)}" role="status">
                   ${failed ? 'Could not load chart history.' : 'Loading chart history…'}
                   ${failed ? `<button type="button" class="qym-inline-action" data-chart-history-retry="${encodeURIComponent(historyKey)}">Retry</button>` : ''}
-                </div>
+                </div>` : `<div class="chart-history-loading" data-chart-history="${encodeURIComponent(historyKey)}" style="min-height:${rememberedChartCardHeight(historyKey)}px">${window.QymShell.skeletonHTML('list', { label: 'Loading chart history…', rows: 4, immediate: true, since: state.chartTabSwitchAt?.[taskName] })}</div>`}
               </div>
             </div>
           </div>`;
@@ -2185,6 +2458,8 @@
             file_path: run.file_path,
             timestamp: run.timestamp,
             metric_averages: run.metric_averages || {},
+            metric_specs: run.metric_specs || {},
+            metrics: run.metrics || [],
             trace_stats: run.trace_stats || null,
             latency: run.avg_latency_ms || 0,
             median_latency: run.median_latency_ms || 0,
@@ -2196,7 +2471,16 @@
       }
 
       const visibleTraceMetrics = _visibleTraceMetrics(allRuns);
-      const groupMetricName = allComboMetrics.find(metric => (state._metricTypes?.[metric] || 'score') !== 'numeric') || '';
+      // Group Pass@K uses the newest run's declared primary metric when it is
+      // a score, else the first score metric; it needs a declared direction.
+      const newestComboRun = allRuns.slice().sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))[0];
+      const declaredGroupMetric = newestComboRun
+        ? window.QymMetrics.defaultMetricName(newestComboRun.metrics, newestComboRun.metric_specs)
+        : null;
+      const isScoreMetric = metric => (state._metricTypes?.[metric] || 'score') !== 'numeric';
+      const groupMetricName = (declaredGroupMetric && allComboMetrics.includes(declaredGroupMetric) && isScoreMetric(declaredGroupMetric)
+        ? declaredGroupMetric
+        : allComboMetrics.find(isScoreMetric)) || '';
 
       // Generate unique card ID for sorting state
       const cardId = getChartCardId(combo.task, combo.dataset);
@@ -2224,7 +2508,7 @@
         return `
           <div class="chart-task-section">
             <div class="chart-task-header">
-              <span class="chart-task-name">${taskName}</span>
+              <span class="chart-task-name">${escapeHtml(taskName)}</span>
               <span class="chart-task-meta">${totalTaskRuns} runs \u00b7 ${allTaskModels.size} models</span>
             </div>
             <div class="chart-card">
@@ -2243,10 +2527,6 @@
         state.chartSortState[cardId] = { key: metrics[0] || visibleTraceMetrics[0]?.key || 'latency', dir: 'desc' };
       }
       const sortState = state.chartSortState[cardId];
-
-      function getChartSortDirection(key) {
-        return key === 'model' ? 'asc' : 'desc';
-      }
 
       function isGroupStatSortKey(key) {
         return key === GROUP_PASS_AT_K_COLUMN_KEY
@@ -2375,23 +2655,23 @@
         const isActive = sortState.key === key;
         const arrow = isActive ? (sortState.dir === 'desc' ? '\u2193' : '\u2191') : '';
         const title = `${label} for grouped runs`;
-        return `<span class="chart-col-header chart-group-stat-header sortable-col ${isActive ? 'active' : ''}" data-card="${cardId}" data-sort="${key}" title="${title}"><span class="chart-col-header-label">${label}</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
+        return `<span class="chart-col-header chart-group-stat-header sortable-col ${isActive ? 'active' : ''}" role="button" tabindex="0" data-card="${cardId}" data-sort="${escapeHtml(key)}" title="${escapeHtml(title)}"><span class="chart-col-header-label">${escapeHtml(label)}</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
       }).join('');
       const headerCells = displayColumns.map(column => {
         if (column === AVG_LATENCY_COLUMN_KEY) {
           const isActive = sortState.key === 'latency';
           const arrow = isActive ? (sortState.dir === 'desc' ? '\u2193' : '\u2191') : '';
-          return `<span class="chart-col-header chart-col-header-latency sortable-col ${isActive ? 'active' : ''}" data-card="${cardId}" data-sort="latency" title="Avg Latency"><span class="chart-col-header-label">\u26A1 Avg Latency</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
+          return `<span class="chart-col-header chart-col-header-latency sortable-col ${isActive ? 'active' : ''}" role="button" tabindex="0" data-card="${cardId}" data-sort="latency" title="Avg Latency"><span class="chart-col-header-label">\u26A1 Avg Latency</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
         }
         if (column === MEDIAN_LATENCY_COLUMN_KEY) {
           const isActive = sortState.key === 'median-latency';
           const arrow = isActive ? (sortState.dir === 'desc' ? '\u2193' : '\u2191') : '';
-          return `<span class="chart-col-header chart-col-header-latency sortable-col ${isActive ? 'active' : ''}" data-card="${cardId}" data-sort="median-latency" title="Median Latency"><span class="chart-col-header-label">\u26A1 Median Latency</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
+          return `<span class="chart-col-header chart-col-header-latency sortable-col ${isActive ? 'active' : ''}" role="button" tabindex="0" data-card="${cardId}" data-sort="median-latency" title="Median Latency"><span class="chart-col-header-label">\u26A1 Median Latency</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
         }
         const label = getMetricDisplayName(column);
         const isActive = sortState.key === column;
         const arrow = isActive ? (sortState.dir === 'desc' ? '\u2193' : '\u2191') : '';
-        return `<span class="chart-col-header sortable-col ${isActive ? 'active' : ''}" data-card="${cardId}" data-sort="${column}" title="${label}"><span class="chart-col-header-label">${label}</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
+        return `<span class="chart-col-header sortable-col ${isActive ? 'active' : ''}" role="button" tabindex="0" data-card="${cardId}" data-sort="${escapeHtml(column)}" title="${escapeHtml(label)}"><span class="chart-col-header-label">${escapeHtml(label)}</span>${arrow ? `<span class="chart-col-sort">${arrow}</span>` : ''}</span>`;
       }).join('');
 
       function renderMetricValueCell(metricName, value, modelIdx, isAggregate = false) {
@@ -2401,7 +2681,7 @@
         const chartMType = state._metricTypes?.[metricName] || window.QymMetrics.detectMetricTypeFromAvg(value);
         if (!prefersBarChartMetric(metricName, chartMType)) {
           const display = window.QymMetrics.formatNumericValue(value);
-          return `<div class="chart-metric-cell"><span class="chart-numeric-value${isAggregate ? ' aggregate' : ''}">${display}</span></div>`;
+          return `<div class="chart-metric-cell"><span class="chart-numeric-value${isAggregate ? ' aggregate' : ''}">${escapeHtml(display)}</span></div>`;
         }
         if (chartMType === 'numeric') {
           const scaleMax = metricScaleMax[metricName] || value || 1;
@@ -2484,7 +2764,7 @@
           displayHtml = `${displayModel}<span class="run-timestamp">${dt.date} \u00b7 ${dt.time}</span>`;
         }
         const versionStr = runData.git_commit ? (runData.git_branch ? `${runData.git_branch}/${runData.git_commit}` : runData.git_commit) : '';
-        const versionTag = versionStr ? `<span class="chart-version-tag qym-tag">${versionStr}</span>` : '';
+        const versionTag = versionStr ? `<span class="chart-version-tag qym-tag">${escapeHtml(versionStr)}</span>` : '';
         const tooltipText = `Run name: ${hoverRunName}${versionStr ? `\nVersion: ${versionStr}` : ''}`;
         const dataCells = displayColumns.map(column => {
           if (column === AVG_LATENCY_COLUMN_KEY) {
@@ -2500,9 +2780,10 @@
         }).join('');
         return `
           <div class="chart-table-row">
-            <span class="chart-bar-label clickable-run ${isMultiRun ? 'multi-run' : ''}"
-                  data-file="${file_path}"
-                  title="${tooltipText}">${displayHtml}${versionTag}</span>
+            <a class="chart-bar-label clickable-run ${isMultiRun ? 'multi-run' : ''}"
+                  href="${escapeHtml(runOpenHref(runData))}"
+                  data-file="${escapeHtml(file_path)}"
+                  title="${escapeHtml(tooltipText)}">${displayHtml}${versionTag}</a>
             ${dataCells}
           </div>
         `;
@@ -2573,7 +2854,8 @@
       }
 
       function getChartGroupMetricThreshold(runs, metricName) {
-        return isChartGroupMetricBoolean(runs, metricName) ? 0.9999 : 0.8;
+        if (isChartGroupMetricBoolean(runs, metricName)) return 0.9999;
+        return window.QymMetrics.defaultPassThreshold(null, runsMetricDirection(runs, metricName));
       }
 
       function scheduleChartGroupMetricStats(runs, metricName, threshold, isBoolean) {
@@ -2585,13 +2867,12 @@
 
         state.chartGroupMetricStats[cacheKey] = { status: 'loading', K: runs.length };
         const paths = Array.from(new Set(runs.map(run => run.file_path).filter(Boolean)));
-        fetchModelRunsData(paths).then((payload) => {
-          const detailedRuns = payload && Array.isArray(payload.runs) ? payload.runs : [];
-          const stats = calculateModelStatsFromItems(detailedRuns, metricName, threshold, isBoolean);
+        fetchChartGroupStats(cacheKey, paths, metricName, threshold, isBoolean, runsMetricDirection(runs, metricName)).then((stats) => {
+          stats = stats || emptyModelStats();
           state.chartGroupMetricStats[cacheKey] = { status: 'ready', K: stats.K || runs.length, stats };
           if (state.currentView === 'charts') renderChartsView();
-        }).catch(() => {
-          state.chartGroupMetricStats[cacheKey] = { status: 'error', K: runs.length };
+        }).catch((error) => {
+          state.chartGroupMetricStats[cacheKey] = { status: 'error', K: runs.length, message: error?.message || '' };
           if (state.currentView === 'charts') renderChartsView();
         });
         return state.chartGroupMetricStats[cacheKey];
@@ -2606,7 +2887,7 @@
 
       function renderGroupStatBar(value, label, title, modelIdx) {
         if (value === undefined || value === null) {
-          return `<div class="chart-metric-cell chart-group-stat-cell" title="${title}"><span class="metric-na">\u2014</span></div>`;
+          return `<div class="chart-metric-cell chart-group-stat-cell" title="${escapeHtml(title)}"><span class="metric-na">\u2014</span></div>`;
         }
         return renderMiniBarCell({
           value,
@@ -2623,22 +2904,27 @@
         if (!showGroupStatColumns) return '';
         const emptyCells = renderEmptyGroupStatCells();
         if (!groupMetricName || !Array.isArray(runs) || runs.length === 0) return emptyCells;
+        // Pass rates need a declared direction (C008).
+        if (!runsMetricDirection(runs, groupMetricName)) return emptyCells;
         const isBoolean = isChartGroupMetricBoolean(runs, groupMetricName);
         const threshold = getChartGroupMetricThreshold(runs, groupMetricName);
         const entry = scheduleChartGroupMetricStats(runs, groupMetricName, threshold, isBoolean);
         const K = entry?.K || runs.length;
         if (!entry || entry.status === 'loading') {
           const loadingTitles = {
-            [GROUP_PASS_AT_K_COLUMN_KEY]: `Loading Pass@${K} for ${escapeHtml(groupMetricName)}`,
-            [GROUP_CONSISTENCY_COLUMN_KEY]: `Loading consistency for ${escapeHtml(groupMetricName)}`,
-            [GROUP_RELIABILITY_COLUMN_KEY]: `Loading reliability for ${escapeHtml(groupMetricName)}`,
+            [GROUP_PASS_AT_K_COLUMN_KEY]: `Loading Pass@${K} for ${groupMetricName}`,
+            [GROUP_CONSISTENCY_COLUMN_KEY]: `Loading consistency for ${groupMetricName}`,
+            [GROUP_RELIABILITY_COLUMN_KEY]: `Loading reliability for ${groupMetricName}`,
           };
           return visibleGroupStatColumns
-            .map(col => `<div class="chart-metric-cell chart-group-stat-cell is-loading" title="${loadingTitles[col.key]}"><span class="metric-na">\u2014</span></div>`)
+            .map(col => `<div class="chart-metric-cell chart-group-stat-cell is-loading" title="${escapeHtml(loadingTitles[col.key])}"><span class="metric-na">\u2014</span></div>`)
             .join('');
         }
         if (entry.status !== 'ready' || !entry.stats) {
-          return emptyCells;
+          if (!entry.message) return emptyCells;
+          return visibleGroupStatColumns
+            .map(() => `<div class="chart-metric-cell chart-group-stat-cell" title="${escapeHtml(entry.message)}"><span class="metric-na">\u2014</span></div>`)
+            .join('');
         }
         const stats = entry.stats;
         const consistencyText = stats.consistency !== null ? formatPercent(stats.consistency) : 'NA';
@@ -2898,7 +3184,7 @@
         <div class="chart-table-shell">
           ${controlsHtml}
           <div class="chart-table-scroll">
-            <div class="chart-table ${isGrouped ? 'chart-table-grouped' : ''}" data-card-id="${cardId}">
+            <div class="chart-table ${isGrouped ? 'chart-table-grouped' : ''}" data-card-id="${cardId}" data-morph-key="${encodeURIComponent(historyKey)}|${isGrouped ? groupMode : 'run'}">
               <div class="chart-table-header">
                 ${firstColHtml}
                 ${showGroupStatColumns ? groupStatHeaderCells : ''}
@@ -2915,32 +3201,94 @@
       return `
           <div class="chart-task-section">
             <div class="chart-task-header">
-              <span class="chart-task-name">${taskName}</span>
+              <span class="chart-task-name">${escapeHtml(taskName)}</span>
               <span class="chart-task-meta">${totalTaskRuns} runs \u00b7 ${allTaskModels.size} models \u00b7 ${metrics.length + visibleTraceMetrics.length} metrics</span>
             </div>
           <div class="chart-card">
             ${datasetTabsHtml}
-            <div class="chart-card-body" id="${chartPanelId}" role="tabpanel" aria-labelledby="${activeDatasetTabId}">
+            <div class="chart-card-body" id="${chartPanelId}" role="tabpanel" aria-labelledby="${activeDatasetTabId}" data-history-key="${encodeURIComponent(historyKey)}">
               ${metricChartsHtml}
             </div>
           </div>
         </div>
       `;
-    }).join('');
+    });
+
+    // A task section whose markup changed is patched in place, the others
+    // are left as they are. Its toggles and dataset tabs keep their elements
+    // (the active pill slides over), its scroll and focus stay; its table is
+    // keyed by dataset and row mode, so switching either draws a new one,
+    // while a sort or a group collapse updates the rows it has.
+    const previousSections = new Map(Array.from(gridEl.children)
+      .filter(node => node.dataset && node.dataset.chartTask)
+      .map(node => [node.dataset.chartTask, node]));
+    const tablesBefore = new Set(gridEl.querySelectorAll('.chart-table'));
+    const skeletonsBefore = window.QymShell?.noteSkeletons?.(gridEl) || [];
+    const barCellsBefore = new Set(Array.from(gridEl.querySelectorAll('.chart-mini-bar-track'), track => track.parentElement));
+    const touchedSections = [];
+    const sections = sectionHtml.map((html, index) => {
+      if (!html) return null;
+      const key = String((chartData.tasks || [])[index]?.task ?? index);
+      const kept = previousSections.get(key);
+      if (kept && kept._qymChartHtml === html) return kept;
+      const template = document.createElement('template');
+      template.innerHTML = html.trim();
+      let node = template.content.firstElementChild;
+      if (!node) return null;
+      node.dataset.chartTask = key;
+      if (kept && chartNodeIdentity(kept) === chartNodeIdentity(node)) node = morphChartNode(kept, node);
+      node._qymChartHtml = html;
+      touchedSections.push(node);
+      return node;
+    }).filter(Boolean);
+    const wanted = new Set(sections);
+    Array.from(gridEl.childNodes).forEach(node => { if (!wanted.has(node)) node.remove(); });
+    sections.forEach((node, index) => {
+      if (gridEl.children[index] !== node) gridEl.insertBefore(node, gridEl.children[index] || null);
+    });
+    const touchedAll = selector => touchedSections.flatMap(node => Array.from(node.querySelectorAll(selector)));
+    // A history skeleton the reader saw leaves under its chart (QymShell).
+    window.QymShell?.retireRemovedSkeletons?.(skeletonsBefore);
+    // Listeners go on each element once, however many renders it lives through.
+    state.chartWired = state.chartWired || new Map();
+    const freshAll = selector => {
+      if (!state.chartWired.has(selector)) state.chartWired.set(selector, new WeakSet());
+      const wired = state.chartWired.get(selector);
+      return touchedAll(selector).filter(element => {
+        if (wired.has(element)) return false;
+        wired.add(element);
+        return true;
+      });
+    };
+
+    // A table drawn new (its history arrived, or another dataset or row
+    // mode) fades in and draws its bars, on its own beat: the view's
+    // arrival may end while those bars are still drawing. Only the tables
+    // of the first render are left to the view's arrival, which follows it.
+    // So does a bar that appears in a table already shown (a group's stats
+    // coming in after it); a bar that was there slides to its new length.
+    const chartsView = el('charts-view');
+    touchedAll('.chart-table').forEach(table => {
+      if (tablesBefore.has(table)) {
+        table.querySelectorAll('.chart-mini-bar-track').forEach(track => {
+          if (!barCellsBefore.has(track.parentElement)) window.QymShell?.arrive?.(track.parentElement);
+        });
+      } else if (!chartsView || chartsView.dataset.qymArrived) {
+        window.QymShell?.arrive?.(table);
+      }
+    });
+    // Each card's height with its chart, so its loading skeleton next time
+    // takes the same room and the cards below do not jump when it arrives.
+    touchedAll('.chart-card-body[data-history-key]').forEach(body => {
+      rememberChartCardHeight(decodeURIComponent(body.dataset.historyKey), body.offsetHeight);
+    });
 
     observeChartHistory();
 
     // Wire up click events for run labels
-    gridEl.querySelectorAll('.chart-bar-label.clickable-run').forEach(label => {
+    freshAll('.chart-bar-label.clickable-run').forEach(label => {
       label.addEventListener('click', (e) => {
-        const target = e.target.closest('.chart-bar-label');
-        const filePath = target?.dataset.file;
-        if (filePath) {
-          openRun(filePath, e);
-        }
-      });
-      label.addEventListener('auxclick', (e) => {
-        if (e.button !== 1) return;
+        if (isModifiedEvent(e)) return; // native new tab / window
         const target = e.target.closest('.chart-bar-label');
         const filePath = target?.dataset.file;
         if (filePath) {
@@ -2951,7 +3299,16 @@
     });
 
     // Wire up sortable column headers
-    gridEl.querySelectorAll('.sortable-col').forEach(header => {
+    freshAll('.sortable-col').forEach(header => {
+      if (header.tagName !== 'BUTTON') {
+        header.setAttribute('role', 'button');
+        header.tabIndex = 0;
+        header.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          header.click();
+        });
+      }
       header.addEventListener('click', (e) => {
         const target = e.currentTarget;
         const cardId = target.dataset.card;
@@ -2959,19 +3316,15 @@
         if (!cardId || !sortKey) return;
 
         const currentSort = state.chartSortState[cardId] || { key: sortKey, dir: 'desc' };
-        if (currentSort.key === sortKey) {
-          currentSort.dir = currentSort.dir === 'desc' ? 'asc' : 'desc';
-        } else {
-          currentSort.key = sortKey;
-          currentSort.dir = getChartSortDirection(sortKey);
-        }
-        state.chartSortState[cardId] = currentSort;
+        state.chartSortState[cardId] = currentSort.key === sortKey
+          ? { key: sortKey, dir: currentSort.dir === 'desc' ? 'asc' : 'desc' }
+          : { key: sortKey, dir: getChartSortDirection(sortKey) };
         renderChartsView();
       });
     });
 
     // Wire up segmented control (Run / Version / Model)
-    gridEl.querySelectorAll('.chart-segment-btn').forEach(btn => {
+    freshAll('.chart-segment-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const control = e.currentTarget.closest('.chart-segment-control');
         const cardId = control?.dataset.card;
@@ -3000,7 +3353,7 @@
     });
 
     // Wire up group expand/collapse
-    gridEl.querySelectorAll('.chart-table-group-header').forEach(header => {
+    freshAll('.chart-table-group-header').forEach(header => {
       header.addEventListener('click', () => {
         const groupId = header.dataset.groupId;
         const card = header.closest('.chart-table')?.dataset.cardId;
@@ -3015,7 +3368,7 @@
     });
 
     // Wire up expand/collapse all buttons
-    gridEl.querySelectorAll('.chart-expand-collapse-btn').forEach(btn => {
+    freshAll('.chart-expand-collapse-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const cardId = btn.dataset.card;
         const card = btn.closest('.chart-card');
@@ -3036,13 +3389,41 @@
     });
 
     // Wire up dataset tab clicks
-    gridEl.querySelectorAll('.chart-dataset-tab').forEach(tab => {
+    freshAll('.chart-dataset-tab').forEach(tab => {
       tab.addEventListener('click', () => {
         const taskName = tab.dataset.task;
         const dataset = tab.dataset.dataset;
         if (taskName && dataset) {
           state.chartDatasetTab[taskName] = dataset;
-          renderChartsView();
+          clearTimeout(state.chartSwitchTimer);
+          const historyKey = JSON.stringify([taskName, dataset]);
+          const history = state.chartHistory.get(historyKey);
+          if (!usesDashboardSummary()) {
+            renderChartsView();
+          } else if (history?.status === 'ready') {
+            applyChartHistory();
+          } else {
+            // A chart still to load: the tab moves now and the last chart
+            // stays until the new one lands, dimmed if that takes a moment
+            // (the switch's own loading sign); only a load still going after
+            // a second gives it up for the skeleton.
+            tab.closest('.chart-dataset-tabs')?.querySelectorAll('.chart-dataset-tab').forEach(other => {
+              other.classList.toggle('active', other === tab);
+              other.setAttribute('aria-selected', String(other === tab));
+            });
+            const section = tab.closest('[data-chart-task]');
+            if (section) section._qymChartHtml = null; // edited by hand: the next render patches it
+            section?.querySelector('.chart-card-body')?.classList.add('is-switching');
+            if (history?.status === 'error') state.chartHistory.delete(historyKey);
+            // Until then a redraw's skeleton for it waits its usual time.
+            (state.chartTabSwitchAt ||= {})[taskName] = performance.now();
+            enqueueChartHistory(historyKey);
+            state.chartSwitchTimer = setTimeout(() => {
+              if (state.chartDatasetTab[taskName] !== dataset || state.chartHistory.get(historyKey)?.status === 'ready') return;
+              state.chartTabSwitchAt[taskName] = performance.now() - 300; // fades in now
+              renderChartsView();
+            }, 1000);
+          }
           const replacement = Array.from(document.querySelectorAll('.chart-dataset-tab')).find(candidate =>
             candidate.dataset.task === taskName && candidate.dataset.dataset === dataset
           );
@@ -3055,7 +3436,7 @@
     });
 
     // Wire up first-column resize handles
-    gridEl.querySelectorAll('.chart-col-resizer').forEach(handle => {
+    freshAll('.chart-col-resizer').forEach(handle => {
       handle.addEventListener('dblclick', (e) => {
         e.preventDefault();
         applyChartFirstColWidth(CHART_FIRST_COL_DEFAULT_WIDTH);
@@ -3110,13 +3491,18 @@
     const causeCount = isPassScoped
       ? Number(analysisCauseCount || 0)
       : Number(run.analysis_cause_count || 0);
+    if (isProjectReadOnly()) {
+      if (causeCount <= 0) return '<span class="metric-na">—</span>';
+      const count = `${causeCount} cause${causeCount === 1 ? '' : 's'}`;
+      return `<span style="color:var(--text-muted);font-size:var(--font-sm)" title="${count} found">${count}</span>`;
+    }
     const analyzerHref = analyzerUrlForRun(run, passNumber);
     if (causeCount > 0) {
       const label = `${causeCount} cause${causeCount === 1 ? '' : 's'}`;
-      return `<a class="run-analysis-chip" href="${analyzerHref}" title="${label} found — open auto-analysis" aria-label="${label} found — open auto-analysis">${ANALYSIS_SPARK_ICON}${label}</a>`;
+      return `<a class="run-analysis-chip" href="${escapeHtml(analyzerHref)}" title="${label} found — open auto-analysis" aria-label="${label} found — open auto-analysis">${ANALYSIS_SPARK_ICON}${label}</a>`;
     }
     if (status !== 'RUNNING' && status !== 'PENDING') {
-      return `<a class="run-analysis-start" href="${analyzerHref}" title="Run auto-analysis" aria-label="Run auto-analysis">${ANALYSIS_SPARK_ICON}Analyze</a>`;
+      return `<a class="run-analysis-start" href="${escapeHtml(analyzerHref)}" title="Run auto-analysis" aria-label="Run auto-analysis">${ANALYSIS_SPARK_ICON}Analyze</a>`;
     }
     return '<span class="metric-na">—</span>';
   }
@@ -3164,8 +3550,24 @@
 
     // Wire up sorting for all sortable columns
     headerRow.querySelectorAll('.sortable').forEach(th => {
+      enhanceSortableHeader(th);
       th.onclick = () => handleColumnSort(th.dataset.sort);
     });
+    updateSortIndicators();
+  }
+
+  // Keyboard and screen-reader access to sorting: the header label becomes a
+  // <button> (Tab reaches it, Enter/Space sort) and the th carries aria-sort.
+  function enhanceSortableHeader(th) {
+    if (th.querySelector('.th-sort-button')) return;
+    const labelHost = th.querySelector('.run-header-label') || th;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'th-sort-button';
+    while (labelHost.firstChild) button.appendChild(labelHost.firstChild);
+    labelHost.appendChild(button);
+    const label = button.textContent.replace(/\s+/g, ' ').trim();
+    if (label) button.setAttribute('aria-label', `Sort by ${label}`);
   }
 
   function handleColumnSort(sortField) {
@@ -3195,10 +3597,12 @@
 
     headerRow.querySelectorAll('.sortable').forEach(th => {
       th.classList.remove('sorted', 'asc');
+      th.setAttribute('aria-sort', 'none');
       const sortField = th.dataset.sort;
       if (state.sortKey.startsWith(sortField + '-') ||
           (sortField.startsWith('metric-') && state.sortKey.startsWith(sortField))) {
         th.classList.add('sorted');
+        th.setAttribute('aria-sort', state.sortKey.endsWith('-asc') ? 'ascending' : 'descending');
         if (state.sortKey.endsWith('-asc')) {
           th.classList.add('asc');
         }
@@ -3224,12 +3628,17 @@
   // Repeat runs: expand each ×k run into k per-pass pseudo-runs so group
   // analysis pools attempts (the attempt is the atomic unit). Runs without
   // pass data flow through unchanged (each = 1 attempt, today's semantics).
+  // The Models view and Charts groups apply the same rule on the server
+  // (services/model_stats.py expand_sampled_runs); keep the two in step.
   function expandSampledRunsData(runsData) {
     const out = [];
     (runsData || []).forEach(rd => {
       const samples = parseInt(rd?.run?.samples, 10) || 1;
       const rows = rd?.snapshot?.rows || [];
-      const hasPassData = samples > 1 && rows.some(r => r && r.pass_scores);
+      // A snapshot whose errored items alone carry passes (the Models
+      // payload) stays one entry per item.
+      const hasPassData = samples > 1 && rd?.snapshot?.pass_scores_scope !== 'errored'
+        && rows.some(r => r && r.pass_scores && Object.keys(r.pass_scores).length > 0);
       if (!hasPassData) { out.push(rd); return; }
       const metricNames = rd.snapshot.metric_names || rd.run.metric_names || [];
       for (let p = 0; p < samples; p++) {
@@ -3239,7 +3648,31 @@
             if (Array.isArray(ps)) return (ps[p] == null ? '' : ps[p]);
             return row.metric_values ? row.metric_values[i] : '';
           });
-          return Object.assign({}, row, { metric_values: mv });
+          // The pass's own task outcome, never the item's status (the pass
+          // that arrived last): a failed pass is a task error, and a row
+          // whose last pass failed reads as completed on its other passes.
+          const attempt = Array.isArray(row.pass_attempts) ? row.pass_attempts[p] : null;
+          const passFailed = (!!attempt && window.QymMetrics.isTaskErrorRow(attempt))
+            || metricNames.some(m => window.QymMetrics.isTaskErrorPass(row, m, p));
+          const scoped = {
+            metric_values: mv,
+            status: passFailed ? 'error' : (window.QymMetrics.isTaskErrorRow(row) ? 'completed' : row.status),
+            __pass_scope: true,
+          };
+          if (!row.pass_metric_meta) return Object.assign({}, row, scoped);
+          // The pass's own metric metadata, so a scorer or task error of this
+          // pass follows the metric's error rule (metrics.js getRowScore)
+          // instead of the item's other passes.
+          const meta = {};
+          metricNames.forEach(m => {
+            const values = row.pass_metric_meta[m];
+            const value = Array.isArray(values) ? values[p] : null;
+            if (value && typeof value === 'object') meta[m] = value;
+          });
+          return Object.assign({}, row, scoped, {
+            metric_meta: meta,
+            pass_metric_meta: null,
+          });
         });
         out.push({ run: rd.run, snapshot: Object.assign({}, rd.snapshot, { rows: passRows }) });
       }
@@ -3247,45 +3680,275 @@
     return out;
   }
 
-  const RUNS_STICKY_COLUMN_LIMITS = [
+  // Runs identity columns in table order. Each one sizes to its visible values
+  // (clamped by the CSS min/max vars) and can be frozen on horizontal scroll.
+  const RUNS_IDENTITY_COLUMNS = [
     {
-      selector: '.col-status',
-      widthVar: '--runs-col-status-width',
-      minVar: '--runs-col-status-min-width',
-      maxVar: '--runs-col-status-max-width',
-    },
-    {
+      key: 'run',
+      label: 'Run name',
       selector: '.col-run',
       widthVar: '--runs-col-run-width',
       minVar: '--runs-col-run-min-width',
       maxVar: '--runs-col-run-max-width',
     },
     {
+      key: 'status',
+      label: 'Status',
+      selector: '.col-status',
+      widthVar: '--runs-col-status-width',
+      minVar: '--runs-col-status-min-width',
+      maxVar: '--runs-col-status-max-width',
+    },
+    {
+      key: 'task',
+      label: 'Task',
       selector: '.col-task',
       widthVar: '--runs-col-task-width',
       minVar: '--runs-col-task-min-width',
     },
     {
+      key: 'model',
+      label: 'Model',
       selector: '.col-model',
       widthVar: '--runs-col-model-width',
       minVar: '--runs-col-model-min-width',
     },
     {
+      key: 'dataset',
+      label: 'Dataset',
       selector: '.col-dataset',
       widthVar: '--runs-col-dataset-width',
       minVar: '--runs-col-dataset-min-width',
     },
     {
+      key: 'owner',
+      label: 'Owner',
       selector: '.col-owner',
       widthVar: '--runs-col-owner-width',
       minVar: '--runs-col-owner-min-width',
     },
     {
+      key: 'time',
+      label: 'Date',
       selector: '.col-time',
       widthVar: '--runs-col-time-width',
       minVar: '--runs-col-time-min-width',
     },
   ];
+
+  // Frozen columns (Display > Columns > Frozen columns). All identity columns
+  // are frozen by default; a reader's choice is remembered in this browser.
+  const RUNS_FROZEN_COLUMNS_STORAGE_KEY = 'qym:runs-frozen-columns';
+
+  function getRunsFrozenColumns() {
+    if (!state.runsFrozenColumns) {
+      let saved = null;
+      try {
+        saved = JSON.parse(window.localStorage.getItem(RUNS_FROZEN_COLUMNS_STORAGE_KEY) || 'null');
+      } catch {}
+      state.runsFrozenColumns = RUNS_IDENTITY_COLUMNS
+        .map(column => column.key)
+        .filter(key => !Array.isArray(saved) || saved.includes(key));
+    }
+    return state.runsFrozenColumns;
+  }
+
+  function isDefaultRunsFrozenColumns() {
+    return getRunsFrozenColumns().length === RUNS_IDENTITY_COLUMNS.length;
+  }
+
+  function setRunsFrozenColumns(keys) {
+    const chosen = new Set(keys);
+    state.runsFrozenColumns = RUNS_IDENTITY_COLUMNS
+      .map(column => column.key)
+      .filter(key => chosen.has(key));
+    try {
+      if (isDefaultRunsFrozenColumns()) {
+        window.localStorage.removeItem(RUNS_FROZEN_COLUMNS_STORAGE_KEY);
+      } else {
+        window.localStorage.setItem(RUNS_FROZEN_COLUMNS_STORAGE_KEY, JSON.stringify(state.runsFrozenColumns));
+      }
+    } catch {}
+    syncRunsFrozenColumnControls();
+    scheduleRunsStickyColumnSizing();
+  }
+
+  // The Frozen columns section of the Columns dropdown (Runs table only).
+  function renderRunsFrozenColumnsSection(searchValue) {
+    if (state.currentView !== 'table') return '';
+    const frozen = new Set(getRunsFrozenColumns());
+    const query = String(searchValue || '').toLowerCase();
+    // The fit note is filled by syncRunsFrozenColumnControls(), so the
+    // menu's markup does not change with the window width.
+    return '<div class="mv-trace-separator"></div>' +
+      '<div class="mv-frozen-header">' +
+        '<div class="mv-trace-label" id="mv-frozen-label">Frozen columns</div>' +
+        '<button type="button" class="qym-dropdown__action mv-frozen-reset" id="mv-frozen-reset">Reset to default</button>' +
+      '</div>' +
+      '<p class="mv-frozen-fit" id="mv-frozen-fit" hidden></p>' +
+      '<div role="group" aria-labelledby="mv-frozen-label" aria-describedby="mv-frozen-fit">' +
+      RUNS_IDENTITY_COLUMNS.map(column => {
+        const hidden = query && !column.label.toLowerCase().includes(query) ? ' style="display:none"' : '';
+        return `<label class="multi-select-option qym-dropdown__option"${hidden}><input type="checkbox" ${frozen.has(column.key) ? 'checked' : ''} data-frozen-column="${escapeHtml(column.key)}" /><span>${escapeHtml(column.label)}</span></label>`;
+      }).join('') +
+      '</div>';
+  }
+
+  function wireRunsFrozenColumnControls(dropdown) {
+    dropdown.querySelectorAll('input[data-frozen-column]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        setRunsFrozenColumns(Array.from(dropdown.querySelectorAll('input[data-frozen-column]'))
+          .filter(input => input.checked)
+          .map(input => input.dataset.frozenColumn));
+      });
+    });
+    dropdown.querySelector('#mv-frozen-reset')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!isDefaultRunsFrozenColumns()) setRunsFrozenColumns(RUNS_IDENTITY_COLUMNS.map(column => column.key));
+    });
+    syncRunsFrozenColumnControls();
+  }
+
+  function syncRunsFrozenColumnControls() {
+    const dropdown = el('metric-visibility-dropdown');
+    if (!dropdown) return;
+    const frozen = new Set(getRunsFrozenColumns());
+    dropdown.querySelectorAll('input[data-frozen-column]').forEach(cb => {
+      cb.checked = frozen.has(cb.dataset.frozenColumn);
+    });
+    // aria-disabled, not disabled: focus stays on the button after a reset.
+    const reset = dropdown.querySelector('#mv-frozen-reset');
+    if (reset) {
+      const isDefault = isDefaultRunsFrozenColumns();
+      reset.setAttribute('aria-disabled', isDefault ? 'true' : 'false');
+      reset.title = isDefault ? 'Default: all seven columns frozen' : 'Freeze all seven columns again';
+    }
+    const fitNote = dropdown.querySelector('#mv-frozen-fit');
+    if (fitNote) {
+      fitNote.textContent = runsFrozenFitNote();
+      fitNote.hidden = !fitNote.textContent;
+    }
+  }
+
+  // A frozen block wider than about 55% of the table's visible width leaves
+  // the scores no room: the seven columns' minimum widths alone (~1090px)
+  // exceed the 1088px a 1280px window shows. The trailing frozen columns
+  // (Date, Owner, Dataset, ...; never Run name) then scroll with the table
+  // until the block fits. The saved choice is not changed, so a wider window
+  // freezes them again. Returns the columns to freeze now and those let go.
+  const RUNS_FROZEN_MAX_SHARE = 0.55;
+  function fitRunsFrozenColumns(widths, available) {
+    const fitted = getRunsFrozenColumns().slice();
+    const unfrozen = [];
+    if (!(available > 0)) return { fitted, unfrozen };
+    let total = fitted.reduce((sum, key) => sum + (widths[key] || 0), 0);
+    while (total > available * RUNS_FROZEN_MAX_SHARE && fitted.length && fitted[fitted.length - 1] !== 'run') {
+      const key = fitted.pop();
+      total -= widths[key] || 0;
+      unfrozen.unshift(key);
+    }
+    return { fitted, unfrozen };
+  }
+
+  // The Columns menu names the columns let go to fit this width.
+  function runsFrozenFitNote() {
+    const labels = (state.runsUnfrozenToFit || [])
+      .map(key => RUNS_IDENTITY_COLUMNS.find(column => column.key === key)?.label)
+      .filter(Boolean);
+    return labels.length ? `Unfrozen to fit this width: ${labels.join(', ')}` : '';
+  }
+
+  // Marks the frozen columns on the table and writes each one's left offset:
+  // the measured width of the frozen columns before it. A frozen column with
+  // a scrolling column (or the table's data) to its right is an edge and
+  // casts the separator shadow.
+  function applyRunsFrozenColumns(table, widths, frozenKeys) {
+    const frozen = new Set(frozenKeys);
+    const edges = [];
+    let left = 0;
+    RUNS_IDENTITY_COLUMNS.forEach((column, index) => {
+      if (!frozen.has(column.key)) {
+        table.style.removeProperty(`--runs-col-${column.key}-left`);
+        return;
+      }
+      table.style.setProperty(`--runs-col-${column.key}-left`, `${left}px`);
+      left += widths[column.key] || 0;
+      const next = RUNS_IDENTITY_COLUMNS[index + 1];
+      if (!next || !frozen.has(next.key)) edges.push(column.key);
+    });
+    table.dataset.frozenColumns = RUNS_IDENTITY_COLUMNS
+      .map(column => column.key)
+      .filter(key => frozen.has(key))
+      .join(' ');
+    table.dataset.frozenEdges = edges.join(' ');
+  }
+
+  // Frozen (horizontally sticky) cells of the runs table.
+  function isRunsFrozenCell(cell) {
+    const style = cell ? getComputedStyle(cell) : null;
+    return !!style && style.position === 'sticky' && style.left !== 'auto';
+  }
+
+  // Width of the frozen block once it is stuck: the right edge of the
+  // rightmost frozen column at its sticky offset. Frozen columns need not be
+  // adjacent (Run name and Date), so this is not where a frozen header sits
+  // right now, which can be further right until the table scrolls.
+  function runsFrozenWidth(scroller) {
+    return Array.from(scroller.querySelectorAll('.runs-table thead th'))
+      .filter(isRunsFrozenCell)
+      .reduce((width, th) => Math.max(
+        width,
+        (Number.parseFloat(getComputedStyle(th).left) || 0) + th.getBoundingClientRect().width,
+      ), 0);
+  }
+
+  function isRunsTableAtEnd(scroller) {
+    return scroller.scrollLeft > 0
+      && scroller.scrollLeft >= scroller.scrollWidth - scroller.clientWidth - 1;
+  }
+
+  // Keyboard focus must not land under the frozen columns (WCAG 2.4.11).
+  // Chromium scrolls a newly focused control into view before `focusin`, so
+  // this moves the table until the control clears the frozen edge, and keeps
+  // that edge as scroll padding so the next focus scroll already stops there.
+  // Frozen cells clear the padding, so focusing them never jumps the table.
+  // Pointer focus is left alone: moving the table under a pressed mouse
+  // button would drop the click on whatever slid beneath it.
+  const RUNS_FOCUS_CLEARANCE_PX = 12; // frozen-edge shadow plus focus ring
+  function isKeyboardFocus(target) {
+    try {
+      return target.matches(':focus-visible');
+    } catch {
+      return true;
+    }
+  }
+
+  function keepRunsFocusClearOfFrozenColumns(target) {
+    const scroller = el('runs-table-scroll');
+    if (!scroller) return;
+    const cell = target instanceof Element ? target.closest('td, th') : null;
+    if (!cell || !scroller.contains(cell) || isRunsFrozenCell(cell) || !isKeyboardFocus(target)) {
+      scroller.style.scrollPaddingLeft = '';
+      return;
+    }
+    const frozenWidth = runsFrozenWidth(scroller);
+    const view = scroller.getBoundingClientRect();
+    const portLeft = view.left + scroller.clientLeft;
+    const box = target.getBoundingClientRect();
+    // A window narrower than the control keeps its right part in view. With
+    // nothing frozen this only completes a control cut by the table's edge.
+    const padding = frozenWidth > 0
+      ? Math.max(0, Math.floor(Math.min(
+        frozenWidth + RUNS_FOCUS_CLEARANCE_PX, scroller.clientWidth - box.width
+      )))
+      : 0;
+    scroller.style.scrollPaddingLeft = padding ? `${padding}px` : '';
+    const visibleLeft = portLeft + padding;
+    const visibleRight = portLeft + scroller.clientWidth;
+    if (box.left < visibleLeft) scroller.scrollLeft -= visibleLeft - box.left;
+    else if (box.right > visibleRight) scroller.scrollLeft += box.right - visibleRight;
+  }
 
   function scheduleRunsStickyColumnSizing() {
     const table = document.querySelector('.runs-table');
@@ -3297,11 +3960,19 @@
       state._runsStickyColumnFrame = null;
       if (!table.isConnected || state.currentView !== 'table') return;
 
+      // Measuring releases the column caps for one layout, which can clamp the
+      // scroll position, and a re-render can widen the table. Keep a reader who
+      // was at the end (where the Actions column is) at the end, and anyone
+      // else exactly where they were.
+      const scroller = table.closest('.table-scroll');
+      const scrollLeft = scroller ? scroller.scrollLeft : 0;
+      const keepEnd = !!scroller && (state._runsTableAtEnd === true || state._runsKeepTableEnd === true);
+      state._runsKeepTableEnd = false;
       table.classList.add('runs-table--measuring-sticky-columns');
       const computed = getComputedStyle(table);
       const measured = [];
       try {
-        RUNS_STICKY_COLUMN_LIMITS.forEach(config => {
+        RUNS_IDENTITY_COLUMNS.forEach(config => {
           const header = table.querySelector(`thead ${config.selector}`);
           if (!header) return;
           const naturalWidth = Math.ceil(header.getBoundingClientRect().width);
@@ -3310,6 +3981,7 @@
             ? Number.parseFloat(computed.getPropertyValue(config.maxVar))
             : Infinity;
           measured.push({
+            key: config.key,
             widthVar: config.widthVar,
             width: Math.min(maxWidth, Math.max(minWidth, naturalWidth)),
           });
@@ -3317,15 +3989,272 @@
       } finally {
         table.classList.remove('runs-table--measuring-sticky-columns');
       }
-      measured.forEach(({ widthVar, width }) => {
+      const widths = {};
+      measured.forEach(({ key, widthVar, width }) => {
         table.style.setProperty(widthVar, `${width}px`);
+        widths[key] = width;
       });
+      // A table that does not scroll sideways shows every column either way.
+      const scrolls = !!scroller && scroller.scrollWidth > scroller.clientWidth + 1;
+      const { fitted, unfrozen } = fitRunsFrozenColumns(widths, scrolls ? scroller.clientWidth : 0);
+      applyRunsFrozenColumns(table, widths, fitted);
+      if (unfrozen.join(' ') !== (state.runsUnfrozenToFit || []).join(' ')) {
+        state.runsUnfrozenToFit = unfrozen;
+        syncRunsFrozenColumnControls();
+      }
+      if (scroller) {
+        scroller.scrollLeft = keepEnd ? scroller.scrollWidth : scrollLeft;
+        state._runsTableAtEnd = keepEnd || isRunsTableAtEnd(scroller);
+      }
+    });
+  }
+
+  // Controls that keep keyboard focus when their row is rebuilt, most specific first.
+  const RUNS_ROW_FOCUS_TARGETS = [
+    '.row-checkbox', '.samples-toggle', '.run-id', '.run-analysis-chip', '.run-analysis-start',
+    '.actions-trigger', '.approve-run', '.reject-run', '.unapprove-run', '.unreject-run',
+    '.submit-run', '.transfer-run', '.delete-run',
+  ];
+
+  function runsSamplesPanelId(runId) {
+    return `samples-detail-${String(runId || '').replace(/[^A-Za-z0-9_-]/g, '_')}`;
+  }
+
+  // Per-view state of one keyed run row: index, stripes, focus, selection and
+  // the open state of a repeat run. Cheap enough to run for every row.
+  function syncRunsRowState(row, run, idx) {
+    if (!row || !run) return;
+    const samplesOpen = run.samples > 1 && !!(state._samplesExpanded || {})[run.run_id];
+    const selectedPassCount = samplesOpen
+      ? Array.from(state.selectedRuns).filter(ref => isPassRef(ref) && passRefBase(ref) === run.file_path).length
+      : 0;
+    const isSelected = samplesOpen
+      ? selectedPassCount > 0 && selectedPassCount === Number(run.samples)
+      : state.selectedRuns.has(run.file_path);
+    row.dataset.idx = String(idx);
+    row.classList.toggle('run-row-even', idx % 2 === 0);
+    row.classList.toggle('run-row-odd', idx % 2 !== 0);
+    row.classList.toggle('selected', isSelected);
+    row.classList.toggle('focused', idx === state.focusedIndex);
+    row.classList.toggle('samples-open', samplesOpen);
+    const checkbox = row.querySelector('.row-checkbox');
+    if (checkbox) {
+      checkbox.checked = isSelected;
+      checkbox.indeterminate = samplesOpen && selectedPassCount > 0 && selectedPassCount < Number(run.samples);
+      checkbox.setAttribute('aria-label', `${samplesOpen ? 'Select all passes for' : 'Select run'} ${run.external_run_id || run.run_id || ''}`);
+    }
+    const toggle = row.querySelector('.samples-toggle');
+    if (toggle) {
+      const label = `${samplesOpen ? 'Collapse' : 'Expand'} ${run.samples} pass results`;
+      toggle.classList.toggle('open', samplesOpen);
+      toggle.setAttribute('aria-expanded', samplesOpen ? 'true' : 'false');
+      toggle.setAttribute('aria-label', label);
+      toggle.title = label;
+    }
+  }
+
+  function runsTableRows() {
+    const tbody = el('runs-tbody');
+    return tbody ? Array.from(tbody.children).filter(row => row.dataset.file && !row.hasAttribute('data-samples-for')) : [];
+  }
+
+  // Moving the highlight touches two rows, never the table.
+  function syncRunsRowFocus() {
+    let focusedRow = null;
+    runsTableRows().forEach(row => {
+      const focused = Number(row.dataset.idx) === state.focusedIndex;
+      row.classList.toggle('focused', focused);
+      if (focused) focusedRow = row;
+    });
+    return focusedRow;
+  }
+
+  function renderSelectModeControls() {
+    const loaded = !!state.runs;
+    const selectionAvailable = loaded && (usesDashboardSummary() ? state.dashboardOverview.total_count > 0 : state.flatRuns.length > 0);
+    // Until the list answers, a selection kept from an earlier visit stays.
+    if (loaded && !selectionAvailable && !state.dashboardOverview?.freshness?.updating) {
+      state.selectMode = false;
+      state.selectedRuns.clear();
+      state.cohortAnchorRuns = null;
+    } else if (state.selectedRuns.size > 0 || state.cohortAnchorRuns) {
+      state.selectMode = true;
+    }
+    el('table-view')?.classList.toggle('select-mode', state.selectMode);
+    const selectModeBtn = el('select-mode-btn');
+    if (selectModeBtn) {
+      const modeVisible = state.currentView === 'table';
+      selectModeBtn.style.display = modeVisible ? 'inline-flex' : 'none';
+      selectModeBtn.disabled = !selectionAvailable;
+      selectModeBtn.textContent = state.selectMode ? 'Done' : 'Select';
+      selectModeBtn.setAttribute('aria-pressed', state.selectMode ? 'true' : 'false');
+      selectModeBtn.classList.toggle('qym-inline-action--neutral', !state.selectMode);
+      selectModeBtn.classList.toggle('qym-inline-action--accent', state.selectMode);
+    }
+  }
+
+  function syncRunsSelectAll() {
+    const selectAllCheckbox = el('select-all');
+    if (!selectAllCheckbox) return;
+    const visibleFilePaths = runsTableRows().map(row => decodeURIComponent(row.dataset.file));
+    const selectedCount = visibleFilePaths.filter(filePath => state.selectedRuns.has(filePath)).length;
+    selectAllCheckbox.disabled = visibleFilePaths.length === 0;
+    selectAllCheckbox.checked = visibleFilePaths.length > 0 && selectedCount === visibleFilePaths.length;
+    selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < visibleFilePaths.length;
+  }
+
+  // A selection change patches checkboxes, row classes and the selection bar
+  // instead of re-rendering the table and every filter.
+  function syncRunsSelection() {
+    const ctx = state._runsTableCtx;
+    const tbody = el('runs-tbody');
+    if (state.currentView !== 'table' || !ctx || !tbody || !runsTableRows().length) {
+      render();
+      return;
+    }
+    const wasSelectMode = el('table-view')?.classList.contains('select-mode');
+    renderSelectModeControls();
+    // The checkbox column changes the frozen columns' widths.
+    if (wasSelectMode !== state.selectMode) scheduleRunsStickyColumnSizing();
+    tbody.querySelectorAll('tr[data-samples-for] .pass-checkbox').forEach(checkbox => {
+      checkbox.checked = state.selectedRuns.has(checkbox.dataset.passRef);
+    });
+    runsTableRows().forEach(row => {
+      const run = ctx.runFor(decodeURIComponent(row.dataset.file));
+      if (!run) return;
+      syncRunsRowState(row, run, Number(row.dataset.idx));
+      if (run.samples > 1 && state._samplesExpanded?.[run.run_id]) ctx.syncRepeatParentSelection(run, row);
+    });
+    syncRunsSelectAll();
+    renderComparePanel();
+  }
+
+  function closeRunActionsMenu(row) {
+    row?.querySelector('.actions-dropdown')?.classList.remove('open');
+  }
+
+  // The list shows a review action as soon as the server confirms it, so the
+  // row stops offering the old action; the refresh that follows reconciles
+  // the row with the published projection.
+  function applyRunWorkflowResult(filePath, status) {
+    const nextStatus = String(status || '').toUpperCase();
+    if (!nextStatus) return;
+    const patch = run => {
+      if (run && run.file_path === filePath) run.status = nextStatus;
+    };
+    state.flatRuns.forEach(patch);
+    (state.filteredRuns || []).forEach(patch);
+    (state.dashboardPage?.rows || []).forEach(patch);
+    state.dashboardPinnedRuns.forEach(patch);
+    if (state.currentView === 'table' && el('runs-tbody')) renderTableView();
+    renderComparePanel();
+  }
+
+  // One set of listeners for every row the table ever renders.
+  function wireRunsTableEvents() {
+    const tbody = el('runs-tbody');
+    if (!tbody || tbody._qymRowEvents) return;
+    tbody._qymRowEvents = true;
+    const rowFor = target => {
+      const row = target && target.closest ? target.closest('tr[data-file]') : null;
+      return row && row.parentElement === tbody && !row.hasAttribute('data-samples-for') ? row : null;
+    };
+    const runFor = row => state._runsTableCtx?.runFor(decodeURIComponent(row.dataset.file)) || null;
+
+    // Capture phase: row controls handle the event before it reaches the row.
+    tbody.addEventListener('click', event => {
+      const row = rowFor(event.target);
+      if (!row) return;
+      const control = event.target.closest('.samples-toggle, .run-id, .run-analysis-chip, .run-analysis-start, .actions-trigger, .submit-run, .transfer-run, .approve-run, .reject-run, .unapprove-run, .unreject-run, .delete-run');
+      if (!control || !row.contains(control)) return;
+      const run = runFor(row);
+      if (!run) return;
+      event.stopPropagation();
+      if (control.matches('.samples-toggle')) {
+        state._runsTableCtx.toggleSamples(control);
+        return;
+      }
+      if (control.matches('.run-id')) {
+        // The run name is a real link: modified clicks, "Open in new tab"
+        // and "Copy link" stay native; a plain click navigates in-app (C051).
+        if (isModifiedEvent(event)) return;
+        event.preventDefault();
+        openRun(run.file_path, event);
+        return;
+      }
+      event.preventDefault();
+      if (control.matches('.run-analysis-chip, .run-analysis-start')) {
+        navigateTo(control.href);
+        return;
+      }
+      if (control.matches('.actions-trigger')) {
+        const menu = row.querySelector('.actions-dropdown');
+        document.querySelectorAll('.actions-dropdown.open').forEach(other => {
+          if (other !== menu) other.classList.remove('open');
+        });
+        menu?.classList.toggle('open');
+        return;
+      }
+      closeRunActionsMenu(row);
+      const name = getRunDisplayName(run);
+      const target = { filePath: run.file_path };
+      // Submit confirms first, with an optional comment (C061).
+      if (control.matches('.submit-run')) showWorkflowModal('submit', run.run_id, name, { runs: [run] });
+      else if (control.matches('.transfer-run')) showTransferOwnershipModal(run);
+      else if (control.matches('.approve-run')) showWorkflowModal('approve', run.run_id, name, target);
+      else if (control.matches('.reject-run')) showWorkflowModal('reject', run.run_id, name, target);
+      else if (control.matches('.unapprove-run')) showWorkflowModal('unapprove', run.run_id, name, target);
+      else if (control.matches('.unreject-run')) showWorkflowModal('unreject', run.run_id, name, target);
+      else if (control.matches('.delete-run')) confirmDeleteRun(run.file_path, run.run_id);
+    }, true);
+
+    // Middle-click on the run name is the link's own (C051).
+    tbody.addEventListener('auxclick', event => {
+      if (event.button === 1 && event.target.closest('#runs-tbody a.run-id')) event.stopPropagation();
+    }, true);
+
+    tbody.addEventListener('change', event => {
+      const checkbox = event.target.closest('.row-checkbox');
+      const row = checkbox && rowFor(checkbox);
+      const run = row && runFor(row);
+      if (!run) return;
+      if (run.samples > 1 && state._samplesExpanded?.[run.run_id]) {
+        state._runsTableCtx.toggleExpandedPassSelection(run, row);
+      } else {
+        toggleSelect(run.file_path);
+      }
+    });
+
+    // Bubble phase: a plain click on the row moves the highlight; on a repeat
+    // run it opens or closes the passes. Interactive children stop the event.
+    tbody.addEventListener('click', event => {
+      const row = rowFor(event.target);
+      if (!row) return;
+      state.focusedIndex = Number(row.dataset.idx);
+      const rowToggle = row.querySelector('.samples-toggle');
+      if (rowToggle) {
+        rowToggle.click();
+        return;
+      }
+      syncRunsRowFocus();
+    });
+
+    tbody.addEventListener('dblclick', event => {
+      const row = rowFor(event.target);
+      const run = row && runFor(row);
+      if (run) openRun(run.file_path);
     });
   }
 
   function renderTableView() {
     const allRuns = state.filteredRuns;
     const tbody = el('runs-tbody');
+    // Note a reader at the table's end before the new rows change its width.
+    const tableScroll = el('runs-table-scroll');
+    if (tableScroll) {
+      state._runsTableAtEnd = isRunsTableAtEnd(tableScroll);
+      if (state._runsTableAtEnd) state._runsKeepTableEnd = true;
+    }
     const availableMetrics = getAvailableMetricsForRuns(allRuns);
     const metricsToShow = getVisibleMetrics(availableMetrics);
     const visibleTraceMetrics = _visibleTraceMetrics(allRuns);
@@ -3406,25 +4335,13 @@
     const anyRepeatRows = runs.some(r => r.samples > 1);
     if (headerRow) headerRow.classList.toggle('has-repeat-rows', anyRepeatRows);
 
-    tbody.innerHTML = runs.map((run, pageIdx) => {
-      const idx = pagination.start + pageIdx;
+    // Rows are keyed by run: a refresh, sort or page change rebuilds only the
+    // rows whose markup changed. Focus, selection, stripes and the open state
+    // of repeat runs are not part of the markup; syncRunsRowState applies them.
+    const runRowHtml = run => {
       const dt = formatDate(run.timestamp);
       const durationText = formatDurationMs(run.duration_ms);
-      const isFocused = idx === state.focusedIndex;
-      const samplesOpen = run.samples > 1 && !!(state._samplesExpanded || {})[run.run_id];
-      const selectedPassCount = samplesOpen
-        ? Array.from(state.selectedRuns).filter(ref => isPassRef(ref) && passRefBase(ref) === run.file_path).length
-        : 0;
-      const isSelected = samplesOpen
-        ? selectedPassCount > 0 && selectedPassCount === Number(run.samples)
-        : state.selectedRuns.has(run.file_path);
-      const samplesPanelId = `samples-detail-${idx}`;
-      const rowClasses = [
-        idx % 2 === 0 ? 'run-row-even' : 'run-row-odd',
-        isSelected ? 'selected' : '',
-        isFocused ? 'focused' : '',
-        samplesOpen ? 'samples-open' : '',
-      ].filter(Boolean).join(' ');
+      const samplesPanelId = runsSamplesPanelId(run.run_id);
 
       // Generate metric columns
       const metricCells = metricsToShow.map(metric => {
@@ -3433,7 +4350,7 @@
           return `<td class="col-metric-value"><span class="metric-na">—</span>${renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : '', metric)}</td>`;
         }
         const mType = state._metricTypes?.[metric] || window.QymMetrics.detectMetricTypeFromAvg(value);
-        const metricClass = window.QymMetrics.getMetricColorClass(value, mType);
+        const metricClass = window.QymMetrics.getMetricColorClass(value, mType, runMetricDirection(run, metric));
         const peerValues = usesDashboardPage()
           ? (run.metric_neighbor_values?.[metric] || [])
           : getRunComboPeerValues(allRuns, run, candidate => candidate.metric_averages?.[metric]);
@@ -3445,7 +4362,11 @@
         const noiseHtml = lowSamples
           ? `<button type="button" class="metric-noise-warn qym-help-marker" aria-label="Explain high-noise estimate" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">${escapeHtml(noiseCopy)}</span></button>`
           : '';
-        return `<td class="col-metric-value"><span class="metric-score ${metricClass}">${display}</span>${renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : '', metric)}${noiseHtml}</td>`;
+        const scoredValue = run.metric_scored_averages?.[metric];
+        const scoredDisplay = scoredValue === undefined || scoredValue === null
+          ? null
+          : window.QymMetrics.formatMetricValueSmart(scoredValue, mType, peerValues);
+        return `<td class="col-metric-value"><span class="metric-score ${metricClass}">${display}</span>${renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : '', metric, scoredDisplay)}${noiseHtml}</td>`;
       }).join('');
 
       const status = run.status || '';
@@ -3456,11 +4377,16 @@
       const projectRole = (state.currentProject && state.currentProject.role) || '';
       const isOwner = !!(state.currentUser && run.owner && run.owner.id === state.currentUser.id);
       const isProjectManager = globalRole === 'ADMIN' || projectRole === 'MANAGER';
-      const canApprove = isProjectManager && status === 'SUBMITTED';
-      const canUnapprove = isProjectManager && status === 'APPROVED';
-      const canUnreject = isProjectManager && status === 'REJECTED';
-      const canSubmit = isOwner && (status === 'COMPLETED' || status === 'FAILED' || status === 'REJECTED');
-      const canDelete = globalRole === 'ADMIN' || isProjectManager || isOwner;
+      const writable = !isProjectReadOnly();
+      const canApprove = writable && isProjectManager && status === 'SUBMITTED';
+      const canUnapprove = writable && isProjectManager && status === 'APPROVED';
+      const canUnreject = writable && isProjectManager && status === 'REJECTED';
+      // The owner submits; a project manager or admin may submit for them (C072).
+      const canSubmit = writable && (isOwner || isProjectManager) && (status === 'COMPLETED' || status === 'FAILED' || status === 'REJECTED');
+      const ownerName = run.owner ? (run.owner.display_name || run.owner.email || '') : '';
+      const submitTitle = isOwner || !ownerName ? 'Submit for approval' : `Submit for approval on behalf of ${ownerName}`;
+      const canTransfer = writable && isProjectManager;
+      const canDelete = writable && (globalRole === 'ADMIN' || isProjectManager || isOwner);
       const progressText = (status === 'RUNNING' && run.progress_total)
         ? `${run.progress_completed || 0}/${run.progress_total}`
         : (status === 'RUNNING' ? `${run.progress_completed || 0}` : '');
@@ -3475,9 +4401,10 @@
         ? ` • pass ${Math.min((run.last_completed_pass || 0) + 1, run.samples)}/${run.samples}`
         : '';
 
-      // Build status tooltip with approval info
+      // Build status tooltip with approval info. The approval keeps the last
+      // decision after it is withdrawn; attribute only a decision in effect.
       let statusTooltip = status;
-      if (approval && approval.decision_by) {
+      if (approval && approval.decision_by && approval.decision === status) {
         statusTooltip = `${status} by ${approval.decision_by.display_name || approval.decision_by.email}`;
         if (approval.comment) {
           statusTooltip += `\n"${approval.comment}"`;
@@ -3485,65 +4412,60 @@
       }
 
       return `
-        <tr data-idx="${idx}" data-file="${encodeURIComponent(run.file_path)}"
-            data-can-delete-pass="${canDelete && status !== 'RUNNING' && status !== 'PENDING' ? 'true' : 'false'}"
-            class="${rowClasses}">
+        <tr data-file="${encodeURIComponent(run.file_path)}"
+            data-can-delete-pass="${canDelete && !['RUNNING', 'PENDING', 'SUBMITTED', 'APPROVED'].includes(status) ? 'true' : 'false'}">
           <td class="col-run">
             <div class="run-cell-content">
               <label class="custom-checkbox run-select-control" onclick="event.stopPropagation()">
-                <input type="checkbox" class="row-checkbox"
-                  aria-label="${samplesOpen ? 'Select all passes for' : 'Select run'} ${escapeHtml(run.external_run_id || run.run_id || '')}"
-                  ${isSelected ? 'checked' : ''} />
+                <input type="checkbox" class="row-checkbox" />
                 <span class="checkmark"></span>
               </label>
-              ${run.samples > 1 ? `<button type="button" class="samples-toggle qym-icon-action${samplesOpen ? ' open' : ''}"
-                data-run-id="${run.run_id}" data-panel-id="${samplesPanelId}"
-                data-count="${run.samples}"
+              ${run.samples > 1 ? `<button type="button" class="samples-toggle qym-icon-action"
+                data-run-id="${escapeHtml(run.run_id)}" data-panel-id="${samplesPanelId}"
+                data-count="${escapeHtml(run.samples)}"
                 data-status="${escapeHtml(status)}"
                 data-live="${status === 'RUNNING' || status === 'PENDING' ? 'true' : 'false'}"
-                aria-expanded="${samplesOpen ? 'true' : 'false'}" aria-controls="${samplesPanelId}"
-                aria-label="${samplesOpen ? 'Collapse' : 'Expand'} ${run.samples} pass results"
-                title="${samplesOpen ? 'Collapse' : 'Expand'} ${run.samples} pass results"><svg class="samples-toggle-chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m4 6 4 4 4-4"></path></svg></button>`
+                aria-controls="${samplesPanelId}"><svg class="samples-toggle-chevron" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m4 6 4 4 4-4"></path></svg></button>`
                 : (anyRepeatRows ? '<span class="samples-toggle-spacer" aria-hidden="true"></span>' : '')}
-              <span class="run-id" title="${run.run_id}">${run.external_run_id ? truncateText(run.external_run_id, 30) : run.run_id.substring(0, 8)}</span>
+              <a class="run-id" href="${escapeHtml(runOpenHref(run))}" title="${escapeHtml(run.run_id)}">${run.external_run_id ? truncateText(run.external_run_id, 30) : escapeHtml(run.run_id.substring(0, 8))}</a>
               ${run.samples > 1 ? `<span class="run-pass-count">x${run.samples}</span>` : ''}
               ${renderOfficialRunBadge(run)}
             </div>
           </td>
           <td class="col-status">
-            ${status ? `<span class="status-badge qym-badge status-${status}" title="${escapeHtml(statusTooltip)}">${status}${passText}${parentProgressText}</span>` : ''}${status !== 'RUNNING' && status !== 'PENDING' ? renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : ' across all items') : ''}${(run.total_retries > 0 && status !== 'RUNNING' && status !== 'PENDING') ? `<span class="status-retries" title="${run.total_retries} total retr${run.total_retries === 1 ? 'y' : 'ies'}${retryScope}">${run.total_retries}↻</span>` : ''}
+            ${status ? `<span class="status-badge qym-badge status-${escapeHtml(status)}" title="${escapeHtml(statusTooltip)}">${escapeHtml(status)}${passText}${parentProgressText}</span>` : ''}${status !== 'RUNNING' && status !== 'PENDING' ? renderExecutionErrors(run, run.samples > 1 ? ' across all passes' : ' across all items') : ''}${(run.total_retries > 0 && status !== 'RUNNING' && status !== 'PENDING') ? `<span class="status-retries" title="${run.total_retries} total retr${run.total_retries === 1 ? 'y' : 'ies'}${retryScope}">${run.total_retries}↻</span>` : ''}${renderIngestIncomplete(run)}
           </td>
           <td class="col-task">
             <span class="tag qym-tag task" title="${escapeHtml(run.task_name || '')}">${run.task_name ? escapeHtml(run.task_name) : '—'}</span>
           </td>
           <td class="col-model">
-            <span class="tag qym-tag model" title="${run.model_name}">
+            <span class="tag qym-tag model" title="${escapeHtml(run.model_name)}">
               <span class="model-color-dot" style="background:${CHART_COLORS[state.allModels.indexOf(getRunModelKey(run)) % CHART_COLORS.length]}"></span>
               ${renderModelLabelForRun(run)}
             </span>
           </td>
           <td class="col-dataset">
-            <span class="tag qym-tag runs-dataset-tag" title="${run.dataset_name}">${truncateText(run.dataset_name, 25)}${window.QymShell ? QymShell.datasetVersionInline(run.dataset_version) + QymShell.datasetAliasTags(run.dataset_aliases) : ''}</span>
+            <span class="tag qym-tag runs-dataset-tag" title="${escapeHtml(run.dataset_name)}">${truncateText(run.dataset_name, 25)}${window.QymShell ? QymShell.datasetVersionInline(run.dataset_version) + QymShell.datasetAliasTags(run.dataset_aliases) : ''}</span>
           </td>
           <td class="col-owner">
             ${run.owner ? `
-              <span class="owner-name" title="${run.owner.email}">
-                <span class="owner-avatar">${getInitials(run.owner.display_name)}</span>
+              <span class="owner-name" title="${escapeHtml(run.owner.email)}">
+                <span class="owner-avatar">${escapeHtml(getInitials(run.owner.display_name))}</span>
                 ${truncateText(run.owner.display_name, 15)}
               </span>
             ` : '<span style="color:var(--text-muted)">—</span>'}
           </td>
           <td class="col-time">
             <span class="timestamp" title="${escapeHtml(dt.full)}">
-              <span class="date">${dt.date}</span>
+              <span class="date">${escapeHtml(dt.date)}</span>
               <span class="timestamp-sep">·</span>
-              <span class="time">${dt.time}</span>
+              <span class="time">${escapeHtml(dt.time)}</span>
             </span>
           </td>
           <td class="col-analysis" onclick="event.stopPropagation()">${renderAnalysisCell(run, status)}</td>
           <td class="col-experiment">${renderExperimentCell(run)}</td>
           <td class="col-version">
-            ${run.git_commit ? `<span class="version-badge qym-tag" title="${run.git_branch ? run.git_branch + '/' : ''}${run.git_commit}">${run.git_branch ? run.git_branch + '/' : ''}${run.git_commit}</span>` : '<span style="color:var(--text-muted)">—</span>'}
+            ${run.git_commit ? `<span class="version-badge qym-tag" title="${escapeHtml((run.git_branch ? run.git_branch + '/' : '') + run.git_commit)}">${escapeHtml((run.git_branch ? run.git_branch + '/' : '') + run.git_commit)}</span>` : '<span style="color:var(--text-muted)">—</span>'}
           </td>
           ${metricCells}${visibleTraceMetrics.length > 0 ? '<td class="col-trace-separator"></td>' : ''}
           ${visibleSystemColumns.has('latency') ? `<td class="col-latency">
@@ -3563,9 +4485,9 @@
             <span class="duration-value">${durationText}</span>
           </td>
           <td class="col-actions">
-            ${(canApprove || canUnapprove || canUnreject) ? `
+            ${(canApprove || canUnapprove || canUnreject || canTransfer) ? `
               <div class="actions-dropdown" onclick="event.stopPropagation()">
-                <button class="actions-trigger qym-icon-action workflow-trigger" title="${(canUnapprove || canUnreject) ? 'Review decision actions' : 'Review'}" aria-label="${(canUnapprove || canUnreject) ? 'Review decision actions' : 'Review run'}">
+                <button class="actions-trigger qym-icon-action workflow-trigger" title="${(canApprove || canUnapprove || canUnreject) ? ((canUnapprove || canUnreject) ? 'Review decision actions' : 'Review') : 'Run actions'}" aria-label="${(canApprove || canUnapprove || canUnreject) ? ((canUnapprove || canUnreject) ? 'Review decision actions' : 'Review run') : 'Run actions'}">
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                     <polyline points="14 2 14 8 20 8"></polyline>
@@ -3601,11 +4523,20 @@
                     </svg>
                     <span>Unreject</span>
                   </a>` : ''}
+                  ${canTransfer ? `<a href="#" class="actions-item transfer-run">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M16 3h5v5"></path>
+                      <path d="M21 3l-7 7"></path>
+                      <path d="M8 21H3v-5"></path>
+                      <path d="M3 21l7-7"></path>
+                    </svg>
+                    <span>Transfer ownership</span>
+                  </a>` : ''}
                 </div>
               </div>
             ` : ''}
             ${canSubmit ? `
-              <a href="#" class="action-icon qym-icon-action submit-run" title="Submit for Approval" aria-label="Submit for approval" onclick="event.stopPropagation()">
+              <a href="#" class="action-icon qym-icon-action submit-run" title="${escapeHtml(submitTitle)}" aria-label="${escapeHtml(submitTitle)}" onclick="event.stopPropagation()">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="22" y1="2" x2="11" y2="13"></line>
                   <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
@@ -3623,154 +4554,64 @@
           </td>
         </tr>
       `;
-    }).join('');
+    };
+
+    // Keep the control a keyboard or screen-reader user is on when its row
+    // has to be rebuilt.
+    const active = document.activeElement;
+    const activeRow = active && tbody.contains(active) ? active.closest('tr[data-file]') : null;
+    const activeFocus = activeRow ? {
+      file: activeRow.dataset.file,
+      selector: RUNS_ROW_FOCUS_TARGETS.find(selector => active.matches(selector)) || null,
+    } : null;
+
+    const structure = JSON.stringify([
+      metricsToShow, visibleTraceMetrics.map(tm => tm.key), [...visibleSystemColumns], anyRepeatRows,
+    ]);
+    const reuse = tbody.dataset.rowStructure === structure;
+    tbody.dataset.rowStructure = structure;
+    const existing = new Map();
+    Array.from(tbody.children).forEach(child => {
+      // Expanded pass rows are re-inserted below for every open repeat run.
+      if (reuse && child.dataset.file && !child.hasAttribute('data-samples-for')) {
+        existing.set(child.dataset.file, child);
+      } else {
+        child.remove();
+      }
+    });
+    const template = document.createElement('template');
+    const ordered = runs.map(run => {
+      const key = encodeURIComponent(run.file_path);
+      const html = runRowHtml(run);
+      let row = existing.get(key);
+      existing.delete(key);
+      if (!row || row._qymRowHtml !== html) {
+        if (row) row.remove();
+        template.innerHTML = html.trim();
+        row = template.content.firstElementChild;
+        row._qymRowHtml = html;
+      }
+      return row;
+    });
+    existing.forEach(row => row.remove());
+    let cursor = tbody.firstElementChild;
+    ordered.forEach(row => {
+      if (row === cursor) {
+        cursor = cursor.nextElementSibling;
+      } else {
+        tbody.insertBefore(row, cursor);
+      }
+    });
+    const runsByFile = new Map(runs.map(run => [run.file_path, run]));
+    ordered.forEach((row, pageIdx) => syncRunsRowState(row, runs[pageIdx], pagination.start + pageIdx));
+    if (activeFocus && !tbody.contains(document.activeElement)) {
+      const row = Array.from(tbody.children).find(candidate => candidate.dataset.file === activeFocus.file);
+      const target = row && activeFocus.selector ? row.querySelector(activeFocus.selector) : row?.querySelector('.row-checkbox');
+      target?.focus({ preventScroll: true });
+    }
 
     // Update sort indicators
     updateSortIndicators();
-
-    // Wire events
-    tbody.querySelectorAll('tr[data-idx]').forEach(tr => {
-      const idx = parseInt(tr.dataset.idx);
-      const filePath = decodeURIComponent(tr.dataset.file);
-      const run = state.filteredRuns[idx - (usesDashboardPage() ? state.dashboardPage.offset : 0)];
-
-      const checkbox = tr.querySelector('.row-checkbox');
-      if (checkbox) {
-        const repeatExpanded = run.samples > 1 && !!state._samplesExpanded?.[run.run_id];
-        const selectedPasses = repeatExpanded
-          ? Array.from(state.selectedRuns).filter(ref => isPassRef(ref) && passRefBase(ref) === filePath).length
-          : 0;
-        checkbox.indeterminate = repeatExpanded
-          && selectedPasses > 0
-          && selectedPasses < Number(run.samples);
-        checkbox.addEventListener('click', (e) => {
-          e.stopPropagation();
-        });
-        checkbox.addEventListener('change', () => {
-          const expanded = run.samples > 1 && !!state._samplesExpanded?.[run.run_id];
-          if (expanded) {
-            toggleExpandedPassSelection(run, tr);
-          } else {
-            toggleSelect(filePath);
-          }
-        });
-      }
-
-      const analysisLink = tr.querySelector('.run-analysis-chip, .run-analysis-start');
-      if (analysisLink) {
-        analysisLink.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          navigateTo(analysisLink.href);
-        });
-      }
-
-      tr.querySelector('.run-id').addEventListener('click', (e) => {
-        e.stopPropagation();
-        openRun(filePath, e);
-      });
-      tr.querySelector('.run-id').addEventListener('auxclick', (e) => {
-        if (e.button !== 1) return;
-        e.preventDefault();
-        e.stopPropagation();
-        openRun(filePath, e);
-      });
-
-      const closeDropdown = () => {
-        tr.querySelector('.actions-dropdown')?.classList.remove('open');
-      };
-
-      const submitBtn = tr.querySelector('.submit-run');
-      if (submitBtn) submitBtn.addEventListener('click', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeDropdown();
-        try {
-          const resp = await fetch(apiUrl(`v1/runs/${encodeURIComponent(run.run_id)}/submit`), { method: 'POST' });
-          if (resp.ok) {
-            showToast('success', 'Submitted', 'Run submitted for approval');
-          } else {
-            showToast('error', 'Submit Failed', 'Could not submit run');
-          }
-          await fetchRuns({ refreshAllPages: true });
-        } catch (err) {
-          console.error('Submit failed', err);
-          showToast('error', 'Submit Failed', err.message || 'Could not submit run');
-        }
-      });
-
-      const approveBtn = tr.querySelector('.approve-run');
-      if (approveBtn) approveBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeDropdown();
-        showWorkflowModal('approve', run.run_id, run.task_name);
-      });
-
-      const rejectBtn = tr.querySelector('.reject-run');
-      if (rejectBtn) rejectBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeDropdown();
-        showWorkflowModal('reject', run.run_id, run.task_name);
-      });
-
-      const unapproveBtn = tr.querySelector('.unapprove-run');
-      if (unapproveBtn) unapproveBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeDropdown();
-        showWorkflowModal('unapprove', run.run_id, run.task_name);
-      });
-
-      const unrejectBtn = tr.querySelector('.unreject-run');
-      if (unrejectBtn) unrejectBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeDropdown();
-        showWorkflowModal('unreject', run.run_id, run.task_name);
-      });
-
-      const deleteBtn = tr.querySelector('.delete-run');
-      if (deleteBtn) deleteBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        closeDropdown();
-        confirmDeleteRun(filePath, run.run_id);
-      });
-
-      // Actions dropdown toggle
-      const actionsDropdown = tr.querySelector('.actions-dropdown');
-      const actionsTrigger = tr.querySelector('.actions-trigger');
-      if (actionsTrigger && actionsDropdown) {
-        actionsTrigger.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          // Close any other open dropdowns
-          document.querySelectorAll('.actions-dropdown.open').forEach(d => {
-            if (d !== actionsDropdown) d.classList.remove('open');
-          });
-          actionsDropdown.classList.toggle('open');
-        });
-      }
-
-      tr.addEventListener('click', () => {
-        state.focusedIndex = idx;
-        // Repeat runs: the whole row is the expand target — the run name
-        // keeps navigating, but any other click toggles the passes (interactive
-        // children all stopPropagation, so they never land here).
-        const rowToggle = tr.querySelector('.samples-toggle');
-        if (rowToggle) {
-          rowToggle.click();
-          return;
-        }
-        renderTableView();
-      });
-
-      tr.addEventListener('dblclick', () => {
-        openRun(filePath);
-      });
-    });
 
     // Repeat runs expand in the table's native group dialect (mock option C):
     // a group-metrics strip styled like a group header, then one real table
@@ -3792,7 +4633,19 @@
         // then fills values in place — same geometry, no loading flicker.
         const listRun = runs.find(r => r.run_id === runId);
         const summaries = (listRun && Array.isArray(listRun.pass_summaries)) ? listRun.pass_summaries : [];
-        const primary = listRun ? (listRun.metrics || [])[0] : null;
+        const primary = listRun ? window.QymMetrics.defaultMetricName(listRun.metrics || [], listRun.metric_specs || {}) : null;
+        // primary_score belongs to the metric the server names; summaries
+        // published before it named one used the first metric.
+        const scoredMetric = (summaries.find(s => s && s.primary_metric) || {}).primary_metric
+          || (listRun && (listRun.metrics || [])[0]) || null;
+        // Same default the server's group metrics use, so the rule does not
+        // change when the fetch lands.
+        const primaryThreshold = primary
+          ? window.QymMetrics.defaultPassThreshold(
+            (listRun.metric_specs || {})[primary],
+            runMetricDirection(listRun, primary)
+          )
+          : undefined;
         if (summaries.length) {
           data = {
             _optimistic: true,
@@ -3802,8 +4655,8 @@
               passes: summaries.map(s => ({
                 pass_number: s.pass_number,
                 status: s.status,
-                metric_means: (primary && typeof s.primary_score === 'number')
-                  ? { [primary]: s.primary_score }
+                metric_means: (scoredMetric && typeof s.primary_score === 'number')
+                  ? { [scoredMetric]: s.primary_score }
                   : {},
                 items_scored: null,
                 error_count: s.error_count,
@@ -3814,7 +4667,7 @@
                 analysis_cause_count: s.analysis_cause_count,
               })),
             },
-            group: { metric: primary },
+            group: { metric: primary, threshold: primaryThreshold },
           };
         } else {
           return `<tr ${detailAttrs}>
@@ -3862,7 +4715,16 @@
       const passHatLabel = estLabel('^', reportK);
       const threshold = groupPayload.threshold != null ? groupPayload.threshold : 0.8;
       const thrPct = Math.round(threshold * 100);
-      const groupMetric = groupPayload.metric || (passes.metrics || [])[0] || 'primary metric';
+      const listRunForGroup = runs.find(candidate => candidate.run_id === runId) || {};
+      const groupMetric = groupPayload.metric
+        || window.QymMetrics.defaultMetricName(passes.metrics || [], listRunForGroup.metric_specs || {})
+        || 'primary metric';
+      // Pass rates need a declared direction; lower-is-better passes at or
+      // below the threshold (the server applies the same rule).
+      const groupDirection = groupPayload.direction !== undefined
+        ? window.QymMetrics.metricDirection({ direction: groupPayload.direction })
+        : runMetricDirection(listRunForGroup, groupMetric);
+      const passRule = groupDirection === 'minimize' ? '≤' : '≥';
       const metricOptions = (passes.metrics || []).map(metric =>
         `<option value="${escapeHtml(metric)}"${metric === groupMetric ? ' selected' : ''}>${escapeHtml(metric)}</option>`
       ).join('');
@@ -3877,9 +4739,10 @@
         ? `across ${k} independent passes.`
         : `from ${finished} of ${k} completed passes.`;
 
-      const stat = (label, v, tooltip) => {
+      const stat = (label, v, tooltip, direction = 'maximize') => {
+        if (!groupDirection && direction === 'maximize') return '';
         const isNum = typeof v === 'number';
-        const cls = isNum ? window.QymMetrics.getMetricColorClass(v, 'score') : '';
+        const cls = isNum ? window.QymMetrics.getMetricColorClass(v, 'score', direction) : '';
         const text = isNum ? window.QymMetrics.formatMetricValue(v, 'score') : pendingText('—');
         return `<span class="samples-summary-stat" title="${escapeHtml(tooltip)}">` +
           `<span class="samples-summary-label">${label}</span>` +
@@ -3922,6 +4785,8 @@
       // Best-in-column chips across sibling passes (same dialect as the run
       // page's pass sweep): max wins for metrics, min wins for latencies.
       const winnersFor = (valueOf, direction) => {
+        // Metric columns pass their declared direction; none = no best.
+        if (direction !== 'max' && direction !== 'min') return new Set();
         const entries = peerPasses
           .map(p => ({ pass: Number(p.pass_number), value: valueOf(p) }))
           .filter(entry => typeof entry.value === 'number' && Number.isFinite(entry.value));
@@ -3938,7 +4803,10 @@
       };
       const metricWinners = Object.fromEntries(metricsToShow.map(metric => [
         metric,
-        winnersFor(p => (p.metric_means || {})[metric], 'max'),
+        winnersFor(
+          p => (p.metric_means || {})[metric],
+          { maximize: 'max', minimize: 'min' }[runMetricDirection(parentRun, metric)] || null,
+        ),
       ]));
       const avgLatencyWinners = winnersFor(p => p.avg_latency_ms, 'min');
       const medianLatencyWinners = winnersFor(p => p.median_latency_ms, 'min');
@@ -3986,14 +4854,14 @@
         const metricCells = metricsToShow.map(metric => {
           const value = (pass.metric_means || {})[metric];
           if (typeof value !== 'number') {
-            return `<td class="col-metric-value">${pass._queued ? '<span class="metric-na">—</span>' : pendingText('<span class="metric-na">—</span>')}${renderExecutionErrors(pass, ' in this pass', metric)}</td>`;
+            return `<td class="col-metric-value">${pass._queued ? '<span class="metric-na">—</span>' : pendingText('<span class="metric-na">—</span>')}${renderExecutionErrors(pass, ' in this pass', metric, null, runMetricDirection(parentRun, metric))}</td>`;
           }
           const metricType = state._metricTypes?.[metric] || window.QymMetrics.detectMetricTypeFromAvg(value);
           const peers = peerPasses.map(sibling => (sibling.metric_means || {})[metric]);
           const display = window.QymMetrics.formatMetricValueSmart(value, metricType, peers);
-          const metricClass = window.QymMetrics.getMetricColorClass(value, metricType);
+          const metricClass = window.QymMetrics.getMetricColorClass(value, metricType, runMetricDirection(parentRun, metric));
           const chip = chipAttrs(metricWinners[metric], firstPass);
-          return `<td class="col-metric-value"><span class="metric-score ${metricClass}${chip.cls}"${chip.title}>${display}</span>${renderExecutionErrors(pass, ' in this pass', metric)}</td>`;
+          return `<td class="col-metric-value"><span class="metric-score ${metricClass}${chip.cls}"${chip.title}>${display}</span>${renderExecutionErrors(pass, ' in this pass', metric, null, runMetricDirection(parentRun, metric))}</td>`;
         }).join('');
         const latencyCell = (cls, v, winners) => {
           const chip = chipAttrs(winners, firstPass);
@@ -4016,8 +4884,8 @@
             ? `<label class="custom-checkbox run-select-control" onclick="event.stopPropagation()"><input type="checkbox" class="pass-checkbox" data-pass-ref="${escapeHtml(passRef)}" ${passSelected ? 'checked' : ''} /><span class="checkmark"></span></label>`
             : ''}<span class="pass-indent"></span><span class="pass-member-id">${passLabel}</span>${passMeta ? `<span class="pass-member-items">${passMeta}</span>` : ''}</td>
           <td class="col-status">${badgeClass
-            ? `<span class="status-badge qym-badge status-${badgeClass}">${statusLabel}${progressLabel}</span>`
-            : `<span class="pass-member-status">${statusLabel}</span>`}${renderExecutionErrors(pass, ' in this pass')}${retries
+            ? `<span class="status-badge qym-badge status-${badgeClass}">${escapeHtml(statusLabel)}${progressLabel}</span>`
+            : `<span class="pass-member-status">${escapeHtml(statusLabel)}</span>`}${renderExecutionErrors(pass, ' in this pass')}${retries
             ? `<span class="status-retries" title="${retries} retr${retries === 1 ? 'y' : 'ies'} in this pass">${retries}↻</span>`
             : ''}</td>
           ${inherit('col-task')}
@@ -4025,7 +4893,7 @@
           ${inherit('col-dataset')}
           ${inherit('col-owner')}
           <td class="col-time">${passDate
-            ? `<span class="timestamp" title="${escapeHtml(passDate.full)}"><span class="date">${passDate.date}</span><span class="timestamp-sep">·</span><span class="time">${passDate.time}</span></span>`
+            ? `<span class="timestamp" title="${escapeHtml(passDate.full)}"><span class="date">${escapeHtml(passDate.date)}</span><span class="timestamp-sep">·</span><span class="time">${escapeHtml(passDate.time)}</span></span>`
             : '<span class="metric-na">—</span>'}</td>
           <td class="col-analysis" onclick="event.stopPropagation()">${renderAnalysisCell(parentRun, runStatus, firstPass, pass.analysis_cause_count)}</td>
           ${inherit('col-experiment')}
@@ -4050,20 +4918,20 @@
                 <span>Metric</span>
                 <select class="samples-metric-select" aria-label="Group metric">${metricOptions}</select>
               </label>` : ''}
-              <span class="samples-threshold" title="An item passes when its score meets or exceeds this threshold.">
-                <span>Pass if ≥</span>
+              ${groupDirection ? `<span class="samples-threshold" title="${groupDirection === 'minimize' ? 'An item passes when its score is at or below this threshold.' : 'An item passes when its score meets or exceeds this threshold.'}">
+                <span>Pass if ${passRule}</span>
                 <input type="range" class="threshold-slider-inline samples-threshold-slider"
                   min="0" max="100" step="5" value="${thrPct}" aria-label="Pass threshold">
                 <span class="threshold-value">${thrPct}%</span>
-              </span>
+              </span>` : `<span class="samples-threshold" title="${escapeHtml(window.QymMetrics.metricDirectionLabel(null))}">No direction declared</span>`}
               <div class="samples-summary-grid">
               ${stat(passAtLabel, group.pass_at_k, reportK
-                ? `Estimated chance that at least one of ${reportK} attempts scores ≥${thrPct}% — the unbiased pass@${reportK} computed from all ${k} stored passes.`
-                : `% of items where at least one of the ${k} passes scored ≥${thrPct}%.`)}
+                ? `Estimated chance that at least one of ${reportK} attempts scores ${passRule}${thrPct}% — the unbiased pass@${reportK} computed from all ${k} stored passes.`
+                : `% of items where at least one of the ${k} passes scored ${passRule}${thrPct}%.`)}
               ${stat(passHatLabel, group.pass_hat_k, reportK
-                ? `Estimated chance that all ${reportK} attempts score ≥${thrPct}% — the unbiased pass^${reportK} computed from all ${k} stored passes.`
-                : `% of items where all ${k} passes scored ≥${thrPct}%.`)}
-              ${stat(`Avg@${k}`, group.avg_at_k, `Mean score across all items and all ${k} passes.`)}
+                ? `Estimated chance that all ${reportK} attempts score ${passRule}${thrPct}% — the unbiased pass^${reportK} computed from all ${k} stored passes.`
+                : `% of items where all ${k} passes scored ${passRule}${thrPct}%.`)}
+              ${stat(`Avg@${k}`, group.avg_at_k, `Mean score across all items and all ${k} passes.`, groupDirection)}
               ${stat('Consistency', group.consistency, 'How often passes agree on pass/fail for the same item. 100% = all passes agree.')}
               ${stat('Reliability', group.reliability, 'Of the items solved at least once, the share of attempts that solve them.')}
               ${latencyStat}
@@ -4141,7 +5009,7 @@
         if (isPassRef(ref) && passRefBase(ref) === filePath) state.selectedRuns.delete(ref);
       });
       if (!allSelected) refs.forEach(ref => state.selectedRuns.add(ref));
-      render();
+      syncRunsSelection();
     }
 
     function insertSamplesDetail(runId, row, panelId, animate) {
@@ -4213,10 +5081,10 @@
           sessionStorage.removeItem('compareRuns');
           sessionStorage.removeItem('compareCohorts');
           sessionStorage.setItem('dashboardRunFile', filePath);
-          const base = state.currentProject && state.currentProject.slug
-            ? projectUrl(state.currentProject.slug, `runs/${encodeURIComponent(filePath)}`)
-            : apiUrl(`run/${encodeURIComponent(filePath)}`);
-          openUrl(`${base}?pass=${passNumber}`, event);
+          // The pass carries the list's view too, for its previous / next run
+          // (C044).
+          const url = runFromListUrl(filePath);
+          openUrl(`${url}${url.includes('?') ? '&' : '?'}pass=${passNumber}`, event);
         });
       });
       inserted.forEach(detail => {
@@ -4384,48 +5252,41 @@
           }
         }
       }
-      toggle.addEventListener('keydown', event => {
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        event.preventDefault();
-        toggle.click();
-      });
-      toggle.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const row = toggle.closest('tr');
-        if (!runId || !row) return;
-        const expanded = !state._samplesExpanded[runId];
-        const sampleCount = toggle.dataset.count || '';
-        state._samplesExpanded[runId] = expanded;
-        toggle.classList.toggle('open', expanded);
-        toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-        toggle.setAttribute('aria-label', `${expanded ? 'Collapse' : 'Expand'} ${sampleCount} pass results`);
-        toggle.title = `${expanded ? 'Collapse' : 'Expand'} ${sampleCount} pass results`;
-        row.classList.toggle('samples-open', expanded);
-        if (expanded) {
-          insertSamplesDetail(runId, row, panelId, true);
-          // The fetch fills the optimistic rows in place — no re-animation.
-          if (!state._samplesData[runId]) loadSamplesData(runId, row, panelId, false);
-        } else {
-          // Collapse instantly: rows can't animate height, so a fade would
-          // just hold their space and then snap — instant reads as crisp.
-          samplesDetailRows(runId).forEach(detail => detail.remove());
-          const run = runs.find(candidate => candidate.run_id === runId);
-          if (run) syncRepeatParentSelection(run, row);
-          scheduleRunsStickyColumnSizing();
-        }
-      });
     });
 
-    renderTablePagination(pagination);
-
-    const selectAllCheckbox = el('select-all');
-    if (selectAllCheckbox) {
-      const visibleFilePaths = runs.map(run => run.file_path);
-      const selectedCount = visibleFilePaths.filter(filePath => state.selectedRuns.has(filePath)).length;
-      selectAllCheckbox.disabled = visibleFilePaths.length === 0;
-      selectAllCheckbox.checked = visibleFilePaths.length > 0 && selectedCount === visibleFilePaths.length;
-      selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < visibleFilePaths.length;
+    function toggleSamples(toggle) {
+      const runId = toggle.dataset.runId;
+      const panelId = toggle.dataset.panelId;
+      const row = toggle.closest('tr');
+      if (!runId || !row) return;
+      const expanded = !state._samplesExpanded[runId];
+      state._samplesExpanded[runId] = expanded;
+      const run = runs.find(candidate => candidate.run_id === runId);
+      if (run) syncRunsRowState(row, run, Number(row.dataset.idx));
+      if (expanded) {
+        insertSamplesDetail(runId, row, panelId, true);
+        // The fetch fills the optimistic rows in place — no re-animation.
+        if (!state._samplesData[runId]) loadSamplesData(runId, row, panelId, false);
+      } else {
+        // Collapse instantly: rows can't animate height, so a fade would
+        // just hold their space and then snap — instant reads as crisp.
+        samplesDetailRows(runId).forEach(detail => detail.remove());
+        if (run) syncRepeatParentSelection(run, row);
+        scheduleRunsStickyColumnSizing();
+      }
     }
+
+    // Row events are delegated once on the tbody (see wireRunsTableEvents);
+    // they act on the rows of the latest render.
+    state._runsTableCtx = {
+      runFor: filePath => runsByFile.get(filePath) || null,
+      toggleSamples,
+      toggleExpandedPassSelection,
+      syncRepeatParentSelection,
+    };
+
+    renderTablePagination(pagination);
+    syncRunsSelectAll();
     scheduleRunsStickyColumnSizing();
   }
 
@@ -4452,20 +5313,20 @@
     return `
         <div class="grid-card ${isSelected ? 'selected' : ''}" data-file="${encodeURIComponent(run.file_path)}">
           <div class="grid-card-header">
-            <span class="grid-card-title" title="${run.run_id}">${stripProviderFromRunId(run.run_id)}</span>
-            <span class="grid-card-success ${successClass}">${formatPercent(run.success_rate)}</span>
+            <span class="grid-card-title" title="${escapeHtml(run.run_id)}">${escapeHtml(stripProviderFromRunId(run.run_id))}</span>
+            <span class="grid-card-success ${successClass}">${escapeHtml(formatPercent(run.success_rate))}</span>
           </div>
           <div class="grid-card-meta">
-            <span class="tag task">${run.task_name}</span>
-            <span class="tag model" title="${run.model_name}">${renderModelLabelForRun(run)}</span>
+            <span class="tag task">${escapeHtml(run.task_name)}</span>
+            <span class="tag model" title="${escapeHtml(run.model_name)}">${renderModelLabelForRun(run)}</span>
         </div>
           <div class="grid-card-bar">
             <div class="segment success" style="width:${successPct}%"></div>
             <div class="segment error" style="width:${errorPct}%"></div>
           </div>
           <div class="grid-card-footer">
-            <span>${run.total_items} items</span>
-            <span>${dt.date} ${dt.time}</span>
+            <span>${escapeHtml(run.total_items)} items</span>
+            <span>${escapeHtml(dt.date)} ${escapeHtml(dt.time)}</span>
           </div>
         </div>
       `;
@@ -4507,20 +5368,20 @@
 
       return `
         <div class="timeline-day">
-          <div class="timeline-date">${dateLabel}</div>
+          <div class="timeline-date">${escapeHtml(dateLabel)}</div>
           <div class="timeline-runs">
             ${dayRuns.map(run => {
               const dt = formatDate(run.timestamp);
               const successClass = getSuccessClass(run.success_rate);
               return `
                 <div class="timeline-run" data-file="${encodeURIComponent(run.file_path)}">
-                  <span class="timeline-time">${dt.time}</span>
+                  <span class="timeline-time">${escapeHtml(dt.time)}</span>
                   <div class="timeline-info">
-                    <span class="tag task">${run.task_name}</span>
-                    <span class="tag model" title="${run.model_name}">${renderModelLabelForRun(run)}</span>
-                    <span style="color:var(--text-muted);font-size:var(--font-sm);">${run.total_items} items</span>
+                    <span class="tag task">${escapeHtml(run.task_name)}</span>
+                    <span class="tag model" title="${escapeHtml(run.model_name)}">${renderModelLabelForRun(run)}</span>
+                    <span style="color:var(--text-muted);font-size:var(--font-sm);">${escapeHtml(run.total_items)} items</span>
                   </div>
-                  <span class="timeline-success ${successClass}">${formatPercent(run.success_rate)}</span>
+                  <span class="timeline-success ${successClass}">${escapeHtml(formatPercent(run.success_rate))}</span>
                 </div>
               `;
             }).join('')}
@@ -4551,6 +5412,7 @@
 
     const hasFilters = state.quickFilter !== 'all'
       || state.filterOrigin !== 'all'
+      || !!activeSearchQuery()
       || state.filterTasks.size > 0
       || (state.filterModels.size > 0)
       || state.filterDatasets.size > 0
@@ -4569,7 +5431,14 @@
         parts.push(`dataset: ${summarizeFilterSelection(state.filterDatasets, getDatasetFilterLabel)}`);
       }
       if (state.filterModels.size > 0 && !state.filterModels.has('__none__')) {
-        parts.push(`model: ${summarizeFilterSelection(state.filterModels, stripModelProvider)}`);
+        // Same names as the dropdown: model keys carry an internal
+        // "|||plain"/"|||reasoning" suffix, shown as a "(reasoning)" marker.
+        const models = [...state.filterModels].map(value => {
+          const name = getModelFilterOptionLabel(value);
+          const short = name.length > 20 ? name.slice(0, 20) + '...' : name;
+          return parseModelVariantKey(value).hasReasoning ? `${short} (reasoning)` : short;
+        });
+        parts.push(`model: ${models.join(', ')}`);
       } else if (state.filterModels.has('__none__')) {
         parts.push('model: none');
       }
@@ -4589,8 +5458,11 @@
       });
       if (state.filterOrigin === 'official') parts.push('official runs');
       if (state.filterOrigin === 'local') parts.push('local runs');
+      if (activeSearchQuery()) parts.push(`search: "${activeSearchQuery()}"`);
       if (state.quickFilter === 'today') parts.push('today');
       if (state.quickFilter === 'week') parts.push('last 7d');
+      if (state.quickFilter === 'month') parts.push('last 30d');
+      if (state.quickFilter === 'custom') parts.push(customRangeLabel());
       filterText = countText + (parts.length > 0 ? ` — ${parts.join(', ')}` : '');
     }
 
@@ -4684,27 +5556,31 @@
           const passIsDeletable = !isPassRef(ref)
             || (Number(run.samples) > 1
               && (selectedPassCounts.get(run.file_path) || 0) < Number(run.samples)
-              && !['RUNNING', 'PENDING'].includes(run.status || ''));
+              // A run in review or signed off keeps its passes (C041).
+              && !['RUNNING', 'PENDING', 'SUBMITTED', 'APPROVED'].includes(run.status || ''));
           return (canManageProject || ownsRun) && passIsDeletable;
         });
       const hasSelectedPasses = selectedRefs.some(isPassRef);
-      deleteBtn.style.display = isCohortMode ? 'none' : 'inline-flex';
+      deleteBtn.style.display = isCohortMode || isProjectReadOnly() ? 'none' : 'inline-flex';
       deleteBtn.disabled = !allDeletable;
       deleteBtn.title = allDeletable
         ? (hasSelectedPasses ? 'Delete selected runs and passes' : 'Delete selected runs')
-        : 'Only owned, inactive runs and passes can be deleted';
+        : 'Only owned, inactive runs can be deleted, and passes only while the run is not submitted or approved';
     }
 
     // Bulk actions must follow the same ownership and status rules as row actions.
     const publishBtn = el('publish-selected');
     if (publishBtn) {
       const currentUserId = state.currentUser && state.currentUser.id;
+      // Managers and admins submit any run of the project for its owner (C072).
+      const managesProject = ((state.currentUser && state.currentUser.role) || '') === 'ADMIN'
+        || ((state.currentProject && state.currentProject.role) || '') === 'MANAGER';
       const allSubmittable = selectedRuns.length > 0 && selectedRuns.every(r => {
         const status = r.status || '';
         const isOwner = !!(currentUserId && r.owner && r.owner.id === currentUserId);
-        return isOwner && (status === 'COMPLETED' || status === 'FAILED' || status === 'REJECTED');
+        return (isOwner || managesProject) && (status === 'COMPLETED' || status === 'FAILED' || status === 'REJECTED');
       });
-      publishBtn.style.display = (allSubmittable && !isCohortMode) ? 'inline-flex' : 'none';
+      publishBtn.style.display = (allSubmittable && !isCohortMode && !isProjectReadOnly()) ? 'inline-flex' : 'none';
       publishBtn.textContent = 'Submit';
     }
   }
@@ -4714,6 +5590,7 @@
   // ═══════════════════════════════════════════════════
 
   function render() {
+    if (!dashboardActive) return;
     if (state.dashboardRequestKey !== null) {
       const filterKey = getTableFilterKey();
       if (filterKey !== state.tableFilterKey) {
@@ -4721,6 +5598,9 @@
         state.tablePage = 1;
         state.focusedIndex = -1;
       }
+    }
+    syncDashboardUrl();
+    if (state.dashboardRequestKey !== null) {
       if (dashboardPageRequestKey() !== state.dashboardRequestKey) {
         el('table-view')?.setAttribute('aria-busy', 'true');
         fetchRuns();
@@ -4737,42 +5617,28 @@
     const gridView = el('grid-view');
     const timelineView = el('timeline-view');
     const modelsView = el('models-view');
-    const selectionAvailable = !!state.runs && (usesDashboardSummary() ? state.dashboardOverview.total_count > 0 : state.flatRuns.length > 0);
-
-    if (!selectionAvailable && !state.dashboardOverview?.freshness?.updating) {
-      state.selectMode = false;
-      state.selectedRuns.clear();
-      state.cohortAnchorRuns = null;
-    } else if (state.selectedRuns.size > 0 || state.cohortAnchorRuns) {
-      state.selectMode = true;
-    }
-    if (tableView) {
-      tableView.classList.toggle('select-mode', state.selectMode);
-    }
-    const selectModeBtn = el('select-mode-btn');
-    if (selectModeBtn) {
-      const modeVisible = state.currentView === 'table';
-      selectModeBtn.style.display = modeVisible ? 'inline-flex' : 'none';
-      selectModeBtn.disabled = !selectionAvailable;
-      selectModeBtn.textContent = state.selectMode ? 'Done' : 'Select';
-      selectModeBtn.setAttribute('aria-pressed', state.selectMode ? 'true' : 'false');
-      selectModeBtn.classList.toggle('qym-inline-action--neutral', !state.selectMode);
-      selectModeBtn.classList.toggle('qym-inline-action--accent', state.selectMode);
-    }
+    renderSelectModeControls();
     // Keep selection controls coherent even when loading/empty states return early.
     renderComparePanel();
+
+    // Each page carries only its own view's container (Runs has no charts or
+    // models view), so every container is optional here.
+    const hideViews = () => {
+      [chartsView, tableView, gridView, timelineView, modelsView].forEach(view => {
+        if (view) view.style.display = 'none';
+      });
+    };
 
     if (!state.runs) {
       loading.style.display = 'flex';
       empty.style.display = 'none';
-      chartsView.style.display = 'none';
-      tableView.style.display = 'none';
-      gridView.style.display = 'none';
-      timelineView.style.display = 'none';
-      if (modelsView) modelsView.style.display = 'none';
+      hideViews();
       return;
     }
 
+    // The first content takes the loading skeleton's place in one crossfade
+    // (QymShell.liftSkeleton / arrive, once per page load).
+    if (loading.style.display !== 'none') window.QymShell?.liftSkeleton?.(loading);
     loading.style.display = 'none';
 
     const runs = filterRuns();
@@ -4796,11 +5662,8 @@
         selectAllCheckbox.disabled = true;
       }
       empty.style.display = 'flex';
-      chartsView.style.display = 'none';
-      tableView.style.display = 'none';
-      gridView.style.display = 'none';
-      timelineView.style.display = 'none';
-      if (modelsView) modelsView.style.display = 'none';
+      hideViews();
+      window.QymShell?.arrive?.(empty);
       return;
     }
 
@@ -4854,6 +5717,7 @@
         renderModelsView();
         break;
     }
+    window.QymShell?.arrive?.({ charts: chartsView, table: tableView, models: modelsView }[state.currentView]);
 
     renderStatsBar();
     renderStatusBar();
@@ -4876,6 +5740,7 @@
     if (state.quickFilter !== 'all') n++;
     if (state.filterOrigin !== 'all') n++;
     n += activeVersioningFilters().length;
+    if (activeSearchQuery()) n++;
     return n;
   }
 
@@ -4897,6 +5762,36 @@
       btn.classList.toggle('active', active);
       btn.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
+    const rangeButton = $('.filter-btn[data-filter="custom"]');
+    if (rangeButton) {
+      rangeButton.textContent = filter === 'custom' ? customRangeLabel() : 'Range';
+      rangeButton.title = filter === 'custom' ? `Runs from ${customRangeLabel()} (click to change)` : 'Choose a date range';
+    }
+  }
+
+  function applyQuickFilter(filter) {
+    state.quickFilter = filter;
+    setQuickFilterSelection(filter);
+    state.focusedIndex = -1;
+    render();
+  }
+
+  function setSearchQuery(value, { updateInput = false } = {}) {
+    // Trim only: a name with two spaces in a row must still match its copy.
+    const query = String(value || '').trim().slice(0, 200);
+    const input = el('runs-search');
+    if (updateInput && input) input.value = query;
+    if (query === state.searchQuery) return;
+    state.searchQuery = query;
+    // Keep the search in the URL so Back, reload and shared links keep it.
+    try {
+      const url = new URL(window.location.href);
+      if (query) url.searchParams.set('q', query);
+      else url.searchParams.delete('q');
+      window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+    } catch {}
+    state.focusedIndex = -1;
+    render();
   }
 
   function setOriginFilterSelection(origin) {
@@ -4920,6 +5815,10 @@
     state.filterOrigin = 'all';
     setOriginFilterSelection('all');
     populateFilterDropdowns();
+    if (state.searchQuery) {
+      setSearchQuery('', { updateInput: true });
+      return;
+    }
     render();
   }
 
@@ -4937,6 +5836,13 @@
     const renderToken = (mvs.renderToken || 0) + 1;
     const scopeKey = getTableFilterKey();
     mvs.renderToken = renderToken;
+    // The view's first frame shows the cards' shape while the candidates
+    // load; what comes next takes its place in one fade (QymShell).
+    if (modelsGrid && !modelsGrid.childElementCount && window.QymShell?.skeletonHTML) {
+      // The grid's own columns would squeeze it: it spans them all.
+      modelsGrid.innerHTML = '<div style="grid-column: 1 / -1">'
+        + window.QymShell.skeletonHTML('cards', { label: 'Loading models…', count: 6, minWidth: 320, height: 260, immediate: true }) + '</div>';
+    }
     let candidates = null;
     if (usesDashboardSummary()) {
       try {
@@ -4967,7 +5873,11 @@
 
     // If no task+dataset selected, show empty state
     if (!selectedTask || !selectedDataset) {
-      if (modelsEmpty) modelsEmpty.style.display = 'flex';
+      window.QymShell?.liftSkeleton?.(modelsGrid);
+      if (modelsEmpty) {
+        modelsEmpty.style.display = 'flex';
+        window.QymShell?.arrive?.(modelsEmpty);
+      }
       if (modelsGrid) modelsGrid.innerHTML = '';
       if (modelsRanking) modelsRanking.style.display = 'none';
       if (modelsStatVisibilityWrapper) modelsStatVisibilityWrapper.style.display = 'none';
@@ -4985,7 +5895,9 @@
     });
 
     if (matchingRuns.length === 0) {
+      window.QymShell?.liftSkeleton?.(modelsGrid);
       if (modelsGrid) modelsGrid.innerHTML = '<div class="models-empty"><h3>No runs found</h3><p>No runs match the selected task and dataset</p></div>';
+      window.QymShell?.arrive?.(modelsGrid);
       if (modelsRanking) modelsRanking.style.display = 'none';
       if (modelsStatVisibilityWrapper) modelsStatVisibilityWrapper.style.display = 'none';
       return;
@@ -5023,15 +5935,30 @@
       }
     }
 
-    // Detect if metric is boolean
+    // Detect if metric is boolean, and its declared direction (C008)
     detectModelsViewMetricType(matchingRuns, mvs.selectedMetric);
+    mvs.metricDirection = runsMetricDirection(matchingRuns, mvs.selectedMetric);
+    // Pass threshold: the one chosen for this metric, else the metric's own
+    // default (spec pass_threshold, else 80%, or 20% when lower is better),
+    // as on Compare and the run page. A fixed 80% made "Pass ≤ 80%" pass
+    // nearly every item of a lower-is-better metric.
+    const thresholdSpec = matchingRuns
+      .map(run => run?.metric_specs?.[mvs.selectedMetric])
+      .find(spec => spec && typeof spec === 'object') || null;
+    const chosenThreshold = (mvs.thresholdByMetric || {})[mvs.selectedMetric];
+    mvs.threshold = chosenThreshold != null
+      ? chosenThreshold
+      : window.QymMetrics.defaultPassThreshold(thresholdSpec, mvs.metricDirection);
+    syncModelsThresholdSlider();
     const globalMetric = candidates?.metric_summary?.[mvs.selectedMetric];
     if (globalMetric) {
       mvs.metricIsBoolean = !!globalMetric.is_boolean;
       mvs.metricIsNumeric = !!globalMetric.is_numeric;
       const thresholdRow = el('models-threshold-row');
-      if (thresholdRow) thresholdRow.style.display = (mvs.metricIsBoolean || mvs.metricIsNumeric) ? 'none' : 'inline-flex';
+      if (thresholdRow) thresholdRow.style.display = (mvs.metricIsBoolean || mvs.metricIsNumeric || !mvs.metricDirection) ? 'none' : 'inline-flex';
     }
+    const thresholdLabel = el('models-threshold-row')?.querySelector('.filter-label');
+    if (thresholdLabel) thresholdLabel.textContent = mvs.metricDirection === 'minimize' ? 'Pass ≤' : 'Pass ≥';
     populateModelsStatVisibility(matchingRuns);
 
     const models = Object.keys(runsByModel);
@@ -5049,6 +5976,7 @@
       mvs.selectedMetric,
       String(mvs.threshold),
       String(mvs.metricIsBoolean),
+      String(mvs.metricDirection),
       String(globalK),
       ...modelSelections
         .map(({ model, selectedPaths }) => `${model}:${selectedPaths.slice().sort().join(',')}`)
@@ -5065,18 +5993,26 @@
     }
 
     // Show loading state only when the Models payload actually needs to change.
-    if (modelsGrid) modelsGrid.innerHTML = '<div class="models-loading"><img src="/static/qym_icon.png" alt="" class="loading-icon" /><span>Loading run data...</span></div>';
+    if (modelsGrid) {
+      modelsGrid.innerHTML = window.QymShell?.skeletonHTML
+        ? '<div style="grid-column: 1 / -1">' + window.QymShell.skeletonHTML('cards', { label: 'Loading models…', count: 6, minWidth: 320, height: 260 }) + '</div>'
+        : '<div class="models-loading"><img src="/static/qym_icon.png" alt="" class="loading-icon" /><span>Loading run data...</span></div>';
+    }
 
     let combinedRunsPromise = null;
     if (mvs.inFlightRequestKey === requestKey && mvs.inFlightRequestPromise) {
       combinedRunsPromise = mvs.inFlightRequestPromise;
     } else {
-      const allSelectedPaths = Array.from(new Set(modelSelections.flatMap(({ selectedPaths }) => selectedPaths)));
       const selectedRows = modelSelections.flatMap(({ selectedRuns }) => selectedRuns);
       const selectedRevision = selectedRows.every(run => run._revision !== undefined)
         ? JSON.stringify(selectedRows.map(run => [run.file_path, run._revision]).sort((a, b) => a[0].localeCompare(b[0])))
         : candidates?.selected_revision ?? candidates?.revision;
-      combinedRunsPromise = fetchModelRunsData(allSelectedPaths, selectedRevision);
+      // K-run statistics come from the server, a few hundred bytes per
+      // model, never the selected runs' item rows (C035).
+      combinedRunsPromise = fetchModelStats(
+        modelSelections.map(({ model, selectedPaths }) => ({ key: model, runs: selectedPaths })),
+        mvs.selectedMetric, mvs.threshold, mvs.metricIsBoolean, mvs.metricDirection, selectedRevision,
+      );
       mvs.inFlightRequestKey = requestKey;
       mvs.inFlightRequestPromise = combinedRunsPromise;
     }
@@ -5098,17 +6034,11 @@
       mvs.inFlightRequestPromise = null;
     }
 
-    const combinedRunsData = comparePayload && Array.isArray(comparePayload.runs) ? comparePayload.runs : [];
-    const runsDataById = new Map((combinedRunsData || []).map((runData) => {
-      const runInfo = runData && runData.run ? runData.run : {};
-      const runId = runInfo.file_path || runInfo.run_id || '';
-      return [runId, runData];
-    }));
+    const groupStats = (comparePayload && comparePayload.groups) || {};
 
     mvs.modelStats = {};
     modelSelections.forEach(({ model, selectedPaths, selectedRuns }) => {
-      const detailedData = selectedPaths.map((path) => runsDataById.get(path)).filter(Boolean);
-      mvs.modelStats[model] = calculateModelStatsFromItems(detailedData, mvs.selectedMetric, mvs.threshold, mvs.metricIsBoolean);
+      mvs.modelStats[model] = { ...(groupStats[model] || emptyModelStats()) };
       mvs.modelStats[model].traceAverages = calculateModelTraceStats(selectedRuns);
       mvs.modelStats[model].totalRetries = selectedRuns.reduce((sum, run) => sum + Number(run.total_retries || 0), 0);
       mvs.modelStats[model].totalAvailable = candidates?.totals?.[model] ?? runsByModel[model].length;
@@ -5142,25 +6072,33 @@
       if (!currentDataset && uniqueDatasets.size === 1) currentDataset = [...uniqueDatasets][0];
     }
 
-    // Get metrics for selected task+dataset
+    // Get metrics for selected task+dataset, in spec position order (newest
+    // run first), never alphabetical (C008).
     const runsForCombo = currentTask && currentDataset
       ? state.filteredRuns.filter(r => r.task_name === currentTask && getRunDatasetKey(r) === currentDataset)
       : [];
-    const metricsSet = new Set(currentTask && currentDataset && candidates ? candidates.metrics : []);
-    for (const run of runsForCombo) {
-      if (run.metrics) {
-        run.metrics.forEach(m => metricsSet.add(m));
-      }
-    }
-    const metrics = [...metricsSet].sort();
+    const comboRuns = currentTask && currentDataset && candidates
+      ? (candidates.rows || []).filter(r => r.task_name === currentTask && getRunDatasetKey(r) === currentDataset)
+      : [];
+    const orderedRuns = [...comboRuns, ...runsForCombo]
+      .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+    const metrics = window.QymMetrics.mergeMetricNames([
+      ...orderedRuns.map(run => run.metrics || []),
+      currentTask && currentDataset && candidates ? (candidates.metrics || []) : [],
+    ]);
     const currentMetric = state.modelsViewState.selectedMetric;
     metricSelect.innerHTML = '<option value="">Select a metric...</option>' +
       metrics.map(m => `<option value="${escapeHtml(m)}" ${m === currentMetric ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('');
 
-    // Auto-select first metric if none selected or current metric not in list
+    // Default to the newest run's declared primary metric, else its first.
     if ((!currentMetric || !metrics.includes(currentMetric)) && metrics.length > 0) {
-      state.modelsViewState.selectedMetric = metrics[0];
-      metricSelect.value = metrics[0];
+      const newest = orderedRuns[0];
+      const preferred = newest
+        ? window.QymMetrics.defaultMetricName(newest.metrics || [], newest.metric_specs || {})
+        : null;
+      const defaultMetric = preferred && metrics.includes(preferred) ? preferred : metrics[0];
+      state.modelsViewState.selectedMetric = defaultMetric;
+      metricSelect.value = defaultMetric;
     }
 
     // K input value
@@ -5168,7 +6106,10 @@
       kInput.value = state.modelsViewState.globalK;
     }
 
-    // Threshold slider value
+    syncModelsThresholdSlider();
+  }
+
+  function syncModelsThresholdSlider() {
     const thresholdSlider = el('models-threshold-slider');
     const thresholdValue = el('models-threshold-value');
     if (thresholdSlider) {
@@ -5225,84 +6166,120 @@
     return entry.promise;
   }
 
-  // Cache for fetched Models run data to avoid re-fetching
-  let modelsRunDataCache = null;
+  function emptyModelStats() {
+    return {
+      passAtK: 0, passHatK: 0, maxAtK: 0, consistency: 0, reliability: 0, avgScore: 0, avgLatency: 0, medianLatency: 0,
+      totalItems: 0, failedCount: 0, K: 0, correctDistribution: [0], runNames: [],
+      minScore: 0, stddevScore: 0
+    };
+  }
 
-  async function fetchModelRunsData(filePaths, revision = (state.dashboardOverview?.catalog_revision ?? state.dashboardOverview?.revision)) {
-    if (filePaths.length === 0) return { runs: [], cacheHit: true };
+  // The last K-run statistics request per view, reused while nothing it
+  // depends on changed (the same groups, metric, threshold and revision).
+  let modelStatsCache = null;
 
-    // Check cache first
-    const paths = [...new Set(filePaths)].sort();
-    const cacheKey = [getProjectSlugFromPath(), revision, ...paths].join('|');
-    if (modelsRunDataCache?.key === cacheKey) return modelsRunDataCache.promise;
+  // The server's limits per statistics request (api/dashboard_stats.py).
+  const MAX_STAT_GROUPS = 100;
+  const MAX_STAT_RUNS = 2000;
+
+  // Pass@K, Pass^K, Max@K, consistency, reliability, averages, latency, error
+  // counts and the correct-count histogram per group, computed on the server
+  // with the metrics.js rules (services/model_stats.py). groups: [{key, runs}].
+  async function fetchModelStats(groups, metric, threshold, isBoolean, direction, revision = (state.dashboardOverview?.catalog_revision ?? state.dashboardOverview?.revision)) {
+    const payload = {
+      metric,
+      threshold: Number(threshold),
+      is_boolean: !!isBoolean,
+      direction: direction === 'maximize' || direction === 'minimize' ? direction : null,
+      groups: (groups || []).map(group => ({ key: String(group.key), runs: [...new Set(group.runs || [])] })),
+    };
+    if (!metric || payload.groups.length === 0) return { groups: {}, cacheHit: true };
+    const cacheKey = [getProjectSlugFromPath(), revision, JSON.stringify(payload)].join('|');
+    if (modelStatsCache?.key === cacheKey) return modelStatsCache.promise;
     const entry = { key: cacheKey, promise: null };
     entry.promise = (async () => {
-      const runs = [];
-      for (let offset = 0; offset < paths.length; offset += 100) {
-        const batch = paths.slice(offset, offset + 100);
-        const params = batch.map(f => `files=${encodeURIComponent(f)}`).join('&');
-        const response = await fetch(apiUrl(`api/models/runs?${params}`));
-        if (!response.ok) throw new Error(`Could not load selected runs (HTTP ${response.status})`);
-        const data = await response.json();
-        if (!Array.isArray(data.runs) || data.runs.length !== batch.length) throw new Error('Some selected runs are no longer available. Refresh the model selection.');
-        runs.push(...data.runs);
+      // Whole groups per request, within the server's limits; the answers
+      // merge. A group is never split: its statistics need all its runs.
+      const batches = [];
+      let batch = null;
+      let runCount = 0;
+      payload.groups.forEach((group) => {
+        if (!batch || batch.length >= MAX_STAT_GROUPS || runCount + group.runs.length > MAX_STAT_RUNS) {
+          batch = [];
+          runCount = 0;
+          batches.push(batch);
+        }
+        batch.push(group);
+        runCount += group.runs.length;
+      });
+      let responses;
+      try {
+        responses = await Promise.all(batches.map(groups => dashboardQuery('models/stats', { ...payload, groups })));
+      } catch (error) {
+        throw new Error(`Could not load model statistics (${error.message || 'request failed'})`);
       }
-      return { runs, cacheHit: false };
+      const groups = {};
+      responses.forEach((data) => {
+        if (!data || typeof data.groups !== 'object') throw new Error('Incomplete model statistics response');
+        if (Array.isArray(data.missing) && data.missing.length) throw new Error('Some selected runs are no longer available. Refresh the model selection.');
+        Object.assign(groups, data.groups);
+      });
+      return { groups, cacheHit: false };
     })();
-    modelsRunDataCache = entry;
-    entry.promise.catch(() => { if (modelsRunDataCache === entry) modelsRunDataCache = null; });
+    modelStatsCache = entry;
+    entry.promise.catch(() => { if (modelStatsCache === entry) modelStatsCache = null; });
     return entry.promise;
   }
 
-  function calculateModelStatsFromItems(runsData, metricName, threshold, isBoolean) {
-    // Get run names before delegating to shared function
-    const runNames = (runsData || []).map((r, i) => r?.run?.run_name || `Run ${i + 1}`);
-    const K = runsData?.length || 0;
-
-    if (!runsData || runsData.length === 0) {
-      return {
-        passAtK: 0, passHatK: 0, maxAtK: 0, consistency: 0, reliability: 0, avgScore: 0, avgLatency: 0, medianLatency: 0,
-        totalItems: 0, failedCount: 0, K: 0, correctDistribution: [0], runNames: [],
-        minScore: 0, stddevScore: 0
-      };
+  // Charts "Grouped" asks for every group's statistics in one render: the
+  // requests of one tick that share a metric rule go out as one batch (at
+  // most 100 groups or 2000 runs each), not one request per group (C035).
+  let chartGroupStatsBatches = new Map();
+  function fetchChartGroupStats(key, paths, metric, threshold, isBoolean, direction) {
+    // One request cannot hold such a group; refuse it alone so the other
+    // groups of its batch still load.
+    const runs = [...new Set(paths)];
+    if (runs.length > MAX_STAT_RUNS) {
+      return Promise.reject(new Error(`Group statistics cover at most ${MAX_STAT_RUNS} runs. Narrow the filters to see them.`));
     }
-
-    const effectiveThreshold = isBoolean ? 0.9999 : threshold;
-
-    // Use shared metrics calculation. Repeat runs pool their ATTEMPTS: a ×k
-    // run contributes k per-pass entries, so Pass@K math runs over the pooled
-    // attempt set — never pass@k of pass@k.
-    const metrics = window.QymMetrics.calculateItemLevelMetrics({
-      runsData: expandSampledRunsData(runsData),
-      metricName,
-      threshold: effectiveThreshold,
-      getMetricIndex: (runData) => {
-        const metricNames = runData?.snapshot?.metric_names || runData?.run?.metric_names || [];
-        return metricNames.indexOf(metricName);
-      },
-      getItemId: (row) => row.item_id || String(row.index),
-      trackDistribution: true
-    });
-
-    return {
-      passAtK: metrics.passAtK,
-      passHatK: metrics.passHatK,
-      maxAtK: metrics.maxAtK,
-      consistency: metrics.consistency,
-      reliability: metrics.reliability,
-      avgScore: metrics.avgScore,
-      avgLatency: metrics.avgLatency,
-      medianLatency: metrics.medianLatency,
-      totalItems: metrics.totalItems,
-      failedCount: metrics.failedCount,
-      totalScoreSum: metrics.totalScoreSum,
-      totalScoreCount: metrics.totalScoreCount,
-      minScore: metrics.minScore,
-      stddevScore: metrics.stddevScore,
-      K: metrics.K,
-      correctDistribution: metrics.correctDistribution || new Array(K + 1).fill(0),
-      runNames
+    const rule = {
+      metric,
+      threshold: Number(threshold),
+      is_boolean: !!isBoolean,
+      direction: direction === 'maximize' || direction === 'minimize' ? direction : null,
     };
+    const signature = JSON.stringify(rule);
+    let batch = chartGroupStatsBatches.get(signature);
+    const runCount = batch ? batch.groups.reduce((sum, group) => sum + group.runs.length, 0) : 0;
+    if (!batch || batch.groups.length >= MAX_STAT_GROUPS || runCount + runs.length > MAX_STAT_RUNS) {
+      if (batch) chartGroupStatsBatches.delete(signature);
+      batch = { rule, groups: [], waiters: new Map() };
+      chartGroupStatsBatches.set(signature, batch);
+      const pending = batch;
+      setTimeout(() => {
+        if (chartGroupStatsBatches.get(signature) === pending) chartGroupStatsBatches.delete(signature);
+        dashboardQuery('models/stats', { ...pending.rule, groups: pending.groups }).then((data) => {
+          const missing = new Set(Array.isArray(data?.missing) ? data.missing : []);
+          pending.groups.forEach((group) => {
+            const waiter = pending.waiters.get(group.key);
+            if (group.runs.some(run => missing.has(run)) || !data?.groups?.[group.key]) {
+              waiter.reject(new Error('Some runs of this group are no longer available.'));
+            } else {
+              waiter.resolve(data.groups[group.key]);
+            }
+          });
+        }).catch((error) => {
+          pending.waiters.forEach(waiter => waiter.reject(error));
+        });
+      }, 0);
+    }
+    const existing = batch.waiters.get(key);
+    if (existing) return existing.promise;
+    const waiter = {};
+    waiter.promise = new Promise((resolve, reject) => { waiter.resolve = resolve; waiter.reject = reject; });
+    batch.waiters.set(key, waiter);
+    batch.groups.push({ key, runs });
+    return waiter.promise;
   }
 
   function calculateModelTraceStats(runs) {
@@ -5349,7 +6326,8 @@
     // Show/hide threshold control (inline) — hide for boolean and numeric
     const thresholdRow = el('models-threshold-row');
     if (thresholdRow) {
-      thresholdRow.style.display = (allBoolean || isNumeric) ? 'none' : 'inline-flex';
+      const direction = runsMetricDirection(runs, metricName);
+      thresholdRow.style.display = (allBoolean || isNumeric || !direction) ? 'none' : 'inline-flex';
     }
   }
 
@@ -5389,14 +6367,25 @@
     const visibleTraceMetrics = mvs.visibleTraceMetrics || [];
     const availableStatOptions = getModelsViewStatOptions();
     const visibleStatKeys = new Set(getVisibleModelsViewStatKeys(availableStatOptions));
+    // No declared direction: values only, no pass rates or colors (C008).
+    const direction = mvs.metricDirection || null;
+    const isNeutral = !isNumeric && !direction;
+    const passRule = direction === 'minimize' ? '≤' : '≥';
+    const scoreClassFor = value => (value === null || value === undefined
+      ? '' : window.QymMetrics.getMetricColorClass(value, mType, direction));
 
     const models = Object.keys(runsByModel).sort((a, b) => {
-      // Sort by avg score descending
-      const scoreA = mvs.modelStats[a]?.avgScore || 0;
-      const scoreB = mvs.modelStats[b]?.avgScore || 0;
-      return scoreB - scoreA;
+      // Best average first when a direction is declared, else by name; a
+      // model without an average comes last.
+      const scoreA = mvs.modelStats[a]?.avgScore ?? null;
+      const scoreB = mvs.modelStats[b]?.avgScore ?? null;
+      if ((scoreA === null) !== (scoreB === null)) return scoreA === null ? 1 : -1;
+      const better = window.QymMetrics.compareMetricValues(scoreA || 0, scoreB || 0, direction);
+      return better ? -better : String(a).localeCompare(String(b));
     });
 
+    // The first cards take the skeleton's place (QymShell, once per load).
+    window.QymShell?.liftSkeleton?.(container);
     container.innerHTML = models.map((model, idx) => {
       const stats = mvs.modelStats[model];
       const color = CHART_COLORS[idx % CHART_COLORS.length];
@@ -5407,17 +6396,17 @@
       const correctDef = isBoolean ? '100%' : `≥${threshold}%`;
       const tooltips = {
         passAtK: isBoolean
-          ? `% of items where at least one of the ${K} runs achieved 100%`
-          : `% of items where at least one of the ${K} runs scored ≥${threshold}%`,
+          ? `% of items where at least one of the ${K} runs achieved ${direction === 'minimize' ? 'the best score (0%)' : '100%'}`
+          : `% of items where at least one of the ${K} runs scored ${passRule}${threshold}%`,
         passHatK: isBoolean
-          ? `% of items where ALL ${K} runs achieved 100%`
-          : `% of items where ALL ${K} runs scored ≥${threshold}%`,
-        maxAtK: isNumeric
-          ? `Average of the best value per item across all ${K} runs`
-          : `Average of the best score per item across all ${K} runs`,
+          ? `% of items where ALL ${K} runs achieved ${direction === 'minimize' ? 'the best score (0%)' : '100%'}`
+          : `% of items where ALL ${K} runs scored ${passRule}${threshold}%`,
+        maxAtK: `Average of the best ${isNumeric ? 'value' : 'score'} per item across all ${K} runs${direction === 'minimize' ? ' (the lowest, since lower is better)' : ''}`,
         consistency: `How often runs agree on pass/fail across ${K} runs. 100% = all agree, 0% = 50/50 split.`,
         reliability: `When an item CAN be solved, how often is it? Only includes items with ≥1 passing run.`,
-        failedCount: `Number of runs that threw an error (across all items). Errors are scored as 0%.`,
+        failedCount: direction === 'minimize'
+          ? `Item evaluations that returned a task or scorer error, across all passes of the selected runs. Lower is better for this metric, so errors are left out of its scores and count as fails.`
+          : `Item evaluations that returned a task or scorer error, across all passes of the selected runs. Errors are scored as 0%.`,
         totalRetries: `Total retries across all items in the selected runs. This sums per-item retry counts, not distinct items that retried.`,
         avgScore: isNumeric
           ? `Mean value across all items and all ${K} runs`
@@ -5425,22 +6414,22 @@
         avgLatency: `Average response time across all runs`,
         medianLatency: `Median response time across all items and all ${K} runs. Less sensitive to outliers than the mean.`,
         correctDist: isBoolean
-          ? `How many runs got each item correct (100%). "0" = no run solved it, "${K}" = all runs solved it.`
-          : `How many runs scored ≥${threshold}% for each item.`
+          ? `How many runs got each item correct. "0" = no run solved it, "${K}" = all runs solved it.`
+          : `How many runs scored ${passRule}${threshold}% for each item.`
       };
 
-      const distBar = isNumeric ? '' : buildModelDistributionBar(stats);
+      const distBar = isNumeric || isNeutral ? '' : buildModelDistributionBar(stats);
 
       // Helper to create info icon with tooltip (same as compare view)
       function infoIcon(tooltip) {
-        return `<button type="button" class="stat-info-icon qym-help-marker" aria-label="More information" aria-expanded="false">i<span class="stat-info-tooltip qym-help-tooltip" role="tooltip">${tooltip}</span></button>`;
+        return `<button type="button" class="stat-info-icon qym-help-marker" aria-label="More information" aria-expanded="false">i<span class="stat-info-tooltip qym-help-tooltip" role="tooltip">${escapeHtml(tooltip)}</span></button>`;
       }
 
       function renderModelStatTile(title, value, valueClass = '', tooltip = '') {
         return `
           <div class="model-stat-item">
-            <div class="stat-label">${title}${tooltip ? ` ${infoIcon(tooltip)}` : ''}</div>
-            <div class="stat-value ${valueClass}">${value}</div>
+            <div class="stat-label">${escapeHtml(title)}${tooltip ? ` ${infoIcon(tooltip)}` : ''}</div>
+            <div class="stat-value ${valueClass}">${escapeHtml(value)}</div>
           </div>
         `;
       }
@@ -5451,10 +6440,19 @@
         if (!visibleStatKeys.has(key)) return;
         statTiles.push(renderModelStatTile(title, value, valueClass, tooltip));
       }
-      if (isNumeric) {
+      if (isNeutral) {
+        const fmtScore = value => window.QymMetrics.formatMetricValue(value, mType);
+        addStatTile('avgScore', 'Avg Score', fmtScore(stats.avgScore), '', tooltips.avgScore);
+        addStatTile('minScore', 'Min', fmtScore(stats.minScore), '', 'Minimum value across all items and runs.');
+        addStatTile('stddevScore', 'StdDev', fmtScore(stats.stddevScore), '', 'Standard deviation across all items and runs.');
+        addStatTile('failedCount', 'Errors', String(stats.failedCount), stats.failedCount > 0 ? 'failed-count' : '', tooltips.failedCount);
+        addStatTile('totalRetries', 'Retries', String(stats.totalRetries || 0), stats.totalRetries > 0 ? 'retry-count' : '', tooltips.totalRetries);
+        addStatTile('avgLatency', '⚡ Avg Latency', formatLatency(stats.avgLatency), '', tooltips.avgLatency);
+        addStatTile('medianLatency', '⚡ Median Latency', formatLatency(stats.medianLatency), '', tooltips.medianLatency);
+      } else if (isNumeric) {
         addStatTile('avgScore', 'Avg', fmtN(stats.avgScore), '', tooltips.avgScore);
         addStatTile('minScore', 'Min', fmtN(stats.minScore), '', 'Minimum value across all items and runs.');
-        addStatTile('maxAtK', `Max@${K}`, fmtN(stats.maxAtK), '', tooltips.maxAtK);
+        addStatTile('maxAtK', `${direction === 'minimize' ? 'Min' : 'Max'}@${K}`, fmtN(stats.maxAtK), '', tooltips.maxAtK);
         addStatTile('stddevScore', 'StdDev', fmtN(stats.stddevScore), '', 'Standard deviation across all items and runs. Lower = more consistent.');
         addStatTile('totalScoreSum', 'Total', fmtN(stats.totalScoreSum), 'accent-value', 'Sum of all values across all items and runs.');
         addStatTile('failedCount', 'Errors', String(stats.failedCount), stats.failedCount > 0 ? 'failed-count' : '', tooltips.failedCount);
@@ -5462,12 +6460,15 @@
         addStatTile('avgLatency', '⚡ Avg Latency', formatLatency(stats.avgLatency), '', tooltips.avgLatency);
         addStatTile('medianLatency', '⚡ Median Latency', formatLatency(stats.medianLatency), '', tooltips.medianLatency);
       } else {
+        // A lower-is-better metric with no score left (every item errored)
+        // has no average or best score: "—", not 0% (the best value).
+        const fmtScore = value => (value === null || value === undefined ? '—' : formatPercent(value));
         addStatTile('passAtK', `Pass@${K}`, formatPercent(stats.passAtK), getSuccessClass(stats.passAtK), tooltips.passAtK);
         addStatTile('passHatK', `Pass^${K}`, formatPercent(stats.passHatK), getSuccessClass(stats.passHatK), tooltips.passHatK);
-        addStatTile('maxAtK', `Max@${K}`, formatPercent(stats.maxAtK), getSuccessClass(stats.maxAtK), tooltips.maxAtK);
+        addStatTile('maxAtK', `${direction === 'minimize' ? 'Min' : 'Max'}@${K}`, fmtScore(stats.maxAtK), scoreClassFor(stats.maxAtK), tooltips.maxAtK);
         addStatTile('consistency', 'Consistency', stats.consistency !== null ? formatPercent(stats.consistency) : 'NA', stats.consistency !== null ? getSuccessClass(stats.consistency) : '', tooltips.consistency);
         addStatTile('reliability', 'Reliability', stats.reliability !== null ? formatPercent(stats.reliability) : 'NA', stats.reliability !== null ? getSuccessClass(stats.reliability) : '', tooltips.reliability);
-        addStatTile('avgScore', 'Avg Score', formatPercent(stats.avgScore), getSuccessClass(stats.avgScore), tooltips.avgScore);
+        addStatTile('avgScore', 'Avg Score', fmtScore(stats.avgScore), scoreClassFor(stats.avgScore), tooltips.avgScore);
         addStatTile('failedCount', 'Errors', String(stats.failedCount), stats.failedCount > 0 ? 'failed-count' : '', tooltips.failedCount);
         addStatTile('totalRetries', 'Retries', String(stats.totalRetries || 0), stats.totalRetries > 0 ? 'retry-count' : '', tooltips.totalRetries);
         addStatTile('avgLatency', '⚡ Avg Latency', formatLatency(stats.avgLatency), '', tooltips.avgLatency);
@@ -5483,22 +6484,22 @@
         statTiles.push(renderModelStatTile(traceMetric.modelsLabel || traceMetric.label, traceMetric.fmt(traceValue), traceClass));
       });
 
-      const showDistribution = !isNumeric && visibleStatKeys.has('correctDistribution');
+      const showDistribution = !isNumeric && !isNeutral && visibleStatKeys.has('correctDistribution');
       const statsGridHtml = statTiles.length > 0
         ? `<div class="model-stats-grid">${statTiles.join('')}</div>`
         : '<div class="model-stats-empty">No summary metrics selected.</div>';
 
       return `
-        <div class="model-card" data-model="${model}">
+        <div class="model-card" data-model="${escapeHtml(model)}">
           <div class="model-card-header">
-            <div class="model-card-title" title="${getModelFilterOptionLabel(model)}">
+            <div class="model-card-title" title="${escapeHtml(getModelFilterOptionLabel(model))}">
               <span class="model-color-dot" style="background: ${color}"></span>
               ${renderModelLabelForModelName(model)}
             </div>
             <div class="model-card-runs">
               <span class="runs-count">${stats.selectedCount}/${globalK} runs</span>
               ${hasWarning ? `<span class="runs-warning" title="Only ${stats.totalAvailable} runs available (requested ${globalK})">⚠️</span>` : ''}
-              <button class="customize-btn" data-model="${model}" title="Customize run selection">Edit</button>
+              <button class="customize-btn" data-model="${escapeHtml(model)}" title="Customize run selection">Edit</button>
             </div>
           </div>
 
@@ -5506,7 +6507,7 @@
 
           ${showDistribution ? `<div class="model-stat-box-wide">
             <div class="stat-title">Correct Distribution ${infoIcon(tooltips.correctDist)}</div>
-            <div class="distribution-bar">${distBar}</div>
+            <div class="distribution-bar qym-arrive-track">${distBar}</div>
             <div class="distribution-legend">
               <span class="dist-legend-item"><span style="color:var(--error)">■</span> 0 runs</span>
               <span class="dist-legend-item"><span style="color:var(--warning)">■</span> 1-${K-1} runs</span>
@@ -5516,11 +6517,12 @@
 
           <div class="model-card-footer">
             <span class="latency">${stats.totalItems} items</span>
-            <a href="#" class="compare-link" data-model="${model}">See item-by-item comparison →</a>
+            <a href="#" class="compare-link" data-model="${escapeHtml(model)}">See item-by-item comparison →</a>
           </div>
         </div>
       `;
     }).join('');
+    window.QymShell?.arrive?.(container);
 
     // Wire up event listeners
     container.querySelectorAll('.customize-btn').forEach(btn => {
@@ -5558,29 +6560,41 @@
       return;
     }
 
-    // Sort by avg score descending
+    // Rank by the metric's declared direction (C008). Without one there is
+    // no "better": list models by name, with no medals or colors.
+    const direction = mvs.metricDirection || null;
     const ranked = models
-      .map(m => ({ model: m, score: mvs.modelStats[m]?.avgScore || 0 }))
-      .sort((a, b) => b.score - a.score);
+      .map(m => ({ model: m, score: mvs.modelStats[m]?.avgScore ?? null }))
+      .sort((a, b) => {
+        // A model without an average (every item errored on a
+        // lower-is-better metric) is never ranked above one with a score.
+        if ((a.score === null) !== (b.score === null)) return a.score === null ? 1 : -1;
+        const better = window.QymMetrics.compareMetricValues(a.score || 0, b.score || 0, direction);
+        return better ? -better : String(a.model).localeCompare(String(b.model));
+      });
 
     const rankEmojis = ['🥇', '🥈', '🥉'];
 
     const isNumeric = mvs.metricIsNumeric;
     const rankMType = isNumeric ? 'numeric' : 'score';
+    const byLabel = isNumeric ? 'Avg Value' : 'Avg Score';
+    const title = !direction
+      ? `Models (${byLabel}; ${mvs.selectedMetric || 'metric'} declares no direction, so there is no ranking)`
+      : `Ranking (by ${byLabel}${direction === 'minimize' ? ', lower is better' : ''})`;
 
     container.style.display = 'block';
     container.innerHTML = `
-      <h3>Ranking (by ${isNumeric ? 'Avg Value' : 'Avg Score'})</h3>
+      <h3>${escapeHtml(title)}</h3>
       <div class="ranking-list">
         ${ranked.map((item, idx) => {
-          const rank = idx < 3 ? rankEmojis[idx] : `#${idx + 1}`;
-          const scoreClass = window.QymMetrics.getMetricColorClass(item.score, rankMType);
+          const rank = !direction || item.score === null ? '' : (idx < 3 ? rankEmojis[idx] : `#${idx + 1}`);
+          const scoreClass = item.score === null ? '' : window.QymMetrics.getMetricColorClass(item.score, rankMType, direction);
           const display = window.QymMetrics.formatMetricValue(item.score, rankMType);
           return `
             <div class="ranking-item">
               <span class="rank">${rank}</span>
               ${renderModelLabelForModelName(item.model)}
-              <span class="score ${scoreClass}">(${display})</span>
+              <span class="score ${scoreClass}">(${escapeHtml(display)})</span>
             </div>
           `;
         }).join('')}
@@ -5609,7 +6623,7 @@
     oldConfirm.parentNode.replaceChild(confirm, oldConfirm);
     el('run-selection-model-name').innerHTML = renderModelLabelForModelName(modelName);
     el('run-selection-model-name').title = getModelFilterOptionLabel(modelName);
-    modal.style.display = 'flex';
+    showLegacyModal(modal);
 
     const updateCounter = () => {
       const counter = listEl.querySelector('#selection-count');
@@ -5651,23 +6665,23 @@
           if (groupCount > 1 && key !== '__ungrouped__') {
             const group = groupSummaries.get(key);
             const label = group?.label || getRunDisplayName(groupRuns[0]);
-            html += `<div style="padding:6px 8px;font-size:var(--font-sm);color:var(--accent-primary);font-weight:600;border-bottom:1px solid var(--border-default);">${escapeHtml(label)} (${group?.total_runs ?? groupRuns.length} runs)</div>`;
+            html += `<div style="padding:6px 8px;font-size:var(--font-sm);color:var(--accent-primary);font-weight:600;border-bottom:1px solid var(--border-default);">${escapeHtml(label)} (${escapeHtml(group?.total_runs ?? groupRuns.length)} runs)</div>`;
           }
           for (const run of groupRuns) {
             const isSelected = selected.has(run.file_path);
             const score = run.metric_averages?.[mvs.selectedMetric];
             const metricType = mvs.metricIsNumeric ? 'numeric' : 'score';
-            const scoreClass = score !== undefined ? window.QymMetrics.getMetricColorClass(score, metricType) : '';
+            const scoreClass = score !== undefined ? window.QymMetrics.getMetricColorClass(score, metricType, runMetricDirection(run, mvs.selectedMetric)) : '';
             const scoreDisplay = score !== undefined ? window.QymMetrics.formatMetricValue(score, metricType) : '';
             const runDisplayName = getRunDisplayName(run);
             html += `<label class="run-selection-item ${isSelected ? 'selected' : ''}">
               <input type="checkbox" data-file="${escapeHtml(run.file_path)}" ${isSelected ? 'checked' : ''} />
-              <div class="run-info"><div class="run-name" title="${escapeHtml(runDisplayName)}">${escapeHtml(runDisplayName)}</div><div class="run-date">${formatDate(run.timestamp).full}${renderOfficialRunBadge(run)}</div></div>
-              ${score !== undefined ? `<span class="run-score ${scoreClass}">${scoreDisplay}</span>` : ''}
+              <div class="run-info"><div class="run-name" title="${escapeHtml(runDisplayName)}">${escapeHtml(runDisplayName)}</div><div class="run-date">${escapeHtml(formatDate(run.timestamp).full)}${renderOfficialRunBadge(run)}</div></div>
+              ${score !== undefined ? `<span class="run-score ${scoreClass}">${escapeHtml(scoreDisplay)}</span>` : ''}
             </label>`;
           }
         }
-        listEl.innerHTML = `<div class="run-selection-header"><span class="selection-counter"><span id="selection-count">${selected.size}</span> / ${globalK} selected</span>${groupCount > 1 ? `<span>${groupCount} config groups</span>` : ''}<span data-selection-offpage></span></div><div class="run-selection-items">${html || '<p>No runs match these filters.</p>'}</div><div data-selection-pagination></div>`;
+        listEl.innerHTML = `<div class="run-selection-header"><span class="selection-counter"><span id="selection-count">${selected.size}</span> / ${escapeHtml(globalK)} selected</span>${groupCount > 1 ? `<span>${groupCount} config groups</span>` : ''}<span data-selection-offpage></span></div><div class="run-selection-items">${html || '<p>No runs match these filters.</p>'}</div><div data-selection-pagination></div>`;
         listEl.querySelectorAll('input[type="checkbox"]').forEach(checkbox => checkbox.addEventListener('change', () => {
           if (checkbox.checked && selected.size >= globalK) { checkbox.checked = false; return; }
           if (checkbox.checked) selected.add(checkbox.dataset.file);
@@ -5691,7 +6705,7 @@
     confirm.addEventListener('click', () => {
       if (selected.size) mvs.modelRunSelections[modelName] = [...selected];
       else delete mvs.modelRunSelections[modelName];
-      modal.style.display = 'none';
+      hideLegacyModal(modal);
       modelRunSelectionToken++;
       renderModelsView();
     });
@@ -5744,18 +6758,18 @@
         const metric = mvs.selectedMetric;
         const score = run.metric_averages?.[metric];
         const selMType = mvs.metricIsNumeric ? 'numeric' : 'score';
-        const scoreClass = score !== undefined ? window.QymMetrics.getMetricColorClass(score, selMType) : '';
+        const scoreClass = score !== undefined ? window.QymMetrics.getMetricColorClass(score, selMType, runMetricDirection(run, metric)) : '';
         const scoreDisplay = score !== undefined ? window.QymMetrics.formatMetricValue(score, selMType) : '';
         const runDisplayName = getRunDisplayName(run);
 
         runListHtml += `
           <label class="run-selection-item ${isSelected ? 'selected' : ''}">
-            <input type="checkbox" data-file="${run.file_path}" ${isSelected ? 'checked' : ''} />
+            <input type="checkbox" data-file="${escapeHtml(run.file_path)}" ${isSelected ? 'checked' : ''} />
             <div class="run-info">
               <div class="run-name" title="${escapeHtml(runDisplayName)}">${escapeHtml(runDisplayName)}</div>
-              <div class="run-date">${dt.full}${renderOfficialRunBadge(run)}</div>
+              <div class="run-date">${escapeHtml(dt.full)}${renderOfficialRunBadge(run)}</div>
             </div>
-            ${score !== undefined ? `<span class="run-score ${scoreClass}">${scoreDisplay}</span>` : ''}
+            ${score !== undefined ? `<span class="run-score ${scoreClass}">${escapeHtml(scoreDisplay)}</span>` : ''}
           </label>
         `;
       }
@@ -5801,7 +6815,7 @@
       });
     });
 
-    modal.style.display = 'flex';
+    showLegacyModal(modal);
 
     // Wire confirm button
     const newConfirmBtn = confirmBtn.cloneNode(true);
@@ -5819,7 +6833,7 @@
         delete mvs.modelRunSelections[modelName];
       }
 
-      modal.style.display = 'none';
+      hideLegacyModal(modal);
       renderModelsView();
     });
   }
@@ -5858,14 +6872,16 @@
     if (state.selectedRuns.has(filePath)) {
       state.selectedRuns.delete(filePath);
     } else {
-      if (!canSelectForCohortB(filePath)) return;
-      // Selecting the whole run supersedes any of its picked passes.
-      for (const ref of Array.from(state.selectedRuns)) {
-        if (isPassRef(ref) && passRefBase(ref) === filePath) state.selectedRuns.delete(ref);
+      // A refused pick still resets the checkbox the browser already ticked.
+      if (canSelectForCohortB(filePath)) {
+        // Selecting the whole run supersedes any of its picked passes.
+        for (const ref of Array.from(state.selectedRuns)) {
+          if (isPassRef(ref) && passRefBase(ref) === filePath) state.selectedRuns.delete(ref);
+        }
+        state.selectedRuns.add(filePath);
       }
-      state.selectedRuns.add(filePath);
     }
-    render();
+    syncRunsSelection();
   }
 
   function setSelectMode(enabled) {
@@ -5874,7 +6890,7 @@
       state.selectedRuns.clear();
       state.cohortAnchorRuns = null;
     }
-    render();
+    syncRunsSelection();
   }
 
   function toggleModelFilter(model) {
@@ -5908,6 +6924,7 @@
   function selectAll() {
     if (getActiveCohortAnchorRuns()) {
       showToast('error', 'Select All Disabled In Cohort Mode', 'Choose Cohort B runs explicitly so you can control membership and avoid overlap with Cohort A.');
+      syncRunsSelectAll();
       return;
     }
     const { pageRuns } = getTablePageSlice(state.filteredRuns);
@@ -5918,14 +6935,14 @@
     } else {
       visibleFilePaths.forEach(filePath => state.selectedRuns.add(filePath));
     }
-    render();
+    syncRunsSelection();
   }
 
   function clearSelection() {
     const restoreTableFocus = !!document.activeElement?.closest?.('#compare-panel, .run-select-control');
     state.selectedRuns.clear();
     state.cohortAnchorRuns = null;
-    render();
+    syncRunsSelection();
     if (restoreTableFocus) el('select-all')?.focus({ preventScroll: true });
   }
 
@@ -5949,6 +6966,29 @@
     return `${labels[0]}, ${labels[1]} +${labels.length - 2}`;
   }
 
+  function runDetailUrl(filePath) {
+    return state.currentProject && state.currentProject.slug
+      ? projectUrl(state.currentProject.slug, `runs/${encodeURIComponent(filePath)}`)
+      : apiUrl(`run/${encodeURIComponent(filePath)}`);
+  }
+
+  // A run opened from the Runs list carries the list's filters, range,
+  // search and sort, so its page steps to the previous and next run in this
+  // order (C044, runs_order.js).
+  function runFromListUrl(filePath) {
+    const url = runDetailUrl(filePath);
+    if (state.currentView !== 'table' || !window.QymRunsOrder) return url;
+    return window.QymRunsOrder.runHref(url, window.QymRunsOrder.contextFromParams({
+      ...dashboardUrlParams(), q: activeSearchQuery() || null,
+    }));
+  }
+
+  // Where a run's name link points (the analyzer while it picks a run).
+  function runOpenHref(run) {
+    if (analysisRunPickerContext && run) return analyzerUrlForRun(run);
+    return runFromListUrl(run.file_path);
+  }
+
   function openRun(filePath, e) {
     const run = state.flatRuns.find(candidate => candidate.file_path === filePath);
     if (analysisRunPickerContext && run) {
@@ -5959,10 +6999,7 @@
     sessionStorage.removeItem('compareRuns');
     sessionStorage.removeItem('compareCohorts');
     sessionStorage.setItem('dashboardRunFile', filePath);
-    const url = state.currentProject && state.currentProject.slug
-      ? projectUrl(state.currentProject.slug, `runs/${encodeURIComponent(filePath)}`)
-      : apiUrl(`run/${encodeURIComponent(filePath)}`);
-    openUrl(url, e);
+    openUrl(runFromListUrl(filePath), e);
   }
 
   function openComparison(e) {
@@ -6052,7 +7089,7 @@
       state.selectedRuns.delete(passRefBase(ref));
       state.selectedRuns.add(ref);
     }
-    render();
+    syncRunsSelection();
   }
 
   function openCohortComparison(e) {
@@ -6099,6 +7136,43 @@
     openUrl(apiUrl('compare?' + params.toString()), e);
   }
 
+  // Only pass deletions are permanent; whole runs go to Deleted Runs.
+  function setDeleteWarning(text) {
+    const warningEl = el('delete-modal-warning');
+    if (!warningEl) return;
+    warningEl.textContent = text;
+    warningEl.style.display = text ? '' : 'none';
+  }
+
+  function restoreWindowCopy(graceDays, plural) {
+    if (!(graceDays > 0)) return '';
+    return plural
+      ? `An admin can restore deleted runs for ${graceDays} day${graceDays === 1 ? '' : 's'}; then they are permanently removed.`
+      : `An admin can restore it for ${graceDays} day${graceDays === 1 ? '' : 's'}; then it is permanently removed.`;
+  }
+
+  // Legacy page modals (#delete-modal, #workflow-modal, #help-modal,
+  // #run-selection-modal) use the shared modal focus contract
+  // (QymUIComponents.openDialog): focus moves in, Tab stays inside, Escape
+  // closes, and focus returns to the control that opened the modal.
+  function showLegacyModal(modal, options = {}) {
+    if (!modal) return;
+    modal.style.display = 'flex';
+    const panel = modal.querySelector('.modal-content') || modal;
+    window.QymUIComponents?.openDialog?.(panel, { onEscape: () => hideLegacyModal(modal), ...options });
+  }
+
+  function hideLegacyModal(modal) {
+    if (!modal) return;
+    const panel = modal.querySelector('.modal-content') || modal;
+    window.QymUIComponents?.releaseDialog?.(panel);
+    modal.style.display = 'none';
+  }
+
+  document.querySelectorAll('[data-modal-dismiss]').forEach(button => {
+    button.addEventListener('click', () => hideLegacyModal(el(button.getAttribute('data-modal-dismiss'))));
+  });
+
   function confirmDeleteRun(filePath, runId) {
     const modal = el('delete-modal');
     const titleEl = el('delete-modal-title');
@@ -6107,9 +7181,11 @@
     const confirmBtn = el('confirm-delete-btn');
 
     if (titleEl) titleEl.textContent = 'Delete run';
-    if (descriptionEl) descriptionEl.textContent = 'Are you sure you want to delete this run?';
+    if (descriptionEl) descriptionEl.textContent = 'Are you sure you want to delete this run? An admin can restore it from Deleted Runs until retention permanently removes it.';
+    // A deleted run can be restored, so no "cannot be undone" warning.
+    setDeleteWarning('');
     runNameEl.textContent = runId;
-    modal.style.display = 'flex';
+    showLegacyModal(modal, { initialFocus: '[data-modal-dismiss]:not(.modal-close)' });
 
     // Remove old listener and add new one
     const newConfirmBtn = confirmBtn.cloneNode(true);
@@ -6127,10 +7203,14 @@
         });
 
         if (response.ok) {
-          modal.style.display = 'none';
+          const result = await response.json().catch(() => ({}));
+          const graceDays = Number(result.purge_after_days) || 0;
+          hideLegacyModal(modal);
           // Remove from selection if selected
           state.selectedRuns.delete(filePath);
-          showToast('success', 'Run deleted', 'The run was moved to the trash.');
+          showToast('success', 'Run deleted', graceDays > 0
+            ? `The run was moved to the trash. ${restoreWindowCopy(graceDays, false)}`
+            : 'The run was moved to the trash.');
           // Refresh data
           await fetchRuns({ refreshAllPages: true });
         } else {
@@ -6181,9 +7261,13 @@
     if (passRefs.length) selectionParts.push(`${passRefs.length} pass${passRefs.length === 1 ? '' : 'es'}`);
 
     if (titleEl) titleEl.textContent = 'Delete selection';
-    if (descriptionEl) descriptionEl.textContent = `Are you sure you want to delete the selected ${selectionParts.join(' and ')}?`;
+    if (descriptionEl) descriptionEl.textContent = `Are you sure you want to delete the selected ${selectionParts.join(' and ')}?`
+      + (runRefs.length ? ' An admin can restore deleted runs from Deleted Runs until retention permanently removes them.' : '');
+    setDeleteWarning(passRefs.length
+      ? `Deleted passes cannot be restored.${runRefs.length ? ' Deleted runs can.' : ''}`
+      : '');
     runNameEl.textContent = `${selectionParts.join(' and ')} selected`;
-    modal.style.display = 'flex';
+    showLegacyModal(modal, { initialFocus: '[data-modal-dismiss]:not(.modal-close)' });
 
     // Remove old listener and add new one
     const newConfirmBtn = confirmBtn.cloneNode(true);
@@ -6194,6 +7278,8 @@
       newConfirmBtn.textContent = 'Deleting...';
 
       let successCount = 0;
+      let deletedRunCount = 0;
+      let graceDays = 0;
       let errorCount = selectionErrors.length;
       const errors = [...selectionErrors];
 
@@ -6226,7 +7312,10 @@
           });
 
           if (response.ok) {
+            const result = await response.json().catch(() => ({}));
+            graceDays = Math.max(graceDays, Number(result.purge_after_days) || 0);
             successCount++;
+            deletedRunCount++;
             state.selectedRuns.delete(filePath);
           } else {
             errorCount++;
@@ -6239,7 +7328,7 @@
         }
       }
 
-      modal.style.display = 'none';
+      hideLegacyModal(modal);
       newConfirmBtn.disabled = false;
       newConfirmBtn.textContent = 'Delete';
 
@@ -6249,18 +7338,65 @@
       if (errorCount > 0) {
         showToast('error', 'Selection partially deleted', `Deleted ${successCount}; failed ${errorCount}. ${errors[0] || ''}`);
       } else {
-        showToast('success', 'Selection deleted', `Deleted ${successCount} selected item${successCount === 1 ? '' : 's'}.`);
+        const restore = deletedRunCount ? restoreWindowCopy(graceDays, true) : '';
+        showToast('success', 'Selection deleted', `Deleted ${successCount} selected item${successCount === 1 ? '' : 's'}.${restore ? ' ' + restore : ''}`);
       }
     });
   }
 
-  function showWorkflowModal(action, runId, taskName) {
+  function submitModalDescription(runs) {
+    const me = state.currentUser && state.currentUser.id;
+    const many = runs.length > 1;
+    const parts = [many
+      ? `Send these ${runs.length} runs to the project's managers for approval. Their scores are locked while they are in review.`
+      : "Send this run to the project's managers for approval. Its scores are locked while it is in review."];
+    const rejected = runs.filter(r => String(r.status || '').toUpperCase() === 'REJECTED').length;
+    if (rejected) {
+      parts.push(many
+        ? `${rejected} of them were rejected: submitting starts a new review round, and each rejection stays in its run's review history.`
+        : 'It was rejected: submitting starts a new review round, and the rejection stays in its review history.');
+    }
+    const others = runs.filter(r => r.owner && r.owner.id && r.owner.id !== me);
+    if (others.length) {
+      const names = [...new Set(others.map(r => r.owner.display_name || r.owner.email || ''))].filter(Boolean);
+      parts.push(many
+        ? `${others.length} of them belong to someone else (${names.join(', ')}); you submit them on their behalf, and the review history records it.`
+        : `It belongs to ${names[0] || 'someone else'}; you submit it on their behalf, and the review history records it.`);
+    }
+    return parts.join(' ');
+  }
+
+  async function postSubmit(runIds, comment) {
+    if (runIds.length === 1) {
+      return fetch(apiUrl(`v1/runs/${encodeURIComponent(runIds[0])}/submit`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comment }),
+      });
+    }
+    // One request, one transaction: every run is submitted or none is.
+    return fetch(apiUrl('v1/runs/submit'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ run_ids: runIds, comment }),
+    });
+  }
+
+  // options: { runs } for submit (one or many runs); { filePath } for the
+  // other actions so the row can show the new status at once (C040).
+  function showWorkflowModal(action, runId, runName, options) {
+    const filePath = (options && options.filePath) || runId;
     const modal = el('workflow-modal');
     const titleEl = el('workflow-modal-title');
     const descEl = el('workflow-modal-description');
     const runNameEl = el('workflow-run-name');
     const commentEl = el('workflow-comment');
     const confirmBtn = el('confirm-workflow-btn');
+
+    if (action === 'submit') {
+      showSubmitModal(options && options.runs ? options.runs : [], runName, modal, titleEl, descEl, runNameEl, commentEl, confirmBtn);
+      return;
+    }
 
     const isApprove = action === 'approve';
     const isUnapprove = action === 'unapprove';
@@ -6269,15 +7405,16 @@
       ? 'Unapprove Run'
       : (isUnreject ? 'Unreject Run' : (isApprove ? 'Approve Run' : 'Reject Run'));
     descEl.textContent = isUnapprove
-      ? 'Clear this approval and return the run to completed.'
+      ? 'Withdraw this approval. The run returns to its execution result and the approval stays in its review history.'
       : (isUnreject
-        ? 'Clear this rejection and return the run to completed.'
+        ? 'Withdraw this rejection. The run returns to its execution result and the rejection stays in its review history.'
       : (isApprove
-        ? 'Approve this run to make it visible to leadership.'
+        ? 'Approve this run. The decision and your comment are kept in its review history.'
         : 'Reject this run and send it back for review.'));
-    runNameEl.textContent = `${taskName} (${runId.substring(0, 8)}...)`;
+    // The same name the runs table and the delete dialog use.
+    runNameEl.textContent = runName || runId;
     commentEl.value = '';
-    modal.style.display = 'flex';
+    showLegacyModal(modal, { initialFocus: commentEl });
 
     // Update button style
     confirmBtn.className = isApprove ? 'btn btn-primary' : 'btn btn-danger';
@@ -6300,16 +7437,23 @@
         });
 
         if (response.ok) {
-          modal.style.display = 'none';
+          const result = await response.json().catch(() => ({}));
+          const restored = String(result.status || 'completed').toLowerCase();
+          hideLegacyModal(modal);
+          // Show the new status (and the actions it allows) at once.
+          if (result.status) applyRunWorkflowResult(filePath, result.status);
           await fetchRuns({ refreshAllPages: true });
           showToast(
             'success',
             isUnapprove ? 'Unapproved' : (isUnreject ? 'Unrejected' : (isApprove ? 'Approved' : 'Rejected')),
-            (isUnapprove || isUnreject) ? 'Run returned to completed' : (isApprove ? 'Run approved' : 'Run rejected'),
+            (isUnapprove || isUnreject) ? `Run returned to ${restored}` : (isApprove ? 'Run approved' : 'Run rejected'),
           );
         } else {
-          const data = await response.json();
+          const data = await response.json().catch(() => ({}));
           showToast('error', `${isUnapprove ? 'Unapprove' : (isUnreject ? 'Unreject' : (isApprove ? 'Approve' : 'Reject'))} Failed`, data.detail || 'Unknown error');
+          // A 409 means the row showed an old review state; refresh it so it
+          // stops offering the action.
+          if (response.status === 409) fetchRuns({ refreshAllPages: true }).catch(() => {});
         }
       } catch (err) {
         showToast('error', `${isUnapprove ? 'Unapprove' : (isUnreject ? 'Unreject' : (isApprove ? 'Approve' : 'Reject'))} Failed`, err.message || 'Unknown error');
@@ -6319,23 +7463,136 @@
       }
     });
 
-    // Focus the comment field
-    setTimeout(() => commentEl.focus(), 100);
+  }
+
+  function showSubmitModal(runs, runName, modal, titleEl, descEl, runNameEl, commentEl, confirmBtn) {
+    const many = runs.length > 1;
+    const label = many ? `Submit ${runs.length} runs` : 'Submit';
+    titleEl.textContent = many ? `Submit ${runs.length} runs for approval` : 'Submit for approval';
+    descEl.textContent = submitModalDescription(runs);
+    runNameEl.textContent = many
+      ? runs.slice(0, 5).map(getRunDisplayName).join(', ') + (runs.length > 5 ? `, and ${runs.length - 5} more` : '')
+      : (runName || (runs[0] && getRunDisplayName(runs[0])) || '');
+    commentEl.value = '';
+    confirmBtn.className = 'btn btn-primary';
+    confirmBtn.textContent = label;
+
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+    newConfirmBtn.addEventListener('click', async () => {
+      newConfirmBtn.disabled = true;
+      newConfirmBtn.textContent = 'Submitting...';
+      try {
+        const response = await postSubmit(runs.map(r => r.run_id || r.file_path), (commentEl.value || '').trim());
+        if (response.ok) {
+          hideLegacyModal(modal);
+          if (many) runs.forEach(r => state.selectedRuns.delete(r.file_path));
+          // Show the new status (and the actions it allows) at once (C040).
+          runs.forEach(r => { if (r.file_path) applyRunWorkflowResult(r.file_path, 'SUBMITTED'); });
+          await fetchRuns({ refreshAllPages: true });
+          showToast('success', 'Submitted', many ? `Submitted ${runs.length} runs for approval` : 'Run submitted for approval');
+        } else {
+          const data = await response.json().catch(() => ({}));
+          showToast('error', 'Submit failed', data.detail || 'Could not submit');
+          if (response.status === 409) fetchRuns({ refreshAllPages: true }).catch(() => {});
+        }
+      } catch (err) {
+        showToast('error', 'Submit failed', err.message || 'Could not submit');
+      } finally {
+        newConfirmBtn.disabled = false;
+        newConfirmBtn.textContent = label;
+      }
+    });
+    // The shared dialog contract (C049): focus on the comment, Tab inside,
+    // Escape closes, focus returns to the Submit control.
+    showLegacyModal(modal, { initialFocus: commentEl });
+  }
+
+  async function showTransferOwnershipModal(run) {
+    const modal = el('transfer-modal');
+    const select = el('transfer-owner-select');
+    const confirmBtn = el('confirm-transfer-btn');
+    let projectId = state.currentProject && state.currentProject.id;
+    if (!projectId && state.currentProject && state.currentProject.slug) {
+      try {
+        const res = await fetch(apiUrl(`v1/projects/by-slug/${encodeURIComponent(state.currentProject.slug)}`));
+        projectId = res.ok ? (await res.json()).id : null;
+      } catch (err) {
+        projectId = null;
+      }
+    }
+    if (!modal || !select || !confirmBtn || !projectId) return;
+    el('transfer-run-name').textContent = getRunDisplayName(run);
+    const ownerName = run.owner ? (run.owner.display_name || run.owner.email || '') : '';
+    el('transfer-current-owner').textContent = ownerName ? `Current owner: ${ownerName}` : '';
+    select.innerHTML = '<option value="">Loading members...</option>';
+    select.disabled = true;
+    showLegacyModal(modal, { initialFocus: '[data-modal-dismiss]:not(.modal-close)' });
+    try {
+      const res = await fetch(apiUrl(`v1/projects/${encodeURIComponent(projectId)}/members`));
+      const data = await res.json();
+      // A disabled account keeps its membership but cannot own runs.
+      const members = (data.members || []).filter(m => m.is_active !== false && (!run.owner || m.user_id !== run.owner.id));
+      select.innerHTML = members.length
+        ? members.map(m => `<option value="${escapeHtml(m.user_id)}">${escapeHtml(m.display_name || m.email)}${m.display_name ? ` (${escapeHtml(m.email)})` : ''}</option>`).join('')
+        : '<option value="">No other members</option>';
+      select.disabled = members.length === 0;
+    } catch (err) {
+      select.innerHTML = '<option value="">Could not load members</option>';
+    }
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+    newConfirmBtn.addEventListener('click', async () => {
+      if (!select.value) return;
+      newConfirmBtn.disabled = true;
+      try {
+        const response = await fetch(apiUrl(`v1/runs/${encodeURIComponent(run.run_id)}/owner`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: select.value }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (response.ok) {
+          hideLegacyModal(modal);
+          await fetchRuns({ refreshAllPages: true });
+          const name = data.owner ? (data.owner.display_name || data.owner.email) : '';
+          showToast('success', 'Ownership transferred', `${getRunDisplayName(run)} now belongs to ${name}`);
+        } else {
+          showToast('error', 'Transfer failed', data.detail || 'Could not transfer the run');
+        }
+      } catch (err) {
+        showToast('error', 'Transfer failed', err.message || 'Could not transfer the run');
+      } finally {
+        newConfirmBtn.disabled = false;
+      }
+    });
+  }
+
+  function runsTotalCount() {
+    return usesDashboardPage() ? state.dashboardPage.total_runs : state.filteredRuns.length;
+  }
+
+  // Focus a row by its index across all pages. On the current page this only
+  // moves the highlight; another page is fetched and lands on the row.
+  function focusRunIndex(newIdx) {
+    if (newIdx < 0 || newIdx >= runsTotalCount()) return;
+    state.focusedIndex = newIdx;
+    const page = Math.floor(newIdx / TABLE_PAGE_SIZE) + 1;
+    if (page !== state.tablePage || !state._runsTableCtx) {
+      setTablePage(page);
+      render();
+    }
+    const focusedRow = syncRunsRowFocus();
+    if (focusedRow) {
+      focusedRow.scrollIntoView({ block: 'nearest' });
+      // Move real focus to the run's link, so assistive tech follows the
+      // highlighted row (C051).
+      focusedRow.querySelector('a.run-id')?.focus({ preventScroll: true });
+    }
   }
 
   function moveFocus(delta) {
-    const newIdx = state.focusedIndex + delta;
-    if (newIdx >= 0 && newIdx < (usesDashboardPage() ? state.dashboardPage.total_runs : state.filteredRuns.length)) {
-      state.focusedIndex = newIdx;
-      setTablePage(Math.floor(newIdx / TABLE_PAGE_SIZE) + 1);
-      render();
-
-      // Scroll into view
-      const row = $(`tr[data-idx="${newIdx}"]`);
-      if (row) {
-        row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      }
-    }
+    focusRunIndex(state.focusedIndex + delta);
   }
 
   function openFocusedRun() {
@@ -6406,8 +7663,7 @@
   }
 
   function getDashboardStateKey() {
-    const projectSlug = getProjectSlugFromPath() || '__global__';
-    return `qym:dashboard-state:${projectSlug}`;
+    return `qym:dashboard-state:${mountedProjectSlug || '__global__'}`;
   }
 
   function saveRunsDataCache(data) {
@@ -6476,8 +7732,13 @@
       if (previous !== undefined && previous !== revision) {
         // A checked pass and its cached details refer to the old mapping.
         // Require the user to select again after the refreshed rows render.
+        const stale = ref => isPassRef(ref) && passRefBase(ref) === run.file_path;
         for (const ref of state.selectedRuns) {
-          if (isPassRef(ref) && passRefBase(ref) === run.file_path) state.selectedRuns.delete(ref);
+          if (stale(ref)) state.selectedRuns.delete(ref);
+        }
+        // A locked Cohort A names passes the same way.
+        if (Array.isArray(state.cohortAnchorRuns)) {
+          state.cohortAnchorRuns = state.cohortAnchorRuns.filter(ref => !stale(ref));
         }
         if (state._samplesData) delete state._samplesData[run.run_id];
       }
@@ -6491,8 +7752,10 @@
     showDashboardChrome();
     state.runs = data;
     if (data && data.project) {
-      state.currentProject = data.project;
-      if (state.currentProject && state.currentProject.slug) {
+      // Keep what the list payload does not carry (role, is_active).
+      const known = state.currentProject && state.currentProject.slug === data.project.slug ? state.currentProject : {};
+      state.currentProject = { ...known, ...data.project };
+      if (state.currentProject.slug && !isProjectReadOnly()) {
         storeProjectSlug(state.currentProject.slug);
       }
     }
@@ -6519,11 +7782,75 @@
     state.aggregations = usesDashboardSummary() ? state.dashboardOverview.aggregations : computeAggregations(state.flatRuns);
     state.chartData = usesDashboardSummary() ? buildDashboardChartData() : computeChartData(state.flatRuns);
     saveRunsDataCache(data);
-    populateFilterDropdowns();
+    // render() rebuilds the filter menus; doing it here as well doubled the work.
     populateMetricVisibility();
     el('last-updated').textContent = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    state.runsEverLoaded = true;
+    clearRunsStale();
     render();
     renderDashboardFreshness(state.dashboardOverview?.freshness);
+  }
+
+  // ── Failed loads and refreshes (C038) ──────────────────────────────
+  // The first failed load shows an error with Retry instead of the table.
+  // A failed refresh keeps the last rows, dimmed, under a banner that says
+  // how old they are and whether the latest filter change is applied; the
+  // busy state always ends.
+  function runsLoadFailed(err) {
+    el('table-view')?.setAttribute('aria-busy', 'false');
+    const ui = window.QymUIComponents;
+    const info = ui ? ui.classifyError(err) : { kind: 'unknown', message: 'Something went wrong while loading. Try again.' };
+    const retry = () => {
+      clearRunsStale();
+      const loading = el('loading');
+      if (loading && !state.runsEverLoaded) {
+        loading.innerHTML = window.QymShell?.skeletonHTML
+          ? window.QymShell.skeletonHTML('table', { label: 'Loading runs…', toolbar: false })
+          : '<div class="loading-spinner"></div><span>Loading runs...</span>';
+      }
+      fetchRuns({ refreshAllPages: true });
+    };
+    if (!state.runsEverLoaded) {
+      const loading = el('loading');
+      if (loading) {
+        loading.style.display = '';
+        if (ui) ui.renderErrorState(loading, { title: 'Couldn\u2019t load runs', error: err, onRetry: retry });
+        else loading.textContent = 'Couldn\u2019t load runs. ' + info.message;
+      }
+      if (el('status-filter')) el('status-filter').textContent = 'Runs not loaded';
+      return;
+    }
+    const tableView = el('table-view');
+    if (!tableView) {
+      if (!state.runsStale) showToast('error', 'Couldn’t refresh runs', info.message);
+      state.runsStale = true;
+      return;
+    }
+    let banner = el('runs-stale-banner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'runs-stale-banner';
+      banner.className = 'qym-stale-banner';
+      banner.setAttribute('role', 'alert');
+      tableView.parentNode.insertBefore(banner, tableView);
+    }
+    const shownAt = el('last-updated')?.textContent || '';
+    const notApplied = state.dashboardRequestKey && state.dashboardRequestKey !== dashboardPageRequestKey();
+    banner.innerHTML = '<span class="qym-stale-banner__text"></span>'
+      + '<button type="button" class="qym-inline-action qym-inline-action--neutral" data-runs-retry>Retry</button>';
+    banner.querySelector('.qym-stale-banner__text').textContent = 'Couldn\u2019t refresh runs. ' + info.message
+      + (shownAt && shownAt !== '\u2014' ? ' Showing runs from ' + shownAt + '.' : '')
+      + (notApplied ? ' Your latest filter, sort or page change is not applied.' : '');
+    banner.querySelector('[data-runs-retry]').addEventListener('click', retry);
+    tableView.classList.add('qym-is-stale');
+    if (!state.runsStale) showToast('error', 'Couldn\u2019t refresh runs', info.message);
+    state.runsStale = true;
+  }
+
+  function clearRunsStale() {
+    state.runsStale = false;
+    el('runs-stale-banner')?.remove();
+    el('table-view')?.classList.remove('qym-is-stale');
   }
 
   async function _fetchRemainingPages(data, totalCount) {
@@ -6735,10 +8062,13 @@
 
     const currentSlug = getProjectSlugFromPath();
     if (currentSlug) {
-      const current = projects.find(project => project.slug === currentSlug) || null;
+      // An archived project is not in me.projects: the shell loads it from the URL.
+      const shellProject = window.QymShell && window.QymShell.getProject ? window.QymShell.getProject() : null;
+      const current = projects.find(project => project.slug === currentSlug)
+        || (shellProject && shellProject.slug === currentSlug ? shellProject : null);
       state.currentProject = current || (me?.role === 'ADMIN' ? { slug: currentSlug, name: currentSlug, role: 'ADMIN' } : null);
       if (state.currentProject) {
-        storeProjectSlug(state.currentProject.slug);
+        if (!isProjectReadOnly()) storeProjectSlug(state.currentProject.slug);
         hideProjectChooser();
         return true;
       }
@@ -6771,18 +8101,10 @@
     };
     if (state.filterOrigin !== 'all') filters.origins = [state.filterOrigin];
     if (activeVersioningFilters().length > 0) filters.versioning = versioningFilters();
-    if (state.quickFilter === 'today') {
-      const start = new Date(now);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(start);
-      end.setDate(end.getDate() + 1);
-      filters.since = start.toISOString();
-      filters.until = end.toISOString();
-    } else if (state.quickFilter === 'week') {
-      const start = new Date(now);
-      start.setDate(start.getDate() - 7);
-      filters.since = start.toISOString();
-    }
+    const { since, until } = timeFilterBounds(now);
+    if (since) filters.since = since.toISOString();
+    if (until) filters.until = until.toISOString();
+    if (activeSearchQuery()) filters.q = activeSearchQuery();
     return filters;
   }
 
@@ -6833,33 +8155,85 @@
     state.tableFilterKey = getTableFilterKey();
     state.runsFetchMeta.totalCount = overview.total_count;
     const tasks = {};
-    for (const entry of state.chartHistory.values()) if (entry.status === 'ready') {
+    for (const entry of openChartHistoryEntries()) {
       for (const row of entry.rows) ((tasks[row.task_name] ||= {})[row.model_name || ''] ||= []).push(row);
     }
     _applyRunsData({ tasks, project: state.currentProject, total_count: overview.total_count });
     renderDashboardFreshness(overview.freshness);
   }
 
+  // Each task's open dataset (its selected tab, else its first).
+  function openChartDataset(task) {
+    return state.chartDatasetTab[task] || state.dashboardOverview?.chart_data?.tasks?.find(t => t.task === task)?.datasets?.[0]?.dataset;
+  }
+  function openChartHistoryEntries() {
+    return Array.from(state.chartHistory.values()).filter(entry => {
+      if (entry.status !== 'ready') return false;
+      const [task, dataset] = JSON.parse(entry.key);
+      return dataset === openChartDataset(task);
+    });
+  }
+
+  // Complete points are kept for the open charts and, within a row budget,
+  // for the datasets shown last, so going back to a tab redraws at once
+  // instead of loading again; a dataset still loading that is no longer
+  // open is dropped.
+  function trimChartHistory() {
+    let rows = 0;
+    const closed = [];
+    for (const [key, entry] of state.chartHistory) {
+      const [task, dataset] = JSON.parse(key);
+      if (dataset === openChartDataset(task)) rows += entry.rows.length;
+      else if (entry.status === 'ready') closed.push(entry);
+      else {
+        entry.controller?.abort();
+        state.chartHistory.delete(key);
+      }
+    }
+    closed.sort((a, b) => (b.shownAt || 0) - (a.shownAt || 0)).forEach(entry => {
+      rows += entry.rows.length;
+      if (rows > state.chartHistoryRowBudget) state.chartHistory.delete(entry.key);
+    });
+  }
+
+  // The page reads the open datasets' points and draws them.
+  function applyChartHistory() {
+    trimChartHistory();
+    const open = openChartHistoryEntries();
+    const now = performance.now();
+    open.forEach(entry => { entry.shownAt = now; });
+    const loadedRuns = open.flatMap(entry => entry.rows);
+    reconcilePassVersions(loadedRuns);
+    state.flatRuns = loadedRuns;
+    state.chartData = buildDashboardChartData();
+    render();
+  }
+
+  function enqueueChartHistory(key) {
+    if (state.chartHistory.has(key)) return;
+    const entry = { status: 'queued', controller: new AbortController(), rows: [], key };
+    state.chartHistory.set(key, entry);
+    state.chartHistoryQueue.push(entry);
+    drainChartHistory();
+  }
+
   function observeChartHistory() {
     state.chartHistoryObserver?.disconnect();
     if (!usesDashboardSummary()) return;
-    const enqueue = node => {
-      const key = decodeURIComponent(node.dataset.chartHistory);
-      if (state.chartHistory.has(key)) return;
-      const entry = { status: 'queued', controller: new AbortController(), rows: [], key };
-      state.chartHistory.set(key, entry);
-      state.chartHistoryQueue.push(entry);
-      drainChartHistory();
-    };
+    const enqueue = node => enqueueChartHistory(decodeURIComponent(node.dataset.chartHistory));
     state.chartHistoryObserver = new IntersectionObserver(entries => {
       for (const entry of entries) if (entry.isIntersecting) enqueue(entry.target);
     }, { rootMargin: '200px' });
     document.querySelectorAll('[data-chart-history]').forEach(node => state.chartHistoryObserver.observe(node));
-    document.querySelectorAll('[data-chart-history-retry]').forEach(button => button.addEventListener('click', () => {
-      const key = decodeURIComponent(button.dataset.chartHistoryRetry);
-      state.chartHistory.delete(key);
-      enqueue(button.closest('[data-chart-history]'));
-    }));
+    document.querySelectorAll('[data-chart-history-retry]').forEach(button => {
+      if (button._qymRetryWired) return; // a patched card keeps its button
+      button._qymRetryWired = true;
+      button.addEventListener('click', () => {
+        const key = decodeURIComponent(button.dataset.chartHistoryRetry);
+        state.chartHistory.delete(key);
+        enqueue(button.closest('[data-chart-history]'));
+      });
+    });
   }
 
   async function drainChartHistory() {
@@ -6887,21 +8261,7 @@
           }
           if (entry.controller.signal.aborted || requestKey !== state.dashboardRequestKey || state.chartHistory.get(entry.key) !== entry) return;
           entry.status = 'ready';
-          // Keep complete points for the opened chart; unopened datasets are
-          // summary-only. Drop earlier datasets when switching a task's tab.
-          for (const [key, cached] of state.chartHistory) {
-            const [cachedTask, cachedDataset] = JSON.parse(key);
-            const active = state.chartDatasetTab[cachedTask] || state.dashboardOverview?.chart_data?.tasks?.find(t => t.task === cachedTask)?.datasets?.[0]?.dataset;
-            if (cachedDataset !== active) {
-              cached.controller?.abort();
-              state.chartHistory.delete(key);
-            }
-          }
-          const loadedRuns = Array.from(state.chartHistory.values()).filter(item => item.status === 'ready').flatMap(item => item.rows);
-          reconcilePassVersions(loadedRuns);
-          state.flatRuns = loadedRuns;
-          state.chartData = buildDashboardChartData();
-          render();
+          applyChartHistory();
         } catch (error) {
           if (error.name === 'AbortError' || !dashboardActive || requestKey !== state.dashboardRequestKey) return;
           entry.status = 'error';
@@ -6937,20 +8297,22 @@
         throw error;
       }
       if (response.status === 404) throw new Error('Project not found');
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        const error = new Error(`HTTP ${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
       return await response.json();
     } finally {
       if (controller) dashboardRequests.delete(controller);
     }
   }
 
+  // The run page orders its previous / next run the same way (runs_order.js).
   function dashboardCollation(overview, sortKey) {
-    const field = sortKey.replace(/-(asc|desc)$/, '');
-    const column = { task: 'tasks', model: 'models', dataset: 'dataset_names', version: 'git_commits', owner: 'owner_names' }[field];
+    const column = window.QymRunsOrder.collatedColumn(sortKey);
     if (!column) return null;
-    return (overview?.sort_values?.[column] || []).slice().sort(
-      field === 'model' ? compareModelVariantKeys : (a, b) => String(a).localeCompare(String(b))
-    );
+    return window.QymRunsOrder.collation(sortKey, overview?.sort_values?.[column] || []);
   }
 
   function renderDashboardFreshness(freshness) {
@@ -6980,9 +8342,12 @@
     const retained = [...retainedIds];
     // The overview (catalog + facets) is the expensive half of a poll; only ask
     // for it again when the projection revision moved or the filter changed.
+    // A page that was still publishing (e.g. right after a review action)
+    // means the cached overview's facets and KPIs are behind too.
     const overviewStale = !state.dashboardOverview
       || state.dashboardOverviewFilterKey !== filterKey
       || state.dashboardOverview?.freshness?.updating
+      || state.dashboardPage?.freshness?.updating
       || (Date.now() - (state._overviewFetchedAt || 0)) > 60000;
     const payload = {
       project_slug: state.currentProject?.slug || getProjectSlugFromPath() || '',
@@ -7016,12 +8381,43 @@
       queueRunsFetch({});
       return;
     }
+    // A poll that brings back exactly what the page shows must not touch the
+    // table, the filter menus or keyboard focus.
+    const overviewMark = page.overview ? [
+      page.overview.catalog_revision, page.overview.revision, page.overview.total_runs,
+      page.overview.total_count, page.overview.facets, page.overview.kpis, page.overview.freshness,
+    ] : null;
+    const signature = JSON.stringify([
+      key, page.rows, pinnedRows, page.total_runs, page.freshness, page.revision, page.catalog_revision,
+      overviewMark, retained,
+    ]);
+    if (state.dashboardPage && state.dashboardRequestKey === key && signature === state._dashboardPageSignature) {
+      // The request succeeded, so an earlier failure is over.
+      clearRunsStale();
+      el('table-view')?.setAttribute('aria-busy', 'false');
+      const updated = el('last-updated');
+      if (updated) updated.textContent = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      renderDashboardFreshness(page.freshness || state.dashboardOverview?.freshness);
+      try { updateRunsRefreshCadence && updateRunsRefreshCadence(); } catch {}
+      return;
+    }
+    state._dashboardPageSignature = signature;
     const total = Number(page.total_runs || 0);
     if (offset >= total && offset > 0) {
       state.tablePage = Math.max(1, Math.ceil(total / TABLE_PAGE_SIZE));
       queueRunsFetch({});
       return;
     }
+    // The pinned rows go in too: a selection kept across visits (C043) needs
+    // its off-page runs' data (passes, status) while the cached page shows.
+    // applyDashboardPageResult keeps only the rows still selected then.
+    rememberDashboardPage(key, { filterKey, offset, page, overview, pinnedRows });
+    applyDashboardPageResult({ key, filterKey, offset, page, overview, pinnedRows, retained });
+  }
+
+  function applyDashboardPageResult({ key, filterKey, offset, page, overview, pinnedRows, retained }) {
+    const total = Number(page.total_runs || 0);
+    const retainedIds = new Set();
     const pageData = { tasks: page.tasks || {}, project: page.project || state.currentProject, total_count: overview.total_count };
     const normalizedRows = new Map(flattenRuns(pageData).runs.map(run => [run.file_path, run]));
     // Task/model groups lose cross-group order. Keep the API's sorted rows,
@@ -7129,7 +8525,9 @@
       }
 
       if (!runsResponse.ok) {
-        throw new Error(`HTTP ${runsResponse.status}`);
+        const error = new Error(`HTTP ${runsResponse.status}`);
+        error.status = runsResponse.status;
+        throw error;
       }
 
       const data = await runsResponse.json();
@@ -7172,10 +8570,7 @@
         showProjectNotFound();
         return;
       }
-      el('loading').innerHTML = `
-        <span style="color:var(--error);">Failed to load runs</span>
-        <span>Is the server running?</span>
-      `;
+      runsLoadFailed(err);
     } finally {
       state.runsFetchMeta.inFlight = false;
       if (dashboardActive && state.runsFetchMeta.pendingOptions) {
@@ -7306,7 +8701,7 @@
     wrapper.style.display = '';
     trigger.textContent = state.currentProject && state.currentProject.name ? state.currentProject.name : 'Choose Project';
     menu.innerHTML = projects.map(project => `
-      <a class="project-switcher-item${state.currentProject && state.currentProject.slug === project.slug ? ' active' : ''}" data-project-switch="${escapeHtml(project.slug)}" href="${projectUrl(project.slug)}">
+      <a class="project-switcher-item${state.currentProject && state.currentProject.slug === project.slug ? ' active' : ''}" data-project-switch="${escapeHtml(project.slug)}" href="${escapeHtml(projectUrl(project.slug))}">
         <span>${escapeHtml(project.name)}</span>
         <span>${escapeHtml(project.role || '')}</span>
       </a>
@@ -7342,29 +8737,22 @@
       if (!dropdown.contains(e.target)) {
         dropdown.classList.remove('open');
       }
-    });
+    }, pageListen());
 
     // Close on escape key
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         dropdown.classList.remove('open');
       }
-    });
+    }, pageListen());
   }
 
   function populateFilterDropdowns() {
     // For each filter, compute applicable values from runs matching ALL OTHER active filters.
     // This ensures each dropdown only shows values that would produce results.
     function runsExcluding(skipFilter, skipVersioningKey = null) {
-      let runs = state.flatRuns;
-      switch (state.quickFilter) {
-        case 'today':
-          runs = runs.filter(r => isToday(r.timestamp));
-          break;
-        case 'week':
-          runs = runs.filter(r => isWithinDays(r.timestamp, 7));
-          break;
-      }
+      const bounds = timeFilterBounds();
+      let runs = state.flatRuns.filter(r => runMatchesTimeFilter(r, bounds) && runMatchesSearch(r));
       if (skipFilter !== 'tasks' && state.filterTasks.size > 0 && !state.filterTasks.has('__none__')) {
         runs = runs.filter(r => matchesFilterSelection(state.filterTasks, r.task_name));
       }
@@ -7404,6 +8792,7 @@
       .concat(ownerValues.includes(EMPTY_FILTER_VALUE) ? [EMPTY_FILTER_VALUE] : []);
     const constrainingFiltersActive = state.quickFilter !== 'all'
       || state.filterOrigin !== 'all'
+      || !!activeSearchQuery()
       || state.filterTasks.size > 0
       || state.filterDatasets.size > 0
       || state.filterModels.size > 0
@@ -7417,6 +8806,7 @@
 
     state.allModels = usesDashboardSummary() ? (state.dashboardOverview.all_models || []).slice().sort(compareModelVariantKeys)
       : [...new Set(state.flatRuns.map(r => getRunModelKey(r)).filter(m => !isEmptyFilterValue(m)))].sort(compareModelVariantKeys);
+    pruneUrlModelVariants();
 
     // Task multi-select
     buildMultiSelect({
@@ -7572,7 +8962,7 @@
         dd.classList.remove('open');
       }
     });
-  });
+  }, pageListen());
 
   // Close actions dropdowns when clicking outside
   document.addEventListener('click', (e) => {
@@ -7581,7 +8971,7 @@
         d.classList.remove('open');
       });
     }
-  });
+  }, pageListen());
 
   // Clear all filters button
   el('clear-all-filters')?.addEventListener('click', clearAllFilters);
@@ -7589,11 +8979,14 @@
 
   // Quick filters
   $$('.filter-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      state.quickFilter = btn.dataset.filter;
-      setQuickFilterSelection(state.quickFilter);
-      state.focusedIndex = -1;
-      render();
+    btn.addEventListener('click', (e) => {
+      if (btn.dataset.filter === 'custom') {
+        e.stopPropagation();
+        toggleTimeRangeDropdown();
+        return;
+      }
+      toggleTimeRangeDropdown(false);
+      applyQuickFilter(btn.dataset.filter);
     });
   });
 
@@ -7608,6 +9001,78 @@
       render();
     });
   });
+
+  // Custom date range: two inclusive local dates, applied explicitly.
+  function toggleTimeRangeDropdown(open) {
+    const dropdown = el('time-range-dropdown');
+    const button = $('.filter-btn[data-filter="custom"]');
+    if (!dropdown) return;
+    const next = open === undefined ? !dropdown.classList.contains('open') : open;
+    if (next) {
+      document.querySelectorAll('.multi-select-dropdown.open').forEach(other => {
+        if (other !== dropdown) other.classList.remove('open');
+      });
+      el('time-range-from').value = state.customRange.from || '';
+      el('time-range-to').value = state.customRange.to || '';
+      el('time-range-error').textContent = '';
+    }
+    dropdown.classList.toggle('open', next);
+    button?.setAttribute('aria-expanded', next ? 'true' : 'false');
+    if (next) el('time-range-from')?.focus();
+  }
+
+  el('time-range-apply')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const from = el('time-range-from').value;
+    const to = el('time-range-to').value;
+    if (!from && !to) {
+      el('time-range-error').textContent = 'Choose a start date, an end date, or both.';
+      return;
+    }
+    if (from && to && from > to) {
+      el('time-range-error').textContent = 'The start date is after the end date.';
+      return;
+    }
+    state.customRange = { from, to };
+    toggleTimeRangeDropdown(false);
+    applyQuickFilter('custom');
+    $('.filter-btn[data-filter="custom"]')?.focus();
+  });
+  el('time-range-cancel')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleTimeRangeDropdown(false);
+    $('.filter-btn[data-filter="custom"]')?.focus();
+  });
+  el('time-range-dropdown')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleTimeRangeDropdown(false);
+      $('.filter-btn[data-filter="custom"]')?.focus();
+    } else if (e.key === 'Enter' && e.target.matches('input')) {
+      e.preventDefault();
+      el('time-range-apply')?.click();
+    }
+  });
+
+  // Runs search: debounced, matched on the server against the run name the
+  // list shows, the run name and the run id.
+  const runsSearch = el('runs-search');
+  if (runsSearch) {
+    const applySearch = debounce(() => setSearchQuery(runsSearch.value), 200);
+    runsSearch.addEventListener('input', applySearch);
+    runsSearch.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        e.preventDefault();
+        if (runsSearch.value) setSearchQuery('', { updateInput: true });
+        else runsSearch.blur();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        setSearchQuery(runsSearch.value);
+      }
+    });
+  }
 
   // View toggle (Charts vs Runs vs Models)
   $$('.view-toggle-btn').forEach(btn => {
@@ -7628,7 +9093,9 @@
   el('models-k-input')?.addEventListener('change', (e) => {
     const value = parseInt(e.target.value);
     if (!isNaN(value) && value >= 1) {
-      state.modelsViewState.globalK = value;
+      // The input's max: statistics take at most 100 runs per model.
+      state.modelsViewState.globalK = Math.min(100, value);
+      e.target.value = state.modelsViewState.globalK;
       state.modelsViewState.modelRunSelections = {};  // Clear custom selections when K changes
       render();
     }
@@ -7645,6 +9112,8 @@
     const value = parseFloat(e.target.value);
     if (!isNaN(value) && value >= 0 && value <= 100) {
       state.modelsViewState.threshold = value / 100;
+      const mvs = state.modelsViewState;
+      mvs.thresholdByMetric = { ...(mvs.thresholdByMetric || {}), [mvs.selectedMetric]: value / 100 };
       // Clear stats cache so they get recalculated with new threshold
       state.modelsViewState.modelStats = {};
       renderModelsView();
@@ -7654,18 +9123,21 @@
   // Close run selection modal when clicking outside
   el('run-selection-modal')?.addEventListener('click', (e) => {
     if (e.target.id === 'run-selection-modal') {
-      el('run-selection-modal').style.display = 'none';
+      hideLegacyModal(el('run-selection-modal'));
     }
   });
+
+  wireRunsTableEvents();
 
   // Select all checkbox
   el('select-all')?.addEventListener('click', (e) => e.stopPropagation());
   el('select-all')?.addEventListener('change', selectAll);
   // Pass checkboxes live inside re-rendered expansion rows; delegate once.
   document.addEventListener('change', (e) => {
+    if (!dashboardActive) return;
     const cb = e.target.closest?.('.pass-checkbox');
     if (cb) togglePassSelection(cb.dataset.passRef);
-  });
+  }, pageListen());
   el('runs-tbody')?.addEventListener('click', event => {
     const button = event.target.closest('[data-execution-errors]');
     if (!button) return;
@@ -7673,6 +9145,39 @@
     event.stopPropagation();
     showExecutionErrorDetails(button);
   }, true);
+  // Frozen columns: keep focused controls and the table's end in view.
+  const runsTableScroll = el('runs-table-scroll');
+  runsTableScroll?.addEventListener('focusin', event => keepRunsFocusClearOfFrozenColumns(event.target));
+  runsTableScroll?.addEventListener('focusout', event => {
+    if (!runsTableScroll.contains(event.relatedTarget)) keepRunsFocusClearOfFrozenColumns(null);
+  });
+  runsTableScroll?.addEventListener('scroll', () => {
+    state._runsTableAtEnd = isRunsTableAtEnd(runsTableScroll);
+  }, { passive: true });
+  // A wider or narrower table (window resize, sidebar) fits the frozen
+  // columns again.
+  if (runsTableScroll && typeof ResizeObserver === 'function') {
+    let fittedWidth = runsTableScroll.clientWidth;
+    state._runsTableResizeObserver = new ResizeObserver(() => {
+      if (!dashboardActive || runsTableScroll.clientWidth === fittedWidth) return;
+      fittedWidth = runsTableScroll.clientWidth;
+      scheduleRunsStickyColumnSizing();
+    });
+    state._runsTableResizeObserver.observe(runsTableScroll);
+  }
+  // The table's scrollbar mirror rests on the status bar. A selection in a
+  // narrow bar puts the pager on a second row there (dashboard.css), so the
+  // mirror follows the bar's real height instead of the one-row height.
+  const statusBar = document.querySelector('.status-bar');
+  const runsScrollMirror = document.querySelector('[data-qym-scroll-mirror-for="runs-table-scroll"]');
+  if (statusBar && runsScrollMirror && typeof ResizeObserver === 'function') {
+    state._statusBarResizeObserver = new ResizeObserver(() => {
+      if (!dashboardActive) return;
+      const height = statusBar.offsetHeight;
+      runsScrollMirror.style.bottom = height > 0 ? height + 'px' : '';
+    });
+    state._statusBarResizeObserver.observe(statusBar);
+  }
 
   // Compare actions
   el('compare-view')?.addEventListener('click', openComparison);
@@ -7680,10 +9185,57 @@
   el('delete-selected')?.addEventListener('click', confirmDeleteSelected);
   el('compare-clear')?.addEventListener('click', clearSelection);
 
-  // Keyboard navigation
+  // Keyboard navigation. Single-key shortcuts act on the Runs table only, can
+  // be turned off in the shortcuts help (WCAG 2.1.4), never fire with a
+  // modifier key, and never fire while a menu, dialog or popover is open.
+  function singleKeyShortcutsEnabled() {
+    try {
+      return window.localStorage.getItem(SINGLE_KEY_SHORTCUTS_KEY) !== 'off';
+    } catch {
+      return true;
+    }
+  }
+
+  function setSingleKeyShortcutsEnabled(enabled) {
+    try {
+      if (enabled) window.localStorage.removeItem(SINGLE_KEY_SHORTCUTS_KEY);
+      else window.localStorage.setItem(SINGLE_KEY_SHORTCUTS_KEY, 'off');
+    } catch {}
+  }
+
+  function shortcutOverlayOpen() {
+    if (document.querySelector('.multi-select-dropdown.open, .actions-dropdown.open')) return true;
+    return Array.from(document.querySelectorAll('.modal, .shell-modal-backdrop, [role="dialog"][aria-modal="true"]'))
+      .some(node => node.getClientRects().length > 0);
+  }
+
+  const shortcutsToggle = el('single-key-shortcuts-toggle');
+  if (shortcutsToggle) {
+    shortcutsToggle.checked = singleKeyShortcutsEnabled();
+    shortcutsToggle.addEventListener('change', () => setSingleKeyShortcutsEnabled(shortcutsToggle.checked));
+  }
+
   document.addEventListener('keydown', (e) => {
+    // A page left through in-app navigation keeps no say over the next page.
+    if (!dashboardActive) return;
+    // Escape inside the help panel is handled by the dialog contract; this
+    // covers focus that fell outside it (e.g. to body) and still releases the
+    // dialog so focus returns to the trigger.
+    if (e.key === 'Escape' && el('help-modal')?.style.display === 'flex') {
+      e.preventDefault();
+      hideLegacyModal(el('help-modal'));
+      return;
+    }
+    // Browser and OS shortcuts (copy, open in new tab...) stay native.
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    // A focused run-name link keeps the row shortcuts (j/k/x...); Enter is
+    // the link's own activation and Escape leaves it.
+    const runLink = e.target.closest?.('#runs-tbody a.run-id');
+    if (runLink && e.key === 'Enter') return;
+    // An open dialog owns the keyboard: no table shortcut acts behind it.
+    if (e.target.closest('[role="dialog"], [role="alertdialog"], .modal')) return;
     // Keyboard shortcuts must not take over native interactive controls.
-    if (e.target.closest('input, select, textarea, button, a, [contenteditable="true"]')) {
+    if ((!runLink || e.key === 'Escape') && e.target.closest('input, select, textarea, button, a, [contenteditable="true"]')) {
       if (e.key === 'Escape') {
         const isSelectionControl = !!e.target.closest('#compare-panel, .run-select-control');
         if (isSelectionControl && state.selectMode) {
@@ -7695,6 +9247,18 @@
       }
       return;
     }
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+    // Charts and Models load this script too but have no runs table.
+    if (state.currentView !== 'table' || !el('runs-tbody')) return;
+    if (shortcutOverlayOpen()) return;
+
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (state.selectMode) setSelectMode(false);
+      else clearSelection();
+      return;
+    }
+    if (!singleKeyShortcutsEnabled()) return;
 
     switch (e.key) {
       case 'j':
@@ -7708,18 +9272,13 @@
         moveFocus(-1);
         break;
       case 'g':
-        if (!e.shiftKey) {
-          e.preventDefault();
-          state.focusedIndex = 0;
-          setTablePage(1);
-          render();
-        }
+        e.preventDefault();
+        focusRunIndex(0);
         break;
       case 'G':
+        // The last run of the whole list, not of the current page.
         e.preventDefault();
-        state.focusedIndex = state.filteredRuns.length - 1;
-        setTablePage(getTablePageCount(state.filteredRuns.length));
-        render();
+        focusRunIndex(runsTotalCount() - 1);
         break;
       case 'Enter':
         e.preventDefault();
@@ -7738,58 +9297,41 @@
           openComparison();
         }
         break;
-      case 'Escape':
-        e.preventDefault();
-        if (state.selectMode) setSelectMode(false);
-        else clearSelection();
+      case '/':
+        if (el('runs-search')) {
+          e.preventDefault();
+          el('runs-search').focus();
+          el('runs-search').select();
+        }
         break;
       case '?':
+        // Charts and Models have no shortcut list.
+        if (!el('help-modal')) break;
         e.preventDefault();
-        el('help-modal').style.display = 'flex';
+        showLegacyModal(el('help-modal'));
         break;
       case '1':
       case '2':
       case '3':
-        const filters = ['all', 'today', 'week'];
-        const idx = parseInt(e.key) - 1;
-        if (idx >= 0 && idx < filters.length) {
-          e.preventDefault();
-          state.quickFilter = filters[idx];
-          setQuickFilterSelection(state.quickFilter);
-          render();
-        }
-        break;
-      case 't':
+      case '4': {
+        const filter = ['all', 'today', 'week', 'month'][Number(e.key) - 1];
         e.preventDefault();
-        state.currentView = 'table';
-        $$('.view-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === 'table'));
-        render();
+        applyQuickFilter(filter);
         break;
-      case 'h':
-        e.preventDefault();
-        state.currentView = 'charts';
-        $$('.view-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === 'charts'));
-        render();
-        break;
-      case 'm':
-        e.preventDefault();
-        state.currentView = 'models';
-        $$('.view-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === 'models'));
-        render();
-        break;
+      }
     }
-  });
+  }, pageListen());
 
   // Close modal on click outside
   el('help-modal')?.addEventListener('click', (e) => {
     if (e.target === el('help-modal')) {
-      el('help-modal').style.display = 'none';
+      hideLegacyModal(el('help-modal'));
     }
   });
 
   // Header help shortcut
   $('.help-trigger')?.addEventListener('click', () => {
-    el('help-modal').style.display = 'flex';
+    showLegacyModal(el('help-modal'));
   });
 
   // ═══════════════════════════════════════════════════
@@ -7812,8 +9354,8 @@
     toast.innerHTML = `
       <div class="toast-icon">${icon}</div>
       <div class="toast-content">
-        <div class="toast-title">${title}</div>
-        ${message ? `<div class="toast-message">${message}</div>` : ''}
+        <div class="toast-title">${escapeHtml(title)}</div>
+        ${message ? `<div class="toast-message">${escapeHtml(message)}</div>` : ''}
       </div>
       <button class="toast-close qym-icon-action" type="button" aria-label="Close notification">×</button>
     `;
@@ -7842,57 +9384,30 @@
   // WORKFLOW SUBMIT
   // ═══════════════════════════════════════════════════
 
-  async function submitSelectedRuns() {
+  function submitSelectedRuns() {
     if (state.selectedRuns.size === 0) return;
     const selectedRuns = state.flatRuns.filter(r => state.selectedRuns.has(r.file_path));
 
     // Pre-validate: check which runs can be submitted
     const submittableStatuses = ['COMPLETED', 'FAILED', 'REJECTED'];
-    const submittable = [];
-    const notSubmittable = [];
-
-    for (const run of selectedRuns) {
-      const status = run.status || '';
-      if (submittableStatuses.includes(status)) {
-        submittable.push(run);
-      } else {
-        notSubmittable.push(run);
-      }
-    }
-
-    // If some runs can't be submitted, show a single clear error
+    const notSubmittable = selectedRuns.filter(r => !submittableStatuses.includes(r.status || ''));
     if (notSubmittable.length > 0) {
       const statuses = [...new Set(notSubmittable.map(r => r.status))].join(', ');
-      showToast('error', 'Cannot Submit', `${notSubmittable.length} run(s) already have status: ${statuses}`);
+      showToast('error', 'Cannot submit', `${notSubmittable.length} run(s) already have status: ${statuses}`);
       return;
     }
-
-    // Submit only the valid runs
-    let ok = 0;
-    let failed = 0;
-
-    for (const run of submittable) {
-      const runId = run.run_id || run.file_path;
-      try {
-        const res = await fetch(apiUrl(`v1/runs/${encodeURIComponent(runId)}/submit`), { method: 'POST' });
-        if (res.ok) ok++;
-        else failed++;
-      } catch (e) {
-        failed++;
-      }
+    const globalRole = (state.currentUser && state.currentUser.role) || '';
+    const projectRole = (state.currentProject && state.currentProject.role) || '';
+    const isProjectManager = globalRole === 'ADMIN' || projectRole === 'MANAGER';
+    const me = state.currentUser && state.currentUser.id;
+    const notMine = selectedRuns.filter(r => !(r.owner && r.owner.id === me));
+    if (!isProjectManager && notMine.length > 0) {
+      showToast('error', 'Cannot submit', `${notMine.length} selected run(s) belong to someone else. Only their owner, a project manager or an admin can submit them.`);
+      return;
     }
-
-    try {
-      await fetchRuns({ refreshAllPages: true });
-    } catch {}
-
-    try {
-      if (failed === 0) showToast('success', 'Submitted', `Submitted ${ok} run(s)`);
-      else showToast('error', 'Partial Submit', `Submitted ${ok}, failed ${failed}`);
-    } catch {
-      if (failed === 0) alert(`Submitted ${ok} run(s)`);
-      else alert(`Submitted ${ok}, failed ${failed}`);
-    }
+    if (!selectedRuns.length) return;
+    // Confirm with an optional comment, then submit all in one request (C061).
+    showWorkflowModal('submit', null, '', { runs: selectedRuns });
   }
 
   // Compare panel: submit selected runs
@@ -7902,7 +9417,217 @@
   // STATE PERSISTENCE (for back/forward navigation)
   // ═══════════════════════════════════════════════════
 
+  // ── View state in the URL ─────────────────────────
+  // Filters, time range, sort and page live in the query string, so a view
+  // can be shared, bookmarked, reloaded in a new tab and restored by Back.
+  // The URL wins over the per-tab sessionStorage copy; a bare URL (sidebar
+  // link) still restores the tab's last filters.
+  const DASHBOARD_URL_FILTERS = {
+    task: 'filterTasks', model: 'filterModels', dataset: 'filterDatasets',
+    status: 'filterStatuses', version: 'filterVersions', owner: 'filterUsers',
+  };
+  const DEFAULT_SORT_KEY = 'time-desc';
+
+  // A plain model name in the URL means every variant of it ("|||plain" and
+  // "|||reasoning"); variants missing from the facets are dropped once the
+  // facets arrive. Written back as the plain name when that is equivalent.
+  function modelUrlValues() {
+    const values = [];
+    for (const key of state.filterModels) {
+      const parsed = parseModelVariantKey(key);
+      if (!parsed.isVariantKey) { values.push(key); continue; }
+      const plain = getModelVariantKey(parsed.rawModelName, false);
+      const reasoning = getModelVariantKey(parsed.rawModelName, true);
+      const reasoningKnown = state.allModels.includes(reasoning);
+      const plainKnown = state.allModels.includes(plain);
+      if (key === plain) {
+        values.push(state.filterModels.has(reasoning) || !reasoningKnown ? parsed.rawModelName : key);
+      } else if (!state.filterModels.has(plain)) {
+        values.push(plainKnown ? key : parsed.rawModelName);
+      }
+    }
+    return [...new Set(values)];
+  }
+
+  function dashboardUrlParams() {
+    const table = state.currentView === 'table';
+    const params = { range: state.quickFilter && state.quickFilter !== 'all' ? state.quickFilter : null };
+    // The Range dates (C060) travel with range=custom.
+    const custom = state.quickFilter === 'custom';
+    params.from = custom && state.customRange.from ? state.customRange.from : null;
+    params.to = custom && state.customRange.to ? state.customRange.to : null;
+    for (const [param, field] of Object.entries(DASHBOARD_URL_FILTERS)) {
+      params[param] = field === 'filterModels' ? modelUrlValues() : [...state[field]];
+    }
+    params.origin = state.filterOrigin !== 'all' ? state.filterOrigin : null;
+    params.sort = table && state.sortKey !== DEFAULT_SORT_KEY ? state.sortKey : null;
+    params.page = table && state.tablePage > 1 ? String(state.tablePage) : null;
+    return params;
+  }
+
+  function syncDashboardUrl() {
+    if (!dashboardActive || !window.QymShell || typeof window.QymShell.replaceUrlQuery !== 'function') return;
+    window.QymShell.replaceUrlQuery(dashboardUrlParams());
+  }
+
+  function applyDashboardUrlState() {
+    const params = new URLSearchParams(window.location.search);
+    // Any view parameter makes the URL the whole view: a link that carries
+    // only a sort or a page was written with no filters, so the tab's saved
+    // filters must not narrow it.
+    const urlHasView = Object.keys(DASHBOARD_URL_FILTERS).some(key => params.has(key))
+      || ['range', 'from', 'to', 'sort', 'page', 'q', 'origin'].some(key => params.has(key));
+    if (urlHasView) {
+      for (const [param, field] of Object.entries(DASHBOARD_URL_FILTERS)) {
+        const values = params.getAll(param).filter(Boolean);
+        if (field !== 'filterModels') { state[field] = new Set(values); continue; }
+        const models = new Set();
+        const expanded = new Set();
+        for (const value of values) {
+          if (value === '__none__' || parseModelVariantKey(value).isVariantKey) { models.add(value); continue; }
+          for (const key of [getModelVariantKey(value, false), getModelVariantKey(value, true)]) {
+            models.add(key);
+            expanded.add(key);
+          }
+        }
+        state.filterModels = models;
+        state._urlModelExpansion = expanded.size ? expanded : null;
+      }
+      const range = params.get('range');
+      // The Range picker allows a start date, an end date or both, so a
+      // custom range may be open on one side (runs_order.js reads it alike).
+      const from = parseLocalDate(params.get('from')) ? params.get('from') : '';
+      const to = parseLocalDate(params.get('to')) ? params.get('to') : '';
+      if (range === 'custom' && (from || to)) {
+        state.customRange = { from, to };
+        state.quickFilter = 'custom';
+      } else {
+        state.quickFilter = ['today', 'week', 'month'].includes(range) ? range : 'all';
+      }
+      setQuickFilterSelection(state.quickFilter);
+      const origin = params.get('origin');
+      state.filterOrigin = ORIGIN_FILTER_VALUES.includes(origin) ? origin : 'all';
+      setOriginFilterSelection(state.filterOrigin);
+    }
+    const sort = params.get('sort');
+    if (sort && /^[^\s].*-(asc|desc)$/.test(sort)) state.sortKey = sort;
+    const page = parseInt(params.get('page') || '', 10);
+    if (Number.isFinite(page) && page > 1) state.tablePage = page;
+  }
+
+  function pruneUrlModelVariants() {
+    const expanded = state._urlModelExpansion;
+    if (!expanded || !state.allModels.length) return;
+    state._urlModelExpansion = null;
+    const known = new Set(state.allModels);
+    const removable = [...expanded].filter(key => !known.has(key));
+    if (!removable.length) return;
+    const raws = new Set(removable.map(key => parseModelVariantKey(key).rawModelName));
+    for (const raw of raws) {
+      const variants = [getModelVariantKey(raw, false), getModelVariantKey(raw, true)];
+      // A model that is not in this project at all keeps one key, so the
+      // filter still says "no runs" instead of silently showing everything.
+      if (!variants.some(key => known.has(key))) {
+        state.filterModels.delete(variants[1]);
+        continue;
+      }
+      variants.filter(key => !known.has(key)).forEach(key => state.filterModels.delete(key));
+    }
+    // Dropping a variant with no runs does not change the result: keep the
+    // page the URL asked for.
+    const filterKey = getTableFilterKey();
+    if (state.tableFilterKey !== filterKey && state.dashboardOverviewFilterKey === state.tableFilterKey) {
+      state.dashboardOverviewFilterKey = filterKey;
+    }
+    state.tableFilterKey = filterKey;
+  }
+
+  // ── Back to the list: cached page first, then revalidate ──
+  const DASHBOARD_PAGE_CACHE_MAX_AGE_MS = 5 * 60 * 1000;
+  function dashboardPageCache() {
+    if (!(window.__QYM_RUNS_PAGE_CACHE__ instanceof Map)) window.__QYM_RUNS_PAGE_CACHE__ = new Map();
+    return window.__QYM_RUNS_PAGE_CACHE__;
+  }
+
+  function rememberDashboardPage(key, entry) {
+    const cache = dashboardPageCache();
+    cache.delete(key);
+    // Stored as JSON: rendering normalizes rows in place.
+    try { cache.set(key, { json: JSON.stringify(entry), savedAt: Date.now() }); } catch { return; }
+    while (cache.size > 4) cache.delete(cache.keys().next().value);
+  }
+
+  function restoreDashboardPageCache() {
+    if (state.currentView !== 'table') return false;
+    const key = dashboardPageRequestKey();
+    const cached = dashboardPageCache().get(key);
+    if (!cached || Date.now() - cached.savedAt > DASHBOARD_PAGE_CACHE_MAX_AGE_MS) return false;
+    try {
+      applyDashboardPageResult({ ...JSON.parse(cached.json), key, retained: [] });
+      // Stale until the background fetch lands.
+      el('table-view')?.setAttribute('aria-busy', 'true');
+      return true;
+    } catch (err) {
+      console.warn('Cached runs page could not be shown:', err);
+      return false;
+    }
+  }
+
+  // ── Compare selection (C043) ──
+  // Runs ticked for Compare, and a locked Cohort A, stay until the user
+  // clears them: through Back/Forward, opening a run or Compare, and the
+  // project's other pages. Kept per project in this tab. Runs that no longer
+  // exist drop out when the list answers (applyDashboardPageResult).
+  function getRunsSelectionKey() {
+    return `qym:runs-selection:${mountedProjectSlug || '__global__'}`;
+  }
+
+  function saveRunsSelection() {
+    if (state.currentView !== 'table') return;
+    const selected = [...state.selectedRuns];
+    const cohortA = Array.isArray(state.cohortAnchorRuns) ? [...state.cohortAnchorRuns] : [];
+    try {
+      if (!selected.length && !cohortA.length) {
+        sessionStorage.removeItem(getRunsSelectionKey());
+        return;
+      }
+      // A pass reference (checked or in Cohort A) means that pass as
+      // numbered when it was picked; reconcilePassVersions drops it if the
+      // run's passes changed meanwhile.
+      const passRevisions = {};
+      for (const ref of [...selected, ...cohortA]) {
+        const base = passRefBase(ref);
+        if (isPassRef(ref) && state._passVersions && base in state._passVersions) {
+          passRevisions[base] = state._passVersions[base];
+        }
+      }
+      sessionStorage.setItem(getRunsSelectionKey(), JSON.stringify({ selected, cohortA, passRevisions }));
+    } catch {}
+  }
+
+  function restoreRunsSelection() {
+    if (state.currentView !== 'table') return;
+    let saved = null;
+    try {
+      saved = JSON.parse(sessionStorage.getItem(getRunsSelectionKey()) || 'null');
+    } catch {}
+    if (!saved || typeof saved !== 'object') return;
+    const refs = value => (Array.isArray(value) ? value.filter(ref => typeof ref === 'string' && ref) : []);
+    state.selectedRuns.clear();
+    refs(saved.selected).forEach(ref => state.selectedRuns.add(ref));
+    const cohortA = refs(saved.cohortA);
+    state.cohortAnchorRuns = cohortA.length ? cohortA : null;
+    if (saved.passRevisions && typeof saved.passRevisions === 'object') {
+      state._passVersions = state._passVersions || {};
+      for (const [runId, revision] of Object.entries(saved.passRevisions)) {
+        if (Number.isFinite(revision)) state._passVersions[runId] = revision;
+      }
+    }
+  }
+
   function saveDashboardState() {
+    if (!dashboardActive && !state._savingOnTeardown) return;
+    saveRunsSelection();
     const {
       inFlightRequestPromise,
       inFlightRequestKey,
@@ -7922,6 +9647,7 @@
       quickFilter: state.quickFilter,
       filterOrigin: state.filterOrigin,
       filterVersioning: Object.fromEntries(activeVersioningFilters().map(([key, selection]) => [key, [...selection]])),
+      customRange: state.customRange,
       chartFirstColWidth: state.chartFirstColWidth,
     };
     sessionStorage.setItem(getDashboardStateKey(), JSON.stringify(stateToSave));
@@ -7964,6 +9690,12 @@
         if (parsed.filterVersions) state.filterVersions = new Set(parsed.filterVersions);
         if (parsed.filterDatasets) state.filterDatasets = new Set(parsed.filterDatasets);
         if (parsed.filterUsers) state.filterUsers = new Set(parsed.filterUsers);
+        if (parsed.customRange && typeof parsed.customRange === 'object') {
+          state.customRange = {
+            from: parseLocalDate(parsed.customRange.from) ? parsed.customRange.from : '',
+            to: parseLocalDate(parsed.customRange.to) ? parsed.customRange.to : '',
+          };
+        }
         if (parsed.quickFilter) {
           state.quickFilter = parsed.quickFilter;
           setQuickFilterSelection(state.quickFilter);
@@ -7984,33 +9716,46 @@
     } else {
       applyChartFirstColWidth(CHART_FIRST_COL_DEFAULT_WIDTH);
     }
+    applyDashboardUrlState();
   }
 
   // Save state before navigating away
-  window.addEventListener('beforeunload', saveDashboardState);
-  window.addEventListener('pagehide', saveDashboardState);
+  window.addEventListener('beforeunload', saveDashboardState, pageListen());
+  window.addEventListener('pagehide', saveDashboardState, pageListen());
   function teardownDashboard() {
     document.getElementById('execution-error-modal')?.remove();
     dashboardActive = false;
     for (const controller of dashboardRequests) controller.abort();
     state.chartHistoryObserver?.disconnect();
+    state._runsTableResizeObserver?.disconnect();
+    state._statusBarResizeObserver?.disconnect();
     for (const entry of state.chartHistory.values()) entry.controller?.abort();
     state.chartHistoryQueue.length = 0;
+    state._savingOnTeardown = true;
     saveDashboardState();
+    state._savingOnTeardown = false;
     state.runsFetchMeta.pendingOptions = null;
     if (window.__QYM_DASHBOARD_INTERVAL__) {
       clearInterval(window.__QYM_DASHBOARD_INTERVAL__);
       window.__QYM_DASHBOARD_INTERVAL__ = null;
     }
   }
-  document.addEventListener('qym:before-navigate', teardownDashboard, { once: true });
+  document.addEventListener('qym:before-navigate', teardownDashboard, pageListen({ once: true }));
 
   // Also save on visibility change (for mobile)
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') {
+    if (dashboardActive && document.visibilityState === 'hidden') {
       saveDashboardState();
+    } else if (state._pollMissedWhileHidden && dashboardActive) {
+      state._pollMissedWhileHidden = false;
+      fetchRuns();
     }
-  });
+  }, pageListen());
+  // Back/forward can restore this page from the browser cache; it may predate
+  // a change made elsewhere (for example a run restored from Deleted Runs).
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted && dashboardActive) fetchRuns({ refreshAllPages: true });
+  }, pageListen());
 
   // ═══════════════════════════════════════════════════
   // INIT
@@ -8021,18 +9766,35 @@
     emptyDocsLink.href = apiUrl('docs-guide#get-started/first-run');
   }
 
+  function restoreSearchFromUrl() {
+    if (state.currentView !== 'table' || !el('runs-search')) return;
+    let query = '';
+    try {
+      query = new URLSearchParams(window.location.search).get('q') || '';
+    } catch {}
+    query = query.trim().slice(0, 200);
+    state.searchQuery = query;
+    el('runs-search').value = query;
+  }
+
   // Check auth first before loading dashboard
   async function checkAuthAndInit() {
     try {
       restoreDashboardState();
+      restoreRunsSelection();
+      restoreSearchFromUrl();
       restoreRunsDataCache();
 
       // If shell is present, wait for it to fetch the user
       if (window.QymShell && !window.__QYM_USER__) {
-        await new Promise(r => document.addEventListener('qym:shell-ready', r, { once: true }));
+        await new Promise(r => document.addEventListener('qym:shell-ready', r, pageListen({ once: true })));
       }
+      if (!dashboardActive) return;
       if (window.__QYM_USER__) {
         state.currentUser = window.__QYM_USER__;
+        // Back to a list seen moments ago: show those rows at once and
+        // revalidate in the background.
+        restoreDashboardPageCache();
         startHeartbeat();
         fetchRuns({ refreshAllPages: true });
         return;
@@ -8071,7 +9833,10 @@
     try {
       // While the summary worker is publishing, back off 2s -> 4s -> 8s -> 15s
       // instead of hammering the server every 2s for the whole backfill.
-      const updating = !!state.dashboardOverview?.freshness?.updating;
+      // The page reports it too: after a review action only the page is
+      // re-requested, and the cached overview still says "not updating".
+      const updating = !!(state.dashboardPage?.freshness?.updating
+        || state.dashboardOverview?.freshness?.updating);
       if (updating) {
         state._updatingPolls = (state._updatingPolls || 0) + 1;
       } else {
@@ -8082,11 +9847,20 @@
         : updating ? backoffMs
         : (state.dashboardOverview?.has_active_runs || hasActiveRuns()) ? LIVE_REFRESH_INTERVAL_MS : IDLE_REFRESH_INTERVAL_MS;
       if (window.__QYM_DASHBOARD_INTERVAL__) clearInterval(window.__QYM_DASHBOARD_INTERVAL__);
-      window.__QYM_DASHBOARD_INTERVAL__ = setInterval(fetchRuns, intervalMs);
+      window.__QYM_DASHBOARD_INTERVAL__ = setInterval(pollRuns, intervalMs);
     } catch {
       if (window.__QYM_DASHBOARD_INTERVAL__) clearInterval(window.__QYM_DASHBOARD_INTERVAL__);
-      window.__QYM_DASHBOARD_INTERVAL__ = setInterval(fetchRuns, IDLE_REFRESH_INTERVAL_MS);
+      window.__QYM_DASHBOARD_INTERVAL__ = setInterval(pollRuns, IDLE_REFRESH_INTERVAL_MS);
     }
+  }
+
+  // Hidden tabs do not poll; the first look back refreshes once.
+  function pollRuns() {
+    if (document.hidden) {
+      state._pollMissedWhileHidden = true;
+      return;
+    }
+    fetchRuns();
   }
   updateRunsRefreshCadence();
 

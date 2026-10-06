@@ -50,9 +50,7 @@
 
   // ── Utilities ──────────────────────────────────────────────────────────
   function esc(value) {
-    return String(value == null ? '' : value)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    return QymSafe.escapeHtml(value == null ? '' : String(value));
   }
 
   function apiUrl(path) {
@@ -1466,7 +1464,7 @@
       drawer.setTitle(st.env.name);
       drawer.setSubtitle(st.env.base_url);
       st.keysTouched = false;
-      drawer.setBody(Object.keys(SECTIONS).map((name) => `<div class="env-section-slot" data-sec="${name}">${SECTIONS[name]()}</div>`).join(''));
+      drawer.setBody(Object.keys(SECTIONS).map((key) => `<div class="env-section-slot" data-sec="${key}">${SECTIONS[key]()}</div>`).join(''));
       renderSlots();
       renderPresets();
       drawer.setFooter(canManage ? `

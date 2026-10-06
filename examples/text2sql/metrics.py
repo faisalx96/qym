@@ -41,7 +41,7 @@ def valid_sql(output: Any, expected: Any, input_data: Dict[str, Any]) -> Dict[st
     if output is None or str(output).strip() == "":
         return {
             "score": 0.0,
-            "metadata": {"error": "Empty output", "is_valid": False}
+            "metadata": {"reason": "Empty output", "is_valid": False}
         }
 
     output = _clean_sql(str(output))
@@ -71,7 +71,7 @@ def valid_sql(output: Any, expected: Any, input_data: Dict[str, Any]) -> Dict[st
             "score": 0.0,
             "metadata": {
                 "is_valid": False,
-                "error": str(e)
+                "reason": str(e)
             }
         }
 
@@ -94,13 +94,15 @@ def execution_accuracy(output: Any, expected: Any, input_data: Dict[str, Any]) -
     if output is None or str(output).strip() == "":
         return {
             "score": 0.0,
-            "metadata": {"error": "Empty output", "execution_match": False}
+            "metadata": {"reason": "Empty output", "execution_match": False}
         }
 
     if expected is None or str(expected).strip() == "":
         return {
             "score": 0.0,
-            "metadata": {"error": "Empty expected SQL", "execution_match": False}
+            # Nothing to compare against: the metric cannot judge this item.
+            "error": "Empty expected SQL",
+            "metadata": {"execution_match": False}
         }
 
     output = _clean_sql(str(output))
@@ -114,7 +116,8 @@ def execution_accuracy(output: Any, expected: Any, input_data: Dict[str, Any]) -
     if schema is None or str(schema).strip() == "":
         return {
             "score": 0.0,
-            "metadata": {"error": "No schema found in input_data", "execution_match": False}
+            "error": "No schema found in input_data",
+            "metadata": {"execution_match": False}
         }
 
     schema = str(schema)
@@ -143,10 +146,8 @@ def execution_accuracy(output: Any, expected: Any, input_data: Dict[str, Any]) -
             conn.close()
             return {
                 "score": 0.0,
-                "metadata": {
-                    "error": f"Expected SQL failed: {e}",
-                    "execution_match": False
-                }
+                "error": f"Expected SQL failed: {e}",
+                "metadata": {"execution_match": False}
             }
 
         # Execute generated SQL
@@ -158,7 +159,7 @@ def execution_accuracy(output: Any, expected: Any, input_data: Dict[str, Any]) -
             return {
                 "score": 0.0,
                 "metadata": {
-                    "error": f"Generated SQL failed: {e}",
+                    "reason": f"Generated SQL failed: {e}",
                     "execution_match": False
                 }
             }
@@ -180,8 +181,6 @@ def execution_accuracy(output: Any, expected: Any, input_data: Dict[str, Any]) -
     except Exception as e:
         return {
             "score": 0.0,
-            "metadata": {
-                "error": str(e),
-                "execution_match": False
-            }
+            "error": str(e),
+            "metadata": {"execution_match": False}
         }

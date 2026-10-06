@@ -9,9 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.orm import Session
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("QYM_AUTH_MODE", "proxy_headers")
@@ -22,9 +20,7 @@ if str(PLATFORM_SRC) not in sys.path:
 if "openai" not in sys.modules:
     sys.modules["openai"] = MagicMock()
 
-from qym_platform.app import create_app
 from qym_platform.datetime_utils import utc_now_naive
-from qym_platform.db.base import Base
 from qym_platform.db.models import (
     ApiKey,
     AuditLog,
@@ -43,47 +39,23 @@ from qym_platform.db.models import (
     User,
     UserRole,
 )
-from qym_platform.deps import get_db
 from qym_platform.security import api_key_prefix, hash_api_key
+from _helpers import sqlite_session_factory
 
 
-@pytest.fixture()
-def session_factory(monkeypatch):
+def _configure_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("QYM_DATABASE_URL", "sqlite:///:memory:")
     monkeypatch.setenv("QYM_AUTH_MODE", "proxy_headers")
     monkeypatch.setenv("QYM_AUTH_LOCAL_ENABLED", "false")
     monkeypatch.setenv("QYM_ALLOW_LEGACY_EMPTY_API_KEY_SCOPES", "true")
     monkeypatch.setenv("QYM_RUN_STALE_TIMEOUT_SECONDS", "60")
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    try:
-        yield SessionLocal
-    finally:
-        engine.dispose()
 
 
 @pytest.fixture()
-def client(session_factory):
-    app = create_app()
-
-    def override_get_db():
-        db = session_factory()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    try:
-        with TestClient(app) as test_client:
-            yield test_client
-    finally:
-        app.dependency_overrides.clear()
+def session_factory(monkeypatch):
+    _configure_env(monkeypatch)
+    with sqlite_session_factory() as factory:
+        yield factory
 
 
 def _auth_headers(token: str) -> dict[str, str]:

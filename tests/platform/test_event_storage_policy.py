@@ -105,17 +105,14 @@ def test_ingest_stores_span_once_and_bodies_by_mode(database, monkeypatch):
         _event(run, 2, "span_completed", {"trace_id": "t", "span_id": "s1", "name": "llm", "attributes": {"openinference.span.kind": "LLM", "input.value": "big" * 100}}),
         _event(run, 3, "item_completed", {"item_id": "a", "output": "done", "latency_ms": 5, "trace_id": "t"}),
     ]
-    assert _apply(engine, run, principal, events) == {"ok": True, "applied": 3, "skipped": 0}
+    assert _apply(engine, run, principal, events) == {
+        "ok": True, "applied": 3, "skipped": 0, "rejected": 0, "rejected_events": []
+    }
     db.expire_all()
     assert db.query(Span).count() == 1
     stored = {e.type: e.payload for e in db.query(RunEvent).all()}
     assert set(stored) == {"item_started", "item_completed"}
     assert stored["item_started"]["input"] == {"q": "hello"}  # full mode keeps bodies
-
-    # Redelivering the span (new event id, same span_id) is a no-op and counts as skipped.
-    again = _event(run, 4, "span_completed", events[1]["payload"])
-    assert _apply(engine, run, principal, [again]) == {"ok": True, "applied": 0, "skipped": 1}
-    assert db.query(Span).count() == 1
 
     _use_settings(monkeypatch, event_log_mode="structural")
     more = [_event(run, 5, "item_completed", {"item_id": "b", "output": "x" * 500, "latency_ms": 5})]

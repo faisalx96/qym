@@ -34,7 +34,7 @@ connection bindings keep ``{connection_id, name, model}`` and every secret ref
 config without the job row.
 
 Retries (plan §13). A retry is a new row with the same ``combo_index``,
-``attempt + 1`` and ``retry_of_job_id`` set (migration 0063); it gets a new id and so a
+``attempt + 1`` and ``retry_of_job_id`` set (migration 0075); it gets a new id and so a
 new token. The retried row is *superseded*: kept for history, left out of the
 experiment's aggregate status.
 

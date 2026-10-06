@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import bisect
+import copy
 import hashlib
 import json
+import math
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from sqlalchemy import and_, case, false, func, or_, select
+from sqlalchemy import and_, case, false, func, or_, select, true
 from sqlalchemy.orm import Session
 
 from qym_platform.auth import Principal, require_ui_principal
@@ -20,7 +23,7 @@ from qym_platform.db.dashboard_models import (
 from qym_platform.db.models import Project, ProjectMembership, UserRole
 from qym_platform.deps import get_db
 from qym_platform.db.dashboard_models import DashboardRunVersion as RunVersion
-from qym_platform.permissions import has_project_access
+from qym_platform.permissions import project_for_read_by_slug
 from qym_platform.settings import PlatformSettings
 from qym_platform.services.dashboard_cache import DashboardSnapshotCache
 from qym_platform.services.run_versioning import (
@@ -29,9 +32,15 @@ from qym_platform.services.run_versioning import (
     versioning_conditions,
 )
 
-_overview_cache = DashboardSnapshotCache()
-_page_cache = DashboardSnapshotCache()
-_catalog_cache = DashboardSnapshotCache(max_entries=4, max_bytes=16 * 1024 * 1024)
+# Entries are keyed by the catalog revision, which moves with every published
+# change, so the TTL only bounds how long an idle entry holds memory.
+_SNAPSHOT_TTL_SECONDS = 300.0
+_overview_cache = DashboardSnapshotCache(ttl=_SNAPSHOT_TTL_SECONDS)
+_page_cache = DashboardSnapshotCache(ttl=_SNAPSHOT_TTL_SECONDS)
+_catalog_cache = DashboardSnapshotCache(
+    max_entries=4, max_bytes=16 * 1024 * 1024, ttl=_SNAPSHOT_TTL_SECONDS
+)
+_kpi_cache = DashboardSnapshotCache(ttl=_SNAPSHOT_TTL_SECONDS)
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 _FILTER_COLUMNS = {
@@ -49,13 +58,16 @@ _ORIGIN_FILTER_VALUES = {"official", "local", "__none__"}
 _VERSIONING_FACET_LIMIT = 500
 
 
+_MAX_SEARCH_LENGTH = 200
+
+
 def _parse_filters(raw: Optional[str]) -> dict:
     try:
         value = json.loads(raw or "{}")
     except (ValueError, TypeError):
         raise HTTPException(400, "Invalid dashboard filters") from None
     if not isinstance(value, dict) or set(value) - (
-        set(_FILTER_COLUMNS) | {"since", "until", "versioning"}
+        set(_FILTER_COLUMNS) | {"since", "until", "versioning", "q"}
     ):
         raise HTTPException(400, "Invalid dashboard filters")
     try:
@@ -65,6 +77,16 @@ def _parse_filters(raw: Optional[str]) -> dict:
         raise HTTPException(400, "Invalid versioning filter") from None
     if not value["versioning"]:
         value.pop("versioning")
+    if "q" in value:
+        if value["q"] is not None and (
+            not isinstance(value["q"], str) or len(value["q"]) > _MAX_SEARCH_LENGTH
+        ):
+            raise HTTPException(400, "Invalid search text")
+        # One cache entry per distinct search; blank text is no search. Inner
+        # spaces stay: run names are stored with theirs.
+        value["q"] = (value["q"] or "").strip().lower()
+        if not value["q"]:
+            del value["q"]
     for key in _FILTER_COLUMNS:
         values = value.get(key, [])
         if (
@@ -92,11 +114,8 @@ def _parse_filters(raw: Optional[str]) -> dict:
 def _project(db, principal, slug):
     query = select(Project).where(Project.is_active.is_(True))
     if slug:
-        project = db.scalar(query.where(Project.slug == slug))
-        if project is None:
-            raise HTTPException(404, "Project not found")
-        if not has_project_access(db, principal, project.id):
-            raise HTTPException(403, "Access denied")
+        # Archived projects stay readable to their members (read-only).
+        project = project_for_read_by_slug(db, principal, slug)
     else:
         if principal.auth_type != "none" and principal.user.role != UserRole.ADMIN:
             query = query.join(
@@ -143,9 +162,15 @@ def _snapshot_project(db, project):
 
 @contextmanager
 def _read_snapshot(auth_db):
-    """Release auth checkout before owning one repeatable-read connection."""
+    """Release auth checkout before owning one repeatable-read connection.
+
+    Writes a read queues with ``after_snapshot`` (the shared overview cache)
+    run once that connection is back in the pool, so a request never waits
+    for a second connection while it holds one.
+    """
     bind = auth_db.get_bind()
     auth_db.close()
+    queued = []
     with bind.connect() as connection:
         if connection.dialect.name == "postgresql":
             connection = connection.execution_options(isolation_level="REPEATABLE READ")
@@ -153,7 +178,23 @@ def _read_snapshot(auth_db):
             # sqlite3's legacy mode otherwise does not start a transaction for SELECT.
             connection.exec_driver_sql("BEGIN")
         with Session(bind=connection, autoflush=False) as db:
+            db.info[_AFTER_SNAPSHOT] = queued
             yield db
+    for write in queued:
+        write()
+
+
+_AFTER_SNAPSHOT = "dashboard_after_snapshot"
+
+
+def after_snapshot(db, write):
+    """Run ``write`` (it opens its own connection) after the request's
+    snapshot connection is released; at once outside ``_read_snapshot``."""
+    queued = db.info.get(_AFTER_SNAPSHOT)
+    if queued is None:
+        write()
+    else:
+        queued.append(write)
 
 
 def _base_conditions(project):
@@ -200,7 +241,89 @@ def _filter_conditions(filters, *, skip=None, skip_versioning=None, facets=False
         conditions.append(Dimension.timestamp >= filters["since"])
     if filters.get("until") is not None:
         conditions.append(Dimension.timestamp < filters["until"])
+    if filters.get("q"):
+        conditions.append(_search_condition(filters["q"]))
     return conditions
+
+
+RUNS_SEARCH_INDEX = "ix_dashboard_run_dimensions_search_trgm"
+# The rows whose ``search_text`` is still NULL. Empty once the
+# build_runs_search_index job has filled them; it lets the planner serve the
+# search's branch for such rows from an index too.
+RUNS_UNSEARCHABLE_INDEX = "ix_dashboard_run_dimensions_unsearchable"
+
+
+def run_search_text(external_run_id, run_name) -> str:
+    """What the Runs search box matches (``Dimension.search_text``): the name
+    the list shows (the external run id) and the run name, lowercased, on two
+    lines. A search never contains a line break, so a match never spans the
+    two names.
+
+    A column of its own, written only by the summary worker's dimension sync:
+    the trigram index over it (``RUNS_SEARCH_INDEX``) leaves the descriptor
+    rewrites of a live run HOT, which an index over descriptor expressions
+    did not.
+    """
+    return (
+        ("" if external_run_id is None else str(external_run_id))
+        + "\n"
+        + ("" if run_name is None else str(run_name))
+    ).lower()
+
+
+def _search_name(table, key):
+    return func.coalesce(table.descriptor[key].as_string(), "")
+
+
+def _descriptor_search_text(table=Dimension):
+    """``run_search_text`` read from the descriptor, for a row written before
+    ``search_text`` existed that the job has not filled yet."""
+    return func.lower(
+        _search_name(table, "external_run_id") + "\n" + _search_name(table, "run_name")
+    )
+
+
+def _search_condition(text, table=Dimension):
+    """Find a run by the name the list shows, its run name, or its id.
+
+    The stored text is what ``RUNS_SEARCH_INDEX`` serves. A row without it is
+    matched on its descriptor (``RUNS_UNSEARCHABLE_INDEX`` keeps that branch
+    indexable), so the results never depend on the job's progress.
+    """
+    needle = text.lower()
+    return or_(
+        table.search_text.contains(needle, autoescape=True),
+        and_(
+            table.search_text.is_(None),
+            _descriptor_search_text(table).contains(needle, autoescape=True),
+        ),
+        func.lower(table.run_key).startswith(needle, autoescape=True),
+    )
+
+
+def runs_search_index_ddl():
+    """CREATE INDEX for the Runs search: trigrams of the stored search text
+    and of the lowercased run id (the id matches by prefix). Neither changes
+    when a live run's descriptor does."""
+    from sqlalchemy.dialects import postgresql
+
+    dialect = postgresql.dialect()
+
+    def compiled(expression):
+        return str(expression.compile(dialect=dialect, compile_kwargs={"literal_binds": True}))
+
+    return (
+        f"CREATE INDEX CONCURRENTLY {RUNS_SEARCH_INDEX} ON dashboard_run_dimensions "
+        f"USING gin (search_text gin_trgm_ops, "
+        f"({compiled(func.lower(Dimension.run_key))}) gin_trgm_ops)"
+    )
+
+
+def runs_unsearchable_index_ddl():
+    return (
+        f"CREATE INDEX CONCURRENTLY {RUNS_UNSEARCHABLE_INDEX} ON dashboard_run_dimensions "
+        "(project_key) WHERE search_text IS NULL"
+    )
 
 
 def _query(*columns):
@@ -213,40 +336,33 @@ def _query(*columns):
 
 def _ordered_query(conditions, *columns):
     # First-seen groups are established before dropdown/time filtering in the UI.
-    raw_model = Dimension.descriptor["model_name"].as_string()
-    task_first = (
+    # Window maxima over the project's present runs give each run its group
+    # order in one pass; joining two GROUP BY subqueries made the planner loop
+    # an index scan once per group. Models group by the typed model column:
+    # reading the name out of every run's JSON descriptor dominated the query.
+    raw_model = Dimension.model
+    first = (
         select(
-            Dimension.task.label("task"), func.max(Dimension.created_at).label("first")
+            Dimension.run_key.label("run_key"),
+            func.max(Dimension.created_at)
+            .over(partition_by=Dimension.task)
+            .label("task_first"),
+            func.max(Dimension.created_at)
+            .over(partition_by=(Dimension.task, raw_model))
+            .label("model_first"),
         )
         .where(conditions[0], Dimension.present.is_(True))
-        .group_by(Dimension.task)
-        .subquery()
-    )
-    model_first = (
-        select(
-            Dimension.task.label("task"),
-            raw_model.label("model"),
-            func.max(Dimension.created_at).label("first"),
-        )
-        .where(conditions[0], Dimension.present.is_(True))
-        .group_by(Dimension.task, raw_model)
         .subquery()
     )
     query = (
         _query(*columns)
-        .join(task_first, task_first.c.task == Dimension.task)
-        .join(
-            model_first,
-            and_(
-                model_first.c.task == Dimension.task, model_first.c.model == raw_model
-            ),
-        )
+        .join(first, first.c.run_key == Dimension.run_key)
         .where(*conditions)
     )
     order = [
-        task_first.c.first.desc(),
+        first.c.task_first.desc(),
         Dimension.task,
-        model_first.c.first.desc(),
+        first.c.model_first.desc(),
         raw_model,
         Dimension.created_at.desc(),
         Dimension.run_key,
@@ -257,12 +373,19 @@ def _ordered_query(conditions, *columns):
 def _sort_columns():
     success = func.coalesce(Summary.data["success_count"].as_float(), 0)
     errors = func.coalesce(Summary.data["error_count"].as_float(), 0)
+    # Execution success: item passes in repeat runs (older summaries: items).
+    executions = func.coalesce(
+        Summary.data["execution_count"].as_float(), success + errors
+    )
+    executed = func.coalesce(
+        Summary.data["execution_success_count"].as_float(), success
+    )
     return {
         "time": Dimension.timestamp,
         "created": Dimension.created_at,
         "activity": Dimension.descriptor["_activity_sort_at"].as_string(),
         "date": Dimension.timestamp,
-        "success": case((success + errors > 0, success / (success + errors)), else_=-1),
+        "success": case((executions > 0, executed / executions), else_=-1),
         "items": func.coalesce(Summary.data["total_items"].as_float(), 0),
         "task": Dimension.task,
         "model": Dimension.model,
@@ -274,7 +397,14 @@ def _sort_columns():
         "status": func.coalesce(
             Summary.data["execution_error_count"].as_float(), errors
         ),
-        "run": Dimension.run_key,
+        # The Run column shows the external run id, else the run id: sort by
+        # that text (case-folded), not by the hidden id alone.
+        "run": func.lower(
+            func.coalesce(
+                func.nullif(Dimension.descriptor["external_run_id"].as_string(), ""),
+                Dimension.run_key,
+            )
+        ),
         "latency": Summary.avg_latency_ms,
         "median-latency": Summary.median_latency_ms,
         "duration": func.coalesce(Summary.data["duration_ms"].as_float(), 0),
@@ -371,7 +501,12 @@ def _stream(db, conditions, sort=None, collation=None):
 def _freshness(db, project):
     from qym_platform.services.dashboard_summaries import dashboard_freshness
 
-    return dashboard_freshness(db, [project["id"]] if project else [])
+    # One read per repeatable-read snapshot: the page, overview and KPIs of a
+    # request all key their caches on the same revision.
+    key = ("dashboard_freshness", project["id"] if project else None)
+    if key not in db.info:
+        db.info[key] = dashboard_freshness(db, [project["id"]] if project else [])
+    return copy.deepcopy(db.info[key])
 
 
 def _facets(db, base, filters):
@@ -453,6 +588,98 @@ def _versioning_facets(db, base, filters):
     return dict(sorted(result.items(), key=lambda item: item[0].casefold()))
 
 
+def _kpis(db, conditions, *, filtered):
+    """Headline KPIs: the one definition behind the Overview cards and topbars.
+
+    One aggregate over the runs in scope (the whole project, or the active
+    filter); a summary that is not published yet adds a run but no items.
+    Execution success is weighted by executions: items, and item passes in
+    repeat runs. Task and metric errors are counted as runs with errors. Models
+    are distinct model names, so reasoning and plain variants of one model
+    count once.
+    """
+    if db.get_bind().dialect.name == "postgresql":
+        # Parse each summary once: every ->> on a json column parses it again.
+        from qym_platform.services.dashboard_overview import kpi_record
+
+        record = kpi_record()
+        query = _query(
+            *_kpi_aggregates(lambda name: record.c[name], Dimension.model)
+        ).join(record, true())
+    else:
+        query = _query(
+            *_kpi_aggregates(lambda name: Summary.data[name].as_float(), Dimension.model)
+        )
+    return _kpi_result(db.execute(query.where(*conditions)).one(), filtered=filtered)
+
+
+def _kpi_values(field):
+    """Each run's KPI inputs, reading summary field ``name`` as ``field(name)``."""
+    task, metric = field("task_error_count"), field("metric_error_count")
+    # Summaries published before the task/metric split carry one error count.
+    errors = case(
+        (and_(task.isnot(None), metric.isnot(None)), task + metric),
+        else_=func.coalesce(field("execution_error_count"), field("error_count"), 0),
+    )
+    # Summaries published before shape 4 carry item counts only.
+    return {
+        "kpi_items": field("total_items"),
+        "kpi_executions": func.coalesce(field("execution_count"), field("total_items")),
+        "kpi_successes": func.coalesce(
+            field("execution_success_count"), field("success_count")
+        ),
+        "kpi_errored": case((errors > 0, 1), else_=0),
+    }
+
+
+def _kpi_totals(values, model):
+    """The KPI aggregates over per-run ``_kpi_values``."""
+    name = func.replace(func.replace(model, "|||reasoning", ""), "|||plain", "")
+    return (
+        func.count(),
+        func.count(func.distinct(case((name != "nomodel", name)))),
+        func.coalesce(func.sum(values["kpi_items"]), 0),
+        func.coalesce(func.sum(values["kpi_executions"]), 0),
+        func.coalesce(func.sum(values["kpi_successes"]), 0),
+        func.coalesce(func.sum(values["kpi_errored"]), 0),
+    )
+
+
+def _kpi_aggregates(field, model):
+    """The KPI aggregates, reading summary field ``name`` as ``field(name)``."""
+    return _kpi_totals(_kpi_values(field), model)
+
+
+def _kpi_result(values, *, filtered):
+    runs, models, items, executions, successes, errored = values
+    return {
+        "scope": "filtered" if filtered else "project",
+        "runs": int(runs),
+        "models": int(models),
+        "items": int(items),
+        "execution_success": float(successes) / executions if executions else None,
+        "runs_with_errors": int(errored),
+    }
+
+
+def _scoped_kpis(db, project, filters, freshness):
+    """KPIs for the project or its active filter, reused per projection revision."""
+    active = _filter_conditions(filters)
+    conditions = _base_conditions(project) + active
+    if not project or not freshness["revision"]:
+        return _kpis(db, conditions, filtered=bool(active))
+    key = (
+        db.get_bind().engine,
+        project["id"],
+        freshness["catalog_revision"],
+        PlatformSettings().hidden_tasks,
+        json.dumps(filters, sort_keys=True, default=str),
+    )
+    return _kpi_cache.get_or_compute(
+        key, lambda: _kpis(db, conditions, filtered=bool(active))
+    )
+
+
 def _overview(db, project, filters, sort="time-desc", collation=None):
     freshness = _freshness(db, project)
     if not project or not freshness["revision"]:
@@ -470,6 +697,20 @@ def _overview(db, project, filters, sort="time-desc", collation=None):
     )
 
     def compute():
+        if db.get_bind().dialect.name == "postgresql":
+            # C037: computed in the database once per revision and shared by
+            # every process and pod; this process keeps a small copy.
+            from qym_platform.services.dashboard_overview import shared_overview
+
+            return shared_overview(
+                db,
+                project,
+                filters,
+                sort,
+                collation,
+                catalog_revision=freshness["catalog_revision"],
+                hidden_tasks=PlatformSettings().hidden_tasks,
+            )
         value = _build_overview(db, project, filters, sort, collation)
         return {
             k: v
@@ -482,6 +723,20 @@ def _overview(db, project, filters, sort="time-desc", collation=None):
 
 
 def _build_overview(db, project, filters, sort="time-desc", collation=None):
+    if db.get_bind().dialect.name == "postgresql":
+        # C037: aggregated in the database, one statement, same numbers.
+        from qym_platform.services.dashboard_overview import build_overview_postgres
+
+        whole, part = build_overview_postgres(db, project, filters, sort, collation)
+        result = {**whole, **part, "project": project}
+        result.update(_freshness(db, project))
+        return result
+    return _build_overview_python(db, project, filters, sort, collation)
+
+
+def _build_overview_python(db, project, filters, sort="time-desc", collation=None):
+    """The overview reduced in Python from every run (SQLite, and the
+    reference the PostgreSQL build is tested against)."""
     from qym_platform.services.dashboard_views import build_overview_data, _global_data
 
     base = _base_conditions(project)
@@ -515,6 +770,7 @@ def _build_overview(db, project, filters, sort="time-desc", collation=None):
         total_count=db.scalar(_query(func.count()).where(*base)) or 0,
         total_runs=db.scalar(_query(func.count()).where(*filtered)) or 0,
         facets=_facets(db, base, filters),
+        kpis=_scoped_kpis(db, project, filters, freshness),
         project=project,
     )
     owners = db.execute(
@@ -549,83 +805,75 @@ def _build_overview(db, project, filters, sort="time-desc", collation=None):
     return result
 
 
+def _metric_number(value):
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
 def _neighbors(db, conditions, rows):
-    """Read adjacent distinct means for page values without fetching history."""
-    groups = {
-        (row["task_name"], row["model_key"], row.get("dataset_name") or "")
-        for row in rows
-    }
-    metrics = {metric for row in rows for metric in (row.get("metric_averages") or {})}
-    raw_model = Dimension.model
+    """Read adjacent distinct means for page values without fetching history.
+
+    One query reads the metric means of the page's (task, model, dataset)
+    groups; a query per metric made the page cost grow with every metric.
+    """
     dataset = Dimension.descriptor["dataset_name"].as_string()
+    wanted = {}
     for row in rows:
         row["metric_neighbor_values"] = {}
-    for metric in metrics:
-        value = Summary.data["metric_averages"][metric].as_float()
-        grouped = (
-            _query(
-                Dimension.task.label("task"),
-                raw_model.label("model"),
-                dataset.label("dataset"),
-                value.label("value"),
-            )
-            .where(
-                *conditions,
-                value.isnot(None),
-                or_(
-                    *(
-                        and_(
-                            Dimension.task == task, raw_model == model, dataset == data
-                        )
-                        for task, model, data in groups
-                    )
-                ),
-            )
-            .distinct()
-            .cte()
+        group = (row["task_name"], row["model_key"], row.get("dataset_name") or "")
+        for metric, value in (row.get("metric_averages") or {}).items():
+            if _metric_number(value) is not None:
+                wanted.setdefault(group, set()).add(metric)
+    if not wanted:
+        return
+    distinct = {}
+    for task, model, data, averages in db.execute(
+        _query(
+            Dimension.task, Dimension.model, dataset, Summary.data["metric_averages"]
         )
-        adjacent = select(
-            grouped,
-            func.lag(grouped.c.value)
-            .over(
-                partition_by=(grouped.c.task, grouped.c.model, grouped.c.dataset),
-                order_by=grouped.c.value,
-            )
-            .label("lower"),
-            func.lead(grouped.c.value)
-            .over(
-                partition_by=(grouped.c.task, grouped.c.model, grouped.c.dataset),
-                order_by=grouped.c.value,
-            )
-            .label("upper"),
-        ).cte()
-        requested = [
-            and_(
-                adjacent.c.task == row["task_name"],
-                adjacent.c.model == (row["model_key"]),
-                adjacent.c.dataset == (row.get("dataset_name") or ""),
-                adjacent.c.value == row["metric_averages"][metric],
-            )
-            for row in rows
-            if row.get("metric_averages", {}).get(metric) is not None
-        ]
-        if not requested:
+        .where(
+            *conditions,
+            or_(
+                *(
+                    and_(
+                        Dimension.task == task,
+                        Dimension.model == model,
+                        dataset == data,
+                    )
+                    for task, model, data in wanted
+                )
+            ),
+        )
+        .execution_options(yield_per=500)
+    ):
+        group = (task, model, data)
+        metrics = wanted.get(group)
+        if not metrics or not isinstance(averages, dict):
             continue
-        lookup = {
-            (task, model, dataset, value): [lower, upper]
-            for task, model, dataset, value, lower, upper in db.execute(
-                select(adjacent).where(or_(*requested))
-            )
-        }
-        for row in rows:
-            key = (
-                row["task_name"],
-                row["model_key"],
-                row.get("dataset_name") or "",
-                row.get("metric_averages", {}).get(metric),
-            )
-            if key in lookup:
-                row["metric_neighbor_values"][metric] = lookup[key]
+        for metric in metrics:
+            number = _metric_number(averages.get(metric))
+            if number is not None:
+                distinct.setdefault((group, metric), set()).add(number)
+    ordered = {key: sorted(values) for key, values in distinct.items()}
+    for row in rows:
+        group = (row["task_name"], row["model_key"], row.get("dataset_name") or "")
+        for metric, value in (row.get("metric_averages") or {}).items():
+            number = _metric_number(value)
+            values = ordered.get((group, metric))
+            if number is None or not values:
+                continue
+            index = bisect.bisect_left(values, number)
+            if index >= len(values) or values[index] != number:
+                continue
+            row["metric_neighbor_values"][metric] = [
+                values[index - 1] if index > 0 else None,
+                values[index + 1] if index + 1 < len(values) else None,
+            ]
 
 
 def _requested_ids(raw):
@@ -750,15 +998,27 @@ def _build_page(
     if dataset is not None:
         filtered.append(Dimension.descriptor["dataset_name"].as_string() == dataset)
     total = db.scalar(_query(func.count()).where(*filtered)) or 0
-    query, legacy_order = _ordered_query(filtered)
-    rows = [
-        _row(dimension, summary)
-        for dimension, summary in db.execute(
+    # Order and page over narrow keys first, then read only the page's wide
+    # descriptor and summary rows.
+    query, legacy_order = _ordered_query(filtered, Dimension.run_key)
+    page_ids = list(
+        db.scalars(
             query.order_by(*_sort(sort, collation), *legacy_order)
             .offset(offset)
             .limit(limit)
         )
-    ]
+    )
+    by_id = (
+        {
+            dimension.run_key: _row(dimension, summary)
+            for dimension, summary in db.execute(
+                _query().where(Dimension.run_key.in_(page_ids))
+            )
+        }
+        if page_ids
+        else {}
+    )
+    rows = [by_id[run_id] for run_id in page_ids if run_id in by_id]
     if include_neighbors:
         _neighbors(db, filtered, rows)
     pinned = []
@@ -839,6 +1099,25 @@ def dashboard_overview(
     with _read_snapshot(db) as reader:
         project = _snapshot_project(reader, project)
         return _overview(reader, project, parsed, sort, _parse_collation(collation))
+
+
+@router.get("/kpis")
+def dashboard_kpis(
+    project_slug: Optional[str] = None,
+    filters: Optional[str] = None,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+):
+    """Headline KPIs only, without the overview's chart and facet payload."""
+    project, parsed = _project(db, principal, project_slug), _parse_filters(filters)
+    with _read_snapshot(db) as reader:
+        project = _snapshot_project(reader, project)
+        freshness = _freshness(reader, project)
+        return {
+            "kpis": _scoped_kpis(reader, project, parsed, freshness),
+            "project": project,
+            **freshness,
+        }
 
 
 @router.get("/points")
@@ -1112,6 +1391,19 @@ def dashboard_overview_query(
 ):
     return dashboard_overview(
         **_body_parameters(payload, {"project_slug", "filters", "sort", "collation"}),
+        db=db,
+        principal=principal,
+    )
+
+
+@router.post("/kpis")
+def dashboard_kpis_query(
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+):
+    return dashboard_kpis(
+        **_body_parameters(payload, {"project_slug", "filters"}),
         db=db,
         principal=principal,
     )

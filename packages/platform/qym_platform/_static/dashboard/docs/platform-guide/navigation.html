@@ -7,7 +7,7 @@
   <thead><tr><th>Destination</th><th>Use it for</th></tr></thead>
   <tbody>
     <tr><td><strong>Projects</strong></td><td>Open an accessible project or create one when your role permits it.</td></tr>
-    <tr><td><strong>Dashboard</strong></td><td>Read the project's evaluation summary and recent activity.</td></tr>
+    <tr><td><strong>Dashboard</strong></td><td>Read the project's evaluation summary, the daily trend of a task's primary metric on one dataset over the last 7, 30 or 90 days, and recent activity. The range and a task you pick are part of the address (<code>?range=30d&amp;task=&hellip;&amp;dataset=&hellip;</code>), so a reload or a shared link shows the same trend.</td></tr>
     <tr><td><strong>Charts</strong></td><td>Track metric and latency trends by task, dataset, version, run, and model.</td></tr>
     <tr><td><strong>Runs</strong></td><td>Filter, inspect, compare, submit, approve, or delete evaluation runs.</td></tr>
     <tr><td><strong>Models</strong></td><td>Compare model-level quality, reliability, latency, retries, and trace statistics.</td></tr>
@@ -24,8 +24,8 @@
 <table>
   <thead><tr><th>Role</th><th>What it adds</th></tr></thead>
   <tbody>
-    <tr><td><strong>Project member</strong></td><td>Can use the project's dashboards, runs, datasets, reviews, API keys, and LLM connections. Members may modify review data and create keys; a key creator may revoke their own key.</td></tr>
-    <tr><td><strong>Project manager</strong></td><td>Adds member and role management, run approval decisions, broader run deletion, key revocation, and project lifecycle controls.</td></tr>
+    <tr><td><strong>Project member</strong></td><td>Can use the project's dashboards, runs, datasets, reviews, API keys, and LLM connections. Members may modify review data and create keys; a key creator may revoke their own key. Members create datasets and drafts, edit draft items and publish; they delete datasets they created.</td></tr>
+    <tr><td><strong>Project manager</strong></td><td>Adds member and role management, run approval decisions, broader run deletion, key revocation, and project lifecycle controls. For datasets: moves the <code>production</code> alias, changes a dataset's slug, deletes any dataset and restores deleted datasets.</td></tr>
     <tr><td><strong>Platform admin</strong></td><td>Can access every project, manage platform users and projects, and view or restore deleted runs.</td></tr>
   </tbody>
 </table>
@@ -37,9 +37,10 @@
 
 <h2>Run ownership and approval</h2>
 <ul>
-  <li>A run owner can submit a completed, failed, or rejected run and can delete their own run.</li>
-  <li>A project manager or platform admin can approve or reject a submitted run, reverse that decision, and delete project runs.</li>
-  <li>Deletion is recoverable: runs move to Deleted Runs. Only platform admins can view that area and restore them.</li>
+  <li>A run owner can submit a completed, failed, or rejected run and can delete their own run. Submitting asks for confirmation and takes an optional comment.</li>
+  <li>A project manager or platform admin can also submit any run of the project on behalf of its owner (the review history says so), transfer a run to another project member (or all of a member's runs when removing that member), approve or reject a submitted run, reverse that decision, and delete project runs.</li>
+  <li>While a run is submitted or approved its scores are locked: they cannot be edited or reset, and its passes cannot be deleted. A manager rejects or unapproves the run to reopen them. Deleting passes needs the same rights as deleting the run.</li>
+  <li>Deletion is recoverable for a limited time: runs move to Deleted Runs, where platform admins can restore them until retention permanently removes them (30 days after deletion by default). Only platform admins can view that area.</li>
 </ul>
 
 <h2>Choose the next page</h2>

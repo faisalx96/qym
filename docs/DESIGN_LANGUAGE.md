@@ -52,7 +52,9 @@ Runs error indicators use the original ⚠ glyph: `--error` for task failures an
 
 Major analytical sections use a sentence-case `--font-lg` section title followed
 by a concise muted `--font-sm` description. Do not introduce a major section
-with an uppercase metadata-style label.
+with an uppercase metadata-style label. The run detail page is the exception:
+its top-level sections are page sections reached from the sticky section nav
+and use the run section header recipe below (`--font-xl` title).
 
 **Floor: no readable text below 11px.** 10px is reserved for badge/pill chrome.
 Off-scale values (9px, 10.5px, 11.5px, 12.5px, 13.5px, 14px, 16px, 17px, 20px…)
@@ -73,6 +75,19 @@ updating the test's allowlist deliberately.
   doubt: if it could contain a sentence, it's sans.
 - No other families. No webfonts (DM Sans and Georgia were removed; the CI test
   bans them).
+- The mono stack is system faces only: `ui-monospace, SFMono-Regular, 'SF Mono',
+  Menlo, …, Consolas, 'Liberation Mono', monospace`. **Menlo must stay**: it is
+  the only mono face Chrome on macOS can see by name; without it the generic
+  `monospace` resolves to Courier. Any hardcoded mono stack (e.g. the SDK-local
+  `_static/ui`) names Menlo too; CI checks both.
+- **Text direction.** Every block that shows user or model text takes
+  `QymSafe.textDirAttrs(text)` (or `QymSafe.applyTextDir(el, text)` for DOM
+  nodes): mostly-Arabic text gets `dir="rtl" lang="ar"`, anything else
+  `dir="auto"`. Put it on the block element, never an inline span inside a
+  left-to-right block; use `text-align: start`, never `left`. Code and JSON
+  editors whose lines mix scripts use `unicode-bidi: plaintext` on every layer
+  (CodeMirror: `EditorView.perLineTextDirection`). Arabic blocks get the 1.7
+  leading from `dashboard.css`, which page line-heights cannot override.
 
 ### Shell chrome scale
 
@@ -160,6 +175,25 @@ Dense dataset collection tabs inside chart cards are the exception: they keep
 an elevated strip, a filled active surface with green text/underline, and a
 filled count tile on every tab. Horizontally overflowing tab strips reveal
 their scrollbar thumb only on hover.
+The run detail page's **sticky section nav** (`.run-section-nav`) is the one
+jump-link variant: one row under the run header with the run name and status
+(shown once the bar sticks), one link per section (`data-run-section-link`,
+`--font-md` / 600, muted; the section in view gets `aria-current` and the
+shared sliding underline in Qym green), the page-wide Filters + Clear, and a
+back-to-top icon action. Links carry `.qym-tag--count` counts (errors use the
+danger tone). No percentages, progress bars or proportional link widths. The
+bar sticks with a frosted `--bg-void` background and gains a shadow only while
+stuck. Dropdowns opened from the bar (the filter builder) hang under it and
+close on Escape or an outside click.
+
+**Run section header.** Every top-level run-page section opens with
+`.run-section-head` (`data-run-section="<key>"`): a `--font-xl` / 650 primary
+title, one muted `--font-base` description line (ellipsis), the section's
+controls in `.run-section-head__aside` on the right, a `--border-subtle`
+hairline above and about 48px (`--space-xl` × 1.5) from the previous section.
+Sections do not add their own top or bottom margins; the header owns the
+spacing.
+
 In-place view, metric, repeat, and time switching uses `.qym-segmented` +
 `.qym-segmented__option`. The complete segmented control is 24px high so it
 aligns with adjacent selectors; options fill its inset content box, and only
@@ -249,8 +283,15 @@ Numeric/ID columns add `font-family: var(--font-mono)` and
 Right-align scalar numeric columns. A column whose primary content is a chart,
 bar, or score track aligns its header to the visualization's left edge.
 Score-bearing table values use `.qym-score-value` plus the `score-1`…`score-5`
-class returned by `QymMetrics.getMetricColorClass()`. Raw numeric metrics stay
-neutral, and confidence intervals remain muted rather than inheriting the
+class returned by `QymMetrics.getMetricColorClass(value, type, direction)`,
+with the direction from `QymMetrics.metricDirection(spec)`. Lower-is-better
+metrics read the ramp inverted; a metric that declares no direction stays
+neutral (no good/bad color, Pass/Fail, "best" or winner). A lower-is-better
+metric leaves task and scorer errors out of its mean (`QymMetrics.getRowScore`
+with the direction): an errored value shows as "Error" or the ⚠
+`--metric-error` glyph, never as a colored score, a "best" or a histogram
+bucket, and the error count sits beside the mean. Raw numeric metrics
+stay neutral, and confidence intervals remain muted rather than inheriting the
 estimate's score color.
 Wide tables that use `.qym-scroll-mirror` expose only the persistent mirrored
 horizontal scrollbar. Shared behavior adds `.qym-scroll-mirror-target` to hide
@@ -271,8 +312,8 @@ action names as visible button text. Matching disabled, hover, and focus states
 apply platform-wide. Pass `pageSizeOptions` only where changing the page size is
 supported. Do not build page-local pagination markup or CSS.
 Changing pages in an item-by-item detail view returns its nested scroll host to
-the start of the complete Item-by-Item section (title and filters included), not
-merely the first card. If content above that section rerenders asynchronously,
+the start of the complete Items section (title and toolbar included, just below
+the run page's sticky section nav), not merely the first card. If content above that section rerenders asynchronously,
 perform the scroll after the layout has settled.
 
 Wide tables that cannot expose their native horizontal scrollbar without
@@ -317,6 +358,25 @@ strings.
 ### Modal
 Title `var(--font-xl)` (page-level modals) or reuse `.shell-modal` (body-mounted,
 root-token sizes). Body text `var(--font-sm)`–`var(--font-base)` secondary.
+
+Every modal surface (shell dialogs, page modals, drawers, the trace viewer)
+goes through `QymUIComponents.openDialog(panel, { initialFocus, onEscape })`
+and `releaseDialog(panel)`: `role="dialog"`, `aria-modal`, a label from its
+title, focus moved in on open, Tab kept inside, Escape closing when the caller
+passes `onEscape`, and focus returned to the trigger on close. Destructive
+confirms start on Cancel, and Enter acts on the focused button (only a text
+field submits on Enter). A closed drawer that stays in the DOM is `inert`
+and `aria-hidden`, and carries `aria-modal` only while open. Never close a
+modal by toggling `display` inline.
+
+### Failed requests
+A failed load is never an empty or "not found" state. Use
+`QymUIComponents.renderErrorState(host, { title, error, onRetry })` in place
+of the region that failed: it names the cause (session ended → Sign in, no
+access, not found only for a real 404, server error, network) and offers
+Retry; it never shows a create action. A refresh that fails after data was
+shown keeps the rows dimmed (`.qym-is-stale`) under a `.qym-stale-banner`
+that says how old they are and whether the latest filter change is applied.
 
 ### Empty state
 Icon: hardcoded 32–48px glyph, `--text-dim`, low opacity. Title:

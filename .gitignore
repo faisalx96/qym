@@ -111,3 +111,9 @@ scripts/build_insightor_dashboard_data.py
 scripts/build_insightor_dashboard_html.py
 scripts/insightor_eval_dashboard.template.html
 scripts/median_triplet_bootstrap.cpp
+
+# Local frontend build and test output (never committed)
+packages/platform/frontend/storybook-static/
+packages/platform/frontend/test-results/
+packages/platform/frontend/playwright-report*/
+packages/platform/frontend/.generated/

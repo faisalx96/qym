@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import mimetypes
 import json
+import os
 import subprocess
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -16,9 +17,9 @@ STATIC = (
     Path(__file__).resolve().parents[2]
     / "packages/platform/qym_platform/_static/dashboard"
 )
-SCREENSHOTS = (
-    Path(__file__).resolve().parents[2] / "artifacts/p1-validation/screenshots"
-)
+# Evidence screenshots go to a temp dir unless QYM_EVIDENCE_SCREENSHOTS names a
+# directory (e.g. artifacts/p1-validation/screenshots) to refresh on purpose.
+EVIDENCE_ENV = "QYM_EVIDENCE_SCREENSHOTS"
 BASELINE = "b1d1d00587df4fcf0e70875c29b0bb0cbc20172c"
 pytestmark = pytest.mark.browser
 
@@ -35,13 +36,56 @@ def baseline_asset(name):
     )
 
 
-@pytest.fixture(scope="module")
-def browser():
-    api = pytest.importorskip("playwright.sync_api")
-    with api.sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
-        yield browser
-        browser.close()
+@pytest.fixture
+def screenshots(tmp_path):
+    target = Path(os.environ[EVIDENCE_ENV]) if os.environ.get(EVIDENCE_ENV) else tmp_path
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
+def trend_payload(days=7, task="Question answering", runs_by_day=None):
+    """A /api/dashboard/trend answer: one task's primary metric per day."""
+    from datetime import date, timedelta
+
+    today = date.today()
+    runs_by_day = runs_by_day if runs_by_day is not None else {0: 2, 3: 1}
+    means = {0: 0.82, 3: 0.74}
+    points = []
+    for offset in range(days - 1, -1, -1):
+        runs = runs_by_day.get(offset, 0)
+        points.append(
+            {
+                "date": (today - timedelta(days=offset)).isoformat(),
+                "runs": runs,
+                "metric_runs": runs,
+                "metric_mean": means.get(offset, 0.8) if runs else None,
+                "execution_success": 0.99 if runs else None,
+            }
+        )
+    total = sum(runs_by_day.values())
+    return {
+        "days": days,
+        "tasks": [
+            {"task": task, "dataset": "golden", "runs": total},
+            {"task": task, "dataset": "golden-v2", "runs": 1},
+        ]
+        if total
+        else [],
+        "task": task,
+        "dataset": "golden",
+        "metric": "accuracy",
+        "direction": "maximize",
+        "latest_run_at": "2026-09-08T10:00:00+00:00",
+        "points": points,
+        "summary": {
+            "runs": total,
+            "metric_mean": 0.793 if total else None,
+            "previous_runs": 2,
+            "previous_metric_mean": 0.81,
+            "delta": 0.793 - 0.81 if total else None,
+            "execution_success": 0.99 if total else None,
+        },
+    }
 
 
 class OverviewFixture:
@@ -51,7 +95,11 @@ class OverviewFixture:
         self.empty = False
         self.denied = False
         self.live_label = "Evaluation in progress"
+        self.trend = None
+        self.trend_status = 200
+        self.trend_requests = []
         self.requests = []
+        self.kpi_requests = []
         self.errors = []
         self.context = browser.new_context(
             viewport={"width": 1440, "height": 1000}, reduced_motion="reduce"
@@ -92,6 +140,26 @@ class OverviewFixture:
                             "role": "MANAGER",
                         }
                     ],
+                }
+            )
+            return
+        if path == "/api/dashboard/kpis":
+            self.kpi_requests.append(route.request.post_data_json)
+            if self.denied:
+                route.fulfill(status=401, json={"detail": "Expired session"})
+                return
+            unknown = self.pending or self.empty
+            route.fulfill(
+                json={
+                    "kpis": {
+                        "scope": "project",
+                        "runs": 0 if unknown else 25,
+                        "models": 0 if unknown else 7,
+                        "items": 0 if unknown else 15832,
+                        "execution_success": None if unknown else 0.9998,
+                        "runs_with_errors": 0 if unknown else 3,
+                    },
+                    "freshness": {"updating": self.pending},
                 }
             )
             return
@@ -174,6 +242,14 @@ class OverviewFixture:
                 }
             )
             return
+        if path == "/api/dashboard/trend":
+            body = route.request.post_data_json
+            self.trend_requests.append(body)
+            if self.trend_status != 200:
+                route.fulfill(status=self.trend_status, json={"detail": "unavailable"})
+                return
+            route.fulfill(json=self.trend or trend_payload(body.get("days", 7)))
+            return
         if path == "/api/corrections":
             route.fulfill(
                 json={
@@ -206,7 +282,7 @@ class OverviewFixture:
         assert not self.errors
 
 
-def test_overview_post_filters_progress_links_and_layout(browser):
+def test_overview_post_filters_progress_links_and_layout(browser, screenshots):
     fixture = OverviewFixture(browser)
     try:
         fixture.open()
@@ -226,23 +302,72 @@ def test_overview_post_filters_progress_links_and_layout(browser):
         assert [request["limit"] for request in fixture.requests] == [8, 5, 5]
         assert "RUNNING" not in fixture.requests[1]["filters"]["statuses"]
         assert fixture.requests[2]["filters"]["statuses"] == ["APPROVED"]
-        SCREENSHOTS.mkdir(parents=True, exist_ok=True)
-        page.screenshot(path=str(SCREENSHOTS / "overview-desktop.png"), full_page=True)
+        page.screenshot(path=str(screenshots / "overview-desktop.png"), full_page=True)
         assert page.locator("#recent-runs-table").evaluate(
             "element => element.getBoundingClientRect().right <= innerWidth"
         )
         page.set_viewport_size({"width": 1280, "height": 900})
         page.screenshot(
-            path=str(SCREENSHOTS / "overview-desktop-1280.png"), full_page=True
+            path=str(screenshots / "overview-desktop-1280.png"), full_page=True
         )
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
     finally:
         fixture.close()
 
 
-def test_overview_narrow_layout_matches_baseline_limitation(browser):
+def test_overview_kpis_come_from_the_project_aggregation(browser):
+    """C011: cards and topbar read /api/dashboard/kpis, not the 5 recent rows."""
+    fixture = OverviewFixture(browser)
+    try:
+        fixture.open()
+        page = fixture.page
+        page.wait_for_function(
+            "document.querySelector('#ov-items').textContent !== '—'"
+        )
+        cards = page.eval_on_selector_all(
+            "#overview-stats [data-kpi]",
+            """cards => cards.map(card => [
+              card.querySelector('.ov-kpi-name').textContent,
+              card.querySelector('.stat-card-value').textContent,
+              card.querySelector('.stat-card-sub').textContent,
+            ])""",
+        )
+        # The recent rows hold one model and 240 items each; none of that leaks
+        # into the project KPIs. 99.98% is never rounded up to 100%.
+        assert cards == [
+            ["Runs", "25", "All runs · 12 approved"],
+            ["Execution success", "99.9%", "All runs"],
+            ["Runs with errors", "3", "All runs"],
+            ["Models", "7", "All runs"],
+            ["Items", "15,832", "All runs"],
+        ]
+        assert fixture.kpi_requests == [{"project_slug": "demo", "filters": {}}]
+        topbar = " ".join(page.locator("#shell-topbar-stats").inner_text().split())
+        assert topbar == (
+            "All runs 25 runs 99.9% execution success 3 runs with errors"
+            " 7 models 15,832 items"
+        )
+        # Repeat runs weigh each item pass, judged by its last attempt (C011).
+        assert page.locator(
+            '[data-kpi="execution_success"] .qym-help-tooltip'
+        ).text_content() == (
+            "Share of item executions that ran without a task error across all"
+            " runs in this project. A repeat run counts each item once per pass,"
+            " judged by that pass’s last attempt. Metric errors do not lower"
+            " it; they count in runs with errors."
+        )
+        assert (
+            page.locator('.topbar-stat[title^="Share of item executions"]').count() == 1
+        )
+        assert page.locator(".topbar-stat").first.get_attribute("title") == (
+            "All runs in this project."
+        )
+    finally:
+        fixture.close()
+
+
+def test_overview_narrow_layout_matches_baseline_limitation(browser, screenshots):
     geometry = {}
-    SCREENSHOTS.mkdir(parents=True, exist_ok=True)
     for baseline in (True, False):
         fixture = OverviewFixture(browser, baseline=baseline)
         try:
@@ -251,7 +376,7 @@ def test_overview_narrow_layout_matches_baseline_limitation(browser):
             name = "baseline" if baseline else "current"
             fixture.page.screenshot(
                 path=str(
-                    SCREENSHOTS
+                    screenshots
                     / f"overview-narrow{'-baseline' if baseline else ''}.png"
                 ),
                 full_page=True,
@@ -265,7 +390,7 @@ def test_overview_narrow_layout_matches_baseline_limitation(browser):
             })""")
         finally:
             fixture.close()
-    (SCREENSHOTS / "overview-narrow-comparison.json").write_text(
+    (screenshots / "overview-narrow-comparison.json").write_text(
         json.dumps(
             {
                 "baseline_ref": BASELINE,
@@ -278,7 +403,15 @@ def test_overview_narrow_layout_matches_baseline_limitation(browser):
     )
     # Existing clipping is documented explicitly; this is a regression comparison,
     # not a claim that narrow viewports are fully supported.
-    assert geometry["current"] == geometry["baseline"]
+    # Content-sized widths may drift by a sub-pixel when the font stack
+    # resolves a different face (C046 put real system monos before the
+    # generic fallback); the frame must not move at all.
+    current, baseline = geometry["current"], geometry["baseline"]
+    assert current.keys() == baseline.keys()
+    for key in ("viewport", "mainWidth", "sidebarWidth"):
+        assert current[key] == baseline[key], key
+    for key in ("recentTableWidth", "recentCardWidth"):
+        assert abs(current[key] - baseline[key]) <= 1, key
     assert (
         geometry["current"]["recentTableWidth"] > geometry["current"]["recentCardWidth"]
     )
@@ -378,5 +511,80 @@ def test_overview_late_unauthorized_reply_preserves_next_page(browser):
         }""")
         assert page.locator("#next-page").inner_text() == "Next page"
         assert page.get_by_role("link", name="Sign in", exact=True).count() == 0
+    finally:
+        fixture.close()
+
+
+def test_overview_trend_replaces_the_placeholder(browser):
+    """C056: no "7-day trend chart" box; a real trend of the primary metric."""
+    fixture = OverviewFixture(browser)
+    try:
+        fixture.open()
+        page = fixture.page
+        page.wait_for_function("document.querySelectorAll('#trend-chart .ovt-dot').length === 2")
+        assert page.get_by_text("7-day trend chart").count() == 0
+        assert page.locator(".trend-placeholder").count() == 0
+        request = fixture.trend_requests[0]
+        assert request["project_slug"] == "demo" and request["days"] == 7
+        assert isinstance(request["tz_offset_minutes"], int)
+        summary = page.locator("#trend-body .ovt-summary").inner_text()
+        assert "accuracy" in summary and "79.3%" in summary
+        # A lower mean than the 7 days before, on a higher-is-better metric.
+        delta = page.locator("#trend-body .ovt-delta")
+        assert "−1.7 pts" in delta.inner_text()
+        assert "regressed" in delta.get_attribute("class")
+        assert "3 finished runs" in summary
+        assert page.locator("#trend-chart .ovt-bar").count() == 2
+        # Hover a day for its numbers.
+        page.locator("#trend-chart .ovt-hit").last.hover()
+        tooltip = page.locator("#trend-tooltip")
+        assert tooltip.is_visible() and "82.0%" in tooltip.inner_text()
+        # Two tasks in range: a task picker; a range switch asks again.
+        assert page.locator("#trend-task").is_visible()
+        page.locator('#trend-range [data-days="30"]').click()
+        page.wait_for_function("document.querySelectorAll('#trend-chart .ovt-hit').length === 30")
+        assert fixture.trend_requests[-1]["days"] == 30
+        assert fixture.trend_requests[-1]["task"] == "Question answering"
+        assert fixture.trend_requests[-1]["dataset"] == "golden"
+        # One option per task and dataset: a trend never mixes datasets.
+        options = page.locator("#trend-task option").all_text_contents()
+        assert options == ["Question answering · golden (3)", "Question answering · golden-v2 (1)"]
+        count = len(fixture.trend_requests)
+        page.locator("#trend-task").select_option(index=1)
+        for _ in range(50):
+            if len(fixture.trend_requests) > count:
+                break
+            page.wait_for_timeout(50)
+        assert len(fixture.trend_requests) == count + 1
+        assert fixture.trend_requests[-1]["dataset"] == "golden-v2"
+        assert fixture.trend_requests[-1]["task"] == "Question answering"
+    finally:
+        fixture.close()
+
+
+def test_overview_trend_empty_and_error_states(browser):
+    fixture = OverviewFixture(browser)
+    fixture.trend = trend_payload(7, runs_by_day={})
+    try:
+        fixture.open()
+        page = fixture.page
+        page.wait_for_function("document.querySelector('#trend-body .ovt-empty strong')")
+        text = page.locator("#trend-body").inner_text()
+        assert "No finished runs in the last 7 days" in text
+        assert "latest finished run is from" in text
+        assert page.locator("#trend-chart").count() == 0
+    finally:
+        fixture.close()
+    fixture = OverviewFixture(browser)
+    fixture.trend_status = 503
+    try:
+        fixture.open()
+        page = fixture.page
+        page.locator("#trend-retry").wait_for()
+        assert "Could not load the trend" in page.locator("#trend-body").inner_text()
+        fixture.trend_status = 200
+        page.locator("#trend-retry").click()
+        page.wait_for_function("document.querySelectorAll('#trend-chart .ovt-dot').length === 2")
+        fixture.errors.clear()  # the 503 is the expected failure
     finally:
         fixture.close()

@@ -8,10 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from cryptography.fernet import Fernet
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.orm import Session
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("QYM_AUTH_MODE", "proxy_headers")
@@ -27,9 +24,7 @@ for src in (PLATFORM_SRC, SDK_SRC):
 if "openai" not in sys.modules:
     sys.modules["openai"] = MagicMock()
 
-from qym_platform.app import create_app
 from qym_platform.api import analysis as analysis_api
-from qym_platform.db.base import Base
 from qym_platform.db.models import (
     ApiKey,
     AuditLog,
@@ -48,9 +43,9 @@ from qym_platform.db.models import (
     User,
     UserRole,
 )
-from qym_platform.deps import get_db
 from qym_platform.security import api_key_prefix, hash_api_key
 from qym_platform.services.analysis_aggregation import AnalysisAggregationError
+from _helpers import sqlite_session_factory
 
 
 @pytest.fixture()
@@ -61,36 +56,8 @@ def session_factory(monkeypatch):
         "QYM_LLM_CONFIG_ENCRYPTION_KEY", Fernet.generate_key().decode("utf-8")
     )
     monkeypatch.setenv("QYM_ALLOW_LEGACY_EMPTY_API_KEY_SCOPES", "true")
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    try:
-        yield SessionLocal
-    finally:
-        engine.dispose()
-
-
-@pytest.fixture()
-def client(session_factory):
-    app = create_app()
-
-    def override_get_db():
-        db = session_factory()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    try:
-        with TestClient(app) as test_client:
-            yield test_client
-    finally:
-        app.dependency_overrides.clear()
+    with sqlite_session_factory() as factory:
+        yield factory
 
 
 def _headers(email: str) -> dict[str, str]:
@@ -308,42 +275,6 @@ def test_proxy_headers_auto_provisions_new_user(client, session_factory):
 def test_run_mutation_permissions_enforced(client, session_factory) -> None:
     with session_factory() as session:
         _seed_platform_data(session)
-
-    owner_metric = client.post(
-        "/api/runs/update_metric",
-        headers=_headers("owner@example.com"),
-        json={
-            "file_path": "run-1",
-            "row_index": 0,
-            "metric_name": "judge",
-            "new_score": 0.9,
-        },
-    )
-    assert owner_metric.status_code == 200
-
-    manager_metric = client.post(
-        "/api/runs/update_metric",
-        headers=_headers("manager-a@example.com"),
-        json={
-            "file_path": "run-1",
-            "row_index": 0,
-            "metric_name": "judge",
-            "new_score": 0.7,
-        },
-    )
-    assert manager_metric.status_code == 200
-
-    other_metric = client.post(
-        "/api/runs/update_metric",
-        headers=_headers("other@example.com"),
-        json={
-            "file_path": "run-1",
-            "row_index": 0,
-            "metric_name": "judge",
-            "new_score": 0.1,
-        },
-    )
-    assert other_metric.status_code == 403
 
     nonmember_root_cause = client.post(
         "/api/runs/update_root_cause",

@@ -17,8 +17,9 @@ class EvaluatorConfig(BaseModel):
     timeout: Optional[float] = Field(default=300, gt=0)
     # Hard wall-clock cap per metric attempt. Timed-out attempts retry according
     # to metric_max_retries; an exhausted timeout is recorded through the normal
-    # metric-error path (score 0 + error), so it is visible but excluded from the
-    # metric mean. Set to None to disable the cap and timeout retries.
+    # metric-error path (score 0 + error status). It counts as 0 in the mean of
+    # a higher-is-better metric, is left out of a lower-is-better one, and never
+    # counts as a pass. Set to None to disable the cap and timeout retries.
     metric_timeout: Optional[float] = Field(default=60.0, gt=0)
     # Retries for a metric call that hits metric_timeout. After the last
     # attempt the timeout is recorded through the ordinary metric-error path
@@ -35,6 +36,9 @@ class EvaluatorConfig(BaseModel):
     # `samples` stored passes — run 9, report pass@3. Must be <= samples.
     # None keeps the historical behavior (k = samples).
     report_k: Optional[int] = Field(default=None, ge=1)
+    # The run's headline metric. The platform opens Compare, Sweep, Models
+    # and the run page on it; without it they use the first metric.
+    primary_metric: Optional[str] = None
     run_metadata: Dict[str, Any] = Field(default_factory=dict)
     should_stop: Optional[Callable[[], bool]] = Field(default=None, exclude=True)
     git_branch: Optional[str] = None   # Override auto-detected git branch

@@ -42,7 +42,368 @@ def test_alembic_has_one_upgrade_head() -> None:
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["0070"]
+    assert heads == ["0082"]
+
+
+def test_operations_docs_name_the_current_migration_head() -> None:
+    """The deploy runbook tells operators which revision to wait for before
+    the API is healthy and before a separate worker (QYM_SKIP_MIGRATIONS=1)
+    starts; an older head there lets the worker start before the newest
+    tables exist. Every place the docs name the head names this one."""
+    import re
+
+    config = Config()
+    config.set_main_option("script_location", str(MIGRATIONS_DIR))
+    (head,) = ScriptDirectory.from_config(config).get_heads()
+    pattern = re.compile(r"(?:one head,|migration head|migrated to|\(head)\s+`(\d{4})`")
+    named = {}
+    for doc in ("docs/internal/OPERATIONS.md", "docs/RELEASE_NOTES.md"):
+        named[doc] = pattern.findall((ROOT / doc).read_text(encoding="utf-8"))
+    # The chain's head, the runbook's wait and the worker's start, the
+    # release note.
+    assert len(named["docs/internal/OPERATIONS.md"]) == 3, named
+    assert named["docs/RELEASE_NOTES.md"][:1] == [head], named
+    assert {revision for found in named.values() for revision in found} == {head}, named
+
+
+def test_migrations_name_their_own_revision_in_job_logs() -> None:
+    """Admins see "queued by migration NNNN" in the maintenance UI; after a
+    renumbering the text must still name the migration that queued the job."""
+    import re
+
+    config = Config()
+    config.set_main_option("script_location", str(MIGRATIONS_DIR))
+    wrong = []
+    for revision in ScriptDirectory.from_config(config).walk_revisions():
+        source = Path(revision.path).read_text(encoding="utf-8")
+        for named in re.findall(r"queued by migration (\w+)", source):
+            if named != revision.revision:
+                wrong.append((Path(revision.path).name, named))
+
+    assert wrong == []
+
+
+def test_user_sessions_migration_creates_and_drops_the_session_table(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    migration = _load_migration("0061_user_sessions.py")
+    engine = sa.create_engine("sqlite://")
+    metadata = sa.MetaData()
+    sa.Table("users", metadata, sa.Column("id", sa.String(length=36), primary_key=True))
+    metadata.create_all(engine)
+
+    with engine.begin() as connection:
+        monkeypatch.setattr(
+            migration, "op", Operations(MigrationContext.configure(connection))
+        )
+        migration.upgrade()
+        inspector = sa.inspect(connection)
+        assert {c["name"] for c in inspector.get_columns("user_sessions")} == {
+            "id",
+            "user_id",
+            "provider",
+            "created_at",
+            "last_seen_at",
+        }
+        assert {i["name"] for i in inspector.get_indexes("user_sessions")} == {
+            "ix_user_sessions_user_id",
+            "ix_user_sessions_last_seen_at",
+        }
+        (foreign_key,) = inspector.get_foreign_keys("user_sessions")
+        assert foreign_key["referred_table"] == "users"
+        assert foreign_key["options"].get("ondelete") == "CASCADE"
+
+        migration.downgrade()
+        assert "user_sessions" not in sa.inspect(connection).get_table_names()
+
+
+def test_item_failure_events_migration_queues_the_repair_job_for_repeat_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from qym_platform.db.maintenance_models import MaintenanceJob
+    from qym_platform.services import maintenance
+
+    migration = _load_migration("0064_project_item_failure_events.py")
+    engine = sa.create_engine("sqlite://")
+    metadata = sa.MetaData()
+    runs = sa.Table(
+        "runs",
+        metadata,
+        sa.Column("id", sa.String(length=36), primary_key=True),
+        sa.Column("samples", sa.Integer()),
+    )
+    metadata.create_all(engine)
+    MaintenanceJob.__table__.create(engine)
+    jobs = "SELECT kind, status FROM maintenance_jobs"
+
+    with engine.begin() as connection:
+        monkeypatch.setattr(
+            migration, "op", Operations(MigrationContext.configure(connection))
+        )
+        connection.execute(runs.insert(), [{"id": "classic", "samples": 1}])
+        migration.upgrade()
+        # Only repeat runs can have a pass that failed through item_failed alone.
+        assert connection.execute(sa.text(jobs)).all() == []
+
+        connection.execute(runs.insert(), [{"id": "repeat", "samples": 3}])
+        migration.upgrade()
+        assert connection.execute(sa.text(jobs)).all() == [
+            ("project_item_failure_events", "queued")
+        ]
+    assert "project_item_failure_events" in maintenance.registry()
+
+
+def test_purge_pause_migration_adds_nullable_columns_and_starts_archived_pauses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    migration = _load_migration("0065_archived_project_purge_pause.py")
+    engine = sa.create_engine("sqlite://")
+    metadata = sa.MetaData()
+    projects = sa.Table(
+        "projects",
+        metadata,
+        sa.Column("id", sa.String(length=36), primary_key=True),
+        sa.Column("is_active", sa.Boolean()),
+    )
+    sa.Table("runs", metadata, sa.Column("id", sa.String(length=36), primary_key=True))
+    metadata.create_all(engine)
+
+    with engine.begin() as connection:
+        connection.execute(
+            projects.insert(),
+            [{"id": "live", "is_active": True}, {"id": "archived", "is_active": False}],
+        )
+        monkeypatch.setattr(
+            migration, "op", Operations(MigrationContext.configure(connection))
+        )
+        migration.upgrade()
+        inspector = sa.inspect(connection)
+        columns = {c["name"]: c for c in inspector.get_columns("projects")}
+        assert columns["archived_at"]["nullable"] is True
+        run_columns = {c["name"]: c for c in inspector.get_columns("runs")}
+        assert run_columns["purge_clock_started_at"]["nullable"] is True
+        rows = dict(connection.execute(sa.text("SELECT id, archived_at FROM projects")).all())
+        # A project archived before this version pauses its purge from now on.
+        assert rows["live"] is None and rows["archived"] is not None
+
+        migration.downgrade()
+        inspector = sa.inspect(connection)
+        assert "archived_at" not in {c["name"] for c in inspector.get_columns("projects")}
+        assert "purge_clock_started_at" not in {c["name"] for c in inspector.get_columns("runs")}
+    engine.dispose()
+
+
+def test_dataset_search_migration_adds_nullable_columns_and_queues_the_backfill(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from qym_platform.db.maintenance_models import MaintenanceJob
+    from qym_platform.services import maintenance
+
+    migration = _load_migration("0068_dataset_search_text.py")
+    engine = sa.create_engine("sqlite://")
+    metadata = sa.MetaData()
+    items = sa.Table("dataset_items", metadata, sa.Column("id", sa.Integer(), primary_key=True))
+    sa.Table("dataset_versions", metadata, sa.Column("id", sa.String(length=36), primary_key=True))
+    sa.Table("datasets", metadata, sa.Column("id", sa.String(length=36), primary_key=True))
+    metadata.create_all(engine)
+    MaintenanceJob.__table__.create(engine)
+    jobs = "SELECT kind, status FROM maintenance_jobs"
+
+    with engine.begin() as connection:
+        monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
+        migration.upgrade()
+        inspector = sa.inspect(connection)
+        assert {c["name"]: c["nullable"] for c in inspector.get_columns("dataset_items")}["search_text"] is True
+        assert {c["name"]: c["nullable"] for c in inspector.get_columns("dataset_versions")}["change_counts"] is True
+        assert {c["name"]: c["nullable"] for c in inspector.get_columns("datasets")}["deleted_by_user_id"] is True
+        # Queued on an empty table too: the job is what builds the trigram
+        # index, so a fresh install must get it.
+        assert connection.execute(sa.text(jobs)).all() == [("backfill_dataset_search_text", "queued")]
+        migration.downgrade()
+        connection.execute(sa.text("DELETE FROM maintenance_jobs"))
+        connection.execute(items.insert(), [{"id": 1}])
+        migration.upgrade()
+        assert connection.execute(sa.text(jobs)).all() == [("backfill_dataset_search_text", "queued")]
+        migration.downgrade()
+        assert "search_text" not in {c["name"] for c in sa.inspect(connection).get_columns("dataset_items")}
+    assert "backfill_dataset_search_text" in maintenance.registry()
+    engine.dispose()
+
+
+def test_dataset_search_backfill_job_fills_text_and_published_counts() -> None:
+    from sqlalchemy.orm import sessionmaker
+
+    from qym_platform.db.base import Base
+    from qym_platform.db.models import Dataset, DatasetItem, DatasetVersion, Project, User
+    from qym_platform.services import maintenance
+
+    engine = sa.create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    with factory() as db:
+        db.add(User(id="u", email="u@x.com"))
+        db.add(Project(id="p", name="P", slug="p", created_by_user_id="u"))
+        db.add(Dataset(id="d", project_id="p", name="D", slug="d", created_by_user_id="u"))
+        db.add(DatasetVersion(id="v1", dataset_id="d", version="v1", status="published", created_by_user_id="u"))
+        db.add(DatasetVersion(id="v2", dataset_id="d", version="v2", status="published", parent_version_id="v1", created_by_user_id="u"))
+        db.flush()
+        for version_id, value in (("v1", "قديم"), ("v2", "جديد")):
+            db.add(DatasetItem(dataset_version_id=version_id, item_id="a", index=0, input=value, item_metadata={"tag": "X"}, fingerprint=value))
+        db.commit()
+        # Rows written before the column existed.
+        db.execute(sa.update(DatasetItem).values(search_text=None))
+        db.commit()
+    with factory() as db:
+        maintenance.enqueue(db, "backfill_dataset_search_text", {"window": 1})
+        db.commit()
+    assert maintenance.MaintenanceWorker(factory, engine).tick() == "succeeded"
+    with factory() as db:
+        texts = sorted(row.search_text for row in db.query(DatasetItem))
+        counts = {v.id: v.change_counts for v in db.query(DatasetVersion)}
+    assert texts == ["a\nجديد\n\n{\"tag\": \"x\"}", "a\nقديم\n\n{\"tag\": \"x\"}"]
+    assert counts == {
+        "v1": {"added": 1, "modified": 0, "deleted": 0, "unchanged": 0},
+        "v2": {"added": 0, "modified": 1, "deleted": 0, "unchanged": 0},
+    }
+    engine.dispose()
+
+
+def test_overview_store_and_runs_search_migrations_are_quick_ddl_that_queue_jobs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """C037/C060: 0069 adds two empty tables and queues the overview backfill;
+    0070 only queues the runs search index job (the index is built
+    CONCURRENTLY by the job, never by the migration)."""
+    from sqlalchemy.orm import sessionmaker
+
+    from qym_platform.db.maintenance_models import MaintenanceJob
+    from qym_platform.services import maintenance
+
+    overview = _load_migration("0069_dashboard_overview_store.py")
+    search = _load_migration("0070_runs_search_index.py")
+    engine = sa.create_engine("sqlite://")
+    metadata = sa.MetaData()
+    sa.Table(
+        "dashboard_run_summaries", metadata, sa.Column("run_key", sa.String(36), primary_key=True)
+    )
+    metadata.create_all(engine)
+    MaintenanceJob.__table__.create(engine)
+    jobs = "SELECT kind, status FROM maintenance_jobs ORDER BY kind"
+
+    with engine.begin() as connection:
+        operations = Operations(MigrationContext.configure(connection))
+        monkeypatch.setattr(overview, "op", operations)
+        monkeypatch.setattr(search, "op", operations)
+        statements = []
+        sa.event.listen(
+            connection, "before_cursor_execute", lambda *args: statements.append(args[2])
+        )
+        overview.upgrade()
+        search.upgrade()
+        tables = set(sa.inspect(connection).get_table_names())
+        assert {"dashboard_run_overview", "dashboard_overview_snapshots"} <= tables
+        assert connection.execute(sa.text(jobs)).all() == [
+            ("backfill_dashboard_overview", "queued"),
+            ("build_runs_search_index", "queued"),
+        ]
+        assert not [s for s in statements if "INDEX" in s.upper() and "TRGM" in s.upper()]
+        search.downgrade()
+        overview.downgrade()
+        tables = set(sa.inspect(connection).get_table_names())
+        assert not {"dashboard_run_overview", "dashboard_overview_snapshots"} & tables
+    registered = maintenance.registry()
+    assert {"backfill_dashboard_overview", "build_runs_search_index"} <= set(registered)
+    engine.dispose()
+
+    # On SQLite both jobs finish at once.
+    from qym_platform.db.base import Base
+
+    engine = sa.create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    worker = maintenance.MaintenanceWorker(factory, engine)
+    for kind in ("backfill_dashboard_overview", "build_runs_search_index"):
+        with factory() as db:
+            maintenance.enqueue(db, kind, {})
+            db.commit()
+        assert worker.tick() == "succeeded"
+        with factory() as db:
+            job = db.query(MaintenanceJob).filter_by(kind=kind).one()
+            assert "skipped: not PostgreSQL" in job.log, kind
+    engine.dispose()
+
+
+def test_runs_search_text_migration_adds_a_column_and_queues_the_job_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """0071 adds the nullable ``search_text`` column (instant DDL) and queues
+    build_runs_search_index again, unless a job 0070 queued still waits to
+    start (this release's job does both)."""
+    from sqlalchemy.orm import sessionmaker
+
+    from qym_platform.db.base import Base
+    from qym_platform.db.dashboard_models import DashboardRunDimension as Dimension
+    from qym_platform.db.maintenance_models import MaintenanceJob
+    from qym_platform.services import maintenance
+
+    search = _load_migration("0070_runs_search_index.py")
+    text_column = _load_migration("0071_runs_search_text.py")
+    engine = sa.create_engine("sqlite://")
+    metadata = sa.MetaData()
+    sa.Table(
+        "dashboard_run_dimensions", metadata, sa.Column("run_key", sa.String(36), primary_key=True)
+    )
+    metadata.create_all(engine)
+    MaintenanceJob.__table__.create(engine)
+    jobs = "SELECT kind, status FROM maintenance_jobs ORDER BY created_at"
+    with engine.begin() as connection:
+        operations = Operations(MigrationContext.configure(connection))
+        monkeypatch.setattr(search, "op", operations)
+        monkeypatch.setattr(text_column, "op", operations)
+        search.upgrade()
+        text_column.upgrade()
+        columns = {c["name"] for c in sa.inspect(connection).get_columns("dashboard_run_dimensions")}
+        assert "search_text" in columns
+        # 0070's job has not started: it is the one that runs.
+        assert connection.execute(sa.text(jobs)).all() == [("build_runs_search_index", "queued")]
+        text_column.downgrade()
+        connection.execute(sa.text("UPDATE maintenance_jobs SET status = 'succeeded'"))
+        # A database whose 0070 job already ran gets a new one.
+        text_column.upgrade()
+        assert connection.execute(sa.text(jobs)).all() == [
+            ("build_runs_search_index", "succeeded"),
+            ("build_runs_search_index", "queued"),
+        ]
+        text_column.downgrade()
+        columns = {c["name"] for c in sa.inspect(connection).get_columns("dashboard_run_dimensions")}
+        assert "search_text" not in columns
+    engine.dispose()
+
+    # The job fills the column for rows written before it existed.
+    engine = sa.create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    stamp = sa.func.now()
+    with factory() as db:
+        for index, (external, name) in enumerate([("Base-0818", "Baseline"), ("", None), (7, "Seven")]):
+            db.add(
+                Dimension(
+                    run_key=f"r{index}", project_key="p", task="t", model="m", dataset="d",
+                    version="", owner="u", status="COMPLETED", timestamp=stamp, created_at=stamp,
+                    present=True, descriptor={"external_run_id": external, "run_name": name},
+                )
+            )
+        db.commit()
+        maintenance.enqueue(db, "build_runs_search_index", {"window": 2})
+        db.commit()
+    assert maintenance.MaintenanceWorker(factory, engine).tick() == "succeeded"
+    with factory() as db:
+        assert {row.run_key: row.search_text for row in db.query(Dimension)} == {
+            "r0": "base-0818\nbaseline", "r1": "\n", "r2": "7\nseven",
+        }
+        job = db.query(MaintenanceJob).filter_by(kind="build_runs_search_index").one()
+        assert job.progress["runs_filled"] == 3
+    engine.dispose()
 
 
 def test_subcategory_taxonomy_migration_preserves_rows_and_defaults_json(
@@ -182,7 +543,7 @@ TS = "2026-09-29 00:00:00"
 
 
 def _eval_environment_prerequisites(engine: sa.engine.Engine) -> sa.Table:
-    """Create the minimal pre-0060 tables the eval-environment migration touches."""
+    """Create the minimal pre-0072 tables the eval-environment migration touches."""
     metadata = sa.MetaData()
     sa.Table("users", metadata, sa.Column("id", sa.String(36), primary_key=True))
     sa.Table("projects", metadata, sa.Column("id", sa.String(36), primary_key=True))
@@ -221,7 +582,7 @@ def _insert_environment(connection: sa.Connection, env_id: str, **values: Any) -
 
 
 def _assert_eval_environment_constraints(connection: sa.Connection) -> None:
-    """Exercise 0060 defaults, uniqueness, checks and cascades on either dialect."""
+    """Exercise 0072 defaults, uniqueness, checks and cascades on either dialect."""
 
     def scalar(sql: str) -> Any:
         return connection.execute(sa.text(sql)).scalar_one()
@@ -333,7 +694,7 @@ def _assert_eval_environments_dropped(connection: sa.Connection) -> None:
 def test_eval_environments_migration_sqlite_upgrade_and_downgrade(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    migration = _load_migration("0060_eval_environments.py")
+    migration = _load_migration("0072_eval_environments.py")
     engine = sa.create_engine("sqlite://")
     _eval_environment_prerequisites(engine)
 
@@ -371,14 +732,14 @@ def test_eval_environments_migration_sqlite_upgrade_and_downgrade(
 def test_eval_environments_migration_matches_models(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The ORM models and migrations 0060 + 0068 + 0069 describe the same schema."""
+    """The ORM models and migrations 0072 + 0080 + 0081 describe the same schema."""
     from alembic.autogenerate import compare_metadata
     from qym_platform.db import models
     from qym_platform.db.base import Base
 
-    migration = _load_migration("0060_eval_environments.py")
-    drop_cap = _load_migration("0068_drop_eval_inflight_cap.py")
-    extra_maps = _load_migration("0069_eval_slot_extra_field_maps.py")
+    migration = _load_migration("0072_eval_environments.py")
+    drop_cap = _load_migration("0080_drop_eval_inflight_cap.py")
+    extra_maps = _load_migration("0081_eval_slot_extra_field_maps.py")
     engine = sa.create_engine("sqlite://")
     _eval_environment_prerequisites(engine)
 
@@ -413,7 +774,7 @@ def postgres_engine(request: pytest.FixtureRequest) -> sa.engine.Engine:
     url = os.environ.get("QYM_TEST_POSTGRES_URL")
     if not url:
         pytest.skip("QYM_TEST_POSTGRES_URL not configured")
-    schema = "qym_migration_0060_" + uuid4().hex
+    schema = "qym_migration_0072_" + uuid4().hex
     admin = sa.create_engine(url)
     with admin.begin() as connection:
         connection.execute(sa.text(f'CREATE SCHEMA "{schema}"'))
@@ -435,7 +796,7 @@ def postgres_engine(request: pytest.FixtureRequest) -> sa.engine.Engine:
 def test_eval_environments_migration_postgres_upgrade_and_downgrade(
     monkeypatch: pytest.MonkeyPatch, postgres_engine: sa.engine.Engine
 ) -> None:
-    migration = _load_migration("0060_eval_environments.py")
+    migration = _load_migration("0072_eval_environments.py")
     _eval_environment_prerequisites(postgres_engine)
 
     with postgres_engine.begin() as connection:
@@ -475,27 +836,27 @@ EXPERIMENT_TABLES = {
 }
 RUN_EXPERIMENT_COLUMNS = {"origin", "experiment_job_id"}
 RUN_EXPERIMENT_INDEXES = {"ix_runs_origin", "ix_runs_experiment_job_id"}
-SCORE_TABLES = frozenset({"eval_run_scores"})  # 0064
-# Revisions after 0061 that change its tables: (table, column they add, file).
+SCORE_TABLES = frozenset({"eval_run_scores"})  # 0076
+# Revisions after 0073 that change its tables: (table, column they add, file).
 # (table, marker column, revision, whether the revision adds the marker or drops it)
 LATER_REVISIONS = (
-    ("eval_experiment_jobs", "attempt", "0063_eval_job_attempts.py", True),
-    ("eval_experiment_jobs", "run_linked_at", "0064_eval_run_scores.py", True),
+    ("eval_experiment_jobs", "attempt", "0075_eval_job_attempts.py", True),
+    ("eval_experiment_jobs", "run_linked_at", "0076_eval_run_scores.py", True),
     (
         "eval_experiments",
         "qym_api_key_id",
-        "0065_eval_experiment_qym_api_key.py",
+        "0077_eval_experiment_qym_api_key.py",
         True,
     ),
-    ("eval_environments", "max_inflight_jobs", "0068_drop_eval_inflight_cap.py", False),
-    ("eval_model_slots", "extra_field_maps", "0069_eval_slot_extra_field_maps.py", True),
+    ("eval_environments", "max_inflight_jobs", "0080_drop_eval_inflight_cap.py", False),
+    ("eval_model_slots", "extra_field_maps", "0081_eval_slot_extra_field_maps.py", True),
 )
 
 
 def _eval_experiment_prerequisites(
     engine: sa.engine.Engine, monkeypatch: pytest.MonkeyPatch
 ) -> ModuleType:
-    """Build the minimal pre-0061 schema (0060 plus ``runs`` with legacy rows)."""
+    """Build the minimal pre-0073 schema (0072 plus ``runs`` with legacy rows)."""
     _eval_environment_prerequisites(engine)
     metadata = sa.MetaData()
     sa.Table(
@@ -505,9 +866,9 @@ def _eval_experiment_prerequisites(
         sa.Column("project_id", sa.String(36), nullable=False),
         sa.Column("task", sa.String(200), nullable=False),
     )
-    # Referenced by eval_experiments.qym_api_key_id (0065).
+    # Referenced by eval_experiments.qym_api_key_id (0077).
     sa.Table("api_keys", metadata, sa.Column("id", sa.String(36), primary_key=True))
-    # Referenced by eval_run_scores (0064).
+    # Referenced by eval_run_scores (0076).
     sa.Table("datasets", metadata, sa.Column("id", sa.String(36), primary_key=True))
     sa.Table(
         "dataset_versions",
@@ -516,7 +877,7 @@ def _eval_experiment_prerequisites(
         sa.Column("dataset_id", sa.String(36), sa.ForeignKey("datasets.id")),
     )
     metadata.create_all(engine)
-    previous = _load_migration("0060_eval_environments.py")
+    previous = _load_migration("0072_eval_environments.py")
     with engine.begin() as connection:
         connection.execute(
             sa.text(
@@ -537,7 +898,7 @@ def _eval_experiment_prerequisites(
             ),
             {"hash": "a" * 64, "ts": TS},
         )
-    return _load_migration("0061_eval_experiments.py")
+    return _load_migration("0073_eval_experiments.py")
 
 
 def _insert_row(connection: sa.Connection, table: str, **row: Any) -> None:
@@ -587,7 +948,7 @@ def _insert_job(connection: sa.Connection, job_id: str, **values: Any) -> None:
 
 
 def _assert_eval_experiment_constraints(connection: sa.Connection) -> None:
-    """Exercise 0061 backfill, defaults, uniqueness, checks and FK actions."""
+    """Exercise 0073 backfill, defaults, uniqueness, checks and FK actions."""
 
     def scalar(sql: str) -> Any:
         return connection.execute(sa.text(sql)).scalar_one()
@@ -744,9 +1105,9 @@ def test_eval_experiments_migration_sqlite_upgrade_and_downgrade(
 def _eval_experiment_model_diffs(
     connection: sa.Connection, extra_tables: frozenset[str] = frozenset()
 ) -> list[Any]:
-    """Diff the ORM models against the 0060/0061 tables and ``runs`` additions.
+    """Diff the ORM models against the 0072/0073 tables and ``runs`` additions.
 
-    ``extra_tables`` adds tables from later revisions (e.g. 0062 presets).
+    ``extra_tables`` adds tables from later revisions (e.g. 0074 presets).
     """
     from alembic.autogenerate import compare_metadata
     from qym_platform.db.base import Base
@@ -761,7 +1122,7 @@ def _eval_experiment_model_diffs(
             return True
         if table.name != "runs":
             return False
-        # The test ``runs`` table is minimal: compare only what 0061 adds.
+        # The test ``runs`` table is minimal: compare only what 0073 adds.
         if kind == "column":
             return name in RUN_EXPERIMENT_COLUMNS
         if kind == "index":
@@ -774,7 +1135,7 @@ def _eval_experiment_model_diffs(
         return kind == "table"
 
     def include_eval_object(obj, name, kind, reflected, compare_to):  # type: ignore[no-untyped-def]
-        # Same for eval_experiments.qym_api_key_id (0065): PRAGMA-checked on SQLite.
+        # Same for eval_experiments.qym_api_key_id (0077): PRAGMA-checked on SQLite.
         if sqlite and kind == "foreign_key_constraint":
             columns = {column.name for column in obj.columns}
             if columns == {"qym_api_key_id"}:
@@ -815,7 +1176,7 @@ def _eval_experiment_model_diffs(
 def test_eval_experiments_migration_matches_models(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The ORM models and migration 0061 describe the same schema."""
+    """The ORM models and migration 0073 describe the same schema."""
     from qym_platform.db import models
 
     engine = sa.create_engine("sqlite://")
@@ -881,14 +1242,14 @@ PRESET_TABLES = frozenset({"eval_config_presets", "eval_config_preset_versions"}
 def _eval_preset_prerequisites(
     engine: sa.engine.Engine, monkeypatch: pytest.MonkeyPatch
 ) -> ModuleType:
-    """Build the pre-0062 schema (0060 + 0061) with an environment and schema."""
+    """Build the pre-0074 schema (0072 + 0073) with an environment and schema."""
     previous = _eval_experiment_prerequisites(engine, monkeypatch)
     with engine.begin() as connection:
         monkeypatch.setattr(
             previous, "op", Operations(MigrationContext.configure(connection))
         )
         previous.upgrade()
-    return _load_migration("0062_eval_config_presets.py")
+    return _load_migration("0074_eval_config_presets.py")
 
 
 def _insert_preset(connection: sa.Connection, preset_id: str, **values: Any) -> None:
@@ -928,7 +1289,7 @@ def _insert_preset_version(
 
 
 def _assert_eval_preset_constraints(connection: sa.Connection) -> None:
-    """Exercise 0062 defaults, uniqueness, checks and FK actions."""
+    """Exercise 0074 defaults, uniqueness, checks and FK actions."""
 
     def scalar(sql: str) -> Any:
         return connection.execute(sa.text(sql)).scalar_one()
@@ -1091,7 +1452,7 @@ def test_eval_presets_migration_sqlite_upgrade_and_downgrade(
 def test_eval_presets_migration_matches_models(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The ORM models and migration 0062 describe the same schema."""
+    """The ORM models and migration 0074 describe the same schema."""
     from qym_platform.db import models
 
     engine = sa.create_engine("sqlite://")
@@ -1164,7 +1525,7 @@ JOB_INDEXES = {
 def _eval_job_attempt_prerequisites(
     engine: sa.engine.Engine, monkeypatch: pytest.MonkeyPatch
 ) -> ModuleType:
-    """Build the pre-0063 schema (0060-0062) with a job linked to run ``r1``."""
+    """Build the pre-0075 schema (0072-0074) with a job linked to run ``r1``."""
     previous = _eval_preset_prerequisites(engine, monkeypatch)
     with engine.begin() as connection:
         monkeypatch.setattr(
@@ -1177,11 +1538,11 @@ def _eval_job_attempt_prerequisites(
         connection.execute(
             sa.text("UPDATE runs SET experiment_job_id = 'j1' WHERE id = 'r1'")
         )
-    return _load_migration("0063_eval_job_attempts.py")
+    return _load_migration("0075_eval_job_attempts.py")
 
 
 def _assert_eval_job_attempt_constraints(connection: sa.Connection) -> None:
-    """Exercise 0063 backfill, the new unique key, checks, FKs and kept indexes."""
+    """Exercise 0075 backfill, the new unique key, checks, FKs and kept indexes."""
 
     def scalar(sql: str) -> Any:
         return connection.execute(sa.text(sql)).scalar_one()
@@ -1210,7 +1571,7 @@ def _assert_eval_job_attempt_constraints(connection: sa.Connection) -> None:
     rejected("j1-dup", attempt=1)
     rejected("bad-attempt", attempt=-1, combo_index=5)
     rejected("bad-retry-of", attempt=2, retry_of_job_id="missing")
-    # 0061's checks, FKs and the unique run link survive.
+    # 0073's checks, FKs and the unique run link survive.
     rejected("bad-status", combo_index=6, status="DONE")
     rejected("bad-combo", combo_index=-1)
     rejected("bad-env", combo_index=7, environment_id="missing")
@@ -1309,7 +1670,7 @@ def test_eval_job_attempts_migration_sqlite_upgrade_and_downgrade(
 def test_eval_job_attempts_migration_matches_models(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The ORM models and migrations 0060-0063 describe the same schema."""
+    """The ORM models and migrations 0072-0075 describe the same schema."""
     engine = sa.create_engine("sqlite://")
     migration = _eval_job_attempt_prerequisites(engine, monkeypatch)
 
@@ -1356,18 +1717,18 @@ def test_eval_job_attempts_migration_postgres_upgrade_and_downgrade(
 def _eval_run_scores_prerequisites(
     engine: sa.engine.Engine, monkeypatch: pytest.MonkeyPatch
 ) -> ModuleType:
-    """Build the pre-0064 schema (0060-0063); job ``j1`` is linked to run ``r1``."""
+    """Build the pre-0076 schema (0072-0075); job ``j1`` is linked to run ``r1``."""
     previous = _eval_job_attempt_prerequisites(engine, monkeypatch)
     with engine.begin() as connection:
         monkeypatch.setattr(
             previous, "op", Operations(MigrationContext.configure(connection))
         )
         previous.upgrade()
-    return _load_migration("0064_eval_run_scores.py")
+    return _load_migration("0076_eval_run_scores.py")
 
 
 def _assert_eval_run_scores_upgraded(connection: sa.Connection) -> None:
-    """Exercise the 0064 ``run_linked_at`` backfill and the empty score index."""
+    """Exercise the 0076 ``run_linked_at`` backfill and the empty score index."""
     rows = connection.execute(
         sa.text("SELECT id, run_linked_at FROM eval_experiment_jobs ORDER BY id")
     ).all()
@@ -1409,7 +1770,7 @@ def _insert_score(connection: sa.Connection, metric: str, **values: Any) -> None
 
 
 def _assert_eval_run_score_constraints(connection: sa.Connection) -> None:
-    """Exercise 0064 defaults, key, checks and FK actions on ``eval_run_scores``."""
+    """Exercise 0076 defaults, key, checks and FK actions on ``eval_run_scores``."""
 
     def scalar(sql: str) -> Any:
         return connection.execute(sa.text(sql)).scalar_one()
@@ -1458,7 +1819,7 @@ def _assert_eval_run_scores_downgraded(connection: sa.Connection) -> None:
         for column in sa.inspect(connection).get_columns("eval_experiment_jobs")
     }
     assert "run_linked_at" not in columns
-    assert "attempt" in columns  # 0063 is untouched
+    assert "attempt" in columns  # 0075 is untouched
     assert "eval_run_scores" not in sa.inspect(connection).get_table_names()
     assert (
         connection.execute(
@@ -1533,7 +1894,7 @@ def test_eval_run_scores_migration_postgres_upgrade_and_downgrade(
 def _eval_qym_api_key_prerequisites(
     engine: sa.engine.Engine, monkeypatch: pytest.MonkeyPatch
 ) -> ModuleType:
-    """Build the pre-0065 schema (0060-0064) with experiment ``x1`` and key ``k1``."""
+    """Build the pre-0077 schema (0072-0076) with experiment ``x1`` and key ``k1``."""
     previous = _eval_run_scores_prerequisites(engine, monkeypatch)
     with engine.begin() as connection:
         monkeypatch.setattr(
@@ -1541,7 +1902,7 @@ def _eval_qym_api_key_prerequisites(
         )
         previous.upgrade()
         _insert_row(connection, "api_keys", id="k1")
-    return _load_migration("0065_eval_experiment_qym_api_key.py")
+    return _load_migration("0077_eval_experiment_qym_api_key.py")
 
 
 def _run_eval_qym_api_key_round_trip(
@@ -1623,9 +1984,9 @@ def test_eval_qym_api_key_migration_postgres_upgrade_and_downgrade(
 
 
 def test_drop_eval_inflight_cap_round_trips(monkeypatch: pytest.MonkeyPatch) -> None:
-    """0068 drops max_inflight_jobs (keeping rows); downgrade restores it at 5."""
-    migration = _load_migration("0060_eval_environments.py")
-    drop_cap = _load_migration("0068_drop_eval_inflight_cap.py")
+    """0080 drops max_inflight_jobs (keeping rows); downgrade restores it at 5."""
+    migration = _load_migration("0072_eval_environments.py")
+    drop_cap = _load_migration("0080_drop_eval_inflight_cap.py")
     engine = sa.create_engine("sqlite://")
     _eval_environment_prerequisites(engine)
     with engine.begin() as connection:
@@ -1652,9 +2013,9 @@ def test_drop_eval_inflight_cap_round_trips(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_slot_extra_field_maps_round_trips(monkeypatch: pytest.MonkeyPatch) -> None:
-    """0069 adds extra_field_maps (existing slots get []); downgrade drops it."""
-    migration = _load_migration("0060_eval_environments.py")
-    extra_maps = _load_migration("0069_eval_slot_extra_field_maps.py")
+    """0081 adds extra_field_maps (existing slots get []); downgrade drops it."""
+    migration = _load_migration("0072_eval_environments.py")
+    extra_maps = _load_migration("0081_eval_slot_extra_field_maps.py")
     engine = sa.create_engine("sqlite://")
     _eval_environment_prerequisites(engine)
     with engine.begin() as connection:

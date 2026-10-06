@@ -5,20 +5,37 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Models</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=eval-versioning-20261002">
-  <link rel="stylesheet" href="/static/shell.css">
-  <script src="/static/auth.js"></script>
-  <script src="/static/shell.js?v=ui-consistency-20260730-16"></script>
-  <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60">
-  <script defer src="/static/ui_components.js?v=ui-consistency-20260803-28"></script>
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261005-3">
+  <link rel="stylesheet" href="/static/shell.css?v=p1-20261005-6">
+  <script src="/static/qym_safe.js?v=p1-20261001"></script>
+  <script src="/static/auth.js?v=p1-20261005"></script>
+  <script src="/static/shell.js?v=p1-20261005-8"></script>
+  <script src="/static/kpis.js?v=p0-20260930"></script>
+  <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261005-2">
+  <script defer src="/static/ui_components.js?v=p1-20261005"></script>
 </head>
 <body>
   <!-- Command Bar -->
   <div class="command-bar">
-    <div class="quick-filters qym-segmented" role="group" aria-label="Time range">
-      <button class="filter-btn qym-segmented__option active" data-filter="all" aria-pressed="true">All</button>
-      <button class="filter-btn qym-segmented__option" data-filter="today" aria-pressed="false">Today</button>
-      <button class="filter-btn qym-segmented__option" data-filter="week" aria-pressed="false">7d</button>
+    <div class="time-range-control multi-select-wrapper">
+      <div class="quick-filters qym-segmented" role="group" aria-label="Time range">
+        <button class="filter-btn qym-segmented__option active" data-filter="all" aria-pressed="true">All</button>
+        <button class="filter-btn qym-segmented__option" data-filter="today" aria-pressed="false">Today</button>
+        <button class="filter-btn qym-segmented__option" data-filter="week" aria-pressed="false" title="Last 7 days">7d</button>
+        <button class="filter-btn qym-segmented__option" data-filter="month" aria-pressed="false" title="Last 30 days">30d</button>
+        <button class="filter-btn qym-segmented__option" data-filter="custom" aria-pressed="false" aria-haspopup="dialog" aria-expanded="false" aria-controls="time-range-dropdown" title="Choose a date range">Range</button>
+      </div>
+      <div class="multi-select-dropdown time-range-dropdown" id="time-range-dropdown" role="dialog" aria-label="Date range">
+        <div class="time-range-fields">
+          <label class="time-range-field"><span>From</span><input type="date" id="time-range-from" class="qym-control qym-input"></label>
+          <label class="time-range-field"><span>To</span><input type="date" id="time-range-to" class="qym-control qym-input"></label>
+        </div>
+        <p class="time-range-error" id="time-range-error" role="alert"></p>
+        <div class="time-range-actions">
+          <button type="button" class="qym-inline-action qym-inline-action--neutral" id="time-range-cancel">Cancel</button>
+          <button type="button" class="qym-inline-action qym-inline-action--accent" id="time-range-apply">Apply</button>
+        </div>
+      </div>
     </div>
     <div class="origin-filters qym-segmented" role="group" aria-label="Run origin" data-qym-segmented-key="run-origin">
       <button class="origin-filter-btn qym-segmented__option active" data-origin="all" aria-pressed="true">All</button>
@@ -58,10 +75,7 @@
   </div>
 
   <main class="dashboard-page-main">
-    <div id="loading" class="loading">
-      <div class="loading-spinner"></div>
-      <span>Loading models...</span>
-    </div>
+    <div id="loading" class="loading loading--skeleton" data-qym-skeleton="cards" data-qym-skeleton-label="Loading models…" data-qym-skeleton-count="6" data-qym-skeleton-min-width="320" data-qym-skeleton-height="260"></div>
     <div id="empty" class="empty" style="display:none;">
       <div class="empty-state">
         <div class="empty-icon">∅</div>
@@ -77,17 +91,17 @@
         </div>
         <div class="models-controls">
           <div class="models-filter-row">
-            <label class="filter-label">Metric:</label>
+            <label class="filter-label" for="models-metric-select">Metric:</label>
             <select id="models-metric-select" class="filter-select">
               <option value="">Select a metric...</option>
             </select>
-            <label class="filter-label">Runs per model:</label>
+            <label class="filter-label" for="models-k-input">Runs per model:</label>
             <input type="number" id="models-k-input" class="filter-input-k" min="1" max="100" value="5" placeholder="5">
             <span class="models-threshold-inline" id="models-threshold-row" style="display:none;">
-              <label class="filter-label">Pass ≥</label>
+              <label class="filter-label" for="models-threshold-slider">Pass ≥</label>
               <input type="range" id="models-threshold-slider" class="threshold-slider-inline" min="0" max="100" step="5" value="80">
               <span class="threshold-value" id="models-threshold-value">80%</span>
-              <button type="button" class="stat-info-icon qym-help-marker threshold-info" aria-label="Explain the pass threshold" aria-expanded="false">i<span class="stat-info-tooltip qym-help-tooltip" role="tooltip">Score threshold for Pass@K and Pass^K metrics. Items scoring at or above this threshold are considered "correct".</span></button>
+              <button type="button" class="stat-info-icon qym-help-marker threshold-info" aria-label="Explain the pass threshold" aria-expanded="false">i<span class="stat-info-tooltip qym-help-tooltip" role="tooltip">Score threshold for Pass@K and Pass^K metrics. Items scoring at or above this threshold (at or below it for a lower-is-better metric) are considered "correct".</span></button>
             </span>
             <div class="multi-select-wrapper" id="models-stat-visibility-wrapper" style="display:none;">
               <button class="multi-select-btn" id="models-stat-visibility-btn" title="Choose which model summary metrics to show">Shown Metrics</button>
@@ -108,7 +122,7 @@
 
   <footer class="status-bar">
     <div class="status-left">
-      <span id="status-filter">0 runs</span>
+      <span id="status-filter">Loading runs…</span>
     </div>
     <div class="status-right">
       <span>Last Updated: <span id="last-updated" style="font-family:var(--font-mono)">—</span></span>
@@ -117,24 +131,25 @@
 
   <!-- Run Selection Modal (Models view) -->
   <div class="modal" id="run-selection-modal" style="display:none;">
-    <div class="modal-content modal-medium">
+    <div class="modal-content modal-medium" role="dialog" aria-modal="true" aria-labelledby="run-selection-modal-title">
       <div class="modal-header">
-        <h2>Select Runs for <span id="run-selection-model-name"></span></h2>
-        <button class="modal-close qym-icon-action" aria-label="Close" onclick="document.getElementById('run-selection-modal').style.display='none'">×</button>
+        <h2 id="run-selection-modal-title">Select Runs for <span id="run-selection-model-name"></span></h2>
+        <button class="modal-close qym-icon-action" type="button" aria-label="Close" data-modal-dismiss="run-selection-modal">×</button>
       </div>
       <div class="modal-body">
         <p class="modal-description">Choose which runs to include in the comparison. Runs are ordered by most recent first.</p>
         <div class="run-selection-list" id="run-selection-list"></div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="document.getElementById('run-selection-modal').style.display='none'">Cancel</button>
+        <button class="btn btn-secondary" type="button" data-modal-dismiss="run-selection-modal">Cancel</button>
         <button class="btn btn-primary" id="confirm-run-selection-btn">Apply Selection</button>
       </div>
     </div>
   </div>
 
   <script>window.__QYM_INITIAL_VIEW__ = 'models';</script>
-  <script src="/static/metrics.js?v=metric-errors-20260914-1"></script>
-  <script src="/static/dashboard.js?v=runs-performance-eval-versioning-20261002"></script>
+  <script src="/static/runs_order.js?v=p1-20261002"></script>
+  <script src="/static/metrics.js?v=p1-20261005"></script>
+  <script src="/static/dashboard.js?v=p1-20261005-9"></script>
 </body>
 </html>

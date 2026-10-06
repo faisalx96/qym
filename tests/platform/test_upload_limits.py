@@ -8,12 +8,7 @@ from fastapi.testclient import TestClient
 
 from qym_platform.uploads import UploadLimitMiddleware, read_upload
 
-from test_endpoint_security import (  # noqa: F401  (pytest fixtures)
-    _auth_headers,
-    _seed_api_key,
-    client,
-    session_factory,
-)
+from test_endpoint_security import _auth_headers, _seed_api_key
 
 
 def _app(limit: int) -> FastAPI:

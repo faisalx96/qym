@@ -8,10 +8,6 @@ from pathlib import Path
 
 import pytest
 from cryptography.fernet import Fernet
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("QYM_AUTH_MODE", "proxy_headers")
@@ -25,10 +21,8 @@ for src in (PLATFORM_SRC, SDK_SRC):
     if str(src) not in sys.path:
         sys.path.insert(0, str(src))
 
-from qym_platform.app import create_app
-from qym_platform.db.base import Base
 from qym_platform.db.models import Project, ProjectLlmConnection, User, UserRole
-from qym_platform.deps import get_db
+from _helpers import sqlite_session_factory
 
 PROJECT_ID = "proj-1"
 CONNECTIONS_URL = f"/v1/projects/{PROJECT_ID}/llm-connections"
@@ -42,36 +36,8 @@ def session_factory(monkeypatch):
         "QYM_LLM_CONFIG_ENCRYPTION_KEY", Fernet.generate_key().decode("utf-8")
     )
     monkeypatch.setenv("QYM_ALLOW_PRIVATE_LLM_BASE_URLS", "true")
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    try:
-        yield SessionLocal
-    finally:
-        engine.dispose()
-
-
-@pytest.fixture()
-def client(session_factory):
-    app = create_app()
-
-    def override_get_db():
-        db = session_factory()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    try:
-        with TestClient(app) as test_client:
-            yield test_client
-    finally:
-        app.dependency_overrides.clear()
+    with sqlite_session_factory() as factory:
+        yield factory
 
 
 def _headers(email: str) -> dict[str, str]:
@@ -128,8 +94,9 @@ def test_connection_key_is_encrypted_and_masked(
     assert len(conns) == 1
     assert conns[0]["llm_api_key_hint"] == "••••1234"
 
-    # ── Test connection: decrypts the real key and falls back max_tokens → max_completion_tokens
-    captured: dict[str, object] = {"calls": []}
+    # ── Test connection: the provider client receives the decrypted key.
+    # The max_tokens fallback is owned by test_openai_compat.py.
+    captured: dict[str, object] = {}
 
     class FakeAsyncOpenAI:
         def __init__(self, *, base_url: str, api_key: str, http_client: object):
@@ -140,14 +107,6 @@ def test_connection_key_is_encrypted_and_masked(
             )
 
         async def _create(self, **kwargs):
-            captured["calls"].append(kwargs)
-            if "max_tokens" in kwargs:
-                raise Exception(
-                    "Error code: 400 - {'error': {'message': "
-                    "\"Unsupported parameter: 'max_tokens' is not supported with this model. "
-                    "Use 'max_completion_tokens' instead.\", 'type': 'invalid_request_error', "
-                    "'param': 'max_tokens', 'code': 'unsupported_parameter'}}"
-                )
             return types.SimpleNamespace(
                 choices=[
                     types.SimpleNamespace(message=types.SimpleNamespace(content="ok"))
@@ -162,11 +121,6 @@ def test_connection_key_is_encrypted_and_masked(
     )
     assert test_response.status_code == 200
     assert captured["api_key"] == "sk-secret-1234"
-    calls = captured["calls"]
-    assert len(calls) == 2
-    assert calls[0]["max_tokens"] == 4
-    assert calls[1]["max_completion_tokens"] == 4
-    assert "max_tokens" not in calls[1]
 
 
 def test_update_with_keep_preserves_key(client, session_factory) -> None:

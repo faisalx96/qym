@@ -2,7 +2,7 @@
 
 import pytest
 
-from test_dashboard_paging_browser import DashboardFixture, browser, make_runs
+from test_dashboard_paging_browser import DashboardFixture, make_runs
 
 pytestmark = pytest.mark.browser
 
@@ -13,6 +13,7 @@ def test_error_symbols_colors_and_drilldown(browser):
         task_error_count=0,
         metric_error_count=2,
         metric_error_counts={"accuracy": 2},
+        metric_scored_averages={"accuracy": 0.9},
         execution_error_count=1,
     )
     rows[1].update(
@@ -54,6 +55,17 @@ def test_error_symbols_colors_and_drilldown(browser):
         assert "breakdown is updating" in unknown.get_attribute("title")
         warning = page.locator('tr[data-file="run-000"] .metric-error-indicator')
         assert warning.inner_text() == "⚠"
+        # Scorer errors count as 0 in the mean; the tooltip says so (C015).
+        label = warning.get_attribute("aria-label")
+        assert "2 accuracy scorer errors, counted as 0%" in label
+        assert "Mean without them: 90" in label
+        # The warning stays on the score's line even in a narrow column.
+        assert warning.evaluate("""w => {
+              const td = w.closest('td');
+              td.style.width = td.style.maxWidth = '1px';
+              const s = td.querySelector('.metric-score').getBoundingClientRect();
+              return Math.abs(s.top - w.getBoundingClientRect().top) < 6;
+            }""")
         warning.click()
         assert "accuracy" in page.get_by_role("dialog").inner_text()
     finally:

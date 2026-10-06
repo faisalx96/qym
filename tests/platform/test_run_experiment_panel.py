@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -419,5 +420,9 @@ def test_panel_follows_design_components():
 
 
 def test_run_export_drops_panel_script():
+    # The export strips every remaining /static/ script; the panel's tag must match it.
     source = RUNS_API.read_text(encoding="utf-8")
-    assert r'run_experiment_panel\.js(?:\?[^"]*)?' in source
+    strip_all = r'\s*<script\s+(?:defer\s+)?src="/static/[^"]+"></script>\s*'
+    assert strip_all in source
+    tag = re.search(r'<script[^>]*run_experiment_panel\.js[^>]*></script>', RUN_HTML.read_text(encoding="utf-8"))
+    assert tag and re.fullmatch(strip_all, tag.group(0))

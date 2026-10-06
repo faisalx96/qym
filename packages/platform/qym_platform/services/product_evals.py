@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 from uuid import uuid4
 
+from qym_platform.services.job_registry import JobDescription, job_registry
 from qym_platform.settings import PlatformSettings, ProductEvalSettings
 
 
@@ -81,6 +82,26 @@ class ProductEvalJob:
     def eval_id(self) -> str:
         return self.job_id
 
+    def _published(self) -> None:
+        """Share the change with the other web worker processes."""
+        job_registry.changed(
+            self.job_id, flush=self.status in TERMINAL_JOB_STATUSES
+        )
+
+    def describe(self) -> JobDescription:
+        snapshot = self.to_dict()
+        return JobDescription(
+            scope_id=snapshot.get("run_id"),
+            project_id=self.project_id,
+            owner_user_id=self.owner_user_id,
+            status=snapshot["status"],
+            active=snapshot["status"] not in TERMINAL_JOB_STATUSES,
+            snapshot=snapshot,
+            error=snapshot.get("error"),
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+        )
+
     def mark(
         self,
         *,
@@ -97,11 +118,13 @@ class ProductEvalJob:
             if error is not None:
                 self.error = error
             self.updated_at = datetime.utcnow()
+        self._published()
 
     def set_group_analysis(self, group_analysis: Dict[str, Any]) -> None:
         with self._lock:
             self.group_analysis = dict(group_analysis)
             self.updated_at = datetime.utcnow()
+        self._published()
 
     def initialize_planned_runs(self) -> None:
         with self._lock:
@@ -148,6 +171,7 @@ class ProductEvalJob:
             ]
             self.expected_runs = max(self.expected_runs, len(self.runs))
             self.updated_at = datetime.utcnow()
+        self._published()
 
     def mark_run(
         self,
@@ -178,6 +202,7 @@ class ProductEvalJob:
                     self.run_id = qym_run_id
                 self._run_ready.set()
             self.updated_at = datetime.utcnow()
+        self._published()
 
     def wait_for_run(self, timeout: float) -> bool:
         return self._run_ready.wait(timeout=timeout)
@@ -212,6 +237,7 @@ class ProductEvalJob:
                     )
             self.runs.sort(key=lambda row: int(row.get("attempt") or 0))
             self.updated_at = datetime.utcnow()
+        self._published()
         return cancelled_before_start
 
     def to_dict(self) -> Dict[str, Any]:
@@ -494,6 +520,65 @@ def _analyze_completed_group_results(
     return _compact_group_analysis(analysis)
 
 
+def _mark_stopped(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    """The published snapshot as ``ProductEvalJob.request_stop`` leaves it."""
+    if snapshot.get("status") not in TERMINAL_JOB_STATUSES:
+        snapshot["status"] = "STOPPED"
+        snapshot["error"] = None
+    runs = [dict(row) for row in snapshot.get("runs") or []]
+    for row in runs:
+        if row.get("status") not in {"COMPLETED", "FAILED", "STOPPED"}:
+            row["status"] = "STOPPED"
+    snapshot["runs"] = runs
+    snapshot["updated_at"] = datetime.utcnow().isoformat() + "Z"
+    return snapshot
+
+
+class RemoteProductEvalJob:
+    """A product eval run by another web worker process (``background_jobs``)."""
+
+    def __init__(self, row: Dict[str, Any], db: Any) -> None:
+        self._row = row
+        self._db = db
+        self._snapshot = dict(row.get("snapshot") or {})
+        self.job_id = str(row["id"])
+        self.owner_user_id = row.get("owner_user_id")
+        self.project_id = row.get("project_id")
+        if row.get("lost"):
+            # The owning process stopped (restart, crash or deploy) mid-eval.
+            self._snapshot["status"] = "FAILED"
+            self._snapshot["error"] = (
+                "The server process running this eval stopped before it finished."
+            )
+
+    @property
+    def eval_id(self) -> str:
+        return self.job_id
+
+    def to_dict(self) -> Dict[str, Any]:
+        snapshot = dict(self._snapshot)
+        snapshot["runs"] = [dict(row) for row in snapshot.get("runs") or []]
+        return snapshot
+
+    def wait_for_run(self, timeout: float) -> bool:
+        return bool(self._snapshot.get("run_id"))
+
+    def stop_requested(self) -> bool:
+        return bool(self._row.get("cancel_requested"))
+
+    def request_stop(self) -> bool:
+        row = job_registry.request_cancel(
+            self._db, PRODUCT_EVAL_JOB_KIND, self.job_id, status="STOPPED", mark=_mark_stopped
+        )
+        if row is not None:
+            self._row = row
+            self._snapshot = dict(row.get("snapshot") or {})
+        return False
+
+
+PRODUCT_EVAL_JOB_KIND = "product_eval"
+
+
 class ProductEvalJobManager:
     def __init__(self, *, max_workers: Optional[int] = None) -> None:
         if max_workers is None:
@@ -527,6 +612,7 @@ class ProductEvalJobManager:
         project_id: Optional[str] = None,
         platform_url: Optional[str] = None,
         run_count: Optional[int] = None,
+        store_bind: Any = None,
     ) -> ProductEvalJob:
         requested_dataset = validate_dataset_name(dataset_name)
         preset = validate_submit_request(
@@ -552,6 +638,15 @@ class ProductEvalJobManager:
                     "Too many product eval jobs are already running. Try again later."
                 )
             self._jobs[job.job_id] = job
+        if store_bind is not None:
+            # Before the thread starts, so its first change finds the handle.
+            job_registry.track(
+                store_bind,
+                kind=PRODUCT_EVAL_JOB_KIND,
+                job_id=job.job_id,
+                describe=job.describe,
+                on_cancel=job.request_stop,
+            )
         try:
             future = self._executor.submit(
                 self._run_job,
@@ -570,15 +665,50 @@ class ProductEvalJobManager:
         except Exception:
             with self._lock:
                 self._jobs.pop(job.job_id, None)
+            job.mark(status="FAILED", error="The eval could not be queued.")
             raise
         job._future = future
         return job
 
-    def get(self, job_id: str) -> Optional[ProductEvalJob]:
+    def get(self, job_id: str, db: Any = None) -> Optional[Any]:
+        """This process's job, else (given ``db``) one another process published."""
         with self._lock:
-            return self._jobs.get(job_id)
+            job = self._jobs.get(job_id)
+        if job is not None or db is None:
+            return job
+        row = job_registry.fetch(db, PRODUCT_EVAL_JOB_KIND, job_id)
+        return RemoteProductEvalJob(row, db) if row is not None else None
 
-    def get_by_qym_run_id(self, run_id: str) -> Optional[ProductEvalJob]:
+    def stop_project(self, project_id: str, db: Any = None) -> List[Any]:
+        """Ask every unfinished job of a project to stop (used on archive).
+
+        Given ``db``, jobs of the other web worker processes stop too.
+        """
+        with self._lock:
+            jobs: List[Any] = [
+                job
+                for job in self._jobs.values()
+                if job.project_id == project_id
+                and job.to_dict()["status"] not in TERMINAL_JOB_STATUSES
+            ]
+        if db is not None:
+            local_ids = {job.job_id for job in jobs} | set(self._jobs)
+            jobs.extend(
+                RemoteProductEvalJob(row, db)
+                for row in job_registry.active(
+                    db, PRODUCT_EVAL_JOB_KIND, project_id=project_id
+                )
+                if row["id"] not in local_ids
+            )
+        for job in jobs:
+            job.request_stop()
+        return jobs
+
+    def get_by_qym_run_id(
+        self, run_id: str, db: Any = None, eval_id: Optional[str] = None
+    ) -> Optional[Any]:
+        """The job that created this qym run; ``eval_id`` (from the run's
+        metadata) finds it in another process given ``db``."""
         with self._lock:
             for job in self._jobs.values():
                 snapshot = job.to_dict()
@@ -587,6 +717,8 @@ class ProductEvalJobManager:
                 for row in snapshot["runs"]:
                     if row.get("qym_run_id") == run_id:
                         return job
+        if db is not None and eval_id:
+            return self.get(eval_id, db=db)
         return None
 
     def _run_job(

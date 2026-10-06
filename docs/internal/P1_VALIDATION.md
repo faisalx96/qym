@@ -99,7 +99,8 @@ synchronization. The PR checks record the full rerun after these corrections.
 - A local SDK test imports the separate sibling `sql_eval` checkout and assumes
   its task module exports `AsyncOpenAI`. That external checkout no longer does.
   The same failure was reproduced before these changes; a clean checkout skips
-  it when the optional sibling repository is absent.
+  it when the optional sibling repository is absent. The later test audit
+  removed this external test.
 - The existing SDK mypy run reports baseline errors. The integrated
   comparison found 113 on main and 111 here, with no new diagnostics. This is
   recorded separately from passing runtime tests.
@@ -108,3 +109,4 @@ synchronization. The PR checks record the full rerun after these corrections.
   inspected at 1280px and 1440px. This pre-existing responsive limitation remains.
 - Optional Traceloop tests skip when that integration is absent. Real OpenTelemetry
   span delivery is covered independently by the SDK/platform integration tests.
+  The later test audit removed the Traceloop tests (`tests/sdk/test_otel_integration.py`).

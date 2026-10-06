@@ -30,10 +30,23 @@ TERMINAL_RUN_STATUSES = frozenset(
         RunWorkflowStatus.STOPPED,
     }
 )
+# While a run is in review, runs.status holds the review state and its data is
+# frozen: runner events must neither move the run nor rewrite what was reviewed.
+REVIEW_RUN_STATUSES = frozenset(
+    {
+        RunWorkflowStatus.SUBMITTED,
+        RunWorkflowStatus.APPROVED,
+        RunWorkflowStatus.REJECTED,
+    }
+)
+
+
+def is_run_in_review(run: Run) -> bool:
+    return run.status in REVIEW_RUN_STATUSES
 
 
 def touch_run_event(run: Run, event_at: datetime | None) -> None:
-    if is_run_force_stopped(run):
+    if is_run_force_stopped(run) or is_run_in_review(run):
         return
     normalized = ensure_utc(event_at)
     if normalized is None:
@@ -64,7 +77,7 @@ def can_force_stop_run(run: Run) -> bool:
 
 
 def mark_run_running(run: Run) -> None:
-    if is_run_force_stopped(run):
+    if is_run_force_stopped(run) or is_run_in_review(run):
         return
     if run.status in TERMINAL_RUN_STATUSES and not should_reopen_from_live_event(run):
         return
@@ -76,7 +89,7 @@ def mark_run_running(run: Run) -> None:
 def mark_run_terminal(
     run: Run, status: RunWorkflowStatus, *, ended_at: datetime | None
 ) -> None:
-    if is_run_force_stopped(run):
+    if is_run_force_stopped(run) or is_run_in_review(run):
         return
     if (
         run.status == RunWorkflowStatus.STOPPED

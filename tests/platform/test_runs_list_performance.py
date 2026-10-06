@@ -24,7 +24,6 @@ from qym_platform.db.models import (
 )
 from qym_platform.services import dashboard_summaries as service
 from test_dashboard_durable_summaries import (
-    database,
     run,
     item,
     drain,

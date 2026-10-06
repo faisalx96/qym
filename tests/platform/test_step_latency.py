@@ -9,6 +9,7 @@ from qym_platform.api.step_latency import (
     _percentile,
     classify_spans,
     compute_step_latency,
+    summarize_step_latency,
 )
 
 
@@ -277,3 +278,107 @@ class TestTokens:
         assert groups[0]["n"] == 0
         assert groups[0]["tokens_total"] == 300
         assert groups[0]["mean_ms"] is None
+
+
+MS = 1_000_000  # ns per ms
+
+
+def timed_trace(trace="t1", task_ms=5000.0, eval_ms=3000.0, run="r1", task_status="OK"):
+    """make_trace() with timed containers: root -> chat_task, eval_metrics."""
+    durations = {"root": task_ms + eval_ms, "task": task_ms, "em": eval_ms}
+    spans = make_trace()
+    for span in spans:
+        span.trace_id, span.run_id = trace, run
+        span.duration_ms = durations.get(span.span_id, span.duration_ms)
+        if span.span_id == "task":
+            span.status = task_status
+    return spans
+
+
+def phases_of(spans):
+    return {p["phase"]: p for p in summarize_step_latency(spans)["phases"]}
+
+
+class TestPhaseParents:
+    """Phase headers draw each trace's phase parent span, which step groups
+    leave out as a container (C143)."""
+
+    def test_task_span_and_eval_metrics_are_the_phase_parents(self):
+        spans = timed_trace("t1", 5000.0, 3000.0) + timed_trace("t2", 7000.0, 1000.0)
+        phases = phases_of(spans)
+        assert list(phases) == ["task", "eval"]
+        task, evals = phases["task"], phases["eval"]
+        assert task["n"] == 2 and task["error_count"] == 0  # one sample per trace
+        assert task["mean_ms"] == pytest.approx(6000.0)
+        assert (task["min_ms"], task["max_ms"]) == (5000.0, 7000.0)
+        assert evals["n"] == 2 and evals["mean_ms"] == pytest.approx(2000.0)
+        # the item root (8s, both phases) is never a phase sample
+        assert task["max_ms"] < 8000.0
+        # the step groups are what compute_step_latency returns
+        assert summarize_step_latency(spans)["groups"] == compute_step_latency(spans)
+
+    def test_root_is_the_task_parent_without_an_eval_phase(self):
+        spans = [
+            FakeSpan(span_id="root", name="eval-item", duration_ms=900.0),
+            tool("s1", "sql_execute", "root", 100.0),
+        ]
+        phases = phases_of(spans)
+        assert list(phases) == ["task"]
+        assert phases["task"]["n"] == 1
+        assert phases["task"]["mean_ms"] == pytest.approx(900.0)
+
+    def test_errored_parent_is_counted_not_pooled(self):
+        spans = timed_trace("t1", 9999.0, task_status="ERROR") + timed_trace("t2", 5000.0)
+        task = phases_of(spans)["task"]
+        assert task["n"] == 1 and task["error_count"] == 1
+        assert task["max_ms"] == 5000.0
+
+    def test_metric_scoped_span_under_the_task_keeps_the_task_span(self):
+        spans = timed_trace("t1", 5000.0, 3000.0)
+        by_id = {span.span_id: span for span in spans}
+        by_id["em"].start_time_ns, by_id["em"].end_time_ns = 6000 * MS, 9000 * MS
+        # ask_question re-execution: a metric-scoped tool parented to the task
+        rerun = tool("s6", "sql_execute", "task", 999.0, **{"qym.usage_scope": "metric"})
+        rerun.start_time_ns, rerun.end_time_ns = 6500 * MS, 7499 * MS
+        phases = phases_of(spans + [rerun])
+        assert phases["task"]["mean_ms"] == pytest.approx(5000.0)
+        # eval's parents are eval_metrics and the re-run: one wall-clock window
+        assert phases["eval"]["n"] == 1
+        assert phases["eval"]["mean_ms"] == pytest.approx(3000.0)
+
+    def test_parents_without_a_wrapper_span_their_wall_clock_extent(self):
+        def timed(span, start_ms, end_ms):
+            span.start_time_ns, span.end_time_ns = start_ms * MS, end_ms * MS
+            span.duration_ms = float(end_ms - start_ms)
+            return span
+
+        spans = [
+            timed(FakeSpan(span_id="root", name="eval-item"), 0, 700),
+            timed(tool("a", "sql_execute", "root", None), 0, 100),
+            timed(tool("b", "http_get", "root", None), 150, 400),
+            timed(FakeSpan(span_id="em", name="eval_metrics", parent_span_id="root"), 400, 700),
+        ]
+        phases = phases_of(spans)
+        assert phases["task"]["n"] == 1
+        assert phases["task"]["mean_ms"] == pytest.approx(400.0)
+        assert phases["eval"]["mean_ms"] == pytest.approx(300.0)
+
+    def test_phase_tokens_are_their_step_tokens(self):
+        spans = timed_trace("t1")
+        spans.append(llm("l9", "task", 10.0, tokens=(100, 20)))
+        spans.append(llm("l8", "em", 10.0, model="judge-1", tokens=(50, 5)))
+        # an agent span reporting its children's total must not double-count
+        next(s for s in spans if s.span_id == "task").attributes.update(
+            {"llm.token_count.total": 120}
+        )
+        phases = phases_of(spans)
+        assert phases["task"]["tokens_total"] == 120
+        assert (phases["task"]["tokens_prompt"], phases["task"]["tokens_completion"]) == (100, 20)
+        assert phases["eval"]["tokens_total"] == 55
+
+    def test_runs_sharing_trace_and_span_ids_stay_separate(self):
+        spans = timed_trace("t1", 5000.0, run="r1") + timed_trace("t1", 7000.0, run="r2")
+        assert phases_of(spans)["task"]["n"] == 2
+
+    def test_traces_without_timed_parents_report_no_phases(self):
+        assert summarize_step_latency(make_trace())["phases"] == []

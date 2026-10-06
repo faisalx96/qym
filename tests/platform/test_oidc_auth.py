@@ -4,14 +4,11 @@ import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from cryptography.fernet import Fernet
 from fastapi import HTTPException
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
-from sqlalchemy.orm import sessionmaker
 
 # NOTE: no module-level os.environ writes here — they execute at collection
 # time and leak into every other test file in the run (e.g. QYM_BASE_URL
@@ -27,14 +24,12 @@ for src in (PLATFORM_SRC, SDK_SRC):
 if "openai" not in sys.modules:
     sys.modules["openai"] = MagicMock()
 
-from qym_platform.app import create_app
 from qym_platform import auth_oidc
 from qym_platform.auth_oidc import ProviderIdentity, oidc_identity_from_claims
-from qym_platform.db.base import Base
 from qym_platform.db.models import LocalAuthCredential, User, UserIdentity, UserRole
 from qym_platform.security import hash_password
 from qym_platform.settings import PlatformSettings
-from qym_platform.deps import get_db
+from _helpers import sqlite_session_factory
 
 
 @pytest.fixture()
@@ -51,36 +46,8 @@ def session_factory(monkeypatch):
     monkeypatch.setenv("QYM_ENVIRONMENT", "test")
     monkeypatch.setenv("QYM_LLM_CONFIG_ENCRYPTION_KEY", Fernet.generate_key().decode("utf-8"))
 
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    try:
-        yield SessionLocal
-    finally:
-        engine.dispose()
-
-
-@pytest.fixture()
-def client(session_factory):
-    app = create_app()
-
-    def override_get_db():
-        db = session_factory()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    try:
-        with TestClient(app) as test_client:
-            yield test_client
-    finally:
-        app.dependency_overrides.clear()
+    with sqlite_session_factory() as factory:
+        yield factory
 
 
 def test_unauthenticated_html_redirects_to_login(client):
@@ -127,30 +94,6 @@ def test_google_callback_provisions_user(client, session_factory, monkeypatch):
         assert session.query(UserIdentity).filter(UserIdentity.user_id == user.id, UserIdentity.provider == "google").count() == 1
 
 
-def test_github_callback_provisions_user(client, session_factory, monkeypatch):
-    from qym_platform.api import auth as auth_api
-
-    async def fake_exchange(request, provider, settings):
-        return ProviderIdentity(
-            provider=provider,
-            subject="github-sub",
-            email="octo@example.com",
-            email_verified=True,
-            display_name="Octo Cat",
-            raw_claims={"id": "github-sub"},
-        )
-
-    monkeypatch.setattr(auth_api, "exchange_provider_identity", fake_exchange)
-
-    response = client.get("/v1/auth/callback/github", follow_redirects=False)
-    assert response.status_code == 303
-
-    with session_factory() as session:
-        user = session.query(User).filter(User.email == "octo@example.com").first()
-        assert user is not None
-        assert session.query(UserIdentity).filter(UserIdentity.user_id == user.id, UserIdentity.provider == "github").count() == 1
-
-
 def test_google_then_github_link_to_same_user(client, session_factory, monkeypatch):
     from qym_platform.api import auth as auth_api
 
@@ -176,15 +119,57 @@ def test_google_then_github_link_to_same_user(client, session_factory, monkeypat
         assert sorted(identity.provider for identity in identities) == ["github", "google"]
 
 
-def test_github_missing_verified_email_fails(client, monkeypatch):
-    from qym_platform.api import auth as auth_api
+class _FakeGitHubResponse:
+    def __init__(self, payload):
+        self._payload = payload
 
-    async def fake_exchange(request, provider, settings):
-        raise HTTPException(status_code=401, detail="GitHub account must provide a verified email")
+    def json(self):
+        return self._payload
 
-    monkeypatch.setattr(auth_api, "exchange_provider_identity", fake_exchange)
-    response = client.get("/v1/auth/callback/github", follow_redirects=False)
-    assert response.status_code == 401
+
+class _FakeGitHubClient:
+    def __init__(self, emails):
+        self._payloads = {
+            "user": {"id": 1, "login": "octocat", "name": "Octo Cat"},
+            "user/emails": emails,
+        }
+
+    async def authorize_access_token(self, request):
+        return {"access_token": "github-token"}
+
+    async def get(self, path, token):
+        return _FakeGitHubResponse(self._payloads[path])
+
+
+def _github_exchange(monkeypatch, emails):
+    import asyncio
+
+    fake = _FakeGitHubClient(emails)
+    monkeypatch.setattr(auth_oidc, "_oauth_client", lambda settings, provider: fake)
+    return asyncio.run(auth_oidc.exchange_provider_identity(MagicMock(), "github", PlatformSettings()))
+
+
+def test_github_exchange_rejects_account_without_verified_email(monkeypatch):
+    emails = [
+        {"email": "primary@example.com", "primary": True, "verified": False},
+        {"email": "backup@example.com", "primary": False, "verified": False},
+    ]
+    with pytest.raises(HTTPException) as exc_info:
+        _github_exchange(monkeypatch, emails)
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail == "GitHub account must provide a verified email"
+
+
+def test_github_exchange_falls_back_to_verified_non_primary_email(monkeypatch):
+    emails = [
+        {"email": "primary@example.com", "primary": True, "verified": False},
+        {"email": "Backup@Example.com", "primary": False, "verified": True},
+    ]
+    identity = _github_exchange(monkeypatch, emails)
+    assert identity.provider == "github"
+    assert identity.subject == "1"
+    assert identity.email == "backup@example.com"
+    assert identity.display_name == "Octo Cat"
 
 
 def test_logout_clears_session(client, monkeypatch):
@@ -210,42 +195,58 @@ def test_logout_clears_session(client, monkeypatch):
     assert client.get("/v1/me").status_code == 401
 
 
-def test_bootstrap_admin_promotes_first_authenticated_user(client, session_factory, monkeypatch):
+def _sign_in_with_google(client, monkeypatch, email):
     from qym_platform.api import auth as auth_api
 
     async def fake_exchange(request, provider, settings):
         return ProviderIdentity(
             provider=provider,
-            subject="google-sub",
-            email="bootstrap@example.com",
+            subject=f"google-{email}",
+            email=email,
             email_verified=True,
-            display_name="Bootstrap User",
+            display_name="",
             raw_claims={},
         )
 
     monkeypatch.setattr(auth_api, "exchange_provider_identity", fake_exchange)
     assert client.get("/v1/auth/callback/google", follow_redirects=False).status_code == 303
 
-    response = client.post(
+
+def _bootstrap_admin(client, token="bootstrap-secret"):
+    return client.post(
         "/v1/auth/bootstrap-admin",
-        json={"bootstrap_token": "bootstrap-secret"},
+        json={"bootstrap_token": token},
         headers={"Origin": "http://testserver"},
     )
+
+
+def _role(session_factory, email):
+    with session_factory() as session:
+        return session.query(User).filter(User.email == email).one().role
+
+
+def test_bootstrap_admin_promotes_only_the_first_user_with_the_token(client, session_factory, monkeypatch):
+    _sign_in_with_google(client, monkeypatch, "bootstrap@example.com")
+
+    wrong_token = _bootstrap_admin(client, token="not-the-bootstrap-secret")
+    assert wrong_token.status_code == 403
+    assert wrong_token.json()["detail"] == "Invalid bootstrap token"
+    assert _role(session_factory, "bootstrap@example.com") == UserRole.MEMBER
+
+    response = _bootstrap_admin(client)
     assert response.status_code == 200
     assert response.json()["role"] == "ADMIN"
+    assert _role(session_factory, "bootstrap@example.com") == UserRole.ADMIN
 
-    with session_factory() as session:
-        user = session.query(User).filter(User.email == "bootstrap@example.com").first()
-        assert user is not None
-        assert user.role == UserRole.ADMIN
+    repeat = _bootstrap_admin(client)
+    assert repeat.status_code == 200
+    assert repeat.json()["role"] == "ADMIN"
 
-    second = client.post(
-        "/v1/auth/bootstrap-admin",
-        json={"bootstrap_token": "bootstrap-secret"},
-        headers={"Origin": "http://testserver"},
-    )
-    assert second.status_code == 200
-    assert second.json()["role"] == "ADMIN"
+    _sign_in_with_google(client, monkeypatch, "second@example.com")
+    second_user = _bootstrap_admin(client)
+    assert second_user.status_code == 409
+    assert second_user.json()["detail"] == "Admin already exists"
+    assert _role(session_factory, "second@example.com") == UserRole.MEMBER
 
 
 GITLAB_URL = "https://gitlab.corp.example"
@@ -579,3 +580,11 @@ def test_gitlab_url_setting_rejects_malformed_values(monkeypatch, value):
     with pytest.raises(ValidationError) as exc_info:
         PlatformSettings(database_url="sqlite://")
     assert "QYM_AUTH_GITLAB_URL" in str(exc_info.value)
+
+
+def test_login_redirect_keeps_every_parameter_of_a_shared_item_link(client):
+    response = client.get("/projects/pa/runs/r-1?pass=2&item=a%26b", follow_redirects=False)
+    assert response.status_code == 303
+    location = urlsplit(response.headers["location"])
+    assert location.path == "/login"
+    assert parse_qs(location.query)["next"] == ["/projects/pa/runs/r-1?pass=2&item=a%26b"]

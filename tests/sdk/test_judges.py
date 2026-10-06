@@ -6,12 +6,6 @@ import sys
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-# Ensure openai mock is available for the judge imports
-_mock_openai = MagicMock()
-_mock_openai.__path__ = []
-_mock_openai.AsyncOpenAI = MagicMock  # placeholder — overridden per test
-sys.modules.setdefault("openai", _mock_openai)
-
 from qym.metrics.result import MetricResult
 from qym.metrics.judge_config import (
     JudgeConfig,
@@ -24,6 +18,18 @@ from qym.metrics.judges.base import (
     create_pairwise_judge,
     snap_to_rail,
 )
+
+
+@pytest.fixture(autouse=True)
+def _openai_module(monkeypatch):
+    """Tests patch ``openai.AsyncOpenAI``; stub the package only when it is missing."""
+    try:
+        import openai  # noqa: F401
+    except ImportError:
+        stub = MagicMock()
+        stub.__path__ = []
+        stub.AsyncOpenAI = MagicMock
+        monkeypatch.setitem(sys.modules, "openai", stub)
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +233,8 @@ class TestCreateJudge:
 
         assert result.score == 0.0
         assert "error" in result.metadata
+        # No verdict: a scorer failure, not a judged 0 (C010).
+        assert result.metadata["status"] == "error"
 
     @pytest.mark.asyncio
     async def test_api_error(self):
@@ -250,6 +258,7 @@ class TestCreateJudge:
         assert result.score == 0.0
         assert "error" in result.metadata
         assert "timeout" in result.metadata["error"]
+        assert result.metadata["status"] == "error"
 
     @pytest.mark.asyncio
     async def test_input_data_substitution(self):

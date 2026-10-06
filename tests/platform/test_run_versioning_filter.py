@@ -40,7 +40,7 @@ from qym_platform.services.run_versioning import (
     parse_versioning_filter,
     parse_versioning_params,
 )
-from test_dashboard_durable_summaries import database, drain, item, run  # noqa: F401
+from test_dashboard_durable_summaries import drain, item, run
 
 STATIC = (
     Path(__file__).resolve().parents[2]

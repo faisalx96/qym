@@ -32,7 +32,7 @@ from qym_platform.db.models import (
 from qym_platform.deps import get_db
 from qym_platform.services import dashboard_summaries as service
 from qym_platform.services.run_origin import parse_origin_filter
-from test_dashboard_durable_summaries import database, drain, item, run  # noqa: F401
+from test_dashboard_durable_summaries import drain, item, run
 
 STATIC = Path(__file__).resolve().parents[2] / "packages/platform/qym_platform/_static/dashboard"
 

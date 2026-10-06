@@ -21,14 +21,21 @@ builtin_metrics = {
     "faithfulness": faithfulness,
 }
 
+# Built-ins declare their direction so the platform can color and compare them.
 builtin_metric_specs = {
-    "exact_match": MetricSpec(score_type="boolean"),
-    "contains": MetricSpec(score_type="boolean"),
-    "fuzzy_match": MetricSpec(score_type="percentage", pass_threshold=0.8),
-    "response_time": MetricSpec(score_type="number"),
+    "exact_match": MetricSpec(score_type="boolean", direction="maximize"),
+    "contains": MetricSpec(score_type="boolean", direction="maximize"),
+    "fuzzy_match": MetricSpec(
+        score_type="percentage", direction="maximize", pass_threshold=0.8
+    ),
+    "response_time": MetricSpec(score_type="number", direction="minimize"),
     "token_count": MetricSpec(score_type="count", direction="minimize", unit="tokens"),
-    "correctness": MetricSpec(score_type="percentage", pass_threshold=0.8),
-    "faithfulness": MetricSpec(score_type="percentage", pass_threshold=0.8),
+    "correctness": MetricSpec(
+        score_type="percentage", direction="maximize", pass_threshold=0.8
+    ),
+    "faithfulness": MetricSpec(
+        score_type="percentage", direction="maximize", pass_threshold=0.8
+    ),
 }
 
 # Try to import LLM judge metrics (requires openai)
@@ -44,7 +51,9 @@ try:
     builtin_metrics.update(judge_metrics)
     builtin_metric_specs.update(
         {
-            name: MetricSpec(score_type="percentage", pass_threshold=0.8)
+            name: MetricSpec(
+                score_type="percentage", direction="maximize", pass_threshold=0.8
+            )
             for name in judge_metrics
         }
     )

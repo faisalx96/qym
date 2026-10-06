@@ -103,7 +103,7 @@ from qym_platform.db.models import (
     User,
 )
 from qym_platform.deps import get_db
-from qym_platform.permissions import is_project_manager
+from qym_platform.permissions import is_project_manager, require_project_writable
 from qym_platform.secrets import encryption_available
 from qym_platform.services import eval_sweeps
 from qym_platform.services.eval_best_run import BestRunError
@@ -1059,6 +1059,7 @@ def create_experiment(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_project_access(db, principal, project_id)
+    require_project_writable(db, project_id)
     if not req.dry_run:
         _check_rate_limit(db, principal)
         if not encryption_available():
@@ -1467,6 +1468,7 @@ def retry_experiment_job(
     lists the slots that need one.
     """
     _require_project_access(db, principal, project_id)
+    require_project_writable(db, project_id)
     experiment = _get_experiment(db, project_id, experiment_id)
     job = _get_job(db, experiment, job_id)
     _require_control(db, principal, experiment)

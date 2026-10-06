@@ -21,7 +21,8 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Iterator, List, Optional
 from uuid import uuid4
 
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import Integer, Text, bindparam, column, delete, func, select, text, update
+from sqlalchemy import values as sa_values
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -707,6 +708,374 @@ def _drop_legacy_spans(ctx: JobContext) -> bool:
     return True
 
 
+def _counted_verdict_reason(meta: Any) -> bool:
+    """A score the pre-C010 rule counted as a scorer error but the current rule
+    reads as a verdict reason: ``meta.error`` set without an error status."""
+    from qym_platform.services.run_means import is_metric_error
+
+    if not isinstance(meta, dict) or is_metric_error(meta):
+        return False
+    error = meta.get("error")
+    return bool(error.strip()) if isinstance(error, str) else bool(error)
+
+
+def _in_own_transaction(ctx: JobContext, work: Callable[[Session], Any], *, attempts: int = 3) -> Any:
+    """Run ``work(db)`` and commit, alone in its transaction.
+
+    A deadlock or lock timeout with the dashboard worker rolls back only this
+    unit and is retried, instead of failing the whole job.
+    """
+    from sqlalchemy.exc import OperationalError
+
+    for attempt in range(attempts):
+        try:
+            with ctx.session() as db:
+                result = work(db)
+                db.commit()
+                return result
+        except OperationalError as exc:
+            if attempt + 1 >= attempts:
+                raise
+            ctx.log(f"retrying after {type(getattr(exc, 'orig', exc)).__name__}")
+            time.sleep(0.2 * (attempt + 1))
+    return None
+
+
+def _mark_task_error_passes(ctx: JobContext, cursor: int, window: int) -> int:
+    """Mark pass scores that ingest zero-filled for a failed task while they
+    still carried the scorer's metadata or explanation (a cancel mid-scoring
+    stored before the marker existed). The dashboard already reads those
+    passes as failed tasks from their attempts; the marker makes the source
+    rows agree. The pass's execution outcome decides before the explanation
+    or metadata does: a failed final attempt, or an item_failed event (older
+    SDKs sent no final attempt)."""
+    from qym_platform.db.models import RunEvent, RunItemAttempt, RunItemPassScore
+    from qym_platform.services.run_means import (
+        METRIC_ERROR_STATUSES,
+        TASK_ERROR_PASS_LABEL,
+        TASK_ERROR_PASS_MARKER,
+        is_metric_error,
+        is_task_error_pass,
+        task_error_pass_meta,
+    )
+
+    def unmarked_verdict(row) -> bool:
+        # Rows the source rule already reads as failed tasks, scorer errors,
+        # reviewer scores and marked scorer verdicts stay as they are.
+        meta = row.meta if isinstance(row.meta, dict) else {}
+        return (
+            not is_task_error_pass(row.label, row.meta, row.explanation)
+            and not is_metric_error(meta)
+            and str(meta.get("modified") or "").strip().lower() != "true"
+            and not isinstance(meta.get(TASK_ERROR_PASS_MARKER), bool)
+        )
+
+    def work(db: Session) -> int:
+        rows = [
+            row
+            for row in db.execute(
+                select(RunItemPassScore).where(
+                    RunItemPassScore.id > cursor,
+                    RunItemPassScore.id <= cursor + window,
+                    func.lower(func.trim(RunItemPassScore.label)) == TASK_ERROR_PASS_LABEL,
+                )
+            ).scalars()
+            if unmarked_verdict(row)
+        ]
+        if not rows:
+            return 0
+        run_ids = {row.run_id for row in rows}
+        item_ids = {row.item_id for row in rows}
+        failed = {
+            tuple(row)
+            for row in db.execute(
+                select(
+                    RunItemAttempt.run_id, RunItemAttempt.item_id, RunItemAttempt.pass_number
+                ).where(
+                    RunItemAttempt.run_id.in_(run_ids),
+                    RunItemAttempt.item_id.in_(item_ids),
+                    RunItemAttempt.is_last_attempt.is_(True),
+                    func.lower(RunItemAttempt.status).in_(METRIC_ERROR_STATUSES),
+                )
+            )
+        }
+        for run_id, item_id, pass_number in db.execute(
+            select(
+                RunEvent.run_id,
+                RunEvent.payload["item_id"].as_string(),
+                RunEvent.payload["pass_number"].as_string(),
+            ).where(
+                RunEvent.run_id.in_(run_ids),
+                RunEvent.type == "item_failed",
+                RunEvent.payload["item_id"].as_string().in_(item_ids),
+            )
+        ):
+            try:
+                failed.add((run_id, item_id, max(1, int(pass_number or 1))))
+            except (TypeError, ValueError):
+                failed.add((run_id, item_id, 1))
+        marked = 0
+        for row in rows:
+            if (row.run_id, row.item_id, int(row.pass_number)) in failed:
+                row.meta = task_error_pass_meta(row.meta)
+                marked += 1
+        return marked
+
+    return int(_in_own_transaction(ctx, work) or 0)
+
+
+@register(
+    "reclassify_metric_errors",
+    description=(
+        "Rebuild dashboard numbers for runs whose metric verdict reasons were counted as "
+        "scorer errors (C010), and mark repeat passes whose task failed after a metric was scored."
+    ),
+)
+def _reclassify_metric_errors(ctx: JobContext) -> bool:
+    """Scan score rows in id windows; repair each affected run once.
+
+    Summaries and error counts come from numeric projection records whose
+    error flag was computed when the score was stored. Rows that only carry a
+    verdict reason in ``meta.error`` need their run rebuilt from source, which
+    the dashboard worker does in the background after the repair request.
+    Each run's repair request commits on its own, in the worker's lock order
+    (a partition, then its buckets), and a deadlock with the worker is
+    retried. The last phase marks task-failed pass scores
+    (``_mark_task_error_passes``).
+    """
+    from qym_platform.db.models import RunItemPassScore, RunItemScore
+    from qym_platform.services.dashboard_summaries import request_dashboard_repair
+
+    window = max(1, int(ctx.params.get("window", 20000)))
+    phases = (
+        ("score", RunItemScore),
+        ("pass_score", RunItemPassScore),
+        ("task_error_pass", RunItemPassScore),
+    )
+    phase = ctx.progress.get("phase") or phases[0][0]
+    names = [name for name, _ in phases]
+    if phase not in names:
+        return True
+    model = dict(phases)[phase]
+    cursor = int(ctx.progress.get("cursor") or 0)
+    repaired = set(ctx.progress.get("runs") or [])
+    with ctx.session() as db:
+        max_key = phase + "_max_id"
+        if max_key not in ctx.progress:
+            # Rows stored after the upgrade already use the current rule.
+            ctx.progress[max_key] = int(
+                db.scalar(select(model.id).order_by(model.id.desc()).limit(1)) or 0
+            )
+        max_id = int(ctx.progress[max_key])
+        affected = set()
+        if phase != "task_error_pass":
+            rows = db.execute(
+                select(model.run_id, model.meta).where(
+                    model.id > cursor,
+                    model.id <= cursor + window,
+                    model.meta["error"].as_string().isnot(None),
+                )
+            ).all()
+            affected = {
+                run_id for run_id, meta in rows if _counted_verdict_reason(meta)
+            } - repaired
+    if phase == "task_error_pass":
+        marked = _mark_task_error_passes(ctx, cursor, window)
+        ctx.progress["passes_marked"] = int(ctx.progress.get("passes_marked") or 0) + marked
+    for run_id in sorted(affected):
+        if _in_own_transaction(
+            ctx, lambda db, run_id=run_id: request_dashboard_repair(db, run_id, publish=False)
+        ):
+            repaired.add(run_id)
+            ctx.progress["runs"] = sorted(repaired)
+    cursor += window
+    ctx.progress["runs"] = sorted(repaired)
+    ctx.progress["runs_repaired"] = len(repaired)
+    if cursor >= max_id:
+        position = names.index(phase) + 1
+        if position >= len(names):
+            ctx.progress["phase"] = "done"
+            ctx.progress["message"] = (
+                f"done: {len(repaired):,} runs queued for a dashboard rebuild; "
+                f"{int(ctx.progress.get('passes_marked') or 0):,} task-failed passes marked"
+            )
+            ctx.log(ctx.progress["message"])
+            return True
+        ctx.progress["phase"], ctx.progress["cursor"] = names[position], 0
+    else:
+        ctx.progress["phase"], ctx.progress["cursor"] = phase, cursor
+    ctx.progress["message"] = f"{phase} rows up to id {min(cursor, max_id):,}; {len(repaired):,} runs queued"
+    return False
+
+
+@register(
+    "project_item_failure_events",
+    description="Rebuild dashboard numbers for repeat runs with a pass that failed only through an item_failed event (C011).",
+)
+def _project_item_failure_events(ctx: JobContext) -> bool:
+    """Walk repeat runs in id windows; repair each affected run once.
+
+    Live ingest stored events without projecting them, so a repeat-run pass
+    whose failure has no failed final attempt (a crash before the attempt, or
+    a metric that raised after the task succeeded) is missing from published
+    task errors and execution success. Only runs with such a pass whose event
+    has no projection record are rebuilt, by the dashboard worker. Each window
+    reads just the item_failed events of its runs, through the run_id index.
+    """
+    from qym_platform.db.dashboard_models import DashboardRecordState as Record
+    from qym_platform.db.models import Run, RunEvent, RunItemAttempt
+    from qym_platform.services.dashboard_outbox import execution_event_numbers
+    from qym_platform.services.dashboard_summaries import request_dashboard_repair
+    from qym_platform.services.run_means import METRIC_ERROR_STATUSES
+
+    window = max(1, int(ctx.params.get("window", 200)))
+    cursor = str(ctx.progress.get("cursor") or "")
+    repaired = set(ctx.progress.get("runs") or [])
+    affected = set()
+    with ctx.session() as db:
+        run_ids = list(
+            db.scalars(
+                select(Run.id)
+                .where(Run.id > cursor, Run.samples > 1, Run.deleted_at.is_(None))
+                .order_by(Run.id)
+                .limit(window)
+            )
+        )
+        events = {}
+        if run_ids:
+            for run_id, event_id, item_id, pass_number in db.execute(
+                select(
+                    RunEvent.run_id,
+                    RunEvent.event_id,
+                    RunEvent.payload["item_id"].as_string(),
+                    RunEvent.payload["pass_number"].as_string(),
+                ).where(RunEvent.run_id.in_(run_ids), RunEvent.type == "item_failed")
+            ):
+                numbers = execution_event_numbers(
+                    "item_failed", {"item_id": item_id, "pass_number": pass_number}
+                )
+                if numbers["item_id"]:
+                    events[run_id, event_id] = (
+                        numbers["item_id"],
+                        numbers["pass_number"],
+                    )
+        failing = sorted({run_id for run_id, _ in events})
+        if failing:
+            # A failed final attempt already carries the failure.
+            failed = {
+                (run_id, str(item_id), max(1, int(pass_number or 1)))
+                for run_id, item_id, pass_number in db.execute(
+                    select(
+                        RunItemAttempt.run_id,
+                        RunItemAttempt.item_id,
+                        RunItemAttempt.pass_number,
+                    ).where(
+                        RunItemAttempt.run_id.in_(failing),
+                        RunItemAttempt.is_last_attempt.is_(True),
+                        func.lower(RunItemAttempt.status).in_(METRIC_ERROR_STATUSES),
+                    )
+                )
+            }
+            projected = set(
+                db.execute(
+                    select(Record.run_key, Record.metric_key).where(
+                        Record.run_key.in_(failing),
+                        Record.record_kind == "attempt",
+                        Record.metric_key.startswith("legacy_event:"),
+                        Record.present.is_(True),
+                        Record.error > 0,
+                    )
+                ).tuples()
+            )
+            affected = {
+                run_id
+                for (run_id, event_id), (item_id, pass_number) in events.items()
+                if (run_id, item_id, pass_number) not in failed
+                and (run_id, "legacy_event:" + event_id) not in projected
+            }
+    # Each repair commits alone: holding one run's dashboard locks while
+    # requesting the next can deadlock with the worker publishing that run.
+    for run_id in sorted(affected - repaired):
+        if _in_own_transaction(
+            ctx, lambda db, run_id=run_id: request_dashboard_repair(db, run_id, publish=False)
+        ):
+            repaired.add(run_id)
+    ctx.progress["runs"] = sorted(repaired)
+    ctx.progress["runs_repaired"] = len(repaired)
+    if len(run_ids) < window:
+        ctx.progress["phase"] = "done"
+        ctx.progress["message"] = (
+            f"done: {len(repaired):,} runs queued for a dashboard rebuild"
+        )
+        ctx.log(ctx.progress["message"])
+        return True
+    ctx.progress["cursor"] = run_ids[-1]
+    ctx.progress["message"] = (
+        f"repeat runs up to {run_ids[-1]}; {len(repaired):,} runs queued"
+    )
+    return False
+
+
+@register(
+    "publish_ingest_flags",
+    description="Show the incomplete-data flag of runs finished before C024 in the runs list.",
+)
+def _publish_ingest_flags(ctx: JobContext) -> bool:
+    """Queue a runs-list refresh for runs whose metadata carries ``ingest_incomplete``.
+
+    The runs list reads the flag from each run's dashboard descriptor, which
+    the worker rebuilds only when the run changes. Runs flagged before the
+    descriptor carried the flag get a run-level change event: the worker
+    rebuilds the descriptor from the run row and republishes the summary from
+    its numeric records, without rescanning items. Runs are read in bounded
+    id windows.
+    """
+    from qym_platform.db.models import Run
+    from qym_platform.services.dashboard_outbox import enqueue_snapshots
+
+    window = max(1, int(ctx.params.get("window", 2000)))
+    cursor = str(ctx.progress.get("cursor") or "")
+    queued = int(ctx.progress.get("runs_queued") or 0)
+    with ctx.session() as db:
+        rows = db.execute(
+            select(
+                Run.id,
+                Run.project_id,
+                Run.run_metadata["ingest_incomplete"].as_string(),
+            )
+            .where(Run.id > cursor, Run.deleted_at.is_(None))
+            .order_by(Run.id)
+            .limit(window)
+        ).all()
+        flagged = [
+            (
+                dict(
+                    partition_key=run_id,
+                    project_key=project_id,
+                    record_key=run_id + ":run",
+                    record_kind="run",
+                    operation="UPSERT",
+                ),
+                [],
+            )
+            for run_id, project_id, flag in rows
+            if flag not in (None, "", "null")
+        ]
+        if flagged:
+            enqueue_snapshots(db.connection(), flagged)
+        db.commit()
+    queued += len(flagged)
+    ctx.progress["runs_queued"] = queued
+    if len(rows) < window:
+        ctx.progress["phase"] = "done"
+        ctx.progress["message"] = f"done: {queued:,} flagged runs queued for the runs list"
+        ctx.log(ctx.progress["message"])
+        return True
+    ctx.progress["cursor"] = rows[-1][0]
+    ctx.progress["message"] = f"runs up to {rows[-1][0]}; {queued:,} flagged runs queued"
+    return False
+
+
 def ingest_settings_for_maintenance():
     from qym_platform.settings import PlatformSettings
 
@@ -723,3 +1092,312 @@ def _run_retention(ctx: JobContext) -> bool:
     ctx.progress["message"] = ", ".join(f"{k}={len(v)}" for k, v in result.items())
     ctx.log(ctx.progress["message"])
     return True
+
+
+@register(
+    "backfill_dataset_search_text",
+    description="Fill dataset item search text and published lineage counts (migration 0068), then build the trigram search index.",
+)
+def _backfill_dataset_search_text(ctx: JobContext) -> bool:
+    """Three phases, each resumable from ``ctx.progress``.
+
+    ``items`` walks dataset_items in id windows and writes ``search_text`` for
+    rows that predate it; ``versions`` stores the lineage counts of published
+    versions whose parent is published too; ``index`` (PostgreSQL only) enables
+    pg_trgm and builds ``ix_dataset_items_search_trgm`` CONCURRENTLY. Without the
+    extension (no privilege), search stays correct and the job logs why the
+    index was skipped.
+    """
+    from qym_platform.db.models import DatasetItem, DatasetVersion
+    from qym_platform.services.dataset_search import dataset_item_search_text
+    from qym_platform.services.dataset_versions import store_change_counts
+
+    phase = ctx.progress.get("phase") or "items"
+    window = max(1, int(ctx.params.get("window", 500)))
+    if phase == "items":
+        cursor = int(ctx.progress.get("cursor") or 0)
+        with ctx.session() as db:
+            rows = db.execute(
+                select(
+                    DatasetItem.id,
+                    DatasetItem.item_id,
+                    DatasetItem.input,
+                    DatasetItem.expected_output,
+                    DatasetItem.item_metadata,
+                )
+                .where(DatasetItem.id > cursor, DatasetItem.search_text.is_(None))
+                .order_by(DatasetItem.id)
+                .limit(window)
+            ).all()
+            if rows:
+                # One statement per window instead of one round trip per row
+                # (PostgreSQL: UPDATE ... FROM (VALUES ...); psycopg2's
+                # executemany would still send one UPDATE per row). The IS NULL
+                # guard keeps it idempotent next to live writes.
+                items_table = DatasetItem.__table__
+                filled = [
+                    (row.id, dataset_item_search_text(row.item_id, row.input, row.expected_output, row.item_metadata))
+                    for row in rows
+                ]
+                if ctx.is_postgres():
+                    batch = sa_values(
+                        column("pk", Integer), column("st", Text), name="filled"
+                    ).data(filled)
+                    db.execute(
+                        update(items_table)
+                        .where(items_table.c.id == batch.c.pk, items_table.c.search_text.is_(None))
+                        # Derived text, not an edit: keep updated_at (its
+                        # onupdate default would stamp every row).
+                        .values(search_text=batch.c.st, updated_at=items_table.c.updated_at)
+                    )
+                else:
+                    db.connection().execute(
+                        update(items_table)
+                        .where(items_table.c.id == bindparam("pk"), items_table.c.search_text.is_(None))
+                        .values(search_text=bindparam("st"), updated_at=items_table.c.updated_at),
+                        [{"pk": pk, "st": search_text} for pk, search_text in filled],
+                    )
+            db.commit()
+            last_item_id = rows[-1].id if rows else None
+        ctx.progress["items_filled"] = int(ctx.progress.get("items_filled") or 0) + len(rows)
+        if len(rows) < window:
+            ctx.progress["phase"], ctx.progress["cursor"] = "versions", ""
+        else:
+            ctx.progress["cursor"] = last_item_id
+        ctx.progress["message"] = f"{ctx.progress['items_filled']:,} items indexed for search"
+        return False
+    if phase == "versions":
+        cursor = str(ctx.progress.get("cursor") or "")
+        with ctx.session() as db:
+            versions = list(
+                db.scalars(
+                    select(DatasetVersion)
+                    .where(DatasetVersion.id > cursor, DatasetVersion.change_counts.is_(None))
+                    .order_by(DatasetVersion.id)
+                    .limit(20)
+                )
+            )
+            stored = sum(1 for version in versions if store_change_counts(db, version) is not None)
+            batch_size = len(versions)
+            # Read before the commit: committed instances expire, and the
+            # session closes when this block ends.
+            last_version_id = versions[-1].id if versions else None
+            db.commit()
+        ctx.progress["versions_counted"] = int(ctx.progress.get("versions_counted") or 0) + stored
+        if batch_size < 20:
+            ctx.progress["phase"] = "index"
+        else:
+            ctx.progress["cursor"] = last_version_id
+        ctx.progress["message"] = f"{ctx.progress['versions_counted']:,} published versions counted"
+        return False
+    if phase == "index" and ctx.is_postgres():
+        with ctx.autocommit() as conn:
+            # The "does this version still have rows without search_text"
+            # probe runs on every search. Once the backfill is done no row
+            # qualifies, so this partial index stays empty and the probe is
+            # one index lookup instead of a walk over the whole version.
+            conn.execute(text("DROP INDEX CONCURRENTLY IF EXISTS ix_dataset_items_unindexed_version"))
+            conn.execute(
+                text(
+                    "CREATE INDEX CONCURRENTLY ix_dataset_items_unindexed_version "
+                    "ON dataset_items (dataset_version_id) WHERE search_text IS NULL"
+                )
+            )
+        if _ensure_pg_trgm(ctx, "search index"):
+            with ctx.autocommit() as conn:
+                # An earlier interrupted build leaves an INVALID index behind; rebuild it.
+                conn.execute(text("DROP INDEX CONCURRENTLY IF EXISTS ix_dataset_items_search_trgm"))
+                started = time.perf_counter()
+                conn.execute(
+                    text(
+                        "CREATE INDEX CONCURRENTLY ix_dataset_items_search_trgm "
+                        "ON dataset_items USING gin (search_text gin_trgm_ops)"
+                    )
+                )
+            ctx.log(f"created ix_dataset_items_search_trgm in {time.perf_counter() - started:.0f}s")
+    ctx.progress["phase"] = "done"
+    ctx.progress["message"] = (
+        f"done: {int(ctx.progress.get('items_filled') or 0):,} items indexed, "
+        f"{int(ctx.progress.get('versions_counted') or 0):,} versions counted"
+    )
+    ctx.log(ctx.progress["message"])
+    return True
+
+
+def _ensure_pg_trgm(ctx: JobContext, index: str) -> bool:
+    """Enable pg_trgm for a trigram index; False (logged) when it cannot be.
+
+    A missing privilege or package must not fail the job or the deploy: the
+    searches the index would serve still work without it, only slower.
+    """
+    try:
+        with ctx.autocommit() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+    except Exception as exc:  # noqa: BLE001 - see above
+        ctx.log(f"{index} skipped: pg_trgm is not available ({type(exc).__name__}); search still works without it")
+        return False
+    return True
+
+
+@register(
+    "build_runs_search_index",
+    description="Fill each run's search text and build the trigram index that serves the Runs search box (migrations 0070, 0071).",
+)
+def _build_runs_search_index(ctx: JobContext) -> bool:
+    """Three phases, each resumable from ``ctx.progress``.
+
+    ``probe`` (PostgreSQL) builds the partial index of the runs without
+    ``search_text``, CONCURRENTLY; ``fill`` walks dashboard_run_dimensions in
+    run-key windows and stores ``search_text`` where it is NULL (rows written
+    before migration 0071); ``index`` (PostgreSQL) enables pg_trgm and builds
+    the trigram index over ``search_text`` and the run id, CONCURRENTLY. It
+    replaces 0070's index over descriptor expressions, which made every
+    descriptor rewrite of a live run a non-HOT update. Without the extension
+    the job logs that the index was skipped and finishes; the search still
+    works, as a scan of the project's runs. Until ``fill`` reaches a row, the
+    search reads that row's names from its descriptor, with the same results.
+    """
+    from qym_platform.api.dashboard import (
+        RUNS_SEARCH_INDEX,
+        RUNS_UNSEARCHABLE_INDEX,
+        run_search_text,
+        runs_search_index_ddl,
+        runs_unsearchable_index_ddl,
+    )
+    from qym_platform.db.dashboard_models import DashboardRunDimension as Dimension
+
+    phase = ctx.progress.get("phase") or "probe"
+    window = max(1, int(ctx.params.get("window", 500)))
+    if phase == "probe":
+        if ctx.is_postgres():
+            with ctx.autocommit() as conn:
+                # An earlier interrupted build leaves an INVALID index behind; rebuild it.
+                conn.execute(text(f"DROP INDEX CONCURRENTLY IF EXISTS {RUNS_UNSEARCHABLE_INDEX}"))
+                conn.execute(text(runs_unsearchable_index_ddl()))
+        ctx.progress["phase"], ctx.progress["cursor"] = "fill", ""
+        return False
+    if phase == "fill":
+        cursor = str(ctx.progress.get("cursor") or "")
+        with ctx.session() as db:
+            rows = db.execute(
+                select(
+                    Dimension.run_key,
+                    Dimension.descriptor["external_run_id"].as_string(),
+                    Dimension.descriptor["run_name"].as_string(),
+                )
+                .where(Dimension.run_key > cursor, Dimension.search_text.is_(None))
+                .order_by(Dimension.run_key)
+                .limit(window)
+            ).all()
+            if rows:
+                table = Dimension.__table__
+                filled = [(key, run_search_text(external, name)) for key, external, name in rows]
+                # One statement per window; the IS NULL guard leaves a row the
+                # summary worker wrote meanwhile as it wrote it.
+                if ctx.is_postgres():
+                    batch = sa_values(
+                        column("rk", Text), column("st", Text), name="filled"
+                    ).data(filled)
+                    db.execute(
+                        update(table)
+                        .where(table.c.run_key == batch.c.rk, table.c.search_text.is_(None))
+                        .values(search_text=batch.c.st)
+                    )
+                else:
+                    db.connection().execute(
+                        update(table)
+                        .where(table.c.run_key == bindparam("rk"), table.c.search_text.is_(None))
+                        .values(search_text=bindparam("st")),
+                        [{"rk": key, "st": value} for key, value in filled],
+                    )
+            db.commit()
+        ctx.progress["runs_filled"] = int(ctx.progress.get("runs_filled") or 0) + len(rows)
+        if len(rows) < window:
+            ctx.progress["phase"], ctx.progress["cursor"] = "index", ""
+        else:
+            ctx.progress["cursor"] = rows[-1][0]
+        ctx.progress["message"] = f"{ctx.progress['runs_filled']:,} runs given search text"
+        return False
+    filled = int(ctx.progress.get("runs_filled") or 0)
+    if not ctx.is_postgres():
+        ctx.progress["message"] = f"done: {filled:,} runs given search text; index skipped: not PostgreSQL"
+    elif _ensure_pg_trgm(ctx, "runs search index"):
+        with ctx.autocommit() as conn:
+            # Replaces an older definition and an INVALID index an earlier
+            # interrupted build left behind.
+            conn.execute(text(f"DROP INDEX CONCURRENTLY IF EXISTS {RUNS_SEARCH_INDEX}"))
+            started = time.perf_counter()
+            conn.execute(text(runs_search_index_ddl()))
+        ctx.log(f"created {RUNS_SEARCH_INDEX} in {time.perf_counter() - started:.0f}s")
+        ctx.progress["message"] = f"done: {RUNS_SEARCH_INDEX} built"
+    else:
+        ctx.progress["message"] = "done: index skipped (pg_trgm is not available)"
+    ctx.progress["phase"] = "done"
+    ctx.log(ctx.progress["message"])
+    return True
+
+
+@register(
+    "backfill_dashboard_overview",
+    description="Store each run's overview inputs (migration 0069), so the Runs, Charts and Models overview stops reading every run's JSON.",
+)
+def _backfill_dashboard_overview(ctx: JobContext) -> bool:
+    """Walk the summaries in run-key windows and store the overview inputs of
+    every run whose stored row is missing or older than its summary.
+
+    Resumable from ``ctx.progress``. Runs the summary worker publishes in the
+    meantime get their row from the worker; a row never moves back to an
+    older revision. PostgreSQL only: SQLite builds the overview in Python.
+    """
+    from qym_platform.db.dashboard_models import (
+        DashboardRunDimension as Dimension,
+        DashboardRunOverview as Facts,
+        DashboardRunSummary as Summary,
+    )
+    from qym_platform.services.dashboard_overview import store_overview_facts
+
+    if not ctx.is_postgres():
+        ctx.progress["message"] = "skipped: not PostgreSQL (the overview is built in Python)"
+        ctx.log(ctx.progress["message"])
+        return True
+    window = max(1, int(ctx.params.get("window", 500)))
+    cursor = str(ctx.progress.get("cursor") or "")
+    with ctx.session() as db:
+        keys = list(
+            db.scalars(
+                select(Summary.run_key)
+                .join(Dimension, Dimension.run_key == Summary.run_key)
+                .outerjoin(
+                    Facts,
+                    (Facts.run_key == Summary.run_key)
+                    & (Facts.revision == Summary.projection_revision),
+                )
+                .where(Summary.run_key > cursor, Facts.run_key.is_(None))
+                .order_by(Summary.run_key)
+                .limit(window)
+            )
+        )
+        if keys:
+            # The JSON functions make the planner expect huge row counts; JIT
+            # compiling for a window of runs costs more than it saves.
+            db.execute(text("SET LOCAL jit = off"))
+            store_overview_facts(db, Dimension.run_key.in_(keys))
+        db.commit()
+    ctx.progress["runs_stored"] = int(ctx.progress.get("runs_stored") or 0) + len(keys)
+    if len(keys) < window:
+        # Without statistics the overview statement nests loops over the
+        # whole table (seconds instead of milliseconds) until autovacuum
+        # analyzes it; give the planner statistics right after the load.
+        try:
+            with ctx.autocommit() as conn:
+                conn.execute(text("ANALYZE dashboard_run_overview"))
+                conn.execute(text("ANALYZE dashboard_run_dimensions"))
+        except Exception as exc:  # noqa: BLE001 - autovacuum analyzes later anyway
+            ctx.log(f"analyze skipped ({type(exc).__name__}); autovacuum will analyze later")
+        ctx.progress["phase"] = "done"
+        ctx.progress["message"] = f"done: {ctx.progress['runs_stored']:,} runs stored"
+        ctx.log(ctx.progress["message"])
+        return True
+    ctx.progress["cursor"] = keys[-1]
+    ctx.progress["message"] = f"{ctx.progress['runs_stored']:,} runs stored"
+    return False

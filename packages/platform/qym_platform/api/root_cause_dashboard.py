@@ -11,8 +11,8 @@ from qym_platform.db.models import Project, Run
 from qym_platform.deps import get_db
 from qym_platform.permissions import (
     PRIVATE_TEST_SET_PLACEHOLDER,
-    has_project_access,
     hidden_item_run_ids,
+    project_for_read_by_slug,
 )
 from qym_platform.services.root_cause_dashboard import (
     DashboardFilters,
@@ -75,16 +75,8 @@ def _project(
     principal: Principal,
     project_slug: str,
 ) -> Project:
-    project = (
-        db.query(Project)
-        .filter(Project.slug == project_slug, Project.is_active.is_(True))
-        .first()
-    )
-    if project is None:
-        raise HTTPException(status_code=404, detail="Project not found")
-    if not has_project_access(db, principal, project.id):
-        raise HTTPException(status_code=403, detail="Access denied")
-    return project
+    # Archived projects stay readable to their members (read-only).
+    return project_for_read_by_slug(db, principal, project_slug)
 
 
 def _filters(

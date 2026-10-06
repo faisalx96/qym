@@ -30,11 +30,11 @@ This is a monorepo with two independently-buildable packages under `packages/`:
 - `internal/`: developer docs (error handling, requirements)
 
 ## Build, Test, and Development Commands
-- Setup (editable + dev tools): `pip install -e packages/sdk[dev] -e packages/platform`
+- Setup (editable + dev tools): `pip install -e packages/sdk[dev] -e packages/platform -r requirements-test.txt`
 - Run CLI: `qym --help`
 - Format: `black . && isort .`
 - Type check: `mypy packages/sdk/qym`
-- Tests: `pytest -q` (supports `pytest-asyncio`)
+- Tests: `pytest -q -n auto` (parallel via `pytest-xdist`; on a low-memory machine `-n 4` can be faster); set `QYM_TEST_POSTGRES_URL` to run the PostgreSQL cases, which otherwise skip
 - Build SDK wheel: `pip wheel packages/sdk/ --no-deps -w dist/`
 - Build platform Docker: `docker compose -f docker/docker-compose.yml build`
 
@@ -46,9 +46,10 @@ qym --task-file examples/example.py \
 ```
 
 ## Environment Variables
-- SDK: `QYM_PLATFORM_URL`, `QYM_API_KEY`, `QYM_PLATFORM_DEBUG`, `QYM_DATASET_READ_TOKEN` (optional, admin-issued per project; lets a service read private test sets — sent only on dataset reads, runs still use `QYM_API_KEY`)
+- SDK: `QYM_BASE_URL`, `QYM_API_KEY`, `QYM_PLATFORM_DEBUG`, `QYM_DATASET_READ_TOKEN` (optional, admin-issued per project; lets a service read private test sets — sent only on dataset reads, runs still use `QYM_API_KEY`)
 - Platform: `QYM_ENVIRONMENT`, `QYM_DATABASE_URL`, `QYM_AUTH_MODE`, `QYM_ADMIN_BOOTSTRAP_TOKEN`, `QYM_BASE_URL`, `QYM_ALLOW_PRIVATE_LLM_BASE_URLS`, `QYM_RUN_STALE_TIMEOUT_SECONDS` (default 180), `QYM_EVAL_JOB_TIMEOUT_SECONDS` (default 8100)
 - Langfuse: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`
+- Langfuse trace links (optional, platform compare view): `LANGFUSE_HOST` (or `LANGFUSE_BASE_URL`), `LANGFUSE_PROJECT_ID`
 
 ## Coding Style & Naming Conventions
 - Python 3.9+, PEP 8, 4-space indentation.
@@ -76,9 +77,8 @@ component recipes. Read it before styling anything. Rules are enforced by
 ## Security & Configuration Tips
 - Credentials: set via env vars or `.env` (auto-loaded).
 ```
-LANGFUSE_PUBLIC_KEY=...
-LANGFUSE_SECRET_KEY=...
-LANGFUSE_HOST=https://cloud.langfuse.com
+QYM_BASE_URL=https://your-qym-platform.example.com
+QYM_API_KEY=...
 ```
 - `.env` is gitignored; never commit secrets.
 

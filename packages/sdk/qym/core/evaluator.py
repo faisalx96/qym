@@ -26,13 +26,14 @@ from rich.console import Console
 from rich.live import Live
 from rich.table import Table
 
-from .results import EvaluationResult
+from .results import METRIC_ERROR_STATUSES, EvaluationResult, score_outcome
 from .checkpoint import (
+    UNREADABLE_SCORE_KEY,
     CheckpointWriter,
+    checkpoint_score,
     load_checkpoint_state,
     iter_checkpoint_rows,
     parse_checkpoint_row,
-    parse_metric_score,
     serialize_checkpoint_row,
 )
 from .progress import ProgressTracker, ProgressObserver
@@ -83,6 +84,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 from ..platform.defaults import DEFAULT_PLATFORM_URL
+
+# ``metadata.status`` values that mark a metric (scorer) execution failure
+# (the local stats read the same ones).
+_METRIC_ERROR_STATUSES = frozenset(METRIC_ERROR_STATUSES)
 
 
 def _utc_now_str() -> str:
@@ -453,6 +458,7 @@ class Evaluator:
         langfuse_client: Optional[Any] = None,
         progress_callback: Optional[Callable[[ProgressSnapshot], None]] = None,
         input_mapping: Optional[Dict[str, str]] = None,
+        primary_metric: Optional[str] = None,
     ):
         """
         Initialize the evaluator.
@@ -476,6 +482,9 @@ class Evaluator:
                 parameter names. Useful when a local CSV uses columns such as
                 ``sql_prompt`` and ``sql_context`` but the task signature expects
                 ``question`` and ``schema``.
+            primary_metric: Name of the run's headline metric. The platform
+                opens its views on it; without it, the first metric is used.
+                Overrides ``config.primary_metric``.
         """
 
         # Parse config
@@ -516,6 +525,16 @@ class Evaluator:
         self._raw_metrics = list(metrics)
         self.metric_specs: Dict[str, MetricSpec] = {}
         self.metrics = self._prepare_metrics(metrics)
+        if primary_metric is not None:
+            self.config.primary_metric = primary_metric
+        if (
+            self.config.primary_metric is not None
+            and self.config.primary_metric not in self.metrics
+        ):
+            raise ValueError(
+                f"primary_metric {self.config.primary_metric!r} is not one of the "
+                f"run's metrics: {', '.join(self.metrics)}"
+            )
 
         # Load only the caller's cwd .env before any config/env auto-detection.
         load_cwd_dotenv()
@@ -777,7 +796,11 @@ class Evaluator:
         return run_block
 
     def _metric_specs_payload(self) -> Dict[str, Dict[str, Any]]:
-        return {name: spec.to_dict() for name, spec in self.metric_specs.items()}
+        primary = getattr(getattr(self, "config", None), "primary_metric", None)
+        payload = {name: spec.to_dict() for name, spec in self.metric_specs.items()}
+        if primary in payload:
+            payload[primary]["primary"] = True
+        return payload
 
     def _prepare_metrics(
         self, metrics: List[Union[str, Callable, Metric]]
@@ -1051,6 +1074,9 @@ class Evaluator:
                     else {}
                 ),
             },
+            # Each metric's direction decides how errors enter its local
+            # stats, as on the platform.
+            metric_specs=dict(getattr(self, "metric_specs", {}) or {}),
         )
         result.samples = self.samples
         result.report_k = self.config.report_k
@@ -1305,16 +1331,22 @@ class Evaluator:
                 completed_pairs = set(checkpoint_state.completed_pairs)
                 resume_failed = len(checkpoint_state.error_item_ids)
                 resume_completed = max(0, len(completed_item_ids) - resume_failed)
+                unreadable_scores = 0
                 for row in iter_checkpoint_rows(checkpoint_path):
                     checkpoint_rows.append(row)
-                    for m in metric_names:
-                        val = parse_metric_score(row.get(f"{m}_score", ""))
-                        if val is not None:
-                            resume_metric_totals[m] += float(val)
-                            resume_metric_counts[m] += 1
                     item_id, row_result, is_error = parse_checkpoint_row(
                         row, metric_names
                     )
+                    for m in metric_names:
+                        restored = row_result["scores"].get(m)
+                        val, _ = score_outcome(restored)
+                        if val is not None and not is_error:
+                            resume_metric_totals[m] += float(val)
+                            resume_metric_counts[m] += 1
+                        if isinstance(restored, dict) and (
+                            restored.get("metadata") or {}
+                        ).get(UNREADABLE_SCORE_KEY):
+                            unreadable_scores += 1
                     if not item_id:
                         continue
                     row_pass = int(row_result.get("pass_number") or 1)
@@ -1347,6 +1379,14 @@ class Evaluator:
                             result.add_pass_result(item_id, row_pass, row_result)
                         else:
                             result.add_result(item_id, row_result)
+
+                if unreadable_scores:
+                    logger.warning(
+                        "%d score(s) in checkpoint %s could not be read; they "
+                        "are left out of the resumed statistics",
+                        unreadable_scores,
+                        checkpoint_path,
+                    )
 
             checkpoint_writer = CheckpointWriter(
                 checkpoint_path,
@@ -1430,14 +1470,6 @@ class Evaluator:
                         break
                     checkpoint_writer.append_row(row)
                     write_queue.task_done()
-
-            def _main_score(val: Any) -> Any:
-                if isinstance(val, dict):
-                    if "error" in val:
-                        return f"ERROR: {val['error']}"
-                    if "score" in val:
-                        return val.get("score")
-                return val
 
             def _checkpoint_run_metadata() -> Dict[str, Any]:
                 md = dict(self.run_metadata or {})
@@ -1566,12 +1598,9 @@ class Evaluator:
                         metric_meta: Dict[str, Dict[str, Any]] = {}
                         score_row: Dict[str, Any] = {}
                         for m in metric_names:
-                            sc = scores.get(m)
-                            score_row[m] = _main_score(sc)
-                            if isinstance(sc, dict) and isinstance(
-                                sc.get("metadata"), dict
-                            ):
-                                metric_meta[m] = sc["metadata"]
+                            score_row[m], meta = checkpoint_score(scores.get(m))
+                            if meta:
+                                metric_meta[m] = meta
                         row = serialize_checkpoint_row(
                             pass_number=pass_number,
                             dataset_name=self.dataset_name,
@@ -1615,22 +1644,7 @@ class Evaluator:
                 if self.samples <= 1:
                     return
                 try:
-                    slice_stats: Dict[str, Any] = {}
-                    for m in metric_names:
-                        values: List[float] = []
-                        for entries_by_pass in result.passes.values():
-                            entry = entries_by_pass.get(pass_number)
-                            if entry is None:
-                                continue
-                            if "error" in entry:
-                                values.append(0.0)
-                                continue
-                            val = result._main_numeric_score(
-                                (entry.get("scores") or {}).get(m)
-                            )
-                            values.append(val if val is not None else 0.0)
-                        if values:
-                            slice_stats[m] = sum(values) / len(values)
+                    slice_stats: Dict[str, Any] = result.pass_means(pass_number)
                     payload = {
                         "pass_number": pass_number,
                         "samples": self.samples,
@@ -1784,27 +1798,34 @@ class Evaluator:
             try:
                 # A timed-out drain must not publish completion ahead of queued
                 # item/span events. close() has already reported the backlog.
+                # Events the platform refused do not hold completion: they can
+                # never be accepted, and the platform flags the run instead.
                 if callable(getattr(type(platform_stream), "aflush", None)) and not await platform_stream.aflush(0):
                     raise RuntimeError("Platform upload still pending after close")
+                rejected_events = int(getattr(platform_stream, "rejected_events", 0) or 0)
+                summary = {
+                    "total_items": result.total_items,
+                    "success_count": len(result.results),
+                    "error_count": len(result.errors),
+                    "run_metadata": dict(result.run_metadata or {}),
+                }
+                if rejected_events:
+                    summary["rejected_events"] = rejected_events
                 # Send run_completed after the ordered queue has drained.
-                final_run_metadata = dict(result.run_metadata or {})
                 await _emit_platform_event(
                     platform_stream,
                     "run_completed",
                     {
                         "ended_at": _utc_now_str(),
                         "final_status": _final_status,
-                        "summary": {
-                            "total_items": result.total_items,
-                            "success_count": len(result.results),
-                            "error_count": len(result.errors),
-                            "run_metadata": final_run_metadata,
-                        },
+                        "summary": summary,
                     },
                     sync=True,
                 )
                 if callable(getattr(type(platform_stream), "aflush", None)) and not await platform_stream.aflush(0):
                     raise RuntimeError("Platform completion was not acknowledged")
+                if int(getattr(platform_stream, "rejected_events", 0) or 0) > rejected_events:
+                    raise RuntimeError("Platform refused the run completion")
                 self._run_completed = True
             except Exception:
                 pass
@@ -2638,7 +2659,14 @@ class Evaluator:
             # Wrap in MetricResult. A caught exception still has score 0 for
             # aggregation, but its metadata explicitly marks it as Error so
             # clients do not confuse it with an ordinary judged failure.
+            # ``metadata.status`` is that execution signal; ``metadata.error``
+            # or ``metadata.reason`` alone is a verdict reason.
             result = MetricResult.from_raw(score)
+            declared_status = (
+                str((result.metadata or {}).get("status") or "").strip().lower()
+            )
+            if declared_status in _METRIC_ERROR_STATUSES:
+                metric_status = "timeout" if declared_status == "timeout" else "error"
             if metric_status in {"error", "timeout"}:
                 result.metadata = dict(result.metadata or {})
                 result.metadata["status"] = metric_status
@@ -2656,7 +2684,12 @@ class Evaluator:
             if metric_status not in {"timeout", "error"}:
                 validated_score = spec.validate_score(raw_score_value)
             else:
-                validated_score = result.score
+                # A scorer error scores 0 whatever score the metric returned
+                # with its error status, as a raised metric does: the run
+                # mean counts it as 0 (or leaves it out when lower is better)
+                # and it is never a pass, locally and on the platform.
+                validated_score = 0.0
+                raw_score_value = 0
             result.score = validated_score
             main_val = result.score
 
@@ -2735,19 +2768,20 @@ class Evaluator:
 
         for m_name, score in scores.items():
             if score is not None:
-                score_metadata = (
-                    score.get("metadata", {}) if isinstance(score, dict) else {}
-                )
-                has_metric_error = isinstance(score, dict) and (
-                    (
-                        score.get("error") is not None
-                        and str(score.get("error")).strip() != ""
-                    )
-                    or (
-                        isinstance(score_metadata, dict)
-                        and str(score_metadata.get("status", "")).lower()
-                        in {"error", "failed", "timeout"}
-                    )
+                if isinstance(score, dict):
+                    score_metadata = score.get("metadata", {})
+                elif isinstance(score, MetricResult):
+                    score_metadata = score.metadata or {}
+                else:
+                    score_metadata = {}
+                has_metric_error = (
+                    isinstance(score, dict)
+                    and score.get("error") is not None
+                    and str(score.get("error")).strip() != ""
+                ) or (
+                    isinstance(score_metadata, dict)
+                    and str(score_metadata.get("status", "")).lower()
+                    in _METRIC_ERROR_STATUSES
                 )
                 if has_metric_error:
                     tracker.set_metric_error(index, m_name)

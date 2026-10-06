@@ -11,7 +11,6 @@ from urllib.parse import urlparse
 
 import pytest
 from qym_platform.services.eval_schema_form import build_form_descriptor
-from test_dashboard_paging_browser import browser  # noqa: F401
 
 STATIC = (
     Path(__file__).resolve().parents[2]

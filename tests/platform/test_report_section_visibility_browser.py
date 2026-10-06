@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 
 import pytest
 
-from test_performance_views_browser import ViewFixture, browser
+from test_performance_views_browser import ViewFixture
 
 pytestmark = pytest.mark.browser
 
@@ -161,9 +161,17 @@ def test_error_report_has_only_populated_groups_and_top_spacing(browser, kind):
         assert section.locator(".breakdown-errors").count() == 1
         assert "Task Errors" in section.inner_text()
         assert "No errors" not in section.inner_text()
-        assert (
-            section.evaluate("element => getComputedStyle(element).marginTop") == "32px"
-        )
+        if kind == "run":
+            # The run page's section header owns the spacing (C058): about
+            # 48px from the section above, a hairline, then the title.
+            head = section.locator(".run-section-head")
+            assert head.locator(".run-section-head__title").inner_text() == "Errors"
+            assert section.evaluate("element => getComputedStyle(element).marginTop") == "0px"
+            assert head.evaluate("element => getComputedStyle(element).marginTop") == "48px"
+        else:
+            assert (
+                section.evaluate("element => getComputedStyle(element).marginTop") == "32px"
+            )
     finally:
         fixture.close()
 
@@ -216,6 +224,9 @@ def test_empty_local_selections_keep_controls_to_restore_reports(browser, kind):
         root.locator("#root-cause-metric-select").select_option("count")
         assert root.locator(".section-title").count() == 0
         assert root.locator(".comparison-stats").count() == 0
+        if kind == "run":
+            # One header recipe (C058): the control sits in the header.
+            assert root.locator(".run-section-head #root-cause-metric-select").count() == 1
         assert root.locator("#root-cause-metric-select").is_visible()
         root.locator("#root-cause-metric-select").select_option("accuracy")
         assert root.locator(".rc-category-card").is_visible()
@@ -231,6 +242,8 @@ def test_empty_local_selections_keep_controls_to_restore_reports(browser, kind):
         )
         assert categories.locator(".section-title").count() == 0
         assert categories.locator(".comparison-stats").count() == 0
+        if kind == "run":
+            assert categories.locator(".run-section-head").count() == 1
         assert categories.locator("[data-chip-key='domain']").is_visible()
         categories.locator("[data-chip-key='domain']").click()
         categories.locator(".comparison-stats").wait_for(state="visible")

@@ -5,19 +5,12 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.browser
+
 STATIC = (
     Path(__file__).resolve().parents[2]
     / "packages/platform/qym_platform/_static/dashboard"
 )
-
-
-@pytest.fixture(scope="module")
-def browser():
-    api = pytest.importorskip("playwright.sync_api")
-    with api.sync_playwright() as playwright:
-        instance = playwright.chromium.launch()
-        yield instance
-        instance.close()
 
 
 @pytest.fixture()
@@ -44,6 +37,8 @@ def dataset_page(browser):
       window.QymAuth = {requireAuth: () => new Promise(() => {})};
       window.fetch = url => new Promise((resolve, reject) => pendingSearches.push({url, resolve, reject}));
     }""")
+    # Pages load the shared safety/text layer before any other script.
+    page.add_script_tag(path=str(STATIC / "qym_safe.js"))
     page.add_script_tag(path=str(STATIC / "metrics.js"))
     page.add_script_tag(path=str(STATIC / "qym_table.js"))
     source = re.findall(

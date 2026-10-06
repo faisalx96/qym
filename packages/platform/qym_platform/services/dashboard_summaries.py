@@ -32,6 +32,17 @@ from qym_platform.services.dashboard_outbox import (
     execution_event_query,
     execution_event_object,
 )
+from qym_platform.services.ingest_completeness import runs_list_ingest_flag
+from qym_platform.services.metric_semantics import declared_direction, primary_metric
+from qym_platform.services.run_means import (
+    MetricTotals,
+    apply_repeat_pass_errors,
+    errors_left_out,
+    execution_outcomes,
+    mean_task_errors,
+    metric_mean_fields,
+    run_metric_mean,
+)
 from sqlalchemy import and_, case, delete, func, insert, or_, select, tuple_, update
 from sqlalchemy.orm import Session, aliased
 
@@ -567,7 +578,7 @@ def _move_numeric_records(
     """Move visibility/time buckets with bounded numeric memory and SQL batches."""
     query = (
         select(Record)
-        .where(Record.run_key == run_id, Record.present.is_(True))
+        .where(Record.run_key == run_id, Record.present)
         .order_by(Record.id)
     )
     cursor = 0
@@ -652,7 +663,7 @@ def _execution_error_counts(db, run_id, samples):
         select(Record.record_key, pass_number.label("pass_number"))
         .where(
             Record.run_key == run_id,
-            Record.present.is_(True),
+            Record.present,
             Record.error > 0,
             error_scope,
         )
@@ -685,7 +696,7 @@ def _execution_error_breakdown(db, run_id, samples):
         select(Record.record_key, number.label("pass_number"))
         .where(
             Record.run_key == run_id,
-            Record.present.is_(True),
+            Record.present,
             Record.error > 0,
             task_scope,
         )
@@ -713,7 +724,7 @@ def _execution_error_breakdown(db, run_id, samples):
         )
         .where(
             Record.run_key == run_id,
-            Record.present.is_(True),
+            Record.present,
             Record.error > 0,
             metric_scope,
             tasks.c.record_key.is_(None),
@@ -731,6 +742,43 @@ def _execution_error_breakdown(db, run_id, samples):
     return error_breakdown(task_counts, metric_counts)
 
 
+def _repeat_execution_counts(db, run_id):
+    """Execution success units of a repeat run: ``(item passes, failed)``.
+
+    Each item pass with attempt records (attempt rows, or legacy item events
+    with a failure or retries) counts once. It failed when it has a task
+    error: its last attempt failed, or the SDK reported item_failed for it (the
+    executions task_error_count counts), so a retried pass is judged by its
+    last attempt. ``execution_errors.repeat_execution_counts`` is the same rule
+    over source rows.
+    """
+    number = case((Record.pass_number < 1, 1), else_=Record.pass_number)
+    task_error = and_(
+        Record.error > 0,
+        or_(Record.is_last.is_(True), Record.metric_key.startswith("legacy_event:")),
+    )
+    passes = (
+        select(
+            Record.record_key,
+            number.label("pass_number"),
+            func.max(case((task_error, 1), else_=0)).label("failed"),
+        )
+        .where(
+            Record.run_key == run_id,
+            Record.record_kind == "attempt",
+            Record.present,
+        )
+        .group_by(Record.record_key, number)
+        .subquery()
+    )
+    total, failed = db.execute(
+        select(func.count(), func.coalesce(func.sum(passes.c.failed), 0)).select_from(
+            passes
+        )
+    ).one()
+    return int(total or 0), int(failed or 0)
+
+
 def _repeat_retry_counts(db, run_id):
     """Deduplicate retries across retained attempts and legacy SDK events."""
     executions = (
@@ -742,7 +790,7 @@ def _repeat_retry_counts(db, run_id):
         .where(
             Record.run_key == run_id,
             Record.record_kind == "attempt",
-            Record.present.is_(True),
+            Record.present,
         )
         .group_by(Record.record_key, Record.pass_number)
         .subquery()
@@ -800,7 +848,7 @@ def repair_extrema(db, project_key, bucket_key, granularity="hour"):
                     Record.project_key == project_key,
                     Record.bucket_key >= bucket_key,
                     Record.bucket_key < bucket_key + 3600,
-                    Record.present.is_(True),
+                    Record.present,
                     Record.record_kind == kind,
                     column.isnot(None),
                 )
@@ -825,7 +873,36 @@ def extrema_payload(bucket):
     }
 
 
+def dashboard_approval_info(db, approval):
+    """The review decision a runs-list row shows (None without an approval)."""
+    from qym_platform.api.runs import _iso
+    from qym_platform.db.models import User
+
+    if not approval:
+        return None
+    decider = (
+        db.get(User, approval.decision_by_user_id)
+        if approval.decision_by_user_id
+        else None
+    )
+    return {
+        "decision": getattr(approval.decision, "value", approval.decision),
+        "decision_at": _iso(approval.decision_at) if approval.decision_at else None,
+        "decision_by": (
+            {
+                "id": decider.id,
+                "email": decider.email,
+                "display_name": decider.display_name or decider.email.split("@")[0],
+            }
+            if decider
+            else None
+        ),
+        "comment": approval.comment or "",
+    }
+
+
 def _sync_dimension(db, run_id, version):
+    from qym_platform.api.dashboard import run_search_text
     from qym_platform.api.runs import (
         _dataset_version_fields,
         _dataset_version_info_map,
@@ -877,28 +954,9 @@ def _sync_dimension(db, run_id, version):
         if owner
         else None
     )
-    approval = db.scalar(select(Approval).where(Approval.run_id == run.id))
-    approval_info = None
-    if approval:
-        decider = (
-            db.get(User, approval.decision_by_user_id)
-            if approval.decision_by_user_id
-            else None
-        )
-        approval_info = {
-            "decision": getattr(approval.decision, "value", approval.decision),
-            "decision_at": _iso(approval.decision_at) if approval.decision_at else None,
-            "decision_by": (
-                {
-                    "id": decider.id,
-                    "email": decider.email,
-                    "display_name": decider.display_name or decider.email.split("@")[0],
-                }
-                if decider
-                else None
-            ),
-            "comment": approval.comment or "",
-        }
+    approval_info = dashboard_approval_info(
+        db, db.scalar(select(Approval).where(Approval.run_id == run.id))
+    )
     dataset = _dataset_version_fields(run, _dataset_version_info_map(db, [run]))
     raw_model = _strip_model_provider(run.model or "")
     trace = metadata.get("trace_stats")
@@ -964,12 +1022,18 @@ def _sync_dimension(db, run_id, version):
         "langfuse_url": metadata.get("langfuse_url"),
         "langfuse_dataset_id": metadata.get("langfuse_dataset_id"),
         "langfuse_run_id": metadata.get("langfuse_run_id"),
+        "ingest_incomplete": runs_list_ingest_flag(metadata),
         **run_origin_fields(
             run, experiment_refs_for_jobs(db, [run.experiment_job_id])
         ),
         "versioning": versioning,
         **dataset,
     }
+    # Unchanged unless a name changes, so the search index over it keeps
+    # this row's descriptor-only updates HOT.
+    dimension.search_text = run_search_text(
+        dimension.descriptor["external_run_id"], dimension.descriptor["run_name"]
+    )
     if created:
         db.add(dimension)
     sync_run_versions(db, run.id, run.project_id, versioning)
@@ -1011,6 +1075,221 @@ def ensure_pending_summary(db, run_id, version):
     if db.get(Summary, run_id) is None:
         db.add(Summary(run_key=run_id, project_key=run.project_id, data={}, projection_revision=0))
         db.flush()
+        _store_overview_inputs(db, run_id)
+
+
+def _store_overview_inputs(db, run_id):
+    """C037: keep the run's overview inputs next to what was just written."""
+    from qym_platform.services.dashboard_overview import refresh_run_overview
+
+    refresh_run_overview(db, run_id)
+
+
+# Bump when published summary fields change; older summaries are refreshed
+# from numeric projection records by reconcile_summary_shapes (2: run means
+# count scorer errors as 0; 3: repeat runs publish the mean without scorer
+# errors, and pass summaries name the declared primary metric; 4:
+# lower-is-better metrics leave task and scorer errors out of their means, and
+# execution success counts repeat-run item passes; 5: repeat-run means judge
+# task errors per pass, not by the pass that arrived last, and a completed
+# run's items never received are counted apart and left out of Execution
+# success and the means).
+SUMMARY_SHAPE = 5
+
+
+def _outdated_shape(data):
+    data = data or {}
+    shape = int(data.get("summary_shape") or 0)
+    return "task_error_count" not in data or shape < SUMMARY_SHAPE
+
+
+def _task_failed_passes(run_id):
+    """``(record_key, pass_number)`` of the passes whose task failed.
+
+    The same task evidence ``_execution_error_breakdown`` counts: final
+    attempts that failed, and item_failed events of older SDKs.
+    """
+    number = case((Record.pass_number < 1, 1), else_=Record.pass_number)
+    return (
+        select(
+            Record.record_key.label("record_key"), number.label("pass_number")
+        )
+        .where(
+            Record.run_key == run_id,
+            Record.present,
+            Record.error > 0,
+            Record.record_kind == "attempt",
+            or_(
+                Record.is_last.is_(True), Record.metric_key.startswith("legacy_event:")
+            ),
+        )
+        .group_by(Record.record_key, number)
+        .subquery()
+    )
+
+
+def _item_not_received(record, run, outcome):
+    """``run_means.item_not_received`` over item records: a classic item of a
+    completed run with no error, no output and no latency. None when the run
+    has no such items to find (repeat, or ``outcome``, how it ran, is not
+    completed)."""
+    status = str(getattr(outcome, "value", outcome) or "").upper()
+    if int(run.samples or 1) > 1 or status != "COMPLETED":
+        return None
+    return and_(
+        record.record_kind == "item",
+        record.error == 0,
+        record.terminal == 0,
+        record.latency_ms.is_(None),
+    )
+
+
+def _repeat_pass_errors(db, run_id, left_out=()):
+    """``apply_repeat_pass_errors`` input from numeric projection records.
+
+    Repeat runs keep scorer errors on pass records; items with one are read,
+    and for the metrics in ``left_out`` (lower-is-better) also items with a
+    pass whose task failed, whichever pass arrived last.
+    """
+    item_alias = aliased(Record)
+    item_ok = and_(
+        # run_key first: record_key alone has no index of its own, and without
+        # it the join scans every project's item records.
+        item_alias.run_key == run_id,
+        item_alias.record_key == Record.record_key,
+        item_alias.record_kind == "item",
+        item_alias.present,
+    )
+    affected = set(
+        db.execute(
+            select(Record.record_key, Record.metric_key)
+            .join(item_alias, item_ok)
+            .where(
+                Record.run_key == run_id,
+                Record.record_kind == "pass_score",
+                Record.present,
+                Record.error > 0,
+            )
+            .distinct()
+        ).all()
+    )
+    failed_passes = set()
+    if left_out:
+        failed = _task_failed_passes(run_id)
+        failed_passes = set(
+            db.execute(select(failed.c.record_key, failed.c.pass_number)).all()
+        )
+        affected.update(
+            db.execute(
+                select(Record.record_key, Record.metric_key)
+                .join(item_alias, item_ok)
+                .join(
+                    failed,
+                    and_(
+                        failed.c.record_key == Record.record_key,
+                        failed.c.pass_number == Record.pass_number,
+                    ),
+                )
+                .where(
+                    Record.run_key == run_id,
+                    Record.record_kind == "pass_score",
+                    Record.present,
+                    Record.metric_key.in_(sorted(left_out)),
+                )
+                .distinct()
+            ).all()
+        )
+    if not affected:
+        return []
+    keys = sorted({key for key, _ in affected})
+    passes, values, item_edits = {}, {}, set()
+    for start in range(0, len(keys), 400):
+        for key, metric, kind, number, score, error, edited, item_edit in db.execute(
+            select(
+                Record.record_key,
+                Record.metric_key,
+                Record.record_kind,
+                Record.pass_number,
+                Record.score,
+                Record.error,
+                Record.success,
+                # On an item score: a reviewer's item-level value (dashboard_outbox).
+                Record.terminal,
+            ).where(
+                Record.run_key == run_id,
+                Record.present,
+                Record.record_kind.in_(("score", "pass_score")),
+                Record.record_key.in_(keys[start : start + 400]),
+            )
+        ):
+            if (key, metric) not in affected:
+                continue
+            if kind == "pass_score":
+                passes.setdefault((key, metric), []).append(
+                    (
+                        score,
+                        error > 0,
+                        # A reviewer's score (success) stands on a failed task.
+                        (key, number) in failed_passes and error == 0 and not edited,
+                    )
+                )
+            else:
+                values[(key, metric)] = score
+                if item_edit:
+                    item_edits.add((key, metric))
+    return [
+        (
+            metric,
+            values.get((key, metric)),
+            passes.get((key, metric), []),
+            (key, metric) in item_edits,
+        )
+        for key, metric in sorted(affected)
+    ]
+
+
+def _metric_totals_statement(run_id, run, *, exclude_not_received=False, outcome=None):
+    """Per-metric score sums of one run's counted items.
+
+    Bounded by the run, never by project history: the item lookup is a
+    semi-join on the same ``run_key`` (ix_dashboard_record_latency), so a live
+    refresh costs O(run) however many records other runs hold. ``present`` is
+    tested as a plain column, since ``present IS true`` does not match the
+    partial indexes' ``WHERE present AND ...`` predicate. ``outcome`` is how
+    the run ran, needed with ``exclude_not_received``.
+    """
+    item = aliased(Record)
+    errored = Record.error > 0
+    counted_item = [
+        item.run_key == Record.run_key,
+        item.record_key == Record.record_key,
+        item.record_kind == "item",
+        item.present,
+    ]
+    if int(run.samples or 1) <= 1:
+        # A classic item's task error counts through task_errors; a repeat
+        # item's value already holds its failed passes (its item record only
+        # carries the pass that arrived last).
+        counted_item.append(item.error == 0)
+    if exclude_not_received:
+        counted_item.append(~_item_not_received(item, run, outcome))
+    return (
+        select(
+            Record.metric_key,
+            func.sum(Record.score),
+            func.count(Record.score),
+            func.sum(case((errored, Record.score))),
+            func.count(case((and_(errored, Record.score.isnot(None)), 1))),
+            func.count(case((and_(errored, Record.score.is_(None)), 1))),
+        )
+        .where(
+            Record.run_key == run_id,
+            Record.record_kind == "score",
+            Record.present,
+            select(item.id).where(*counted_item).exists(),
+        )
+        .group_by(Record.metric_key)
+    )
 
 
 def refresh_run_summary(db, run_id, version):
@@ -1027,7 +1306,7 @@ def refresh_run_summary(db, run_id, version):
     db.flush()
     db.refresh(summary)
     items = select(Record).where(
-        Record.run_key == run_id, Record.record_kind == "item", Record.present.is_(True)
+        Record.run_key == run_id, Record.record_kind == "item", Record.present
     )
     latency = items.with_only_columns(Record.latency_ms).where(
         Record.latency_ms.isnot(None)
@@ -1036,37 +1315,62 @@ def refresh_run_summary(db, run_id, version):
         summary.latency_sum / summary.latency_count if summary.latency_count else 0.0
     )
     median_latency = _median(db, latency, Record.latency_ms)
-    item_alias = aliased(Record)
+    errored = Record.error > 0
+    repeat = int(run.samples or 1) > 1
+    # Items never received are counted apart: neither successes nor executions,
+    # and left out of the means (services/run_means.py).
+    # How the run ran: a failed run in review is still a failed run.
+    outcome = execution_outcomes(db, [run])[run.id]
+    not_received_rule = _item_not_received(Record, run, outcome)
+    not_received = (
+        int(
+            db.scalar(
+                select(func.count()).where(
+                    Record.run_key == run_id,
+                    Record.present,
+                    not_received_rule,
+                )
+            )
+            or 0
+        )
+        if not_received_rule is not None
+        else 0
+    )
     metric_rows = db.execute(
-        select(Record.metric_key, func.sum(Record.score), func.count(Record.score))
-        .join(
-            item_alias,
-            and_(
-                item_alias.record_key == Record.record_key,
-                item_alias.record_kind == "item",
-                item_alias.present.is_(True),
-                item_alias.error == 0,
-            ),
+        _metric_totals_statement(
+            run_id, run, exclude_not_received=bool(not_received), outcome=outcome
         )
-        .where(
-            Record.run_key == run_id,
-            Record.record_kind == "score",
-            Record.present.is_(True),
-        )
-        .group_by(Record.metric_key)
     ).all()
-    metric_agg = {
-        metric: (total or 0, count or 0) for metric, total, count in metric_rows
+    metric_specs = (dimension.descriptor or {}).get("metric_specs") or {}
+    directions = {
+        metric: declared_direction(spec) for metric, spec in metric_specs.items()
     }
-    metric_means = {
-        metric: (
-            metric_agg.get(metric, (0, 0))[0]
-            / (metric_agg.get(metric, (0, 0))[1] + summary.error_count)
-            if metric_agg.get(metric, (0, 0))[1] + summary.error_count
-            else 0.0
+    metric_totals = {
+        metric: MetricTotals(
+            score_sum=float(total or 0.0),
+            score_count=int(count or 0),
+            error_score_sum=float(error_total or 0.0),
+            error_score_count=int(error_count or 0),
+            unscored_errors=int(unscored or 0),
+            direction=directions.get(metric),
         )
-        for metric in run.metrics or []
+        for metric, total, count, error_total, error_count, unscored in metric_rows
     }
+    if repeat:
+        left_out = sorted(
+            metric
+            for metric in run.metrics or []
+            if errors_left_out(directions.get(metric))
+        )
+        apply_repeat_pass_errors(
+            metric_totals, _repeat_pass_errors(db, run_id, left_out)
+        )
+    metric_means = metric_mean_fields(
+        run.metrics or [],
+        metric_totals,
+        mean_task_errors(run.samples, summary.error_count),
+        directions,
+    )
     execution_error_count, execution_errors_by_pass = _execution_error_counts(
         db, run_id, run.samples
     )
@@ -1097,7 +1401,7 @@ def refresh_run_summary(db, run_id, version):
         attempts = select(Record).where(
             Record.run_key == run_id,
             Record.record_kind == "attempt",
-            Record.present.is_(True),
+            Record.present,
             Record.is_last.is_(True),
         )
         attempt_latencies = attempts.with_only_columns(Record.latency_ms).where(
@@ -1129,20 +1433,67 @@ def refresh_run_summary(db, run_id, version):
                 ).group_by(Record.pass_number)
             )
         }
-        primary = (run.metrics or [None])[0]
-        means = dict(
-            db.execute(
-                select(Record.pass_number, func.avg(Record.score))
+        primary = primary_metric(run.metrics, metric_specs)
+        # Same rule as run means (services/run_means.py): a pass whose scorer
+        # or task failed counts as 0, or is left out when lower is better.
+        errored = Record.error > 0
+        pass_totals = {
+            number: MetricTotals(
+                score_sum=float(total or 0.0),
+                score_count=int(count or 0),
+                error_score_sum=float(error_total or 0.0),
+                error_score_count=int(error_count or 0),
+                unscored_errors=int(unscored or 0),
+                direction=directions.get(primary),
+            )
+            for number, total, count, error_total, error_count, unscored in db.execute(
+                select(
+                    Record.pass_number,
+                    func.sum(Record.score),
+                    func.count(Record.score),
+                    func.sum(case((errored, Record.score))),
+                    func.count(case((and_(errored, Record.score.isnot(None)), 1))),
+                    func.count(case((and_(errored, Record.score.is_(None)), 1))),
+                )
                 .where(
                     Record.run_key == run_id,
                     Record.record_kind == "pass_score",
                     Record.metric_key == primary,
-                    Record.present.is_(True),
-                    Record.score.isnot(None),
+                    Record.present,
+                    or_(Record.score.isnot(None), errored),
                 )
                 .group_by(Record.pass_number)
             ).all()
-        )
+        }
+        if errors_left_out(directions.get(primary)):
+            failed = _task_failed_passes(run_id)
+            for number, total, count in db.execute(
+                select(
+                    Record.pass_number, func.sum(Record.score), func.count(Record.score)
+                )
+                .join(
+                    failed,
+                    and_(
+                        failed.c.record_key == Record.record_key,
+                        failed.c.pass_number == Record.pass_number,
+                    ),
+                )
+                .where(
+                    Record.run_key == run_id,
+                    Record.record_kind == "pass_score",
+                    Record.metric_key == primary,
+                    Record.present,
+                    Record.error == 0,
+                    Record.success == 0,
+                )
+                .group_by(Record.pass_number)
+            ).all():
+                if number in pass_totals:
+                    pass_totals[number].task_error_score_sum = float(total or 0.0)
+                    pass_totals[number].task_error_score_count = int(count or 0)
+        means = {
+            number: run_metric_mean(totals, 0) for number, totals in pass_totals.items()
+        }
         pass_causes = dict(
             db.execute(
                 select(
@@ -1171,6 +1522,7 @@ def refresh_run_summary(db, run_id, version):
                     has_data=p in means or p in attempt_counts,
                     run_status=dimension.status,
                 ),
+                "primary_metric": primary,
                 "primary_score": means.get(p),
                 "error_count": execution_errors_by_pass.get(p, 0),
                 **error_details["pass_error_counts"].get(
@@ -1188,7 +1540,15 @@ def refresh_run_summary(db, run_id, version):
         ]
         if sum(pass_causes.values()):
             causes = sum(pass_causes.values())
-    success_rate = summary.success_count / summary.count if summary.count else 0.0
+    # Execution success: one unit per item, or per item pass in a repeat run
+    # (its RunItem reflects only the pass that arrived last).
+    success_count = summary.success_count - not_received
+    executions, execution_successes = summary.count - not_received, success_count
+    if repeat:
+        item_passes, failed_passes = _repeat_execution_counts(db, run_id)
+        if item_passes:
+            executions, execution_successes = item_passes, item_passes - failed_passes
+    success_rate = execution_successes / executions if executions else 0.0
     completed_success = (
         max(0, summary.terminal_count - summary.error_count) / summary.terminal_count
         if summary.terminal_count
@@ -1200,13 +1560,17 @@ def refresh_run_summary(db, run_id, version):
         completed_success,
     )
     summary.data = {
-        "metric_averages": metric_means,
+        "summary_shape": SUMMARY_SHAPE,
+        **metric_means,
         "total_items": summary.count,
         "progress_completed": summary.terminal_count,
         "progress_total": expected,
         "progress_pct": summary.terminal_count / expected if expected else None,
-        "success_count": summary.success_count,
+        "success_count": success_count,
         "error_count": summary.error_count,
+        "not_received_count": not_received,
+        "execution_count": executions,
+        "execution_success_count": execution_successes,
         "execution_error_count": execution_error_count,
         **{k: v for k, v in error_details.items() if k != "pass_error_counts"},
         "total_retries": total_retries,
@@ -1226,7 +1590,7 @@ def refresh_run_summary(db, run_id, version):
     scores = select(Record.score).where(
         Record.run_key == run_id,
         Record.record_kind == "score",
-        Record.present.is_(True),
+        Record.present,
         Record.score.isnot(None),
     )
     summary.score_min = db.scalar(scores.order_by(Record.score).limit(1))
@@ -1239,13 +1603,14 @@ def refresh_run_summary(db, run_id, version):
         key=lambda entry: 0 if entry[3] == "hour" else 1,
     ):
         repair_extrema(db, run.project_id, bucket, granularity)
+    _store_overview_inputs(db, run_id)
 
 
 def _descriptor_origin_stale(run, dimension):
     """An official run whose descriptor predates ``origin`` or ``versioning``.
 
     ``versioning`` matters only for runs linked to an experiment job: republishing
-    fills the descriptor and the run's ``dashboard_run_versions`` rows (0066).
+    fills the descriptor and the run's ``dashboard_run_versions`` rows (0078).
     """
     from qym_platform.db.models import RunOrigin
 
@@ -1323,12 +1688,12 @@ def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
                     summary is not None
                     and partition.queue_state != "repair_required"
                     and (
-                        "task_error_count" not in (summary.data or {})
+                        _outdated_shape(summary.data)
                         or _descriptor_origin_stale(run, dimension)
                     )
                 ):
                     # Upgrade the published shape from numeric projection rows.
-                    # Migration 0058 queues existing summaries without replaying history.
+                    # Migrations 0058/0060 queue existing summaries without replaying history.
                     hours = {_hour(dimension.timestamp)} if dimension else set()
                     if run:
                         hours.add(_hour(run.started_at or run.created_at))
@@ -1442,7 +1807,7 @@ def reconcile_summary_shapes(db, *, limit=100):
 
     # Official runs published before descriptors carried ``origin`` would list
     # as local, and runs linked to an experiment job published before
-    # ``versioning`` (0066) would not match versioning filters; only those few
+    # ``versioning`` (0078) would not match versioning filters; only those few
     # are requeued (``origin`` and ``experiment_job_id`` are indexed).
     stale_origin = (
         select(Dimension.run_key)
@@ -1468,6 +1833,8 @@ def reconcile_summary_shapes(db, *, limit=100):
             Summary.projection_revision > 0,
             or_(
                 Summary.data["task_error_count"].as_integer().is_(None),
+                Summary.data["summary_shape"].as_integer().is_(None),
+                Summary.data["summary_shape"].as_integer() < SUMMARY_SHAPE,
                 Summary.run_key.in_(stale_origin),
             ),
         )
@@ -1736,20 +2103,78 @@ def dashboard_freshness(db, project_ids):
     )
     # Include membership, including revision-zero pending runs. A sum alone
     # misses their insertion and can collide after a purge and publication.
-    # Read only identity/revision columns, streamed in deterministic order.
-    revision = 0
-    catalog_hash = hashlib.sha256()
-    for run_key, published_revision, present in db.execute(
-        select(Summary.run_key, Summary.projection_revision, Dimension.present)
-        .outerjoin(Dimension, Dimension.run_key == Summary.run_key)
-        .where(Summary.project_key.in_(projects))
-        .order_by(Summary.run_key)
-        .execution_options(yield_per=1000)
-    ):
-        revision += int(published_revision or 0)
-        catalog_hash.update(
-            json.dumps([run_key, published_revision, present], separators=(",", ":")).encode()
+    # Review actions and deletes change the list row's status and visibility
+    # at once; a published run also moves its revision, but a pending
+    # (revision-zero) run must stay pending, so both columns are hashed too.
+    # Read only identity/revision columns, in deterministic order.
+    def catalog(*columns):
+        return (
+            select(*columns)
+            .select_from(Summary)
+            .outerjoin(Dimension, Dimension.run_key == Summary.run_key)
+            .where(Summary.project_key.in_(projects))
         )
+
+    if db.get_bind().dialect.name == "postgresql":
+        from sqlalchemy import String, cast, literal_column
+        from sqlalchemy.dialects.postgresql import aggregate_order_by
+
+        # Every list request reads this; hash inside the database instead of
+        # streaming one row per run of the project into Python.
+        member = func.concat_ws(
+            ":",
+            Summary.run_key,
+            func.coalesce(Summary.projection_revision, 0),
+            func.coalesce(cast(Dimension.present, String), "null"),
+            func.coalesce(Dimension.status, ""),
+            case((Dimension.hidden_at.is_(None), "shown"), else_="hidden"),
+        )
+        revision, digest = db.execute(
+            catalog(
+                func.coalesce(func.sum(Summary.projection_revision), 0),
+                # sha256, not md5: md5() fails on FIPS-mode servers.
+                func.encode(
+                    func.sha256(
+                        func.convert_to(
+                            func.coalesce(
+                                func.string_agg(
+                                    member,
+                                    aggregate_order_by(
+                                        literal_column("','"), Summary.run_key
+                                    ),
+                                ),
+                                "",
+                            ),
+                            "UTF8",
+                        )
+                    ),
+                    "hex",
+                ),
+            )
+        ).one()
+        catalog_revision = f"pg:{digest}"
+    else:
+        revision = 0
+        catalog_hash = hashlib.sha256()
+        for run_key, published_revision, present, status, hidden_at in db.execute(
+            catalog(
+                Summary.run_key,
+                Summary.projection_revision,
+                Dimension.present,
+                Dimension.status,
+                Dimension.hidden_at,
+            )
+            .order_by(Summary.run_key)
+            .execution_options(yield_per=1000)
+        ):
+            revision += int(published_revision or 0)
+            catalog_hash.update(
+                json.dumps(
+                    [run_key, published_revision, present, status, hidden_at is not None],
+                    separators=(",", ":"),
+                ).encode()
+            )
+        catalog_revision = catalog_hash.hexdigest()
     pending, oldest, backfilling, unpublished, failed = db.execute(
         select(
             func.count(),
@@ -1789,7 +2214,7 @@ def dashboard_freshness(db, project_ids):
     ).one()
     return {
         "revision": int(revision),
-        "catalog_revision": catalog_hash.hexdigest(),
+        "catalog_revision": catalog_revision,
         "freshness": {
             "updating": bool(pending),
             "pending_partitions": int(pending),

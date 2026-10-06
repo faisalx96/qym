@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Projects</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=runs-analysis-c1-20260804-16">
-  <link rel="stylesheet" href="/static/shell.css">
-  <script src="/static/auth.js"></script>
-  <script src="/static/shell.js?v=ui-consistency-20260730-16"></script>
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261005-3">
+  <link rel="stylesheet" href="/static/shell.css?v=p1-20261005-6">
+  <script src="/static/qym_safe.js?v=p1-20261001"></script>
+  <script src="/static/auth.js?v=p1-20261005"></script>
+  <script src="/static/shell.js?v=p1-20261005-8"></script>
   <style>
     .projects-page { }
     .projects-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-md); margin-bottom: var(--space-lg); }
@@ -45,8 +46,8 @@
     .empty-state h2 { font-size: var(--font-lg); margin-bottom: var(--space-sm); color: var(--text-primary); }
 
   </style>
-  <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60">
-  <script defer src="/static/ui_components.js?v=ui-consistency-20260803-28"></script>
+  <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261005-2">
+  <script defer src="/static/ui_components.js?v=p1-20261005"></script>
 </head>
 <body>
   <main class="projects-page">
@@ -66,7 +67,7 @@
     </div>
 
     <div class="project-grid" id="project-grid">
-      <div class="empty-state" id="loading-state">Loading projects...</div>
+      <div id="loading-state" style="grid-column: 1 / -1" data-qym-skeleton="cards" data-qym-skeleton-label="Loading projects…" data-qym-skeleton-count="3" data-qym-skeleton-min-width="300" data-qym-skeleton-height="170"></div>
     </div>
   </main>
 
@@ -80,9 +81,7 @@
       }
 
       function esc(v) {
-        const d = document.createElement('div');
-        d.textContent = v == null ? '' : v;
-        return d.innerHTML;
+        return QymSafe.escapeHtml(v == null ? '' : String(v));
       }
 
       function relativeTime(dateStr) {
@@ -117,23 +116,28 @@
 
         // Show new project button for admins/managers
         const canCreate = user.role === 'ADMIN' || allProjects.some(p => p.role === 'MANAGER');
-        document.getElementById('new-project-btn').style.display = canCreate ? 'inline-flex' : 'none';
+        const newProjectButton = document.getElementById('new-project-btn');
+        newProjectButton.style.display = canCreate ? 'inline-flex' : 'none';
+        if (canCreate) window.QymShell?.arrive?.(newProjectButton);
 
         renderProjects(allProjects);
       }
 
       function renderProjects(projects) {
         const grid = document.getElementById('project-grid');
+        // The first render takes the skeleton's place (QymShell, once per load).
+        window.QymShell?.liftSkeleton?.(grid);
 
         if (!projects.length) {
           grid.innerHTML = '<div class="empty-state"><h2>No projects yet</h2><p>Create a project to get started with evaluations.</p></div>';
+          window.QymShell?.arrive?.(grid);
           return;
         }
 
         grid.innerHTML = projects.map(p => {
           const role = (p.role || 'MEMBER').toLowerCase();
           const roleClass = role === 'manager' || role === 'admin' ? 'manager' : 'member';
-          return `<a class="project-card" href="${(window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '')}/projects/${encodeURIComponent(p.slug)}">
+          return `<a class="project-card" href="${esc((window.__QYM_ROOT_PATH__ || '').replace(/\/$/, ''))}/projects/${encodeURIComponent(p.slug)}">
             <div class="project-card-top">
               ${window.QymShell && QymShell.identiconHTML ? QymShell.identiconHTML(p.slug, { cell: 10, gap: 3 }) : ''}
               <span class="role-badge qym-tag qym-tag--role ${roleClass}">${esc(role)}</span>
@@ -152,6 +156,7 @@
             </div>
           </a>`;
         }).join('');
+        window.QymShell?.arrive?.(grid);
       }
 
       // Search

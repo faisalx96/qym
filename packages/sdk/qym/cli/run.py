@@ -41,6 +41,7 @@ def run_create(
     dataset_file: Optional[str] = typer.Option(None, "--dataset-file", help="Path to a local CSV or JSONL dataset file"),
     dataset_csv: Optional[str] = typer.Option(None, "--dataset-csv", help="Path to a local CSV dataset file"),
     metrics: Optional[str] = typer.Option(None, "--metrics", help="Comma-separated metric names"),
+    primary_metric: Optional[str] = typer.Option(None, "--primary-metric", help="Headline metric the platform opens on (default: the first metric)"),
     csv_input_col: str = typer.Option("input", "--csv-input-col", help="CSV column for input"),
     csv_expected_col: str = typer.Option("expected_output", "--csv-expected-col", help="CSV column for expected output"),
     csv_id_col: Optional[str] = typer.Option(None, "--csv-id-col", help="CSV column for item ID"),
@@ -186,6 +187,8 @@ def run_create(
             config["samples"] = samples
         if task_name:
             config["task_name"] = task_name
+        if primary_metric:
+            config["primary_metric"] = primary_metric
         if platform_url:
             config["platform_url"] = platform_url
         if platform_api_key:
@@ -254,7 +257,9 @@ def run_create(
                 err_console.print(f"{res.run_name} Success Rate: {res.success_rate:.1%}")
                 for metric_name in metrics_list:
                     stats = res.get_metric_stats(metric_name)
-                    err_console.print(f"{res.run_name} {metric_name}: {stats['mean']:.3f}")
+                    # No mean when every item of a lower-is-better metric errored.
+                    mean = "n/a" if stats["mean"] is None else f"{stats['mean']:.3f}"
+                    err_console.print(f"{res.run_name} {metric_name}: {mean}")
         else:
             for res in run_results:
                 res.print_summary()

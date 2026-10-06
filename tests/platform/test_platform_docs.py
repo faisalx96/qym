@@ -82,6 +82,34 @@ def test_metric_docs_match_runtime_dependency_and_timeout_behavior() -> None:
     assert "JudgeInputError" in judges
 
 
+def test_metric_error_docs_match_the_status_contract() -> None:
+    """Only ``metadata.status`` marks a metric error (C010), and scorer errors
+    count as 0 in the run mean (C015); no guide may still say otherwise."""
+    guides = {
+        path.relative_to(DASHBOARD_DOCS).as_posix(): _read(path)
+        for path in DASHBOARD_DOCS.rglob("*.html")
+    }
+    # Every wording the guides used for the old rule; the SDK's local
+    # summary (get_metric_stats) is described as such, with other words.
+    stale = (
+        "excluded from the mean",
+        "excluded from the metric mean",
+        "excluded from aggregation",
+        "excluded from aggregate scoring",
+        "excluded from that metric's aggregate",
+        "excludes the item from aggregation",
+        "drops out of the mean",
+        "drops out of the average",
+    )
+    for name, text in guides.items():
+        flat = " ".join(text.split())
+        for phrase in stale:
+            assert phrase not in flat, (name, phrase)
+        assert 'metadata={"error": "..."}' not in text, name
+    judges = guides["sdk-guide/judges.html"]
+    assert 'metadata={"status": "error", "error": "..."}' in judges
+
+
 def test_product_eval_docs_use_one_native_repeat_run() -> None:
     client = _read(PLATFORM / "docs" / "PRODUCT_EVAL_API_CLIENT_GUIDE.md")
     operator = _read(PLATFORM / "docs" / "PRODUCT_EVAL_API_GUIDE.md")
@@ -91,3 +119,60 @@ def test_product_eval_docs_use_one_native_repeat_run() -> None:
     for guide in (client, operator):
         assert "samples=k" in guide
     assert "does not create `k` dashboard runs" in client
+
+
+def test_ingestion_docs_describe_per_line_rejections() -> None:
+    """The ingest contract (C024, C005): each line gets a verdict, rejected
+    lines are listed, and an all-rejected request answers 422."""
+    for page in ("developer/ingestion.html", "developer/api-overview.html"):
+        text = " ".join(_read(DASHBOARD_DOCS / page).split())
+        assert "rejected_events" in text, page
+        assert "422" in text, page
+        assert "Incomplete" in text, page
+        for stale in ("always returns <code>200</code>", "silently dropped", "the event is dropped"):
+            assert stale not in text, (page, stale)
+
+
+def test_platform_guide_explains_kpis_incomplete_runs_and_text_mode() -> None:
+    runs = " ".join(_read(DASHBOARD_DOCS / "platform-guide/runs.html").split())
+    assert "Execution success" in runs and "Runs with errors" in runs
+    assert "once per pass" in runs
+    assert "<strong>Incomplete</strong>" in runs
+    detail = " ".join(_read(DASHBOARD_DOCS / "platform-guide/run-detail.html").split())
+    assert "<strong>Raw</strong>" in detail and "Rendered" in detail
+
+
+def test_guides_describe_one_error_rule_for_local_and_platform_stats() -> None:
+    """The SDK's local stats use the platform's error rule (final review,
+    option B); no guide may describe a separate local rule."""
+    stale = (
+        "The platform run mean differs",
+        "Errored metrics in the local summary and on the platform",
+        "treat it differently",
+        "left out of the local",
+        "leaves it out of the metric's mean and counts it as an error instead",
+        "in the local summary a metric failure",
+        "leaves it out of that metric's aggregate",
+        "counts as 0 in the platform run mean",
+    )
+    for path in DASHBOARD_DOCS.rglob("*.html"):
+        flat = " ".join(_read(path).split())
+        for phrase in stale:
+            assert phrase not in flat, (path.name, phrase)
+    results = " ".join(_read(DASHBOARD_DOCS / "sdk-guide/results.html").split())
+    assert "The local stats follow the same rule as the platform run mean" in results
+    for field in ("error_count", "task_error_count", "metric_error_count", "errors_left_out"):
+        assert field in results, field
+    metrics = " ".join(_read(DASHBOARD_DOCS / "sdk-guide/metrics.html").split())
+    assert "<h2>How errored metrics enter the mean</h2>" in metrics
+    assert "The SDK's local stats" in metrics
+    # A metric's own error status is a scorer error recorded as 0 (the
+    # evaluator zeroes the score it came with), on both sides.
+    assert "sets its own <code>metadata.status</code> to error, failed or timeout" in metrics
+    repeats = " ".join(_read(DASHBOARD_DOCS / "sdk-guide/repeats.html").split())
+    assert "<code>score &lt;= threshold</code> for a lower-is-better metric" in repeats
+    guide = " ".join(
+        _read(ROOT / "packages" / "sdk" / "docs" / "USER_GUIDE.md").split()
+    )
+    assert "one rule for the platform and for the local summary" in guide
+    assert "defaults to `score >= 0.8`" not in guide

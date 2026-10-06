@@ -1,20 +1,33 @@
 from __future__ import annotations
 
+import hashlib
+import secrets
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 
 from fastapi import HTTPException, Request
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from qym_platform.db.models import User, UserIdentity, UserRole
+from qym_platform.db.models import User, UserIdentity, UserRole, UserSession
 from qym_platform.settings import PlatformSettings
 
 
 SESSION_USER_ID_KEY = "qym_user_id"
 SESSION_PROVIDER_KEY = "qym_auth_provider"
 SESSION_NEXT_KEY = "qym_auth_next"
+SESSION_ID_KEY = "qym_sid"
+
+# Idle lifetime of a sign-in. The cookie is re-signed on every response, so an
+# active user stays signed in; the server-side row mirrors the same window.
+SESSION_MAX_AGE_SECONDS = 14 * 24 * 60 * 60
+# Refresh ``last_seen_at`` at most this often (one small write per session).
+_SESSION_TOUCH_INTERVAL = timedelta(minutes=10)
+# The row outlives the cookie by one touch interval so the server never ends a
+# session the browser still considers valid.
+_SESSION_IDLE_LIMIT = timedelta(seconds=SESSION_MAX_AGE_SECONDS) + _SESSION_TOUCH_INTERVAL
 
 
 @dataclass(frozen=True)
@@ -97,12 +110,21 @@ def with_root_path(request: Request, path: str) -> str:
 
 
 def sanitize_next(next_value: Optional[str], default: str = "/") -> str:
+    """Return ``next_value`` only when it is a path on this site, else ``default``.
+
+    Browsers read a backslash as a slash and drop tabs and newlines, so
+    ``/\\evil.com`` or ``/<TAB>/evil.com`` would leave the site; any backslash
+    or control character is refused before the URL is parsed.
+    """
     value = (next_value or "").strip()
     if not value:
         return default
-    if not value.startswith("/"):
+    if not value.startswith("/") or value.startswith("//"):
         return default
-    if value.startswith("//"):
+    if "\\" in value or any(ord(char) < 0x20 or ord(char) == 0x7F for char in value):
+        return default
+    parts = urlsplit(value)
+    if parts.scheme or parts.netloc:
         return default
     return value
 
@@ -126,14 +148,66 @@ def pop_login_next(request: Request) -> str:
     return sanitize_next(_session_store(request).pop(SESSION_NEXT_KEY, default), default=default)
 
 
-def set_authenticated_session(request: Request, user: User, provider: str) -> None:
+def _session_digest(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def set_authenticated_session(db: Session, request: Request, user: User, provider: str) -> None:
+    """Start a new server-side session and point the cookie at it.
+
+    Signing in always rotates the session: any session the cookie carried
+    before is ended, and only the post-login redirect target is kept.
+    """
     session = request.scope.setdefault("session", {})
+    now = datetime.utcnow()
+    previous = session.get(SESSION_ID_KEY)
+    if previous:
+        db.query(UserSession).filter(UserSession.id == _session_digest(str(previous))).delete(
+            synchronize_session=False
+        )
+    # Sessions idle past their lifetime can no longer authenticate; drop them.
+    db.query(UserSession).filter(UserSession.last_seen_at < now - _SESSION_IDLE_LIMIT).delete(
+        synchronize_session=False
+    )
+    token = secrets.token_urlsafe(32)
+    db.add(
+        UserSession(
+            id=_session_digest(token),
+            user_id=str(user.id),
+            provider=provider,
+            created_at=now,
+            last_seen_at=now,
+        )
+    )
+    db.commit()
+    next_value = session.get(SESSION_NEXT_KEY)
+    session.clear()
+    if next_value:
+        session[SESSION_NEXT_KEY] = next_value
+    session[SESSION_ID_KEY] = token
     session[SESSION_USER_ID_KEY] = str(user.id)
     session[SESSION_PROVIDER_KEY] = provider
 
 
-def clear_authenticated_session(request: Request) -> None:
-    _session_store(request).clear()
+def clear_authenticated_session(db: Session, request: Request) -> None:
+    """End this browser's session on the server and clear its cookie."""
+    session = _session_store(request)
+    token = session.get(SESSION_ID_KEY)
+    if token:
+        db.query(UserSession).filter(UserSession.id == _session_digest(str(token))).delete(
+            synchronize_session=False
+        )
+        db.commit()
+    session.clear()
+
+
+def end_user_sessions(db: Session, user_id: str) -> int:
+    """End every browser session of a user. The caller commits."""
+    return (
+        db.query(UserSession)
+        .filter(UserSession.user_id == str(user_id))
+        .delete(synchronize_session=False)
+    )
 
 
 def get_session_user_and_provider(db: Session, request: Request) -> Optional[tuple[User, Optional[str]]]:
@@ -141,11 +215,33 @@ def get_session_user_and_provider(db: Session, request: Request) -> Optional[tup
     user_id = session.get(SESSION_USER_ID_KEY)
     if not user_id:
         return None
+    token = session.get(SESSION_ID_KEY)
+    # Cookies issued before server-side sessions carry no token and cannot be
+    # revoked, so they are not trusted; those users sign in once more.
+    row = db.get(UserSession, _session_digest(str(token))) if token else None
+    now = datetime.utcnow()
+    if row is None or row.user_id != str(user_id) or row.last_seen_at < now - _SESSION_IDLE_LIMIT:
+        session.clear()
+        return None
+    provider = row.provider or session.get(SESSION_PROVIDER_KEY)
+    if now - row.last_seen_at >= _SESSION_TOUCH_INTERVAL:
+        # A bulk UPDATE, not an ORM write: a sign-out or revoke that deletes
+        # the row after it was loaded matches 0 rows here, which means the
+        # session ended (an ORM flush would raise StaleDataError instead).
+        touched = (
+            db.query(UserSession)
+            .filter(UserSession.id == row.id)
+            .update({UserSession.last_seen_at: now}, synchronize_session=False)
+        )
+        db.commit()
+        if not touched:
+            session.clear()
+            return None
     user = db.query(User).filter(User.id == str(user_id)).first()
     if not user or not user.is_active:
         session.clear()
         return None
-    return user, session.get(SESSION_PROVIDER_KEY)
+    return user, provider
 
 
 def _default_display_name(email: str, display_name: str = "") -> str:

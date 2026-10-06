@@ -28,7 +28,7 @@ from qym_platform.db.models import (
     EvalEnvironment,
 )
 from qym_platform.deps import get_db
-from qym_platform.permissions import is_project_manager
+from qym_platform.permissions import is_project_manager, require_project_writable
 from qym_platform.services import eval_presets, eval_promote
 from qym_platform.services.eval_presets import PresetError
 from sqlalchemy.exc import IntegrityError
@@ -129,6 +129,7 @@ def create_preset(
         _require_project_manager(db, principal, project_id)
     else:
         _require_project_access(db, principal, project_id)
+    require_project_writable(db, project_id)
     env = _get_environment(db, project_id, env_id)
     schema = _current_schema(db, env)
     try:
@@ -245,6 +246,7 @@ def publish_preset_version(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_project_access(db, principal, project_id)
+    require_project_writable(db, project_id)
     env = _get_environment(db, project_id, env_id)
     try:
         preset = eval_presets.get_preset(db, env, preset_id)

@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
+from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from qym_platform.auth import Principal, require_ui_principal
-from qym_platform.auth_oidc import local_auth_enabled
+from qym_platform.auth_oidc import end_user_sessions, local_auth_enabled
 from qym_platform.api.projects import serialize_project_payloads
 from qym_platform.db.models import (
     AuditLog,
@@ -80,7 +81,9 @@ def list_users(
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> list[Dict[str, Any]]:
-    _ = principal
+    # The whole user directory is for admins. Project managers look people up
+    # through GET /v1/projects/{id}/member-candidates instead.
+    _require_admin(principal)
     users = db.query(User).filter(User.is_active == True).order_by(User.email).all()
     return [
         {
@@ -152,6 +155,25 @@ def admin_create_user(
     return {"id": user.id, "email": user.email}
 
 
+def _other_active_admins_locked(db: Session, user_id: str) -> List[str]:
+    """Active admins other than ``user_id``, with every active admin row locked.
+
+    Rows are locked in id order before counting: two admins disabling,
+    demoting or deleting each other at once then run one after the other, and
+    the second sees the first's change (Postgres re-checks the filter on rows
+    it waited for). SQLite ignores FOR UPDATE and serialises writers anyway.
+    """
+    active_admin_ids = [
+        row.id
+        for row in db.query(User.id)
+        .filter(User.role == UserRole.ADMIN, User.is_active.is_(True))
+        .order_by(User.id)
+        .with_for_update()
+        .all()
+    ]
+    return [admin_id for admin_id in active_admin_ids if admin_id != user_id]
+
+
 @router.put("/v1/admin/users/{user_id}")
 def admin_update_user(
     user_id: str,
@@ -160,7 +182,12 @@ def admin_update_user(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     _require_admin(principal)
-    user = db.query(User).filter(User.id == user_id).first()
+    # Lock the target and the active admins in id order before reading them,
+    # so two concurrent demotions cannot both count the other admin as active.
+    db.query(User.id).filter(
+        or_(User.id == user_id, and_(User.role == UserRole.ADMIN, User.is_active.is_(True)))
+    ).order_by(User.id).with_for_update().all()
+    user = db.query(User).filter(User.id == user_id).populate_existing().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -172,10 +199,33 @@ def admin_update_user(
         user.email = next_email
     if req.display_name is not None:
         user.display_name = req.display_name.strip()
+    if req.is_active is False and user.id == principal.user.id:
+        raise HTTPException(status_code=400, detail="You cannot disable your own account")
+    if (
+        user.id == principal.user.id
+        and user.role == UserRole.ADMIN
+        and req.role is not None
+        and req.role != UserRole.ADMIN
+    ):
+        # Another admin can change it; demoting yourself ends your admin access
+        # in the middle of the page that manages it.
+        raise HTTPException(status_code=409, detail="You cannot remove your own admin role")
+    will_be_admin = (req.role if req.role is not None else user.role) == UserRole.ADMIN and (
+        req.is_active if req.is_active is not None else user.is_active
+    )
+    if user.role == UserRole.ADMIN and user.is_active and not will_be_admin:
+        other_admins = _other_active_admins_locked(db, user.id)
+        if not other_admins:
+            # Nobody could sign in to undo this: the bootstrap token only
+            # works while there are no users at all.
+            raise HTTPException(status_code=409, detail="At least one active admin must remain")
     if req.role is not None:
         user.role = req.role
     if req.is_active is not None:
         user.is_active = req.is_active
+        if not req.is_active:
+            # A later re-enable must not revive sessions from before the disable.
+            end_user_sessions(db, user.id)
 
     db.commit()
     db.refresh(user)
@@ -191,6 +241,9 @@ def _store_temporary_password(db: Session, user: User, actor_id: str, password_h
         db.add(credential)
     credential.password_hash = password_hash
     credential.must_change_password = True
+    # A new credential is an INSERT, which the password hook does not see; a
+    # reset always signs the user out everywhere.
+    end_user_sessions(db, user.id)
 
     has_identity = (
         db.query(UserIdentity.id)
@@ -266,6 +319,12 @@ def admin_delete_user(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if (
+        user.role == UserRole.ADMIN
+        and user.is_active
+        and not _other_active_admins_locked(db, user.id)
+    ):
+        raise HTTPException(status_code=409, detail="At least one active admin must remain")
 
     db.delete(user)
     db.commit()

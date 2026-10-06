@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Profile</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=runs-analysis-c1-20260804-16">
-  <link rel="stylesheet" href="/static/shell.css">
-  <script src="/static/auth.js"></script>
-  <script src="/static/shell.js?v=ui-consistency-20260730-16"></script>
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261005-3">
+  <link rel="stylesheet" href="/static/shell.css?v=p1-20261005-6">
+  <script src="/static/qym_safe.js?v=p1-20261001"></script>
+  <script src="/static/auth.js?v=p1-20261005"></script>
+  <script src="/static/shell.js?v=p1-20261005-8"></script>
   <style>
     .page {
     }
@@ -169,8 +170,8 @@
       }
     }
   </style>
-  <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60">
-  <script defer src="/static/ui_components.js?v=ui-consistency-20260803-28"></script>
+  <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261005-2">
+  <script defer src="/static/ui_components.js?v=p1-20261005"></script>
 </head>
 <body>
   <main class="page">
@@ -185,7 +186,7 @@
 
     <section class="panel">
       <h2>Account</h2>
-      <div class="grid" id="account-grid"></div>
+      <div class="grid" id="account-grid" data-qym-arrive><div style="grid-column: 1 / -1" data-qym-skeleton="lines" data-qym-skeleton-rows="3" data-qym-skeleton-label="Loading your account…"></div></div>
     </section>
 
     <section class="panel bootstrap-panel" id="bootstrap-panel">
@@ -200,7 +201,7 @@
 
     <section class="panel">
       <h2>Projects</h2>
-      <div class="project-list" id="projects-list"></div>
+      <div class="project-list" id="projects-list" data-qym-arrive><div data-qym-skeleton="list" data-qym-skeleton-rows="3" data-qym-skeleton-label="Loading your projects…"></div></div>
     </section>
 
   </main>
@@ -215,12 +216,7 @@
       }
 
       function escapeHtml(value) {
-        return String(value == null ? '' : value)
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;');
+        return QymSafe.escapeHtml(value == null ? '' : String(value));
       }
 
       function projectUrl(slug, suffix = '') {
@@ -265,8 +261,8 @@
             </div>
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
               <span class="role-pill qym-tag qym-tag--role ${escapeHtml(String(project.role || 'member').toLowerCase())}">${escapeHtml(project.role || 'MEMBER')}</span>
-              <a class="btn btn-secondary" href="${projectUrl(project.slug)}">Open</a>
-              <a class="btn btn-secondary" href="${projectUrl(project.slug, 'settings')}">Settings</a>
+              <a class="btn btn-secondary" href="${escapeHtml(projectUrl(project.slug))}">Open</a>
+              <a class="btn btn-secondary" href="${escapeHtml(projectUrl(project.slug, 'settings'))}">Settings</a>
             </div>
           </div>
         `).join('') : '<div class="inline-note">You do not belong to any active projects yet.</div>';

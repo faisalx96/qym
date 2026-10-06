@@ -115,7 +115,7 @@ type already used in `db/models.py`.
 | `base_url` str(500) | full prefix incl. `EVAL_SERVER_PREFIX`, **without** `/evals`; normalized (no trailing `/`) |
 | `api_key_encrypted`, `api_key_last4` | `EVAL_API_KEY` via `secrets.py`; never returned |
 | `default_priority`, `max_priority` | enum `LOW/NORMAL/HIGH`; defaults `NORMAL` / `NORMAL`. Raising `max_priority` to `HIGH` requires manager |
-| ~~`max_inflight_jobs` int~~ | removed (migration 0068): the Evaluation Service limits and queues runs itself |
+| ~~`max_inflight_jobs` int~~ | removed (migration 0080): the Evaluation Service limits and queues runs itself |
 | `allow_connection_keys` bool | default `false`; opt-in to send decrypted `ProjectLlmConnection` keys to this env (D1) |
 | `current_schema_id` FK → `eval_environment_schemas` | |
 | `ranking_metric`, `ranking_k` | default metric and k for best-run ranking (§10); nullable → project default |
@@ -726,7 +726,7 @@ QUEUED ─submit─► SUBMITTED ─remote RUNNING or run linked─► RUNNING �
   └──► CANCELLED        SUBMITTED/RUNNING ─queue cancel─► CANCELLING ─► CANCELLED
 ```
 
-- **Submit** every queued job (no platform in-flight cap since migration 0068; the service queues). Secrets are decrypted in memory only.
+- **Submit** every queued job (no platform in-flight cap since migration 0080; the service queues). Secrets are decrypted in memory only.
   - `202` → `SUBMITTED` and store `remote_job_id`.
   - `409 HIGH active` → backoff (30s → 5m).
   - `422` → `BLOCKED`, with `loc` mapped back to form pointers.

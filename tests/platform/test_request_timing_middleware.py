@@ -38,6 +38,7 @@ def test_server_timing_header_absent_by_default():
 def test_role_api_does_not_start_worker():
     settings = PlatformSettings(database_url="sqlite://", auth_mode="none", role="api")
     app = create_app(settings)
+    # Check while the app runs: shutdown stops the workers either way.
     with TestClient(app):
-        pass
-    assert app.state.dashboard_summary_worker.is_alive() is False
+        assert app.state.dashboard_summary_worker.is_alive() is False
+        assert app.state.maintenance_worker.is_alive() is False

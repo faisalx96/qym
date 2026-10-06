@@ -9,12 +9,10 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
-from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, delete, event, func, null, select, text, update
+from sqlalchemy import delete, event, func, null, select, update
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
 
 os.environ.setdefault("QYM_DATABASE_URL", "sqlite://")
 from qym_platform.api import runs as runs_api
@@ -32,11 +30,9 @@ from qym_platform.db.dashboard_models import DashboardRunSummary as Summary
 from qym_platform.db.models import (
     Approval,
     ApprovalDecision,
-    Base,
     Dataset,
     DatasetAlias,
     DatasetVersion,
-    Project,
     Run,
     RunItem,
     RunItemAttempt,
@@ -45,49 +41,9 @@ from qym_platform.db.models import (
     RunMetricSpec,
     RunWorkflowStatus,
     User,
-    UserRole,
 )
 from qym_platform.services import dashboard_summaries as service
 from qym_platform.services.dashboard_outbox import enqueue_snapshots, snapshot
-
-
-@pytest.fixture(params=["sqlite", "postgres"])
-def database(request):
-    admin = schema = None
-    if request.param == "postgres":
-        url = os.environ.get("QYM_TEST_POSTGRES_URL")
-        if not url:
-            pytest.skip("QYM_TEST_POSTGRES_URL not configured")
-        schema = "qym_dashboard_" + uuid4().hex
-        admin = create_engine(url)
-        with admin.begin() as conn:
-            conn.execute(text(f'CREATE SCHEMA "{schema}"'))
-        engine = create_engine(url, connect_args={"options": f"-csearch_path={schema}"})
-    else:
-        engine = create_engine(
-            "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
-        )
-    Base.metadata.create_all(engine)
-    with Session(engine) as db:
-        db.add(
-            User(
-                id="u",
-                email="owner@example.test",
-                display_name="Owner",
-                role=UserRole.ADMIN,
-            )
-        )
-        db.flush()
-        db.add(Project(id="p", name="Project", slug="test", created_by_user_id="u"))
-        db.commit()
-    try:
-        yield engine
-    finally:
-        engine.dispose()
-        if admin:
-            with admin.begin() as conn:
-                conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
-            admin.dispose()
 
 
 def run(db, run_id="r", **kwargs):
@@ -838,12 +794,29 @@ def test_migration_frozen_schema_and_existing_history_seed(database):
     )
     later_migration = importlib.util.module_from_spec(later)
     later.loader.exec_module(later_migration)
+    # 0069's overview tables reference 0048's summaries: replay them around it.
+    overview = importlib.util.spec_from_file_location(
+        "dashboard_overview_store",
+        path.parent / "0069_dashboard_overview_store.py",
+    )
+    overview_migration = importlib.util.module_from_spec(overview)
+    overview.loader.exec_module(overview_migration)
+    # 0071 adds the runs search text column to 0048's dimensions table.
+    search = importlib.util.spec_from_file_location(
+        "dashboard_runs_search_text",
+        path.parent / "0071_runs_search_text.py",
+    )
+    search_migration = importlib.util.module_from_spec(search)
+    search.loader.exec_module(search_migration)
     with database.begin() as connection:
         migration.op = Operations(MigrationContext.configure(connection))
+        overview_migration.op = later_migration.op = search_migration.op = migration.op
+        overview_migration.downgrade()
         migration.downgrade()
         migration.upgrade()
-        later_migration.op = migration.op
         later_migration.upgrade()
+        overview_migration.upgrade()
+        search_migration.upgrade()
     with Session(database) as db:
         assert db.get(Partition, "r").queue_state == "backfill"
         assert not db.get(Partition, "r").backfill_complete

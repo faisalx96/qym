@@ -376,10 +376,10 @@ def test_review_queue_redacts_private_corrections(world):
 
     rows = client.get("/api/corrections", params={"project_slug": "p"}, headers=MEMBER).json()["corrections"]
     by_run = {row["run_id"]: row for row in rows}
-    assert by_run["run-secret"]["input_snapshot"] == PRIVATE_TEST_SET_PLACEHOLDER
+    assert by_run["run-secret"]["input_preview"] == PRIVATE_TEST_SET_PLACEHOLDER
     assert by_run["run-secret"]["content_restricted"] is True
     assert SECRET_OUTPUT not in str(by_run["run-secret"])
-    assert by_run["run-open"]["input_snapshot"] == SECRET_INPUT
+    assert by_run["run-open"]["input_preview"] == SECRET_INPUT
 
     # Per-run approved corrections span every run of the task in the project.
     rows = client.get("/api/runs/run-open/corrections", headers=MEMBER).json()["corrections"]
@@ -389,7 +389,7 @@ def test_review_queue_redacts_private_corrections(world):
     assert single.status_code == 200 and not _leaks(single)
 
     admin_rows = client.get("/api/corrections", params={"project_slug": "p"}, headers=ADMIN).json()["corrections"]
-    assert all(row["input_snapshot"] == SECRET_INPUT for row in admin_rows)
+    assert all(row["input_preview"] == SECRET_INPUT for row in admin_rows)
 
 
 def test_analyzer_is_admin_only_on_private_runs(world):

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from qym_platform.api import dashboard
 from qym_platform.db.models import RunItemScore, RunWorkflowStatus
 from qym_platform.services.dashboard_cache import DashboardSnapshotCache
-from test_dashboard_durable_summaries import database, run, item, drain
+from test_dashboard_durable_summaries import run, item, drain
 
 
 def test_concurrent_misses_compute_once_and_failed_work_can_retry():
@@ -84,11 +84,20 @@ def test_api_cache_invalidates_on_publication_and_keeps_request_permissions(data
     drain(database)
     overview_cache = DashboardSnapshotCache()
     page_cache = DashboardSnapshotCache()
+    if database.dialect.name == "postgresql":
+        # C037: PostgreSQL builds the overview in SQL (shared_overview).
+        from qym_platform.services import dashboard_overview
+
+        builder = patch.object(
+            dashboard_overview,
+            "build_overview_postgres",
+            wraps=dashboard_overview.build_overview_postgres,
+        )
+    else:
+        builder = patch.object(dashboard, "_build_overview", wraps=dashboard._build_overview)
     with patch.object(dashboard, "_overview_cache", overview_cache), patch.object(
         dashboard, "_page_cache", page_cache
-    ), patch.object(
-        dashboard, "_build_overview", wraps=dashboard._build_overview
-    ) as build:
+    ), builder as build:
 
         def read(project, filters=None, sort="time-desc"):
             with Session(database) as db:

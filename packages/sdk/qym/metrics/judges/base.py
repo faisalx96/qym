@@ -220,10 +220,11 @@ async def llm_judge(
             raw_text = response.choices[0].message.content or ""
         except Exception as exc:
             logger.warning("LLM judge call failed after retries: %s", exc)
+            # status="error" marks a scorer failure, not a judged 0.
             return MetricResult(
                 score=0.0,
                 kind="llm",
-                metadata={"error": str(exc)},
+                metadata={"status": "error", "error": str(exc)},
             )
 
         # --- Parse response ---
@@ -268,7 +269,11 @@ async def llm_judge(
             return MetricResult(
                 score=0.0,
                 kind="llm",
-                metadata={"error": "Could not parse LLM verdict", "raw_response": raw_text},
+                metadata={
+                    "status": "error",
+                    "error": "Could not parse LLM verdict",
+                    "raw_response": raw_text,
+                },
             )
 
         return MetricResult(

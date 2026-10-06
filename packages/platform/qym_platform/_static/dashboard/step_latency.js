@@ -1,6 +1,7 @@
 // Step Latency panel — per-step latency distributions as an interval plot.
 // One row per (phase, step type): p5–p95 whisker, p25–p75 bar, median tick,
-// mean diamond, "n · err" annotation. Vanilla JS + inline SVG, no external
+// mean diamond, "n · err" annotation; each phase header plots the phase's
+// parent span the same way. Vanilla JS + inline SVG, no external
 // dependencies. Mounted from run.html into the Latency and Trace Analysis
 // section; also usable from the compare page with multiple run ids.
 (function () {
@@ -15,9 +16,7 @@
     return Math.max(1, Math.round(ms * 1000)) + "\u00b5s";
   };
 
-  const esc = (s) => String(s == null ? "" : s)
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+  const esc = (s) => QymSafe.escapeHtml(s == null ? "" : String(s));
 
   // Row annotation: "mean 2.1s · n=12 · err=3". annPlain() drives the gutter
   // width math, annMarkup() renders it (err in the danger color) — one source
@@ -32,7 +31,11 @@
   // Collapsible grouping. Keys: "p:<phase>" for a phase header, and
   // "k:<phase>|<kind>" for a kind sub-header. Phase collapse only applies
   // where a phase header is drawn (All view); kind collapse only in By-step,
-  // where kinds group step rows rather than being rows themselves.
+  // where kinds group step rows rather than being rows themselves. The run
+  // page starts with both phases collapsed to their headers, which carry the
+  // phase parent span's own interval (C143); the Agent and Eval views draw no
+  // phase header, so their steps always show.
+  const PHASE_KEYS = ["p:task", "p:eval"];
   const phaseKeyOf = (g) => "p:" + g.phase;
   const kindKeyOf = (g) => "k:" + g.phase + "|" + g.kind;
 
@@ -73,14 +76,18 @@
         items.push({
           header: e.phase === "task" ? "Agent" : "Eval",
           iconKey: e.phase === "task" ? "AGENT" : "EVALUATOR",
-          level: 1, key: pKey, collapsed: pDown, count: phaseCount[pKey],
+          level: 1, key: pKey, phase: e.phase, collapsed: pDown, count: phaseCount[pKey],
         });
         lastPhase = e.phase;
         lastKind = "";
       }
       if (pDown) return;
 
-      if (showKindHeaders && e.kind !== lastKind) {
+      // A kind that only repeats its phase (AGENT spans under Agent,
+      // EVALUATOR spans under Eval) adds a level that says nothing (C143).
+      const repeatsPhase = showPhaseHeaders &&
+        String(e.kind || "").toUpperCase() === (e.phase === "task" ? "AGENT" : "EVALUATOR");
+      if (showKindHeaders && e.kind !== lastKind && !repeatsPhase) {
         items.push({
           header: e.kind, iconKey: ICON_KEY[e.kind] || "DEFAULT",
           level: 2, key: kKey, collapsed: kDown, count: kindCount[kKey],
@@ -95,21 +102,24 @@
   }
 
   // Header row markup: chevron + kind icon + label, wrapped in a click
-  // target spanning the label column.
-  function headerMarkup(it, yTop, h, labelWidth) {
-    const hb = yTop + h - 8;
+  // target spanning the label column. `baseline` centres the label on a
+  // header taller than usual (one carrying comparison lanes).
+  function headerMarkup(it, yTop, h, labelWidth, baseline) {
+    const hb = baseline != null ? baseline : yTop + h - 8;
     const l1 = it.level === 1;
     const cx = l1 ? 12 : 24;
     const ix = l1 ? 26 : 38;
     const tx = l1 ? 46 : 54;
     const suffix = it.collapsed ? "  \u00b7 " + it.count : "";
-    return '<g data-sl-collapse="' + esc(it.key) + '" style="cursor:pointer">' +
-      '<rect x="0" y="' + yTop + '" width="' + (labelWidth + 24) +
+    // A real button for the keyboard too: the run page opens collapsed.
+    return '<g data-sl-collapse="' + esc(it.key) + '" role="button" tabindex="0" ' +
+        'aria-expanded="' + !it.collapsed + '" style="cursor:pointer">' +
+      '<rect class="sl-collapse-hit" x="0" y="' + yTop + '" width="' + (labelWidth + 24) +
         '" height="' + h + '" fill="transparent"/>' +
       collapseChevron(cx, hb - 4, it.collapsed, "var(--text-muted, #888)") +
       kindIconSvg(it.iconKey, ix, hb - (l1 ? 11 : 9.5), l1 ? 13 : 11) +
       '<text x="' + tx + '" y="' + hb +
-        '" font-size="' + (l1 ? 11 : 10) +
+        '" font-size="' + 11 +
         '" letter-spacing="' + (l1 ? "0.1em" : "0.08em") +
         '" font-weight="' + (l1 ? 700 : 600) +
         '" fill="' + (l1 ? "var(--text-primary, #ddd)" : "var(--text-muted, #888)") +
@@ -124,6 +134,46 @@
         "err=" + g.error_count + "</tspan>"
       : "";
     return esc(lead) + err;
+  }
+
+  // A phase header's own distribution: the phase parent span of each trace
+  // (the task/agent span, eval_metrics), which steps leave out (C143).
+  function phaseStatsOf(phase) {
+    return (state.phaseData || []).find((p) => p.phase === phase) || null;
+  }
+
+  function phaseLaneOf(seriesKey, phase) {
+    const lanes = (state.runPhases[state.rollup] || {})[seriesKey] || [];
+    return lanes.find((p) => p.phase === phase) || null;
+  }
+
+  // Interval tooltip: name, counts, then the distribution.
+  function intervalTitle(name, g) {
+    return "<title>" + esc(name) + "\n" +
+      "n=" + g.n + ", err=" + g.error_count + "\n" +
+      "p5 " + FMT(g.p5_ms) + " \u00b7 p25 " + FMT(g.p25_ms) +
+      " \u00b7 median " + FMT(g.median_ms) + " \u00b7 p75 " + FMT(g.p75_ms) +
+      " \u00b7 p95 " + FMT(g.p95_ms) + "\nmean " + FMT(g.mean_ms) +
+      " \u00b7 min " + FMT(g.min_ms) + " \u00b7 max " + FMT(g.max_ms) +
+      (g.cv != null ? " \u00b7 cv " + g.cv.toFixed(2) : "") + "</title>";
+  }
+
+  // One interval glyph: p5–p95 whisker, p25–p75 box, median tick, mean
+  // diamond. Step rows and phase headers draw the same one.
+  function intervalMarkup(g, cy, scale, color, name) {
+    if (!(g.n > 0)) return "";
+    const p5 = scale.x(g.p5_ms), p25 = scale.x(g.p25_ms), p75 = scale.x(g.p75_ms),
+      p95 = scale.x(g.p95_ms), med = scale.x(g.median_ms), mean = scale.x(g.mean_ms);
+    return "<g>" + intervalTitle(name, g) +
+      '<line x1="' + p5 + '" y1="' + cy + '" x2="' + p95 + '" y2="' + cy +
+        '" stroke="' + color + '" stroke-width="1.5" opacity="0.55"/>' +
+      '<rect x="' + p25 + '" y="' + (cy - 6) + '" width="' + Math.max(p75 - p25, 1.5) +
+        '" height="12" rx="2" fill="' + color + '" opacity="0.75"/>' +
+      '<line x1="' + med + '" y1="' + (cy - 8) + '" x2="' + med + '" y2="' + (cy + 8) +
+        '" stroke="var(--text-primary, #fff)" stroke-width="2"/>' +
+      '<path d="M ' + mean + " " + (cy - 5) + " l 5 5 l -5 5 l -5 -5 Z" +
+        '" fill="none" stroke="' + color + '" stroke-width="1.5"/>' +
+      "</g>";
   }
 
   const PHASE_COLORS = {
@@ -191,13 +241,16 @@
     phase: "all",      // all | task | eval
     scale: "linear",   // linear | log
     data: null,        // groups from the API for current rollup
+    phaseData: [],     // phase parent spans' distributions (API `phases`)
     cache: {},         // groups per rollup for the current pass scope
+    phaseCache: {},    // phases per rollup, alongside `cache`
     traceCount: 0,     // distinct traces behind the current data
     hasUnscopedGroups: false, // keep pass controls usable after an empty selection
     collapsed: {},     // group keys collapsed in the plot (client-side only)
     series: [],        // [{key, label, refs}] one lane each: a run, or a cohort
     activeSeries: [],  // series keys currently drawn
     runData: {},       // groups keyed by rollup then series key
+    runPhases: {},     // phases keyed by rollup then series key
     error: null,
     seq: 0,            // request generation; stale responses are discarded
     pending: {},       // shared requests for each rollup in this generation
@@ -217,14 +270,22 @@
     return "/api/runs/step-latency?" + q.toString();
   }
 
+  // Compare lanes that are single runs or passes come back with the pooled
+  // request (group_by=ref) instead of one request per lane.
+  function lanesFromPooled() {
+    return state.pooled && state.series.every((s) => s.refs.length === 1);
+  }
+
   async function loadGroups(rollup, seq) {
     if (state.cache[rollup]) {
-      return { groups: state.cache[rollup], passes: state.passes,
-        trace_count: state.traceCount };
+      return { groups: state.cache[rollup], phases: state.phaseCache[rollup] || [],
+        passes: state.passes, trace_count: state.traceCount };
     }
     const pending = state.pending;
     if (!pending[rollup]) pending[rollup] = (async () => {
-      const resp = await fetch(apiUrl({ rollup: rollup }), {
+      const lanes = lanesFromPooled();
+      const params = lanes ? { rollup: rollup, group_by: "ref" } : { rollup: rollup };
+      const resp = await fetch(apiUrl(params), {
         headers: { Accept: "application/json" },
         credentials: "same-origin",
       });
@@ -232,7 +293,19 @@
       const payload = await resp.json();
       if (seq !== state.seq) return null;
       payload.groups = (payload.groups || []).filter(hasGroupData);
+      payload.phases = (payload.phases || []).filter(hasGroupData);
+      const byRef = payload.groups_by_ref;
+      if (lanes && byRef && typeof byRef === "object") {
+        const bucket = state.runData[rollup] || (state.runData[rollup] = {});
+        const phaseBucket = state.runPhases[rollup] || (state.runPhases[rollup] = {});
+        const phasesByRef = payload.phases_by_ref || {};
+        state.series.forEach((s) => {
+          bucket[s.key] = (byRef[s.refs[0]] || []).filter(hasGroupData);
+          phaseBucket[s.key] = (phasesByRef[s.refs[0]] || []).filter(hasGroupData);
+        });
+      }
       state.cache[rollup] = payload.groups;
+      state.phaseCache[rollup] = payload.phases;
       state.passes = payload.passes || [];
       state.traceCount = payload.trace_count || 0;
       return payload;
@@ -243,19 +316,35 @@
   async function fetchData() {
     const seq = state.seq;
     const rollup = state.rollup;
-    state.data = null;
     state.error = null;
-    render();
+    // A plot on screen stays, dimmed, until its replacement arrives: a
+    // toggle never collapses the panel to a loading line (C028).
+    if (container && container.querySelector(".sl-plot")) {
+      state.refreshing = true;
+      container.classList.add("sl-refreshing");
+    } else {
+      state.data = null;
+      // A quiet remount (the run page when a live run ends) keeps what is on
+      // screen, an empty panel's nothing, until the data arrives: a
+      // "Loading" card must not flash in and push the sections below down
+      // and back (C039, C028).
+      if (!state.quietReload) render();
+    }
     try {
       const [payload] = await Promise.all([
         loadGroups(rollup, seq),
         state.pooled ? ensureRunData(seq) : ensureNameGroups(seq),
       ]);
       if (seq !== state.seq || !payload) return;
+      state.quietReload = false;
+      state.refreshing = false;
       state.data = payload.groups || [];
+      state.phaseData = payload.phases || [];
       if (state.passNum == null) state.hasUnscopedGroups = state.data.length > 0;
     } catch (err) {
       if (seq !== state.seq) return;
+      state.quietReload = false;
+      state.refreshing = false;
       state.error = String((err && err.message) || err);
     }
     refreshTraceStatsInset();
@@ -264,7 +353,12 @@
 
   async function ensureRunData(seq = state.seq) {
     const rollup = state.rollup;
+    // Filled by the pooled request; a server without group_by leaves the
+    // lanes empty and they fall back to their own requests below.
+    if (lanesFromPooled()) await loadGroups(rollup, seq);
+    if (seq !== state.seq) return;
     const bucket = state.runData[rollup] || (state.runData[rollup] = {});
+    const phaseBucket = state.runPhases[rollup] || (state.runPhases[rollup] = {});
     const pending = state.runPending[rollup] || (state.runPending[rollup] = {});
     const missing = state.activeSeries.filter((key) => !bucket[key]);
     await Promise.all(missing.map(async (key) => {
@@ -284,7 +378,9 @@
         });
         if (!resp.ok) throw new Error("HTTP " + resp.status);
         const payload = await resp.json();
-        if (seq === state.seq) bucket[key] = (payload.groups || []).filter(hasGroupData);
+        if (seq !== state.seq) return;
+        bucket[key] = (payload.groups || []).filter(hasGroupData);
+        phaseBucket[key] = (payload.phases || []).filter(hasGroupData);
       })().catch((err) => {
         if (seq === state.seq && state.activeSeries.includes(key)) throw err;
       }).finally(() => { delete pending[key]; });
@@ -403,31 +499,45 @@
     return rows;
   }
 
+  // The plot is drawn at the panel's own pixel width, so its 11px text stays
+  // 11px on screen (--font-sm) instead of scaling up with a wide window
+  // (C143). A hidden or unmeasured panel falls back to 860.
+  function plotWidth() {
+    const width = container ? container.clientWidth - 34 : 0;
+    return width > 0 ? Math.max(560, Math.round(width)) : 860;
+  }
+
   // ── SVG interval plot ─────────────────────────────────────────────────
   function plotSvg(groups) {
     const LABEL_W = 210;
-    // annotation gutter sized to the widest annotation string (~6.6px/char)
-    const annLen = Math.max(4, ...groups.map((g) => annPlain(g).length));
-    const RIGHT_PAD = 24 + Math.ceil(annLen * 6.6);
     const ROW_H = 30;
     const HEADER_H = 22;
     const PHASE_HEADER_H = 30;
     const TOP = 26;
-    const width = 860;
+    const width = plotWidth();
 
     // Two-level grouping (collapsible): one phase header encompassing its
     // kind sub-headers in By-step view; phase headers only in By-kind view.
+    // A phase header plots its parent span, collapsed or not.
     const items = groupedItems(groups);
+    items.forEach((it) => { if (it.level === 1) it.stats = phaseStatsOf(it.phase); });
+    const phaseRows = items.map((it) => it.stats).filter(Boolean);
+    const plotted = groups.concat(phaseRows);
 
+    // annotation gutter sized to the widest annotation string (~6.6px/char)
+    const annLen = Math.max(4, ...plotted.map((g) => annPlain(g).length));
+    const RIGHT_PAD = 24 + Math.ceil(annLen * 6.6);
     const bodyH = items.reduce((h, it) =>
       h + (it.header ? (it.level === 1 ? PHASE_HEADER_H : HEADER_H) : ROW_H), 0);
     const height = TOP + bodyH + 34;
     const x0 = LABEL_W;
     const x1 = width - RIGHT_PAD;
-    const scale = makeScale(groups, x0, x1);
+    // Phase parents share the steps' axis, so their longer bars fit too.
+    const scale = makeScale(plotted, x0, x1);
 
+    // A group, not an image: its group headers are buttons.
     let s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + width + " " + height +
-      '" width="100%" role="img" aria-label="Step latency interval plot" ' +
+      '" width="' + width + '" height="' + height + '" role="group" aria-label="Step latency interval plot" ' +
       'font-family="inherit" font-size="11">';
 
     // axis + gridlines
@@ -447,6 +557,15 @@
       if (it.header) {
         const h = it.level === 1 ? PHASE_HEADER_H : HEADER_H;
         s += headerMarkup(it, yCur, h, LABEL_W);
+        if (it.stats) {
+          // centred on the header label (baseline yCur + h - 8)
+          const cy = yCur + h - 12;
+          s += intervalMarkup(it.stats, cy, scale,
+            PHASE_COLORS[it.phase] || "var(--text-primary, #ddd)",
+            it.header + " phase, parent span per trace");
+          s += '<text x="' + (x1 + 8) + '" y="' + (cy + 4) +
+            '" fill="var(--text-muted, #888)">' + annMarkup(it.stats) + "</text>";
+        }
         yCur += h;
         return;
       }
@@ -462,7 +581,7 @@
         // match the By-step kind sub-header styling: icon + uppercase label
         s += kindIconSvg(ICON_KEY[g.kind] || "DEFAULT", 24, cy - 5.5, 11);
         s += '<text x="40" y="' + (cy + 4) +
-          '" font-size="10" letter-spacing="0.08em" font-weight="600" ' +
+          '" font-size="11" letter-spacing="0.08em" font-weight="600" ' +
           'fill="var(--text-muted, #888)">' + esc(label.toUpperCase()) + "</text>";
       } else {
         const shown = label.length > 30 ? label.slice(0, 29) + "\u2026" : label;
@@ -471,27 +590,7 @@
         (shown !== label ? "<title>" + esc(label) + "</title>" : "") + esc(shown) + "</text>";
       }
 
-      if (g.n > 0) {
-        const p5 = scale.x(g.p5_ms), p25 = scale.x(g.p25_ms), p75 = scale.x(g.p75_ms),
-          p95 = scale.x(g.p95_ms), med = scale.x(g.median_ms), mean = scale.x(g.mean_ms);
-        const title = "<title>" + esc(g.step_type) + " (" + g.phase + ")\n" +
-          "n=" + g.n + ", err=" + g.error_count + "\n" +
-          "p5 " + FMT(g.p5_ms) + " \u00b7 p25 " + FMT(g.p25_ms) +
-          " \u00b7 median " + FMT(g.median_ms) + " \u00b7 p75 " + FMT(g.p75_ms) +
-          " \u00b7 p95 " + FMT(g.p95_ms) + "\nmean " + FMT(g.mean_ms) +
-          " \u00b7 min " + FMT(g.min_ms) + " \u00b7 max " + FMT(g.max_ms) +
-          (g.cv != null ? " \u00b7 cv " + g.cv.toFixed(2) : "") + "</title>";
-        s += "<g>" + title +
-          '<line x1="' + p5 + '" y1="' + cy + '" x2="' + p95 + '" y2="' + cy +
-            '" stroke="' + color + '" stroke-width="1.5" opacity="0.55"/>' +
-          '<rect x="' + p25 + '" y="' + (cy - 6) + '" width="' + Math.max(p75 - p25, 1.5) +
-            '" height="12" rx="2" fill="' + color + '" opacity="0.75"/>' +
-          '<line x1="' + med + '" y1="' + (cy - 8) + '" x2="' + med + '" y2="' + (cy + 8) +
-            '" stroke="var(--text-primary, #fff)" stroke-width="2"/>' +
-          '<path d="M ' + mean + " " + (cy - 5) + " l 5 5 l -5 5 l -5 -5 Z" +
-            '" fill="none" stroke="' + color + '" stroke-width="1.5"/>' +
-          "</g>";
-      }
+      s += intervalMarkup(g, cy, scale, color, g.step_type + " (" + g.phase + ")");
 
       s += '<text x="' + (x1 + 8) + '" y="' + (cy + 4) +
         '" fill="var(--text-muted, #888)">' + ann + "</text>";
@@ -504,29 +603,40 @@
   function plotSvgByRun(rows) {
     const LABEL_W = 210;
     const laneCount = Math.max(state.activeSeries.length, 1);
-    const annLen = Math.max(4, ...rows.flatMap((r) =>
-      r.lanes.map((g) => (g ? annPlain(g).length : 0))));
-    const RIGHT_PAD = 24 + Math.ceil(annLen * 6.2);
     const LANE_H = 16;
     const ROW_PAD = 8;
     const rowH = ROW_PAD + laneCount * LANE_H;
     const HEADER_H = 22;
     const PHASE_HEADER_H = 30;
     const TOP = 26;
-    const width = 860;
+    const width = plotWidth();
 
+    // A phase header carries one lane per run for its parent span, so it
+    // grows to a row's height when it has any.
     const items = groupedItems(rows);
+    items.forEach((it) => {
+      if (it.level !== 1) return;
+      const lanes = state.activeSeries.map((key) => phaseLaneOf(key, it.phase));
+      if (lanes.some(Boolean)) it.lanes = lanes;
+    });
+    const itemH = (it) => !it.header ? rowH
+      : it.level !== 1 ? HEADER_H
+      : it.lanes ? Math.max(PHASE_HEADER_H, rowH) : PHASE_HEADER_H;
+    const laneSets = rows.map((r) => r.lanes)
+      .concat(items.filter((it) => it.lanes).map((it) => it.lanes));
 
-    const bodyH = items.reduce((h, it) =>
-      h + (it.header ? (it.level === 1 ? PHASE_HEADER_H : HEADER_H) : rowH), 0);
+    const annLen = Math.max(4, ...laneSets.flatMap((lanes) =>
+      lanes.map((g) => (g ? annPlain(g).length : 0))));
+    const RIGHT_PAD = 24 + Math.ceil(annLen * 6.2);
+    const bodyH = items.reduce((h, it) => h + itemH(it), 0);
     const height = TOP + bodyH + 34;
     const x0 = LABEL_W;
     const x1 = width - RIGHT_PAD;
-    const flat = rows.flatMap((r) => r.lanes).filter(Boolean);
+    const flat = laneSets.flat().filter(Boolean);
     const scale = makeScale(flat, x0, x1);
 
     let s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + width + " " + height +
-      '" width="100%" role="img" aria-label="Step latency comparison by run" ' +
+      '" width="' + width + '" height="' + height + '" role="group" aria-label="Step latency comparison by run" ' +
       'font-family="inherit" font-size="11">';
     scale.ticks.forEach((t) => {
       const tx = scale.x(t);
@@ -538,47 +648,27 @@
     s += '<line x1="' + x0 + '" y1="' + (height - 28) + '" x2="' + x1 + '" y2="' +
       (height - 28) + '" stroke="var(--border-strong, #444)" stroke-width="1"/>';
 
-    let yCur = TOP;
-    items.forEach((it) => {
-      if (it.header) {
-        const h = it.level === 1 ? PHASE_HEADER_H : HEADER_H;
-        s += headerMarkup(it, yCur, h, LABEL_W);
-        yCur += h;
-        return;
-      }
-      const r = it.row;
-      const labelY = yCur + rowH / 2 + 4;
-      if (state.rollup === "kind") {
-        s += kindIconSvg(ICON_KEY[r.kind] || "DEFAULT", 24, labelY - 9.5, 11);
-        s += '<text x="40" y="' + labelY +
-          '" font-size="10" letter-spacing="0.08em" font-weight="600" ' +
-          'fill="var(--text-muted, #888)">' + esc(r.step_type.toUpperCase()) + "</text>";
-      } else {
-        const shown = r.step_type.length > 30
-          ? r.step_type.slice(0, 29) + "\u2026" : r.step_type;
-        s += '<text x="' + (LABEL_W - 10) + '" y="' + labelY +
-          '" text-anchor="end" fill="var(--text-primary, #ddd)">' +
-          (shown !== r.step_type ? "<title>" + esc(r.step_type) + "</title>" : "") +
-          esc(shown) + "</text>";
-      }
-      r.lanes.forEach((g, li) => {
-        const cy = yCur + ROW_PAD / 2 + li * LANE_H + LANE_H / 2;
+    // One run's lane per line, laid out as a row's lanes from `yTop`.
+    function lanesMarkup(lanes, yTop, name) {
+      let out = "";
+      lanes.forEach((g, li) => {
+        const cy = yTop + ROW_PAD / 2 + li * LANE_H + LANE_H / 2;
         const color = runColor(state.activeSeries[li]);
         if (!g || !(g.n > 0)) {
           if (g && g.error_count) {
-            s += '<text x="' + (x1 + 8) + '" y="' + (cy + 3.5) +
-              '" font-size="9.5" fill="var(--danger, #ef4444)">err=' +
+            out += '<text x="' + (x1 + 8) + '" y="' + (cy + 3.5) +
+              '" font-size="11" fill="var(--danger, #ef4444)">err=' +
               g.error_count + "</text>";
           }
           return;
         }
         const p5 = scale.x(g.p5_ms), p25 = scale.x(g.p25_ms), p75 = scale.x(g.p75_ms),
           p95 = scale.x(g.p95_ms), medX = scale.x(g.median_ms), meanX = scale.x(g.mean_ms);
-        const title = "<title>" + esc(r.step_type) + " (" + r.phase + ") \u2014 " +
+        const title = "<title>" + esc(name) + " \u2014 " +
           esc(seriesLabel(state.activeSeries[li])) + "\nn=" + g.n + ", err=" + g.error_count +
           "\nmedian " + FMT(g.median_ms) + " \u00b7 mean " + FMT(g.mean_ms) +
           "\np5 " + FMT(g.p5_ms) + " \u00b7 p95 " + FMT(g.p95_ms) + "</title>";
-        s += "<g>" + title +
+        out += "<g>" + title +
           '<line x1="' + p5 + '" y1="' + cy + '" x2="' + p95 + '" y2="' + cy +
             '" stroke="' + color + '" stroke-width="1.2" opacity="0.55"/>' +
           '<rect x="' + p25 + '" y="' + (cy - 4) + '" width="' + Math.max(p75 - p25, 1.2) +
@@ -588,9 +678,43 @@
           '<path d="M ' + meanX + " " + (cy - 3.5) + ' l 3.5 3.5 l -3.5 3.5 l -3.5 -3.5 Z' +
             '" fill="none" stroke="' + color + '" stroke-width="1.2"/>' +
           "</g>";
-        s += '<text x="' + (x1 + 8) + '" y="' + (cy + 3.5) +
-          '" font-size="9.5" fill="' + color + '">' + annMarkup(g) + "</text>";
+        out += '<text x="' + (x1 + 8) + '" y="' + (cy + 3.5) +
+          '" font-size="11" fill="' + color + '">' + annMarkup(g) + "</text>";
       });
+      return out;
+    }
+
+    let yCur = TOP;
+    items.forEach((it) => {
+      if (it.header) {
+        const h = itemH(it);
+        if (it.lanes) {
+          // label centred like a row's, lanes centred under it
+          s += headerMarkup(it, yCur, h, LABEL_W, yCur + h / 2 + 4);
+          s += lanesMarkup(it.lanes, yCur + (h - rowH) / 2,
+            it.header + " phase, parent span per trace");
+        } else {
+          s += headerMarkup(it, yCur, h, LABEL_W);
+        }
+        yCur += h;
+        return;
+      }
+      const r = it.row;
+      const labelY = yCur + rowH / 2 + 4;
+      if (state.rollup === "kind") {
+        s += kindIconSvg(ICON_KEY[r.kind] || "DEFAULT", 24, labelY - 9.5, 11);
+        s += '<text x="40" y="' + labelY +
+          '" font-size="11" letter-spacing="0.08em" font-weight="600" ' +
+          'fill="var(--text-muted, #888)">' + esc(r.step_type.toUpperCase()) + "</text>";
+      } else {
+        const shown = r.step_type.length > 30
+          ? r.step_type.slice(0, 29) + "\u2026" : r.step_type;
+        s += '<text x="' + (LABEL_W - 10) + '" y="' + labelY +
+          '" text-anchor="end" fill="var(--text-primary, #ddd)">' +
+          (shown !== r.step_type ? "<title>" + esc(r.step_type) + "</title>" : "") +
+          esc(shown) + "</text>";
+      }
+      s += lanesMarkup(r.lanes, yCur, r.step_type + " (" + r.phase + ")");
       yCur += rowH;
     });
     s += "</svg>";
@@ -724,8 +848,45 @@
       ).join("") + "</div>";
   }
 
+  // Run page card header: "7 steps · 421 traces".
+  function panelSummaryHtml() {
+    let text;
+    if (state.error) text = "Could not load";
+    else if (state.data == null) text = "Loading…";
+    else {
+      const steps = (state.data || []).length;
+      text = steps + (steps === 1 ? " step" : " steps") +
+        (state.traceCount ? " · " + state.traceCount + (state.traceCount === 1 ? " trace" : " traces") : "");
+    }
+    return '<span class="sl-summary">' + esc(text) + "</span>";
+  }
+
+  // CSV and SVG downloads behind one Export menu (C143).
+  function exportMenuHtml() {
+    return '<details class="sl-export">' +
+      '<summary class="qym-inline-action qym-inline-action--neutral sl-btn" title="Download this view">' +
+        DL_ICON + "Export</summary>" +
+      '<div class="sl-export-menu" role="menu">' +
+        '<a class="sl-export-item" role="menuitem" href="' +
+          esc(apiUrl({ format: "csv", rollup: state.rollup })) +
+          '" download title="Download summary CSV">CSV summary</a>' +
+        '<a class="sl-export-item" role="menuitem" href="' +
+          esc(apiUrl({ format: "csv", level: "spans" })) +
+          '" download title="Download raw span CSV">CSV raw spans</a>' +
+        '<button type="button" class="sl-export-item" role="menuitem" ' +
+          'data-sl-download-svg title="Download plot as SVG">SVG plot</button>' +
+      "</div></details>";
+  }
+
   function render() {
     if (!container) return;
+    // While new data loads, the plot on screen belongs to the previous
+    // settings: a redraw in between (a resize, a group toggle) keeps those
+    // nodes as they are instead of drawing old rows under new labels.
+    const stalePlot = state.refreshing
+      ? Array.from(container.querySelectorAll(".sl-legend, .sl-plot"))
+      : [];
+    if (!state.refreshing) container.classList.remove("sl-refreshing");
     let body;
     let emptySelection = false;
     if (state.error) {
@@ -764,15 +925,7 @@
       return;
     }
 
-    container.innerHTML =
-      (emptySelection ? '<div class="sl-filter-controls">' : '<div class="metric-card sl-card">' +
-      '<div class="ri-header"><div>' +
-        '<h3 class="section-title">Step Latency Distributions</h3>' +
-        '<div class="ri-header-copy">Percentile latency intervals per step. ' +
-        "Errors are excluded from " +
-        "distributions and counted separately.</div>" +
-      "</div></div>") +
-      '<div class="sl-controls">' +
+    const controls = '<div class="sl-controls">' +
         seg("phase", [
           { value: "all", label: "All" },
           { value: "task", label: "Agent" },
@@ -793,16 +946,65 @@
               state.passNum == null ? "" : String(state.passNum),
               "Repeat pass")
           : "") +
-        (emptySelection ? "" : '<span class="sl-spacer"></span>' +
-        '<a class="qym-inline-action qym-inline-action--accent sl-btn" href="' +
-          esc(apiUrl({ format: "csv", rollup: state.rollup })) +
-          '" download title="Download summary CSV">' + DL_ICON + "CSV summary</a>" +
-        '<a class="qym-inline-action qym-inline-action--accent sl-btn" href="' +
-          esc(apiUrl({ format: "csv", level: "spans" })) +
-          '" download title="Download raw span CSV">' + DL_ICON + "CSV raw spans</a>" +
-        '<button type="button" class="qym-inline-action qym-inline-action--accent sl-btn" ' +
-          'data-sl-download-svg title="Download plot as SVG">' + DL_ICON + "SVG</button>") +
-      "</div>" + body + "</div>";
+        (emptySelection ? "" : '<span class="sl-spacer"></span>' + exportMenuHtml()) +
+      "</div>";
+    const title = "Step latency distributions";
+    const copy = "Percentile latency intervals per step. " +
+      "Errors are excluded from distributions and counted separately.";
+
+    if (state.collapsible) {
+      // Run page: a card of the Latency and traces section, under Trace
+      // stats and titled like it, then the controls and plot; the plot's
+      // phase groups start collapsed (C143).
+      container.innerHTML = '<div class="metric-card sl-card sl-run-card">' +
+        '<div class="ri-header">' +
+          '<div><span class="sl-card-title">Step latency</span>' +
+          '<div class="ri-header-copy">' + copy + "</div></div>" +
+          panelSummaryHtml() +
+        "</div>" +
+        controls + body +
+      "</div>";
+    } else {
+      container.innerHTML =
+        (emptySelection ? '<div class="sl-filter-controls">' : '<div class="metric-card sl-card">' +
+        '<div class="ri-header"><div>' +
+          '<h3 class="section-title">' + title + "</h3>" +
+          '<div class="ri-header-copy">' + copy + "</div>" +
+        "</div></div>") +
+        controls + body + "</div>";
+    }
+    const freshPlot = container.querySelectorAll(".sl-legend, .sl-plot");
+    if (stalePlot.length && freshPlot.length === stalePlot.length) {
+      freshPlot.forEach((node, index) => node.replaceWith(stalePlot[index]));
+    }
+
+    // An open Export menu closes on an outside click or Escape. The document
+    // listeners live only while the menu is open, so none outlive the page
+    // (C069).
+    container.querySelectorAll("details.sl-export").forEach((menu) => {
+      let closer = null;
+      const stopWatching = () => { if (closer) { closer.abort(); closer = null; } };
+      menu.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape" || !menu.open) return;
+        menu.open = false;
+        const summary = menu.querySelector("summary");
+        if (summary) summary.focus();
+      });
+      const summary = menu.querySelector("summary");
+      if (summary) summary.addEventListener("click", () => {
+        // About to open: watch for an outside click until it closes.
+        if (menu.open) return;
+        stopWatching();
+        closer = new AbortController();
+        document.addEventListener("click", (event) => {
+          if (!menu.isConnected || !menu.contains(event.target)) {
+            menu.open = false;
+            stopWatching();
+          }
+        }, { signal: closer.signal });
+      });
+      menu.addEventListener("toggle", () => { if (!menu.open) stopWatching(); });
+    });
 
     container.querySelectorAll("[data-sl-seg]").forEach((group) => {
       const name = group.getAttribute("data-sl-seg");
@@ -812,7 +1014,17 @@
           const next = name === "passNum" ? (val === "" ? null : Number(val)) : val;
           if (state[name] === next) return;
           state[name] = next;
-          if (name === "passNum") { state.cache = {}; state.runData = {}; }
+          // The choice shows at once, while the plot keeps its place until
+          // the new data arrives.
+          group.querySelectorAll("[data-sl-val]").forEach((option) => {
+            const on = option === btn;
+            option.classList.toggle("active", on);
+            option.setAttribute("aria-pressed", String(on));
+          });
+          if (name === "passNum") {
+            state.cache = {}; state.phaseCache = {};
+            state.runData = {}; state.runPhases = {};
+          }
           if (name === "rollup" || name === "passNum") {
             state.seq += 1;
             state.pending = {};
@@ -826,12 +1038,22 @@
     });
 
     // Collapse/expand a phase or kind group (pure client-side re-render).
+    // From the keyboard, focus stays on the redrawn header.
     container.querySelectorAll("[data-sl-collapse]").forEach((node) => {
-      node.addEventListener("click", () => {
-        const key = node.getAttribute("data-sl-collapse");
+      const key = node.getAttribute("data-sl-collapse");
+      const toggle = () => {
         if (state.collapsed[key]) delete state.collapsed[key];
         else state.collapsed[key] = true;
         render();
+      };
+      node.addEventListener("click", toggle);
+      node.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        toggle();
+        const next = Array.from(container.querySelectorAll("[data-sl-collapse]"))
+          .find((header) => header.getAttribute("data-sl-collapse") === key);
+        if (next) next.focus({ preventScroll: true });
       });
     });
 
@@ -863,6 +1085,8 @@
     const dl = container.querySelector("[data-sl-download-svg]");
     if (dl) {
       dl.addEventListener("click", () => {
+        const menu = dl.closest("details");
+        if (menu) menu.open = false;
         const svg = container.querySelector(".sl-plot svg");
         if (!svg) return;
         const blob = new Blob(
@@ -924,6 +1148,8 @@
     while (clone.firstChild) inner.appendChild(clone.firstChild);
     clone.appendChild(inner);
     clone.setAttribute("viewBox", "0 0 " + W + " " + (TITLE_H + H + LEGEND_H));
+    clone.setAttribute("width", W);
+    clone.setAttribute("height", TITLE_H + H + LEGEND_H);
 
     const bg = document.createElementNS(SVGNS, "rect");
     bg.setAttribute("x", 0);
@@ -995,7 +1221,37 @@
       ".sl-ts-empty{color:var(--text-muted,#888);font-size:var(--font-sm,12px)}" +
       ".sl-legend{margin:0 0 4px;overflow-x:auto}" +
       ".sl-legend svg text{font-family:var(--font-sans, inherit)}" +
-      ".sl-plot svg text{font-family:var(--font-sans, inherit)}";
+      ".sl-plot svg text{font-family:var(--font-sans, inherit)}" +
+      // Plot text on the type scale (C143): drawn at 1:1, so 11px is 11px.
+      ".sl-plot svg text,.sl-legend svg text{font-size:var(--font-sm, 11px)}" +
+      ".sl-refreshing .sl-plot,.sl-refreshing .sl-legend{opacity:.55;" +
+        "transition:opacity .12s ease .08s}" +
+      // Run page card: title and copy left, the summary right (C143).
+      // Its own title class: metric-card-name marks a metric's card (C143).
+      ".sl-run-card .sl-card-title{display:block;margin-bottom:2px;color:var(--text-primary, #eee);" +
+        "font-size:var(--font-md, 13px);font-weight:600}" +
+      ".sl-run-card .ri-header{display:flex;align-items:baseline;" +
+        "justify-content:space-between;gap:var(--space-md, 14px);margin-bottom:var(--space-md, 14px)}" +
+      ".sl-summary{flex-shrink:0;margin-left:auto;color:var(--text-muted, #888);font-size:var(--font-sm, 11px);" +
+        "font-family:var(--font-mono, monospace);font-variant-numeric:tabular-nums;white-space:nowrap}" +
+      // Group headers are keyboard buttons; focus shows on their hit area.
+      ".sl-plot [data-sl-collapse]{outline:none}" +
+      ".sl-plot [data-sl-collapse]:focus-visible .sl-collapse-hit{" +
+        "stroke:var(--accent-primary, #34d399);stroke-width:1}" +
+      // One Export menu instead of three buttons (C143).
+      ".sl-export{position:relative}" +
+      ".sl-export>summary{list-style:none}" +
+      ".sl-export>summary::-webkit-details-marker{display:none}" +
+      ".sl-export-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:20;" +
+        "display:flex;flex-direction:column;min-width:160px;padding:var(--space-xs, 4px);" +
+        "background:var(--bg-elevated, #1c1c22);border:1px solid var(--border-default, #333);" +
+        "border-radius:var(--control-radius, 5px);box-shadow:0 8px 24px rgba(0,0,0,.35)}" +
+      ".sl-export-item{display:flex;align-items:center;height:28px;padding:0 var(--space-sm, 8px);" +
+        "border:0;border-radius:var(--control-radius, 5px);background:none;" +
+        "color:var(--text-secondary, #aaa);font:inherit;font-size:var(--font-sm, 11px);" +
+        "text-align:left;text-decoration:none;cursor:pointer}" +
+      ".sl-export-item:hover,.sl-export-item:focus-visible{background:var(--bg-hover, #222);" +
+        "color:var(--text-primary, #ddd);outline:none}";
     const style = document.createElement("style");
     style.id = "sl-styles";
     style.textContent = css;
@@ -1167,6 +1423,14 @@
   function enhanceTraceStats() {
     if (state.pooled) return; // run page only
     if (_tsTimer) clearInterval(_tsTimer);
+    _tsTimer = null;
+    // A strip already on the page is enhanced now, in the same task that
+    // drew it: folded tiles never paint and then vanish (C028).
+    const present = document.querySelector(".trace-pills-row.qym-stat-strip");
+    if (present) {
+      enhanceTraceStrip(present);
+      return;
+    }
     let tries = 0;
     _tsTimer = setInterval(() => {
       tries += 1;
@@ -1177,44 +1441,48 @@
       }
       clearInterval(_tsTimer);
       _tsTimer = null;
-      Array.from(strip.children).forEach((pill) => {
-        try {
-          if (pill.hasAttribute("data-sl-ts") ||
-              pill.hasAttribute("data-sl-folded")) return;
-          const label = _tileLabel(pill);
-          const foldable = /^Avg\s+.+\s+latency$/i.test(label) &&
-            !(label in TILE_BREAKDOWNS) && label !== "Avg Trace Latency";
-          if (foldable) {
-            const valEl = pill.querySelector(".trace-pill-val");
-            _tsFolded.push({
-              label: label,
-              value: (valEl ? valEl.textContent : "").trim() || "\u2014",
-              pill: pill,
-              display: pill.style.display,
-            });
-            pill.setAttribute("data-sl-folded", "1");
-            pill.style.display = "none";
-            return;
-          }
-          const expandable = (label in TILE_BREAKDOWNS) ||
-            label === "Avg Trace Latency";
-          if (!expandable) return;
-          pill.setAttribute("data-sl-ts", label);
-          pill.classList.add("sl-ts-expandable");
-          pill.insertAdjacentHTML("beforeend",
-            '<svg class="sl-ts-chev" viewBox="0 0 16 16" width="12" height="12" ' +
-            'fill="none" stroke="currentColor" stroke-width="1.7" ' +
-            'stroke-linecap="round" aria-hidden="true">' +
-            '<path d="M4 6.5 8 10.5 12 6.5"/></svg>');
-          const handler = () => _toggleInset(label, strip);
-          pill.addEventListener("click", handler);
-          _tsBindings.push({ pill: pill, handler: handler });
-        } catch (err) {
-          console.error("[step-latency] pill enhance failed:", err, pill);
-        }
-      });
-      refreshTraceStatsInset();
+      enhanceTraceStrip(strip);
     }, 250);
+  }
+
+  function enhanceTraceStrip(strip) {
+    Array.from(strip.children).forEach((pill) => {
+      try {
+        if (pill.hasAttribute("data-sl-ts") ||
+            pill.hasAttribute("data-sl-folded")) return;
+        const label = _tileLabel(pill);
+        const foldable = /^Avg\s+.+\s+latency$/i.test(label) &&
+          !(label in TILE_BREAKDOWNS) && label !== "Avg Trace Latency";
+        if (foldable) {
+          const valEl = pill.querySelector(".trace-pill-val");
+          _tsFolded.push({
+            label: label,
+            value: (valEl ? valEl.textContent : "").trim() || "\u2014",
+            pill: pill,
+            display: pill.style.display,
+          });
+          pill.setAttribute("data-sl-folded", "1");
+          pill.style.display = "none";
+          return;
+        }
+        const expandable = (label in TILE_BREAKDOWNS) ||
+          label === "Avg Trace Latency";
+        if (!expandable) return;
+        pill.setAttribute("data-sl-ts", label);
+        pill.classList.add("sl-ts-expandable");
+        pill.insertAdjacentHTML("beforeend",
+          '<svg class="sl-ts-chev" viewBox="0 0 16 16" width="12" height="12" ' +
+          'fill="none" stroke="currentColor" stroke-width="1.7" ' +
+          'stroke-linecap="round" aria-hidden="true">' +
+          '<path d="M4 6.5 8 10.5 12 6.5"/></svg>');
+        const handler = () => _toggleInset(label, strip);
+        pill.addEventListener("click", handler);
+        _tsBindings.push({ pill: pill, handler: handler });
+      } catch (err) {
+        console.error("[step-latency] pill enhance failed:", err, pill);
+      }
+    });
+    refreshTraceStatsInset();
   }
 
   window.QymStepLatency = {
@@ -1223,15 +1491,20 @@
       resetTraceStats();
       container = el;
       state.seq += 1;
+      state.refreshing = false;
       state.runData = {};
+      state.runPhases = {};
       state.cache = {};
+      state.phaseCache = {};
       state.pending = {};
       state.runPending = {};
       state.data = null;
+      state.phaseData = [];
       state.error = null;
       state.passes = [];
       state.traceCount = 0;
       state.hasUnscopedGroups = false;
+      state.quietReload = !!(opts && opts.quietReload);
       state.runIds = runIds.map(String);
       state.pooled = (opts && typeof opts.pooled === "boolean")
         ? opts.pooled
@@ -1271,9 +1544,42 @@
         }));
       }
       state.activeSeries = state.pooled ? state.series.map((s) => s.key) : [];
+      // The run page (`collapsible`) always shows the plot, opening on its
+      // two phase headers with their parent spans' intervals (C143). A
+      // quiet remount (a live run ending) keeps what the reader expanded.
+      state.collapsible = !!(opts && opts.collapsible);
+      if (state.collapsible && !state.quietReload) {
+        state.collapsed = {};
+        PHASE_KEYS.forEach((key) => { state.collapsed[key] = true; });
+      }
       injectStyles();
+      watchWidth();
       fetchData();
       enhanceTraceStats();
     },
+    // A redrawn Trace Stats strip gets its breakdowns again, from the data
+    // already loaded: no new request (C028).
+    refreshTraceStats() {
+      if (!container || state.pooled) return;
+      resetTraceStats();
+      enhanceTraceStats();
+    },
   };
+
+  // The plot follows the panel's width (it is drawn at 1:1 pixels).
+  let resizeObserver = null;
+  let observedWidth = 0;
+  function watchWidth() {
+    if (resizeObserver) resizeObserver.disconnect();
+    if (typeof ResizeObserver !== "function" || !container) return;
+    observedWidth = container.clientWidth;
+    resizeObserver = new ResizeObserver(() => {
+      const width = container ? container.clientWidth : 0;
+      if (!width || Math.abs(width - observedWidth) < 16) return;
+      observedWidth = width;
+      if (container.querySelector(".sl-plot")) requestAnimationFrame(render);
+    });
+    resizeObserver.observe(container);
+  }
+
 })();

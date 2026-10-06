@@ -25,6 +25,7 @@ from qym_platform.db.models import (
 )
 from qym_platform.deps import get_db
 from qym_platform.permissions import can_view_run_items, redact_item_content
+from qym_platform.services.ingest_completeness import public_run_metadata
 from qym_platform.services.product_evals import (
     ProductEvalError,
     ProductEvalJob,
@@ -32,10 +33,18 @@ from qym_platform.services.product_evals import (
     ProductEvalQueueFull,
     ProductEvalRuntimeInputs,
 )
+from qym_platform.services.run_lifecycle import (
+    REVIEW_RUN_STATUSES,
+    TERMINAL_RUN_STATUSES,
+)
 from qym_platform.settings import PlatformSettings
 
 
 logger = logging.getLogger(__name__)
+
+# Stop never touches a finished run, nor one in review (its status is the
+# review state; moving it would strand the review).
+_SETTLED_RUN_STATUSES = TERMINAL_RUN_STATUSES | REVIEW_RUN_STATUSES
 
 router = APIRouter(prefix="/v1/product-evals", tags=["product-evals"])
 job_manager = ProductEvalJobManager()
@@ -428,11 +437,7 @@ def _stop_product_eval_runs(
     now = utc_now_naive()
     stopped = 0
     for run in query.order_by(Run.id).with_for_update().populate_existing().all():
-        if run.status in {
-            RunWorkflowStatus.COMPLETED,
-            RunWorkflowStatus.FAILED,
-            RunWorkflowStatus.STOPPED,
-        }:
+        if run.status in _SETTLED_RUN_STATUSES:
             continue
         run.status = RunWorkflowStatus.STOPPED
         run.status_reason = "product_eval_stopped"
@@ -443,16 +448,36 @@ def _stop_product_eval_runs(
     return stopped
 
 
+def stop_project_product_evals(db: Session, project_id: str) -> int:
+    """Stop a project's in-process product evals and mark their runs stopped.
+
+    Archiving turns the project's API keys off, so the job's own key can no
+    longer call the stop routes, and its uploads are refused while the
+    product and judge calls would go on.
+    """
+    run_ids = set()
+    for job in job_manager.stop_project(project_id, db=db):
+        snapshot = job.to_dict()
+        run_ids.update(str(row["qym_run_id"]) for row in snapshot["runs"] if row.get("qym_run_id"))
+        if snapshot.get("run_id"):
+            run_ids.add(str(snapshot["run_id"]))
+    if not run_ids:
+        return 0
+    runs = (
+        Run.active(db)
+        .filter(Run.id.in_(sorted(run_ids)), Run.project_id == project_id)
+        .order_by(Run.id)
+        .all()
+    )
+    return _stop_runs(db, runs)
+
+
 def _stop_runs(db: Session, runs: List[Run]) -> int:
     now = utc_now_naive()
     stopped = 0
     for run in sorted(runs, key=lambda value: value.id):
         db.refresh(run, with_for_update=True)
-        if run.status in {
-            RunWorkflowStatus.COMPLETED,
-            RunWorkflowStatus.FAILED,
-            RunWorkflowStatus.STOPPED,
-        }:
+        if run.status in _SETTLED_RUN_STATUSES:
             continue
         run.status = RunWorkflowStatus.STOPPED
         run.status_reason = "product_eval_stopped"
@@ -465,11 +490,7 @@ def _stop_runs(db: Session, runs: List[Run]) -> int:
 
 def _mark_run_stopped(db: Session, run: Run) -> bool:
     db.refresh(run, with_for_update=True)
-    if run.status in {
-        RunWorkflowStatus.COMPLETED,
-        RunWorkflowStatus.FAILED,
-        RunWorkflowStatus.STOPPED,
-    }:
+    if run.status in _SETTLED_RUN_STATUSES:
         return False
     now = utc_now_naive()
     run.status = RunWorkflowStatus.STOPPED
@@ -521,7 +542,11 @@ def _latency_stats(items: List[RunItem]) -> Dict[str, Any]:
 
 
 def _public_metadata(run_metadata: Dict[str, Any]) -> Dict[str, Any]:
-    return {key: value for key, value in run_metadata.items() if key != "product_eval"}
+    return {
+        key: value
+        for key, value in public_run_metadata(run_metadata).items()
+        if key != "product_eval"
+    }
 
 
 def _completed_event_item_ids(db: Session, run_id: str) -> set[str]:
@@ -697,6 +722,7 @@ def submit_product_eval(
             owner_user_id=principal.user.id,
             project_id=principal.project_id,
             run_count=request.run_count,
+            store_bind=db.get_bind(),
         )
     except ProductEvalError as exc:
         return _error_response(400, "invalid_request", str(exc))
@@ -719,10 +745,11 @@ def submit_product_eval(
 @router.get("/jobs/{job_id}")
 def get_product_eval_job(
     job_id: str,
+    db: Session = Depends(get_db),
     principal: Principal = Depends(require_api_key_principal),
 ) -> JSONResponse:
     require_api_key_scope(principal, "runs:read")
-    job_or_response = _require_job_access(job_manager.get(job_id), principal)
+    job_or_response = _require_job_access(job_manager.get(job_id, db=db), principal)
     if isinstance(job_or_response, JSONResponse):
         return job_or_response
     return JSONResponse(_ok(_job_payload(job_or_response)))
@@ -735,7 +762,7 @@ def stop_product_eval_job(
     principal: Principal = Depends(require_api_key_principal),
 ) -> JSONResponse:
     require_api_key_scope(principal, "runs:write")
-    job_or_response = _require_job_access(job_manager.get(job_id), principal)
+    job_or_response = _require_job_access(job_manager.get(job_id, db=db), principal)
     if isinstance(job_or_response, JSONResponse):
         return job_or_response
     job = job_or_response
@@ -755,7 +782,7 @@ def stop_product_eval(
     require_api_key_scope(principal, "runs:write")
 
     if _is_eval_id(identifier):
-        job = job_manager.get(identifier)
+        job = job_manager.get(identifier, db=db)
         if job is not None:
             job_or_response = _require_job_access(job, principal)
             if isinstance(job_or_response, JSONResponse):
@@ -776,18 +803,16 @@ def stop_product_eval(
 
     run = _require_run_access(db, principal, identifier)
 
-    job = job_manager.get_by_qym_run_id(identifier)
+    job = job_manager.get_by_qym_run_id(
+        identifier, db=db, eval_id=_product_eval_metadata(run).get("eval_id")
+    )
     if job is not None:
         job_or_response = _require_job_access(job, principal)
         if isinstance(job_or_response, JSONResponse):
             return job_or_response
         job_or_response.request_stop()
         stopped_runs = _stop_product_eval_runs(db, job_or_response, principal)
-        if run.status not in {
-            RunWorkflowStatus.COMPLETED,
-            RunWorkflowStatus.FAILED,
-            RunWorkflowStatus.STOPPED,
-        }:
+        if run.status not in _SETTLED_RUN_STATUSES:
             run = _require_run_access(db, principal, identifier)
             _mark_run_stopped(db, run)
             stopped_runs += 1
@@ -810,7 +835,7 @@ def get_product_eval(
 ) -> Dict[str, Any]:
     require_api_key_scope(principal, "runs:read")
     if _is_eval_id(identifier):
-        job = job_manager.get(identifier)
+        job = job_manager.get(identifier, db=db)
         if job is not None:
             job_or_response = _require_job_access(job, principal)
             if isinstance(job_or_response, JSONResponse):

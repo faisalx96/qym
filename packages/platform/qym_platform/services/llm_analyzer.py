@@ -45,7 +45,6 @@ from qym_platform.services.root_cause_categories import (
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
-MAX_FEW_SHOT_EXAMPLES = 20
 # Rule writing is deliberately split by source.  These limits are large enough
 # to learn from a useful project library, while still leaving room for the
 # writer instructions and the model's response in a normal context window.
@@ -1700,56 +1699,6 @@ def _render_system_prompt(template: str, values: dict[str, str]) -> str:
     return rendered.replace(open_brace, "{").replace(close_brace, "}")
 
 
-def get_few_shot_examples(
-    db: Session,
-    task: str,
-    project_id: str,
-    limit: int | None = 5,
-    correction_ids: list[int] | None = None,
-) -> list[ReviewCorrection]:
-    """Retrieve project-scoped approved correction examples for a task.
-
-    Only corrections with status=APPROVED are used as few-shot examples.
-    If correction_ids is provided, fetch those specific corrections (by ID)
-    instead of the latest N. Every path is capped at MAX_FEW_SHOT_EXAMPLES.
-    """
-    requested_limit = MAX_FEW_SHOT_EXAMPLES if limit is None else max(0, limit)
-    effective_limit = min(requested_limit, MAX_FEW_SHOT_EXAMPLES)
-    if correction_ids is not None:
-        corrections = (
-            db.query(ReviewCorrection)
-            .join(Run, Run.id == ReviewCorrection.run_id)
-            .filter(
-                ReviewCorrection.task == task,
-                Run.project_id == project_id,
-                Run.deleted_at.is_(None),
-                ReviewCorrection.id.in_(correction_ids),
-                ReviewCorrection.status == CorrectionStatus.APPROVED,
-                ReviewCorrection.is_active.is_(True),
-            )
-            .order_by(ReviewCorrection.created_at.desc())
-            .all()
-        )
-        return filter_explicitly_approved_issue_corrections(
-            db, corrections
-        )[:effective_limit]
-    query = (
-        db.query(ReviewCorrection)
-        .join(Run, Run.id == ReviewCorrection.run_id)
-        .filter(
-            ReviewCorrection.task == task,
-            Run.project_id == project_id,
-            Run.deleted_at.is_(None),
-            ReviewCorrection.status == CorrectionStatus.APPROVED,
-            ReviewCorrection.is_active.is_(True),
-        )
-        .order_by(ReviewCorrection.created_at.desc())
-    )
-    return filter_explicitly_approved_issue_corrections(
-        db, query.all()
-    )[:effective_limit]
-
-
 def get_all_approved_examples(
     db: Session,
     *,
@@ -2114,7 +2063,6 @@ def _format_item_context(
 def build_analysis_prompt(
     item: RunItem,
     scores: dict[str, RunItemScore],
-    corrections: list[ReviewCorrection],
     config: dict[str, Any] | None = None,
     metric_name: str | None = None,
 ) -> list[dict[str, str]]:
@@ -2749,7 +2697,6 @@ async def analyze_single_item(
     model: str,
     item: RunItem,
     scores: dict[str, RunItemScore],
-    corrections: list[ReviewCorrection],
     config: dict[str, Any] | None = None,
     metric_name: str | None = None,
     temperature: float | None = None,
@@ -2762,7 +2709,7 @@ async def analyze_single_item(
 ) -> AnalysisResult:
     """Analyze a single item using the LLM."""
     messages = build_analysis_prompt(
-        item, scores, corrections, config=config, metric_name=metric_name
+        item, scores, config=config, metric_name=metric_name
     )
     prompt_hash = hashlib.sha256(
         json.dumps(messages, ensure_ascii=False, sort_keys=True).encode("utf-8")
@@ -3011,7 +2958,6 @@ async def analyze_items_batch(
         tuple[RunItem, dict[str, RunItemScore]]
         | tuple[RunItem, dict[str, RunItemScore], str]
     ],
-    corrections: list[ReviewCorrection],
     concurrency: int = 20,
     config: dict[str, Any] | None = None,
     metric_name: str | None = None,
@@ -3044,7 +2990,6 @@ async def analyze_items_batch(
                 model,
                 item,
                 scores,
-                corrections,
                 config=config,
                 metric_name=selected_metric,
                 temperature=temperature,

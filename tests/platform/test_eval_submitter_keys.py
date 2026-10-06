@@ -276,7 +276,7 @@ def test_unavailable_key_blocks_instead_of_submitting(
             db.get(ApiKey, experiment.qym_api_key_id).revoked_at = utc_now_naive()
         elif breakage == "unreadable":
             experiment.qym_api_key_encrypted = "not-a-fernet-token"
-        else:  # an experiment launched before migration 0065
+        else:  # an experiment launched before migration 0077
             experiment.qym_api_key_id = None
             experiment.qym_api_key_encrypted = None
         db.commit()

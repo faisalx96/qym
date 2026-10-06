@@ -4,7 +4,8 @@ Computes percentile-based latency stats (n, mean, median, std, p5/p25/p75/p95,
 min, max, CV) per (phase, step type) from stored spans, and serves them as
 JSON or CSV. Phase attribution (task vs eval) mirrors the ingestion logic:
 spans under an ``eval_metrics`` root or carrying ``qym.usage_scope=metric``
-(directly or via an ancestor) belong to the eval phase.
+(directly or via an ancestor) belong to the eval phase. The JSON summary also
+carries one distribution per phase, of each trace's phase parent span.
 
 Purely read-only: no schema changes, no ingestion changes.
 """
@@ -15,7 +16,7 @@ import csv
 import io
 import math
 from collections import defaultdict
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
@@ -112,6 +113,17 @@ def _percentile(sorted_values: Sequence[float], pct: float) -> float:
     return sorted_values[lo] + frac * (sorted_values[hi] - sorted_values[lo])
 
 
+def _duration_ms(value: Any) -> Optional[float]:
+    """A usable span duration in ms, or None (missing, non-finite, negative)."""
+    try:
+        duration = float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+    if duration is not None and (not math.isfinite(duration) or duration < 0):
+        return None
+    return duration
+
+
 def _metric_span_ids(spans: Sequence[Any]) -> set:
     """Run/trace/span keys in the eval phase: metric-scoped spans and all
     descendants of metric roots (``eval_metrics`` name or metric usage scope).
@@ -162,11 +174,14 @@ def _step_label(kind: str, name: str, attrs: Dict[str, Any], rollup: str) -> str
     return name or kind.lower()
 
 
-def classify_spans(spans: Sequence[Any], rollup: str = "name") -> List[Dict[str, Any]]:
+def classify_spans(
+    spans: Sequence[Any], rollup: str = "name", eval_ids: Optional[set] = None
+) -> List[Dict[str, Any]]:
     """Map spans to step rows: [{phase, kind, step_type, name, duration_ms,
     status, ...}] keeping only step-kind spans with usable durations or
-    error status."""
-    eval_ids = _metric_span_ids(spans)
+    error status. ``eval_ids`` reuses an attribution already computed."""
+    if eval_ids is None:
+        eval_ids = _metric_span_ids(spans)
     parent_ids = {
         (span.run_id, span.trace_id, span.parent_span_id)
         for span in spans
@@ -184,13 +199,7 @@ def classify_spans(spans: Sequence[Any], rollup: str = "name") -> List[Dict[str,
             continue
         if not kind:
             kind = "OTHER"
-        duration = span.duration_ms
-        try:
-            duration = float(duration) if duration is not None else None
-        except (TypeError, ValueError):
-            duration = None
-        if duration is not None and (not math.isfinite(duration) or duration < 0):
-            duration = None
+        duration = _duration_ms(span.duration_ms)
         status = str(span.status or "UNSET").upper()
         tokens = _token_counts(attrs)
         if duration is None and status != "ERROR":
@@ -216,26 +225,53 @@ def classify_spans(spans: Sequence[Any], rollup: str = "name") -> List[Dict[str,
     return rows
 
 
-def compute_step_latency(
-    spans: Sequence[Any], rollup: str = "name"
-) -> List[Dict[str, Any]]:
-    """Aggregate spans into per-(phase, step_type) latency distributions.
+def _new_bucket() -> Dict[str, Any]:
+    return {"durations": [], "error_count": 0,
+            "tokens_total": 0, "tokens_prompt": 0, "tokens_completion": 0}
 
-    ERROR spans are excluded from the distributions and surfaced as
-    ``error_count`` per group.
-    """
-    rows = classify_spans(spans, rollup=rollup)
+
+def _add_tokens(bucket: Dict[str, Any], row: Dict[str, Any]) -> None:
+    # tokens count for every span, errored or not: they were spent
+    for field in _TOKEN_FIELDS:
+        bucket[field] += row.get(field) or 0
+
+
+def _bucket_stats(bucket: Dict[str, Any]) -> Dict[str, Any]:
+    """n, error_count, tokens and the latency fields of one bucket."""
+    durations = sorted(bucket["durations"])
+    n = len(durations)
+    stats: Dict[str, Any] = {
+        "n": n,
+        "error_count": bucket["error_count"],
+        **{field: bucket[field] for field in _TOKEN_FIELDS},
+    }
+    if not n:
+        stats.update({f: None for f in _LATENCY_FIELDS})
+        return stats
+    mean = sum(durations) / n
+    variance = sum((d - mean) ** 2 for d in durations) / n
+    std = math.sqrt(variance)
+    stats.update({
+        "mean_ms": mean,
+        "median_ms": _percentile(durations, 50),
+        "std_ms": std,
+        "p5_ms": _percentile(durations, 5),
+        "p25_ms": _percentile(durations, 25),
+        "p75_ms": _percentile(durations, 75),
+        "p95_ms": _percentile(durations, 95),
+        "min_ms": durations[0],
+        "max_ms": durations[-1],
+        "cv": (std / mean) if mean > 0 else None,
+    })
+    return stats
+
+
+def _aggregate_steps(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
     groups: Dict[tuple, Dict[str, Any]] = {}
     for row in rows:
         key = (row["phase"], row["step_type"], row["kind"])
-        group = groups.setdefault(
-            key,
-            {"durations": [], "error_count": 0,
-             "tokens_total": 0, "tokens_prompt": 0, "tokens_completion": 0},
-        )
-        # tokens count for every span, errored or not: they were spent
-        for field in ("tokens_total", "tokens_prompt", "tokens_completion"):
-            group[field] += row.get(field) or 0
+        group = groups.setdefault(key, _new_bucket())
+        _add_tokens(group, row)
         if row["status"] == "ERROR":
             group["error_count"] += 1
         elif row["duration_ms"] is not None:
@@ -243,41 +279,10 @@ def compute_step_latency(
 
     out: List[Dict[str, Any]] = []
     for (phase, step_type, kind), group in groups.items():
-        durations = sorted(group["durations"])
-        n = len(durations)
-        if n == 0 and group["error_count"] == 0:
+        if not group["durations"] and group["error_count"] == 0:
             continue
-        if n:
-            mean = sum(durations) / n
-            variance = sum((d - mean) ** 2 for d in durations) / n
-            std = math.sqrt(variance)
-            stats = {
-                "n": n,
-                "error_count": group["error_count"],
-                "tokens_total": group["tokens_total"],
-                "tokens_prompt": group["tokens_prompt"],
-                "tokens_completion": group["tokens_completion"],
-                "mean_ms": mean,
-                "median_ms": _percentile(durations, 50),
-                "std_ms": std,
-                "p5_ms": _percentile(durations, 5),
-                "p25_ms": _percentile(durations, 25),
-                "p75_ms": _percentile(durations, 75),
-                "p95_ms": _percentile(durations, 95),
-                "min_ms": durations[0],
-                "max_ms": durations[-1],
-                "cv": (std / mean) if mean > 0 else None,
-            }
-        else:
-            stats = {
-                "n": 0,
-                "error_count": group["error_count"],
-                "tokens_total": group["tokens_total"],
-                "tokens_prompt": group["tokens_prompt"],
-                "tokens_completion": group["tokens_completion"],
-                **{f: None for f in _LATENCY_FIELDS},
-            }
-        out.append({"phase": phase, "step_type": step_type, "kind": kind, **stats})
+        out.append({"phase": phase, "step_type": step_type, "kind": kind,
+                    **_bucket_stats(group)})
 
     out.sort(
         key=lambda g: (
@@ -286,6 +291,118 @@ def compute_step_latency(
         )
     )
     return out
+
+
+def compute_step_latency(
+    spans: Sequence[Any], rollup: str = "name"
+) -> List[Dict[str, Any]]:
+    """Aggregate spans into per-(phase, step_type) latency distributions.
+
+    ERROR spans are excluded from the distributions and surfaced as
+    ``error_count`` per group.
+    """
+    return _aggregate_steps(classify_spans(spans, rollup=rollup))
+
+
+def _phase_parents(
+    trace_spans: Sequence[Any], is_eval: Callable[[Any], bool]
+) -> Dict[str, List[Any]]:
+    """The phase parent spans of one trace, per phase.
+
+    Step rows leave containers out (they would double-count their children),
+    so a phase header needs its own parent span, chosen as the attribution
+    and ingestion's outer-scope spans see the trace:
+    - eval: an eval span whose parent is not in the eval phase, i.e. the
+      ``eval_metrics`` span (or a metric-scoped span outside it);
+    - task: the trace root when it holds no eval span; otherwise the item
+      root wraps both phases and its task-phase children are the parents
+      (the SDK's task/agent span).
+    """
+    by_id = {span.span_id: span for span in trace_spans}
+
+    def parent_of(span: Any) -> Optional[Any]:
+        return by_id.get(span.parent_span_id) if span.parent_span_id else None
+
+    # Every ancestor of an eval span holds eval work.
+    holds_eval: set = set()
+    for span in trace_spans:
+        if not is_eval(span):
+            continue
+        parent = parent_of(span)
+        while parent is not None and parent.span_id not in holds_eval:
+            holds_eval.add(parent.span_id)
+            parent = parent_of(parent)
+    parents: Dict[str, List[Any]] = {"task": [], "eval": []}
+    for span in trace_spans:
+        parent = parent_of(span)
+        if is_eval(span):
+            if parent is None or not is_eval(parent):
+                parents["eval"].append(span)
+        elif parent is None:
+            if span.span_id not in holds_eval:
+                parents["task"].append(span)
+        elif parent_of(parent) is None and parent.span_id in holds_eval:
+            parents["task"].append(span)
+    return parents
+
+
+def _parents_duration(nodes: Sequence[Any]) -> Optional[float]:
+    """One trace's phase time: its parent's duration, or the wall-clock
+    extent of several parents (no single wrapper), else their summed time."""
+    if len(nodes) == 1:
+        return _duration_ms(nodes[0].duration_ms)
+    starts = [node.start_time_ns for node in nodes]
+    ends = [node.end_time_ns for node in nodes]
+    if None not in starts and None not in ends and max(ends) > min(starts):
+        return (max(ends) - min(starts)) / 1e6
+    durations = [d for d in (_duration_ms(node.duration_ms) for node in nodes)
+                 if d is not None]
+    return sum(durations) if durations else None
+
+
+def _aggregate_phases(
+    spans: Sequence[Any], eval_ids: set, rows: Sequence[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Per-phase distributions of the phase parent spans, one sample per
+    trace (an ERROR parent counts as an error, as for steps). Tokens are the
+    phase's step tokens, so containers never double-count them."""
+    buckets = {"task": _new_bucket(), "eval": _new_bucket()}
+    for row in rows:
+        _add_tokens(buckets[row["phase"]], row)
+    by_trace: Dict[tuple, List[Any]] = defaultdict(list)
+    for span in spans:
+        by_trace[(span.run_id, span.trace_id)].append(span)
+    for (run_id, trace_id), trace_spans in by_trace.items():
+        parents = _phase_parents(
+            trace_spans,
+            lambda span: (run_id, trace_id, span.span_id) in eval_ids,
+        )
+        for phase, nodes in parents.items():
+            if not nodes:
+                continue
+            if any(str(node.status or "").upper() == "ERROR" for node in nodes):
+                buckets[phase]["error_count"] += 1
+                continue
+            duration = _parents_duration(nodes)
+            if duration is not None:
+                buckets[phase]["durations"].append(duration)
+    return [
+        {"phase": phase, **_bucket_stats(bucket)}
+        for phase, bucket in buckets.items()
+        if bucket["durations"] or bucket["error_count"]
+    ]
+
+
+def summarize_step_latency(
+    spans: Sequence[Any], rollup: str = "name"
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Step groups plus phase parent distributions, from one attribution."""
+    eval_ids = _metric_span_ids(spans)
+    rows = classify_spans(spans, rollup=rollup, eval_ids=eval_ids)
+    return {
+        "groups": _aggregate_steps(rows),
+        "phases": _aggregate_phases(spans, eval_ids, rows),
+    }
 
 
 PASS_REF_SEP = "::pass"
@@ -360,6 +477,48 @@ def _load_spans(
     if whole_runs:
         filters.append(Span.run_id.in_(whole_runs))
     return _project_spans(db, filters), passes
+
+
+def _spans_by_ref(
+    db: Session,
+    run_ids: List[str],
+    spans: List["_SpanView"],
+    pass_number: Optional[int] = None,
+) -> Dict[str, List["_SpanView"]]:
+    """Split the pooled spans of ``_load_spans`` into each ref's own spans.
+
+    A pass ref owns the traces of that pass's attempts, exactly as the pooled
+    filter selects them, so one request can serve every compared lane.
+    """
+    refs = list(dict.fromkeys(run_ids))
+    scoped = {}
+    for ref in refs:
+        base, ref_pass = _parse_run_ref(ref)
+        scoped[ref] = (base, ref_pass if ref_pass is not None else pass_number)
+    wanted = {key for key in scoped.values() if key[1] is not None}
+    traces: Dict[tuple, set] = defaultdict(set)
+    if wanted:
+        rows = db.query(
+            RunItemAttempt.run_id, RunItemAttempt.pass_number, RunItemAttempt.trace_id
+        ).filter(
+            RunItemAttempt.run_id.in_(sorted({base for base, _ in wanted})),
+            RunItemAttempt.trace_id.isnot(None),
+        )
+        for run_id, number, trace_id in rows:
+            if (run_id, number) in wanted:
+                traces[(run_id, number)].add(trace_id)
+    spans_by_run: Dict[str, List[_SpanView]] = defaultdict(list)
+    for span in spans:
+        spans_by_run[span.run_id].append(span)
+    result: Dict[str, List[_SpanView]] = {}
+    for ref, (base, effective) in scoped.items():
+        run_spans = spans_by_run.get(base, [])
+        if effective is None:
+            result[ref] = run_spans
+        else:
+            trace_ids = traces.get((base, effective), set())
+            result[ref] = [span for span in run_spans if span.trace_id in trace_ids]
+    return result
 
 
 class _SpanView:
@@ -437,6 +596,11 @@ def multi_run_step_latency(
     level: str = Query("summary", pattern="^(summary|spans)$"),
     rollup: str = Query("name", pattern="^(name|kind)$"),
     pass_number: Optional[int] = Query(None, ge=1, description="Restrict to one repeat pass"),
+    group_by: Optional[str] = Query(
+        None,
+        pattern="^ref$",
+        description="Also return each run ref's own groups (JSON summary only)",
+    ),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ):
@@ -451,17 +615,30 @@ def multi_run_step_latency(
             return _csv_response(_SPAN_FIELDS, rows, "step_latency_spans.csv")
         return {"run_ids": ids, "pass_number": pass_number, "passes": passes,
                 "trace_count": trace_count, "spans": rows}
-    groups = compute_step_latency(spans, rollup=rollup)
     if format == "csv":
+        groups = compute_step_latency(spans, rollup=rollup)
         return _csv_response(_SUMMARY_FIELDS, groups, "step_latency_summary.csv")
-    return {
+    summary = summarize_step_latency(spans, rollup=rollup)
+    payload: Dict[str, Any] = {
         "run_ids": ids,
         "rollup": rollup,
         "pass_number": pass_number,
         "passes": passes,
         "trace_count": trace_count,
-        "groups": groups,
+        "groups": summary["groups"],
+        # Phase headers draw their parent spans, which steps leave out.
+        "phases": summary["phases"],
     }
+    if group_by == "ref":
+        # Compare draws one lane per run or pass; serving every lane from the
+        # pooled spans replaces one request per lane.
+        by_ref = {
+            ref: summarize_step_latency(ref_spans, rollup=rollup)
+            for ref, ref_spans in _spans_by_ref(db, ids, spans, pass_number).items()
+        }
+        payload["groups_by_ref"] = {ref: s["groups"] for ref, s in by_ref.items()}
+        payload["phases_by_ref"] = {ref: s["phases"] for ref, s in by_ref.items()}
+    return payload
 
 
 @router.get("/api/runs/{run_id}/step-latency")

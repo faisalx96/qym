@@ -19,74 +19,8 @@ from qym_platform.db.models import (
 )
 from qym_platform.services.root_cause_changes import PASS_ANALYSIS_META_KEY
 from qym_platform.services.llm_analyzer import AnalysisResult
-from test_issue_reviews import setup, act
-from test_root_cause_issue_persistence import db_session
+from test_issue_reviews import act
 from test_migrations import _load_migration
-
-
-@pytest.fixture
-def repeat(db_session):
-    # Match SessionLocal, not SQLAlchemy's default autoflush=True.
-    db_session.autoflush = False
-    _, run, item, principal = setup(db_session)
-    run.samples = 2
-    original = deepcopy(item.item_metadata)
-    analysis = {
-        "source": "ai",
-        "confidence": 0.9,
-        "root_cause": "New approved category",
-        "root_cause_issues": [
-            {
-                "issue_id": "shared-issue-1",
-                "category": "New approved category",
-                "subcategory": "Approved detail",
-                "finding": "First finding",
-            },
-            {
-                "issue_id": "shared-issue-2",
-                "category": "Unapproved category",
-                "subcategory": "Unapproved detail",
-                "finding": "Second finding",
-            },
-        ],
-        "category_taxonomy": {
-            "New approved category": {
-                "description": "Reviewed failure.",
-                "when_to_use": "When observed.",
-            },
-            "Unapproved category": {
-                "description": "Pending failure.",
-                "when_to_use": "Unreviewed.",
-            },
-        },
-    }
-    for number in (1, 2):
-        db_session.add(
-            RunItemPassScore(
-                run_id=run.id,
-                item_id=item.item_id,
-                metric_name="accuracy",
-                pass_number=number,
-                score_numeric=number / 10,
-                meta={
-                    PASS_ANALYSIS_META_KEY: deepcopy(analysis),
-                    "reason": "Judge reason",
-                },
-            )
-        )
-        db_session.add(
-            RunItemAttempt(
-                run_id=run.id,
-                item_id=item.item_id,
-                pass_number=number,
-                attempt_number=1,
-                status="completed",
-                is_last_attempt=True,
-                output={"answer": f"Pass {number}"},
-            )
-        )
-    db_session.commit()
-    return run, item, principal, original
 
 
 def score(db, run, number):
@@ -134,7 +68,10 @@ def test_pass_approval_reaches_reviews_dataset_and_catalog(db_session, repeat):
     assert listed["facet_counts"]["dataset"] == {run.dataset: 1}
     review = listed["corrections"][0]
     assert review["pass_number"] == 2
-    assert review["output_snapshot"] == {"answer": "Pass 2"}
+    # List rows carry a preview; the full snapshot comes with the detail (C030).
+    assert review["output_preview"] == "answer: Pass 2"
+    detail = api.get_correction(review["id"], db=db_session, principal=principal)
+    assert detail["output_snapshot"] == {"answer": "Pass 2"}
     assert review["scores_snapshot"] == {"accuracy": 0.2}
     assert score(db_session, run, 1).meta == other_pass
     assert item.item_metadata == original
@@ -172,6 +109,8 @@ def test_reviews_actions_and_history_remain_on_selected_pass(db_session, repeat)
         == "pending"
     )
     api.approve_correction(first.id, {}, db=db_session, principal=principal)
+    # Reject decides only a pending correction: withdraw the approval first.
+    api.reset_correction(first.id, db=db_session, principal=principal)
     api.reject_correction(first.id, {}, db=db_session, principal=principal)
     assert (
         score(db_session, run, 2).meta[PASS_ANALYSIS_META_KEY]["root_cause_issues"][0][
@@ -282,6 +221,13 @@ def test_catalog_approval_is_idempotent_and_keeps_old_version(db_session, repeat
     act(db_session, run, item, principal, "approve", pass_number=2)
     first = db_session.query(ProjectAnalysisCategoryCatalogVersion).one()
     original = deepcopy(first.categories)
+    # Approve decides only a pending issue, so approving it again is refused.
+    with pytest.raises(HTTPException) as again:
+        act(db_session, run, item, principal, "approve", pass_number=2)
+    assert again.value.status_code == 409
+    db_session.rollback()
+    # Withdrawn and approved again, it publishes no new catalog version.
+    api.reset_correction(records(db_session, run, 2)[0].id, db=db_session, principal=principal)
     act(db_session, run, item, principal, "approve", pass_number=2)
     assert db_session.query(ProjectAnalysisCategoryCatalogVersion).count() == 1
     act(db_session, run, item, principal, "approve", index=1, pass_number=2)
@@ -461,6 +407,11 @@ def test_bulk_review_actions_preserve_all_changes_in_a_pass(db_session, repeat, 
     act(db_session, run, item, principal, "approve", pass_number=2)
     act(db_session, run, item, principal, "approve", index=1, pass_number=2)
     ids = [row.id for row in records(db_session, run, 2)]
+    if action == "reject":
+        # Reject decides only pending corrections: withdraw both approvals.
+        api.bulk_correction_action(
+            api.BulkActionRequest(ids=ids, action="reset"), db=db_session, principal=principal
+        )
     result = api.bulk_correction_action(
         api.BulkActionRequest(ids=ids, action=action),
         db=db_session,

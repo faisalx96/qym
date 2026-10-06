@@ -589,7 +589,9 @@ def test_malformed_event_log_omits_input(client, sessions, seed, caplog):
         }
     )
     response = _send(client, run_id, [bad])
-    assert response.status_code == 200
+    # A batch with nothing usable is a 422 (C005) that never echoes the input.
+    assert response.status_code == 422
+    assert TOKEN not in response.text
     assert TOKEN not in caplog.text
 
     # A valid envelope with an invalid payload is rejected without echoing input.
@@ -602,7 +604,7 @@ def test_malformed_event_log_omits_input(client, sessions, seed, caplog):
     response = _send(client, run_id, [invalid_payload])
     assert response.status_code == 422
     assert TOKEN not in response.text
-    assert "started_at" in response.json()["detail"]
+    assert "started_at" in response.json()["rejected_events"][0]["error"]
     assert TOKEN not in caplog.text
     _assert_no_token_stored(sessions)
 

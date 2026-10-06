@@ -13,6 +13,7 @@ The Evaluation Service runbook (dispatcher, environments, queue triage) is in
 |---|---|---|
 | API pod(s) | Serve HTTP; apply Alembic migrations on start; run the dashboard summary backfill, maintenance jobs, and hourly retention | `QYM_ROLE=all` (default) |
 | Worker pod (optional) | Runs the background loops in a separate process | `QYM_ROLE=worker`, `QYM_SKIP_MIGRATIONS=1`, command `python -m qym_platform.worker`; set `QYM_ROLE=api` on the API |
+| Web processes (optional) | Several uvicorn processes serve HTTP in one API pod; with `QYM_ROLE=all` one extra process in the same pod runs the background loops | `QYM_WEB_WORKERS=N` (default `1`) |
 | Maintenance jobs | Reclaim, index builds, span copy, and purges. Progress is saved between steps. Final legacy verification and DROP share one transaction | `Admin → Maintenance`, `GET/POST /api/admin/maintenance/jobs` |
 | Maintenance mode | Ingest answers `503 Retry-After: 60`; SDKs buffer (16 MiB RAM + 256 MiB disk) and retry; UI stays readable | `QYM_MAINTENANCE_MODE=1` |
 
@@ -27,11 +28,15 @@ sure one process runs a given job.
 | Variable | Default | Meaning |
 |---|---|---|
 | `QYM_ROLE` | `all` | `api`, `worker`, or `all` |
+| `QYM_WEB_WORKERS` | `1` | HTTP processes per API pod. Above 1, see "Several web processes in one pod" |
 | `QYM_MAINTENANCE_MODE` | `false` | Reject ingest with 503 during a window |
 | `QYM_EVENT_LOG_MODE` | `full` | `structural` drops item/metric bodies from `run_events` (bodies live in `run_items`/attempts/scores). Enable after the new image is live |
 | `QYM_SPAN_MAX_BYTES` | `1048576` | Safety ceiling per span; larger spans keep scalar attributes only and are flagged |
 | `QYM_SPAN_RETENTION_DAYS` | `60` | Raw traces older than this are dropped by partition (0 = keep forever) |
-| `QYM_DELETED_RUN_GRACE_DAYS` | `30` | Soft-deleted runs are hard-deleted after this |
+| `QYM_DELETED_RUN_GRACE_DAYS` | `30` | Soft-deleted runs are hard-deleted after this; time their project spends archived does not count |
+| `QYM_AUTH_LOCAL_SIGNUP` | `false` | Email/password self sign-up; off means admins add people (open only while no active admin exists) |
+| `QYM_AUTH_LOGIN_MAX_FAILURES_PER_EMAIL` / `..._PER_CLIENT` / `QYM_AUTH_LOGIN_FAILURE_WINDOW_SECONDS` | `5` / `30` / `300` | Failed password sign-ins before `429`. `..._PER_EMAIL` counts one email from one client address and refuses only that client, so the right password from another client still works; `..._PER_CLIENT` counts one address over all emails. "Account already exists" answers at sign-up count only against the client. An attempt counts as a failure from the moment it passes the check until its password proves right, so concurrent attempts cannot get past a limit. All limits are counted per API process (with `QYM_WEB_WORKERS=N` each process counts on its own, so a pod allows up to N times the limit). uvicorn trusts `X-Forwarded-For` only from `FORWARDED_ALLOW_IPS` (default `127.0.0.1`): set `FORWARDED_ALLOW_IPS` (or `--forwarded-allow-ips=...` in `QYM_UVICORN_ARGS`) to the ingress/pod CIDR, otherwise every client shares the ingress address and the per-client limit applies to all of them together. The API logs a warning at startup when password sign-in is on outside dev/test and neither is set |
+| `QYM_AUTH_LOGIN_EMAIL_CEILING` / `QYM_AUTH_LOGIN_EMAIL_CEILING_WINDOW_SECONDS` | `50` / `900` | Failed password sign-ins for one email from all clients together; past it, password sign-in for that email answers `429` from every client, even with the right password, until failures age out. Counted per API process |
 | `QYM_DB_POOL_SIZE` / `QYM_DB_MAX_OVERFLOW` | `10` / `10` | API connection pool |
 | `QYM_DB_WORKER_POOL_SIZE` / `QYM_DB_WORKER_MAX_OVERFLOW` | `3` / `2` | Worker pool |
 | `QYM_DB_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement guard on API connections |
@@ -75,14 +80,21 @@ A component that tries to write anywhere else now fails loudly
   rechecks the run before deleting it. A restore that commits first prevents purge;
   a restore after purge returns 404. Purge waits for dashboard deletion publication
   and for `spans_legacy` to be removed. It resumes after those steps finish.
+- Purge skips deleted runs whose project is archived (Restore refuses them too).
+  `projects.archived_at` records when the pause started; unarchiving moves each
+  deleted run's `runs.purge_clock_started_at` forward by the time since, so its
+  grace period resumes where it stopped. Deleted Runs shows "Purge paused while
+  the project is archived" instead of a date. An archived project with runs in
+  Trash therefore cannot be deleted until it is unarchived and they are purged.
 
 ## Migrations and large tables
 
-The combined migration chain has one head, `0057`, following `0050` through
-`0051`–`0056`. Migrations run before API readiness. Large storage rewrites and index
+The combined migration chain has one head, `0082`, following `0050` through
+`0051`–`0081`. Migrations run before API readiness. Large storage rewrites and index
 builds are deferred to maintenance jobs. Migration `0057` also backfills existing
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
+Migrations `0058`–`0082` are quick DDL or small job/queue inserts.
 
 | Migration | Work during startup | Deferred job (if table is large) |
 |---|---|---|
@@ -93,6 +105,84 @@ startup time on a populated copy before setting deployment readiness deadlines.
 | 0055 | — | `create_deferred_indexes` — extrema partial indexes |
 | 0056 | `dashboard_run_dimensions.hidden_at` | None |
 | 0057 | Pass review scope, deleted-pass marker, index, and approval/catalog backfill | Runs during migration |
+| 0058 | Marks ready dashboard partitions pending | None: the worker republishes each summary from its numeric records (no source rescan) |
+| 0059 | `local_auth_credentials.must_change_password` | None |
+| 0060 | Marks ready dashboard partitions pending (run means count scorer errors as 0) | None: summary republish, as 0058; `SUMMARY_SHAPE` 5 refreshes the rest |
+| 0061 | Empty `user_sessions` table | None. Every signed-in user signs in once after the upgrade |
+| 0062 | Empty `run_workflow_events` table, nullable `approvals.execution_status` | None |
+| 0063 | `run_metric_specs.direction` nullable, `run_metric_specs.is_primary` | `reclassify_metric_errors` — **queued, runs by itself**: rebuilds runs whose verdict reasons were counted as scorer errors, and marks repeat passes whose task failed after a metric was scored |
+| 0064 | — | `project_item_failure_events` — **queued, runs by itself**: rebuilds repeat runs with a pass that failed only through an `item_failed` event |
+| 0065 | Nullable `projects.archived_at` and `runs.purge_clock_started_at`; sets `archived_at` on projects already archived (a handful of rows) | None: Trash purging pauses for archived projects from now on |
+| 0066 | Empty `background_jobs` table (shared job state for several web processes) | None |
+| 0067 | `projects.correction_approvers` (default `members`) and `projects.correction_require_different_reviewer` (default false), constant defaults on the small projects table; nullable `run_workflow_events.on_behalf_of_user_id` | None: every project keeps today's review behaviour until a manager changes it |
+| 0068 | Nullable `dataset_items.search_text`, `dataset_versions.change_counts`, `datasets.deleted_by_user_id` | `backfill_dataset_search_text` — **queued, runs by itself** (on every database, an empty one included, since the job also builds the index): fills search text in id windows (one statement per 500-item window), stores lineage counts of published versions, builds the small partial index `ix_dataset_items_unindexed_version` CONCURRENTLY, then runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` and builds `ix_dataset_items_search_trgm` CONCURRENTLY. Without the privilege to create the extension it logs that and skips the trigram index; search stays correct, only unindexed. Until the job reaches a row, search rebuilds that row's text on read; results match except a search for a JSON fragment spanning several keys of one object, whose key order PostgreSQL's JSONB text may differ. If the job ever failed (Admin → Maintenance shows it), start `backfill_dataset_search_text` again there: it resumes and is safe to repeat |
+| 0069 | Empty `dashboard_run_overview` (each run's overview inputs) and `dashboard_overview_snapshots` (the overview shared by every process and pod) tables | `backfill_dashboard_overview` — **queued, runs by itself** (on every database; on SQLite, or with no runs, it finishes at once): stores each run's overview inputs in run-key windows (one statement per 500-run window; about 0.4 s per 1,000 runs on the perf lab). Until it reaches a run, the overview reads that run's JSON, with the same numbers; the summary worker stores every run it publishes from the start. Resumable and safe to start again from Admin → Maintenance |
+| 0070 | — (one job insert) | `build_runs_search_index` — **queued, runs by itself**: runs `CREATE EXTENSION IF NOT EXISTS pg_trgm`, then builds `ix_dashboard_run_dimensions_search_trgm` (the Runs search box) CONCURRENTLY. Without the privilege to create the extension it logs "runs search index skipped" and finishes; the search stays correct, only unindexed. Safe to start again: it rebuilds the index |
+| 0071 | Nullable `dashboard_run_dimensions.search_text` (instant) and one job insert, skipped while a `build_runs_search_index` job still waits to start | `build_runs_search_index` (this release's job does all of it) — **queued, runs by itself**: builds the partial index `ix_dashboard_run_dimensions_unsearchable` CONCURRENTLY, fills `search_text` in run-key windows (one statement per 500-run window), then rebuilds `ix_dashboard_run_dimensions_search_trgm` over `search_text` and the run ID, CONCURRENTLY. It replaces `0070`'s index over descriptor expressions, which made every descriptor rewrite of a live run a non-HOT update. Until it reaches a row, the search reads that row's names from its descriptor, with the same results. Without `pg_trgm` it fills the column, logs "runs search index skipped" and finishes. Resumable and safe to start again |
+
+After `0060`/`0064` the dashboard worker republishes every ready summary once
+(a "republish wave"; about 45 s per 600 runs on the perf lab, in the
+background). Summaries of `SUMMARY_SHAPE` 5 (repeat-run means judge task
+errors per pass; a completed run's items never received are counted apart as
+`not_received_count`) are rebuilt from the same numeric records; no source
+rows are read. `reclassify_metric_errors` and `project_item_failure_events`
+request a full source rebuild only for the runs they find affected; estimate
+the count before deploying (read-only, works on json and jsonb):
+
+```sql
+SELECT count(DISTINCT s.run_id) FROM run_item_scores s JOIN runs r ON r.id = s.run_id
+WHERE r.deleted_at IS NULL AND s.meta->>'error' IS NOT NULL
+  AND coalesce(lower(trim(s.meta->>'status')), '') NOT IN ('error', 'failed', 'timeout');
+-- repeat for run_item_pass_scores
+```
+
+Both jobs commit one run at a time and retry a deadlock with the dashboard
+worker; check Admin → Maintenance afterwards and re-queue a `failed` job.
+`publish_ingest_flags` is **manual**: start it once so runs finished before
+this release show the Incomplete tag in the runs list.
+
+### Databases that ran the pre-release branch (old revision 0059)
+
+The rebase onto #52 reused revision ids: the pre-release branch's `0059`
+(run means) is not this release's `0059` (`local_auth_credentials.must_change_password`).
+Alembic tracks only the id, so a database stamped with the old `0059` would
+upgrade to head without an error and never get that column; password sign-in,
+sign-up, password change and admin reset then fail with `UndefinedColumn`.
+
+Recover only a database still at the old `0059`, before this version's API or
+worker starts against it: their entrypoint runs `alembic upgrade head` first,
+and stamping `0058` back after that upgrade makes the replay fail. With the new
+image built, the database running and the API and worker stopped, run from the
+repository root:
+
+```bash
+docker compose -f docker/docker-compose.yml run --rm --no-deps --entrypoint /bin/sh api -ec \
+  'alembic -c packages/platform/qym_platform/migrations/alembic.ini stamp 0058 && alembic -c packages/platform/qym_platform/migrations/alembic.ini upgrade head'
+```
+
+The `/bin/sh` entrypoint skips the startup migration. This re-applies `0059`
+onward; `0060` only re-queues dashboard summaries, so running it again is
+harmless. Production never ran the pre-release branch, so
+this applies only to development and perf-lab databases (for example the dev
+compose `docker-db-1` and `qym-db-perf`). A database at the old `0060`–`0062`
+stops the upgrade with a duplicate table or column error instead of skipping
+silently. An old `0063` existed only on an unreleased stream branch; it would
+also upgrade silently (this release's `0064` and `0065` add nothing it
+already has), so recreate such a throwaway database instead.
+
+### API keys that stop working at deploy
+
+Keys of archived projects answer 409 (`X-Qym-Key-State: project_archived`), and
+keys whose non-admin owner is no longer a project member answer 403
+(`owner_removed`) — including members removed before this release. List them
+before deploying so their pipelines can move to a new key:
+
+```sql
+SELECT k.id, k.name, k.prefix, u.email, p.slug, p.is_active
+FROM api_keys k JOIN users u ON u.id = k.user_id JOIN projects p ON p.id = k.project_id
+LEFT JOIN project_memberships m ON m.project_id = k.project_id AND m.user_id = k.user_id
+WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.role <> 'ADMIN'));
+```
 
 ## Recovery runbook (database near its volume limit)
 
@@ -113,7 +203,7 @@ startup time on a populated copy before setting deployment readiness deadlines.
 ### Deploy and run maintenance
 
 1. Deploy the new API with the default `QYM_ROLE=all`. Wait for migration head
-   `0057` and a healthy API. The API process then runs every queued job itself.
+   `0082` and a healthy API. The API process then runs every queued job itself.
    Do not restart the API while a job runs; the job resumes, but each restart
    costs time. Optional split layout: set `QYM_ROLE=api` on the API and start
    one worker with the same image and configuration, `QYM_ROLE=worker`, and
@@ -183,6 +273,47 @@ after destructive maintenance. Use a full `pg_dump` or a consistent storage
 snapshot, keep it off the database volume, and test the restore in isolation.
 Smaller exports of derived data can supplement that backup but do not replace it.
 
+## Several web processes in one pod (`QYM_WEB_WORKERS`)
+
+One Python process serves every request on one interpreter lock, so a few
+people opening large runs or comparisons at once make every other request wait
+(perf lab, 4 heavy readers: about 0.25 s for one alone, 0.7 s with 4, 2.3 s with
+10, while `/healthz` slowed to 0.8 s at p95). `QYM_WEB_WORKERS=N` (N above 1)
+makes the entrypoint start `python -m qym_platform.serve` instead of a single
+uvicorn:
+
+- N uvicorn worker processes serve HTTP (`QYM_ROLE=api` inside them);
+- with `QYM_ROLE=all` (the default), **one** more process in the same pod runs
+  the dashboard summary and maintenance loops, restarted if it exits; with
+  `QYM_ROLE=api` (separate worker Deployment) no loop process starts;
+- the launcher forwards SIGTERM to all of them and exits when uvicorn exits.
+
+Leaving `QYM_WEB_WORKERS` unset keeps the exact single-process command. Use
+`QYM_WEB_WORKERS` rather than `--workers` in `QYM_UVICORN_ARGS`: plain uvicorn
+workers would each run the loops (safe through database leases, but redundant
+CPU in every HTTP process).
+
+Sizing, per API pod:
+
+- **CPU/memory**: each process holds its own copy of the app (260-340 MB
+  resident each in the perf lab after a load test; the loop process about
+  75 MB). Start with N = 2-4 and at least N CPU cores' worth of limit.
+- **Database connections**: each web process has its own pool
+  (`QYM_DB_POOL_SIZE` + `QYM_DB_MAX_OVERFLOW`, 20 by default) and the loop
+  process uses the worker pool (5). With N = 4 lower the API pool, e.g.
+  `QYM_DB_POOL_SIZE=5`, `QYM_DB_MAX_OVERFLOW=5`, so pods x (N x 10 + 5) stays
+  under the server's `max_connections`.
+- **Background analyses, rule inference and product evals** run in the web
+  process that accepted them; their concurrency limits
+  (`QYM_ANALYSIS_JOB_MAX_WORKERS`, product eval workers) apply per process. Their
+  state is published to the `background_jobs` table (migration 0066), so a poll,
+  a cancel or a project archive handled by another process sees and stops the
+  same job. A job whose process stopped (restart, crash, rollout) shows as failed
+  within about 15 seconds instead of running forever; start it again.
+- **Sign-in failure limits** (`QYM_AUTH_LOGIN_MAX_FAILURES_*` and
+  `QYM_AUTH_LOGIN_EMAIL_CEILING`) are counted in each web process, so a pod with
+  N processes allows up to N times the limit.
+
 ## Optional separate worker Deployment (Helm/Kubernetes sketch)
 
 Not required. The default `QYM_ROLE=all` API Deployment runs the background loops.
@@ -190,7 +321,7 @@ Use this layout to keep long maintenance jobs away from API rollouts and probes,
 or to run several API replicas with one background process. Same image as the
 API; only the command and two variables differ. One replica. Inherit maintenance
 mode and retention settings from the same configuration as the API. Start this
-deployment only after the API has migrated to `0057`.
+deployment only after the API has migrated to `0082`.
 
 ```yaml
 apiVersion: apps/v1
@@ -325,29 +456,33 @@ Per-environment settings (**Project Settings → Environments → Policies**, ma
 `default_priority` and `max_priority` (default `NORMAL`), `allow_connection_keys`
 (default off; reset when the URL changes). There is no per-environment in-flight cap:
 the Evaluation Service limits concurrent runs and queues the rest itself (migration
-`0068` drops the former `max_inflight_jobs` column).
+`0080` drops the former `max_inflight_jobs` column).
 
 ### Deploying the release
 
-The Evaluation Service tables come in migrations `0060`–`0066` on top of `0059`:
+The Evaluation Service tables come in migrations `0072`–`0082` on top of `0071`:
 
 | Migration | Adds | Startup cost |
 |---|---|---|
-| `0060` | `eval_environments`, `eval_environment_schemas`, `eval_model_slots`; `project_llm_connections.available_for_experiments` | New tables and a constant-default column: instant |
-| `0061` | `eval_experiments`, `eval_experiment_jobs`, `eval_remote_queue_snapshots`; `runs.origin` (default `local`, indexed) and `runs.experiment_job_id` | The `origin` column uses a constant default (no rewrite on PostgreSQL 11+), but its CHECK constraint and index scan `runs` once |
-| `0062` | `eval_config_presets`, `eval_config_preset_versions` | New tables: instant |
-| `0063` | `eval_experiment_jobs.attempt` and `retry_of_job_id`; per-attempt unique key | Small table |
-| `0064` | `eval_run_scores` (best-run index, created empty); `eval_experiment_jobs.run_linked_at` | New table: instant |
-| `0065` | `eval_experiments.qym_api_key_id` and `qym_api_key_encrypted` (the submitting user's key) | Nullable columns: instant |
-| `0066` | `dashboard_run_versions` (filterable `versioning_metadata`, created empty) | New table: instant. The dashboard worker fills it: its shape reconcile requeues every run linked to a job, in batches of 100 back to back until none is left |
+| `0072` | `eval_environments`, `eval_environment_schemas`, `eval_model_slots`; `project_llm_connections.available_for_experiments` | New tables and a constant-default column: instant |
+| `0073` | `eval_experiments`, `eval_experiment_jobs`, `eval_remote_queue_snapshots`; `runs.origin` (default `local`, indexed) and `runs.experiment_job_id` | The `origin` column uses a constant default (no rewrite on PostgreSQL 11+), but its CHECK constraint and index scan `runs` once |
+| `0074` | `eval_config_presets`, `eval_config_preset_versions` | New tables: instant |
+| `0075` | `eval_experiment_jobs.attempt` and `retry_of_job_id`; per-attempt unique key | Small table |
+| `0076` | `eval_run_scores` (best-run index, created empty); `eval_experiment_jobs.run_linked_at` | New table: instant |
+| `0077` | `eval_experiments.qym_api_key_id` and `qym_api_key_encrypted` (the submitting user's key) | Nullable columns: instant |
+| `0078` | `dashboard_run_versions` (filterable `versioning_metadata`, created empty) | New table: instant. The dashboard worker fills it: its shape reconcile requeues every run linked to a job, in batches of 100 back to back until none is left |
+| `0079` | `datasets.private_test_set` (default false) | Constant-default column on the small datasets table: instant |
+| `0080` | Drops `eval_environments.max_inflight_jobs` | Small table: instant |
+| `0081` | `eval_model_slots.extra_field_maps` (existing slots get `[]`) | Small table: instant |
+| `0082` | Empty `dataset_read_tokens` table (admin-issued per-project tokens, hash only) | New table: instant |
 
 Steps:
 
 1. Set `QYM_LLM_CONFIG_ENCRYPTION_KEY` on every API and worker process (if it isn't
    already set for LLM connections), plus any `QYM_EVAL_*` overrides.
-2. Deploy the image. The API applies migrations up to `0066` before it reports ready,
+2. Deploy the image. The API applies migrations up to `0082` before it reports ready,
    as for every release. A split worker starts after the API, with
-   `QYM_SKIP_MIGRATIONS=1`. On a large `runs` table, time the `0061` scan on a
+   `QYM_SKIP_MIGRATIONS=1`. On a large `runs` table, time the `0073` scan on a
    populated copy before setting readiness deadlines.
 3. Run the one-time score backfill once, from an API or worker pod or as a one-off Job
    with the same image and configuration:
@@ -366,9 +501,28 @@ Steps:
 5. Ask a project manager to register an environment (next section) and launch one
    single-job experiment. Confirm the run arrives with the **Official run** badge.
 
-Rollback: `alembic downgrade` below `0061` drops `runs.origin` and every experiment
-row. `0063`'s downgrade keeps only the latest attempt of each combination. Prefer a
+Rollback: `alembic downgrade` below `0073` drops `runs.origin` and every experiment
+row. `0075`'s downgrade keeps only the latest attempt of each combination. Prefer a
 forward fix once experiments have run.
+
+### Databases that ran the pre-merge eval branch (old revisions 0060–0070)
+
+Before merging `main`'s `0060`–`0071`, this branch numbered its Evaluation Service
+and dataset revisions `0060`–`0070`; they are now `0072`–`0082`. Alembic tracks only
+the id, so a database stamped with an old id (for example preprod at the old `0070`,
+`dataset_read_tokens`) would run the wrong revisions: `upgrade head` applies `0071`
+and then fails in `0072` with a duplicate `eval_environments` table, and `main`'s
+`0060`–`0070` never run. None of `main`'s `0060`–`0071` touch the eval or dataset
+read token tables, so recover such a database (it must have reached the old `0070`;
+upgrade it with the previous image first if not) with the API and worker stopped:
+
+```bash
+docker compose -f docker/docker-compose.yml run --rm --no-deps --entrypoint /bin/sh api -ec \
+  'A="alembic -c packages/platform/qym_platform/migrations/alembic.ini"; $A stamp 0059 && $A upgrade 0071 && $A stamp 0082'
+```
+
+This applies `main`'s `0060`–`0071` on top of the eval tables and marks the eval
+revisions as applied. Then start the API as usual.
 
 ### Environment setup and the ingest key
 

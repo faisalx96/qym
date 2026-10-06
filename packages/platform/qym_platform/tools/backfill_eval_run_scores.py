@@ -1,6 +1,6 @@
 """Backfill ``eval_run_scores`` for existing official runs (plan §4.7, issue #36).
 
-Migration ``0064`` only creates the table. This command fills it for official runs
+Migration ``0076`` only creates the table. This command fills it for official runs
 that were already scored before it existed, and repairs rows a failed hook missed.
 It recomputes each official, linked run from its scores and replaces its rows, so it
 is idempotent and safe to re-run at any time (runs that aren't scorable yet end with

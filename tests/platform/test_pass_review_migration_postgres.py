@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from datetime import datetime
+from functools import partial
 
 from alembic import command
 from alembic.script import ScriptDirectory
@@ -24,22 +25,21 @@ from qym_platform.services.root_cause_changes import PASS_ANALYSIS_META_KEY
 from sqlalchemy import inspect, select, text
 from sqlalchemy.orm import Session
 from test_migrations import _load_migration
-from test_p1_migrations_lifecycle import insert_legacy_run, postgres
+from _helpers import insert_at_revision
 
 
 def test_populated_0050_upgrade_recovers_approvals_and_retains_tombstones(postgres):
     engine, config = postgres
     command.upgrade(config, "0050")
     reviewed_at = datetime(2026, 9, 15, 10)
-    with Session(engine) as db:
-        db.info["dashboard_projection_worker"] = True
-        user = User(id="u", email="u@example.test")
-        db.add(user)
-        db.flush()
-        db.add(Project(id="p", name="Project", slug="p", created_by_user_id="u"))
-        db.flush()
-        insert_legacy_run(
-            db,
+    # Seed with the 0050 columns only, and without ORM flush hooks (no
+    # dashboard outbox rows), like data written before these migrations.
+    with engine.begin() as conn:
+        insert = partial(insert_at_revision, conn)
+        insert(User, id="u", email="u@example.test")
+        insert(Project, id="p", name="Project", slug="p", created_by_user_id="u")
+        insert(
+            Run,
             id="r",
             project_id="p",
             owner_user_id="u",
@@ -47,21 +47,11 @@ def test_populated_0050_upgrade_recovers_approvals_and_retains_tombstones(postgr
             task="task",
             dataset="dataset",
             metrics=["accuracy"],
-            run_metadata={},
-            run_config={},
             samples=2,
             status=RunWorkflowStatus.COMPLETED,
         )
-        db.add(
-            RunItem(
-                run_id="r", item_id="i", index=0, input="question", output="pass two"
-            )
-        )
-        db.add(
-            RunItemScore(
-                run_id="r", item_id="i", metric_name="accuracy", score_numeric=0.5
-            )
-        )
+        insert(RunItem, run_id="r", item_id="i", index=0, input="question", output="pass two")
+        insert(RunItemScore, run_id="r", item_id="i", metric_name="accuracy", score_numeric=0.5)
         for number in (1, 2):
             analysis = {
                 "source": "ai",
@@ -77,45 +67,42 @@ def test_populated_0050_upgrade_recovers_approvals_and_retains_tombstones(postgr
                     {"category": "Unapproved category", "finding": "Pending sibling"},
                 ],
             }
-            db.add(
-                RunItemPassScore(
-                    run_id="r",
-                    item_id="i",
-                    metric_name="accuracy",
-                    pass_number=number,
-                    score_numeric=number / 10,
-                    meta={PASS_ANALYSIS_META_KEY: analysis},
-                )
-            )
-            db.add(
-                RunItemAttempt(
-                    run_id="r",
-                    item_id="i",
-                    pass_number=number,
-                    attempt_number=1,
-                    status="completed",
-                    is_last_attempt=True,
-                    output=f"pass {number}",
-                )
-            )
-        # A real legacy aggregate approval has neither of the new columns.
-        db.execute(
-            ReviewCorrection.__table__.insert().values(
+            insert(
+                RunItemPassScore,
                 run_id="r",
                 item_id="i",
                 metric_name="accuracy",
-                task="task",
-                ai_root_cause="Classic category",
-                human_root_cause="Classic category",
-                status=CorrectionStatus.APPROVED,
-                is_active=True,
-                reviewed_at=reviewed_at,
-                reviewed_by_user_id="u",
+                pass_number=number,
+                score_numeric=number / 10,
+                meta={PASS_ANALYSIS_META_KEY: analysis},
             )
+            insert(
+                RunItemAttempt,
+                run_id="r",
+                item_id="i",
+                pass_number=number,
+                attempt_number=1,
+                status="completed",
+                is_last_attempt=True,
+                output=f"pass {number}",
+            )
+        # A real legacy aggregate approval has neither of the new columns.
+        insert(
+            ReviewCorrection,
+            run_id="r",
+            item_id="i",
+            metric_name="accuracy",
+            task="task",
+            ai_root_cause="Classic category",
+            human_root_cause="Classic category",
+            status=CorrectionStatus.APPROVED,
+            is_active=True,
+            reviewed_at=reviewed_at,
+            reviewed_by_user_id="u",
         )
         for run_id in ("collapsed", "unreviewed", "classic"):
-            insert_legacy_run(
-                db,
+            insert(
+                Run,
                 id=run_id,
                 project_id="p",
                 owner_user_id="u",
@@ -125,21 +112,17 @@ def test_populated_0050_upgrade_recovers_approvals_and_retains_tombstones(postgr
                 metrics=["accuracy"],
                 samples=1,
                 run_metadata={"preserve": {"run_id": run_id}},
-                run_config={},
                 status=RunWorkflowStatus.COMPLETED,
             )
-            db.add(
-                RunItem(
-                    run_id=run_id, item_id="i", index=0, input="question", output=run_id
-                )
+            insert(
+                RunItem, run_id=run_id, item_id="i", index=0, input="question", output=run_id
             )
-            db.add(
-                RunItemScore(
-                    run_id=run_id,
-                    item_id="i",
-                    metric_name="accuracy",
-                    score_numeric=0.2,
-                )
+            insert(
+                RunItemScore,
+                run_id=run_id,
+                item_id="i",
+                metric_name="accuracy",
+                score_numeric=0.2,
             )
             if run_id != "classic":
                 retained_analysis = deepcopy(analysis)
@@ -147,28 +130,25 @@ def test_populated_0050_upgrade_recovers_approvals_and_retains_tombstones(postgr
                     retained_analysis["root_cause_issues"][0][
                         "review_status"
                     ] = "pending"
-                db.add(
-                    RunItemPassScore(
-                        run_id=run_id,
-                        item_id="i",
-                        metric_name="accuracy",
-                        pass_number=1,
-                        score_numeric=0.2,
-                        meta={PASS_ANALYSIS_META_KEY: retained_analysis},
-                    )
+                insert(
+                    RunItemPassScore,
+                    run_id=run_id,
+                    item_id="i",
+                    metric_name="accuracy",
+                    pass_number=1,
+                    score_numeric=0.2,
+                    meta={PASS_ANALYSIS_META_KEY: retained_analysis},
                 )
-                db.add(
-                    RunItemAttempt(
-                        run_id=run_id,
-                        item_id="i",
-                        pass_number=1,
-                        attempt_number=1,
-                        status="completed",
-                        is_last_attempt=True,
-                        output=run_id,
-                    )
+                insert(
+                    RunItemAttempt,
+                    run_id=run_id,
+                    item_id="i",
+                    pass_number=1,
+                    attempt_number=1,
+                    status="completed",
+                    is_last_attempt=True,
+                    output=run_id,
                 )
-        db.commit()
 
     with engine.connect() as conn:
         assert "pass_number" not in {

@@ -151,13 +151,13 @@ tests/        SDK and platform tests
 Install both packages in editable mode:
 
 ```bash
-pip install -e packages/sdk[dev] -e packages/platform
+pip install -e packages/sdk[dev] -e packages/platform -r requirements-test.txt
 ```
 
 Useful commands:
 
 ```bash
-pytest -q
+pytest -q -n auto
 black .
 isort .
 mypy packages/sdk/qym

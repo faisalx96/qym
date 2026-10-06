@@ -9,7 +9,6 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from test_dashboard_paging_browser import browser  # noqa: F401
 
 STATIC = (
     Path(__file__).resolve().parents[2]

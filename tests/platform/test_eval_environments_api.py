@@ -575,7 +575,7 @@ def test_project_hard_delete_succeeds_with_presets(client, session_factory):
     # StaticPool shares one connection, so the pragma applies to the app too.
     with engine.connect() as connection:
         connection.exec_driver_sql("PRAGMA foreign_keys=ON")
-    res = client.delete(f"/v1/admin/projects/{P1}", headers=_headers(ADMIN))
+    res = client.delete(f"/v1/admin/projects/{P1}?confirm=p1", headers=_headers(ADMIN))
     assert res.status_code == 200, res.text
     assert res.json()["deleted"] is True
     with session_factory() as s:

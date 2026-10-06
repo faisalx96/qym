@@ -41,6 +41,12 @@ window.QymPlayground = (function () {
   var _canDeleteRuleVersions = false;
   var _canActivateRuleVersions = false;
   var _canRestoreRuleVersions = false;
+  // Project members who are not managers (or the run's owner) get a read-only
+  // workspace: they can read rules, documents and categories but not change
+  // them or run analysis. The server enforces the same split.
+  var _canOperateAnalyzer = true;
+  var _canManageRules = true;
+  var _bootstrapProblems = [];
   var _documentUploadsInFlight = 0;
   var _contextFeedbackTimer = null;
   var _analysisRuleSaveTimer = null;
@@ -439,8 +445,15 @@ window.QymPlayground = (function () {
     }, 600);
   }
 
+  // Members who cannot analyze only read the category catalog: an edit
+  // there could be neither saved nor used in an analysis.
+  function _categoryCatalogLocked() {
+    return !_canOperateAnalyzer;
+  }
+
   function _resumeActiveAnalysis() {
-    if (!_getRunId()) return;
+    // Only people who may analyze this run can have a job to resume.
+    if (!_getRunId() || !_canOperateAnalyzer) return;
     var base = _opts.apiUrl || function (p) { return '/' + p; };
     var generation = ++_analysisPollGeneration;
     var activePath = _analysisJobsPath('active');
@@ -619,12 +632,34 @@ window.QymPlayground = (function () {
     }
     var base = _opts.apiUrl || function (p) { return '/' + p; };
 
+    // Only the configuration is required. A panel that fails to load is named
+    // in a notice instead of failing the whole workspace.
+    var problems = [];
+    function optional(label, path) {
+      return fetch(base(_analysisContextPath(path)))
+        .then(function (r) {
+          if (!r.ok) throw new Error(r.status === 403 ? 'you do not have access' : 'HTTP ' + r.status);
+          return r.json();
+        })
+        .catch(function (error) {
+          problems.push(label + ' could not be loaded (' + (error && error.message ? error.message : 'request failed') + ')');
+          return null;
+        });
+    }
     return Promise.all([
-      fetch(base(_analysisContextPath('analysis-config'))).then(function (r) { if (!r.ok) throw new Error('Config: HTTP ' + r.status); return r.json(); }),
-      fetch(base(_analysisContextPath('analysis-documents'))).then(function (r) { if (!r.ok) throw new Error('Documents: HTTP ' + r.status); return r.json(); }),
-      fetch(base(_analysisContextPath('analysis-rule-versions?include_deleted=true'))).then(function (r) { if (!r.ok) throw new Error('Rule versions: HTTP ' + r.status); return r.json(); }),
+      fetch(base(_analysisContextPath('analysis-config'))).then(function (r) {
+        if (r.status === 403) throw new Error('You do not have access to this project\u2019s analysis setup.');
+        if (!r.ok) throw new Error('Config: HTTP ' + r.status);
+        return r.json();
+      }),
+      optional('Project documents', 'analysis-documents'),
+      optional('Rule versions', 'analysis-rule-versions?include_deleted=true'),
     ]).then(function (results) {
       _config = results[0];
+      _bootstrapProblems = problems;
+      // Older servers do not send the flags: keep their full workspace.
+      _canOperateAnalyzer = !_config || _config.can_operate_analyzer !== false;
+      _canManageRules = !_config || _config.can_manage_analysis_rules !== false;
       var _conns = (_config && _config.llm_connections) || [];
       _connectionId = (_config && _config.default_connection_id) || (_conns[0] && _conns[0].id) || null;
       _testResults = [];
@@ -732,14 +767,11 @@ window.QymPlayground = (function () {
   }
 
   function _esc(text) {
-    if (_opts.escapeHtml) return _opts.escapeHtml(text);
-    var d = document.createElement('div');
-    d.textContent = text || '';
-    return d.innerHTML;
+    return QymSafe.escapeHtml(text || '');
   }
 
   function _escAttr(text) {
-    return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return QymSafe.escapeHtml(String(text || ''));
   }
 
   function _formatCategoryExampleValue(value) {
@@ -827,6 +859,16 @@ window.QymPlayground = (function () {
     return issues;
   }
 
+  // Shared direction policy (qym_safe.js): Arabic examples read right to left.
+  function _dirAttrs(value) {
+    return window.QymSafe && window.QymSafe.textDirAttrs ? window.QymSafe.textDirAttrs(value == null ? '' : String(value)) : '';
+  }
+
+  function _categoryExampleBlock(label, value) {
+    var text = _formatCategoryExampleValue(value);
+    return '<div><span>' + label + '</span><pre' + _dirAttrs(text) + '>' + _esc(text) + '</pre></div>';
+  }
+
   function _buildCategoryExamples(examples) {
     var rows = Array.isArray(examples) ? examples : [];
     if (!rows.length) {
@@ -840,16 +882,16 @@ window.QymPlayground = (function () {
           '<span class="pg-category-example-meta">' + _esc(meta || 'Approved example') + '</span>' +
         '</summary>' +
         '<div class="pg-category-example-body">' +
-          (example.detail ? '<div class="pg-category-example-field"><span>Detail</span><strong>' + _esc(example.detail) + '</strong></div>' : '') +
-          (example.note ? '<div class="pg-category-example-field"><span>Reviewer reasoning</span><p>' + _esc(example.note) + '</p></div>' : '') +
+          (example.detail ? '<div class="pg-category-example-field"><span>Detail</span><strong' + _dirAttrs(example.detail) + '>' + _esc(example.detail) + '</strong></div>' : '') +
+          (example.note ? '<div class="pg-category-example-field"><span>Reviewer reasoning</span><p' + _dirAttrs(example.note) + '>' + _esc(example.note) + '</p></div>' : '') +
           '<div class="pg-category-example-data">' +
-            '<div><span>Input</span><pre>' + _esc(_formatCategoryExampleValue(example.input)) + '</pre></div>' +
-            '<div><span>Expected</span><pre>' + _esc(_formatCategoryExampleValue(example.expected)) + '</pre></div>' +
-            '<div><span>Output</span><pre>' + _esc(_formatCategoryExampleValue(example.output)) + '</pre></div>' +
+            _categoryExampleBlock('Input', example.input) +
+            _categoryExampleBlock('Expected', example.expected) +
+            _categoryExampleBlock('Output', example.output) +
           '</div>' +
           (example.solution || example.solution_note
-            ? '<div class="pg-category-example-field"><span>Approved solution</span><strong>' + _esc(example.solution || '\u2014') + '</strong>' +
-                (example.solution_note ? '<p>' + _esc(example.solution_note) + '</p>' : '') + '</div>'
+            ? '<div class="pg-category-example-field"><span>Approved solution</span><strong' + _dirAttrs(example.solution) + '>' + _esc(example.solution || '\u2014') + '</strong>' +
+                (example.solution_note ? '<p' + _dirAttrs(example.solution_note) + '>' + _esc(example.solution_note) + '</p>' : '') + '</div>'
             : '') +
         '</div>' +
       '</details>';
@@ -951,14 +993,15 @@ window.QymPlayground = (function () {
       var taxonomy = _subcategoryTaxonomyFor(subcategoryTaxonomy, category, detail);
       var hasTaxonomy = Object.keys(taxonomy).length > 0;
       var exampleOnly = !catalog.some(function (entry) { return String(entry || '').trim().toLocaleLowerCase() === String(detail || '').trim().toLocaleLowerCase(); });
+      var locked = exampleOnly || _categoryCatalogLocked();
       return '<div class="pg-detail-item" data-detail="' + _escAttr(detail) + '" data-detail-example-count="' + count + '" data-approved="' + (count > 0 ? 'true' : 'false') + '" data-example-only="' + (exampleOnly ? 'true' : 'false') + '" data-parent-cat="' + _escAttr(category) + '"' + (isNew ? ' data-new-subcategory="true"' : '') + (hasTaxonomy ? ' data-subcategory-taxonomy-defined="true"' : '') + '>' +
         '<div class="pg-detail-header"><span class="pg-detail-copy"><span class="pg-detail-name" dir="auto">' + _esc(detail) + '</span>' +
           '<span class="qym-tag qym-tag--count pg-detail-example-count">' + _detailCountLabel(count) + '</span></span>' +
-        '<button class="pg-detail-remove qym-icon-action" type="button" title="Remove subcategory" aria-label="Remove ' + _escAttr(detail) + ' subcategory"' + (exampleOnly ? ' hidden' : '') + '>' + _icon('close') + '</button>' +
+        '<button class="pg-detail-remove qym-icon-action" type="button" title="Remove subcategory" aria-label="Remove ' + _escAttr(detail) + ' subcategory"' + (locked ? ' hidden' : '') + '>' + _icon('close') + '</button>' +
         '</div>' +
         '<div class="pg-detail-taxonomy-fields">' +
-          '<label class="pg-detail-taxonomy-field"><span>Description</span><textarea data-subcategory-taxonomy-field="description" rows="2" placeholder="What this subcategory means..." spellcheck="true"' + (exampleOnly ? ' readonly' : '') + '>' + _esc(taxonomy.description || '') + '</textarea></label>' +
-          '<label class="pg-detail-taxonomy-field"><span>Use when</span><textarea data-subcategory-taxonomy-field="when_to_use" rows="2" placeholder="When the analyzer should use this subcategory..." spellcheck="true"' + (exampleOnly ? ' readonly' : '') + '>' + _esc(taxonomy.when_to_use || '') + '</textarea></label>' +
+          '<label class="pg-detail-taxonomy-field"><span>Description</span><textarea data-subcategory-taxonomy-field="description" rows="2" placeholder="What this subcategory means..." spellcheck="true"' + (locked ? ' readonly' : '') + '>' + _esc(taxonomy.description || '') + '</textarea></label>' +
+          '<label class="pg-detail-taxonomy-field"><span>Use when</span><textarea data-subcategory-taxonomy-field="when_to_use" rows="2" placeholder="When the analyzer should use this subcategory..." spellcheck="true"' + (locked ? ' readonly' : '') + '>' + _esc(taxonomy.when_to_use || '') + '</textarea></label>' +
         '</div>' +
       '</div>';
     }).join('');
@@ -1000,15 +1043,15 @@ window.QymPlayground = (function () {
       _categoryTabMarkup(cat, domKey, 'details', 'Subcategories', String(approvedSubcategoryCount)) +
       _categoryTabMarkup(cat, domKey, 'examples', 'Examples', String(catExamples.length)) +
       '</div>' +
-      '<div class="pg-category-panel-actions">' +
+      '<div class="pg-category-panel-actions"' + (_categoryCatalogLocked() ? ' hidden style="display:none"' : '') + '>' +
         '<button class="pg-category-remove qym-icon-action qym-icon-action--danger" type="button" title="Remove category from this analysis" aria-label="Remove ' + _escAttr(cat) + ' category from this analysis">' + _icon('trash') + '</button>' +
       '</div>' +
     '</div>';
     html += '<div class="pg-category-content">';
     html += '<section class="pg-category-tab-panel pg-category-taxonomy" id="' + guidancePanelId + '" data-category-panel="guidance" role="tabpanel" aria-labelledby="pg-category-' + domKey + '-guidance-tab">' +
       '<h4>Category guidance</h4><p class="pg-category-taxonomy-hint">Define the meaning of this label and the signal that should trigger it. Both fields are required.</p>' +
-      '<label class="pg-category-taxonomy-field"><span>Description <abbr title="Required" aria-label="Required">*</abbr></span><textarea data-taxonomy-field="description" rows="3" placeholder="What this category means..." spellcheck="true" required aria-required="true">' + _esc(catTaxonomy.description || '') + '</textarea></label>' +
-      '<label class="pg-category-taxonomy-field"><span>Use when <abbr title="Required" aria-label="Required">*</abbr></span><textarea data-taxonomy-field="when_to_use" rows="3" placeholder="When the analyzer should use this category..." spellcheck="true" required aria-required="true">' + _esc(catTaxonomy.when_to_use || '') + '</textarea></label>' +
+      '<label class="pg-category-taxonomy-field"><span>Description <abbr title="Required" aria-label="Required">*</abbr></span><textarea data-taxonomy-field="description" rows="3" placeholder="What this category means..." spellcheck="true" required aria-required="true"' + (_categoryCatalogLocked() ? ' readonly' : '') + '>' + _esc(catTaxonomy.description || '') + '</textarea></label>' +
+      '<label class="pg-category-taxonomy-field"><span>Use when <abbr title="Required" aria-label="Required">*</abbr></span><textarea data-taxonomy-field="when_to_use" rows="3" placeholder="When the analyzer should use this category..." spellcheck="true" required aria-required="true"' + (_categoryCatalogLocked() ? ' readonly' : '') + '>' + _esc(catTaxonomy.when_to_use || '') + '</textarea></label>' +
     '</section>';
     html += '<section class="pg-category-tab-panel pg-category-details" id="' + detailsPanelId + '" data-category-panel="details" role="tabpanel" aria-labelledby="pg-category-' + domKey + '-details-tab" hidden>' +
       '<div class="pg-category-tab-heading"><div><h4>Subcategories</h4><p>Browse approved subcategories or select All to edit catalog labels.</p></div><span class="qym-tag qym-tag--count pg-detail-total-count">' + approvedSubcategoryCount + '</span></div>' +
@@ -1018,7 +1061,7 @@ window.QymPlayground = (function () {
       '<div class="pg-details-sublist" data-cat="' + _escAttr(cat) + '">' + _buildCategoryDetailItems(cat, displayedDetails, catExamples, subcategoryTaxonomy, false, catDetails) + '</div>' +
       '<div class="qym-pagination pg-category-pagination" data-category-pagination="details" role="navigation" aria-label="' + _escAttr(cat) + ' subcategories pagination" hidden></div>' +
       '<p class="pg-category-details-empty" data-detail-empty hidden>No approved subcategories match this search.</p>' +
-      '<div class="pg-add-detail-row" data-cat="' + _escAttr(cat) + '"><input type="text" placeholder="Add subcategory..." aria-label="Add a subcategory to ' + _escAttr(cat) + '" class="pg-add-input pg-add-detail-input qym-control qym-input" />' +
+      '<div class="pg-add-detail-row" data-cat="' + _escAttr(cat) + '"' + (_categoryCatalogLocked() ? ' hidden style="display:none"' : '') + '><input type="text" placeholder="Add subcategory..." aria-label="Add a subcategory to ' + _escAttr(cat) + '" class="pg-add-input pg-add-detail-input qym-control qym-input" />' +
         '<button type="button" class="pg-add-detail-btn pg-add-btn qym-inline-action qym-inline-action--neutral">Add subcategory</button></div>' +
     '</section>';
     html += '<section class="pg-category-tab-panel pg-category-examples" id="' + examplesPanelId + '" data-category-panel="examples" role="tabpanel" aria-labelledby="pg-category-' + domKey + '-examples-tab" hidden>' +
@@ -1857,10 +1900,13 @@ window.QymPlayground = (function () {
   }
 
   function _isMetricExecutionError(meta) {
+    // One rule for every page: metrics.js isMetricErrorMeta (meta.status).
+    if (window.QymMetrics && window.QymMetrics.isMetricErrorMeta) {
+      return window.QymMetrics.isMetricErrorMeta(meta);
+    }
     if (!meta || typeof meta !== 'object') return false;
     var status = String(meta.status || '').trim().toLowerCase();
-    if (status === 'error' || status === 'failed' || status === 'timeout') return true;
-    return Boolean(meta.error) && String(meta.error).trim() !== '';
+    return status === 'error' || status === 'failed' || status === 'timeout';
   }
 
   function _getMatchedItems() {
@@ -2012,6 +2058,29 @@ window.QymPlayground = (function () {
       surface.appendChild(banner);
     }
 
+    // Read-only workspace for members who cannot change the setup or analyze.
+    if (!_canOperateAnalyzer || !_canManageRules) {
+      var readOnlyBanner = document.createElement('div');
+      readOnlyBanner.className = 'playground-banner';
+      readOnlyBanner.id = 'pg-read-only-banner';
+      readOnlyBanner.setAttribute('role', 'note');
+      readOnlyBanner.style.cssText = 'background: var(--bg-elevated); color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle);';
+      readOnlyBanner.textContent = !_canOperateAnalyzer
+        ? (_opts.projectScoped
+          ? 'You can view this project\u2019s analysis setup. Only project managers can upload documents, change rules or run analysis.'
+          : 'You can view this analysis setup. Only project managers and the run\u2019s owner can upload documents or run analysis, and only managers can change rules.')
+        : 'Only project managers can change rules and categories.';
+      surface.appendChild(readOnlyBanner);
+    }
+    if (_bootstrapProblems.length) {
+      var problemBanner = document.createElement('div');
+      problemBanner.className = 'playground-banner playground-banner-warn';
+      problemBanner.id = 'pg-load-problems';
+      problemBanner.setAttribute('role', 'alert');
+      problemBanner.textContent = _bootstrapProblems.join('. ') + '.';
+      surface.appendChild(problemBanner);
+    }
+
     // Scrollable content area
     var scroll = document.createElement('div');
     scroll.className = dedicatedPage ? 'playground-page-sections' : 'playground-scroll';
@@ -2059,7 +2128,9 @@ window.QymPlayground = (function () {
 
     // Wire all events
     _wireEvents();
-    document.addEventListener('keydown', _onKeyDown);
+    // Ends with the page that opened the playground (in-app navigation).
+    var _pageSignal = window.QymShell && typeof window.QymShell.pageSignal === 'function' ? window.QymShell.pageSignal() : undefined;
+    document.addEventListener('keydown', _onKeyDown, _pageSignal ? { signal: _pageSignal } : false);
     // Initialize once the controls are mounted so target matching reads their
     // real values instead of the pre-mount empty DOM.
     _onFilterChange();
@@ -2361,7 +2432,7 @@ window.QymPlayground = (function () {
 
   function _buildAnalysisRulesEditor() {
     var selected = _ruleVersions.find(function (version) { return version.id === _selectedRuleVersionId; });
-    var readOnly = !selected || selected.status !== 'draft';
+    var readOnly = !selected || selected.status !== 'draft' || !_canManageRules;
     if (_analysisRules.length === 0) {
       return '<div class="pg-rule-empty">' + (readOnly
         ? 'This version has no rules. Create a draft before editing.'
@@ -2521,9 +2592,10 @@ window.QymPlayground = (function () {
         meta += ' · sent to analyzer in full';
       }
       var selected = document.selected !== false;
+      var locked = !_canOperateAnalyzer;
       return '<div class="pg-document-item' + (selected ? '' : ' pg-document-item-excluded') + '" data-document-index="' + index + '">' +
-        '<label class="pg-document-toggle" title="' + (selected ? 'Included in project analysis' : 'Excluded from project analysis') + '">' +
-          '<input class="pg-document-select" type="checkbox" data-document-index="' + index + '"' + (selected ? ' checked' : '') + ' />' +
+        '<label class="pg-document-toggle" title="' + (selected ? 'Included in project analysis' : 'Excluded from project analysis') + (locked ? ' \u00b7 only project managers can change this' : '') + '">' +
+          '<input class="pg-document-select" type="checkbox" data-document-index="' + index + '"' + (selected ? ' checked' : '') + (locked ? ' disabled' : '') + ' />' +
           '<span class="pg-document-check" aria-hidden="true"></span>' +
           '<span class="pg-document-state">' + (selected ? 'Included' : 'Excluded') + '</span>' +
         '</label>' +
@@ -2531,7 +2603,7 @@ window.QymPlayground = (function () {
           '<span class="pg-document-name" dir="auto">' + _esc(document.name) + '</span>' +
           '<span class="pg-document-meta">' + _esc(meta) + '</span>' +
         '</div>' +
-        '<button class="pg-document-remove qym-icon-action qym-icon-action--danger" type="button" data-document-index="' + index + '" title="Delete ' + _escAttr(document.name) + '" aria-label="Delete ' + _escAttr(document.name) + '">' + _icon('trash') + '</button>' +
+        (locked ? '' : '<button class="pg-document-remove qym-icon-action qym-icon-action--danger" type="button" data-document-index="' + index + '" title="Delete ' + _escAttr(document.name) + '" aria-label="Delete ' + _escAttr(document.name) + '">' + _icon('trash') + '</button>') +
       '</div>';
     }).join('');
   }
@@ -3207,11 +3279,15 @@ window.QymPlayground = (function () {
     // ── Reference Documents ──
     var documentsBody = '';
     documentsBody += '<div class="pg-instructions-hint">Choose which documents belong in project analysis. The analyzer sends all retained content without shortening. If the selected provider cannot accept the complete prompt, Qym reports <code>context_limit_exceeded</code>.</div>';
-    documentsBody += '<label class="pg-document-dropzone" id="pg-document-dropzone" for="pg-document-input" role="button" tabindex="0" aria-controls="pg-document-input" aria-label="Upload project documents">' +
-      '<span class="pg-document-upload-title">Choose documents or drop them here</span>' +
-      '<span class="pg-document-upload-help">PDF, DOCX, TXT, Markdown, HTML, CSV, JSON, or YAML · up to 10 MB each · text above 40,000 characters requires confirmation</span>' +
-    '</label>';
-    documentsBody += '<input class="pg-document-input" id="pg-document-input" type="file" multiple accept=".pdf,.docx,.txt,.text,.md,.markdown,.html,.htm,.csv,.json,.yaml,.yml,.log,.rst" aria-label="Choose project documents" />';
+    if (_canOperateAnalyzer) {
+      documentsBody += '<label class="pg-document-dropzone" id="pg-document-dropzone" for="pg-document-input" role="button" tabindex="0" aria-controls="pg-document-input" aria-label="Upload project documents">' +
+        '<span class="pg-document-upload-title">Choose documents or drop them here</span>' +
+        '<span class="pg-document-upload-help">PDF, DOCX, TXT, Markdown, HTML, CSV, JSON, or YAML · up to 10 MB each · text above 40,000 characters requires confirmation</span>' +
+      '</label>';
+      documentsBody += '<input class="pg-document-input" id="pg-document-input" type="file" multiple accept=".pdf,.docx,.txt,.text,.md,.markdown,.html,.htm,.csv,.json,.yaml,.yml,.log,.rst" aria-label="Choose project documents" />';
+    } else {
+      documentsBody += '<div class="pg-instructions-hint" id="pg-document-read-only">Only project managers can add, include or delete documents.</div>';
+    }
     documentsBody += '<div class="pg-document-upload-status" id="pg-document-upload-status" role="status" aria-live="polite"></div>';
     documentsBody += '<div class="pg-document-budget" id="pg-document-budget" role="status" aria-live="polite"></div>';
     documentsBody += '<div class="pg-document-list" id="pg-document-list">' + _buildReferenceDocumentList() + '</div>';
@@ -3237,8 +3313,8 @@ window.QymPlayground = (function () {
     }
     maxCategories = Math.min(_MAX_ROOT_CAUSE_CATEGORIES, Math.max(1, Math.trunc(maxCategories)));
     catDetBody += '<div class="pg-category-editor"><div class="pg-category-editor-toolbar"><div class="pg-category-editor-heading"><span class="pg-category-panel-kicker">Category catalog</span><strong id="pg-category-active-name">Select a category</strong><span>Changes apply to future analyses after you save the catalog.</span></div>' +
-      '<div class="pg-add-category-form"><label class="pg-visually-hidden" for="pg-new-category">New category</label><input type="text" id="pg-new-category" placeholder="New category..." class="pg-add-input qym-control qym-input" required aria-required="true" hidden /><button id="pg-add-category-btn" class="pg-add-btn qym-inline-action qym-inline-action--neutral" type="button">' + _icon('plus') + '<span>Add category</span></button></div>' +
-      '<div class="pg-category-limit-field" data-category-limit-field role="group" aria-labelledby="pg-max-root-cause-categories-label"><label class="pg-category-limit-label" id="pg-max-root-cause-categories-label" for="pg-max-root-cause-categories">Max issues per item</label><button class="qym-help-marker" type="button" aria-label="How the issue limit works">i<span class="qym-help-tooltip" role="tooltip">Limits how many root-cause issues the analyzer can return for each item. Higher values allow multiple independent causes.</span></button><input class="qym-control qym-input" id="pg-max-root-cause-categories" type="number" min="1" max="10" step="1" inputmode="numeric" value="' + maxCategories + '" /></div></div>' +
+      '<div class="pg-add-category-form"' + (_categoryCatalogLocked() ? ' hidden style="display:none"' : '') + '><label class="pg-visually-hidden" for="pg-new-category">New category</label><input type="text" id="pg-new-category" placeholder="New category..." class="pg-add-input qym-control qym-input" required aria-required="true" hidden /><button id="pg-add-category-btn" class="pg-add-btn qym-inline-action qym-inline-action--neutral" type="button">' + _icon('plus') + '<span>Add category</span></button></div>' +
+      '<div class="pg-category-limit-field" data-category-limit-field role="group" aria-labelledby="pg-max-root-cause-categories-label"><label class="pg-category-limit-label" id="pg-max-root-cause-categories-label" for="pg-max-root-cause-categories">Max issues per item</label><button class="qym-help-marker" type="button" aria-label="How the issue limit works">i<span class="qym-help-tooltip" role="tooltip">Limits how many root-cause issues the analyzer can return for each item. Higher values allow multiple independent causes.</span></button><input class="qym-control qym-input" id="pg-max-root-cause-categories" type="number" min="1" max="10" step="1" inputmode="numeric" value="' + maxCategories + '"' + (_categoryCatalogLocked() ? ' readonly title="Only project managers can change this"' : '') + ' /></div></div>' +
       '<div id="pg-categories-list">';
     for (var i = 0; i < cats.length; i++) {
       totalDetails += _approvedSubcategoriesFor(_categoryExamplesFor(categoryExamples, cats[i])).length;
@@ -4010,16 +4086,19 @@ window.QymPlayground = (function () {
     var selected = _ruleVersions.find(function (version) { return version.id === _selectedRuleVersionId; });
     var editorTitle = document.getElementById('pg-rule-editor-title');
     if (editorTitle) editorTitle.textContent = selected ? 'Rules in v' + selected.version : 'Rules';
-    var editable = !!selected && selected.status === 'draft';
+    var editable = !!selected && selected.status === 'draft' && _canManageRules;
     var addButton = document.getElementById('pg-add-rule');
     var createButton = document.getElementById('pg-create-rule-version');
+    var addLabel = !_canManageRules ? 'Only project managers can change rules' : (editable ? 'Add rule' : 'Create a draft to add rules');
     if (addButton) {
       addButton.disabled = !editable;
-      addButton.title = editable ? 'Add rule' : 'Create a draft to add rules';
-      addButton.setAttribute('aria-label', editable ? 'Add rule' : 'Create a draft to add rules');
+      addButton.title = addLabel;
+      addButton.setAttribute('aria-label', addLabel);
     }
     if (createButton) {
       createButton.hidden = false;
+      createButton.disabled = !_canManageRules;
+      createButton.title = _canManageRules ? '' : 'Only project managers can create rule drafts';
       createButton.classList.remove('qym-inline-action--accent');
       createButton.classList.add('qym-inline-action--neutral');
     }
@@ -4034,7 +4113,7 @@ window.QymPlayground = (function () {
       viewState.classList.toggle('qym-badge--success', editable);
       viewState.classList.toggle('qym-badge--warning', !editable);
       viewState.classList.remove('qym-badge--neutral');
-      viewState.title = editable ? 'Rules in this draft can be edited.' : 'Create a draft before editing these rules.';
+      viewState.title = editable ? 'Rules in this draft can be edited.' : (_canManageRules ? 'Create a draft before editing these rules.' : 'Only project managers can change rules.');
     }
     _renderRuleVersionMeta(selected);
     _renderRuleVersionActions();
@@ -4074,15 +4153,17 @@ window.QymPlayground = (function () {
     }
     var generateButton = document.getElementById('pg-infer-rules');
     if (generateButton) {
-      generateButton.disabled = _ruleInferenceRunning || !state.hasUsableSource;
-      generateButton.title = _ruleInferenceRunning
-        ? 'Rule generation is in progress'
-        : (state.hasUsableSource ? 'Generate additional non-redundant rules from the selected sources' : state.message);
+      generateButton.disabled = _ruleInferenceRunning || !state.hasUsableSource || !_canManageRules;
+      generateButton.title = !_canManageRules
+        ? 'Only project managers can generate rules'
+        : _ruleInferenceRunning
+          ? 'Rule generation is in progress'
+          : (state.hasUsableSource ? 'Generate additional non-redundant rules from the selected sources' : state.message);
     }
     var documentsInput = document.getElementById('pg-infer-use-documents');
-    if (documentsInput) documentsInput.disabled = _ruleInferenceRunning;
+    if (documentsInput) documentsInput.disabled = _ruleInferenceRunning || !_canManageRules;
     var addExamplesButton = document.getElementById('pg-add-examples');
-    if (addExamplesButton) addExamplesButton.disabled = _ruleInferenceRunning;
+    if (addExamplesButton) addExamplesButton.disabled = _ruleInferenceRunning || !_canManageRules;
     var documentBudget = document.getElementById('pg-document-budget');
     if (documentBudget) {
       var documentCharacters = Number(state.selectedDocumentCharacters || 0);
@@ -5031,7 +5112,8 @@ window.QymPlayground = (function () {
   }
 
   function _resumeActiveRuleInferenceJob() {
-    if (!_hasAnalysisContext()) return;
+    // Rule generation is manager-only; members have no job to resume.
+    if (!_hasAnalysisContext() || !_canManageRules) return;
     if (_ruleInferencePollTimer) clearTimeout(_ruleInferencePollTimer);
     var base = _opts.apiUrl || function (p) { return '/' + p; };
     var generation = ++_ruleInferencePollGeneration;
@@ -5845,6 +5927,7 @@ window.QymPlayground = (function () {
     var metricsReady = selectedMetrics === null || selectedMetrics.length > 0;
     var ready = !!(
       _config &&
+      _canOperateAnalyzer &&
       _config.llm_configured &&
       _documentUploadsInFlight === 0 &&
       metricsReady
@@ -6217,6 +6300,22 @@ window.QymPlayground = (function () {
     },
     refreshFilters: function () {
       if (_overlay) _onFilterChange();
+    },
+    // An analysis or a test is starting or running: its results belong to
+    // the sample it started on, so the analyzer must not switch samples.
+    isBusy: function () {
+      return _running || !!_analysisJobId;
+    },
+    // The analyzer switched samples in place: results shown for the
+    // previous sample no longer apply.
+    clearResults: function () {
+      _testResults = [];
+      ['pg-runall-results', 'pg-test-results'].forEach(function (id) {
+        var node = document.getElementById(id);
+        if (node) node.innerHTML = '';
+      });
+      var divider = document.getElementById('pg-results-divider');
+      if (divider) divider.style.display = 'none';
     },
   };
 })();

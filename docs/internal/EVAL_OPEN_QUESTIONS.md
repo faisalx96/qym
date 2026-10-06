@@ -110,7 +110,7 @@ project. The API guide is updated in §3.1, a new §4.0 and §7.
   `user_id`. Retries submitted by a manager still use the creator's key.
 - **Minting.** One dedicated platform API key is minted per experiment at launch (named
   "Evaluation Service · …", minimal ingest scopes). It is stored encrypted (migration
-  0065) and added to the submitted body in memory only.
+  0077) and added to the submitted body in memory only.
 - **Revocation.** The key is revoked automatically once every job has reached a
   terminal status. It stays valid while a job is BLOCKED, because a blocked job can be
   retried. A retry after revocation mints a new key.
@@ -118,7 +118,7 @@ project. The API guide is updated in §3.1, a new §4.0 and §7.
   BLOCKED instead of submitted.
 - **Creator left the project.** A retry is refused (409) with a hint to clone the
   experiment and launch it as yourself.
-- **Experiments launched before 0065.** They have no key, so their queued jobs are
+- **Experiments launched before 0077.** They have no key, so their queued jobs are
   BLOCKED ("key unavailable") until retried, which mints one.
 
 **Questions for review.**
@@ -232,7 +232,7 @@ the last 5 minutes" (there is no `last_viewed_at` column).
 ### B13. Other differences, listed for completeness
 
 - **Migrations:** the plan names `0058_eval_service_integration`; the code uses
-  0060–0064.
+  0072–0076.
 - **Job statuses:** SUBMITTING and CANCELLING are stored statuses.
 - **Default priority:** when none is requested, the lowest `default_priority` among the
   selected environments.
@@ -251,7 +251,7 @@ the last 5 minutes" (there is no `last_viewed_at` column).
 could filter on them. How should filtering work, given the service may add keys?
 
 **Decision.**
-- **Any key.** One row per run and key in `dashboard_run_versions` (0066), written by
+- **Any key.** One row per run and key in `dashboard_run_versions` (0078), written by
   the dashboard worker with the run's dimension. No key name is hard-coded: the UI
   builds one dropdown per key it sees, and the APIs take `key=value`.
 - **Matching.** Values of one key are alternatives, and different keys must all match.
@@ -313,7 +313,7 @@ To prefill the dataset from the form, initialise the picker's `draft` from
 queued job is submitted as soon as a dispatcher claims it, and the Evaluation Service
 limits concurrent runs and queues the rest (`PENDING` remotely, `SUBMITTED` in qym).
 `max_inflight_jobs` is gone from the API, the environment drawer, the environments
-table and the Queue page header, and migration `0068` drops the column. Old clients
+table and the Queue page header, and migration `0080` drops the column. Old clients
 that still send `max_inflight_jobs` have it ignored. Stale remote jobs are still shown,
 and managers can still cancel them, but they no longer hold back submissions.
 
@@ -325,7 +325,7 @@ the service's queue holds them instead of qym's. Cancelling a queued job now usu
 means a remote cancel, not a local one. Other callers of the same service share its
 limit with qym, as they already did.
 
-**To reverse.** Downgrade migration `0068` (it restores the column with a default of
+**To reverse.** Downgrade migration `0080` (it restores the column with a default of
 5), then restore the cap check in `EvalDispatcher._try_submit` / `_begin_submit` and
 the field in the API and UI from the commit that removed them.
 
@@ -373,13 +373,13 @@ and skip `refreshEnvSchema` for non-managers in `experiment_launch.js`.
   checked with static tests and a syntax check only. A manual pass is needed on: the
   launch form (bases, Advanced panel, sweeps, best run), the experiment matrix, the
   queue page, the official defaults editor and promote, and the run Experiment panel.
-- **C2. Deploy step.** After migrations 0060–0064, run
+- **C2. Deploy step.** After migrations 0072–0076, run
   `python -m qym_platform.tools.backfill_eval_run_scores` once.
 - **C3. Stylesheets after client-side navigation.** The shell's client-side navigation
   doesn't carry `<link>` stylesheets. Some pages load them on mount; others (for
   example Project settings → Environments) may show unstyled until a full reload.
 - **C4. Stale migration head in `OPERATIONS.md`.** Older text in the file still says the
-  migration chain head is `0057` (main has 0058/0059, and eval adds 0060–0064).
+  migration chain head is `0057` (main has 0058/0059, and eval adds 0060–0064, since renumbered 0072–0076).
 - **C5. Old `shell.js` version (fixed).** All pages now load `shell.js?v=…-16`, so browsers fetch the copy that has the Experiments nav item.
 - **C6. Dispatcher load test.** This runs outside CI. The slow 64-job test needs
   `QYM_TEST_SLOW=1`, and the Postgres variants need `QYM_TEST_POSTGRES_URL`. Consider

@@ -16,15 +16,6 @@ STATIC = (
 )
 
 
-@pytest.fixture(scope="module")
-def browser():
-    api = pytest.importorskip("playwright.sync_api")
-    with api.sync_playwright() as playwright:
-        instance = playwright.chromium.launch()
-        yield instance
-        instance.close()
-
-
 @pytest.fixture()
 def page(browser):
     context = browser.new_context()
@@ -61,6 +52,8 @@ def page(browser):
     source = source.replace(
         "window.__dsx = { state,", "window.__dsx = { openUploadWizard, state,"
     )
+    # The page loads the shared escaping layer before any other script.
+    page.add_script_tag(path=str(STATIC / "qym_safe.js"))
     page.add_script_tag(content=source)
     page.evaluate("""() => {
       Object.assign(__dsx.state, {slug: 'project', datasetRef: 'demo',

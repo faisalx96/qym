@@ -5,12 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Charts</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=eval-versioning-20261002">
-  <link rel="stylesheet" href="/static/shell.css">
-  <script src="/static/auth.js"></script>
-  <script src="/static/shell.js?v=ui-consistency-20260730-16"></script>
-  <link rel="stylesheet" href="/static/ui_components.css?v=ui-consistency-20260803-60">
-  <script defer src="/static/ui_components.js?v=ui-consistency-20260803-28"></script>
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261005-3">
+  <link rel="stylesheet" href="/static/shell.css?v=p1-20261005-6">
+  <script src="/static/qym_safe.js?v=p1-20261001"></script>
+  <script src="/static/auth.js?v=p1-20261005"></script>
+  <script src="/static/shell.js?v=p1-20261005-8"></script>
+  <script src="/static/kpis.js?v=p0-20260930"></script>
+  <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261005-2">
+  <script defer src="/static/ui_components.js?v=p1-20261005"></script>
 </head>
 <body>
   <!-- Command Bar -->
@@ -22,10 +24,25 @@
         <div class="multi-select-dropdown" id="metric-visibility-dropdown"></div>
       </div>
     </div>
-    <div class="quick-filters qym-segmented" role="group" aria-label="Time range">
-      <button class="filter-btn qym-segmented__option active" data-filter="all" aria-pressed="true">All</button>
-      <button class="filter-btn qym-segmented__option" data-filter="today" aria-pressed="false">Today</button>
-      <button class="filter-btn qym-segmented__option" data-filter="week" aria-pressed="false">7d</button>
+    <div class="time-range-control multi-select-wrapper">
+      <div class="quick-filters qym-segmented" role="group" aria-label="Time range">
+        <button class="filter-btn qym-segmented__option active" data-filter="all" aria-pressed="true">All</button>
+        <button class="filter-btn qym-segmented__option" data-filter="today" aria-pressed="false">Today</button>
+        <button class="filter-btn qym-segmented__option" data-filter="week" aria-pressed="false" title="Last 7 days">7d</button>
+        <button class="filter-btn qym-segmented__option" data-filter="month" aria-pressed="false" title="Last 30 days">30d</button>
+        <button class="filter-btn qym-segmented__option" data-filter="custom" aria-pressed="false" aria-haspopup="dialog" aria-expanded="false" aria-controls="time-range-dropdown" title="Choose a date range">Range</button>
+      </div>
+      <div class="multi-select-dropdown time-range-dropdown" id="time-range-dropdown" role="dialog" aria-label="Date range">
+        <div class="time-range-fields">
+          <label class="time-range-field"><span>From</span><input type="date" id="time-range-from" class="qym-control qym-input"></label>
+          <label class="time-range-field"><span>To</span><input type="date" id="time-range-to" class="qym-control qym-input"></label>
+        </div>
+        <p class="time-range-error" id="time-range-error" role="alert"></p>
+        <div class="time-range-actions">
+          <button type="button" class="qym-inline-action qym-inline-action--neutral" id="time-range-cancel">Cancel</button>
+          <button type="button" class="qym-inline-action qym-inline-action--accent" id="time-range-apply">Apply</button>
+        </div>
+      </div>
     </div>
     <div class="origin-filters qym-segmented" role="group" aria-label="Run origin" data-qym-segmented-key="run-origin">
       <button class="origin-filter-btn qym-segmented__option active" data-origin="all" aria-pressed="true">All</button>
@@ -65,10 +82,7 @@
   </div>
 
   <main class="dashboard-page-main">
-    <div id="loading" class="loading">
-      <div class="loading-spinner"></div>
-      <span>Loading charts...</span>
-    </div>
+    <div id="loading" class="loading loading--skeleton" data-qym-skeleton="cards" data-qym-skeleton-label="Loading charts…" data-qym-skeleton-count="2" data-qym-skeleton-min-width="560" data-qym-skeleton-height="300"></div>
     <div id="empty" class="empty" style="display:none;">
       <div class="empty-state">
         <div class="empty-icon">∅</div>
@@ -90,7 +104,7 @@
 
   <footer class="status-bar">
     <div class="status-left">
-      <span id="status-filter">0 runs</span>
+      <span id="status-filter">Loading runs…</span>
     </div>
     <div class="status-right">
       <span>Last Updated: <span id="last-updated" style="font-family:var(--font-mono)">—</span></span>
@@ -98,7 +112,8 @@
   </footer>
 
   <script>window.__QYM_INITIAL_VIEW__ = 'charts';</script>
-  <script src="/static/metrics.js?v=metric-errors-20260914-1"></script>
-  <script src="/static/dashboard.js?v=runs-performance-eval-versioning-20261002"></script>
+  <script src="/static/runs_order.js?v=p1-20261002"></script>
+  <script src="/static/metrics.js?v=p1-20261005"></script>
+  <script src="/static/dashboard.js?v=p1-20261005-9"></script>
 </body>
 </html>

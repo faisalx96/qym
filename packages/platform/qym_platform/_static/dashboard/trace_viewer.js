@@ -59,7 +59,7 @@
   function copyBtn(textOrFn, label) {
     const id = `tv-cb-${++_copyId}`;
     _copyData[id] = textOrFn;
-    return `<button type="button" class="tv-copy-btn qym-icon-action" data-copy-id="${id}" title="${label || "Copy"}" aria-label="${label || "Copy"}">${COPY_ICON}</button>`;
+    return `<button type="button" class="tv-copy-btn qym-icon-action" data-copy-id="${id}" title="${esc(label || "Copy")}" aria-label="${esc(label || "Copy")}">${COPY_ICON}</button>`;
   }
   let _copyId = 0;
   const _copyData = {};
@@ -67,7 +67,7 @@
   function expandBtn(payload, label) {
     const id = `tv-xb-${++_expandId}`;
     _expandData[id] = payload;
-    return `<button type="button" class="tv-expand-btn qym-icon-action" data-expand-id="${id}" title="${label || "Expand"}" aria-label="${label || "Expand"}">${EXPAND_ICON}</button>`;
+    return `<button type="button" class="tv-expand-btn qym-icon-action" data-expand-id="${id}" title="${esc(label || "Expand")}" aria-label="${esc(label || "Expand")}">${EXPAND_ICON}</button>`;
   }
   let _expandId = 0;
   const _expandData = {};
@@ -83,7 +83,13 @@
   }
 
   function esc(v) {
-    return String(v == null ? "" : v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    return QymSafe.escapeHtml(v == null ? "" : String(v));
+  }
+
+  // Text blocks follow the shared direction policy (qym_safe.js): Arabic
+  // reads right to left with lang="ar", anything else gets dir="auto".
+  function dirAttrs(v) {
+    return QymSafe.textDirAttrs(v == null ? "" : String(v));
   }
 
   function fmtDur(ms) {
@@ -139,7 +145,7 @@
   const MODEL_REASONING_BADGE_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 2a7 7 0 0 0-4.2 12.6c.7.5 1.2 1.4 1.2 2.3V18h6v-1.1c0-.9.5-1.8 1.2-2.3A7 7 0 0 0 12 2Z"/></svg>`;
 
   function renderModelReasoningBadge() {
-    return `<span class="model-reasoning-badge" title="${esc(MODEL_REASONING_BADGE_TITLE)}" aria-label="${esc(MODEL_REASONING_BADGE_TITLE)}">${MODEL_REASONING_BADGE_ICON}</span>`;
+    return `<span class="model-reasoning-badge" role="img" title="${esc(MODEL_REASONING_BADGE_TITLE)}" aria-label="${esc(MODEL_REASONING_BADGE_TITLE)}">${MODEL_REASONING_BADGE_ICON}</span>`;
   }
 
   function statusCls(s) {
@@ -824,7 +830,7 @@
     if (query) {
       html += renderLabeledSection(
         "Query",
-        `<div class="tv-doc-query tv-markdown">${esc(query)}</div>`,
+        `<div class="tv-doc-query tv-markdown"${dirAttrs(query)}>${esc(query)}</div>`,
         "tv-io-label-input"
       );
     }
@@ -839,7 +845,7 @@
         render: () => renderExpandedContent(
           `<div class="tv-doc-card tv-doc-card-expanded">` +
             `<div class="tv-doc-card-head"><div class="tv-doc-title-wrap"><span class="tv-doc-icon">${ICONS.RETRIEVER}</span><div class="tv-doc-title-block"><div class="tv-doc-title">${esc(title)}</div><div class="tv-doc-index">${esc(secondary)}</div></div></div></div>` +
-            `<div class="tv-doc-body tv-markdown">${esc(doc.text)}</div>` +
+            `<div class="tv-doc-body tv-markdown"${dirAttrs(doc.text)}>${esc(doc.text)}</div>` +
             (metaHtml ? `<div class="tv-doc-meta">${metaHtml}</div>` : "") +
           `</div>`
         ),
@@ -856,7 +862,7 @@
         expandBtn(expandPayload, "Expand document"),
       ], "tv-card-actions");
       html += `</div>`;
-      html += `<div class="tv-doc-body tv-markdown">${esc(doc.text)}</div>`;
+      html += `<div class="tv-doc-body tv-markdown"${dirAttrs(doc.text)}>${esc(doc.text)}</div>`;
       if (metaHtml) html += `<div class="tv-doc-meta">${metaHtml}</div>`;
       html += `</article>`;
     });
@@ -946,11 +952,11 @@
         JSON.parse(body);
         return `<div class="tv-msg-body">${renderJsonBlock(body, jsonClassName)}</div>`;
       } catch (_) {
-        return `<div class="tv-msg-body">${esc(body)}</div>`;
+        return `<div class="tv-msg-body"${dirAttrs(body)}>${esc(body)}</div>`;
       }
     }
-    if (body.includes("```")) return `<div class="tv-msg-body">${renderMarkdownLite(body)}</div>`;
-    return `<div class="tv-msg-body">${esc(body)}</div>`;
+    if (body.includes("```")) return `<div class="tv-msg-body"${dirAttrs(body)}>${renderMarkdownLite(body)}</div>`;
+    return `<div class="tv-msg-body"${dirAttrs(body)}>${esc(body)}</div>`;
   }
 
   function renderToolCallCard(tc, actionsHtml, jsonClassName) {
@@ -1031,7 +1037,7 @@
     const role = String(message.role).toLowerCase();
     const msgText = message.content ? String(message.content) : "";
     const resolvedName = message._resolvedToolName || "";
-    let bubble = `<div class="tv-msg tv-msg-${role}">`;
+    let bubble = `<div class="tv-msg tv-msg-${esc(role)}">`;
     if (role === "tool" && resolvedName) {
         bubble += renderToolHeader(resolvedName, "result", message.toolCallId, headerActions);
     } else {
@@ -1039,7 +1045,7 @@
     }
     if (message._reasoning) {
       const r = message._reasoning;
-      bubble += `<details class="tv-thinking"><summary class="tv-thinking-toggle"><span class="tv-thinking-label"><span class="tv-thinking-label-text"><span class="tv-thinking-label-closed">Show Thinking</span><span class="tv-thinking-label-open">Hide Thinking</span></span></span></summary><div class="tv-thinking-body">${esc(r)}</div></details>`;
+      bubble += `<details class="tv-thinking"><summary class="tv-thinking-toggle"><span class="tv-thinking-label"><span class="tv-thinking-label-text"><span class="tv-thinking-label-closed">Show Thinking</span><span class="tv-thinking-label-open">Hide Thinking</span></span></span></summary><div class="tv-thinking-body"${dirAttrs(r)}>${esc(r)}</div></details>`;
     }
     if (msgText) bubble += renderMessageContent(msgText, role === "tool" ? "tv-json-preview tv-json-preview-output" : "");
     if (message.toolCalls && message.toolCalls.length) {
@@ -1062,7 +1068,7 @@
   }
 
   function renderReasoningBlock(reasoning, actionsHtml, open) {
-    return `<details class="tv-reasoning-expander"${open ? " open" : ""}><summary class="tv-reasoning-summary"><span class="tv-reasoning-title">Reasoning</span>${actionsHtml || ""}</summary><div class="tv-reasoning">${esc(reasoning)}</div></details>`;
+    return `<details class="tv-reasoning-expander"${open ? " open" : ""}><summary class="tv-reasoning-summary"><span class="tv-reasoning-title">Reasoning</span>${actionsHtml || ""}</summary><div class="tv-reasoning"${dirAttrs(reasoning)}>${esc(reasoning)}</div></details>`;
   }
 
   function renderErrorBox(errInfo, actionsHtml, attemptError) {
@@ -1654,7 +1660,7 @@
     return parts.map(p => {
       if (p.startsWith("```")) {
         const inner = p.replace(/^```\w*\n?/, "").replace(/```$/, "");
-        return `<pre class="tv-code">${esc(inner)}</pre>`;
+        return `<pre class="tv-code" dir="ltr">${esc(inner)}</pre>`;
       }
       return `<span>${esc(p)}</span>`;
     }).join("");
@@ -1696,7 +1702,7 @@
     const body = parsed.trim();
     if (!body) return `<div class="tv-markdown${className ? ` ${className}` : ""}"></div>`;
     if (looksLikeCode(body)) return renderTextPlaceholder(body, `${className || ""} tv-json-preview-output`.trim());
-    return `<div class="tv-value-block${valueToneClass(className)}"><div class="tv-markdown">${renderMarkdownLite(body)}</div></div>`;
+    return `<div class="tv-value-block${valueToneClass(className)}"><div class="tv-markdown"${dirAttrs(body)}>${renderMarkdownLite(body)}</div></div>`;
   }
 
   function renderResponse(span) {
@@ -2053,6 +2059,11 @@
         const doc = typeof payload === "string" ? payload : payload.doc;
         const mode = typeof payload === "string" ? "json" : (payload.mode || "json");
         const extensions = [
+          // Each line takes its own direction, so an Arabic string inside
+          // JSON reads right to left; Arabic text also soft-wraps instead of
+          // running off to the side.
+          cm.view.EditorView.perLineTextDirection.of(true),
+          ...(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(String(doc)) ? [cm.view.EditorView.lineWrapping] : []),
           cm.view.lineNumbers(),
           cm.view.drawSelection(),
           cm.view.keymap.of([...cm.commands.defaultKeymap]),
@@ -2263,9 +2274,12 @@
     if (S.shell) return;
     const el = document.createElement("div");
     el.className = "tv-shell";
+    // Closed: out of the Tab order and the accessibility tree (C047).
+    el.setAttribute("inert", "");
+    el.setAttribute("aria-hidden", "true");
     el.innerHTML = `
       <div class="tv-backdrop" data-trace-close="1"></div>
-      <aside class="tv-drawer" role="dialog" aria-modal="true" aria-label="Trace viewer">
+      <aside class="tv-drawer" role="dialog" aria-label="Trace viewer" tabindex="-1">
         <div class="tv-header">
           <div class="tv-header-left">
             <div class="tv-eyebrow">TRACE</div>
@@ -2296,9 +2310,9 @@
           </div>
         </div>
       </aside>
-      <div class="tv-modal-layer" aria-hidden="true">
+      <div class="tv-modal-layer" aria-hidden="true" inert>
         <div class="tv-modal-backdrop" data-trace-modal-close="1"></div>
-        <section class="tv-modal" role="dialog" aria-modal="true" aria-label="Expanded trace content">
+        <section class="tv-modal" role="dialog" aria-modal="true" aria-label="Expanded trace content" tabindex="-1">
           <div class="tv-modal-header">
             <div class="tv-modal-title-wrap">
               <div class="tv-modal-eyebrow">EXPANDED</div>
@@ -2314,6 +2328,8 @@
     `;
     document.body.appendChild(el);
     S.shell = el;
+    S.el.drawer = el.querySelector(".tv-drawer");
+    S.el.modal = el.querySelector(".tv-modal");
     S.el.title = el.querySelector(".tv-title");
     S.el.meta = el.querySelector(".tv-meta");
     S.el.warning = el.querySelector(".tv-warning");
@@ -2357,11 +2373,27 @@
   }
 
   /* ── open / close ── */
-  function openDrawer() { ensureShell(); S.shell.classList.add("open"); document.body.classList.add("tv-open"); }
+  // Shared modal focus contract (ui_components.js): focus moves into the
+  // drawer, Tab stays inside it, and closing returns focus to the trigger.
+  function _dialogs() { return window.QymUIComponents && window.QymUIComponents.openDialog ? window.QymUIComponents : null; }
+  function openDrawer() {
+    ensureShell();
+    const wasOpen = S.shell.classList.contains("open");
+    S.shell.removeAttribute("inert");
+    S.shell.removeAttribute("aria-hidden");
+    S.el.drawer.setAttribute("aria-modal", "true");
+    S.shell.classList.add("open");
+    document.body.classList.add("tv-open");
+    const dialogs = _dialogs();
+    if (!wasOpen && dialogs) dialogs.openDialog(S.el.drawer, { initialFocus: (drawer) => drawer });
+  }
   function closeExpandModal() {
     if (!S.el.modalLayer) return;
+    const dialogs = _dialogs();
+    if (dialogs && S.el.modalLayer.classList.contains("open")) dialogs.releaseDialog(S.el.modal);
     S.el.modalLayer.classList.remove("open");
     S.el.modalLayer.setAttribute("aria-hidden", "true");
+    S.el.modalLayer.setAttribute("inert", "");
     if (S.el.modalBody) S.el.modalBody.innerHTML = "";
   }
   function openExpandModal(payload) {
@@ -2369,16 +2401,48 @@
     if (!payload) return;
     S.el.modalTitle.textContent = payload.title || "Expanded Trace Content";
     S.el.modalBody.innerHTML = payload.render ? payload.render() : "";
+    S.el.modalLayer.removeAttribute("inert");
     S.el.modalLayer.classList.add("open");
     S.el.modalLayer.setAttribute("aria-hidden", "false");
+    const dialogs = _dialogs();
+    if (dialogs) dialogs.openDialog(S.el.modal, { initialFocus: ".tv-close" });
     mountJsonFormatters(S.el.modalBody);
   }
   function closeDrawer() {
     if (!S.shell) return;
     closeExpandModal();
+    const wasOpen = S.shell.classList.contains("open");
     S.shell.classList.remove("open");
     document.body.classList.remove("tv-open");
+    // Return focus before the shell goes inert, or it would drop to <body>.
+    const dialogs = _dialogs();
+    if (wasOpen && dialogs) {
+      // The trigger may have been re-rendered while the drawer was open.
+      let fallbackFocus = null;
+      try {
+        if (S.meta && S.meta.endpoint) fallbackFocus = document.querySelector(`.trace-drawer-btn[data-trace-endpoint="${CSS.escape(S.meta.endpoint)}"]`);
+      } catch (_) { fallbackFocus = null; }
+      dialogs.releaseDialog(S.el.drawer, { fallbackFocus });
+    }
+    S.el.drawer.removeAttribute("aria-modal");
+    S.shell.setAttribute("inert", "");
+    S.shell.setAttribute("aria-hidden", "true");
     _clearTraceUrl();
+  }
+
+  // The page that owns this viewer unmounts: remove the viewer with it. No
+  // focus move and no URL change, as the next page owns both now.
+  function disposeViewer() {
+    S.disposed = true;
+    if (!S.shell) return;
+    const dialogs = _dialogs();
+    if (dialogs) {
+      dialogs.releaseDialog(S.el.modal, { restoreFocus: false });
+      dialogs.releaseDialog(S.el.drawer, { restoreFocus: false });
+    }
+    S.shell.remove();
+    S.shell = null;
+    document.body.classList.remove("tv-open");
   }
 
   async function fetchTrace(meta) {
@@ -2398,7 +2462,7 @@
       // Use itemId extracted from endpoint: .../items/{itemId}/trace
       const m = (meta.endpoint || "").match(/\/items\/([^/]+)\/trace/);
       if (m) url.searchParams.set("trace", m[1]);
-      history.replaceState(null, "", url);
+      history.replaceState(history.state, "", url);
     } catch (_) {}
   }
 
@@ -2406,12 +2470,12 @@
     try {
       const url = new URL(window.location);
       url.searchParams.delete("trace");
-      history.replaceState(null, "", url);
+      history.replaceState(history.state, "", url);
     } catch (_) {}
   }
 
   async function open(meta) {
-    if (S.exportMode) return;
+    if (S.exportMode || S.disposed) return;
     S.meta = meta;
     S.data = null;
     S.selected = null;
@@ -2432,6 +2496,7 @@
 
     try {
       const data = await fetchTrace(meta);
+      if (S.disposed) return;
       S.data = normalizeAttempts(data);
 
       const currentAttempt = currentAttemptData();
@@ -2448,6 +2513,7 @@
       renderHeader(meta, S.data);
       renderTree();
     } catch (err) {
+      if (S.disposed) return;
       renderHeader(meta, { item: { trace_id: meta.traceId, trace_url: meta.traceUrl }, summary: {}, spans: [] });
       S.el.list.innerHTML = `<div class="tv-empty"><div class="tv-empty-t">Failed to load</div><div class="tv-empty-d">${esc(err.message)}</div></div>`;
     }
@@ -2572,6 +2638,22 @@
     }
     // Don't handle keys if search is focused (except Escape)
     if (S.el.search === document.activeElement) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // Letter keys honour the Runs page's single-key shortcuts switch (WCAG 2.1.4).
+    if (e.key.length === 1) {
+      try {
+        if (window.localStorage.getItem("qym:single-key-shortcuts") === "off") return;
+      } catch (_) {}
+    }
+    // The expanded view is modal: span navigation stays off behind it.
+    if (S.el.modalLayer && S.el.modalLayer.classList.contains("open")) return;
+    // A focused control keeps its own keys: Enter activates a button (Close,
+    // tabs, Expand, Copy) and arrows or letters edit fields and editors. Span
+    // rows are the exception; Enter and arrows there drive the tree.
+    const target = e.target && e.target.closest ? e.target : null;
+    if (target && target.closest('input, select, textarea, [contenteditable="true"], .cm-editor')) return;
+    const control = target ? target.closest('button, a[href], summary, [role="tab"]') : null;
+    if (control && !control.matches("[data-span]") && (e.key === "Enter" || e.key.indexOf("Arrow") === 0)) return;
     if (e.key === "ArrowDown" || e.key === "j") { e.preventDefault(); navigate(1); }
     else if (e.key === "ArrowUp" || e.key === "k") { e.preventDefault(); navigate(-1); }
     else if (e.key === "Enter" || e.key === "ArrowRight") { e.preventDefault(); if (S.selected && !S.expanded.has(S.selected)) { S.expanded.add(S.selected); renderTree(); } }
@@ -2608,8 +2690,17 @@
     S.exportMode = !!(opts && opts.exportMode);
     ensureShell();
     if (S.ready) return;
-    document.addEventListener("click", handleClick);
-    document.addEventListener("keydown", handleKey);
+    // The page re-runs this script on every in-app visit: end the listeners
+    // with the page that called init (QymShell.pageSignal).
+    const pageSignal = window.QymShell && typeof window.QymShell.pageSignal === "function"
+      ? window.QymShell.pageSignal()
+      : undefined;
+    const options = pageSignal ? { signal: pageSignal } : false;
+    document.addEventListener("click", handleClick, options);
+    document.addEventListener("keydown", handleKey, options);
+    if (window.QymShell && typeof window.QymShell.onPageUnmount === "function") {
+      window.QymShell.onPageUnmount(disposeViewer);
+    }
     S.ready = true;
   }
 

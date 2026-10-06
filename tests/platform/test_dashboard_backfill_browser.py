@@ -4,8 +4,7 @@ import re
 from urllib.parse import parse_qs, urlparse
 
 import pytest
-from test_dashboard_paging_browser import DashboardFixture, STATIC, browser, nested
-from test_dashboard_durable_summaries import database
+from test_dashboard_paging_browser import DashboardFixture, STATIC, nested
 
 pytestmark = pytest.mark.browser
 

@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Auto-analysis</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=approved-subcategories-20260917-1">
-  <link rel="stylesheet" href="/static/shell.css">
-  <script src="/static/auth.js"></script>
-  <script src="/static/shell.js?v=accessibility-responsive-20260806"></script>
-  <script src="/static/metrics.js?v=metric-errors-20260914-1"></script>
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261005-3">
+  <link rel="stylesheet" href="/static/shell.css?v=p1-20261005-6">
+  <script src="/static/qym_safe.js?v=p1-20261001"></script>
+  <script src="/static/auth.js?v=p1-20261005"></script>
+  <script src="/static/shell.js?v=p1-20261005-8"></script>
+  <script src="/static/metrics.js?v=p1-20261005"></script>
   <script src="/static/qym_table.js"></script>
-  <script src="/static/playground.js?v=approved-subcategories-20260917-1"></script>
+  <script src="/static/playground.js?v=p1-20261005-3"></script>
   <style>
     /* Typography and color roles follow docs/DESIGN_LANGUAGE.md. */
     .analysis-page {
@@ -23,10 +24,27 @@
     #analysis-run-view,
     #analysis-project-view,
     #analysis-diagnosis-view,
-    .analysis-landing {
+    .analysis-landing,
+    .analysis-status,
+    .analysis-loading,
+    .analysis-error,
+    .analysis-page .playground-page-content > .playground-banner {
       width: min(100%, var(--page-constrained-width));
       margin-right: auto;
       margin-left: auto;
+    }
+    /* playground.js banners render edge-to-edge for the modal; here they are
+       callouts inside the page column, like .analysis-status. */
+    .analysis-page .playground-page-content > .playground-banner {
+      margin-bottom: var(--space-md);
+      padding: var(--space-sm) var(--space-md);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      line-height: 1.5;
+    }
+    .analysis-page .playground-page-content > .playground-banner-warn {
+      border-color: var(--warning-dim);
+      background: var(--bg-surface);
     }
     .analysis-hero,
     .analysis-tabs {
@@ -85,6 +103,13 @@
       background: var(--bg-surface);
       color: var(--text-secondary);
       text-align: center;
+    }
+    /* The workspace's shape while it loads (QymShell skeleton). */
+    .analysis-loading.analysis-loading--skeleton {
+      padding: 0;
+      border: 0;
+      background: none;
+      text-align: left;
     }
     .analysis-landing {
       max-width: 680px;
@@ -3546,8 +3571,8 @@
             }
     }
   </style>
-  <link rel="stylesheet" href="/static/ui_components.css?v=auto-analysis-selectors-20260811-1">
-  <script defer src="/static/ui_components.js?v=auto-analysis-selectors-20260811-1"></script>
+  <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261005-2">
+  <script defer src="/static/ui_components.js?v=p1-20261005"></script>
 </head>
 <body>
   <div class="analysis-page" role="region" aria-labelledby="analysis-title">
@@ -3576,7 +3601,7 @@
     </header>
 
     <div class="analysis-status" id="analysis-status" role="status" aria-live="polite"></div>
-    <div class="analysis-loading" id="analysis-loading">Loading the analysis workspace…</div>
+    <div class="analysis-loading analysis-loading--skeleton" id="analysis-loading" data-qym-skeleton="cards" data-qym-skeleton-count="3" data-qym-skeleton-min-width="340" data-qym-skeleton-height="220" data-qym-skeleton-label="Loading the analysis workspace…"></div>
     <div class="analysis-error" id="analysis-error" role="alert" hidden>
       <h2 id="analysis-error-title">Unable to load auto-analysis</h2>
       <p id="analysis-error-message"></p>
@@ -3640,6 +3665,12 @@
   <script>
     (() => {
       'use strict';
+
+      // document/window listeners end when the shell unmounts this page.
+      const pageSignal = window.QymShell && typeof window.QymShell.pageSignal === 'function'
+        ? window.QymShell.pageSignal()
+        : undefined;
+      const pageListen = (options = {}) => (pageSignal ? { ...options, signal: pageSignal } : options);
 
       const rootPath = (window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '');
       const path = window.location.pathname.replace(/\/+$/, '');
@@ -3752,12 +3783,8 @@
       }
 
       function navigateToPass(passNumber) {
-        const nextParams = new URLSearchParams(window.location.search);
-        if (projectSlug) nextParams.set('run', runId);
-        nextParams.set('pass', String(passNumber));
-        if (requestedMetric) nextParams.set('metric', requestedMetric);
-        nextParams.set('scope', 'run');
-        window.location.href = window.location.pathname + '?' + nextParams.toString();
+        // In place: no page reload and no second download of the run (C027).
+        switchToPass(passNumber).catch(showAnalyzerLoadError);
       }
 
       function analysisViewUrl(view) {
@@ -3766,14 +3793,13 @@
         return window.location.pathname + '?' + nextParams.toString();
       }
 
+      // One shared escaping rule (qym_safe.js): & < > " ' in text and attributes.
       function escapeHtml(value) {
-        const node = document.createElement('div');
-        node.textContent = value == null ? '' : String(value);
-        return node.innerHTML;
+        return QymSafe.escapeHtml(value == null ? '' : String(value));
       }
 
       function escapeAttr(value) {
-        return escapeHtml(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        return escapeHtml(value);
       }
 
       function projectApprovalSignature(config) {
@@ -3931,13 +3957,13 @@
       document.querySelectorAll('[data-analysis-view]').forEach(tab => {
         tab.addEventListener('click', () => setAnalyzerView(tab.dataset.analysisView));
       });
-      window.addEventListener('focus', () => { refreshProjectApprovals(); });
+      window.addEventListener('focus', () => { refreshProjectApprovals(); }, pageListen());
       document.addEventListener('visibilitychange', () => {
         if (!document.hidden) refreshProjectApprovals();
-      });
+      }, pageListen());
       window.addEventListener('pageshow', event => {
         if (event.persisted) refreshProjectApprovals({ force: true });
-      });
+      }, pageListen());
 
       function analyzerRows() {
         const snapshot = (state.data && state.data.snapshot) || {};
@@ -3985,10 +4011,12 @@
           }
           metrics.forEach((metricName, index) => {
             const passValues = (row.pass_scores || {})[metricName];
-            const rawValue = passNumber && Array.isArray(passValues)
-              ? passValues[passNumber - 1]
-              : (row.metric_values || [])[index];
-            metricScores[metricName] = window.QymMetrics.parseScoreValue(rawValue);
+            // A whole item's value follows the metric's error rule
+            // (metrics.js): a lower-is-better item is judged without its
+            // errored passes.
+            metricScores[metricName] = passNumber && Array.isArray(passValues)
+              ? window.QymMetrics.parseScoreValue(passValues[passNumber - 1])
+              : window.QymMetrics.getRowScore(row, index, metricName, window.QymMetrics.metricDirection(specs[metricName])).score;
             metricThresholds[metricName] = specs[metricName] && specs[metricName].pass_threshold != null
               ? Number(specs[metricName].pass_threshold)
               : 0.8;
@@ -3997,7 +4025,8 @@
           return {
             item_id: row.item_id,
             index: row.index,
-            input: row.input,
+            // Compact rows carry a one-line preview instead of the body.
+            input: row.input != null ? row.input : row.input_preview,
             input_full: row.input_full,
             output: passNumber && passAttemptValue ? passAttemptValue.output : row.output,
             output_full: passNumber && passAttemptValue ? passAttemptValue.output : row.output_full,
@@ -4949,7 +4978,7 @@
       });
       document.addEventListener('click', event => {
         if (!event.target.closest('.analysis-dashboard-filter')) state.dashboard.openFilterKey = '';
-      });
+      }, pageListen());
       document.getElementById('analysis-dashboard-compare')?.addEventListener('click', () => {
         state.dashboard.compareRequested = true;
         loadDashboardCompare().catch(error => showDashboardError(error));
@@ -4982,7 +5011,7 @@
                 '<li class="analysis-run-context-item"><span class="analysis-run-context-label">Model</span><span class="analysis-run-context-value">' + runSummaryValue(run.model_name) + '</span></li>' +
                 '<li class="analysis-run-context-item"><span class="analysis-run-context-label">Dataset</span><span class="analysis-run-context-value">' + runSummaryValue(run.dataset_name) + '</span></li>' +
               '</ul>' + passSelectorHtml + '</div>' +
-            '<a class="analysis-secondary-link qym-inline-action qym-inline-action--neutral" href="' + selectedRunUrl(runId) + '">View run</a></div>' +
+            '<a class="analysis-secondary-link qym-inline-action qym-inline-action--neutral" href="' + escapeAttr(selectedRunUrl(runId)) + '">View run</a></div>' +
           '<div class="analysis-metrics"><div class="analysis-metric-heading"><span class="analysis-run-label">Metrics to analyze</span>' +
             '<span class="analysis-metric-actions"><button class="analysis-metric-action qym-inline-action qym-inline-action--neutral" id="analysis-metrics-all" type="button">Select all</button>' +
             '<button class="analysis-metric-action qym-inline-action qym-inline-action--neutral" id="analysis-metrics-none" type="button">Clear</button></span></div>' +
@@ -5139,7 +5168,7 @@
             event.preventDefault();
             closeInputMapping();
           };
-          document.addEventListener('keydown', inputMappingEscapeHandler);
+          document.addEventListener('keydown', inputMappingEscapeHandler, pageListen());
         }
         document.getElementById('analysis-mapping-close').focus();
       }
@@ -5207,7 +5236,8 @@
         const contextActions = projectPanel.querySelector('.pg-context-actions');
         const contextStatus = document.getElementById('pg-context-status');
         const contextFeedback = document.getElementById('pg-context-feedback');
-        const documentInput = document.getElementById('pg-document-input');
+        // Members without upload access get the list but no file input.
+        const documentInput = document.getElementById('pg-document-input') || document.getElementById('pg-document-list');
         const documentsSection = documentInput && documentInput.closest('.pg-section');
         const documentsBody = documentsSection && documentsSection.querySelector('.pg-section-body');
 
@@ -5338,10 +5368,10 @@
         historyButton.addEventListener('click', openVersionHistory);
         document.addEventListener('qym:rule-version-history-rendered', () => {
           if (versionHistoryDrawer) requestAnimationFrame(renderRuleGraph);
-        });
+        }, pageListen());
         window.addEventListener('resize', () => {
           if (versionHistoryDrawer) requestAnimationFrame(renderRuleGraph);
-        });
+        }, pageListen());
         const documentsPanel = document.createElement('section');
         documentsPanel.className = 'analysis-project-panel';
         documentsPanel.dataset.projectPanel = 'documents';
@@ -5368,6 +5398,13 @@
         if (documentList) libraryBody.append(documentList);
         libraryCard.append(libraryBody);
         documentsPanel.append(uploadCard, libraryCard);
+        // Read-only members: no upload card, and the library says why.
+        const readOnlyDocuments = uploadBody.querySelector('#pg-document-read-only');
+        if (readOnlyDocuments) {
+          uploadCard.hidden = true;
+          uploadCard.style.display = 'none';
+          libraryBody.prepend(readOnlyDocuments);
+        }
         if (documentsSection) documentsSection.remove();
 
         const projectFooter = document.createElement('footer');
@@ -5738,13 +5775,13 @@
             if (!contextSettings.hidden && !contextSettings.contains(event.target) && !settingsToggle.contains(event.target)) {
               closeContextSettings();
             }
-          });
+          }, pageListen());
           document.addEventListener('keydown', event => {
             if (event.key === 'Escape' && !contextSettings.hidden) {
               event.preventDefault();
               closeContextSettings(true);
             }
-          });
+          }, pageListen());
           previewCard.append(preview);
           runPanel.append(previewCard);
         }
@@ -5954,12 +5991,16 @@
           }
           document.getElementById('analysis-go-runs').href = projectSlug ? analysisRunsPickerUrl() : rootPath + '/';
           state.contextRunId = '';
-          document.getElementById('analysis-loading').hidden = true;
           document.getElementById('analyzer-host').hidden = false;
           await initializePlayground(true);
+          revealWorkspace();
           return;
         }
-        const response = await fetch(apiUrl('api/runs/' + encodeURIComponent(runId)));
+        // The run header (no item rows) loads first; only a repeat run then
+        // asks for its sample list, so a single-sample run never pays for the
+        // /passes work. The rows load afterwards, compact and for the chosen
+        // sample only (C027).
+        const response = await fetch(apiUrl('api/runs/' + encodeURIComponent(runId) + '?view=summary'));
         if (!response.ok) throw new Error('Could not load this run (HTTP ' + response.status + ').');
         const data = await response.json();
         if (data && data.error) {
@@ -5973,8 +6014,10 @@
         state.metric = state.selectedMetrics[0] || '';
         const sampleCount = Number(data.run.samples || 1);
         if (sampleCount > 1 || data.run.metadata?.has_repeat_pass_context) {
-          const passesResponse = await fetch(apiUrl('api/runs/' + encodeURIComponent(runId) + '/passes'));
-          if (!passesResponse.ok) throw new Error('Could not load the run samples (HTTP ' + passesResponse.status + ').');
+          const passesResponse = await fetch(apiUrl('api/runs/' + encodeURIComponent(runId) + '/passes')).catch(() => null);
+          if (!passesResponse || !passesResponse.ok) {
+            throw new Error('Could not load the run samples (HTTP ' + (passesResponse ? passesResponse.status : 'network error') + ').');
+          }
           const passData = await passesResponse.json();
           if (passData && passData.error) throw new Error(String(passData.error));
           state.passSummaries = Array.isArray(passData && passData.passes) && passData.passes.length
@@ -5994,11 +6037,122 @@
           state.passSummaries = [];
           state.passNumber = null;
         }
+        await openWorkspace();
+      }
+
+      // The analysis workspace for the current sample: its rows, then the
+      // playground (C027).
+      async function openWorkspace() {
+        const data = state.data;
+        data.snapshot.rows = await fetchAnalyzerRows(state.passNumber);
         document.title = 'قيِّم • Auto-analysis • ' + (data.run.run_name || runId);
-        document.getElementById('analysis-loading').hidden = true;
         document.getElementById('analyzer-host').hidden = false;
         await initializePlayground(false);
+        revealWorkspace();
         wirePassSelector();
+      }
+
+      // The skeleton stays until the workspace is built (its config loads
+      // after the rows), then the workspace takes its place in one fade.
+      function revealWorkspace() {
+        const loading = document.getElementById('analysis-loading');
+        if (!loading.hidden) window.QymShell?.liftSkeleton?.(loading);
+        loading.hidden = true;
+        window.QymShell?.arrive?.(document.getElementById('analyzer-host'));
+      }
+
+      // Compact rows (scores, flags, metadata; no text bodies), scoped to
+      // one sample of a repeat run. Field pickers read the JSON shape of the
+      // first rows, so those load their bodies.
+      async function fetchAnalyzerRows(passNumber) {
+        const query = '?view=compact' + (passNumber ? '&pass_number=' + encodeURIComponent(passNumber) : '');
+        const response = await fetch(apiUrl('api/runs/' + encodeURIComponent(runId) + query));
+        if (!response.ok) throw new Error('Could not load this run (HTTP ' + response.status + ').');
+        const data = await response.json();
+        if (data && data.error) {
+          throw new Error(typeof data.error === 'string' ? data.error : 'Could not load this run.');
+        }
+        const rows = (data && data.snapshot && Array.isArray(data.snapshot.rows)) ? data.snapshot.rows : [];
+        const sample = rows.slice(0, 20);
+        if (sample.length) {
+          try {
+            const details = await fetch(apiUrl('api/runs/' + encodeURIComponent(runId) + '/items/details'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ item_ids: sample.map(row => String(row.item_id ?? row.index)) }),
+            });
+            const detailData = details.ok ? await details.json() : null;
+            const byId = new Map(((detailData && detailData.rows) || []).map(row => [String(row.item_id ?? row.index), row]));
+            sample.forEach(row => {
+              const full = byId.get(String(row.item_id ?? row.index));
+              if (!full) return;
+              ['input', 'input_full', 'expected', 'expected_full', 'output', 'output_full',
+                'metric_meta', 'pass_metric_meta', 'pass_attempts'].forEach(key => {
+                if (full[key] !== undefined) row[key] = full[key];
+              });
+            });
+          } catch (error) {
+            // The pickers still offer the full value of each field.
+            console.warn('Could not load sample item bodies', error);
+          }
+        }
+        return rows;
+      }
+
+      // Switching samples stays on the page: only that sample's rows load.
+      function rememberPassInUrl(passNumber) {
+        const nextParams = new URLSearchParams(window.location.search);
+        if (projectSlug) nextParams.set('run', runId);
+        nextParams.set('pass', String(passNumber));
+        if (requestedMetric) nextParams.set('metric', requestedMetric);
+        nextParams.set('scope', 'run');
+        history.replaceState(history.state, '', window.location.pathname + '?' + nextParams.toString());
+      }
+
+      async function switchToPass(passNumber) {
+        if (!state.data || passNumber === state.passNumber) return;
+        const select = document.getElementById('analysis-pass-select');
+        if (!select) {
+          // From the sample picker: open the workspace for the chosen sample.
+          state.passNumber = passNumber;
+          rememberPassInUrl(passNumber);
+          const host = document.getElementById('analyzer-host');
+          host.innerHTML = '';
+          host.hidden = true;
+          document.getElementById('analysis-loading').hidden = false;
+          await openWorkspace();
+          return;
+        }
+        const previousPass = state.passNumber;
+        const playground = window.QymPlayground || {};
+        const cancel = document.getElementById('pg-cancel-btn');
+        const busy = playground.isBusy ? playground.isBusy() : (cancel && !cancel.hidden);
+        if (busy) {
+          // An analysis is starting or running: its results belong to the
+          // sample it started on.
+          select.value = String(previousPass);
+          showStatus('warning', 'Analysis running', 'Wait for it to finish, or cancel it, before switching samples.');
+          return;
+        }
+        const runCard = document.querySelector('.analysis-run-card');
+        select.disabled = true;
+        if (runCard) runCard.setAttribute('aria-busy', 'true');
+        try {
+          const rows = await fetchAnalyzerRows(passNumber);
+          state.passNumber = passNumber;
+          state.data.snapshot.rows = rows;
+          rememberPassInUrl(passNumber);
+          const runLink = document.querySelector('.analysis-run-header > .analysis-secondary-link');
+          if (runLink) runLink.setAttribute('href', selectedRunUrl(runId));
+          if (playground.clearResults) playground.clearResults();
+          if (playground.refreshFilters) playground.refreshFilters();
+        } catch (error) {
+          select.value = String(previousPass);
+          showStatus('error', 'Could not load the sample', error.message || String(error));
+        } finally {
+          select.disabled = false;
+          if (runCard) runCard.removeAttribute('aria-busy');
+        }
       }
 
       document.getElementById('analysis-error-retry').addEventListener('click', () => {

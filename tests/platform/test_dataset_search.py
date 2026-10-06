@@ -1,10 +1,15 @@
-"""Decoded Arabic matching on SQLite and an optional PostgreSQL test database."""
+"""Decoded Arabic matching on SQLite and an optional PostgreSQL test database.
+
+Every case runs twice: on the stored ``search_text`` written at insert time
+(C031) and on legacy rows whose ``search_text`` is still NULL (written before
+migration 0068, not yet reached by the backfill), which must match the same.
+"""
 
 import os
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import String, cast, create_engine
+from sqlalchemy import String, cast, create_engine, update
 from sqlalchemy.orm import Session
 
 from qym_platform.db.base import Base
@@ -34,8 +39,8 @@ def search_engine(request):
     engine.dispose()
 
 
-@pytest.fixture()
-def search_db(search_engine):
+@pytest.fixture(params=["stored", "legacy"])
+def search_db(search_engine, request):
     with search_engine.connect() as connection:
         transaction = connection.begin()
         with Session(connection) as db:
@@ -92,11 +97,18 @@ def search_db(search_engine):
                         index=index,
                         input=input_value,
                         expected_output=expected,
-                        item_metadata={"hidden": "بيانات سرية"},
+                        item_metadata=(
+                            {"category": "فَواتير", "source": "Ticket-42"}
+                            if item_id == "english"
+                            else {"hidden": "بيانات سرية"}
+                        ),
                         fingerprint="test",
                     )
                 )
             db.flush()
+            if request.param == "legacy":
+                db.execute(update(DatasetItem).values(search_text=None))
+                db.expire_all()
             yield db
         transaction.rollback()
 
@@ -118,7 +130,10 @@ def search_db(search_engine):
         ("late payment", []),
         ("%", ["english"]),
         ("_", ["under_score"]),
-        ("بيانات سرية", []),
+        # Metadata is searched too (category and source values were invisible before).
+        ("بيانات سرية", ["أحمد-١", "nested", "under_score"]),
+        ("فواتير", ["english"]),
+        ("ticket-42", ["english"]),
         ("مفقود", []),
     ],
 )
@@ -142,12 +157,30 @@ def test_existing_escaped_json_search_is_filtered_before_pagination(search_db):
     )
     assert "\\u" in raw
     assert "السعودية" not in raw
-    # Searching just alef returns two items across input, expected and ID.
+    # Searching "مكة" matches the nested JSON of one item; filtering happens
+    # before paging, so the second page of a two-hit search is the second hit.
     query = filter_dataset_item_search(
-        search_db, search_db.query(DatasetItem), "ا"
+        search_db, search_db.query(DatasetItem), "ر"
     ).order_by(DatasetItem.index)
-    assert query.count() == 2
+    # ر: الرياض (expected), زيارة (nested input), سرية (metadata of the rest).
+    assert query.count() == 4
     assert [row.item_id for row in query.offset(1).limit(1)] == ["nested"]
+    only_input = filter_dataset_item_search(
+        search_db, search_db.query(DatasetItem), "مكة"
+    ).order_by(DatasetItem.index)
+    assert [row.item_id for row in only_input] == ["nested"]
+
+
+def test_search_text_is_written_on_insert_and_update(search_db, request):
+    if request.node.callspec.params["search_db"] == "legacy":
+        pytest.skip("legacy rows have no stored search text")
+    item = search_db.query(DatasetItem).filter(DatasetItem.item_id == "english").one()
+    assert "billing" in item.search_text and "ticket-42" in item.search_text
+    item.expected_output = "Ask the أَرشيف team"
+    search_db.flush()
+    assert "ارشيف" in item.search_text and "billing" not in item.search_text
+    query = search_db.query(DatasetItem).filter(DatasetItem.dataset_version_id == "search-version")
+    assert [row.item_id for row in filter_dataset_item_search(search_db, query, "ارشيف", version_id="search-version")] == ["english"]
 
 
 @pytest.mark.parametrize("search", ["", "  ", "ـُّ"])

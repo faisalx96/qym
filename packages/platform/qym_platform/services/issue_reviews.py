@@ -40,15 +40,70 @@ def issue_snapshot(issue: dict[str, Any]) -> dict[str, Any]:
 
 
 def lock_issue_correction(db: Session, correction: ReviewCorrection) -> None:
-    """Use the same lock order as issue edits, then recheck active state."""
-    if not correction_issue_id(correction):
-        return
+    """Lock the correction's item, then the correction row, and reload it.
+
+    Same lock order as issue edits (item, then correction rows), for legacy
+    and issue corrections alike. The row lock (SELECT ... FOR UPDATE on
+    Postgres) makes the status the caller checks next the status it changes:
+    a decision another reviewer committed meanwhile is read here, not lost.
+    """
     db.query(RunItem).filter(
         RunItem.run_id == correction.run_id, RunItem.item_id == correction.item_id,
     ).populate_existing().with_for_update().one_or_none()
-    db.refresh(correction)
-    if not correction.is_active:
+    if correction.id is not None:
+        db.query(ReviewCorrection).filter(
+            ReviewCorrection.id == correction.id
+        ).populate_existing().with_for_update().one_or_none()
+    if correction_issue_id(correction) and not correction.is_active:
         raise HTTPException(409, "This issue was edited. Reload before reviewing it.")
+
+
+# The statuses each review decision applies to: approve and reject decide a
+# pending correction; reset withdraws a decision.
+DECISION_STATUSES = {
+    "approve": (CorrectionStatus.PENDING,),
+    "reject": (CorrectionStatus.PENDING,),
+    "reset": (CorrectionStatus.APPROVED, CorrectionStatus.REJECTED),
+}
+_DECISION_PAST = {"approve": "approved", "reject": "rejected", "reset": "reset"}
+
+
+def _status_words(action: str) -> str:
+    return " or ".join(status.value for status in DECISION_STATUSES[action])
+
+
+def decision_status_conflict(
+    action: str, corrections: Iterable[ReviewCorrection], *, noun: str = "correction"
+) -> HTTPException | None:
+    """409 naming how many corrections the decision does not fit, or None.
+
+    Call after ``lock_issue_correction`` so the statuses are current.
+    """
+    rows = list(corrections)
+    allowed = DECISION_STATUSES[action]
+    wrong = [row for row in rows if row.status not in allowed]
+    if not wrong:
+        return None
+    rule = f"Only {_status_words(action)} {noun}s can be {_DECISION_PAST[action]}."
+    if len(rows) == 1:
+        status = getattr(wrong[0].status, "value", wrong[0].status)
+        detail = f"This {noun} is {status}. {rule}"
+        if action != "reset" and wrong[0].status in DECISION_STATUSES["reset"]:
+            detail += " Reset it to pending first."
+        return HTTPException(409, detail + " Reload to see its current state.")
+    return HTTPException(
+        409,
+        f"{len(wrong)} of the {len(rows)} selected {noun}s are not "
+        f"{_status_words(action)}. {rule} Reload the list and select again.",
+    )
+
+
+def require_decision_status(
+    action: str, corrections: Iterable[ReviewCorrection], *, noun: str = "correction"
+) -> None:
+    conflict = decision_status_conflict(action, corrections, noun=noun)
+    if conflict is not None:
+        raise conflict
 
 
 def correction_issues(correction: ReviewCorrection) -> list[dict[str, Any]]:
@@ -64,6 +119,21 @@ def correction_issues(correction: ReviewCorrection) -> list[dict[str, Any]]:
         legacy_detail=correction.ai_root_cause_detail,
         legacy_finding=correction.ai_root_cause_note,
     )
+
+
+# The columns ``correction_issues`` reads, for loading only those.
+ISSUE_REVIEW_COLUMNS = (
+    ReviewCorrection.human_root_cause_issues,
+    ReviewCorrection.human_root_causes,
+    ReviewCorrection.human_root_cause,
+    ReviewCorrection.human_root_cause_detail,
+    ReviewCorrection.human_root_cause_note,
+    ReviewCorrection.ai_root_cause_issues,
+    ReviewCorrection.ai_root_causes,
+    ReviewCorrection.ai_root_cause,
+    ReviewCorrection.ai_root_cause_detail,
+    ReviewCorrection.ai_root_cause_note,
+)
 
 
 def correction_issue_id(correction: ReviewCorrection) -> str:
@@ -197,6 +267,70 @@ def filter_explicitly_approved_issue_corrections(
         ):
             approved.append(correction)
     return approved
+
+
+def issue_review_statuses(
+    analysis: Any, active: Iterable[ReviewCorrection]
+) -> list[dict[str, str]]:
+    """Each issue's review status as the run page's Approve route judges it.
+
+    A read-only copy of how ``change_metric_issue`` matches an issue to its
+    review row (``sync_issue_candidates``): an issue keeps its own active
+    correction while its content matches; an unchanged issue of a legacy
+    grouped review takes that review's status; any other issue would get a
+    new pending review. ``active`` holds the scope's active corrections,
+    newest first (query rows with ``status`` and ``ISSUE_REVIEW_COLUMNS``
+    do). In older data an issue's JSON ``review_status`` can say pending
+    while its correction is decided, so the run page offers Approve by this
+    status, not by the JSON. One entry per issue, in issue order.
+    """
+    # Each row's issues are normalized once (a run page has thousands).
+    scoped: dict[str, tuple[ReviewCorrection, list[dict[str, Any]]]] = {}
+    legacy = None
+    legacy_issues: list[dict[str, Any]] = []
+    for row in active:
+        row_issues = correction_issues(row)
+        row_issue_id = str(row_issues[0].get("issue_id") or "") if len(row_issues) == 1 else ""
+        if row_issue_id:
+            scoped[row_issue_id] = (row, row_issues)
+        elif legacy is None:
+            legacy, legacy_issues = row, row_issues
+    statuses = []
+    seen: set[str] = set()
+    for index, issue in enumerate(analysis_root_cause_issues(analysis)):
+        issue_id = str(issue.get("issue_id") or "")
+        # A repeated ID is given a new one when the issue is next saved.
+        candidate = scoped.get(issue_id) if issue_id and issue_id not in seen else None
+        seen.add(issue_id)
+        content = issue_content(issue)
+        if candidate is not None and issue_content(candidate[1][0]) == content:
+            status = candidate[0].status
+        elif legacy is not None and index < len(legacy_issues) and issue_content(legacy_issues[index]) == content:
+            status = legacy.status
+        else:
+            status = CorrectionStatus.PENDING
+        statuses.append({"issue_id": issue_id, "status": getattr(status, "value", status)})
+    return statuses
+
+
+def issue_json_says_decided(analysis: Any) -> bool:
+    """Whether the run page's JSON reading calls any issue approved or rejected.
+
+    It reads an issue's ``review_status``, else the analysis's. With no review
+    row every issue is pending to the Approve route, so the page needs
+    ``issue_review_statuses`` for such an analysis only when this is true.
+    """
+    if not isinstance(analysis, dict):
+        return False
+    default = str(analysis.get("review_status") or "").strip().lower()
+    issues = analysis.get("root_cause_issues")
+    if not isinstance(issues, list):
+        return default not in ("", "pending")
+    return any(
+        str(issue.get("review_status") or default).strip().lower() not in ("", "pending")
+        for issue in issues
+        if isinstance(issue, dict)
+    )
 
 
 def apply_issue_review(issue: dict[str, Any], correction: ReviewCorrection) -> None:
@@ -358,11 +492,13 @@ def sync_issue_candidates(
                 # The JSON issue retains the full solution; this legacy column is a short label.
                 human_solution="" if is_ai else str(issue.get("solution") or "")[:200],
                 human_solution_note="" if is_ai else str(issue.get("solution_note") or ""),
-                status=status, is_active=True, corrected_by_user_id=actor_user_id,
+                status=status, is_active=True,
+                # Splitting is storage, not authorship: unchanged content keeps its writer.
+                corrected_by_user_id=legacy.corrected_by_user_id if unchanged_legacy else actor_user_id,
                 reviewed_by_user_id=legacy.reviewed_by_user_id if unchanged_legacy else None,
                 reviewed_at=legacy.reviewed_at if unchanged_legacy else None,
                 review_comment=legacy.review_comment if unchanged_legacy else "",
-                created_at=utc_now_naive(),
+                created_at=legacy.created_at if unchanged_legacy else utc_now_naive(),
             )
             db.add(candidate)
         apply_issue_review(issue, candidate)
@@ -452,6 +588,11 @@ def change_metric_issue(
     )
     if action == "approve":
         candidate = candidates[index]
+        if candidate.id is not None:
+            # The caller holds the item (and pass) lock; lock this review row
+            # too and judge the status it has now, not the one first read.
+            db.refresh(candidate, with_for_update=True)
+        require_decision_status("approve", [candidate], noun="issue")
         if not candidate.human_root_cause_issues and candidate.ai_root_cause_issues:
             candidate.human_root_cause_issues = deepcopy(candidate.ai_root_cause_issues)
             for suffix in ("root_cause", "root_causes", "root_cause_detail", "root_cause_note", "category_taxonomy", "solution", "solution_note"):
