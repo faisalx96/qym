@@ -4,6 +4,7 @@ import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from cryptography.fernet import Fernet
@@ -579,3 +580,11 @@ def test_gitlab_url_setting_rejects_malformed_values(monkeypatch, value):
     with pytest.raises(ValidationError) as exc_info:
         PlatformSettings(database_url="sqlite://")
     assert "QYM_AUTH_GITLAB_URL" in str(exc_info.value)
+
+
+def test_login_redirect_keeps_every_parameter_of_a_shared_item_link(client):
+    response = client.get("/projects/pa/runs/r-1?pass=2&item=a%26b", follow_redirects=False)
+    assert response.status_code == 303
+    location = urlsplit(response.headers["location"])
+    assert location.path == "/login"
+    assert parse_qs(location.query)["next"] == ["/projects/pa/runs/r-1?pass=2&item=a%26b"]

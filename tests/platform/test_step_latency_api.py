@@ -75,8 +75,11 @@ def _seed(session: Session, run_id: str = "run-1", trace: str = "trace-1") -> No
         run_config={},
     )
     spans = [
-        _span(run_id, f"{trace}-root", "eval-item", trace=trace),
-        _span(run_id, f"{trace}-task", "chat_task", parent=f"{trace}-root", trace=trace),
+        # Containers: the item root, its task span and eval_metrics (the phase
+        # parents) are timed, but never step rows.
+        _span(run_id, f"{trace}-root", "eval-item", dur=2500.0, trace=trace),
+        _span(run_id, f"{trace}-task", "chat_task", parent=f"{trace}-root", dur=1600.0,
+              trace=trace),
         _span(run_id, f"{trace}-s1", "sql_execute", parent=f"{trace}-task", dur=100.0,
               trace=trace, attrs=_tool_attrs("sql_execute")),
         _span(run_id, f"{trace}-s2", "sql_execute", parent=f"{trace}-task", dur=300.0,
@@ -85,7 +88,8 @@ def _seed(session: Session, run_id: str = "run-1", trace: str = "trace-1") -> No
               status="ERROR", trace=trace, attrs=_tool_attrs("sql_execute")),
         _span(run_id, f"{trace}-l1", "ChatCompletion", parent=f"{trace}-task",
               dur=1000.0, trace=trace, attrs=_llm_attrs("m1")),
-        _span(run_id, f"{trace}-em", "eval_metrics", parent=f"{trace}-root", trace=trace),
+        _span(run_id, f"{trace}-em", "eval_metrics", parent=f"{trace}-root", dur=700.0,
+              trace=trace),
         _span(run_id, f"{trace}-s3", "sql_execute", parent=f"{trace}-em", dur=500.0,
               trace=trace, attrs=_tool_attrs("sql_execute")),
     ]
@@ -116,6 +120,48 @@ def test_summary_json(client, session_factory):
 
     assert groups[("eval", "sql_execute")]["n"] == 1
     assert groups[("task", "llm:m1")]["n"] == 1
+
+
+def test_summary_json_carries_phase_parent_distributions(client, session_factory):
+    """Phase headers plot each trace's phase parent span (C143): the task span
+    under the item root and eval_metrics, which step groups leave out."""
+    with session_factory() as session:
+        _seed(session)
+    headers = _headers("owner@example.com")
+    payload = client.get("/api/runs/run-1/step-latency", headers=headers).json()
+    phases = {p["phase"]: p for p in payload["phases"]}
+    assert list(phases) == ["task", "eval"]
+    assert phases["task"]["n"] == 1 and phases["task"]["error_count"] == 0
+    assert phases["task"]["mean_ms"] == pytest.approx(1600.0)  # not the 2.5s root
+    assert phases["eval"]["n"] == 1
+    assert phases["eval"]["median_ms"] == pytest.approx(700.0)
+    for field in ("p5_ms", "p25_ms", "p75_ms", "p95_ms", "min_ms", "max_ms", "cv",
+                  "tokens_total"):
+        assert field in phases["task"]
+    # The CSV summary stays one row per step group.
+    csv_text = client.get("/api/runs/run-1/step-latency?format=csv", headers=headers).text
+    assert len(csv_text.strip().splitlines()) == 1 + len(payload["groups"])
+
+
+def test_phase_parents_follow_the_pass_scope(client, session_factory):
+    with session_factory() as session:
+        _seed(session)
+        _seed_second_pass(session)
+    headers = _headers("owner@example.com")
+
+    def phases(query):
+        body = client.get("/api/runs/run-1/step-latency" + query, headers=headers).json()
+        return {p["phase"]: p for p in body["phases"]}
+
+    both = phases("")
+    assert both["task"]["n"] == 2  # trace-1's task span + pass 2's eval-less root
+    assert (both["task"]["min_ms"], both["task"]["max_ms"]) == (900.0, 1600.0)
+    second = phases("?pass_number=2")
+    assert list(second) == ["task"]
+    assert second["task"]["mean_ms"] == pytest.approx(900.0)
+    first = phases("?pass_number=1")
+    assert first["task"]["mean_ms"] == pytest.approx(1600.0)
+    assert first["eval"]["n"] == 1
 
 
 def test_summary_csv(client, session_factory):
@@ -178,7 +224,7 @@ def _seed_second_pass(
         status="COMPLETED", trace_id=trace, is_last_attempt=True,
     ))
     session.add_all([
-        _span(run_id, "p2-root", "eval-item", trace=trace),
+        _span(run_id, "p2-root", "eval-item", dur=900.0, trace=trace),
         _span(run_id, "p2-s1", "sql_execute", parent="p2-root", dur=800.0,
               trace=trace, attrs=_tool_attrs("sql_execute")),
     ])
@@ -351,18 +397,25 @@ def test_group_by_ref_returns_each_lane_as_if_requested_alone(client, session_fa
             "/api/runs/step-latency?run_ids=" + ",".join(refs) + extra, headers=headers
         ).json()
         assert body["groups"] == alone["groups"]
-        assert "groups_by_ref" not in alone
+        assert body["phases"] == alone["phases"]
+        assert "groups_by_ref" not in alone and "phases_by_ref" not in alone
         assert list(body["groups_by_ref"]) == refs
+        assert list(body["phases_by_ref"]) == refs
         for ref in refs:
             single = client.get(
                 f"/api/runs/step-latency?run_ids={ref}" + extra, headers=headers
             ).json()
             assert body["groups_by_ref"][ref] == single["groups"], (ref, extra)
+            assert body["phases_by_ref"][ref] == single["phases"], (ref, extra)
     lane = next(
         group for group in body["groups_by_ref"]["run-1::pass2"]
         if group["phase"] == "task"
     )
     assert lane["n"] == 1 and lane["mean_ms"] == pytest.approx(800.0)
+    # Each lane's phase header has its own parent spans.
+    phase_lane = body["phases_by_ref"]["run-1::pass2"]
+    assert [p["phase"] for p in phase_lane] == ["task"]
+    assert phase_lane[0]["mean_ms"] == pytest.approx(900.0)
     rejected = client.get(
         "/api/runs/step-latency?run_ids=run-1&group_by=run", headers=headers
     )

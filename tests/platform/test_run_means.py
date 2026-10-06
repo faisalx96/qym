@@ -327,6 +327,8 @@ def test_a_score_edited_over_a_scorer_error_is_no_longer_an_error(database):
         )
         stored = db.query(RunItemScore).filter_by(item_id="b").one()
         assert stored.score_numeric == pytest.approx(0.45)
+        # Who edited the score, when, from what to what (C041).
+        assert stored.meta.pop("last_edit")["to"] == pytest.approx(0.45)
         assert stored.meta == {
             "original_score": 0.0,
             "modified": "true",

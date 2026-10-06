@@ -58,7 +58,7 @@ function metricMetaDisplayKey(key, meta) {
  * (isTaskErrorPass). They are not metric fields and are not shown as judge
  * output.
  */
-var INTERNAL_META_KEYS = new Set(['modified', 'original_score', 'task_error']);
+var INTERNAL_META_KEYS = new Set(['modified', 'original_score', 'original_score_numeric', 'last_edit', 'task_error']);
 function isInternalMetaKey(key) {
   return INTERNAL_META_KEYS.has(key);
 }

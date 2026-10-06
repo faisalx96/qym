@@ -133,6 +133,11 @@
         ? (event.actor.display_name || event.actor.email || event.actor.id)
         : "Unknown user";
       head.appendChild(node("span", "qym-review-history__actor", actor));
+      if (event.on_behalf_of) {
+        // A project manager or admin submitted the run for its owner.
+        const owner = event.on_behalf_of.display_name || event.on_behalf_of.email || event.on_behalf_of.id;
+        head.appendChild(node("span", "qym-review-history__behalf", "on behalf of " + owner));
+      }
       if (event.to_status && (event.action === "unapprove" || event.action === "unreject")) {
         head.appendChild(node("span", "", "returned the run to " + statusLabel(event.to_status)));
       }

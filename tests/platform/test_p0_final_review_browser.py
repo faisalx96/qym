@@ -217,7 +217,8 @@ def test_compare_pass_columns_name_their_pass_first(browser):
         fixture = ViewFixture(browser, "compare", count=5)
         fixture.api_client = client
         try:
-            fixture.goto()
+            # Pass columns are the "Each pass" view (Run average is the default).
+            fixture.goto("&columns=passes")
             headers = fixture.page.locator("#metrics-table th[title]")
             titles = headers.evaluate_all("nodes => nodes.map(node => node.getAttribute('title'))")
             assert [title.split(" · ")[-1] for title in titles if " · pass " in title] == [
@@ -319,6 +320,8 @@ def test_models_label_the_best_value_of_a_lower_is_better_metric_min(browser):
         page = fixture.page
         page.locator("#models-metric-select").select_option("count")
         page.wait_for_function("__modelsTest.state.modelsViewState.metricIsNumeric")
+        # The cards render after the stats arrive, so wait for their labels.
+        page.wait_for_function("() => [...document.querySelectorAll('.model-card .stat-label')].some(n => n.textContent.trim().toUpperCase().startsWith('MIN@'))")
         # Labels are shown upper-case.
         labels = [label.upper() for label in page.locator(".model-card .stat-label").all_inner_texts()]
         assert any(label.startswith("MIN@") for label in labels), labels

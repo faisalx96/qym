@@ -13,7 +13,7 @@
   // Mirrors services/run_payloads.py: the index keeps error flags and short
   // scalar metadata only. Released rows return to exactly that shape.
   const META_TEXT_LIMIT = 200;
-  const META_ALWAYS_KEPT = new Set(['error', 'status', 'task_error']);
+  const META_ALWAYS_KEPT = new Set(['error', 'status', 'task_error', 'last_edit']);
   const INDEX_FIELDS = ['output_digest', '__has_output', '__execution_error', 'input_preview'];
 
   async function withRequestSlot(request) {
@@ -301,6 +301,8 @@
       isLoaded: row => row?.__details_loaded !== false,
       matches: (condition, row) => searches.get(searchKey(condition))?.has(itemId(row)) || false,
       releaseExcept(rows) { trim(new Set(rows.map(itemId)), rows.length); },
+      // A live run gained items: earlier text-search answers may miss them.
+      forgetSearches() { searches.clear(); },
       stop() {
         stopped = true;
         self.stopped = true;

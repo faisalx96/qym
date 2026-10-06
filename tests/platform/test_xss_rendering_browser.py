@@ -415,9 +415,11 @@ def test_rendered_markdown_is_a_safe_subset_that_keeps_code_intact(safe_page):
           QymSafe.textBlock('Hi **there**', { mode: 'rendered', dir: 'rtl' }),
         ]""")
     assert blocks == [
-        '<div class="qym-text qym-text--code" data-qym-text-mode="raw">SELECT a * b FROM t</div>',
-        '<div class="qym-text qym-text--prose" data-qym-text-mode="raw">Hi **there** &lt;b&gt;</div>',
-        '<div class="qym-text qym-text--prose" data-qym-text-mode="rendered" dir="rtl">Hi <strong>there</strong></div>',
+        # Every block carries the shared direction policy (C053): dir="auto",
+        # or dir="rtl" lang="ar" when asked for (or detected) as Arabic.
+        '<div class="qym-text qym-text--code" data-qym-text-mode="raw" dir="auto">SELECT a * b FROM t</div>',
+        '<div class="qym-text qym-text--prose" data-qym-text-mode="raw" dir="auto">Hi **there** &lt;b&gt;</div>',
+        '<div class="qym-text qym-text--prose" data-qym-text-mode="rendered" dir="rtl" lang="ar">Hi <strong>there</strong></div>',
     ]
 
 
@@ -451,10 +453,10 @@ def test_sql_after_an_intro_is_code_and_english_openers_are_prose(safe_page):
           'Update: the model now returns **two** rows.',
         ].map(t => QymSafe.textBlock(t, { mode: 'rendered' }))""")
     assert rendered == [
-        '<div class="qym-text qym-text--code" data-qym-text-mode="raw">'
+        '<div class="qym-text qym-text--code" data-qym-text-mode="raw" dir="auto">'
         "Here is the query:\nSELECT a.*, b.* FROM a JOIN b ON a.id = b.id</div>",
-        '<div class="qym-text qym-text--prose" data-qym-text-mode="rendered">Answer:'
+        '<div class="qym-text qym-text--prose" data-qym-text-mode="rendered" dir="auto">Answer:'
         '<pre class="qym-text__pre"><code>SELECT a.*, b.* FROM t</code></pre></div>',
-        '<div class="qym-text qym-text--prose" data-qym-text-mode="rendered">'
+        '<div class="qym-text qym-text--prose" data-qym-text-mode="rendered" dir="auto">'
         "Update: the model now returns <strong>two</strong> rows.</div>",
     ]

@@ -57,6 +57,14 @@ QYM_DATABASE_URL=$PGURL QYM_AUTH_MODE=none QYM_ENVIRONMENT=dev QYM_REQUEST_TIMIN
 every response and logs one line per request. `QYM_ROLE=api` starts the API without
 the summary worker; `QYM_ROLE=worker` runs only the worker.
 
+To measure the multi-process layout, start the launcher the container uses when
+`QYM_WEB_WORKERS` is above 1 (N web processes plus one background-loop process):
+
+```bash
+QYM_DATABASE_URL=$PGURL QYM_AUTH_MODE=none QYM_ENVIRONMENT=dev QYM_WEB_WORKERS=4 \
+  QYM_HOST=127.0.0.1 QYM_PORT=8010 python -m qym_platform.serve
+```
+
 The repo's own `.env` is auto-loaded by `PlatformSettings`; pass the variables above
 explicitly so a local OIDC config does not leak into the lab.
 

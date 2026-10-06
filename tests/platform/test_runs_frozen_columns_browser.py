@@ -94,9 +94,19 @@ def test_focused_control_in_a_scrolling_cell_clears_the_frozen_block(table):
                 assert stop["left"] >= stop["frozenRight"], stop
 
 
-def test_a_mouse_click_beside_the_frozen_block_reaches_its_control(table):
+def test_a_mouse_click_beside_the_frozen_block_reaches_its_control(browser):
     """Only keyboard focus moves the table; pointer focus keeps it still."""
-    page = table.page
+    runs = wide_identity_runs()
+    for run in runs:  # room to bring an Analyze link up to the frozen edge
+        run["git_commit"] = "release-candidate-build-2026-09-27-0001-nightly-rebuild"
+    view = open_runs(browser, 1440, runs=runs)
+    try:
+        _click_beside_the_frozen_block(view.page)
+    finally:
+        view.close()
+
+
+def _click_beside_the_frozen_block(page):
     page.evaluate(
         """() => { window.__clicks = [];
           document.addEventListener('click', event => {
@@ -312,7 +322,8 @@ def scroll_to_metric(page, state):
 
 
 def test_default_keeps_the_seven_identity_columns_frozen_as_before(browser):
-    view = open_runs(browser, 1440)
+    # Wide enough for all seven: narrower windows fit the block (below).
+    view = open_runs(browser, 2560, runs=wide_identity_runs())
     try:
         page = view.page
         state = page.evaluate(FROZEN_STATE)
@@ -359,11 +370,11 @@ def test_unfreezing_task_to_date_reveals_the_metric_columns(browser, width):
     try:
         page = view.page
         before = page.evaluate(FROZEN_STATE)
-        if width == 1280:
-            # The reported problem: the seven frozen columns are wider than
-            # the table, so no score can be brought into view.
-            assert before["width"] > before["clientWidth"]
-            assert scroll_to_metric(page, before) == {"header": False, "cell": False}
+        # The seven frozen columns used to be wider than a 1280 px table, so
+        # no score could be brought into view. Trailing ones now scroll until
+        # the block fits, before the reader changes anything.
+        assert before["width"] <= before["clientWidth"] * 0.55
+        assert scroll_to_metric(page, before) == {"header": True, "cell": True}
         frozen_section(page)
         toggle_with_keyboard(page, "Task", "Model", "Dataset", "Owner", "Date")
         # A background refresh rebuilds the menu; focus stays on the option.
@@ -415,7 +426,7 @@ def test_unfreezing_task_to_date_reveals_the_metric_columns(browser, width):
 
 
 def test_frozen_choice_persists_across_reload_and_resets_to_default(browser):
-    view = open_runs(browser, 1280)
+    view = open_runs(browser, 2560, runs=wide_identity_runs())
     try:
         page = view.page
         section = frozen_section(page)
@@ -492,9 +503,10 @@ def test_split_frozen_block_offsets_skip_the_scrolling_columns(browser):
         (1440, ["run", "time"]),
         (1920, ["run", "time"]),
         (1280, []),
-        # The default block leaves room for controls only on a wide screen;
-        # at 1280/1440 with these values it covers the table (the reason to
-        # unfreeze columns).
+        # The default block used to cover the table at 1280/1440 with these
+        # values; it now fits, leaving room for the controls.
+        (1280, None),
+        (1440, None),
         (1920, None),
     ],
     ids=[
@@ -505,6 +517,8 @@ def test_split_frozen_block_offsets_skip_the_scrolling_columns(browser):
         "split-1440",
         "split-1920",
         "none-1280",
+        "default-1280",
+        "default-1440",
         "default-1920",
     ],
 )
@@ -640,7 +654,7 @@ def test_charts_columns_menu_has_no_frozen_section(browser):
 
 
 def test_blocked_storage_keeps_the_default_and_the_toggles_working(browser):
-    view = DashboardFixture(browser, runs=long_identity_runs())
+    view = DashboardFixture(browser, runs=wide_identity_runs())
     page = view.page
     page.add_init_script(
         """Object.defineProperty(window, 'localStorage', {
@@ -648,7 +662,7 @@ def test_blocked_storage_keeps_the_default_and_the_toggles_working(browser):
              get() { throw new DOMException('blocked', 'SecurityError'); } });"""
     )
     try:
-        page.set_viewport_size({"width": 1440, "height": 900})
+        page.set_viewport_size({"width": 2560, "height": 900})
         page.goto("https://qym.test/projects/demo")
         page.wait_for_function(
             "() => window.__dashboardTest?.state.dashboardPage?.rows.length > 0"
@@ -660,5 +674,174 @@ def test_blocked_storage_keeps_the_default_and_the_toggles_working(browser):
         state = page.evaluate(FROZEN_STATE)
         assert state["frozen"] == IDENTITY[:-1]
         assert state["shadows"] == ["owner"]
+    finally:
+        view.close()
+
+
+# ── Fit: a frozen block too wide for the table lets trailing columns scroll ──
+
+LABELS = dict(zip(IDENTITY, ["Run name", "Status", "Task", "Model", "Dataset", "Owner", "Date"]))
+
+MENU_STATE = """() => {
+  const note = document.getElementById('mv-frozen-fit');
+  return {
+    checked: [...document.querySelectorAll('#metric-visibility-dropdown input[data-frozen-column]')]
+      .filter(cb => cb.checked).map(cb => cb.dataset.frozenColumn),
+    note: note && !note.hidden ? note.textContent.trim() : '',
+    noteVisible: !!note && !note.hidden && note.getBoundingClientRect().height > 0,
+    describedBy: document.querySelector('#metric-visibility-dropdown [role="group"][aria-labelledby="mv-frozen-label"]')
+      ?.getAttribute('aria-describedby'),
+    reset: document.getElementById('mv-frozen-reset')?.getAttribute('aria-disabled'),
+  };
+}"""
+
+
+def fit_note(keys):
+    return "Unfrozen to fit this width: " + ", ".join(LABELS[key] for key in keys)
+
+
+def resize(page, width):
+    page.set_viewport_size({"width": width, "height": 900})
+    page.wait_for_function(
+        "w => document.getElementById('runs-table-scroll').clientWidth === w", arg=width
+    )
+    settle(page)
+    settle(page)
+
+
+def column_fully_visible(page, key, state):
+    """Scroll a scrolling identity column to just right of the frozen edge;
+    is all of it in view there?"""
+    return page.evaluate(
+        """([key, edge]) => {
+          const scroller = document.getElementById('runs-table-scroll');
+          const header = document.querySelector(`.runs-table thead th.col-${key}`);
+          scroller.scrollLeft += header.getBoundingClientRect().left - edge;
+          const cell = document.querySelector(`#runs-tbody tr[data-idx] td.col-${key}`);
+          const b = cell.getBoundingClientRect();
+          const view = scroller.getBoundingClientRect();
+          const shows = x => { const hit = document.elementFromPoint(x, b.top + b.height / 2);
+            return !!hit && (hit === cell || cell.contains(hit)); };
+          return shows(b.left + 2) && shows(b.right - 2) && b.right <= view.left + scroller.clientWidth + 0.5;
+        }""",
+        [key, state["portLeft"] + state["width"] + 1],
+    )
+
+
+@pytest.mark.parametrize("width", [1280, 1440, 1920])
+def test_default_block_fits_beside_the_scores_at_each_width(browser, width):
+    view = open_runs(browser, width)
+    try:
+        page = view.page
+        state = page.evaluate(FROZEN_STATE)
+        frozen = state["frozen"]
+        # Trailing columns let go from the right; Run name always stays.
+        assert frozen[0] == "run" and frozen == IDENTITY[: len(frozen)]
+        assert len(frozen) < len(IDENTITY)
+        assert state["width"] <= state["clientWidth"] * 0.55 + 0.5
+        assert state["attr"] == " ".join(frozen)
+        assert state["edges"] == frozen[-1] and state["shadows"] == [frozen[-1]]
+        # The reader's choice is untouched: nothing stored, all seven ticked.
+        assert state["stored"] is None
+        let_go = IDENTITY[len(frozen):]
+        assert scroll_to_metric(page, state) == {"header": True, "cell": True}
+        # Date is no longer cut off: it scrolls fully into view.
+        assert column_fully_visible(page, "time", state)
+        frozen_section(page)
+        menu = page.evaluate(MENU_STATE)
+        assert menu["checked"] == IDENTITY
+        assert menu["reset"] == "true"
+        assert menu["note"] == fit_note(let_go)
+        assert menu["noteVisible"] and menu["describedBy"] == "mv-frozen-fit"
+    finally:
+        view.close()
+
+
+def test_run_name_stays_frozen_however_narrow(browser):
+    view = open_runs(browser, 720)
+    try:
+        page = view.page
+        state = page.evaluate(FROZEN_STATE)
+        assert state["frozen"] == ["run"]
+        assert state["width"] > state["clientWidth"] * 0.55  # Run name alone
+        frozen_section(page)
+        assert page.evaluate(MENU_STATE)["note"] == fit_note(IDENTITY[1:])
+    finally:
+        view.close()
+
+
+def test_fitting_keeps_the_saved_choice_and_follows_resizes(browser):
+    choice = ["run", "status", "task", "dataset", "time"]
+    view = open_runs(browser, 1280)
+    try:
+        page = view.page
+        # Seeded once (not on every load), so the reload below reads back
+        # only what the page itself saved.
+        page.evaluate(
+            "([key, value]) => localStorage.setItem(key, value)",
+            [STORAGE_KEY, json.dumps(choice)],
+        )
+        page.reload()
+        page.wait_for_function(
+            "() => window.__dashboardTest?.state.dashboardPage?.rows.length > 0"
+        )
+        settle(page)
+        state = page.evaluate(FROZEN_STATE)
+        assert state["frozen"] == ["run", "status", "task"]
+        assert json.loads(state["stored"]) == choice
+        frozen_section(page)
+        menu = page.evaluate(MENU_STATE)
+        assert menu["checked"] == choice
+        assert menu["reset"] == "false"
+        assert menu["note"] == fit_note(["dataset", "time"])
+
+        # Narrower with the menu open: re-checked, and the note follows.
+        resize(page, 720)
+        assert page.evaluate(FROZEN_STATE)["frozen"] == ["run"]
+        menu = page.evaluate(MENU_STATE)
+        assert menu["note"] == fit_note(["status", "task", "dataset", "time"])
+        assert menu["checked"] == choice
+
+        # Wide enough again: the whole choice is frozen, no note.
+        resize(page, 2560)
+        state = page.evaluate(FROZEN_STATE)
+        assert state["frozen"] == choice
+        assert state["edges"] == "task dataset time"
+        assert page.evaluate(MENU_STATE)["note"] == ""
+        assert json.loads(state["stored"]) == choice
+
+        # A change made while fitted saves exactly what the reader ticked.
+        resize(page, 1280)
+        toggle_with_keyboard(page, "Status")
+        state = page.evaluate(FROZEN_STATE)
+        assert json.loads(state["stored"]) == ["run", "task", "dataset", "time"]
+        assert state["frozen"] == ["run", "task"]
+        assert page.evaluate(MENU_STATE)["note"] == fit_note(["dataset", "time"])
+
+        page.reload()
+        page.wait_for_function(
+            "() => window.__dashboardTest?.state.dashboardPage?.rows.length > 0"
+        )
+        settle(page)
+        state = page.evaluate(FROZEN_STATE)
+        assert json.loads(state["stored"]) == ["run", "task", "dataset", "time"]
+        assert state["frozen"] == ["run", "task"]
+        assert view.errors == []
+    finally:
+        view.close()
+
+
+def test_a_table_that_does_not_scroll_keeps_every_chosen_column(browser):
+    """Nothing scrolls sideways, so nothing needs letting go (and no note)."""
+    view = open_runs(browser, 1920, runs=wide_identity_runs())
+    try:
+        page = view.page
+        assert page.evaluate(
+            "() => { const s = document.getElementById('runs-table-scroll');"
+            " return s.scrollWidth <= s.clientWidth; }"
+        )
+        assert page.evaluate(FROZEN_STATE)["frozen"] == IDENTITY
+        frozen_section(page)
+        assert page.evaluate(MENU_STATE)["note"] == ""
     finally:
         view.close()

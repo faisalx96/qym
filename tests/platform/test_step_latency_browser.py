@@ -45,6 +45,17 @@ def payload(latency=222, *, step="llm:test", tokens=500):
     }
 
 
+def phase(latency=900, *, name="task", n=1):
+    """A phase parent span distribution (the API's `phases` entries)."""
+    return {
+        "phase": name, "n": n, "error_count": 0,
+        "mean_ms": latency, "median_ms": latency, "min_ms": latency,
+        "max_ms": latency, "p5_ms": latency, "p25_ms": latency,
+        "p75_ms": latency, "p95_ms": latency, "cv": 0,
+        "tokens_total": 0, "tokens_prompt": 0, "tokens_completion": 0,
+    }
+
+
 def trace_strip():
     labels = [
         "Avg Tokens",
@@ -110,6 +121,8 @@ class Panel:
         if self.lanes_in_pool and query.get("group_by") == ["ref"]:
             refs = query["run_ids"][0].split(",")
             data.setdefault("groups_by_ref", {ref: data["groups"] for ref in refs})
+            if "phases" in data:
+                data.setdefault("phases_by_ref", {ref: data["phases"] for ref in refs})
         # evaluate() returns after the response promise and its continuations
         # drain, so requests those continuations send are already recorded.
         self.page.evaluate(
@@ -536,6 +549,7 @@ def test_comparison_legends_and_svg_preserve_labels_as_text(panel, tmp_path):
     assert panel.page.locator(".sl-plot image").count() == 0
     assert panel.page.evaluate("window.injected !== true")
 
+    panel.page.locator(".sl-export > summary").click()
     with panel.page.expect_download() as downloaded:
         panel.page.locator("[data-sl-download-svg]").click()
     destination = tmp_path / "step-latency.svg"
@@ -591,6 +605,7 @@ def test_wide_comparison_labels_fit_live_and_exported_legends(panel, tmp_path):
         assert bounds[-1]["shown"] == labels[-1]
 
     assert_labels_fit(panel.page.locator(".sl-legend svg"))
+    panel.page.locator(".sl-export > summary").click()
     with panel.page.expect_download() as downloaded:
         panel.page.locator("[data-sl-download-svg]").click()
     destination = tmp_path / "wide-labels.svg"
@@ -612,3 +627,188 @@ def test_csv_exports_preserve_individual_repeat_pass_scopes(panel):
         query = parse_qs(urlparse(href).query)
         assert query["run_ids"] == [",".join(refs)]
         assert query["format"] == ["csv"]
+
+
+# ── C143: normal type scale, one Export menu, phases collapsed on the run page ──
+
+
+def test_plot_text_stays_on_the_type_scale_at_any_width(panel):
+    panel.page.set_viewport_size({"width": 1440, "height": 900})
+    panel.mount()
+    panel.respond_since(0)
+    panel.expect_latency(222)
+    plot = panel.page.evaluate(
+        """() => {
+          const svg = document.querySelector('.sl-plot svg');
+          const text = svg.querySelector('text');
+          return {
+            drawn: svg.getBoundingClientRect().width,
+            viewBox: svg.viewBox.baseVal.width,
+            font: getComputedStyle(text).fontSize,
+            rendered: text.getBoundingClientRect().height,
+          };
+        }"""
+    )
+    # Drawn 1:1 (not stretched to the panel), so 11px text is 11px on screen.
+    assert abs(plot["drawn"] - plot["viewBox"]) < 1, plot
+    assert plot["viewBox"] > 860, "the plot uses the panel's width"
+    assert plot["font"] == "11px"
+    assert plot["rendered"] < 15, plot
+
+
+def test_downloads_sit_behind_one_export_menu(panel):
+    panel.mount()
+    panel.respond_since(0)
+    panel.expect_latency(222)
+    page = panel.page
+    assert page.locator("#panel .sl-controls > .sl-btn, #panel .sl-controls > a").count() == 0
+    menu = page.locator("#panel details.sl-export")
+    assert menu.count() == 1
+    assert menu.locator("summary").inner_text().strip() == "Export"
+    assert not page.locator("#panel .sl-export-menu").is_visible()
+    menu.locator("summary").click()
+    items = page.locator("#panel .sl-export-item")
+    assert items.all_inner_texts() == ["CSV summary", "CSV raw spans", "SVG plot"]
+    page.keyboard.press("Escape")
+    assert not page.locator("#panel .sl-export-menu").is_visible()
+    menu.locator("summary").click()
+    page.mouse.click(5, 5)
+    assert not page.locator("#panel .sl-export-menu").is_visible()
+
+
+def test_kind_that_repeats_its_phase_adds_no_level(panel):
+    data = payload(300, step="agent:planner")
+    data["groups"][0]["kind"] = "AGENT"
+    panel.mount()
+    panel.respond_since(0, data)
+    panel.expect_latency(300)
+    headers = panel.page.locator("#panel [data-sl-collapse] text").all_text_contents()
+    assert headers == ["AGENT"], headers
+
+
+def test_a_toggle_keeps_the_plot_until_new_data_arrives(panel):
+    panel.mount()
+    panel.respond_since(0)
+    panel.expect_latency(222)
+    start = len(panel.requests())
+    panel.select("rollup", "kind")
+    assert panel.page.locator("#panel .sl-plot > svg").count() == 1
+    assert "Loading" not in panel.page.locator("#panel").inner_text()
+    assert "sl-refreshing" in panel.page.locator("#panel").get_attribute("class")
+    selected = panel.page.locator('[data-sl-seg="rollup"] [data-sl-val="kind"]')
+    assert selected.get_attribute("aria-pressed") == "true"
+    panel.respond_since(start, payload(333, step="llm"))
+    panel.expect_latency(333)
+    assert "sl-refreshing" not in (panel.page.locator("#panel").get_attribute("class") or "")
+
+
+def test_a_redraw_while_new_data_loads_keeps_the_old_plot_as_it_was(panel):
+    """A resize between a toggle and its data used to redraw the old rows
+    under the new grouping (step rows labelled as kinds) and undim them."""
+    panel.mount()
+    panel.respond_since(0)
+    panel.expect_latency(222)
+    start = len(panel.requests())
+    page = panel.page
+    page.evaluate("() => { document.querySelector('#panel .sl-plot > svg').__old = true; }")
+    panel.select("rollup", "kind")
+    # The panel gets narrower: the width observer redraws the panel.
+    page.evaluate("() => { document.getElementById('panel').style.width = '700px'; }")
+    page.wait_for_timeout(300)
+    assert page.evaluate("() => document.querySelector('#panel .sl-plot > svg').__old === true")
+    assert "sl-refreshing" in page.locator("#panel").get_attribute("class")
+    selected = page.locator('[data-sl-seg="rollup"] [data-sl-val="kind"]')
+    assert selected.get_attribute("aria-pressed") == "true"
+    panel.respond_since(start, payload(333, step="llm"))
+    panel.expect_latency(333)
+    assert page.evaluate("() => !document.querySelector('#panel .sl-plot > svg').__old")
+    assert "sl-refreshing" not in (page.locator("#panel").get_attribute("class") or "")
+
+
+def test_run_page_panel_opens_on_collapsed_phases_with_their_parent_bars(panel):
+    """No section disclosure: the run page shows its controls and plot, with
+    each phase collapsed to a header that plots its parent span (C143)."""
+    data = payload(222)
+    data["phases"] = [phase(900)]
+    panel.mount(opts={"collapsible": True})
+    panel.respond_since(0, data)
+    page = panel.page
+    plot = page.locator("#panel .sl-plot")
+    plot.wait_for()
+    assert page.locator("#panel [data-sl-disclosure]").count() == 0
+    for label in ("Show distributions", "Hide distributions"):
+        assert label not in page.locator("#panel").inner_text()
+    assert page.locator("#panel .sl-controls").is_visible()
+    assert page.locator("#panel .sl-summary").inner_text() == "1 step · 1 trace"
+    header = page.locator('#panel [data-sl-collapse="p:task"]')
+    assert header.get_attribute("aria-expanded") == "false"
+    # Collapsed: the header's parent bar and annotation, not the step's.
+    assert "mean 900ms · n=1" in plot.text_content()
+    assert "mean 222ms" not in plot.text_content()
+    assert "llm:test" not in plot.text_content()
+    requests = len(panel.requests())
+    header.click()
+    panel.expect_latency(222)
+    assert "mean 900ms" in plot.text_content(), "an open phase keeps its bar"
+    assert len(panel.requests()) == requests, "expanding uses the loaded data"
+    # From the keyboard too, keeping focus on the header.
+    page.locator('#panel [data-sl-collapse="p:task"]').focus()
+    page.keyboard.press("Enter")
+    assert "mean 222ms" not in page.locator("#panel .sl-plot").text_content()
+    assert page.evaluate(
+        "() => document.activeElement.getAttribute('data-sl-collapse') === 'p:task'"
+    )
+    # The Agent view draws no phase header, so its steps show.
+    panel.select("phase", "task")
+    panel.expect_latency(222)
+    assert page.locator("#panel [data-sl-collapse^='p:']").count() == 0
+    assert page.evaluate("() => !Object.keys(localStorage).some(k => k.includes('stepLatency'))")
+
+
+def test_phase_parent_bar_shares_the_step_axis(panel):
+    data = payload(222)
+    data["phases"] = [phase(30000)]
+    panel.mount()
+    panel.respond_since(0, data)
+    panel.expect_latency(222)
+    bounds = panel.page.evaluate(
+        """() => {
+          const svg = document.querySelector('.sl-plot svg');
+          const right = Math.max(...[...svg.querySelectorAll('g > rect, g > line')]
+            .map(node => node.getBoundingClientRect().right));
+          return {right, svg: svg.getBoundingClientRect().right};
+        }"""
+    )
+    # The 30s phase bar fits the axis rather than running off the plot.
+    assert bounds["right"] <= bounds["svg"], bounds
+    assert "mean 30.00s · n=1" in panel.page.locator(".sl-plot").text_content()
+
+
+def test_comparison_phase_headers_carry_a_lane_per_run(panel):
+    refs = ["run-1", "run-2"]
+    panel.mount(refs, {"pooled": True})
+    panel.wait_requests(1)
+    data = payload(100)
+    data["phases"] = [phase(900)]
+    data["phases_by_ref"] = {"run-1": [phase(901)], "run-2": [phase(902)]}
+    panel.respond(0, data)
+    panel.expect_latency(100)
+    text = panel.page.locator(".sl-plot").text_content()
+    assert "mean 901ms" in text and "mean 902ms" in text
+
+
+def test_trace_stats_refresh_reattaches_breakdowns_without_a_request(panel):
+    panel.page.locator("#stats").evaluate(
+        "(el, markup) => el.innerHTML = markup", trace_strip()
+    )
+    panel.mount()
+    panel.respond_since(0)
+    requests = len(panel.requests())
+    # The run page redraws the strip (a filter changed the overview).
+    panel.page.locator("#stats").evaluate(
+        "(el, markup) => el.innerHTML = markup", trace_strip()
+    )
+    panel.page.evaluate("() => QymStepLatency.refreshTraceStats()")
+    panel.tile("Avg Tokens").click()
+    assert "llm:test" in panel.page.locator(".sl-ts-inset").inner_text()
+    assert len(panel.requests()) == requests

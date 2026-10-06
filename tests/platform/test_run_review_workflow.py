@@ -1200,7 +1200,7 @@ def test_trash_page_no_longer_promises_runs_stay_until_restored():
     ).read_text(encoding="utf-8")
     assert "remain here until restored" not in page
     assert "X-Qym-Deleted-Run-Grace-Days" in page
-    assert "<th>Purges</th>" in page
+    assert "label: 'Purges'" in page
 
 
 def test_run_page_shows_history_and_runs_list_credits_only_decisions_in_effect():

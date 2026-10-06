@@ -15,8 +15,8 @@ concurrency:
 jobs:
   regression:
     runs-on: ubuntu-latest
-    # A healthy leg takes about 7 minutes; stop a hung lock or browser early.
-    timeout-minutes: 20
+    # A healthy leg takes about 17 minutes; stop a hung lock or browser early.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:

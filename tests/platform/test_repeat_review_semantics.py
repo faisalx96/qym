@@ -163,7 +163,8 @@ JS_CATEGORIES = (
     + _run_page_functions(
         "metricDirectionOf", "metricPassesFor", "rowScoreFor", "errorsLeftOutFor",
         "passValuesFor", "passVectorFor", "getCategoryMetricScores",
-        "isListCategoryKey", "getMetadataCategoryValues", "getCategoryGroupStats",
+        "categoryValueText", "isListCategoryKey", "getMetadataCategoryValues",
+        "getCategoryGroupStats",
     )
     + """
 const parseMetaList = raw => (Array.isArray(raw) ? raw : [raw]);

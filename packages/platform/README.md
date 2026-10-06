@@ -124,7 +124,10 @@ For SDK streaming and platform-launched SDK work against a private HTTPS origin,
 | `QYM_ADMIN_BOOTSTRAP_TOKEN` | empty | One-time token for promoting the first admin. |
 | `QYM_AUTO_PROVISION_USERS` | `true` | Create unknown users received from trusted proxy headers. |
 | `QYM_AUTH_SESSION_SECRET` | empty | Required whenever OIDC or local password auth enables browser sessions. |
-| `QYM_AUTH_LOCAL_ENABLED` | `false` | Enable email/password sign-up and login when auth mode is not `none`. |
+| `QYM_AUTH_LOCAL_ENABLED` | `false` | Enable email/password login when auth mode is not `none`. |
+| `QYM_AUTH_LOCAL_SIGNUP` | `false` | Let anyone who can reach `/login` create a `MEMBER` account. Off: admins add people in Admin > Users. Sign-up stays open while no active admin exists, so the first person can create an account and claim admin. |
+| `QYM_AUTH_LOGIN_MAX_FAILURES_PER_EMAIL` / `QYM_AUTH_LOGIN_MAX_FAILURES_PER_CLIENT` / `QYM_AUTH_LOGIN_FAILURE_WINDOW_SECONDS` | `5` / `30` / `300` | Failed password sign-ins allowed within the window per email from one client address, and per client address over all emails. Past a limit that client gets `429` with `Retry-After`, even with the right password; other clients can still sign in to that email. Counted per API process. |
+| `QYM_AUTH_LOGIN_EMAIL_CEILING` / `QYM_AUTH_LOGIN_EMAIL_CEILING_WINDOW_SECONDS` | `50` / `900` | Failed password sign-ins allowed for one email from all clients together; past it, every client gets `429` for that email until failures age out. Counted per API process. |
 | `QYM_AUTH_GOOGLE_CLIENT_ID` / `QYM_AUTH_GOOGLE_CLIENT_SECRET` | empty | Enable Google login in `oidc` mode. |
 | `QYM_AUTH_GITHUB_CLIENT_ID` / `QYM_AUTH_GITHUB_CLIENT_SECRET` | empty | Enable GitHub login in `oidc` mode. |
 | `QYM_AUTH_GITLAB_URL` / `QYM_AUTH_GITLAB_CLIENT_ID` / `QYM_AUTH_GITLAB_CLIENT_SECRET` | empty | Enable self-hosted GitLab login in `oidc` mode. The URL is the GitLab issuer, for example `https://gitlab.example.com`; a malformed value stops startup. |
@@ -134,7 +137,7 @@ Auth modes:
 - `none` is for local development. It creates or reuses `dev@local` as an `ADMIN` and accepts no identity headers.
 - `proxy_headers` trusts `X-User-Email` or `X-Email` from an identity-aware reverse proxy. Block direct access to the application so clients cannot spoof these headers.
 - `oidc` provides native Google, GitHub, and/or self-hosted GitLab login. Register `${QYM_BASE_URL}/v1/auth/callback/<provider>` (`google`, `github`, or `gitlab`) with the provider. Enterprise SSO/SAML is not implemented.
-- `QYM_AUTH_LOCAL_ENABLED=true` adds local email/password sessions alongside `proxy_headers` or `oidc`.
+- `QYM_AUTH_LOCAL_ENABLED=true` adds local email/password sessions alongside `proxy_headers` or `oidc`. Self sign-up additionally needs `QYM_AUTH_LOCAL_SIGNUP=true` once an admin exists. Behind a proxy, the per-client sign-in limit counts the address uvicorn sees; pass `--proxy-headers --forwarded-allow-ips=...` in `QYM_UVICORN_ARGS` so it sees the real client.
 
 For GitLab, create an OAuth application (instance, group, or user level) with the redirect URI `${QYM_BASE_URL}/v1/auth/callback/gitlab`, the scopes `openid`, `email`, and `profile`, and **Confidential** enabled. The platform reads `${QYM_AUTH_GITLAB_URL}/.well-known/openid-configuration`, so the container must reach GitLab and trust its TLS certificate. A GitLab login links to an existing qym account with the same verified email, so qym trusts GitLab's email verification: only enable GitLab login when users cannot set an unconfirmed email on the instance (email confirmation on, or emails managed by LDAP/admins). Otherwise a GitLab user could claim another person's qym account, including an admin's. qym keys a GitLab account by the ID token issuer and subject, so a second GitLab instance cannot sign in as a user of the first. If the GitLab external URL changes, users relink by verified email at their next sign-in.
 

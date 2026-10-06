@@ -210,8 +210,11 @@ def test_run_page_histogram_keeps_errors_out_of_the_best_bucket(browser):
             .endswith("3 errors · not counted in the mean")
         )
         # The 0% bucket (the best for this metric) holds no errored item.
-        best = card.locator('.dist-chart-col[data-bucket-min="0"]')
+        # It is empty, so it is no filter control (C028).
+        best = card.locator(".dist-chart-col").first
+        assert best.locator(".bar-label").inner_text() == "0%"
         assert best.locator(".bar-count").inner_text() == ""
+        assert "is-empty" in best.get_attribute("class")
         assert card.locator(".bar-fill-errors").count() == 0
         assert "7 scored · 3 err" in card.locator(".metric-card-badge").inner_text()
         assert fixture.errors == []
@@ -313,7 +316,10 @@ def test_run_page_pass_distribution_filter_counts_errored_passes_as_fails(browse
             # h passes at <= 30%: a 1 of 3 (its scorer error fails), b 2 of 3
             # (its task error fails), c none, d 2 of 3 (/group-metrics).
             assert [
-                bars.nth(index).get_attribute("aria-label").split(".")[0]
+                (
+                    bars.nth(index).get_attribute("aria-label")
+                    or bars.nth(index).get_attribute("title")
+                ).split(".")[0]
                 for index in range(bars.count())
             ] == [
                 "0 of 3 attempts passed: 1 items",
@@ -331,7 +337,10 @@ def test_run_page_pass_distribution_filter_counts_errored_passes_as_fails(browse
                         ".map(item => item.itemId || item.row.item_id)"
                     )
                 )
-            assert filtered == {0: ["c"], 1: ["a"], 2: ["b", "d"], 3: []}
+            # The empty "3 of 3" bar is no control: clicking it keeps the
+            # previous filter instead of emptying the page (C028).
+            assert bars.nth(3).get_attribute("role") is None
+            assert filtered == {0: ["c"], 1: ["a"], 2: ["b", "d"], 3: ["b", "d"]}
         finally:
             fixture.close()
 
@@ -444,8 +453,8 @@ def test_runs_list_run_page_and_compare_show_the_same_means(browser):
             fixture.api_client = client
             assert _run_page_means(fixture) == _approx(listed["run-1"])
 
-            # Compare splits the repeat run into its passes: their means are
-            # the server's per-pass means.
+            # Compare splits the repeat run into its passes. In "Each pass"
+            # columns their means are the server's per-pass means.
             passes = {
                 item["pass_number"]: item["metric_means"]
                 for item in client.get("/api/runs/run-1/passes").json()["passes"]
@@ -453,15 +462,14 @@ def test_runs_list_run_page_and_compare_show_the_same_means(browser):
             compare = ViewFixture(browser, "compare", count=5)
             fixtures.append(compare)
             compare.api_client = client
-            compare.goto()
-            table = compare.page.evaluate(
-                """() => Object.fromEntries(Array.from(
+            read_table = """() => Object.fromEntries(Array.from(
                   document.querySelectorAll('#metrics-table tr'),
                   row => [row.querySelector('.metric-name')?.textContent,
                           Array.from(row.querySelectorAll('td.metric-value-cell .metric-val'),
                                      cell => cell.textContent)],
                 ).filter(([name]) => name))"""
-            )
+            compare.goto("&columns=passes")
+            table = compare.page.evaluate(read_table)
             columns = compare.page.evaluate(
                 "__viewTest.state.runs.map(run => run.run.file_path)"
             )
@@ -474,6 +482,15 @@ def test_runs_list_run_page_and_compare_show_the_same_means(browser):
                 shown = {
                     ref: _percent(value) for ref, value in zip(columns, table[metric])
                 }
+                assert shown == _approx(expected), metric
+
+            # "Run average" (the default) shows one column per run: the
+            # repeat run's is its run mean, as the runs list shows it.
+            compare.goto()
+            table = compare.page.evaluate(read_table)
+            for metric in ("h", "q"):
+                shown = dict(zip(("run-1", "run-2"), (_percent(value) for value in table[metric])))
+                expected = {run_id: listed[run_id][metric] for run_id in ("run-1", "run-2")}
                 assert shown == _approx(expected), metric
     finally:
         for fixture in fixtures:

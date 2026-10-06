@@ -384,8 +384,11 @@ def test_compare_displays_and_saves_the_same_scope(scope_kind: str) -> None:
             "metricColorClassFor",
             "renderCompareOutputGroup",
             "compareRunReadOnly",
+            "compareRunScoresLocked",
+            "scoreEditTitle",
             "wireRootCauseHandlers",
             "saveRootCauseIssues",
+            "getCompareRunDataId",
         )
     )
     _run_javascript(
@@ -396,6 +399,9 @@ def test_compare_displays_and_saves_the_same_scope(scope_kind: str) -> None:
         + f"\nconst scopeKind = '{scope_kind}';\n"
         + """
         const PASS_REF_SEP = '::pass';
+        // Run labels (naming only); the output group groups a run's passes by them.
+        const compareColumnLabel = key => String(key);
+        const compareRunShortLabel = runIdx => 'Run ' + (runIdx + 1);
         const MAX_ROOT_CAUSE_CATEGORIES = 3;
         const IS_COMPARE_EXPORT = false;
         const issues = finding => [{category: 'Agent', subcategory: 'Lookup', finding}];
@@ -932,3 +938,15 @@ def test_issue_tags_and_solution_only_render_when_solution_has_text():
         assert.ok(!withoutOptionalFields.includes('metric-analysis-subcategory-tag'));
         assert.ok(!withoutOptionalFields.includes('metric-analysis-finding-tag'));
     """)
+
+
+def test_compare_issue_patch_keeps_issue_ids() -> None:
+    """Without IDs an edit next to a removal looks like two removals."""
+    _run_javascript(
+        _function("compare", "rootCauseIssues")
+        + _function("compare", "rootCauseIssuePatch")
+        + """
+        const patch = rootCauseIssuePatch([{issue_id: 'a', category: 'A2'}, {category: 'New'}]);
+        assert.deepEqual(patch.root_cause_issues.map(issue => issue.issue_id), ['a', undefined]);
+    """
+    )

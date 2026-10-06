@@ -280,15 +280,31 @@
       event.preventDefault();
     });
 
+    var resizeObserver = null;
+    var mutationObserver = null;
     if (window.ResizeObserver) {
-      var resizeObserver = new ResizeObserver(update);
+      resizeObserver = new ResizeObserver(update);
       resizeObserver.observe(target);
       if (target.firstElementChild) resizeObserver.observe(target.firstElementChild);
     }
     if (window.MutationObserver) {
-      new MutationObserver(update).observe(target, { childList: true, subtree: true });
+      mutationObserver = new MutationObserver(update);
+      mutationObserver.observe(target, { childList: true, subtree: true });
     }
-    window.addEventListener('resize', update);
+    // This script loads once, but the mirror belongs to the current page:
+    // let the shell's page unmount release the window listener and observers.
+    var pageSignal = window.QymShell && typeof window.QymShell.pageSignal === 'function'
+      ? window.QymShell.pageSignal()
+      : undefined;
+    window.addEventListener('resize', update, pageSignal ? { signal: pageSignal } : false);
+    if (pageSignal) {
+      var release = function () {
+        if (resizeObserver) resizeObserver.disconnect();
+        if (mutationObserver) mutationObserver.disconnect();
+      };
+      if (pageSignal.aborted) release();
+      else pageSignal.addEventListener('abort', release, { once: true });
+    }
     window.requestAnimationFrame(update);
   }
 
@@ -419,6 +435,16 @@
     segmentSyncFrames.set(segmented, schedule(run));
   }
 
+  // classList.add/remove write the class attribute even when nothing
+  // changes, and the document observer re-syncs a segmented control on every
+  // class write: an unconditional toggle re-ran the sync every frame while
+  // the page sat idle (about 60 writes a second per control).
+  function setSegmentedReady(segmented, ready) {
+    if (segmented.classList.contains('qym-segmented--ready') !== ready) {
+      segmented.classList.toggle('qym-segmented--ready', ready);
+    }
+  }
+
   function syncSegmented(segmented) {
     if (!segmented || !segmented.matches('.qym-segmented')) return;
     var options = directSegmentOptions(segmented);
@@ -428,7 +454,7 @@
         || option.getAttribute('aria-pressed') === 'true';
     });
     if (!active || active.offsetWidth <= 0) {
-      segmented.classList.remove('qym-segmented--ready');
+      setSegmentedReady(segmented, false);
       return;
     }
     var nextX = active.offsetLeft + 'px';
@@ -439,7 +465,7 @@
     if (segmented.style.getPropertyValue('--qym-segment-width') !== nextWidth) {
       segmented.style.setProperty('--qym-segment-width', nextWidth);
     }
-    segmented.classList.add('qym-segmented--ready');
+    setSegmentedReady(segmented, true);
     var historyKey = segmentedHistoryKey(segmented);
     if (historyKey) {
       segmentPositions.set(historyKey, { x: nextX, width: nextWidth });
@@ -488,7 +514,7 @@
     if (previous) {
       segmented.style.setProperty('--qym-segment-x', previous.x);
       segmented.style.setProperty('--qym-segment-width', previous.width);
-      segmented.classList.add('qym-segmented--ready');
+      setSegmentedReady(segmented, true);
       scheduleSegmentedSync(segmented, 2);
     } else {
       syncSegmented(segmented);
@@ -662,6 +688,26 @@
     return select._qymReviewSelector;
   }
 
+  // The rule builder's selects use appearance: base-select (ui_components.css),
+  // which sizes a select to its chosen option; a native select keeps the width
+  // of its widest one. Hold that width so a row does not shift as values change.
+  var BASE_SELECT_WIDTH_SCOPE = '.qym-item-builder .fb-token select';
+
+  function holdBaseSelectWidth(select) {
+    if (select.dataset.qymWidthHeld === 'true') return;
+    if (window.getComputedStyle(select).appearance !== 'base-select') return;
+    if (!select.getBoundingClientRect().width) return;
+    var chosen = select.selectedIndex;
+    var widest = 0;
+    for (var i = 0; i < select.options.length; i += 1) {
+      select.selectedIndex = i;
+      widest = Math.max(widest, select.getBoundingClientRect().width);
+    }
+    select.selectedIndex = chosen;
+    select.style.minWidth = widest + 'px';
+    select.dataset.qymWidthHeld = 'true';
+  }
+
   function enhanceSelects(root, selector, options) {
     var scope = root && root.querySelectorAll ? root : document;
     return Array.prototype.map.call(scope.querySelectorAll(selector || 'select[data-qym-review-select]'), function (select) {
@@ -691,6 +737,8 @@
       ensureDropdownButton(wrapper && wrapper.querySelector('.multi-select-btn'));
     }
     scope.querySelectorAll('.multi-select-btn').forEach(ensureDropdownButton);
+    if (scope.matches && scope.matches(BASE_SELECT_WIDTH_SCOPE)) holdBaseSelectWidth(scope);
+    scope.querySelectorAll(BASE_SELECT_WIDTH_SCOPE).forEach(holdBaseSelectWidth);
     if (scope.matches && scope.matches('[data-qym-scroll-mirror-for]')) {
       setupScrollMirror(scope);
     }
@@ -895,7 +943,10 @@
       records.forEach(function (record) {
         if (record.type === 'childList') {
           record.removedNodes.forEach(function (node) {
-            if (node.nodeType === 1) cleanupSegmented(node);
+            if (node.nodeType === 1) {
+              cleanupSegmented(node);
+              if (dialogStack.length) releaseRemovedDialogs(node);
+            }
           });
           record.addedNodes.forEach(function (node) {
             if (node.nodeType === 1) refresh(node);
@@ -920,13 +971,539 @@
     });
   }
 
+  // ── Modal dialogs ─────────────────────────────────────────────────────
+  // One focus contract for every modal surface (shell dialogs, legacy page
+  // modals, drawers): role=dialog + aria-modal + a label, focus moved in on
+  // open, Tab kept inside, Escape closes when the caller allows it, and focus
+  // returned to the trigger on close. Removing an open dialog from the DOM
+  // releases it too, so callers that just `.remove()` still restore focus.
+  var DIALOG_FOCUSABLE = 'a[href], area[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), iframe, [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
+  var dialogStack = [];
+  var dialogTitleId = 0;
+
+  function isFocusableVisible(node) {
+    if (!node || node.closest('[inert]')) return false;
+    if (!(node.offsetWidth || node.offsetHeight || node.getClientRects().length)) return false;
+    return window.getComputedStyle(node).visibility !== 'hidden';
+  }
+
+  function dialogFocusables(dialog) {
+    return Array.prototype.filter.call(dialog.querySelectorAll(DIALOG_FOCUSABLE), isFocusableVisible);
+  }
+
+  function resolveDialogTarget(dialog, target) {
+    if (typeof target === 'function') target = target(dialog);
+    if (typeof target === 'string') target = dialog.querySelector(target);
+    return target && target.nodeType === 1 ? target : null;
+  }
+
+  // A dialog that left the DOM or was hidden without being released no longer
+  // holds focus.
+  function topDialog() {
+    for (var i = dialogStack.length - 1; i >= 0; i--) {
+      var node = dialogStack[i].dialog;
+      if (node.isConnected && node.getClientRects().length) return dialogStack[i];
+      releaseDialog(node, { restoreFocus: false });
+    }
+    return null;
+  }
+
+  function focusDialogTarget(handle, target) {
+    var node = target || dialogFocusables(handle.dialog)[0] || handle.dialog;
+    try { node.focus({ preventScroll: !!handle.preventScroll }); } catch (_) { node.focus(); }
+    return document.activeElement === node;
+  }
+
+  function onDialogKeydown(event) {
+    var handle = topDialog();
+    if (!handle || handle.dialog !== event.currentTarget) return;
+    if (event.key === 'Tab') {
+      var focusables = dialogFocusables(handle.dialog);
+      if (!focusables.length) {
+        event.preventDefault();
+        focusDialogTarget(handle, handle.dialog);
+        return;
+      }
+      var first = focusables[0];
+      var last = focusables[focusables.length - 1];
+      var active = document.activeElement;
+      var inside = handle.dialog.contains(active);
+      if (event.shiftKey && (!inside || active === first || active === handle.dialog)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (!inside || active === last)) {
+        event.preventDefault();
+        first.focus();
+      }
+      return;
+    }
+    if (event.key === 'Escape' && typeof handle.onEscape === 'function' && !event.defaultPrevented) {
+      event.preventDefault();
+      event.stopPropagation();
+      handle.onEscape(event);
+    }
+  }
+
+  // Focus that escapes the top dialog (a click on the page behind, a script
+  // focusing something else) is pulled back. Menus, listboxes, nested dialogs
+  // and popups a dialog mounts on <body> (mark them data-qym-dialog-portal;
+  // the root-cause/solution pickers are body-mounted too) may keep it.
+  var DIALOG_PORTALS = '[role="menu"], [role="listbox"], [role="dialog"], [role="alertdialog"], [data-qym-dialog-portal], .root-cause-dropdown, .shell-toast-container';
+  document.addEventListener('focusin', function (event) {
+    var handle = topDialog();
+    if (!handle || handle.dialog.contains(event.target)) return;
+    if (event.target.closest && event.target.closest(DIALOG_PORTALS)) return;
+    focusDialogTarget(handle, null);
+  });
+
+  function openDialog(dialog, options) {
+    if (!dialog) return null;
+    options = options || {};
+    if (dialog.__qymDialog && dialog.__qymDialog.active) return dialog.__qymDialog;
+    // Drop dialogs that were removed or hidden without a release first, so
+    // their late cleanup cannot pull focus out of this one.
+    topDialog();
+    if (!dialog.hasAttribute('role')) dialog.setAttribute('role', options.role || 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    if (!dialog.hasAttribute('aria-labelledby') && !dialog.hasAttribute('aria-label')) {
+      var title = resolveDialogTarget(dialog, options.labelledBy || '[data-qym-dialog-title], h1, h2, h3, .shell-modal-title, .modal-title');
+      if (title) {
+        if (!title.id) title.id = 'qym-dialog-title-' + (++dialogTitleId);
+        dialog.setAttribute('aria-labelledby', title.id);
+      } else if (options.label) {
+        dialog.setAttribute('aria-label', options.label);
+      }
+    }
+    if (!dialog.hasAttribute('tabindex')) dialog.setAttribute('tabindex', '-1');
+    var active = document.activeElement;
+    var handle = {
+      dialog: dialog,
+      active: true,
+      onEscape: options.onEscape,
+      preventScroll: options.preventScroll !== false,
+      returnFocus: options.returnFocus
+        || (active && active !== document.body && active !== document.documentElement && !dialog.contains(active) ? active : null),
+      close: function (closeOptions) { releaseDialog(dialog, closeOptions); },
+    };
+    dialog.__qymDialog = handle;
+    dialogStack.push(handle);
+    dialog.addEventListener('keydown', onDialogKeydown);
+    var initial = function () {
+      return resolveDialogTarget(dialog, options.initialFocus)
+        || dialog.querySelector('[data-autofocus], [autofocus]');
+    };
+    // The caller may reveal the dialog right after this call: retry once the
+    // frame has laid it out.
+    if (!focusDialogTarget(handle, initial())) {
+      window.requestAnimationFrame(function () {
+        if (handle.active && !dialog.contains(document.activeElement)) focusDialogTarget(handle, initial());
+      });
+    }
+    return handle;
+  }
+
+  function releaseDialog(dialog, options) {
+    var handle = dialog && dialog.__qymDialog;
+    if (!handle || !handle.active) return;
+    options = options || {};
+    handle.active = false;
+    dialog.removeEventListener('keydown', onDialogKeydown);
+    var index = dialogStack.indexOf(handle);
+    if (index >= 0) dialogStack.splice(index, 1);
+    if (options.restoreFocus === false) return;
+    var target = options.returnFocus || handle.returnFocus;
+    if (target && target.isConnected && isFocusableVisible(target)) {
+      try { target.focus({ preventScroll: true }); } catch (_) { target.focus(); }
+    } else if (options.fallbackFocus && options.fallbackFocus.isConnected) {
+      try { options.fallbackFocus.focus({ preventScroll: true }); } catch (_) { options.fallbackFocus.focus(); }
+    }
+  }
+
+  function releaseRemovedDialogs(node) {
+    dialogStack.slice().forEach(function (handle) {
+      if (handle.dialog === node || (node.contains && node.contains(handle.dialog))) {
+        if (!handle.dialog.isConnected) releaseDialog(handle.dialog);
+      }
+    });
+  }
+
+  // ── Scroll hold ───────────────────────────────────────────────────────
+  // What the reader pressed (a toggle, an expander, a range or view switch,
+  // a filter) stays where it is on screen while the page redraws around it.
+  // When a section got shorter near the end of a scroller, even for a moment
+  // mid-render, the browser clamped the scroll and the control jumped away
+  // from the pointer; browser scroll anchoring keeps the first visible node,
+  // not the control. Only the browser's own moves are undone: the hold ends
+  // when the reader scrolls (wheel, touch, keys, scrollbar, a drag) or page
+  // code places the view (scrollTop, scrollTo, scrollIntoView, a focus that
+  // scrolls), and SCROLL_HOLD_MS after the press (the data a control asks
+  // for arrives within it). A scroller whose page keeps its own place opts
+  // out with data-qym-scroll-hold="off".
+  var SCROLL_HOLD_MS = 4000;
+  var SCROLL_KEYS = { ArrowUp: 1, ArrowDown: 1, PageUp: 1, PageDown: 1, Home: 1, End: 1, ' ': 1 };
+  var scrollHolds = new Map();
+  var scrollRooms = new WeakMap();
+  var nativeScrollTop = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop');
+
+  function isScrollable(el) {
+    var overflowY = getComputedStyle(el).overflowY;
+    return (overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight;
+  }
+
+  function holdScroller(node) {
+    for (var el = node.parentElement; el && el !== document.body; el = el.parentElement) {
+      if (isScrollable(el)) return el;
+    }
+    return null;
+  }
+
+  function setScrollTop(scroller, top) {
+    nativeScrollTop.set.call(scroller, top);
+  }
+
+  function startScrollHold(target, scroller, point) {
+    if (scroller.closest('[data-qym-scroll-hold="off"]')) return;
+    var marks = [];
+    for (var node = target; node && node !== scroller; node = node.parentElement) {
+      // A sticky or fixed control stays in view on its own; the content
+      // under it is what moves, as it should when a filter shortens it.
+      var position = getComputedStyle(node).position;
+      if (position === 'sticky' || position === 'fixed') return;
+      marks.push({ node: node, top: node.getBoundingClientRect().top });
+    }
+    if (!marks.length) return;
+    var hold = {
+      scroller: scroller,
+      marks: marks,
+      point: point,
+      top: scroller.scrollTop,
+      until: Date.now() + SCROLL_HOLD_MS,
+      anchor: scroller.style.overflowAnchor,
+      observer: null,
+      timer: 0,
+    };
+    hold.onScroll = function () { settleScrollHold(hold); };
+    scrollHolds.set(scroller, hold);
+    // The hold replaces browser anchoring, which would move the view first.
+    scroller.style.overflowAnchor = 'none';
+    scroller.addEventListener('scroll', hold.onScroll, { passive: true });
+    if (window.ResizeObserver) {
+      hold.observer = new ResizeObserver(function () { settleScrollHold(hold); });
+      Array.prototype.forEach.call(scroller.children, function (child) { hold.observer.observe(child); });
+      marks.forEach(function (mark) { hold.observer.observe(mark.node); });
+    }
+    armScrollHold(hold);
+  }
+
+  function armScrollHold(hold) {
+    clearTimeout(hold.timer);
+    hold.timer = setTimeout(function () {
+      if (Date.now() < hold.until) armScrollHold(hold);
+      else endScrollHold(hold);
+    }, Math.max(0, hold.until - Date.now()));
+  }
+
+  function endScrollHold(hold) {
+    if (scrollHolds.get(hold.scroller) !== hold) return;
+    scrollHolds.delete(hold.scroller);
+    clearTimeout(hold.timer);
+    if (hold.observer) hold.observer.disconnect();
+    hold.scroller.removeEventListener('scroll', hold.onScroll);
+    hold.scroller.style.overflowAnchor = hold.anchor;
+  }
+
+  // End the holds of the scrollers that hold `node` (or are it).
+  function endScrollHoldsAround(node) {
+    if (!scrollHolds.size || !node || node.nodeType !== 1) return;
+    scrollHolds.forEach(function (hold, scroller) {
+      if (scroller === node || scroller.contains(node)) endScrollHold(hold);
+    });
+  }
+
+  function settleScrollHold(hold) {
+    var scroller = hold.scroller;
+    if (scrollHolds.get(scroller) !== hold) return;
+    if (!scroller.isConnected || Date.now() > hold.until) { endScrollHold(hold); return; }
+    trimScrollRoom(scroller);
+    // The pressed element, else the nearest block around it still shown (a
+    // control that redraws its own section is gone by now).
+    var mark = null;
+    for (var i = 0; i < hold.marks.length && !mark; i++) {
+      if (hold.marks[i].node.isConnected && hold.marks[i].node.getClientRects().length) mark = hold.marks[i];
+    }
+    if (mark) {
+      var delta = mark.node.getBoundingClientRect().top - mark.top;
+      if (Math.abs(delta) >= 1) {
+        reserveScrollRoom(scroller, scroller.scrollTop + delta);
+        setScrollTop(scroller, scroller.scrollTop + delta);
+      }
+    }
+    hold.top = scroller.scrollTop;
+  }
+
+  // Room at the end of a scroller for a place its content no longer
+  // reaches: extra bottom padding, given back as the reader scrolls up.
+  function reserveScrollRoom(scroller, top) {
+    if (top <= scroller.scrollHeight - scroller.clientHeight) return;
+    var room = scrollRooms.get(scroller);
+    if (!room) {
+      // Padding inside a content-box scroller would grow the box instead.
+      if (getComputedStyle(scroller).boxSizing !== 'border-box') return;
+      room = {
+        size: 0,
+        inline: scroller.style.paddingBottom,
+        base: parseFloat(getComputedStyle(scroller).paddingBottom) || 0,
+      };
+      scrollRooms.set(scroller, room);
+      scroller.addEventListener('scroll', trimScrollRoomOnScroll, { passive: true });
+    }
+    // Where the content ends on its own, measured under more room than any
+    // place needs: a page that stretches to fill its scroller (a short one)
+    // would take the room in instead. The room then keeps it unstretched.
+    setScrollRoom(scroller, room, top + scroller.clientHeight);
+    var contentEnd = scroller.scrollHeight - room.size;
+    setScrollRoom(scroller, room, top + scroller.clientHeight - contentEnd);
+  }
+
+  function setScrollRoom(scroller, room, size) {
+    room.size = Math.max(0, Math.ceil(size));
+    if (room.size) {
+      scroller.style.paddingBottom = (room.base + room.size) + 'px';
+      return;
+    }
+    scroller.style.paddingBottom = room.inline;
+    scrollRooms.delete(scroller);
+    scroller.removeEventListener('scroll', trimScrollRoomOnScroll);
+  }
+
+  function trimScrollRoom(scroller) {
+    var room = scrollRooms.get(scroller);
+    if (!room) return;
+    // Only the part of the room the view reaches is still needed.
+    var contentEnd = scroller.scrollHeight - room.size;
+    var needed = scroller.scrollTop > 0 ? scroller.scrollTop + scroller.clientHeight - contentEnd : 0;
+    if (needed < room.size) setScrollRoom(scroller, room, needed);
+  }
+
+  function trimScrollRoomOnScroll(event) {
+    trimScrollRoom(event.currentTarget);
+  }
+
+  function isEditable(node) {
+    return !!node.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]');
+  }
+
+  function pressScrollHold(target, point) {
+    if (!target || target.nodeType !== 1) return;
+    scrollHolds.forEach(function (hold, scroller) {
+      if (scroller.contains(target)) {
+        endScrollHold(hold);
+      } else {
+        // A press outside the held scroller (a menu or dialog laid over the
+        // page) is the same interaction: what it picks redraws under the
+        // control that opened it.
+        hold.until = Date.now() + SCROLL_HOLD_MS;
+        armScrollHold(hold);
+      }
+    });
+    // A press on a scroller itself is its scrollbar; a link scrolls to
+    // where it goes.
+    if (isScrollable(target) || target.closest('a[href]')) return;
+    var scroller = holdScroller(target);
+    if (scroller) startScrollHold(target, scroller, point);
+  }
+
+  if (nativeScrollTop && nativeScrollTop.set) installScrollHold();
+
+  function installScrollHold() {
+    document.addEventListener('pointerdown', function (event) {
+      if (event.button === 0) pressScrollHold(event.target, { x: event.clientX, y: event.clientY });
+      else endScrollHoldsAround(event.target);  // middle-button autoscroll
+    }, true);
+    // A drag (selecting text past the edge, resizing) scrolls on purpose.
+    document.addEventListener('pointermove', function (event) {
+      if (!event.buttons || !scrollHolds.size) return;
+      scrollHolds.forEach(function (hold) {
+        if (hold.point && Math.abs(event.clientX - hold.point.x) + Math.abs(event.clientY - hold.point.y) > 6) endScrollHold(hold);
+      });
+    }, true);
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Tab') endScrollHoldsAround(event.target);  // focus moves into view
+      else pressScrollHold(event.target, null);
+    }, true);
+    // Keys the page left to the browser scroll the view.
+    window.addEventListener('keydown', function (event) {
+      if (!SCROLL_KEYS[event.key] || event.defaultPrevented || !scrollHolds.size) return;
+      var target = event.target;
+      if (target.nodeType !== 1 || isEditable(target)) return;
+      if (event.key === ' ' && target.closest('button, summary, [role="button"], [role="tab"], [role="switch"], [role="checkbox"], [role="radio"], [role="option"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]')) return;
+      endScrollHoldsAround(target);
+    });
+    ['wheel', 'touchmove'].forEach(function (type) {
+      document.addEventListener(type, function (event) { endScrollHoldsAround(event.target); }, { capture: true, passive: true });
+    });
+
+    // Page code placing the view ends the hold where it scrolls.
+    Object.defineProperty(Element.prototype, 'scrollTop', {
+      configurable: true,
+      enumerable: nativeScrollTop.enumerable,
+      get: nativeScrollTop.get,
+      set: function (value) {
+        if (scrollHolds.size) { var hold = scrollHolds.get(this); if (hold) endScrollHold(hold); }
+        nativeScrollTop.set.call(this, value);
+      },
+    });
+    ['scroll', 'scrollTo', 'scrollBy'].forEach(function (name) {
+      var native = Element.prototype[name];
+      if (typeof native !== 'function') return;
+      Element.prototype[name] = function () {
+        if (scrollHolds.size) { var hold = scrollHolds.get(this); if (hold) endScrollHold(hold); }
+        return native.apply(this, arguments);
+      };
+    });
+    ['scrollIntoView', 'scrollIntoViewIfNeeded'].forEach(function (name) {
+      var native = Element.prototype[name];
+      if (typeof native !== 'function') return;
+      Element.prototype[name] = function () {
+        endScrollHoldsAround(this);
+        return native.apply(this, arguments);
+      };
+    });
+    var nativeFocus = HTMLElement.prototype.focus;
+    HTMLElement.prototype.focus = function (options) {
+      if (scrollHolds.size && !(options && options.preventScroll)) {
+        // Only a focus that has to bring its element into view places it.
+        var self = this;
+        scrollHolds.forEach(function (hold, scroller) {
+          if (!scroller.contains(self)) return;
+          var box = self.getBoundingClientRect();
+          var view = scroller.getBoundingClientRect();
+          if (box.top < view.top || box.bottom > view.bottom) endScrollHold(hold);
+        });
+      }
+      return nativeFocus.apply(this, arguments);
+    };
+  }
+
+  // ── Request failures ──────────────────────────────────────────────────
+  // A failed request is never an empty or "not found" state. classifyError
+  // sorts any thrown error (fetch rejection, an error carrying .status, or a
+  // Response) into one kind; renderErrorState shows it in place of the
+  // region that failed, with Retry (or Sign in for an ended session).
+  var REQUEST_ERROR_COPY = {
+    auth: 'Your session has ended. Sign in again to continue.',
+    forbidden: 'You do not have access to this. Ask a project admin for access.',
+    not_found: 'It may have been deleted, or the link is wrong.',
+    server: 'The server had a problem. Nothing was changed. Try again in a moment.',
+    network: 'The server could not be reached. Check your connection and try again.',
+    client: 'The request was not accepted.',
+    unknown: 'Something went wrong while loading. Try again.',
+  };
+
+  function classifyError(error) {
+    var status = 0;
+    if (error && typeof error.status === 'number') status = error.status;
+    else if (error && error.response && typeof error.response.status === 'number') status = error.response.status;
+    var kind;
+    if (error && error.name === 'AbortError') kind = 'abort';
+    else if (status === 401) kind = 'auth';
+    else if (status === 403) kind = 'forbidden';
+    else if (status === 404) kind = 'not_found';
+    else if (status >= 500) kind = 'server';
+    else if (status >= 400) kind = 'client';
+    else if (error && error.name === 'TypeError' && /fetch|network|load failed/i.test(String(error.message || ''))) kind = 'network';
+    else if (error && REQUEST_ERROR_COPY[error.kind]) kind = error.kind;
+    else kind = 'unknown';
+    var detail = error && error.detail ? String(error.detail) : (error && error.message ? String(error.message) : '');
+    return {
+      kind: kind,
+      status: status,
+      message: REQUEST_ERROR_COPY[kind] || REQUEST_ERROR_COPY.unknown,
+      detail: detail,
+    };
+  }
+
+  function requestError(status, detail) {
+    var error = new Error(detail || ('HTTP ' + status));
+    error.status = status;
+    error.detail = detail || '';
+    error.kind = classifyError(error).kind;
+    return error;
+  }
+
+  // fetch + JSON with typed failures: throws an Error carrying status, kind
+  // and the server's detail, for every non-2xx answer.
+  async function fetchJson(url, init) {
+    var response;
+    try {
+      response = await fetch(url, Object.assign({ credentials: 'same-origin' }, init || {}));
+    } catch (error) {
+      if (error && error.name !== 'AbortError') error.kind = classifyError(error).kind;
+      throw error;
+    }
+    var text = await response.text();
+    var data = null;
+    if (text) {
+      try { data = JSON.parse(text); } catch (_) { data = text; }
+    }
+    if (!response.ok) {
+      var detail = data && typeof data === 'object' ? (data.detail || data.error || '') : '';
+      if (detail && typeof detail !== 'string') detail = JSON.stringify(detail);
+      throw requestError(response.status, detail || (typeof data === 'string' ? data.slice(0, 200) : ''));
+    }
+    return data;
+  }
+
+  function renderErrorState(host, options) {
+    if (!host) return null;
+    options = options || {};
+    var info = classifyError(options.error);
+    var esc = window.QymSafe ? window.QymSafe.escapeHtml : function (value) { return String(value == null ? '' : value); };
+    var title = options.title || 'Couldn’t load this';
+    var message = options.message || (info.kind === 'not_found' && options.notFoundMessage) || info.message;
+    // Secondary line: the status and the server's own words, unless they only
+    // repeat the title or the browser's generic network message.
+    var meta = [];
+    if (info.status) meta.push('HTTP ' + info.status);
+    var detail = info.detail;
+    if (detail && detail !== 'HTTP ' + info.status && info.kind !== 'network'
+        && detail.toLowerCase() !== String(title).toLowerCase()) meta.push(detail);
+    var action = '';
+    if (info.kind === 'auth' && window.QymAuth && typeof window.QymAuth.loginUrl === 'function') {
+      action = '<a class="qym-inline-action qym-inline-action--accent" href="' + esc(window.QymAuth.loginUrl()) + '">Sign in</a>';
+    } else if (typeof options.onRetry === 'function' && info.kind !== 'not_found' && info.kind !== 'forbidden') {
+      action = '<button type="button" class="qym-inline-action qym-inline-action--neutral" data-qym-retry>Retry</button>';
+    }
+    host.innerHTML =
+      '<div class="qym-error-state' + (options.compact ? ' qym-error-state--compact' : '') + '" role="alert" data-error-kind="' + esc(info.kind) + '">' +
+        '<div class="qym-error-state__title">' + esc(title) + '</div>' +
+        '<p class="qym-error-state__body">' + esc(message) + '</p>' +
+        (meta.length ? '<p class="qym-error-state__detail">' + esc(meta.join(' · ')) + '</p>' : '') +
+        (action ? '<div class="qym-error-state__actions">' + action + '</div>' : '') +
+      '</div>';
+    var retry = host.querySelector('[data-qym-retry]');
+    if (retry) {
+      retry.addEventListener('click', function (event) {
+        event.preventDefault();
+        options.onRetry();
+      });
+    }
+    return info;
+  }
+
   window.QymUIComponents = {
     alignMetricColumns: alignMetricColumns,
+    classifyError: classifyError,
     closeHelpMarkers: closeHelpMarkers,
     enhanceSelect: enhanceSelect,
     enhanceSelects: enhanceSelects,
+    fetchJson: fetchJson,
+    openDialog: openDialog,
     refresh: refresh,
+    releaseDialog: releaseDialog,
+    renderErrorState: renderErrorState,
     renderPagination: renderPagination,
+    requestError: requestError,
   };
 
   if (document.readyState === 'loading') {

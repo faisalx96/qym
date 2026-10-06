@@ -8,7 +8,8 @@ than downloaded for every item during initial navigation.
 from __future__ import annotations
 
 import hashlib
-from typing import Any, Dict, List, Optional, Set
+import json
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import HTTPException
 
@@ -21,8 +22,9 @@ COMPACT_META_TEXT_LIMIT = 200
 # Error flags drive task/metric error filters and buckets for every item, so
 # they stay in the index at full length. task_error decides whether an
 # "error"-labeled pass is a failed task or a scorer's verdict, and must give
-# the same answer once the explanation is dropped.
-_COMPACT_META_ALWAYS_KEPT = frozenset({"error", "status", "task_error"})
+# the same answer once the explanation is dropped; a score's edit record
+# (``last_edit``, a small dict) is kept for the Edited badge it explains.
+_COMPACT_META_ALWAYS_KEPT = frozenset({"error", "status", "task_error", "last_edit"})
 INPUT_PREVIEW_CHARS = 300
 
 MetaKeyIndex = Dict[str, Dict[str, Set[str]]]
@@ -177,3 +179,80 @@ def search_conditions(payload: Dict[str, Any]) -> List[Dict[str, str]]:
         seen.add(ident)
         result.append({"id": ident, "field": field, "value": term.lower()})
     return result
+
+
+# Failure reasons (C065): the run page's item list shows why a failing row
+# failed. The index drops explanations and long reasons, so the visible page
+# asks for just these fields instead of hydrating whole items.
+REASON_FIELDS = ("reason", "error", "status", "explanation", "label")
+REASON_TEXT_LIMIT = 2000
+
+
+def reason_request(payload: Dict[str, Any]) -> Tuple[List[str], str, Optional[int]]:
+    """Validate a reasons request: item IDs, one metric, an optional pass."""
+    ids = detail_item_ids(payload)
+    metric = payload.get("metric")
+    if not isinstance(metric, str) or not metric or len(metric) > 200:
+        raise HTTPException(
+            422, "metric must be a non-empty string of at most 200 characters"
+        )
+    pass_number = payload.get("pass_number")
+    if pass_number is not None and (type(pass_number) is not int or pass_number < 1):
+        raise HTTPException(422, "pass_number must be a positive integer")
+    return ids, metric, pass_number
+
+
+def reason_fields(meta: Any) -> Dict[str, str]:
+    """The reason-bearing fields of one metric's metadata, as bounded text."""
+    if not isinstance(meta, dict):
+        return {}
+    result = {}
+    for key in REASON_FIELDS:
+        value = meta.get(key)
+        if value is None or value == "":
+            continue
+        if isinstance(value, str):
+            text = value
+        else:
+            text = json.dumps(value, ensure_ascii=False, default=str)
+        result[key] = text[:REASON_TEXT_LIMIT]
+    return result
+
+
+# Per-pass series of a row: one entry per pass, by position.
+_PASS_SERIES_FIELDS = ("pass_scores", "pass_metric_meta", "pass_metric_analyses")
+
+
+def scope_row_to_pass(row: Dict[str, Any], pass_number: int) -> Dict[str, Any]:
+    """Keep only one pass of a row's per-pass series.
+
+    Positions stay (the other passes become null), so a reader that picks
+    ``values[pass_number - 1]`` reads the same value as from the full row.
+    The analyzer of one sample needs nothing from the other passes.
+    """
+    keep = pass_number - 1
+
+    def one_pass(values: Any) -> Any:
+        if not isinstance(values, list):
+            return values
+        return [value if index == keep else None for index, value in enumerate(values)]
+
+    for field in _PASS_SERIES_FIELDS:
+        series = row.get(field)
+        if isinstance(series, dict):
+            row[field] = {metric: one_pass(values) for metric, values in series.items()}
+    attempts = row.get("pass_attempts")
+    if isinstance(attempts, list):
+        row["pass_attempts"] = [
+            (
+                attempt
+                if isinstance(attempt, dict)
+                and (
+                    attempt.get("pass_number") == pass_number
+                    or (attempt.get("pass_number") is None and index == keep)
+                )
+                else None
+            )
+            for index, attempt in enumerate(attempts)
+        ]
+    return row

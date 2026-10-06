@@ -22,6 +22,7 @@ from sqlalchemy import (
     UniqueConstraint,
     delete,
     event,
+    false,
 )
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.dialects.postgresql import JSONB
@@ -153,6 +154,15 @@ class Project(Base):
     # its deleted runs is paused meanwhile; unarchiving moves their purge
     # clocks forward by the time since (Run.purge_clock_started_at).
     archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Review rules for diagnosis corrections (services/correction_rules.py):
+    # who may approve, reject or reset them ("members" or "managers"), and
+    # whether the author of a correction is kept from deciding it.
+    correction_approvers: Mapped[str] = mapped_column(
+        String(20), default="members", server_default="members", nullable=False
+    )
+    correction_require_different_reviewer: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
     created_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -622,6 +632,8 @@ class Dataset(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None, index=True)
+    # Who deleted it (shown in Deleted datasets); the audit log keeps the full record.
+    deleted_by_user_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, default=None)
 
     versions: Mapped[list["DatasetVersion"]] = relationship("DatasetVersion", lazy="noload")
     aliases: Mapped[list["DatasetAlias"]] = relationship("DatasetAlias", lazy="noload")
@@ -660,6 +672,9 @@ class DatasetVersion(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     published_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Added / modified / deleted / unchanged items relative to the parent, stored
+    # once both sides are immutable (published); NULL means "compute on read".
+    change_counts: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON(none_as_null=True), nullable=True, default=None)
 
     items: Mapped[list["DatasetItem"]] = relationship("DatasetItem", lazy="noload")
 
@@ -694,12 +709,27 @@ class DatasetItem(Base):
     item_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
     labels: Mapped[list[str]] = mapped_column(JSON, default=list)
     fingerprint: Mapped[str] = mapped_column(String(64), index=True)
+    # Normalized text of item_id, input, expected output and metadata, written on
+    # every insert/update (see the listeners below) so search is a plain LIKE that
+    # a trigram index can serve. NULL only on rows written before migration 0068
+    # until the backfill_dataset_search_text maintenance job reaches them.
+    search_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     __table_args__ = (
         UniqueConstraint("dataset_version_id", "item_id", name="uq_dataset_item_id"),
         Index("ix_dataset_item_version_fingerprint", "dataset_version_id", "fingerprint"),
+    )
+
+
+@event.listens_for(DatasetItem, "before_insert")
+@event.listens_for(DatasetItem, "before_update")
+def _dataset_item_search_text(_mapper, _connection, target: DatasetItem) -> None:
+    from qym_platform.services.dataset_search import dataset_item_search_text
+
+    target.search_text = dataset_item_search_text(
+        target.item_id, target.input, target.expected_output, target.item_metadata
     )
 
 
@@ -901,6 +931,8 @@ class RunWorkflowEvent(Base):
     # Copied from the approval row of a review that started before history
     # was kept, just before its first recorded transition overwrote the row.
     reconstructed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # The run owner, when a project manager or admin submitted the run for them.
+    on_behalf_of_user_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
 
     __table_args__ = (Index("ix_run_workflow_events_run", "run_id", "id"),)
 
@@ -1152,6 +1184,7 @@ class RunTraceNamedContribution(Base):
 
 # Import projection mappings so Base.metadata includes their durable tables.
 from qym_platform.db.maintenance_models import MaintenanceJob  # noqa: E402,F401
+from qym_platform.db.background_job_models import BackgroundJob  # noqa: E402,F401
 from qym_platform.db.dashboard_models import (  # noqa: E402,F401
     DashboardChangeEvent, DashboardEventCause, DashboardRecordState,
     DashboardRecordCause, DashboardRunDimension, DashboardRunSummary,

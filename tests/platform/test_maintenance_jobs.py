@@ -276,3 +276,19 @@ def test_reclaim_and_index_jobs_on_postgres(postgres_engine):
     with factory() as db:
         names = {r[0] for r in db.execute(text("SELECT indexname FROM pg_indexes WHERE tablename = 'run_events' AND schemaname = current_schema()"))}
         assert "ix_run_events_run_type_seq" in names
+
+
+def test_admin_overview_does_not_report_loops_stopped_in_an_http_only_process(sqlite_engine, monkeypatch):
+    # QYM_WEB_WORKERS>1 runs the HTTP processes with QYM_ROLE=api and the loops
+    # in one separate process: an HTTP process must not claim they "stopped".
+    monkeypatch.setenv("QYM_ROLE", "api")
+    with _client(sqlite_engine, monkeypatch, role="api") as client:
+        workers = client.get("/api/admin/maintenance").json()["workers"]
+    assert workers["loops"] == "separate"
+    assert workers["summary_worker_alive"] is None
+    assert workers["maintenance_worker_alive"] is None
+    monkeypatch.setenv("QYM_ROLE", "all")
+    with _client(sqlite_engine, monkeypatch) as client:
+        workers = client.get("/api/admin/maintenance").json()["workers"]
+    assert workers["loops"] == "local"
+    assert workers["summary_worker_alive"] in (True, False)

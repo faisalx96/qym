@@ -6,7 +6,7 @@
   <title>Sign in</title>
   <!--__QYM_LOCAL_AUTH_MARKER__-->
   <link rel="icon" type="image/png" href="__QYM_PREFIX__/static/qym_icon.png">
-  <link rel="stylesheet" href="__QYM_PREFIX__/static/dashboard.css?v=p0-20260930">
+  <link rel="stylesheet" href="__QYM_PREFIX__/static/dashboard.css?v=p1-20261005-3">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -170,6 +170,28 @@
     .auth-form {
       display: grid;
       gap: 12px;
+    }
+
+    .auth-alt {
+      margin-top: var(--space-sm);
+      font-size: var(--font-base);
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    .auth-alt-link {
+      border: 0;
+      padding: 0;
+      background: none;
+      color: var(--accent-primary);
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .auth-alt-link:hover,
+    .auth-alt-link:focus-visible {
+      text-decoration: underline;
     }
 
     .field {
@@ -422,9 +444,9 @@
       }
     }
   </style>
-  <link rel="stylesheet" href="__QYM_PREFIX__/static/ui_components.css?v=p0-20260930">
-  <script src="__QYM_PREFIX__/static/qym_safe.js?v=p0-20260930"></script>
-  <script defer src="__QYM_PREFIX__/static/ui_components.js?v=p0-20260930-2"></script>
+  <link rel="stylesheet" href="__QYM_PREFIX__/static/ui_components.css?v=p1-20261005-2">
+  <script src="__QYM_PREFIX__/static/qym_safe.js?v=p1-20261001"></script>
+  <script defer src="__QYM_PREFIX__/static/ui_components.js?v=p1-20261005"></script>
 </head>
 <body>
   <div class="grid-overlay"></div>
@@ -451,6 +473,14 @@
   <script>
     window.__QYM_LOGIN_BOOTSTRAP__ = __QYM_LOGIN_BOOTSTRAP_JSON__;
     window.__QYM_ROOT_PATH__ = __QYM_ROOT_PATH_JSON__;
+    // Signing in starts this tab clean. Its sessionStorage holds the state of
+    // whoever used the tab before (signed out, or their session ended): the
+    // Runs selection (qym:runs-selection:<project>), saved filters
+    // (qym:dashboard-state:<project>), the runs cache (qym:runs-cache:<project>)
+    // and Compare hand-offs. Pages save their state as they unload, so it is
+    // cleared here, after that. The server sends a signed-in reader past this
+    // page, so a reload of any page keeps its state.
+    try { window.sessionStorage.clear(); } catch (err) { /* storage off */ }
   </script>
   <script>
     (function () {
@@ -460,8 +490,22 @@
         if (p.charAt(0) === '/' && p.charAt(1) !== '/') return QYM_PREFIX + p;
         return p;
       }
+      // Go only to a page on this site after sign-in. Browsers read "\" as "/"
+      // and drop tabs, so "/\evil.com" would leave the site; the resolved
+      // origin decides, whatever the server sent.
+      function sameOriginTarget(value) {
+        var fallback = QYM_PREFIX + '/';
+        if (!value || typeof value !== 'string') return fallback;
+        try {
+          var url = new URL(value, window.location.origin);
+          if (url.origin !== window.location.origin) return fallback;
+          return url.pathname + url.search + url.hash;
+        } catch (err) {
+          return fallback;
+        }
+      }
       var params = new URLSearchParams(window.location.search);
-      var next = params.get('next') || (QYM_PREFIX + '/');
+      var next = sameOriginTarget(params.get('next'));
       var root = document.getElementById('auth-root');
       var state = {
         mode: 'signin',
@@ -539,22 +583,14 @@
           ? (isSignup ? 'Creating account...' : 'Signing in...')
           : (isSignup ? 'Create account' : 'Sign in');
         var statusClass = state.messageType ? 'auth-status ' + state.messageType : 'auth-status';
-        var switchLabel = isSignup ? 'Already have an account?' : 'New to qym?';
-        var switchTitle = isSignup ? 'Use your email and password to sign in.' : 'Create an account with email and password.';
-        var switchAction = isSignup ? 'Sign in instead' : 'Create account';
+        // Sign-up is a secondary path below the form, shown only when the
+        // deployment allows it (QYM_AUTH_LOCAL_SIGNUP).
+        var altPrompt = isSignup ? 'Already have an account?' : 'New to qym?';
+        var altAction = isSignup ? 'Sign in' : 'Create an account';
 
         return ''
           + '<div class="auth-panel">'
-          + '  <div class="auth-switch">'
-          + '    <div class="auth-switch-copy">'
-          + '      <div class="auth-switch-label">' + (isSignup ? 'Account creation' : 'Email and password') + '</div>'
-          + '      <div class="auth-switch-title">' + esc(switchLabel) + ' ' + esc(switchTitle) + '</div>'
-          + '    </div>'
-          + (state.signupEnabled
-            ? '    <button class="auth-switch-btn" type="button" data-toggle-mode="1">' + esc(switchAction) + '</button>'
-            : '')
-          + '  </div>'
-          + '  <form class="auth-form" id="local-auth-form">'
+          + '  <form class="auth-form" id="local-auth-form" aria-label="' + (isSignup ? 'Create an account' : 'Sign in with email and password') + '">'
           + (isSignup
             ? '    <div class="field"><label class="field-label" for="display-name">Display name</label><input class="field-input" id="display-name" name="display_name" type="text" autocomplete="name" placeholder="Team member"></div>'
             : '')
@@ -566,6 +602,9 @@
           + '    <button class="auth-submit" type="submit"' + (state.loading ? ' disabled' : '') + '>' + esc(submitLabel) + '</button>'
           + '    <div class="' + statusClass + '" role="status" aria-live="polite">' + esc(state.message) + '</div>'
           + '  </form>'
+          + (state.signupEnabled
+            ? '  <div class="auth-alt">' + esc(altPrompt) + ' <button class="auth-alt-link" type="button" data-toggle-mode="1">' + esc(altAction) + '</button></div>'
+            : '')
           + '</div>';
       }
 
@@ -720,7 +759,7 @@
           state.message = 'Password changed. Redirecting...';
           state.messageType = 'success';
           render();
-          window.location.href = result.data.next || (QYM_PREFIX + '/');
+          window.location.href = sameOriginTarget(result.data.next);
         } catch (err) {
           showError('Could not complete the request. Please try again.', { focus: 'new-password' });
         }
@@ -772,7 +811,7 @@
           state.message = state.mode === 'signup' ? 'Account created. Redirecting...' : 'Signed in. Redirecting...';
           state.messageType = 'success';
           render();
-          window.location.href = data.next || (QYM_PREFIX + '/');
+          window.location.href = sameOriginTarget(data.next);
         } catch (err) {
           showError('Could not complete the request. Please try again.', { focus: 'password' });
         }

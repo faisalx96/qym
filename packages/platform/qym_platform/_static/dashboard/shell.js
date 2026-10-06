@@ -16,6 +16,25 @@
   // ── Prevent double-init ──
   if (window.QymShell) return;
 
+  // ── The shell's frame from the first paint ──
+  // This runs in <head>, before the page's content parses. Until init builds
+  // the shell, shell.css draws its frame (in the remembered sidebar width)
+  // and hides the content, which would otherwise paint bare, full width,
+  // and jump when the shell wraps it. A failed init shows the page anyway.
+  (function markShellPending() {
+    var root = document.documentElement;
+    root.classList.add('qym-shell-pending');
+    try {
+      var narrow = window.matchMedia && window.matchMedia('(max-width: 760px)').matches;
+      if (narrow || localStorage.getItem('qym:sidebar-collapsed') === '1') root.classList.add('qym-shell-pending-collapsed');
+    } catch (_err) { /* private mode */ }
+    setTimeout(endShellPending, 4000);
+  })();
+
+  function endShellPending() {
+    document.documentElement.classList.remove('qym-shell-pending', 'qym-shell-pending-collapsed');
+  }
+
   // ── Cached state ──
   let _user = null;
   let _projects = [];
@@ -25,6 +44,51 @@
   // projects), but admins and its members open it read-only from Admin or a
   // link: the shell loads it by slug and keeps it here.
   let _archivedProject = null;
+
+  // What the last /v1/me said, for the first frame of the next load: the
+  // role (the Platform section), the name (the user menu) and the project
+  // names (the breadcrumb), which otherwise pop in a round trip later. It is
+  // display only (the server checks every request), replaced as soon as
+  // /v1/me answers, and cleared on sign-out (auth.js).
+  var ME_CACHE_KEY = 'qym:me';
+  var _cachedMe = null;
+
+  function readCachedMe() {
+    try {
+      var cached = JSON.parse(localStorage.getItem(ME_CACHE_KEY) || 'null');
+      return cached && typeof cached === 'object' && Array.isArray(cached.projects) ? cached : null;
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  function cacheMe(user) {
+    try {
+      localStorage.setItem(ME_CACHE_KEY, JSON.stringify({
+        role: user.role || '',
+        display_name: user.display_name || '',
+        email: user.email || '',
+        projects: (user.projects || []).filter(Boolean).map(function (project) {
+          return { slug: project.slug, name: project.name };
+        }),
+      }));
+    } catch (_err) { /* private mode */ }
+  }
+
+  function forgetCachedMe() {
+    _cachedMe = null;
+    try { localStorage.removeItem(ME_CACHE_KEY); } catch (_err) { /* private mode */ }
+  }
+
+  // The project a /projects/{slug}/ URL names, by its remembered name, until
+  // /v1/me answers. A guessed project (a legacy /run/{id} link) is never
+  // shown from memory: it can be the wrong one.
+  function rememberedRouteProject(ctx) {
+    if (_user || !_cachedMe || !ctx || !ctx.explicitProject || !ctx.projectSlug) return null;
+    return _cachedMe.projects.find(function (project) {
+      return project && project.slug === ctx.projectSlug && project.name;
+    }) || null;
+  }
 
   // ══════════════════════════════════════════════════
   // URL PARSING
@@ -353,7 +417,7 @@
     if (!content) return;
     closeShellPopovers();
     updateCurrentProjectForRoute();
-    setTopbarStats([]);
+    clearTopbarStats();
     renderBreadcrumbs([{ label: 'Project Not Found', current: true }]);
     content.innerHTML = ''
       + '<div style="max-width:640px;margin:56px auto;padding:0 20px;">'
@@ -487,8 +551,9 @@
       // Logo
       + '<div class="sidebar-logo">'
       +   '<a href="' + esc(root) + '">'
-      +     '<img src="' + esc(root) + 'static/qym_icon.png" alt="قيِّم" class="logo-icon-img" />'
-      +     '<img src="' + esc(root) + 'static/qym_text.png" alt="قيِّم" class="logo-text-img" />'
+      // Embedded in shell.css, so the logo paints with the sidebar.
+      +     '<span class="logo-icon-img" role="img" aria-label="قيِّم"></span>'
+      +     '<span class="logo-text-img" aria-hidden="true"></span>'
       +   '</a>'
       + '</div>'
 
@@ -576,10 +641,11 @@
 
   function computeBreadcrumbs(ctx) {
     var crumbs = [];
+    var project = _currentProject || rememberedRouteProject(ctx);
 
-    if (ctx.projectSlug && _currentProject) {
+    if (ctx.projectSlug && project) {
       // First crumb = project switcher
-      crumbs.push({ label: _currentProject.name, projectSwitcher: true });
+      crumbs.push({ label: project.name, projectSwitcher: true, project: project });
 
       if (ctx.page === 'analysis' || ctx.page === 'analyzer') {
         crumbs.push({ label: 'Auto-analysis', current: true });
@@ -612,12 +678,14 @@
       if (i > 0) html += '<span class="breadcrumb-sep">/</span>';
       var c = crumbs[i];
       if (c.projectSwitcher) {
-        // Embedded project switcher as breadcrumb segment
+        // Embedded project switcher as breadcrumb segment. Its project is the
+        // crumb's (a remembered one before /v1/me answers), else the current.
+        var crumbProject = c.project || _currentProject;
         html += '<div class="breadcrumb-project" id="breadcrumb-project">'
           + '<button class="breadcrumb-project-btn" id="shell-project-trigger">'
           +   '<span class="project-trigger-icon">'
-          +     (_currentProject && _currentProject.slug
-                  ? identiconHTML(_currentProject.slug, { cell: 2, gap: 1, showEmpty: false })
+          +     (crumbProject && crumbProject.slug
+                  ? identiconHTML(crumbProject.slug, { cell: 2, gap: 1, showEmpty: false })
                   : iconRaw('project', 10, 10))
           +   '</span>'
           +   '<span class="project-trigger-text">' + esc(c.label) + '</span>'
@@ -772,6 +840,19 @@
     }
   }
 
+  // Every shell dialog uses the shared modal focus contract
+  // (QymUIComponents.openDialog): focus moves in, Tab stays inside, Escape
+  // closes, and focus returns to the control that opened it.
+  function manageDialog(modal, options) {
+    var ui = window.QymUIComponents;
+    return ui && ui.openDialog ? ui.openDialog(modal, options) : null;
+  }
+
+  function releaseManagedDialog(modal) {
+    var ui = window.QymUIComponents;
+    if (ui && ui.releaseDialog) ui.releaseDialog(modal);
+  }
+
   function openCreateProjectDialog() {
     // Remove any existing dialog
     var existing = document.getElementById('shell-create-project-dialog');
@@ -781,18 +862,18 @@
     dialog.id = 'shell-create-project-dialog';
     dialog.className = 'shell-modal-backdrop';
     dialog.innerHTML = ''
-      + '<div class="shell-modal">'
+      + '<div class="shell-modal" role="dialog" aria-modal="true" aria-labelledby="shell-create-project-title">'
       +   '<div class="shell-modal-header">'
-      +     '<div class="shell-modal-title">Create Project</div>'
+      +     '<div class="shell-modal-title" id="shell-create-project-title">Create Project</div>'
       +     '<button class="shell-modal-close qym-icon-action" type="button" aria-label="Close">&times;</button>'
       +   '</div>'
       +   '<div class="shell-modal-body">'
       +     '<div class="shell-form-group">'
-      +       '<label class="shell-form-label">Project Name</label>'
+      +       '<label class="shell-form-label" for="shell-new-project-name">Project Name</label>'
       +       '<input class="shell-form-input" id="shell-new-project-name" type="text" placeholder="My Project" autofocus />'
       +     '</div>'
       +     '<div class="shell-form-group">'
-      +       '<label class="shell-form-label">Slug</label>'
+      +       '<label class="shell-form-label" for="shell-new-project-slug">Slug</label>'
       +       '<input class="shell-form-input" id="shell-new-project-slug" type="text" placeholder="my-project" style="font-family:var(--font-mono);font-size:var(--font-base)" />'
       +     '</div>'
       +     '<div class="shell-form-error" id="shell-new-project-error"></div>'
@@ -822,21 +903,15 @@
       }
     });
 
-    setTimeout(function () { nameInput.focus(); }, 50);
-
-    function closeDialog() { dialog.remove(); }
+    var modal = dialog.querySelector('.shell-modal');
+    function closeDialog() { releaseManagedDialog(modal); dialog.remove(); }
+    manageDialog(modal, { initialFocus: nameInput, onEscape: closeDialog });
 
     cancelBtn.addEventListener('click', closeDialog);
     var closeBtn = dialog.querySelector('.shell-modal-close');
     if (closeBtn) closeBtn.addEventListener('click', closeDialog);
     dialog.addEventListener('click', function (e) {
       if (e.target === dialog) closeDialog();
-    });
-    document.addEventListener('keydown', function escHandler(e) {
-      if (e.key === 'Escape') {
-        closeDialog();
-        document.removeEventListener('keydown', escHandler);
-      }
     });
 
     async function submit() {
@@ -901,7 +976,7 @@
         +     (options.note ? '<div class="shell-modal-note">' + esc(options.note) + '</div>' : '')
         +     (needsInput
                 ? '<div class="shell-form-group" style="margin-top:var(--space-md)">'
-                  + '<label class="shell-form-label">' + esc(options.inputLabel || 'Type to Confirm') + '</label>'
+                  + '<label class="shell-form-label" for="shell-confirm-input">' + esc(options.inputLabel || 'Type to Confirm') + '</label>'
                   + '<input class="shell-form-input" id="shell-confirm-input" type="text" placeholder="' + esc(options.inputPlaceholder || '') + '" autocomplete="off" />'
                   + '</div>'
                 : '')
@@ -912,7 +987,7 @@
         +     (options.altLabel
                 ? '<button class="shell-btn shell-btn-secondary" id="shell-confirm-alt" type="button">' + esc(options.altLabel) + '</button>'
                 : '')
-        +     '<button class="shell-btn ' + (options.confirmClass || 'shell-btn-primary') + '" id="shell-confirm-submit" type="button">' + esc(options.confirmLabel || 'Confirm') + '</button>'
+        +     '<button class="shell-btn ' + (options.confirmClass || (options.danger === true ? 'shell-btn-danger' : 'shell-btn-primary')) + '" id="shell-confirm-submit" type="button">' + esc(options.confirmLabel || 'Confirm') + '</button>'
         +   '</div>'
         + '</div>';
       var mount = options.mount && options.mount.appendChild
@@ -940,29 +1015,12 @@
         if (errorEl && isValid()) errorEl.textContent = '';
       }
 
-      function cleanup() {
-        document.removeEventListener('keydown', onKeyDown);
-      }
+      var modal = dialog.querySelector('.shell-modal');
 
       function close(result) {
-        cleanup();
+        releaseManagedDialog(modal);
         dialog.remove();
         resolve(result);
-      }
-
-      function onKeyDown(e) {
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          close({ confirmed: false, value: null });
-          return;
-        }
-        // A focused Cancel, Close or alternate button handles Enter itself.
-        var active = document.activeElement;
-        if (active && (active === cancelBtn || active === altBtn || active === closeBtn)) return;
-        if (e.key === 'Enter' && (!input || active === input)) {
-          e.preventDefault();
-          submit();
-        }
       }
 
       function submit() {
@@ -982,15 +1040,25 @@
       if (confirmBtn) confirmBtn.addEventListener('click', submit);
       if (input) {
         input.addEventListener('input', refreshState);
-        setTimeout(function () { input.focus(); }, 50);
-      } else {
-        setTimeout(function () { confirmBtn && confirmBtn.focus(); }, 50);
+        // Enter submits only from the confirmation field; on a button, Enter
+        // activates that button (Enter on Cancel cancels).
+        input.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            submit();
+          }
+        });
       }
       dialog.addEventListener('click', function (e) {
         if (e.target === dialog) close({ confirmed: false, value: null });
       });
-      document.addEventListener('keydown', onKeyDown);
       refreshState();
+      // Destructive confirms start on Cancel, so a stray Enter never confirms.
+      var destructive = /danger/.test(options.confirmClass || '') || options.danger === true;
+      manageDialog(modal, {
+        initialFocus: input || (destructive ? cancelBtn : confirmBtn),
+        onEscape: function () { close({ confirmed: false, value: null }); },
+      });
     });
   }
 
@@ -1163,12 +1231,14 @@
         var helpHtml = f.help ? '<div class="shell-modal-note" style="margin-top:4px;">' + esc(f.help) + '</div>' : '';
         var inputHtml = '';
         if (f.type === 'textarea') {
-          inputHtml = '<textarea class="shell-form-input" id="' + id + '" data-field="' + esc(f.name) + '" rows="' + (f.rows || 3) + '" placeholder="' + esc(f.placeholder || '') + '">' + esc(f.value || '') + '</textarea>';
+          // The value is set as a property after mounting (below), never as markup.
+          inputHtml = '<textarea class="shell-form-input" id="' + id + '" data-field="' + esc(f.name) + '" rows="' + (f.rows || 3) + '" placeholder="' + esc(f.placeholder || '') + '"></textarea>';
         } else if (f.type === 'select') {
           var opts = (f.options || []).map(function (o) {
             var ov = typeof o === 'object' ? o.value : o;
             var ol = typeof o === 'object' ? o.label : o;
-            return '<option value="' + esc(ov) + '"' + (String(ov) === String(f.value) ? ' selected' : '') + '>' + esc(ol) + '</option>';
+            // String() first: esc() drops falsy values, and an option may be 0.
+            return '<option value="' + esc(ov == null ? '' : String(ov)) + '"' + (String(ov) === String(f.value) ? ' selected' : '') + '>' + esc(ol == null ? '' : String(ol)) + '</option>';
           }).join('');
           inputHtml = '<select class="shell-form-input" id="' + id + '" data-field="' + esc(f.name) + '">' + opts + '</select>';
         } else if (f.type === 'checkbox') {
@@ -1182,7 +1252,7 @@
           labelHtml = '';
           helpHtml = '';
         } else {
-          inputHtml = '<input class="shell-form-input" type="' + (f.type || 'text') + '" id="' + id + '" data-field="' + esc(f.name) + '" placeholder="' + esc(f.placeholder || '') + '" value="' + esc(f.value || '') + '" autocomplete="off" />';
+          inputHtml = '<input class="shell-form-input" type="' + esc(f.type || 'text') + '" id="' + id + '" data-field="' + esc(f.name) + '" placeholder="' + esc(f.placeholder || '') + '" autocomplete="off" />';
         }
         return '<div class="shell-form-group">' + labelHtml + inputHtml + helpHtml + '</div>';
       }).join('');
@@ -1208,9 +1278,9 @@
       }
 
       dialog.innerHTML = ''
-        + '<div class="shell-modal" role="dialog" aria-modal="true" style="width:' + (options.width || 480) + 'px;">'
+        + '<div class="shell-modal" role="dialog" aria-modal="true" aria-labelledby="shell-form-title" style="width:' + (options.width || 480) + 'px;">'
         +   '<div class="shell-modal-header">'
-        +     '<div class="shell-modal-title">' + esc(options.title || 'Form') + '</div>'
+        +     '<div class="shell-modal-title" id="shell-form-title">' + esc(options.title || 'Form') + '</div>'
         +     '<button class="shell-modal-close qym-icon-action" type="button" aria-label="Close">&times;</button>'
         +   '</div>'
         +   '<div class="shell-modal-body">'
@@ -1228,6 +1298,13 @@
         ? options.mount
         : document.body;
       mount.appendChild(dialog);
+      // Text values go in as DOM properties, so quotes, angle brackets and
+      // ampersands round-trip exactly and can never end an attribute early.
+      fields.forEach(function (f, idx) {
+        if (f.type === 'select' || f.type === 'checkbox') return;
+        var input = dialog.querySelector('#shell-form-field-' + idx);
+        if (input) input.value = f.value == null ? '' : String(f.value);
+      });
 
       var closeBtn = dialog.querySelector('.shell-modal-close');
       var cancelBtn = document.getElementById('shell-form-cancel');
@@ -1245,11 +1322,13 @@
         return values;
       }
 
-      function cleanup() { document.removeEventListener('keydown', onKey); }
-      function close(result) { cleanup(); dialog.remove(); resolve(result); }
+      var modal = dialog.querySelector('.shell-modal');
+      function close(result) { releaseManagedDialog(modal); dialog.remove(); resolve(result); }
+      // Enter submits from a single-line field; on a button it activates that
+      // button, so Enter on Cancel cancels.
       function onKey(e) {
-        if (e.key === 'Escape') { e.preventDefault(); close({ confirmed: false, values: null }); return; }
-        if (e.key === 'Enter' && !(e.target && e.target.tagName === 'TEXTAREA')) { e.preventDefault(); submit(); }
+        if (e.key !== 'Enter' || !e.target || !e.target.matches) return;
+        if (e.target.matches('input:not([type="checkbox"]):not([type="radio"]), select')) { e.preventDefault(); submit(); }
       }
       function submit() {
         var values = readValues();
@@ -1293,12 +1372,11 @@
       if (cancelBtn) cancelBtn.addEventListener('click', function () { close({ confirmed: false, values: null }); });
       if (submitBtn) submitBtn.addEventListener('click', submit);
       dialog.addEventListener('click', function (e) { if (e.target === dialog) close({ confirmed: false, values: null }); });
-      document.addEventListener('keydown', onKey);
-
-      setTimeout(function () {
-        var firstInput = dialog.querySelector('input,textarea,select');
-        if (firstInput) firstInput.focus();
-      }, 50);
+      modal.addEventListener('keydown', onKey);
+      manageDialog(modal, {
+        initialFocus: dialog.querySelector('input,textarea,select') || cancelBtn,
+        onEscape: function () { close({ confirmed: false, values: null }); },
+      });
     });
   }
 
@@ -1316,7 +1394,7 @@
     drawer.id = 'shell-drawer';
     drawer.className = 'shell-drawer-backdrop';
     drawer.innerHTML = ''
-      + '<div class="shell-drawer" role="dialog" aria-modal="true" style="width:' + width + 'px;">'
+      + '<div class="shell-drawer" role="dialog" aria-modal="true" aria-labelledby="shell-drawer-title" tabindex="-1" style="width:' + width + 'px;">'
       +   '<div class="shell-drawer-header">'
       +     '<div class="shell-drawer-title-wrap">'
       +       '<div class="shell-drawer-title" id="shell-drawer-title">' + esc(options.title || '') + '</div>'
@@ -1334,6 +1412,7 @@
     var footer = document.getElementById('shell-drawer-footer');
     var actions = document.getElementById('shell-drawer-actions');
     var closeBtn = drawer.querySelector('.shell-drawer-close');
+    var panel = drawer.querySelector('.shell-drawer');
 
     function setTitle(t) { var el = document.getElementById('shell-drawer-title'); if (el) el.textContent = t || ''; }
     function setSubtitle(t) { var el = document.getElementById('shell-drawer-subtitle'); if (el) el.textContent = t || ''; }
@@ -1386,7 +1465,7 @@
       setBody: setBody,
       setFooter: setFooter,
       setActions: setActions,
-      close: function () { cleanup(); drawer.remove(); document.dispatchEvent(new CustomEvent('qym:drawer-close')); if (typeof options.onClose === 'function') options.onClose(); },
+      close: function () { cleanup(); releaseManagedDialog(panel); drawer.remove(); document.dispatchEvent(new CustomEvent('qym:drawer-close')); if (typeof options.onClose === 'function') options.onClose(); },
     };
 
     function onKey(e) {
@@ -1402,6 +1481,7 @@
     document.addEventListener('keydown', onKey);
 
     if (typeof options.render === 'function') options.render(api);
+    manageDialog(panel, { initialFocus: panel });
     document.dispatchEvent(new CustomEvent('qym:drawer-open'));
 
     return api;
@@ -1504,36 +1584,309 @@
   // AJAX NAVIGATION (SPA-like content swap)
   // ══════════════════════════════════════════════════
 
-  var _navigating = false;
+  // ── Page lifecycle ────────────────────────────────
+  // Page scripts are re-executed on every in-app navigation, so anything a
+  // page adds to document/window outlives its DOM unless it is removed.
+  // Each mounted page gets one AbortController: pages pass
+  // { signal: QymShell.pageSignal() } to document/window listeners (and may
+  // register cleanups with QymShell.onPageUnmount); the shell aborts it right
+  // after 'qym:before-navigate', before the next page's scripts run. Between
+  // unmount and the next mount the signal is already aborted, so a late
+  // registration by the outgoing page is dropped instead of leaking.
+  var _pageController = typeof AbortController === 'function' ? new AbortController() : null;
+
+  function pageSignal() {
+    return _pageController ? _pageController.signal : undefined;
+  }
+
+  function onPageUnmount(fn) {
+    var signal = pageSignal();
+    if (!signal || typeof fn !== 'function') return;
+    var run = function () {
+      try { fn(); } catch (err) { console.error('[QymShell] page cleanup failed:', err); }
+    };
+    if (signal.aborted) { run(); return; }
+    signal.addEventListener('abort', run, { once: true });
+  }
+
+  function unmountPage() {
+    if (_pageController && !_pageController.signal.aborted) _pageController.abort();
+  }
+
+  function mountPage() {
+    unmountPage();
+    _pageController = typeof AbortController === 'function' ? new AbortController() : null;
+  }
+
+  // ── Per-history-entry view state ──────────────────
+  // The scroll offsets of the page's scroll containers are kept in
+  // history.state, so Back/Forward (and a reload) put the reader back where
+  // they were once the page has rendered tall enough. View state (filters,
+  // sort, page, tab, open item) lives in the query string, written by the
+  // pages through replaceUrlQuery().
+  var SCROLL_SCAN_DEPTH = 4;
+
+  function scrollKey(el, content) {
+    if (el === content) return { id: 'shell-content' };
+    if (el.id) return { id: el.id };
+    var cls = Array.prototype.slice.call(el.classList || []).filter(function (name) {
+      return /^[A-Za-z_][-\w]*$/.test(name);
+    });
+    var selector = el.tagName.toLowerCase() + (cls.length ? '.' + cls.join('.') : '');
+    var matches = content.querySelectorAll(selector);
+    return { sel: selector, nth: Array.prototype.indexOf.call(matches, el) };
+  }
+
+  function findScrollTarget(entry, content) {
+    if (!content) return null;
+    if (entry.id === 'shell-content') return content;
+    if (entry.id) return document.getElementById(entry.id);
+    if (!entry.sel) return null;
+    try {
+      return content.querySelectorAll(entry.sel)[entry.nth || 0] || null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function captureScrollPositions() {
+    var content = document.getElementById('shell-content');
+    if (!content) return [];
+    var out = [];
+    (function walk(el, depth) {
+      if (el.scrollTop > 0) {
+        var key = scrollKey(el, content);
+        key.top = Math.round(el.scrollTop);
+        out.push(key);
+      }
+      if (depth >= SCROLL_SCAN_DEPTH) return;
+      for (var child = el.firstElementChild; child; child = child.nextElementSibling) walk(child, depth + 1);
+    })(content, 0);
+    return out;
+  }
+
+  function saveHistoryViewState() {
+    if (_scrollRestore) return; // still restoring: keep the saved target
+    try {
+      var current = history.state && typeof history.state === 'object' ? history.state : {};
+      var next = Object.assign({}, current, { qym: true, qymScroll: captureScrollPositions() });
+      history.replaceState(next, '', window.location.href);
+    } catch (err) { /* history unavailable */ }
+  }
+
+  var _scrollSaveTimer = 0;
+  function clearScheduledViewStateSave() {
+    if (_scrollSaveTimer) clearTimeout(_scrollSaveTimer);
+    _scrollSaveTimer = 0;
+  }
+
+  function scheduleHistoryViewStateSave() {
+    clearScheduledViewStateSave();
+    _scrollSaveTimer = setTimeout(function () {
+      _scrollSaveTimer = 0;
+      // While a navigation is in flight the current entry may already be the
+      // target (popstate): never write the outgoing page's offsets into it.
+      if (_navFetch || _navSwapping) return;
+      saveHistoryViewState();
+    }, 250);
+  }
+
+  var _scrollRestore = null;
+
+  function cancelScrollRestore() {
+    if (_scrollRestore) _scrollRestore.cancel();
+  }
+
+  // Apply the saved offsets until they hold: data renders after the scripts
+  // run, so the page may be too short at first. Any user input stops it.
+  function restoreScrollPositions(entries) {
+    cancelScrollRestore();
+    if (!Array.isArray(entries) || !entries.length) return;
+    var content = document.getElementById('shell-content');
+    var started = Date.now();
+    var settledSince = 0;
+    var cancelled = false;
+    var frame = 0;
+    var inputs = ['wheel', 'touchstart', 'keydown', 'mousedown'];
+    var handle = { cancel: cancel };
+    function cancel() {
+      if (cancelled) return;
+      cancelled = true;
+      if (frame) cancelAnimationFrame(frame);
+      inputs.forEach(function (type) { window.removeEventListener(type, cancel, true); });
+      if (_scrollRestore === handle) _scrollRestore = null;
+    }
+    _scrollRestore = handle;
+    inputs.forEach(function (type) { window.addEventListener(type, cancel, true); });
+    function tick() {
+      frame = 0;
+      if (cancelled) return;
+      var allHeld = true;
+      entries.forEach(function (entry) {
+        var el = findScrollTarget(entry, content);
+        if (!el) { allHeld = false; return; }
+        if (Math.abs(el.scrollTop - entry.top) > 1) {
+          el.scrollTop = entry.top;
+          if (Math.abs(el.scrollTop - entry.top) > 1) allHeld = false;
+        }
+      });
+      var now = Date.now();
+      if (allHeld) {
+        if (!settledSince) settledSince = now;
+      } else {
+        settledSince = 0;
+      }
+      // Hold the position briefly after it first sticks: late sections above
+      // the target (charts, KPIs) can still change height.
+      if ((settledSince && now - settledSince > 600) || now - started > 6000) { cancel(); return; }
+      frame = requestAnimationFrame(tick);
+    }
+    frame = requestAnimationFrame(tick);
+  }
+
+  // Replace query parameters of the current entry without adding history or
+  // losing its saved view state. updates: { key: string | string[] | null };
+  // an empty value removes the key. Returns the new relative URL.
+  function replaceUrlQuery(updates) {
+    var url = new URL(window.location.href);
+    Object.keys(updates || {}).forEach(function (key) {
+      var value = updates[key];
+      url.searchParams.delete(key);
+      if (value === null || value === undefined || value === '') return;
+      (Array.isArray(value) ? value : [value]).forEach(function (item) {
+        if (item !== null && item !== undefined && item !== '') url.searchParams.append(key, String(item));
+      });
+    });
+    var next = url.pathname + url.search + url.hash;
+    if (next !== window.location.pathname + window.location.search + window.location.hash) {
+      try { history.replaceState(history.state, '', next); } catch (err) { /* ignore */ }
+    }
+    return next;
+  }
+
+  // Copy text to the clipboard; resolves true on success.
+  function copyText(text) {
+    var value = String(text == null ? '' : text);
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(value).then(function () { return true; }, function () { return fallbackCopy(value); });
+    }
+    return Promise.resolve(fallbackCopy(value));
+  }
+
+  function fallbackCopy(value) {
+    var area = document.createElement('textarea');
+    area.value = value;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+    area.remove();
+    return ok;
+  }
+
+  // ── Navigation ────────────────────────────────────
+  // The latest click wins: a navigation that is still fetching is abandoned
+  // when another starts. While a page is being swapped in, a new request
+  // waits for the swap to finish and then runs.
+  var _navSeq = 0;
+  var _navFetch = null;
+  var _navSwapping = false;
+  var _queuedNav = null;
+
+  // The run page's data, asked for at the click: the page itself only asks
+  // once its HTML and scripts are in, ~250ms later. It takes this response
+  // (takePrefetch) when it asks for the same URL; anything else fetches as
+  // usual.
+  var _prefetch = null;
+  function prefetchPageData(url, signal) {
+    _prefetch = null;
+    var path;
+    try { path = new URL(url, window.location.href).pathname.replace(/\/+$/, ''); } catch (_err) { return; }
+    var match = path.match(/\/projects\/[^/]+\/runs\/(.+)$/) || path.match(/\/run\/(.+)$/);
+    if (!match || /\/analyzer$/.test(match[1])) return;
+    var runId;
+    try { runId = decodeURIComponent(match[1]); } catch (_err) { return; }
+    var dataUrl = new URL(apiUrl('api/runs/' + runId + '?view=compact'), window.location.href).href;
+    var response = fetch(dataUrl, signal ? { signal: signal } : undefined);
+    response.catch(function () { /* the page asks again */ });
+    _prefetch = { url: dataUrl, response: response };
+  }
+
+  function takePrefetch(url) {
+    var entry = _prefetch;
+    if (!entry) return null;
+    var wanted;
+    try { wanted = new URL(url, window.location.href).href; } catch (_err) { return null; }
+    if (entry.url !== wanted) return null;
+    _prefetch = null;
+    return entry.response;
+  }
 
   function navigateTo(url, opts) {
     opts = opts || {};
-    if (_navigating) return;
-    _navigating = true;
-
+    _loadStartedAt = performance.now();
+    if (_navSwapping) {
+      _queuedNav = { url: url, opts: opts };
+      return;
+    }
     var content = document.getElementById('shell-content');
+    var seq = ++_navSeq;
+    if (_navFetch) _navFetch.abort();
+    var fetchController = typeof AbortController === 'function' ? new AbortController() : null;
+    _navFetch = fetchController;
+
+    clearScheduledViewStateSave();
+    if (opts.historyMode !== 'none') saveHistoryViewState();
+    cancelScrollRestore();
     document.dispatchEvent(new CustomEvent('qym:before-navigate', { detail: { url: url, opts: opts } }));
+    unmountPage();
     if (!content) { window.location.href = url; return; }
 
     closeShellPopovers();
     setNavigationPending(true);
+    prefetchPageData(url, fetchController ? fetchController.signal : undefined);
 
-    fetchAndSwap(url, opts).then(function () {
-      _navigating = false;
+    fetchAndSwap(url, opts, { seq: seq, signal: fetchController ? fetchController.signal : undefined }).then(function (swapped) {
+      if (seq !== _navSeq) return;
+      _navFetch = null;
       setNavigationPending(false);
-    }).catch(function (err) {
-      _navigating = false;
+      if (swapped && opts.historyMode === 'none') {
+        restoreScrollPositions(history.state && history.state.qymScroll);
+      }
+    }, function (err) {
+      if (seq !== _navSeq) return;
+      _navFetch = null;
       setNavigationPending(false);
       console.error('[QymShell] Navigation failed, falling back:', err);
       window.location.href = url;
+    }).then(function () {
+      if (_navSwapping || !_queuedNav) return;
+      var queued = _queuedNav;
+      _queuedNav = null;
+      navigateTo(queued.url, queued.opts);
     });
   }
 
-  async function fetchAndSwap(url, opts) {
+  async function fetchAndSwap(url, opts, nav) {
     opts = opts || {};
-    var res = await fetch(url, { credentials: 'same-origin' });
+    nav = nav || {};
+    var res = await fetch(url, { credentials: 'same-origin', signal: nav.signal });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     var html = await res.text();
+    // A later navigation started while this one was fetching: drop this one.
+    if (nav.seq !== undefined && nav.seq !== _navSeq) return false;
+    _navSwapping = true;
+    try {
+      return await swapPage(url, opts, html);
+    } finally {
+      _navSwapping = false;
+    }
+  }
+
+  async function swapPage(url, opts, html) {
 
     // Parse the fetched HTML
     var parser = new DOMParser();
@@ -1587,6 +1940,19 @@
       });
       script.remove();
     });
+    // Scripts run in order, each after the one before has loaded; fetched
+    // one at a time that way, the run page's seven cost ~400ms. All of them
+    // start loading now, in parallel, so each is in hand when its turn comes.
+    document.querySelectorAll('link[data-shell-preload]').forEach(function (link) { link.remove(); });
+    scriptInfos.forEach(function (info) {
+      if (!info.src) return;
+      var preload = document.createElement('link');
+      preload.rel = 'preload';
+      preload.as = 'script';
+      preload.href = info.src;
+      preload.setAttribute('data-shell-preload', '');
+      document.head.appendChild(preload);
+    });
 
     // Get the content area
     var content = document.getElementById('shell-content');
@@ -1610,7 +1976,11 @@
     while (newBody.firstChild) {
       fragment.appendChild(newBody.firstChild);
     }
+    // The incoming page owns everything registered from here on.
+    mountPage();
+    expandSkeletonMarkers(fragment);
     content.replaceChildren(fragment);
+    watchArrivals(content);
 
     if (opts.historyMode !== 'none') {
       history.pushState({ qym: true }, '', url);
@@ -1628,11 +1998,15 @@
 
     if (_routeCtx.projectSlug && _user && !projectExists(_routeCtx.projectSlug)) {
       renderProjectNotFound(_routeCtx.projectSlug);
-      return;
+      return false;
     }
 
     renderBreadcrumbs(computeBreadcrumbs(_routeCtx));
-    setTopbarStats([]);
+    // The new page's numbers as last seen, until it loads its own.
+    clearTopbarStats();
+    showRememberedTopbarStats();
+    // A new page starts at the top; Back/Forward put the saved offsets back
+    // once the page has rendered (restoreScrollPositions in navigateTo).
     content.scrollTop = 0;
 
     // Expose the shell user before page scripts run so route scripts can
@@ -1644,6 +2018,7 @@
     }
 
     document.dispatchEvent(new CustomEvent('qym:shell-ready'));
+    return true;
   }
 
   function executeScript(info) {
@@ -1690,6 +2065,9 @@
 
   function interceptNavClicks() {
     document.addEventListener('click', function (e) {
+      // A page that handled the click itself (its own in-app navigation)
+      // already called preventDefault: do not navigate a second time.
+      if (e.defaultPrevented) return;
       var link = e.target.closest('#qym-app a[href]');
       if (!canInterceptLink(link, e)) return;
       e.preventDefault();
@@ -1697,6 +2075,7 @@
     });
 
     window.addEventListener('popstate', function () {
+      clearScheduledViewStateSave();
       var event = new CustomEvent('qym:popstate', {
         cancelable: true,
         detail: { url: window.location.pathname + window.location.search },
@@ -1714,10 +2093,57 @@
     return esc(s).replace(/"/g, '&quot;');
   }
 
+  // The top bar's numbers as last shown at this URL in this tab, painted when
+  // the shell is built so a reload does not blank them until the page's
+  // numbers load. The page's first numbers replace them. Pages also report
+  // "no numbers yet" while loading, so an empty set clears remembered
+  // numbers only after a grace period; leaving the page clears them at once.
+  var TOPBAR_STATS_KEY = 'qym:topbar-stats:';
+  var _topbarStatsRemembered = false;
+  var _topbarStatsClearTimer = null;
+
+  // Runs, Dashboard, Charts and Models show the same project numbers when
+  // unfiltered: one remembered entry serves all four, so moving between
+  // them never blanks the numbers.
+  function topbarStatsKey() {
+    var path = window.location.pathname;
+    var search = window.location.search;
+    var family = path.match(/^(.*\/projects\/[^/]+)(?:\/(?:overview|charts|models))?\/?$/);
+    if (family && !search) return TOPBAR_STATS_KEY + family[1] + '|all';
+    return TOPBAR_STATS_KEY + path + search;
+  }
+
+  function showRememberedTopbarStats() {
+    var remembered = null;
+    try { remembered = JSON.parse(sessionStorage.getItem(topbarStatsKey()) || 'null'); } catch (_err) { /* private mode */ }
+    if (!remembered || !Array.isArray(remembered.stats) || !remembered.stats.length) return;
+    setTopbarStats(remembered.stats, remembered.options);
+    _topbarStatsRemembered = true;
+    _topbarStatsClearTimer = setTimeout(clearTopbarStats, 5000);
+  }
+
+  // Off the screen only: what this URL showed stays remembered.
+  function clearTopbarStats() {
+    _topbarStatsRemembered = false;
+    clearTimeout(_topbarStatsClearTimer);
+    var el = document.getElementById('shell-topbar-stats');
+    if (el) el.innerHTML = '';
+  }
+
   function setTopbarStats(stats, options) {
     var el = document.getElementById('shell-topbar-stats');
     if (!el) return;
-    if (!stats || !stats.length) { el.innerHTML = ''; return; }
+    if (!stats || !stats.length) {
+      if (_topbarStatsRemembered) return;  // still loading: keep them for now
+      el.innerHTML = '';
+      try { sessionStorage.removeItem(topbarStatsKey()); } catch (_err) { /* private mode */ }
+      return;
+    }
+    _topbarStatsRemembered = false;
+    clearTimeout(_topbarStatsClearTimer);
+    try {
+      sessionStorage.setItem(topbarStatsKey(), JSON.stringify({ stats: stats, options: options || null }));
+    } catch (_err) { /* private mode or full */ }
     var html = '';
     if (options && options.scope) {
       html += '<span class="topbar-stats-scope"'
@@ -1738,18 +2164,48 @@
   // TOAST
   // ══════════════════════════════════════════════════
 
-  function toast(message, type) {
+  // options.action = { label, onClick } adds one button (e.g. Undo) that runs
+  // once and closes the toast; options.duration keeps it longer than 4s.
+  function toast(message, type, options) {
     var container = document.getElementById('shell-toast-container');
     if (!container) return;
+    options = options || {};
     var el = document.createElement('div');
     el.className = 'shell-toast' + (type ? ' ' + type : '');
-    el.textContent = message;
-    container.appendChild(el);
-    setTimeout(function () {
+    // Errors are announced at once; other toasts politely (C038).
+    el.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    var dismissed = false;
+    function dismiss() {
+      if (dismissed) return;
+      dismissed = true;
       el.style.opacity = '0';
       el.style.transition = 'opacity 0.3s ease';
       setTimeout(function () { el.remove(); }, 300);
-    }, 4000);
+    }
+    var action = options.action;
+    if (action && action.label && typeof action.onClick === 'function') {
+      el.classList.add('shell-toast--action');
+      var text = document.createElement('span');
+      text.className = 'shell-toast-message';
+      text.textContent = message;
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'shell-toast-action';
+      button.textContent = action.label;
+      button.addEventListener('click', function () {
+        if (dismissed) return;
+        button.disabled = true;
+        dismiss();
+        action.onClick();
+      });
+      el.appendChild(text);
+      el.appendChild(button);
+    } else {
+      el.textContent = message;
+    }
+    container.appendChild(el);
+    setTimeout(dismiss, Math.max(1000, Number(options.duration) || 4000));
+    return { element: el, dismiss: dismiss };
   }
 
   // ══════════════════════════════════════════════════
@@ -1769,6 +2225,7 @@
 
     // Parse current route
     _routeCtx = parseRoute();
+    _cachedMe = readCachedMe();
 
     // Build shell DOM
     var wrapper = document.createElement('div');
@@ -1779,7 +2236,7 @@
     var sidebar = document.createElement('aside');
     sidebar.className = 'sidebar';
     sidebar.id = 'qym-sidebar';
-    sidebar.dataset.userRole = '';
+    sidebar.dataset.userRole = _cachedMe ? (_cachedMe.role || '') : '';
     if (!_routeCtx.projectSlug) sidebar.classList.add('no-project');
     sidebar.innerHTML = buildSidebarHTML();
 
@@ -1821,6 +2278,9 @@
     var toastContainer = document.createElement('div');
     toastContainer.className = 'shell-toast-container';
     toastContainer.id = 'shell-toast-container';
+    // Screen readers announce toasts; errors interrupt (role=alert per toast).
+    toastContainer.setAttribute('role', 'status');
+    toastContainer.setAttribute('aria-live', 'polite');
     document.body.appendChild(toastContainer);
 
     // Restore collapse state
@@ -1829,10 +2289,33 @@
     // Set active nav
     setActiveNav(_routeCtx.page);
 
+    // The user menu as last seen, until /v1/me answers.
+    if (_cachedMe) populateUser(_cachedMe);
+
     // Render initial breadcrumbs
     renderBreadcrumbs(computeBreadcrumbs(_routeCtx));
+    showRememberedTopbarStats();
 
-    history.replaceState({ qym: true }, '', window.location.href);
+    // The page's loading spots become skeletons before its first frame.
+    expandSkeletonMarkers(document);
+    watchArrivals(document);
+
+    // The shell is whole: the page shows inside it from this frame on.
+    endShellPending();
+
+    // Keep the entry's saved view state across a reload, and keep saving the
+    // scroll offsets while the reader scrolls (Back from the next page can
+    // no longer read them).
+    var initialState = history.state && typeof history.state === 'object' ? history.state : {};
+    history.replaceState(Object.assign({}, initialState, { qym: true }), '', window.location.href);
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+    if (Array.isArray(initialState.qymScroll) && initialState.qymScroll.length) {
+      document.addEventListener('qym:shell-ready', function () {
+        restoreScrollPositions(initialState.qymScroll);
+      }, { once: true });
+    }
+    document.addEventListener('scroll', scheduleHistoryViewStateSave, { capture: true, passive: true });
+    window.addEventListener('pagehide', saveHistoryViewState);
 
     // Bind events
     bindEvents();
@@ -1848,12 +2331,14 @@
     try {
       var res = await fetch(apiUrl('v1/me'), { credentials: 'same-origin' });
       if (res.status === 401) {
+        forgetCachedMe();
         if (window.QymAuth) window.QymAuth.redirectToLogin();
         return;
       }
       if (!res.ok) return;
       _user = await res.json();
       _projects = _user.projects || [];
+      cacheMe(_user);
       // An archived project named in the URL opens read-only. Load it before
       // pages see the user, so they start from the right project.
       if (_routeCtx.explicitProject && !projectExists(_routeCtx.projectSlug)) {
@@ -1963,14 +2448,341 @@
     return html;
   }
 
+  // ══════════════════════════════════════════════════
+  // PAGE ARRIVAL (shell.css "PAGE ARRIVAL")
+  // ══════════════════════════════════════════════════
+
+  // Loading, timed so a quick load never flashes (shell.css "PAGE ARRIVAL"):
+  // a skeleton waits SKELETON_DELAY_MS before it fades in, so a load quicker
+  // than that shows none; one that did show stays at least SKELETON_MIN_MS;
+  // and content fades in only where a skeleton the reader saw leaves
+  // (arrive), otherwise it is simply there and only its charts move.
+  var SKELETON_DELAY_MS = 300;
+  var SKELETON_MIN_MS = 400;
+  var SKELETON_FADE_MS = 200;
+  // When the current load started: the page's navigation (0 on a full load).
+  var _loadStartedAt = 0;
+  function skeletonWait(since) {
+    return Math.round(SKELETON_DELAY_MS - (performance.now() - since)) + 'ms';
+  }
+
+  // A loading skeleton in a page's own layout: 'table' (a toolbar line and
+  // rows), 'cards' (a grid of cards), 'list' (stacked rows), 'lines' (rows
+  // inside a table or card), 'chart' (a headline and bars) or 'value' (one
+  // number). `label` is
+  // what a screen reader hears ("Loading runs…"). Its wait counts from
+  // `since` (a performance.now() time; default now), or from the page's
+  // navigation when `immediate` (one drawn after the page's first frame as
+  // part of its load, e.g. redrawn with its section: it shows when the
+  // page's other skeletons do, never blinking out and back).
+  function skeletonHTML(kind, options) {
+    var opts = options || {};
+    var bone = function (style) { return '<span class="qym-skeleton__bone"' + (style ? ' style="' + style + '"' : '') + '></span>'; };
+    var html = '';
+    var i;
+    var wrapperClass = '';
+    var wrapperStyle = '';
+    if (kind === 'value') {
+      // Inline, in the text's own line: the number replaces it without the
+      // line growing or shrinking.
+      wrapperClass = ' qym-skeleton--inline';
+      html = bone('display:inline-block;vertical-align:-0.1em;width:' + (opts.width || 64) + 'px;height:0.8em');
+    } else if (kind === 'lines') {
+      for (i = 0; i < (opts.rows || 3); i++) {
+        html += '<div class="qym-skeleton__row">' + bone('width:' + (30 + (i * 19) % 25) + '%') + bone('width:14%') + bone('width:12%;margin-left:auto') + '</div>';
+      }
+      // `height`: the content's usual height, so it neither grows nor shrinks
+      // when the rows arrive.
+      if (opts.height) wrapperStyle = 'height:' + opts.height + 'px;gap:0;justify-content:space-evenly';
+    } else if (kind === 'chart') {
+      var bars = '';
+      for (i = 0; i < (opts.count || 14); i++) {
+        bars += bone('flex:1;height:' + (28 + (i * 37) % 62) + '%;border-radius:3px 3px 1px 1px');
+      }
+      html = '<div class="qym-skeleton__row">' + bone('width:120px;height:18px') + bone('width:80px') + '</div>'
+        + '<div class="qym-skeleton__row" style="align-items:flex-end;height:' + (opts.height || 160) + 'px">' + bars + '</div>';
+    } else if (kind === 'cards') {
+      var count = opts.count || 6;
+      var cards = '';
+      for (i = 0; i < count; i++) {
+        cards += '<div class="qym-skeleton__card">'
+          + '<div class="qym-skeleton__row">' + bone('width:36px;height:36px;border-radius:8px') + bone('width:40%;height:14px') + '</div>'
+          + bone('width:70%') + bone('width:55%')
+          + '<div class="qym-skeleton__row" style="margin-top:auto">' + bone('width:30%;height:10px') + bone('width:20%;height:10px') + '</div>'
+          + '</div>';
+      }
+      html = '<div class="qym-skeleton__grid"'
+        + (opts.minWidth ? ' style="--qym-skeleton-card-min:' + opts.minWidth + 'px;--qym-skeleton-card-h:' + (opts.height || 160) + 'px"'
+          : (opts.height ? ' style="--qym-skeleton-card-h:' + opts.height + 'px"' : ''))
+        + '>' + cards + '</div>';
+    } else if (kind === 'list') {
+      for (i = 0; i < (opts.rows || 6); i++) {
+        html += '<div class="qym-skeleton__card" style="min-height:0;padding:var(--space-md)">'
+          + '<div class="qym-skeleton__row">' + bone('width:' + (38 + (i * 17) % 30) + '%;height:13px') + bone('width:12%;margin-left:auto') + '</div>'
+          + bone('width:' + (55 + (i * 23) % 35) + '%;height:10px')
+          + '</div>';
+      }
+    } else {
+      var rows = '<div class="qym-skeleton__table-row qym-skeleton__table-row--head">' + bone() + bone() + bone() + bone() + bone() + bone() + '</div>';
+      for (i = 0; i < (opts.rows || 10); i++) {
+        rows += '<div class="qym-skeleton__table-row">'
+          + bone('width:' + (55 + (i * 29) % 40) + '%') + bone('width:70%') + bone('width:60%') + bone('width:50%') + bone('width:65%') + bone('width:40%')
+          + '</div>';
+      }
+      html = (opts.toolbar === false ? '' : '<div class="qym-skeleton__row">' + bone('width:220px;height:24px') + bone('width:90px;height:24px') + bone('width:90px;height:24px') + '</div>')
+        + '<div class="qym-skeleton__table">' + rows + '</div>';
+    }
+    var since = typeof opts.since === 'number' ? opts.since : (opts.immediate ? _loadStartedAt : performance.now());
+    wrapperStyle = '--qym-skeleton-wait:' + skeletonWait(since) + (wrapperStyle ? ';' + wrapperStyle : '');
+    var tag = kind === 'value' ? 'span' : 'div';
+    return '<' + tag + ' class="qym-skeleton' + wrapperClass + '" role="status"'
+      + ' style="' + wrapperStyle + '">'
+      + '<span class="qym-skeleton__label">' + esc(opts.label || 'Loading…') + '</span>'
+      + '<' + tag + ' aria-hidden="true" style="display:contents">' + html + '</' + tag + '>'
+      + '</' + tag + '>';
+  }
+
+  // A page marks where its content will load with data-qym-skeleton="table"
+  // (or "cards" / "list"), plus data-qym-skeleton-label, -rows, -count,
+  // -height; the shell fills each with its skeleton before the page's first
+  // frame, on a full load (init) and on in-app navigation (swapPage).
+  function expandSkeletonMarkers(root) {
+    if (!root || !root.querySelectorAll) return;
+    // A heading that names the project shows the name from its first frame
+    // (the remembered one until /v1/me answers), not a placeholder title.
+    var project = _currentProject || rememberedRouteProject(_routeCtx);
+    if (project && project.name) {
+      root.querySelectorAll('[data-qym-project-name]').forEach(function (node) { node.textContent = project.name; });
+    }
+    root.querySelectorAll('[data-qym-skeleton]').forEach(function (marker) {
+      var number = function (name) { var value = parseInt(marker.getAttribute('data-qym-skeleton-' + name), 10); return value > 0 ? value : undefined; };
+      // One page, two layouts by route: data-qym-skeleton-match (a pattern
+      // on the path) picks data-qym-skeleton-match-kind instead.
+      var kind = marker.getAttribute('data-qym-skeleton');
+      var match = marker.getAttribute('data-qym-skeleton-match');
+      try {
+        if (match && new RegExp(match).test(window.location.pathname)) kind = marker.getAttribute('data-qym-skeleton-match-kind') || kind;
+      } catch (_err) { /* a bad pattern keeps the default */ }
+      marker.innerHTML = skeletonHTML(kind, {
+        since: _loadStartedAt,
+        label: marker.getAttribute('data-qym-skeleton-label') || undefined,
+        rows: number('rows'), count: number('count'), height: number('height'), minWidth: number('min-width'), width: number('width'),
+        toolbar: marker.getAttribute('data-qym-skeleton-toolbar') !== 'false',
+      });
+      marker.removeAttribute('data-qym-skeleton');
+    });
+    // A page's own skeleton (data-qym-skeleton-root) keeps the same clock.
+    root.querySelectorAll('[data-qym-skeleton-root]').forEach(function (skeleton) {
+      skeleton.style.setProperty('--qym-skeleton-wait', skeletonWait(_loadStartedAt));
+    });
+  }
+
+  // A skeleton is "shown" once its fade-in starts (after its wait).
+  document.addEventListener('animationstart', function (event) {
+    var target = event.target;
+    if (!target || !target.classList) return;
+    if (target.classList.contains('qym-skeleton') || target.hasAttribute('data-qym-skeleton-root')) {
+      target.dataset.qymShownAt = String(performance.now() - (event.elapsedTime || 0) * 1000);
+    }
+  }, true);
+  function shownFor(skeleton) {
+    return skeleton.dataset.qymShownAt ? performance.now() - Number(skeleton.dataset.qymShownAt) : 0;
+  }
+
+  // A skeleton the reader saw, leaving (`ghost`: it, or a copy of it):
+  // laid over the page at `box`, kept until it has been up SKELETON_MIN_MS,
+  // then faded out while the content fades in under it (arrive, which
+  // waits as long).
+  var _seenSkeleton = null;
+  function retireShownSkeleton(ghost, box, opacity, visibleFor) {
+    var wait = Math.max(0, Math.round(SKELETON_MIN_MS - visibleFor));
+    ghost.removeAttribute('id');
+    ghost.removeAttribute('role');
+    ghost.setAttribute('aria-hidden', 'true');
+    ghost.classList.add('qym-skeleton-leaving');
+    Object.assign(ghost.style, {
+      top: box.top + 'px', left: box.left + 'px', width: box.width + 'px',
+      animation: 'none', opacity: String(opacity),
+    });
+    document.body.appendChild(ghost);
+    ghost.getBoundingClientRect();  // commit the start opacity
+    ghost.style.opacity = wait > 0 ? '1' : '0';
+    if (wait > 0) setTimeout(function () { ghost.style.opacity = '0'; }, wait);
+    setTimeout(function () { ghost.remove(); }, wait + 260);
+    // What arrives in this same task fades in, after that wait.
+    if (!_seenSkeleton) {
+      _seenSkeleton = { wait: 0 };
+      setTimeout(function () { _seenSkeleton = null; }, 0);
+    }
+    _seenSkeleton.wait = Math.max(_seenSkeleton.wait, wait);
+  }
+
+  // A skeleton just replaced by the content (watchArrivals): laid back over
+  // its container if the reader saw it.
+  function fadeOutRemovedSkeleton(skeleton, container) {
+    var visibleFor = shownFor(skeleton);
+    var opacity = Math.min(1, visibleFor / SKELETON_FADE_MS);
+    if (opacity < 0.05) return;
+    var box = container.getBoundingClientRect();
+    var style = getComputedStyle(container);
+    retireShownSkeleton(skeleton, {
+      top: box.top + parseFloat(style.paddingTop || 0),
+      left: box.left + parseFloat(style.paddingLeft || 0),
+      width: Math.max(0, box.width - parseFloat(style.paddingLeft || 0) - parseFloat(style.paddingRight || 0)),
+    }, opacity, visibleFor);
+  }
+
+  // For a page that redraws a region in place: the skeletons on screen in
+  // it before the redraw, then those the redraw removed, laid back where
+  // they stood (as fadeOutRemovedSkeleton).
+  function noteSkeletons(root) {
+    if (!root || !root.querySelectorAll) return [];
+    return Array.prototype.map.call(root.querySelectorAll('.qym-skeleton'), function (skeleton) {
+      return { skeleton: skeleton, box: skeleton.getBoundingClientRect(), opacity: parseFloat(getComputedStyle(skeleton).opacity) || 0 };
+    }).filter(function (note) { return note.opacity >= 0.05 && note.box.width > 0; });
+  }
+  function retireRemovedSkeletons(notes) {
+    (notes || []).forEach(function (note) {
+      if (!note.skeleton.isConnected) retireShownSkeleton(note.skeleton, note.box, note.opacity, shownFor(note.skeleton));
+    });
+  }
+
+  // Containers marked data-qym-arrive arrive (QymShell.arrive) the moment
+  // the page first renders into them, i.e. when their last skeleton is
+  // replaced: no page code needed. Set up when the page's DOM is placed,
+  // before its scripts render (init; swapPage).
+  function watchArrivals(root) {
+    if (!root || !root.querySelectorAll || typeof MutationObserver !== 'function') return;
+    root.querySelectorAll('[data-qym-arrive]').forEach(function (container) {
+      if (container.dataset.qymArriveWatched || !container.querySelector('.qym-skeleton')) return;
+      container.dataset.qymArriveWatched = '1';
+      var observer = new MutationObserver(function (mutations) {
+        var removed = null;
+        mutations.forEach(function (mutation) {
+          mutation.removedNodes.forEach(function (node) {
+            if (removed || node.nodeType !== 1) return;
+            removed = node.classList.contains('qym-skeleton') ? node : node.querySelector('.qym-skeleton');
+          });
+        });
+        if (!removed || container.querySelector('.qym-skeleton')) return;
+        observer.disconnect();
+        if (container.isConnected) fadeOutRemovedSkeleton(removed, container);
+        arrive(container);
+      });
+      observer.observe(container, { childList: true, subtree: true });
+    });
+  }
+
+  // Before content replaces a skeleton: one the reader can see is laid over
+  // the page and stays its minimum, then fades out while the content fades
+  // in, so there is no blank frame between them. One still waiting to show
+  // simply goes. `container` may itself be the skeleton (a page's own, with
+  // data-qym-skeleton-root).
+  function liftSkeleton(container) {
+    var root = container || document;
+    var skeletons = [];
+    if (root.matches && root.matches('.qym-skeleton, [data-qym-skeleton-root]')) skeletons.push(root);
+    if (root.querySelectorAll) Array.prototype.push.apply(skeletons, root.querySelectorAll('.qym-skeleton'));
+    skeletons.forEach(function (skeleton) {
+      if (!skeleton.isConnected) return;
+      var opacity = parseFloat(getComputedStyle(skeleton).opacity) || 0;
+      var box = skeleton.getBoundingClientRect();
+      if (opacity < 0.05 || !box.width) return;
+      retireShownSkeleton(skeleton.cloneNode(true), box, opacity, shownFor(skeleton));
+    });
+  }
+
+  // The content's arrival, once per element per page load: its bars grow
+  // and tracks draw (shell.css); where a skeleton the reader saw just left,
+  // it also fades in, once that skeleton's minimum is up. Ends when the
+  // beat is over or at the reader's first click or key, so nothing they
+  // cause replays it. Bars that grow get their place for the left-to-right
+  // sweep.
+  var ARRIVE_MS = 700;
+  function arrive(element) {
+    if (!element || element.dataset.qymArrived) return;
+    element.dataset.qymArrived = '1';
+    element.classList.remove('qym-await');
+    var groups = new Map();
+    element.querySelectorAll('.qym-arrive-bar, .dist-chart-col .bar-fill').forEach(function (bar) {
+      var group = bar.closest('.dist-chart, [data-qym-arrive-group]') || bar.parentElement;
+      var index = groups.get(group) || 0;
+      groups.set(group, index + 1);
+      bar.style.setProperty('--qym-arrive-i', String(Math.min(index, 10)));
+    });
+    var wait = _seenSkeleton ? _seenSkeleton.wait : 0;
+    element.style.setProperty('--qym-arrive-wait', wait + 'ms');
+    if (_seenSkeleton) element.classList.add('qym-arriving--fade');
+    element.classList.add('qym-arriving');
+    var timer = null;
+    var settle = function () {
+      clearTimeout(timer);
+      element.classList.remove('qym-arriving', 'qym-arriving--fade');
+      element.style.removeProperty('--qym-arrive-wait');
+      document.removeEventListener('pointerdown', settle, true);
+      document.removeEventListener('keydown', settle, true);
+    };
+    timer = setTimeout(settle, ARRIVE_MS + wait);
+    document.addEventListener('pointerdown', settle, true);
+    document.addEventListener('keydown', settle, true);
+  }
+
+  // For a page with its own entrance (the run page): whether content
+  // arriving now replaces a skeleton the reader saw ({ wait } in ms before
+  // it fades in), or null.
+  function pendingArrival() {
+    return _seenSkeleton ? { wait: _seenSkeleton.wait } : null;
+  }
+
+  // A page whose content is built hidden behind a separate skeleton block:
+  // the skeleton goes (fading out under it if it was on screen) and the
+  // content shows and arrives.
+  function reveal(skeleton, content) {
+    if (skeleton && skeleton.isConnected) {
+      liftSkeleton(skeleton);
+      skeleton.remove();
+    }
+    if (!content) return;
+    content.hidden = false;
+    arrive(content);
+  }
+
+  // Ends an arrival now: content redrawn during it shows in its final state
+  // instead of fading and drawing again.
+  function settleArrival(element) {
+    if (element) element.classList.remove('qym-arriving');
+  }
+
+  // Both, around a page's first render of its content.
+  function arriveWith(container, render) {
+    liftSkeleton(container);
+    var result = render();
+    arrive(container);
+    return result;
+  }
+
   window.QymShell = {
     init: init,
+    skeletonHTML: skeletonHTML,
+    liftSkeleton: liftSkeleton,
+    arrive: arrive,
+    arriveWith: arriveWith,
+    watchArrivals: watchArrivals,
+    reveal: reveal,
+    settleArrival: settleArrival,
+    noteSkeletons: noteSkeletons,
+    retireRemovedSkeletons: retireRemovedSkeletons,
+    pendingArrival: pendingArrival,
+    takePrefetch: takePrefetch,
     identicon: identicon,
     identiconHTML: identiconHTML,
     datasetVersionInline: datasetVersionInline,
     datasetAliasTags: datasetAliasTags,
     getUser: function () { return _user; },
     getProject: function () { return _currentProject; },
+    // The current project, or before /v1/me answers the one this URL names
+    // as last seen ({slug, name}): for labels a page draws at once.
+    getRememberedProject: function () { return _currentProject || rememberedRouteProject(_routeCtx); },
     getPageContext: function () { return _routeCtx; },
     switchProject: switchProject,
     setTopbarStats: setTopbarStats,
@@ -1979,6 +2791,10 @@
     toast: toast,
     apiUrl: apiUrl,
     navigateTo: navigateTo,
+    pageSignal: pageSignal,
+    onPageUnmount: onPageUnmount,
+    replaceUrlQuery: replaceUrlQuery,
+    copyText: copyText,
     openCreateProjectDialog: openCreateProjectDialog,
     openConfirmDialog: openConfirmDialog,
     confirmArchiveProject: confirmArchiveProject,

@@ -64,6 +64,8 @@
         headers: { 'Content-Type': 'application/json' },
       });
     } catch (_) {}
+    // The shell's remembered user (shell.js ME_CACHE_KEY) leaves with them.
+    try { localStorage.removeItem('qym:me'); } catch (_) {}
     redirectToLogin(withPrefix('/'));
   }
 

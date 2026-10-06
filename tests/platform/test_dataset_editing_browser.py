@@ -6,6 +6,12 @@
 - C016: the import wizard validates every JSON/JSONL record and shows inline errors.
 - C018: "Create dataset" never appends to an existing dataset; "new version" is explicit.
 - C019: Windows-1256 CSVs are detected, and the encoding can be changed.
+- C052: the upload wizard is a labelled modal dialog that keeps focus inside,
+  maps columns with a select per column (unknown columns default to Metadata),
+  and asks before Escape, the backdrop or Cancel throw away a loaded file.
+- C048: row menus and the version switcher work from the keyboard.
+- C181/C321: compare pages its lists, lists changes by time with their
+  timestamp, opens the first rows, and diffs long fields within a budget.
 """
 
 import re
@@ -24,6 +30,7 @@ STATIC = ROOT / "packages/platform/qym_platform/_static/dashboard"
 EXPORTS = (
     "openUploadWizard, renderItemsTab, renderItemPageDetails, saveItemPageItem, "
     "historyDiffBody, diffValueTexts, detectCSVEncoding, legacyTextScore, slugifyDatasetName, overflowMenuButton, "
+    "compareView, renderLineageTab, wordDiff, diffHtmlPair, versionSelectorPill, renderSettingsTab, "
 )
 
 SETUP_JS = """() => {
@@ -350,9 +357,17 @@ def test_review_step_lists_columns_that_will_not_be_imported(page):
     page.locator("#dsx-wiz-name").fill("Probe")
     _choose_file(page, "probe.csv", b"input,expected_output,category,difficulty\nq,a,geo,easy\n")
     _continue(page)
+    # Unknown columns are kept as Metadata by default (C052), never dropped silently.
+    assert page.get_by_label("category").input_value() == "metadata"
+    page.get_by_label("difficulty").select_option("ignore")
     _continue(page)
     ignored = page.locator("#dsx-wiz-ignored").inner_text()
-    assert "Not imported: 2 columns (category, difficulty)" in ignored
+    assert "Not imported: 1 column (difficulty)" in ignored
+    page.get_by_role("button", name="Create dataset", exact=True).click()
+    page.wait_for_function("requests.length === 1")
+    form = _requests(page)[0]["body"]["form"]
+    assert form["metadata_cols"] == "category"
+    assert form["input_cols"] == "input" and form["expected_cols"] == "expected_output"
 
 
 # ---------------------------------------------------------------------------
@@ -476,17 +491,10 @@ def test_new_dataset_upload_sends_the_chosen_encoding(page):
     page.locator("#dsx-wiz-name").fill("Arabic Excel")
     _choose_file(page, "arabic.csv", ARABIC_CSV.encode("cp1256"))
     _continue(page)
-    page.locator(".dsx-mapping").wait_for()
-    # Drag-free mapping: assign the Arabic question column as input.
-    page.evaluate("""() => {
-      const chip = Array.from(document.querySelectorAll('.dsx-mapping-bank .dsx-mapping-chip'))
-        .find(node => node.textContent.trim() === 'السؤال');
-      const target = Array.from(document.querySelectorAll('.dsx-mapping-field'))
-        .find(node => node.textContent.includes('Input'));
-      const data = new DataTransfer();
-      chip.dispatchEvent(new DragEvent('dragstart', {dataTransfer: data, bubbles: true}));
-      target.dispatchEvent(new DragEvent('drop', {dataTransfer: data, bubbles: true}));
-    }""")
+    page.locator(".dsx-mapping-table").wait_for()
+    # Keyboard-operable mapping: each column has its own labelled select.
+    page.get_by_label("السؤال").select_option("input")
+    page.get_by_label("الإجابة").select_option("expected")
     _continue(page)
     review = page.locator("#dsx-wiz-body").inner_text()
     assert "Windows-1256 (Arabic)" in review
@@ -495,6 +503,7 @@ def test_new_dataset_upload_sends_the_chosen_encoding(page):
     form = _requests(page)[0]["body"]["form"]
     assert form["encoding"] == "windows-1256"
     assert form["input_cols"] == "السؤال"
+    assert form["expected_cols"] == "الإجابة"
 
 
 @pytest.mark.parametrize(
@@ -527,3 +536,335 @@ def test_browser_encoding_detection_matches_the_server(page, text, encoding):
         [list(raw), server_label],
     )
     assert suspicious is False
+
+
+# ---------------------------------------------------------------------------
+# C052: the upload wizard is an accessible dialog and does not lose work
+# ---------------------------------------------------------------------------
+
+
+def _mock_confirm(page, answer):
+    page.evaluate("""answer => {
+      window.confirms = [];
+      window.QymShell.openConfirmDialog = options => { confirms.push(options.title); return Promise.resolve({confirmed: answer}); };
+    }""", answer)
+
+
+def test_wizard_is_a_labelled_dialog_that_keeps_focus_inside(page):
+    page.evaluate("""() => { __dsx.state.datasets = [];
+      const opener = document.createElement('button'); opener.id = 'opener'; opener.textContent = 'Import';
+      document.querySelector('#host').appendChild(opener); opener.focus(); }""")
+    _open_wizard(page, mode="new")
+    dialog = page.get_by_role("dialog", name="Upload dataset")
+    dialog.wait_for()
+    assert dialog.get_attribute("aria-modal") == "true"
+    page.wait_for_function("document.activeElement && document.activeElement.id === 'dsx-wiz-name'")
+    assert page.get_by_role("button", name="Close").count() == 1
+    # Labels are associated with their fields.
+    assert page.get_by_label("Description").count() == 1
+    assert page.get_by_role("button", name="File (CSV, TSV, JSON, or JSONL) * choose a file").count() == 1
+    inside = []
+    for _ in range(12):
+        page.keyboard.press("Tab")
+        inside.append(page.evaluate("() => !!document.activeElement.closest('[role=dialog]')"))
+    assert all(inside)
+    page.keyboard.press("Shift+Tab")
+    assert page.evaluate("() => !!document.activeElement.closest('[role=dialog]')")
+    # Without a file, Escape closes at once and focus returns to the opener.
+    page.keyboard.press("Escape")
+    page.wait_for_function("() => !document.querySelector('[role=dialog]')")
+    assert page.evaluate("document.activeElement.id") == "opener"
+
+
+def test_escape_backdrop_and_cancel_ask_before_discarding_a_loaded_file(page):
+    page.evaluate("() => { __dsx.state.datasets = []; }")
+    _mock_confirm(page, False)
+    _open_wizard(page, mode="new")
+    page.locator("#dsx-wiz-name").fill("Probe")
+    _choose_file(page, "probe.csv", b"question,answer\nq,a\n")
+    _continue(page)
+    page.keyboard.press("Escape")
+    page.wait_for_function("confirms.length === 1")
+    # A click on the backdrop itself (shell.css is not loaded here, so dispatch it).
+    page.evaluate("() => document.querySelector('.shell-modal-backdrop').dispatchEvent(new MouseEvent('click', {bubbles: true}))")
+    page.wait_for_function("confirms.length === 2")
+    page.get_by_role("button", name="Cancel", exact=True).click()
+    page.wait_for_function("confirms.length === 3")
+    assert page.evaluate("confirms") == ["Discard this upload?"] * 3
+    # Kept: still on the mapping step with the auto-detected input.
+    assert "Map columns" in _active_step(page)
+    assert page.get_by_label("question").input_value() == "input"
+    _mock_confirm(page, True)
+    page.keyboard.press("Escape")
+    page.wait_for_function("() => !document.querySelector('[role=dialog]')")
+
+
+def test_column_mapping_works_from_the_keyboard(page):
+    page.evaluate("() => { __dsx.state.datasets = []; }")
+    _open_wizard(page, mode="new")
+    page.locator("#dsx-wiz-name").fill("Probe")
+    _choose_file(page, "probe.csv", b"prompt_text,gold,ref\nq,a,r1\n")
+    _continue(page)
+    # Nothing is recognised as input: Continue explains and focuses the first select.
+    _continue(page)
+    assert "Choose Input for at least one column" in page.locator("#dsx-wiz-mapping-error").inner_text()
+    assert page.evaluate("document.activeElement.dataset.column") == "prompt_text"
+    page.keyboard.press("ArrowUp")  # Metadata -> Expected output -> Input
+    page.keyboard.press("ArrowUp")
+    assert page.get_by_label("prompt_text").input_value() == "input"
+    page.get_by_label("ref").select_option("id")
+    page.get_by_label("gold").select_option("id")
+    # One Item ID: the previous one becomes Metadata instead of vanishing.
+    assert page.get_by_label("ref").input_value() == "metadata"
+    _continue(page)
+    page.get_by_role("button", name="Create dataset", exact=True).click()
+    page.wait_for_function("requests.length === 1")
+    form = _requests(page)[0]["body"]["form"]
+    assert (form["input_cols"], form["id_col"], form["metadata_cols"]) == ("prompt_text", "gold", "ref")
+
+
+def test_new_version_wizard_respects_the_production_rule(page):
+    page.evaluate("""() => { Object.assign(__dsx.state.dataset, {permissions: {can_set_production: false}});
+      Object.assign(__dsx.state, {activeVersion: {id: 'v2', version: 'v2', status: 'published'}, versions: [{version: 'v1'}, {version: 'v2'}]});
+      document.querySelector('#host').appendChild(__dsx.overflowMenuButton()); }""")
+    page.get_by_role("button", name="More actions").click()
+    page.get_by_role("menuitem", name="↑ Upload file as new version…").click()
+    _choose_file(page, "probe.csv", b"input,expected_output\nq,a\n")
+    _continue(page)
+    _continue(page)
+    page.get_by_label("Publish immediately").check()
+    production = page.get_by_label("Set as production alias")
+    assert production.is_disabled() and not production.is_checked()
+
+
+# ---------------------------------------------------------------------------
+# C048: menus and the version switcher from the keyboard
+# ---------------------------------------------------------------------------
+
+
+def test_row_menu_is_a_keyboard_menu(page):
+    page.evaluate("""() => {
+      Object.assign(__dsx.state, {activeVersion: {id: 'v2', version: 'v2', status: 'published'}, versions: [{version: 'v1'}, {version: 'v2'}]});
+      document.querySelector('#host').appendChild(__dsx.overflowMenuButton());
+    }""")
+    trigger = page.get_by_role("button", name="More actions")
+    trigger.focus()
+    page.keyboard.press("Enter")
+    menu = page.get_by_role("menu")
+    menu.wait_for()
+    assert trigger.get_attribute("aria-expanded") == "true"
+    first = page.evaluate("document.activeElement.getAttribute('role') + ':' + document.activeElement.textContent")
+    assert first == "menuitem:Name version…"
+    page.keyboard.press("ArrowDown")
+    assert page.evaluate("document.activeElement.textContent") == "Compare…"
+    page.keyboard.press("End")
+    assert page.evaluate("document.activeElement.textContent") == "↑ Upload file as new version…"
+    page.keyboard.press("Home")
+    assert page.evaluate("document.activeElement.textContent") == "Name version…"
+    page.keyboard.press("Escape")
+    assert page.get_by_role("menu").count() == 0
+    assert page.evaluate("document.activeElement.getAttribute('aria-label')") == "More actions"
+    assert trigger.get_attribute("aria-expanded") == "false"
+
+
+def test_dialog_opened_from_a_menu_returns_focus_to_the_menu_trigger(page):
+    # The catalog's "+ New dataset" and the version overflow menu open the upload
+    # wizard from a menu item; closing the wizard must land on the trigger, not
+    # on <body> (the menu item it was opened from no longer exists).
+    page.evaluate("""() => {
+      Object.assign(__dsx.state, {
+        dataset: {id: 'd1', name: 'Golden', slug: 'golden', permissions: {}},
+        activeVersion: {id: 'v2', version: 'v2', status: 'published'},
+        versions: [{version: 'v1'}, {version: 'v2'}],
+      });
+      document.querySelector('#host').appendChild(__dsx.overflowMenuButton());
+    }""")
+    trigger = page.get_by_role("button", name="More actions")
+    trigger.focus()
+    page.keyboard.press("Enter")
+    page.get_by_role("menu").wait_for()
+    page.keyboard.press("End")
+    assert page.evaluate("document.activeElement.textContent") == "↑ Upload file as new version…"
+    page.keyboard.press("Enter")
+    page.get_by_role("dialog").wait_for()
+    page.keyboard.press("Escape")
+    page.wait_for_function("() => !document.querySelector('[role=dialog]')")
+    assert page.evaluate("document.activeElement.getAttribute('aria-label')") == "More actions"
+
+
+def test_version_switcher_is_a_listbox_with_arrow_keys_and_escape(page):
+    page.evaluate("""() => {
+      window.navigations = [];
+      const versions = [
+        {id: 'a', version: 'v1', status: 'published', created_at: '2026-09-01T00:00:00Z', aliases: []},
+        {id: 'b', version: 'v2', status: 'published', created_at: '2026-09-02T00:00:00Z', aliases: ['production']},
+        {id: 'c', version: 'v3', status: 'draft', created_at: '2026-09-03T00:00:00Z', aliases: []},
+      ];
+      Object.assign(__dsx.state, {mode: 'detail', tab: 'items', versions, activeVersion: versions[1]});
+      document.querySelector('#host').appendChild(__dsx.versionSelectorPill());
+    }""")
+    pill = page.locator(".dsx-version-pill")
+    pill.focus()
+    page.keyboard.press("ArrowDown")
+    listbox = page.get_by_role("listbox", name="Versions")
+    listbox.wait_for()
+    assert pill.get_attribute("aria-expanded") == "true"
+    page.wait_for_function("document.activeElement.getAttribute('role') === 'combobox'")
+    assert page.get_by_role("option").count() == 3
+    active = lambda: page.evaluate("document.getElementById(document.activeElement.getAttribute('aria-activedescendant')).textContent")  # noqa: E731
+    assert active().startswith("v2")  # opens on the current version
+    page.keyboard.press("ArrowDown")
+    assert active().startswith("v1")
+    page.keyboard.press("Escape")
+    assert page.get_by_role("listbox").count() == 0
+    assert page.evaluate("document.activeElement.classList.contains('dsx-version-pill')")
+
+
+def test_lineage_versions_are_links_and_changes_show_time_in_order(page):
+    page.evaluate("""() => {
+      window.replyFor = req => req.url.includes('/lineage') ? {body: {
+        versions: [
+          {id: 'a', version: 'v1', status: 'published', created_at: '2026-09-01T08:00:00Z', published_at: '2026-09-01T09:00:00Z', aliases: [], change_counts: {added: 2}},
+          {id: 'b', version: 'v2', status: 'draft', parent_version_id: 'a', created_at: '2026-09-02T08:00:00Z', aliases: [], change_counts: {modified: 1}},
+        ],
+        changes: [
+          {id: 3, dataset_version_id: 'b', change_summary: {type: 'created', from_version_id: 'a'}, actor: {display_name: 'Mona', email: 'm@x'}, created_at: '2026-09-02T08:00:00Z'},
+          {id: 1, dataset_version_id: 'a', change_summary: {type: 'uploaded', item_count: 2}, created_at: '2026-09-01T08:00:00Z'},
+          {id: 2, dataset_version_id: 'a', change_summary: {type: 'published', item_count: 2}, created_at: '2026-09-01T09:00:00Z'},
+        ]}} : null;
+      Object.assign(__dsx.state, {mode: 'detail', tab: 'lineage', activeVersion: {id: 'a', version: 'v1'}});
+      __dsx.renderLineageTab(document.querySelector('#host'));
+    }""")
+    log = page.get_by_role("list", name="Change log")
+    log.wait_for()
+    rows = log.locator("li")
+    assert [rows.nth(i).locator(".ctype").inner_text() for i in range(3)] == ["Uploaded", "Published", "Created"]
+    times = [rows.nth(i).locator("time").get_attribute("datetime") for i in range(3)]
+    assert times == sorted(times)
+    assert all(rows.nth(i).locator("time").inner_text().strip() for i in range(3))
+    assert "Mona" in rows.nth(2).inner_text()
+    link = page.get_by_role("link", name="Open version v2")
+    assert "v=v2" in link.get_attribute("href") and "tab=lineage" in link.get_attribute("href")
+    assert "created " in page.locator(".dsx-lineage-times").first.inner_text()
+
+
+# ---------------------------------------------------------------------------
+# C181 / C321: paged compare, ordered by time, robust word diff
+# ---------------------------------------------------------------------------
+
+
+def _changed_row(n, minute):
+    return {
+        "item_id": f"item-{n}", "target_index": n, "fields": ["input"],
+        "changed_at": f"2026-09-01T12:{minute:02d}:00Z", "changed_at_source": "revision",
+        "before": {"input": f"old {n}"}, "after": {"input": f"new {n}"},
+    }
+
+
+def test_compare_pages_rows_shows_times_and_keeps_the_tab_in_the_url(page):
+    page.evaluate("""() => {
+      window.compareRows = n => Array.from({length: n}, (_, i) => i);
+      window.replyFor = req => {
+        if (!req.url.includes(':compare')) return null;
+        const url = new URL(req.url, 'http://qym.test');
+        const kind = url.searchParams.get('kind');
+        const offset = Number(url.searchParams.get('offset') || 0);
+        const total = kind === 'changed' ? 60 : 1;
+        const count = Math.min(50, total - offset);
+        const rows = Array.from({length: count}, (_, i) => {
+          const n = offset + i;
+          return {item_id: 'item-' + n, target_index: n, fields: ['input'], changed_at: '2026-09-01T12:' + String(n % 60).padStart(2, '0') + ':00Z',
+            changed_at_source: 'revision', before: {input: 'old ' + n}, after: {input: 'new ' + n}, input: 'x', index: n};
+        });
+        return {body: {summary: {changed: 60, added: 1, removed: 0, unchanged: 0},
+          field_diffs: kind === 'changed' ? rows : [], added_items: kind === 'added' ? rows : [],
+          page: {kind, offset, limit: 50, total, next_offset: offset + 50 < total ? offset + 50 : null},
+          target: {created_by: null}}};
+      };
+      Object.assign(__dsx.state, {mode: 'compare', slug: 'project', datasetRef: 'demo', baseVersion: 'v1', headVersion: 'v2', cmpTab: 'changed',
+        dataset: {name: 'Demo', slug: 'demo'}, versions: [{version: 'v1', status: 'published'}, {version: 'v2', status: 'published'}]});
+      document.querySelector('#host').appendChild(__dsx.compareView());
+    }""")
+    page.locator(".dsx-diff-row").first.wait_for()
+    assert page.locator(".dsx-diff-row").count() == 50
+    toggles = page.locator(".dsx-diff-toggle")
+    assert [toggles.nth(i).get_attribute("aria-expanded") for i in range(4)] == ["true", "true", "true", "false"]
+    assert "changed Sep 1, 2026" in toggles.first.inner_text()
+    assert "oldest first" in page.locator(".dsx-compare-order").inner_text()
+    first_request = [r for r in _requests(page) if ":compare" in r["url"]][0]["url"]
+    assert "limit=50" in first_request and "kind=changed" in first_request
+    # Keyboard: the header is a button that toggles its body.
+    toggles.nth(3).focus()
+    page.keyboard.press("Enter")
+    assert toggles.nth(3).get_attribute("aria-expanded") == "true"
+    page.get_by_role("button", name="Show 10 more").click()
+    page.wait_for_function("document.querySelectorAll('.dsx-diff-row').length === 60")
+    assert "Showing 60 of 60" in page.locator(".dsx-compare-count").inner_text()
+    # Focus continues at the first newly loaded row.
+    assert page.evaluate("document.activeElement.className") == "dsx-diff-toggle"
+    assert "item-50" in page.evaluate("document.activeElement.textContent")
+    page.locator("#dsx-cmp-tab-added").click()
+    page.wait_for_function("location.search.includes('tab=added')")
+    page.locator(".dsx-diff-row").first.wait_for()
+    assert "+ added" in page.locator(".dsx-diff-row").first.inner_text()
+
+
+def test_word_diff_marks_only_the_real_change_in_a_long_field(page):
+    result = page.evaluate("""() => {
+      const words = Array.from({length: 30000}, (_, i) => 'w' + i).join(' ');
+      const edited = words.replace('w15000', 'CHANGED');
+      const pair = __dsx.diffHtmlPair(words, edited);
+      return {tooLarge: pair.tooLarge,
+        removed: (pair.before.match(/dsx-diff-removed-tok/g) || []).length,
+        added: (pair.after.match(/dsx-diff-added-tok/g) || []).length,
+        hasChanged: pair.after.includes('>CHANGED<')};
+    }""")
+    # The old LCS gave up past 200k cells and marked the whole field.
+    assert result == {"tooLarge": False, "removed": 1, "added": 1, "hasChanged": True}
+    big = page.evaluate("""() => {
+      const a = Array.from({length: 12000}, (_, i) => 'a' + i).join(' ');
+      const b = Array.from({length: 12000}, (_, i) => 'b' + i).join(' ');
+      const pair = __dsx.diffHtmlPair(a, b);
+      return {tooLarge: pair.tooLarge, marked: pair.before.includes('dsx-diff-removed-tok')};
+    }""")
+    assert big == {"tooLarge": True, "marked": False}
+    small = page.evaluate("() => __dsx.wordDiff('the cat sat', 'the dog sat').map(t => t.kind + ':' + t.txt.trim()).filter(t => !t.endsWith(':'))")
+    assert small == ["same:the", "del:cat", "add:dog", "same:sat"]
+
+
+def test_item_rows_are_links_and_previews_are_not_tab_stops(page):
+    page.evaluate("""() => {
+      window.replyFor = req => req.url.includes('/items?') ? {body: {items: [
+        {id: 1, item_id: 'alpha', index: 0, input: 'question one', expected_output: 'a', metadata: {k: 'v'}},
+        {id: 2, item_id: 'beta', index: 1, input: 'question two', expected_output: 'b', metadata: {}},
+      ], total: 2}} : null;
+      Object.assign(__dsx.state, {mode: 'detail', tab: 'items', activeVersion: {id: 'v1', version: 'v1', status: 'published'}});
+      __dsx.renderItemsTab(document.querySelector('#host'));
+    }""")
+    link = page.get_by_role("link", name="Open item alpha")
+    link.wait_for()
+    assert "item=alpha" in link.get_attribute("href") and "tab=details" in link.get_attribute("href")
+    # 2 rows: 2 row links, and no preview cell takes a tab stop (was 3 per row).
+    assert page.locator(".dsx-preview[tabindex]").count() == 0
+    assert page.locator("a.dsx-row-link").count() == 2
+    request = [r for r in _requests(page) if "/items?" in r["url"]][0]["url"]
+    assert "include_context=false" in request
+    link.focus()
+    page.keyboard.press("Enter")
+    page.wait_for_function("location.search.includes('item=alpha')")
+
+
+def test_settings_offer_delete_only_to_creator_or_manager_with_honest_copy(page):
+    page.evaluate("""() => {
+      Object.assign(__dsx.state.dataset, {description: '', tags: [], permissions: {can_delete: false, can_set_production: false}});
+      __dsx.renderSettingsTab(document.querySelector('#host'));
+    }""")
+    text = page.locator("#host").inner_text()
+    assert "Deleted datasets" in text and "restore" in text
+    assert "removes all its versions" not in text
+    assert page.get_by_role("button", name="Delete dataset").count() == 0
+    assert "creator or a project manager" in page.get_by_role("note").inner_text()
+    page.evaluate("""() => { document.querySelector('#host').innerHTML = '';
+      __dsx.state.dataset.permissions = {can_delete: true};
+      __dsx.renderSettingsTab(document.querySelector('#host')); }""")
+    assert page.get_by_role("button", name="Delete dataset").count() == 1

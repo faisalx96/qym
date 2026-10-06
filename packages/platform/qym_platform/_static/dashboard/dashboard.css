@@ -121,8 +121,12 @@
   /* Mono font for data. 'Qym Arabic' leads both stacks: its unicode-range
      limits it to Arabic glyphs, so Latin falls through untouched while any
      Arabic — prose, code blocks, metric details, table cells — renders in a
-     real Arabic face at a corrected optical size (see @font-face below). */
-  --font-mono: 'Qym Arabic', 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace;
+     real Arabic face at a corrected optical size (see @font-face below).
+     Latin resolves to a real system mono on every OS: ui-monospace and
+     SFMono-Regular reach SF Mono in Safari, Menlo is the face Chrome on
+     macOS can actually see (without it the generic 'monospace' falls back to
+     Courier), Consolas covers Windows and Liberation Mono covers Linux. */
+  --font-mono: 'Qym Arabic', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, 'JetBrains Mono', 'Fira Code', Consolas, 'Liberation Mono', monospace;
   --font-sans: 'Qym Arabic', -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
 }
 
@@ -136,9 +140,13 @@
   unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
 }
 
-/* RTL blocks (the renderers stamp dir="rtl" on detected Arabic text) get
-   the taller leading the script needs. */
-[dir="rtl"] {
+/* RTL blocks (the renderers stamp dir="rtl" lang="ar" on detected Arabic
+   text, QymSafe.textDirAttrs) get the taller leading the script needs. The
+   :not(#…) adds ID weight so page rules such as `.formatted-string` or
+   `.item-title` (line-height 1.45–1.5) cannot win over it. Blocks that
+   start in Arabic under dir="auto" align to the right on their own. */
+[dir="rtl"],
+[dir="rtl"][lang="ar"]:not(#qym-rtl-leading) {
   line-height: 1.7;
 }
 
@@ -777,8 +785,10 @@ html {
 .command-bar {
   display: flex;
   align-items: center;
-  flex-wrap: nowrap;
-  gap: var(--space-md);
+  /* Wrap at every width: the bar must never widen the page (the shell's
+     content area scrolls on both axes, so overflow here scrolls the page). */
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
   padding: var(--space-sm) var(--space-lg);
   background: var(--bg-base);
   border-bottom: 1px solid var(--border-subtle);
@@ -839,6 +849,83 @@ html {
 .quick-filters {
   display: flex;
   gap: 4px;
+}
+
+/* Runs search: first in the command bar, focused with "/". */
+.runs-search {
+  flex: 0 1 240px;
+  min-width: 160px;
+}
+
+.runs-search > input {
+  width: 100%;
+  padding-right: 28px;
+}
+
+.runs-search-kbd {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.runs-search:focus-within .runs-search-kbd,
+.runs-search:has(> input:not(:placeholder-shown)) .runs-search-kbd {
+  display: none;
+}
+
+/* Custom date range popover under the time segment. The two-class selector
+   outranks the shared dropdown anatomy rule in ui_components.css, which loads
+   later with the same single-class weight. */
+.time-range-control {
+  flex-shrink: 0;
+}
+
+.multi-select-dropdown.time-range-dropdown {
+  min-width: 260px;
+  max-height: none;
+  overflow: visible;
+  padding: var(--space-md);
+}
+
+.time-range-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-sm);
+}
+
+.time-range-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.time-range-field input {
+  width: 100%;
+  padding: 0 var(--space-xs);
+  color-scheme: dark;
+}
+
+.time-range-error {
+  min-height: 0;
+  margin: var(--space-xs) 0 0;
+  font-size: var(--font-sm);
+  color: var(--error);
+}
+
+.time-range-error:empty {
+  display: none;
+}
+
+.time-range-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
 }
 
 .filter-btn {
@@ -930,8 +1017,9 @@ html {
 }
 
 .command-bar-filter-row {
-  flex: 1;
-  min-width: 0;
+  /* Takes the rest of the row, or its own row when less than this is left. */
+  flex: 1 1 auto;
+  min-width: min(100%, 560px);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -944,7 +1032,7 @@ html {
   gap: var(--space-sm);
   flex: 1;
   min-width: 0;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   overflow-y: visible;
 }
@@ -1414,6 +1502,13 @@ main {
   color: var(--text-muted);
 }
 
+/* A page's loading skeleton (QymShell.skeletonHTML) fills the width. */
+.loading.loading--skeleton {
+  align-items: stretch;
+  justify-content: flex-start;
+  height: auto;
+}
+
 .loading-spinner {
   width: 24px;
   height: 24px;
@@ -1611,6 +1706,14 @@ main {
 
 .chart-card-body {
   padding: var(--space-lg);
+}
+
+/* A dataset tab whose chart is still loading: the last chart stays until
+   the new one arrives (renderChartsView patches the class away), dimmed
+   only if that takes a moment, so a quick switch never flickers. */
+.chart-card-body.is-switching .chart-table-shell {
+  opacity: 0.5;
+  transition: opacity 0.2s ease-out 0.15s;
 }
 
 /* Dataset tabs (flush inside card top) */
@@ -3019,6 +3122,40 @@ body.chart-col-resize-active {
   text-decoration: underline;
 }
 
+/* Run names, chart run labels and sort headers are real links/buttons
+   (keyboard, middle-click, "Copy link"); they keep their text styling. */
+a.run-id,
+a.chart-bar-label.clickable-run {
+  text-decoration: none;
+}
+a.run-id:focus-visible,
+a.chart-bar-label.clickable-run:focus-visible,
+.sortable-col:focus-visible,
+.th-sort-button:focus-visible,
+button.legend-item:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.th-sort-button {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+button.legend-item {
+  appearance: none;
+  background: none;
+  border: 0;
+  font-family: var(--font-sans);
+}
+
 .run-name {
   display: block;
   font-size: var(--font-sm);
@@ -3956,6 +4093,9 @@ body.chart-col-resize-active {
   color: var(--text-muted);
   min-height: var(--status-bar-height);
   flex-shrink: 0;
+  /* The Runs selection layout below follows the bar's own width, which the
+     sidebar (expanded or collapsed) changes as much as the window does. */
+  container: runs-status / inline-size;
 }
 
 .status-left, .status-right {
@@ -3964,8 +4104,14 @@ body.chart-col-resize-active {
   gap: var(--space-md);
 }
 
+/* A selection keeps the pager (C043): the selection now stays across
+   navigation, so a reader who comes back to Runs with one still pages.
+   Order of priority: the selection actions at full width, then the pager
+   (range summary and controls together), then the status, which truncates
+   if it must. The list summary returns where the bar has room for it; the
+   pager's range summary already gives the count. */
 .status-bar.selection-active {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: max-content auto minmax(0, 1fr);
 }
 
 .status-bar.selection-active .status-left {
@@ -3975,8 +4121,61 @@ body.chart-col-resize-active {
   scrollbar-width: thin;
 }
 
-.status-bar.selection-active .status-center {
+.status-bar.selection-active #status-filter,
+.status-bar.selection-active #selection-status-separator {
   display: none;
+}
+
+.status-bar.selection-active .status-right {
+  min-width: 0;
+}
+
+.status-bar.selection-active .status-updated {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@container runs-status (min-width: 1300px) {
+  .status-bar.selection-active #status-filter,
+  .status-bar.selection-active #selection-status-separator {
+    display: revert;
+  }
+
+  .status-bar.selection-active #status-filter {
+    max-width: 40ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* Shortcuts stay on "?"; the button makes room for the pager. */
+@container runs-status (max-width: 1049px) {
+  .status-bar.selection-active .status-right .sep,
+  .status-bar.selection-active .status-right .help-trigger {
+    display: none;
+  }
+}
+
+/* A narrow bar: the pager takes its own row under the selection actions. */
+@container runs-status (max-width: 939px) {
+  .status-bar.selection-active .status-left {
+    grid-column: 1 / -2;
+    margin-top: var(--space-xs);
+  }
+
+  .status-bar.selection-active .status-right {
+    grid-column: -2 / -1;
+    margin-top: var(--space-xs);
+  }
+
+  .status-bar.selection-active .status-center {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin-bottom: var(--space-xs);
+  }
 }
 
 .status-center {
@@ -3988,6 +4187,22 @@ body.chart-col-resize-active {
 
 .status-right {
   justify-content: flex-end;
+}
+
+.status-right button.help-trigger {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.status-right button.help-trigger:hover { color: var(--text-secondary); }
+.status-right button.help-trigger:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 
 .sep {
@@ -4141,6 +4356,35 @@ body.chart-col-resize-active {
   gap: var(--space-sm);
   padding: var(--space-xs) 0;
   font-size: var(--font-sm);
+  color: var(--text-muted);
+}
+
+.shortcut-setting {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.shortcut-setting input {
+  margin-top: 2px;
+  accent-color: var(--accent-primary);
+}
+
+.shortcut-setting strong {
+  display: block;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.shortcut-setting-note {
+  display: block;
   color: var(--text-muted);
 }
 
@@ -10326,6 +10570,22 @@ td.col-trace-metric-value {
 .mv-frozen-reset[aria-disabled="true"] {
   opacity: 0.45;
   cursor: default;
+}
+/* Frozen columns that scroll for now because the block would cover most of
+   a narrow table; the saved choice is kept. Width 0 + min-width 100%: the
+   note wraps to the menu instead of widening it. */
+.mv-frozen-fit {
+  width: 0;
+  min-width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 10px 4px;
+  font-size: var(--font-sm);
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+.mv-frozen-fit[hidden] {
+  display: none;
 }
 
 /* ─── Responsive ─── */

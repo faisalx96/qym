@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Admin</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p0-20260930">
-  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
-  <script src="/static/qym_safe.js?v=p0-20260930"></script>
-  <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p0-20260930-3"></script>
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261005-3">
+  <link rel="stylesheet" href="/static/shell.css?v=p1-20261005-6">
+  <script src="/static/qym_safe.js?v=p1-20261001"></script>
+  <script src="/static/auth.js?v=p1-20261005"></script>
+  <script src="/static/shell.js?v=p1-20261005-8"></script>
   <style>
     .admin-page { }
     .admin-header { margin-bottom: var(--space-xl); }
@@ -122,8 +122,8 @@
     .maint-status--succeeded { color: var(--success); }
     .self-warning { background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 6px; padding: var(--space-sm) var(--space-md); font-size: var(--font-sm); color: var(--text-muted); }
   </style>
-  <link rel="stylesheet" href="/static/ui_components.css?v=p0-20260930">
-  <script defer src="/static/ui_components.js?v=p0-20260930-2"></script>
+  <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261005-2">
+  <script defer src="/static/ui_components.js?v=p1-20261005"></script>
 </head>
 <body>
   <main class="admin-page">
@@ -133,9 +133,9 @@
     </div>
 
     <div class="admin-stats qym-stat-strip">
-      <div class="stat-card qym-stat-strip__item"><div class="stat-card-label qym-stat-strip__label">Total Users</div><div class="stat-card-value qym-stat-strip__value" id="stat-users">—</div></div>
-      <div class="stat-card qym-stat-strip__item"><div class="stat-card-label qym-stat-strip__label">Projects</div><div class="stat-card-value qym-stat-strip__value" id="stat-projects">—</div></div>
-      <div class="stat-card qym-stat-strip__item"><div class="stat-card-label qym-stat-strip__label">Total Runs</div><div class="stat-card-value qym-stat-strip__value" id="stat-runs">—</div></div>
+      <div class="stat-card qym-stat-strip__item"><div class="stat-card-label qym-stat-strip__label">Total Users</div><div class="stat-card-value qym-stat-strip__value" id="stat-users" data-qym-arrive><span data-qym-skeleton="value" data-qym-skeleton-width="48"></span></div></div>
+      <div class="stat-card qym-stat-strip__item"><div class="stat-card-label qym-stat-strip__label">Projects</div><div class="stat-card-value qym-stat-strip__value" id="stat-projects" data-qym-arrive><span data-qym-skeleton="value" data-qym-skeleton-width="48"></span></div></div>
+      <div class="stat-card qym-stat-strip__item"><div class="stat-card-label qym-stat-strip__label">Total Runs</div><div class="stat-card-value qym-stat-strip__value" id="stat-runs" data-qym-arrive><span data-qym-skeleton="value" data-qym-skeleton-width="48"></span></div></div>
     </div>
 
     <div class="admin-tabs qym-tabs" role="tablist" aria-label="Admin sections">
@@ -154,8 +154,8 @@
         <div class="card-body">
           <table class="data-table">
             <thead><tr><th>Project</th><th>Run</th><th>Owner</th><th>Status</th><th>Progress</th><th>Updated</th><th>Actions</th></tr></thead>
-            <tbody id="live-runs-tbody">
-              <tr><td colspan="7" style="text-align:center;color:var(--text-muted)">Loading...</td></tr>
+            <tbody id="live-runs-tbody" data-qym-arrive>
+              <tr><td colspan="7"><div data-qym-skeleton="lines" data-qym-skeleton-rows="1" data-qym-skeleton-height="16" data-qym-skeleton-label="Loading live runs…"></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -168,8 +168,8 @@
         <div class="card-body">
           <table class="data-table">
             <thead><tr><th>Project</th><th>Run</th><th>Owner</th><th>Status</th><th>Items</th><th>Created</th><th>Actions</th></tr></thead>
-            <tbody id="recent-runs-tbody">
-              <tr><td colspan="7" style="text-align:center;color:var(--text-muted)">Loading...</td></tr>
+            <tbody id="recent-runs-tbody" data-qym-arrive>
+              <tr><td colspan="7"><div data-qym-skeleton="lines" data-qym-skeleton-rows="6" data-qym-skeleton-height="355" data-qym-skeleton-label="Loading recent runs…"></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -187,7 +187,7 @@
         <div class="card-body">
           <table class="data-table">
             <thead><tr><th>Project</th><th>Slug</th><th>Status</th><th>Members</th><th style="text-align:right">Actions</th></tr></thead>
-            <tbody id="projects-tbody"></tbody>
+            <tbody id="projects-tbody" data-qym-arrive><tr><td colspan="5"><div data-qym-skeleton="lines" data-qym-skeleton-rows="4" data-qym-skeleton-label="Loading projects…"></div></td></tr></tbody>
           </table>
         </div>
       </div>
@@ -236,7 +236,7 @@
         <div class="card-body">
           <table class="data-table">
             <thead><tr><th>User</th><th>Email</th><th>Role</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead>
-            <tbody id="users-tbody"></tbody>
+            <tbody id="users-tbody" data-qym-arrive><tr><td colspan="5"><div data-qym-skeleton="lines" data-qym-skeleton-rows="4" data-qym-skeleton-label="Loading users…"></div></td></tr></tbody>
           </table>
         </div>
       </div>
@@ -244,9 +244,9 @@
   </main>
 
   <div class="modal" id="edit-user-modal" style="display:none">
-    <div class="modal-content" style="max-width:440px">
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="edit-user-title" style="max-width:440px">
       <div class="modal-header">
-        <h2>Edit User</h2>
+        <h2 id="edit-user-title">Edit User</h2>
         <button class="modal-close qym-icon-action" type="button" id="edit-user-close" aria-label="Close">×</button>
       </div>
       <div class="modal-body edit-user-body">
@@ -296,6 +296,12 @@
   <script>
     (() => {
       'use strict';
+
+      // document/window listeners end when the shell unmounts this page.
+      const pageSignal = window.QymShell && typeof window.QymShell.pageSignal === 'function'
+        ? window.QymShell.pageSignal()
+        : undefined;
+      const pageListen = (options = {}) => (pageSignal ? { ...options, signal: pageSignal } : options);
 
       function apiUrl(path) {
         const root = (window.__QYM_ROOT_PATH__ || '').replace(/\/$/, '');
@@ -659,15 +665,20 @@
             <td>${u.is_active ? '<span style="color:var(--success)">Active</span>' : '<span style="color:var(--error)">Disabled</span>'}</td>
             <td><div class="row-actions">
               <button class="btn btn-secondary" style="padding:4px 10px;font-size:var(--font-sm)" data-user-edit="${escapeHtml(u.id)}">Edit</button>
-              ${state.me && state.me.id === u.id ? '' : u.is_active ? `<button class="btn btn-danger" style="padding:4px 10px;font-size:var(--font-sm)" data-user-toggle="${escapeHtml(u.id)}" data-active="false">Disable</button>` : `<button class="btn btn-secondary" style="padding:4px 10px;font-size:var(--font-sm)" data-user-toggle="${escapeHtml(u.id)}" data-active="true">Enable</button>`}
+              ${state.me && state.me.id === u.id
+                // Your own account: the server refuses it too (nobody may lock themselves out).
+                ? '<button class="btn btn-danger" style="padding:4px 10px;font-size:var(--font-sm)" type="button" disabled title="You cannot disable your own account" aria-label="You cannot disable your own account">Disable</button>'
+                : u.is_active ? `<button class="btn btn-danger" style="padding:4px 10px;font-size:var(--font-sm)" data-user-toggle="${escapeHtml(u.id)}" data-active="false">Disable</button>` : `<button class="btn btn-secondary" style="padding:4px 10px;font-size:var(--font-sm)" data-user-toggle="${escapeHtml(u.id)}" data-active="true">Enable</button>`}
             </div></td>
           </tr>`).join('');
 
         document.querySelectorAll('[data-user-toggle]').forEach(btn => {
           btn.addEventListener('click', async () => {
             const isActive = btn.dataset.active === 'true';
+            const userId = btn.dataset.userToggle;
+            const user = state.users.find(u => u.id === userId);
+            const who = user ? (user.display_name || user.email) : 'this user';
             if (!isActive) {
-              const user = state.users.find(u => u.id === btn.dataset.userToggle);
               const description = [
                 `Disable ${user ? user.email : 'this user'}? They are signed out everywhere at once and cannot sign in until an admin enables them again.`,
                 'Their API keys stop working while they are disabled.',
@@ -677,15 +688,35 @@
                 : { confirmed: window.confirm(description.join('\n\n')) };
               if (!confirmation || !confirmation.confirmed) return;
             }
+            const msgEl = document.getElementById('user-message');
+            const setActive = active => fetchJson(`v1/admin/users/${userId}`, {
+              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ is_active: active }),
+            });
             try {
-              await fetchJson(`v1/admin/users/${btn.dataset.userToggle}`, {
-                method: 'PUT', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ is_active: isActive }),
-              });
-              document.getElementById('user-message').textContent = isActive ? 'User enabled' : 'User disabled';
+              await setActive(isActive);
+              if (msgEl) { msgEl.style.color = ''; msgEl.textContent = isActive ? 'User enabled' : 'User disabled'; }
+              if (!isActive && window.QymShell?.toast) {
+                // A mis-click is one click away from undone; their sessions stay ended.
+                window.QymShell.toast(`Disabled ${who}`, 'success', {
+                  duration: 10000,
+                  action: {
+                    label: 'Undo',
+                    onClick: async () => {
+                      try {
+                        await setActive(true);
+                        if (msgEl) { msgEl.style.color = ''; msgEl.textContent = 'User enabled'; }
+                        window.QymShell.toast(`Enabled ${who} again. They need to sign in again.`, 'success');
+                      } catch (undoErr) {
+                        window.QymShell.toast('Undo failed: ' + (undoErr.message || 'Unknown error'), 'error');
+                      }
+                      await load();
+                    },
+                  },
+                });
+              }
               await load();
             } catch (err) {
-              const msgEl = document.getElementById('user-message');
               if (msgEl) { msgEl.style.color = 'var(--error)'; msgEl.textContent = 'Failed: ' + (err.message || 'Unknown error'); }
             }
           });
@@ -732,10 +763,13 @@
         document.getElementById('edit-user-temp-value').value = '';
         document.getElementById('edit-user-error').textContent = '';
         document.getElementById('edit-user-modal').style.display = 'flex';
+        // Shared modal focus contract (focus in, Tab kept inside, focus back).
+        window.QymUIComponents?.openDialog(document.querySelector('#edit-user-modal .modal-content'), { initialFocus: '#edit-user-name' });
       }
 
       function closeEditUserModal() {
         if (state.editUserBusy) return;
+        window.QymUIComponents?.releaseDialog(document.querySelector('#edit-user-modal .modal-content'));
         document.getElementById('edit-user-modal').style.display = 'none';
         document.getElementById('edit-user-temp-value').value = '';
         state.editingUserId = null;
@@ -847,7 +881,10 @@
         document.getElementById('maint-settings').textContent =
           `${dbSize} total · role ${st.role} · maintenance mode ${st.maintenance_mode ? 'ON' : 'off'} · event log ${st.event_log_mode} · ` +
           `span retention ${st.span_retention_days} d · deleted-run grace ${st.deleted_run_grace_days} d · ` +
-          `workers: summary ${w.summary_worker_alive ? 'running' : 'stopped'}, maintenance ${w.maintenance_worker_alive ? 'running' : 'stopped'} · refreshed ${Math.round(data.db_stats_age_seconds)} s ago`;
+          (w.loops === 'separate'
+            ? 'workers: in a separate worker process'
+            : `workers: summary ${w.summary_worker_alive ? 'running' : 'stopped'}, maintenance ${w.maintenance_worker_alive ? 'running' : 'stopped'}`) +
+          ` · refreshed ${Math.round(data.db_stats_age_seconds)} s ago`;
         const stats = data.db_stats || {};
         const tb = document.querySelector('#maint-tables tbody');
         tb.innerHTML = (stats.tables || []).slice(0, 12).map(t => `<tr><td>${escapeHtml(t.table)}</td><td>${fmtBytes(t.total_bytes)}</td><td>${fmtBytes(t.heap_bytes)}</td><td>${fmtBytes(t.toast_bytes)}</td><td>${fmtBytes(t.index_bytes)}</td><td>${Number(t.live_rows).toLocaleString()}</td><td>${Number(t.dead_rows).toLocaleString()}</td></tr>`).join('')
@@ -947,7 +984,7 @@
         if (e.key === 'Escape' && !document.getElementById('shell-confirm-dialog') && document.getElementById('edit-user-modal').style.display === 'flex') {
           closeEditUserModal();
         }
-      });
+      }, pageListen());
 
       document.getElementById('create-user-btn').addEventListener('click', async () => {
         await fetchJson('v1/admin/users', {
@@ -983,8 +1020,8 @@
         liveRequest++;
         recentRequest++;
       }
-      document.addEventListener('qym:before-navigate', closeAdmin, { once: true });
-      window.addEventListener('pagehide', closeAdmin, { once: true });
+      document.addEventListener('qym:before-navigate', closeAdmin, pageListen({ once: true }));
+      window.addEventListener('pagehide', closeAdmin, pageListen({ once: true }));
     })();
   </script>
 </body>

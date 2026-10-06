@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Project Settings</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p0-20260930">
-  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
-  <script src="/static/qym_safe.js?v=p0-20260930"></script>
-  <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p0-20260930-3"></script>
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261005-3">
+  <link rel="stylesheet" href="/static/shell.css?v=p1-20261005-6">
+  <script src="/static/qym_safe.js?v=p1-20261001"></script>
+  <script src="/static/auth.js?v=p1-20261005"></script>
+  <script src="/static/shell.js?v=p1-20261005-8"></script>
   <style>
     .settings-page { }
     .settings-header { margin-bottom: var(--space-xl); }
@@ -27,12 +27,32 @@
     .card-subtitle { font-size: var(--font-sm); color: var(--text-muted); margin-top: 2px; }
     .card-body { padding: var(--space-lg); }
     .card-body.flush { padding: 0; }
+    .ps-review-rule { display: flex; flex-direction: column; gap: 6px; }
+    .ps-review-rule + .ps-review-rule { margin-top: var(--space-md); }
+    .ps-review-rule .form-select { max-width: 320px; }
+    .ps-review-help { font-size: var(--font-sm); color: var(--text-muted); line-height: 1.5; }
+    .ps-review-toggle { display: inline-flex; align-items: center; gap: var(--space-sm); font-size: var(--font-base); color: var(--text-primary); cursor: pointer; }
+    .ps-review-toggle input:disabled + span { color: var(--text-muted); }
     .card-footer { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-sm); padding: var(--space-md) var(--space-lg); border-top: 1px solid var(--border-subtle); }
 
     .add-bar { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--border-subtle); }
     .add-bar .form-select, .add-bar .form-input { font-family: var(--font-sans); font-size: var(--font-base); background-color: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 6px; padding: var(--space-sm) var(--space-md); color: var(--text-primary); }
     .add-bar .form-select { width: 160px; flex: none; padding-right: 30px; }
     .add-bar .form-input { flex: 1; min-width: 0; }
+    /* Add member: a search over people who are not members yet (managers and admins). */
+    .member-picker { position: relative; flex: 1; min-width: 0; display: flex; }
+    /* The results list may extend below the members card. */
+    #panel-members .card { overflow: visible; }
+    .member-picker .form-input { width: 100%; }
+    .member-results {
+      position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20; max-height: 280px; overflow-y: auto;
+      background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    }
+    .member-results[hidden] { display: none; }
+    .member-result { display: flex; align-items: baseline; gap: var(--space-sm); width: 100%; padding: var(--space-sm) var(--space-md); border: 0; background: transparent; color: var(--text-primary); font-family: var(--font-sans); font-size: var(--font-base); text-align: left; cursor: pointer; }
+    .member-result[aria-selected="true"], .member-result:hover { background: var(--bg-hover); }
+    .member-result-email { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--font-sm); }
+    .member-results-note { padding: var(--space-sm) var(--space-md); color: var(--text-muted); font-size: var(--font-sm); }
     /* Native selects get the same appearance reset + custom chevron as .filter-select
        so dropdowns match across the platform instead of showing the OS default arrow. */
     .form-select {
@@ -69,6 +89,10 @@
     .key-modal .token-field { flex: 1; font-family: var(--font-mono); font-size: var(--font-base); color: var(--text-primary); background: var(--bg-base); border: 1px solid var(--border-default); border-radius: 8px; padding: 10px 12px; word-break: break-all; }
     .key-modal .warn { margin-top: var(--space-md); color: var(--warning); font-size: var(--font-sm); }
     .key-modal .footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: var(--space-lg); }
+    /* Remove-member dialog (shell modal recipe): room for the runs picker. */
+    .remove-member-modal { width: 480px; }
+    .remove-member-modal .remove-member-transfer { margin: var(--space-md) 0 0; }
+    .remove-member-modal .shell-modal-note:empty { display: none; }
 
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); }
     .form-group { display: flex; flex-direction: column; gap: 6px; }
@@ -188,11 +212,12 @@
       animation: spin 0.7s linear infinite;
     }
   </style>
-  <link rel="stylesheet" href="/static/ui_components.css?v=p0-20260930">
-  <script defer src="/static/ui_components.js?v=p0-20260930-2"></script>
+  <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261005-2">
+  <script defer src="/static/ui_components.js?v=p1-20261005"></script>
 </head>
 <body>
-  <main class="settings-page">
+  <div class="settings-page" id="settings-skeleton" data-qym-skeleton="list" data-qym-skeleton-rows="5" data-qym-skeleton-label="Loading project settings…"></div>
+  <main class="settings-page" id="settings-main" hidden>
     <div class="settings-header">
       <h1 id="project-title">Project Settings</h1>
       <p id="project-subtitle">Manage members, API keys, and integrations for this project.</p>
@@ -214,11 +239,33 @@
         <div class="card-header"><div><div class="card-title">Project Details</div><div class="card-subtitle">Name and slug</div></div></div>
         <div class="card-body">
           <div class="form-grid">
-            <div class="form-group"><label class="form-label">Project Name</label><input class="form-input" id="gen-name" type="text" /></div>
+            <div class="form-group"><label class="form-label" for="gen-name">Project Name</label><input class="form-input" id="gen-name" type="text" maxlength="200" readonly /><div class="note" id="gen-name-note" hidden></div></div>
             <div class="form-group"><label class="form-label">Slug</label><input class="form-input" id="gen-slug" type="text" style="font-family:var(--font-mono);font-size:var(--font-base);" readonly /></div>
           </div>
         </div>
-        <div class="card-footer"><button class="btn btn-primary" id="save-general-btn" type="button">Save Changes</button></div>
+        <div class="card-footer"><button class="btn btn-primary" id="save-general-btn" type="button" disabled>Save Changes</button></div>
+      </div>
+      <div class="card" id="review-rules-card">
+        <div class="card-header"><div><div class="card-title">Correction reviews</div><div class="card-subtitle">Who decides which diagnosis corrections become evidence for auto-analysis</div></div></div>
+        <div class="card-body">
+          <div class="ps-review-rule">
+            <label class="form-label" for="review-approvers">Who can approve corrections</label>
+            <select class="form-select" id="review-approvers">
+              <option value="members">All project members</option>
+              <option value="managers">Project managers and admins</option>
+            </select>
+            <div class="ps-review-help">Applies to approving, rejecting and resetting corrections, one at a time or in bulk, on the Reviews page and the run page.</div>
+          </div>
+          <div class="ps-review-rule">
+            <label class="ps-review-toggle" for="review-different-reviewer">
+              <input type="checkbox" id="review-different-reviewer" />
+              <span>Require a different reviewer</span>
+            </label>
+            <div class="ps-review-help">When on, the person who wrote a correction cannot approve, reject or reset it. AI diagnoses taken as they are have no human author.</div>
+          </div>
+          <div class="ps-review-help" id="review-rules-note" hidden></div>
+        </div>
+        <div class="card-footer" id="review-rules-footer"><button class="btn btn-primary" id="save-review-rules-btn" type="button">Save review rules</button></div>
       </div>
       <div class="card">
         <div class="card-header"><div><div class="card-title">Overview</div></div></div>
@@ -233,12 +280,15 @@
       <div class="card">
         <div class="card-header"><div><div class="card-title">Members</div><div class="card-subtitle" id="member-count-label"></div></div></div>
         <div class="add-bar" id="member-form">
-          <select class="form-select" id="member-user"></select>
+          <div class="member-picker">
+            <input class="form-input" id="member-search" type="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="member-results" aria-label="Person to add" placeholder="Search people by name or email" autocomplete="off" />
+            <div class="member-results" id="member-results" role="listbox" aria-label="People who are not members" hidden></div>
+          </div>
           <select class="form-select" id="member-role" style="width:140px;">
             <option value="MEMBER">Member</option>
             <option value="MANAGER">Manager</option>
           </select>
-          <button class="btn btn-primary" id="add-member-btn" type="button" style="padding:0 var(--space-md);font-size:var(--font-sm);">Add</button>
+          <button class="btn btn-primary" id="add-member-btn" type="button" style="padding:0 var(--space-md);font-size:var(--font-sm);" disabled>Add</button>
         </div>
         <div class="note" id="member-note" style="padding:0 var(--space-lg);"></div>
         <div class="card-body flush">
@@ -403,6 +453,12 @@
     (() => {
       'use strict';
 
+      // document/window listeners end when the shell unmounts this page.
+      const pageSignal = window.QymShell && typeof window.QymShell.pageSignal === 'function'
+        ? window.QymShell.pageSignal()
+        : undefined;
+      const pageListen = (options = {}) => (pageSignal ? { ...options, signal: pageSignal } : options);
+
       // ── Tab switching ──
       document.querySelectorAll('.settings-tab').forEach(tab => {
         tab.addEventListener('click', () => {
@@ -445,7 +501,7 @@
         return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       }
 
-      let state = { me: null, project: null, members: [], users: [], apiKeys: [], analysisPrompts: null };
+      let state = { me: null, project: null, members: [], apiKeys: [], analysisPrompts: null };
 
       async function fetchJson(path, options) {
         const res = await fetch(apiUrl(path), options);
@@ -473,14 +529,14 @@
       // ── Load data ──
       async function load() {
         const slug = projectSlug();
-        const [me, project, users] = await Promise.all([
+        // The user directory is not loaded here: managers search it through
+        // member-candidates when they add someone; members never see it.
+        const [me, project] = await Promise.all([
           fetchJson('v1/me'),
           fetchJson(`v1/projects/by-slug/${encodeURIComponent(slug)}`),
-          fetchJson('v1/users'),
         ]);
         state.me = me;
         state.project = project;
-        state.users = users || [];
         state.members = ((await fetchJson(`v1/projects/${project.id}/members`)) || {}).members || [];
         state.apiKeys = ((await fetchJson(`v1/projects/${project.id}/api-keys`)) || {}).api_keys || [];
         state.analysisPrompts = canManageMembers()
@@ -747,15 +803,22 @@
             ? 'Settings are read-only while the project is archived. You can still revoke API keys and remove members; only an admin can unarchive it.'
             : 'Settings are read-only while the project is archived. You can still revoke your own API keys.';
 
-        // General tab
-        document.getElementById('gen-name').value = p.name;
-        document.getElementById('gen-name').readOnly = readOnly;
-        document.getElementById('save-general-btn').closest('.card-footer').style.display = readOnly ? 'none' : '';
+        // General tab: renaming is admin-only on the server (PATCH /v1/admin/projects).
+        const canRename = isAdmin && !readOnly;
+        const nameInput = document.getElementById('gen-name');
+        if (!general.saving) nameInput.value = p.name;
+        nameInput.readOnly = !canRename;
+        const nameNote = document.getElementById('gen-name-note');
+        nameNote.hidden = canRename || readOnly;
+        nameNote.textContent = canRename || readOnly ? '' : 'Only admins can rename a project.';
+        document.getElementById('save-general-btn').closest('.card-footer').style.display = canRename ? '' : 'none';
+        syncGeneralSave();
         document.getElementById('gen-slug').value = p.slug;
         document.getElementById('project-summary').innerHTML = [
           ['Slug', p.slug], ['Role', p.role || 'MEMBER'], ['Members', String(state.members.length)], ['Status', p.is_active ? 'ACTIVE' : 'ARCHIVED'],
         ].map(([label, value]) => `<div class="form-group"><div class="form-label">${escapeHtml(label)}</div><div style="font-size:var(--font-sm);color:var(--text-primary);font-family:var(--font-mono)">${escapeHtml(value)}</div></div>`).join('');
 
+        renderReviewRules();
         renderPrompts();
 
         // Archive, Unarchive and Delete are admin-only on the server too.
@@ -773,11 +836,6 @@
 
         // Members tab
         document.getElementById('member-count-label').textContent = `${state.members.length} members in this project`;
-        const currentIds = new Set(state.members.map(m => m.user_id));
-        document.getElementById('member-user').innerHTML = state.users
-          .filter(u => !currentIds.has(u.id))
-          .map(u => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.display_name || u.email)}</option>`)
-          .join('');
         document.getElementById('member-form').style.display = canManageMembers() && !readOnly ? 'flex' : 'none';
         document.getElementById('member-note').textContent = readOnly
           ? (canManageMembers()
@@ -808,33 +866,7 @@
           });
         });
         document.querySelectorAll('[data-member-remove]').forEach(btn => {
-          btn.addEventListener('click', async () => {
-            const uid = btn.dataset.memberRemove;
-            const member = state.members.find(m => m.user_id === uid);
-            const who = member ? (member.display_name || member.email) : 'This member';
-            // Removal revokes the person's keys for this project on the server.
-            const keys = state.apiKeys.filter(k => !k.revoked_at && k.creator?.id === uid);
-            const lines = [
-              `${who} will lose access to this project.`,
-              keys.length
-                ? `Their ${plural(keys.length, 'active API key')} for this project (${keys.map(k => k.name || 'default').join(', ')}) will be revoked.`
-                : 'They have no active API keys in this project.',
-              'Runs they created stay in the project.',
-            ];
-            if (window.QymShell && window.QymShell.openConfirmDialog) {
-              const confirmation = await window.QymShell.openConfirmDialog({
-                title: 'Remove member?',
-                description: lines,
-                confirmLabel: 'Remove member',
-                confirmClass: 'shell-btn-danger',
-              });
-              if (!confirmation || !confirmation.confirmed) return;
-            } else if (!confirm(lines.join('\n'))) {
-              return;
-            }
-            await fetchJson(`v1/projects/${state.project.id}/members/${uid}`, { method: 'DELETE' });
-            await load();
-          });
+          btn.addEventListener('click', () => openRemoveMemberDialog(btn.dataset.memberRemove));
         });
 
         // API Keys tab: revoking stays possible while the project is archived.
@@ -879,19 +911,341 @@
       }
 
       // ── Event handlers ──
-      document.getElementById('add-member-btn').addEventListener('click', async () => {
-        const userId = document.getElementById('member-user').value;
-        if (!userId) return;
-        await fetchJson(`v1/projects/${state.project.id}/members`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: userId, role: document.getElementById('member-role').value }) });
-        await load();
+      // ── General: rename (admins) ──
+      const general = { saving: false };
+
+      function syncGeneralSave() {
+        const button = document.getElementById('save-general-btn');
+        const input = document.getElementById('gen-name');
+        button.textContent = general.saving ? 'Saving…' : 'Save Changes';
+        if (!state.project) { button.disabled = true; return; }
+        const next = input.value.trim();
+        button.disabled = general.saving || input.readOnly || !next || next === state.project.name;
+      }
+
+      document.getElementById('gen-name').addEventListener('input', syncGeneralSave);
+      document.getElementById('gen-name').addEventListener('keydown', event => {
+        if (event.key === 'Enter' && !document.getElementById('save-general-btn').disabled) {
+          event.preventDefault();
+          document.getElementById('save-general-btn').click();
+        }
+      });
+      document.getElementById('save-general-btn').addEventListener('click', async () => {
+        const input = document.getElementById('gen-name');
+        const name = input.value.trim();
+        if (!state.project || !name || name === state.project.name || general.saving) return;
+        general.saving = true;
+        input.readOnly = true;
+        syncGeneralSave();
+        try {
+          const updated = await fetchJson(`v1/admin/projects/${state.project.id}`, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+          });
+          if (updated) {
+            state.project = { ...state.project, ...updated, role: state.project.role };
+            // Keep the sidebar switcher and breadcrumb in step without a reload.
+            if (window.QymShell && window.QymShell.upsertProject) window.QymShell.upsertProject(updated);
+            input.value = updated.name;
+            toast(`Project renamed to “${updated.name}”`, 'success');
+          }
+        } catch (err) {
+          toast('Rename failed: ' + (err.message || 'Unknown error'), 'error');
+        } finally {
+          general.saving = false;
+          if (state.project) render();
+        }
       });
 
+      // ── Members: add someone who is not a member yet ──
+      const memberPicker = { selected: null, results: [], active: -1, timer: null, seq: 0, hasMore: false };
+
+      function closeMemberResults() {
+        const input = document.getElementById('member-search');
+        const results = document.getElementById('member-results');
+        if (!input || !results) return;
+        results.hidden = true;
+        input.setAttribute('aria-expanded', 'false');
+        input.removeAttribute('aria-activedescendant');
+        memberPicker.active = -1;
+      }
+
+      function renderMemberResults(message) {
+        const list = document.getElementById('member-results');
+        const input = document.getElementById('member-search');
+        if (message) {
+          list.innerHTML = `<div class="member-results-note">${escapeHtml(message)}</div>`;
+        } else {
+          list.innerHTML = memberPicker.results.map((user, index) => `
+            <button type="button" class="member-result" role="option" id="member-option-${index}" data-candidate-index="${index}" aria-selected="${index === memberPicker.active ? 'true' : 'false'}">
+              <span>${escapeHtml(user.display_name || user.email)}</span>
+              <span class="member-result-email">${escapeHtml(user.email)}</span>
+            </button>`).join('')
+            + (memberPicker.hasMore ? '<div class="member-results-note">Keep typing to narrow the list.</div>' : '');
+        }
+        list.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
+        if (memberPicker.active >= 0) input.setAttribute('aria-activedescendant', `member-option-${memberPicker.active}`);
+        else input.removeAttribute('aria-activedescendant');
+      }
+
+      async function searchMemberCandidates() {
+        if (!state.project || !canManageMembers()) return;
+        const query = document.getElementById('member-search').value.trim();
+        const seq = ++memberPicker.seq;
+        try {
+          const data = await fetchJson(`v1/projects/${state.project.id}/member-candidates?limit=20&q=${encodeURIComponent(query)}`);
+          if (seq !== memberPicker.seq || !data) return;
+          memberPicker.results = data.users || [];
+          memberPicker.hasMore = !!data.has_more;
+          memberPicker.active = memberPicker.results.length ? 0 : -1;
+          renderMemberResults(memberPicker.results.length ? '' : (query ? `No one outside the project matches “${query}”.` : 'Everyone is already a member.'));
+        } catch (err) {
+          if (seq === memberPicker.seq) renderMemberResults('Could not search people: ' + (err.message || 'Unknown error'));
+        }
+      }
+
+      function chooseMemberCandidate(index) {
+        const user = memberPicker.results[index];
+        if (!user) return;
+        memberPicker.selected = user;
+        document.getElementById('member-search').value = user.display_name ? `${user.display_name} (${user.email})` : user.email;
+        document.getElementById('add-member-btn').disabled = false;
+        closeMemberResults();
+      }
+
+      const memberSearch = document.getElementById('member-search');
+      memberSearch.addEventListener('input', () => {
+        memberPicker.selected = null;
+        document.getElementById('add-member-btn').disabled = true;
+        clearTimeout(memberPicker.timer);
+        memberPicker.timer = setTimeout(searchMemberCandidates, 200);
+      });
+      memberSearch.addEventListener('focus', () => {
+        if (!memberPicker.selected) searchMemberCandidates();
+      });
+      memberSearch.addEventListener('keydown', event => {
+        const open = !document.getElementById('member-results').hidden;
+        if (event.key === 'Escape' && open) {
+          event.preventDefault();
+          closeMemberResults();
+        } else if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && open && memberPicker.results.length) {
+          event.preventDefault();
+          const step = event.key === 'ArrowDown' ? 1 : -1;
+          memberPicker.active = (memberPicker.active + step + memberPicker.results.length) % memberPicker.results.length;
+          renderMemberResults('');
+        } else if (event.key === 'Enter') {
+          event.preventDefault();
+          if (open && memberPicker.active >= 0) chooseMemberCandidate(memberPicker.active);
+          else if (memberPicker.selected) document.getElementById('add-member-btn').click();
+        }
+      });
+      document.getElementById('member-results').addEventListener('mousedown', event => {
+        // Keep focus in the search field while picking.
+        event.preventDefault();
+        const option = event.target.closest('[data-candidate-index]');
+        if (option) chooseMemberCandidate(Number(option.dataset.candidateIndex));
+      });
+      document.addEventListener('click', event => {
+        if (!event.target.closest('.member-picker')) closeMemberResults();
+      }, pageListen());
+
+      document.getElementById('add-member-btn').addEventListener('click', async () => {
+        const user = memberPicker.selected;
+        if (!user) return;
+        const button = document.getElementById('add-member-btn');
+        button.disabled = true;
+        try {
+          await fetchJson(`v1/projects/${state.project.id}/members`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: user.id, role: document.getElementById('member-role').value }) });
+          memberPicker.selected = null;
+          memberPicker.results = [];
+          document.getElementById('member-search').value = '';
+          toast(`Added ${user.display_name || user.email}`, 'success');
+          await load();
+        } catch (err) {
+          button.disabled = false;
+          toast('Could not add the member: ' + (err.message || 'Unknown error'), 'error');
+        }
+      });
+
+      // ── Remove member (C072) ──
+      // Lists the runs the member owns in this project and offers to transfer
+      // them to another active member in the same request
+      // (DELETE …/members/{id}?transfer_runs_to=). Removing without a transfer
+      // stays possible. Shell modal recipe, page-local because of the picker;
+      // a destructive confirm, so it opens on Cancel.
+      function ownedRunsText(who, preview) {
+        const live = Number(preview.owned_runs) || 0;
+        const deleted = Number(preview.owned_deleted_runs) || 0;
+        const total = live + deleted;
+        if (!total) return `${who} owns no runs in this project.`;
+        return `${who} owns ${plural(total, 'run')} in this project`
+          + (deleted ? `, ${deleted} of them in Deleted Runs.` : '.');
+      }
+
+      function openRemoveMemberDialog(uid) {
+        const member = state.members.find(m => m.user_id === uid);
+        const who = member ? (member.display_name || member.email) : 'This member';
+        // Removal revokes the person's keys for this project on the server.
+        const keys = state.apiKeys.filter(k => !k.revoked_at && k.creator?.id === uid);
+        // A disabled account keeps its membership but cannot own runs.
+        const takers = state.members.filter(m => m.user_id !== uid && m.is_active !== false);
+        const make = (tag, className, text) => {
+          const node = document.createElement(tag);
+          if (className) node.className = className;
+          if (text != null) node.textContent = text;
+          return node;
+        };
+
+        document.getElementById('remove-member-dialog')?.remove();
+        const backdrop = make('div', 'shell-modal-backdrop');
+        backdrop.id = 'remove-member-dialog';
+        const modal = make('div', 'shell-modal remove-member-modal');
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.setAttribute('aria-labelledby', 'remove-member-title');
+        modal.setAttribute('aria-describedby', 'remove-member-summary');
+        const header = make('div', 'shell-modal-header');
+        const title = make('div', 'shell-modal-title', 'Remove member?');
+        title.id = 'remove-member-title';
+        const closeBtn = make('button', 'shell-modal-close qym-icon-action', '×');
+        closeBtn.type = 'button';
+        closeBtn.setAttribute('aria-label', 'Close');
+        header.append(title, closeBtn);
+
+        const body = make('div', 'shell-modal-body');
+        const summary = make('div');
+        summary.id = 'remove-member-summary';
+        summary.append(
+          make('p', 'shell-modal-description', `${who} will lose access to this project.`),
+          make('p', 'shell-modal-description', keys.length
+            ? `Their ${plural(keys.length, 'active API key')} for this project (${keys.map(k => k.name || 'default').join(', ')}) will be revoked.`
+            : 'They have no active API keys in this project.'),
+        );
+        const runsLine = make('p', 'shell-modal-description', `Checking the runs ${who} owns…`);
+        runsLine.id = 'remove-member-runs';
+        runsLine.setAttribute('aria-live', 'polite');
+        summary.append(runsLine);
+        const transferGroup = make('div', 'shell-form-group remove-member-transfer');
+        transferGroup.hidden = true;
+        const label = make('label', 'shell-form-label', 'Their runs');
+        label.htmlFor = 'remove-member-transfer';
+        const select = make('select', 'shell-form-input');
+        select.id = 'remove-member-transfer';
+        select.append(new Option(`Keep them with ${who}`, ''));
+        takers.forEach(m => select.append(new Option(
+          `Transfer to ${m.display_name || m.email}${m.display_name ? ` (${m.email})` : ''}`, m.user_id)));
+        transferGroup.append(label, select);
+        const note = make('p', 'shell-modal-note', 'Runs they created stay in the project.');
+        note.id = 'remove-member-note';
+        const error = make('div', 'shell-form-error');
+        error.setAttribute('role', 'alert');
+        body.append(summary, transferGroup, note, error);
+
+        const footer = make('div', 'shell-modal-footer');
+        const cancelBtn = make('button', 'shell-btn shell-btn-secondary', 'Cancel');
+        cancelBtn.type = 'button';
+        const confirmBtn = make('button', 'shell-btn shell-btn-danger', 'Remove member');
+        confirmBtn.type = 'button';
+        confirmBtn.id = 'remove-member-confirm';
+        footer.append(cancelBtn, confirmBtn);
+        modal.append(header, body, footer);
+        backdrop.append(modal);
+        document.body.append(backdrop);
+
+        let preview = null;
+        let busy = false;
+        function sync() {
+          const total = preview ? (Number(preview.owned_runs) || 0) + (Number(preview.owned_deleted_runs) || 0) : 0;
+          const target = takers.find(m => m.user_id === select.value);
+          confirmBtn.textContent = busy ? 'Removing…' : target
+            ? `Transfer ${plural(total, 'run')} and remove`
+            : 'Remove member';
+          if (!preview) return;
+          if (!total) note.textContent = '';
+          else if (isReadOnly()) note.textContent = `Runs can be transferred after the project is unarchived; until then they stay owned by ${who}.`;
+          else if (!takers.length) note.textContent = `No other active member can take them, so they stay owned by ${who}.`;
+          else if (target) note.textContent = `${target.display_name || target.email} becomes their owner and can submit and delete them. Their results and review history stay as they are.`;
+          else note.textContent = `They stay in the project, owned by ${who}; a manager can still submit or transfer them later.`;
+        }
+        let closed = false;
+        function close() {
+          if (closed) return;
+          closed = true;
+          if (window.QymUIComponents) window.QymUIComponents.releaseDialog(modal);
+          backdrop.remove();
+        }
+        async function confirmRemoval() {
+          if (busy) return;
+          busy = true;
+          confirmBtn.disabled = true;
+          cancelBtn.disabled = true;
+          error.textContent = '';
+          sync();
+          const target = takers.find(m => m.user_id === select.value);
+          const query = target ? `?transfer_runs_to=${encodeURIComponent(target.user_id)}` : '';
+          try {
+            const result = await fetchJson(
+              `v1/projects/${encodeURIComponent(state.project.id)}/members/${encodeURIComponent(uid)}${query}`,
+              { method: 'DELETE' });
+            if (!result) return;
+            close();
+            const moved = Number(result.transferred_runs) || 0;
+            toast(target && moved
+              ? `${who} was removed. ${plural(moved, 'run')} now ${moved === 1 ? 'belongs' : 'belong'} to ${target.display_name || target.email}.`
+              : `${who} was removed.`, 'success');
+            await load();
+          } catch (err) {
+            busy = false;
+            confirmBtn.disabled = false;
+            cancelBtn.disabled = false;
+            error.textContent = err.message || 'Could not remove the member.';
+            sync();
+          }
+        }
+        closeBtn.addEventListener('click', () => { if (!busy) close(); });
+        cancelBtn.addEventListener('click', close);
+        confirmBtn.addEventListener('click', confirmRemoval);
+        select.addEventListener('change', sync);
+        backdrop.addEventListener('click', event => { if (event.target === backdrop && !busy) close(); });
+        // Leaving the page (shell navigation) takes the dialog with it.
+        if (pageSignal) pageSignal.addEventListener('abort', close, { once: true });
+        if (window.QymUIComponents) {
+          window.QymUIComponents.openDialog(modal, { initialFocus: cancelBtn, onEscape: () => { if (!busy) close(); } });
+        } else {
+          cancelBtn.focus();
+        }
+
+        fetchJson(`v1/projects/${encodeURIComponent(state.project.id)}/members/${encodeURIComponent(uid)}/removal-preview`)
+          .then(data => {
+            if (!data || !backdrop.isConnected) return;
+            preview = data;
+            runsLine.textContent = ownedRunsText(who, data);
+            const total = (Number(data.owned_runs) || 0) + (Number(data.owned_deleted_runs) || 0);
+            transferGroup.hidden = !total || !takers.length || isReadOnly();
+            sync();
+          })
+          .catch(() => {
+            if (!backdrop.isConnected) return;
+            // Removal still works; only the transfer offer needs the count.
+            runsLine.textContent = `Could not check the runs ${who} owns. Removing keeps them in the project, owned by ${who}.`;
+          });
+      }
+
       // ── New-key modal ──
+      // Shared modal focus contract: focus moves to Copy, Tab stays inside,
+      // Escape closes, and focus returns to the control that created the key.
       function showKeyModal(token) {
         document.getElementById('key-modal-token').textContent = token;
         document.getElementById('key-modal-backdrop').classList.add('open');
+        if (window.QymUIComponents) {
+          window.QymUIComponents.openDialog(document.querySelector('#key-modal-backdrop .key-modal'), {
+            initialFocus: '#key-modal-copy',
+            onEscape: closeKeyModal,
+          });
+        }
       }
       function closeKeyModal() {
+        if (window.QymUIComponents) window.QymUIComponents.releaseDialog(document.querySelector('#key-modal-backdrop .key-modal'));
         document.getElementById('key-modal-backdrop').classList.remove('open');
         document.getElementById('key-modal-token').textContent = '';
       }
@@ -1049,7 +1403,7 @@
       });
 
       syncPromptTabOrientation();
-      window.addEventListener('resize', syncPromptTabOrientation);
+      window.addEventListener('resize', syncPromptTabOrientation, pageListen());
       window.setInterval(updatePromptEditorState, 60000);
 
       // ── LLM connections (project-scoped) ──
@@ -1125,6 +1479,52 @@
         resetLlmForm();
         await loadConnections();
       }
+
+      // Correction review rules (C074): managers and admins set them; others
+      // see the project's rules read-only.
+      function renderReviewRules() {
+        const p = state.project;
+        const editable = canManageMembers() && !isReadOnly();
+        const approvers = document.getElementById('review-approvers');
+        const different = document.getElementById('review-different-reviewer');
+        approvers.value = p.correction_approvers || 'members';
+        different.checked = !!p.correction_require_different_reviewer;
+        approvers.disabled = !editable;
+        different.disabled = !editable;
+        document.getElementById('review-rules-footer').style.display = editable ? '' : 'none';
+        const note = document.getElementById('review-rules-note');
+        note.hidden = editable;
+        note.textContent = editable ? '' : (isReadOnly()
+          ? 'Read-only while the project is archived.'
+          : 'Only project managers and admins can change these rules.');
+      }
+
+      async function saveReviewRules() {
+        const btn = document.getElementById('save-review-rules-btn');
+        btn.disabled = true;
+        try {
+          const rules = await fetchJson(`v1/projects/${state.project.id}/review-rules`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              correction_approvers: document.getElementById('review-approvers').value,
+              correction_require_different_reviewer: document.getElementById('review-different-reviewer').checked,
+            }),
+          });
+          if (rules) {
+            state.project.correction_approvers = rules.correction_approvers;
+            state.project.correction_require_different_reviewer = rules.correction_require_different_reviewer;
+          }
+          renderReviewRules();
+          toast('Review rules saved', 'success');
+        } catch (err) {
+          toast(err.message || 'Could not save the review rules', 'error');
+        } finally {
+          btn.disabled = false;
+        }
+      }
+
+      document.getElementById('save-review-rules-btn').addEventListener('click', saveReviewRules);
 
       function toast(message, type) {
         if (window.QymShell && window.QymShell.toast) window.QymShell.toast(message, type);
@@ -1366,12 +1766,21 @@
         }
       });
 
+      // The settings are built hidden behind a skeleton, then take its place
+      // in one fade (QymShell.reveal), so their fields never fill in one by one.
+      const showSettings = () => {
+        const main = document.getElementById('settings-main');
+        if (window.QymShell?.reveal) window.QymShell.reveal(document.getElementById('settings-skeleton'), main);
+        else { document.getElementById('settings-skeleton')?.remove(); main.hidden = false; }
+      };
       load().then(() => {
         // ?tab=apikeys opens a tab directly (Admin > Projects: "Revoke keys first").
         const wanted = new URLSearchParams(window.location.search).get('tab');
         const tab = wanted ? document.getElementById('settings-tab-' + wanted) : null;
         if (tab && !tab.hidden && !tab.disabled) tab.click();
+        showSettings();
       }).catch(err => {
+        showSettings();
         document.querySelector('main').innerHTML = `<div class="settings-page"><div class="card"><div class="card-body">${escapeHtml(err.message)}</div></div></div>`;
       });
     })();

@@ -794,12 +794,29 @@ def test_migration_frozen_schema_and_existing_history_seed(database):
     )
     later_migration = importlib.util.module_from_spec(later)
     later.loader.exec_module(later_migration)
+    # 0069's overview tables reference 0048's summaries: replay them around it.
+    overview = importlib.util.spec_from_file_location(
+        "dashboard_overview_store",
+        path.parent / "0069_dashboard_overview_store.py",
+    )
+    overview_migration = importlib.util.module_from_spec(overview)
+    overview.loader.exec_module(overview_migration)
+    # 0071 adds the runs search text column to 0048's dimensions table.
+    search = importlib.util.spec_from_file_location(
+        "dashboard_runs_search_text",
+        path.parent / "0071_runs_search_text.py",
+    )
+    search_migration = importlib.util.module_from_spec(search)
+    search.loader.exec_module(search_migration)
     with database.begin() as connection:
         migration.op = Operations(MigrationContext.configure(connection))
+        overview_migration.op = later_migration.op = search_migration.op = migration.op
+        overview_migration.downgrade()
         migration.downgrade()
         migration.upgrade()
-        later_migration.op = migration.op
         later_migration.upgrade()
+        overview_migration.upgrade()
+        search_migration.upgrade()
     with Session(database) as db:
         assert db.get(Partition, "r").queue_state == "backfill"
         assert not db.get(Partition, "r").backfill_complete

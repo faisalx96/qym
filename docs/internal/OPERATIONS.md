@@ -10,6 +10,7 @@ shell on the database host, so every operation below is driven from **values.yam
 |---|---|---|
 | API pod(s) | Serve HTTP; apply Alembic migrations on start; run the dashboard summary backfill, maintenance jobs, and hourly retention | `QYM_ROLE=all` (default) |
 | Worker pod (optional) | Runs the background loops in a separate process | `QYM_ROLE=worker`, `QYM_SKIP_MIGRATIONS=1`, command `python -m qym_platform.worker`; set `QYM_ROLE=api` on the API |
+| Web processes (optional) | Several uvicorn processes serve HTTP in one API pod; with `QYM_ROLE=all` one extra process in the same pod runs the background loops | `QYM_WEB_WORKERS=N` (default `1`) |
 | Maintenance jobs | Reclaim, index builds, span copy, and purges. Progress is saved between steps. Final legacy verification and DROP share one transaction | `Admin → Maintenance`, `GET/POST /api/admin/maintenance/jobs` |
 | Maintenance mode | Ingest answers `503 Retry-After: 60`; SDKs buffer (16 MiB RAM + 256 MiB disk) and retry; UI stays readable | `QYM_MAINTENANCE_MODE=1` |
 
@@ -24,11 +25,15 @@ sure one process runs a given job.
 | Variable | Default | Meaning |
 |---|---|---|
 | `QYM_ROLE` | `all` | `api`, `worker`, or `all` |
+| `QYM_WEB_WORKERS` | `1` | HTTP processes per API pod. Above 1, see "Several web processes in one pod" |
 | `QYM_MAINTENANCE_MODE` | `false` | Reject ingest with 503 during a window |
 | `QYM_EVENT_LOG_MODE` | `full` | `structural` drops item/metric bodies from `run_events` (bodies live in `run_items`/attempts/scores). Enable after the new image is live |
 | `QYM_SPAN_MAX_BYTES` | `1048576` | Safety ceiling per span; larger spans keep scalar attributes only and are flagged |
 | `QYM_SPAN_RETENTION_DAYS` | `60` | Raw traces older than this are dropped by partition (0 = keep forever) |
 | `QYM_DELETED_RUN_GRACE_DAYS` | `30` | Soft-deleted runs are hard-deleted after this; time their project spends archived does not count |
+| `QYM_AUTH_LOCAL_SIGNUP` | `false` | Email/password self sign-up; off means admins add people (open only while no active admin exists) |
+| `QYM_AUTH_LOGIN_MAX_FAILURES_PER_EMAIL` / `..._PER_CLIENT` / `QYM_AUTH_LOGIN_FAILURE_WINDOW_SECONDS` | `5` / `30` / `300` | Failed password sign-ins before `429`. `..._PER_EMAIL` counts one email from one client address and refuses only that client, so the right password from another client still works; `..._PER_CLIENT` counts one address over all emails. "Account already exists" answers at sign-up count only against the client. An attempt counts as a failure from the moment it passes the check until its password proves right, so concurrent attempts cannot get past a limit. All limits are counted per API process (with `QYM_WEB_WORKERS=N` each process counts on its own, so a pod allows up to N times the limit). uvicorn trusts `X-Forwarded-For` only from `FORWARDED_ALLOW_IPS` (default `127.0.0.1`): set `FORWARDED_ALLOW_IPS` (or `--forwarded-allow-ips=...` in `QYM_UVICORN_ARGS`) to the ingress/pod CIDR, otherwise every client shares the ingress address and the per-client limit applies to all of them together. The API logs a warning at startup when password sign-in is on outside dev/test and neither is set |
+| `QYM_AUTH_LOGIN_EMAIL_CEILING` / `QYM_AUTH_LOGIN_EMAIL_CEILING_WINDOW_SECONDS` | `50` / `900` | Failed password sign-ins for one email from all clients together; past it, password sign-in for that email answers `429` from every client, even with the right password, until failures age out. Counted per API process |
 | `QYM_DB_POOL_SIZE` / `QYM_DB_MAX_OVERFLOW` | `10` / `10` | API connection pool |
 | `QYM_DB_WORKER_POOL_SIZE` / `QYM_DB_WORKER_MAX_OVERFLOW` | `3` / `2` | Worker pool |
 | `QYM_DB_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement guard on API connections |
@@ -54,12 +59,12 @@ sure one process runs a given job.
 
 ## Migrations and large tables
 
-The combined migration chain has one head, `0065`, following `0050` through
-`0051`–`0064`. Migrations run before API readiness. Large storage rewrites and index
+The combined migration chain has one head, `0071`, following `0050` through
+`0051`–`0070`. Migrations run before API readiness. Large storage rewrites and index
 builds are deferred to maintenance jobs. Migration `0057` also backfills existing
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
-Migrations `0058`–`0065` are quick DDL or small job/queue inserts.
+Migrations `0058`–`0071` are quick DDL or small job/queue inserts.
 
 | Migration | Work during startup | Deferred job (if table is large) |
 |---|---|---|
@@ -78,6 +83,12 @@ Migrations `0058`–`0065` are quick DDL or small job/queue inserts.
 | 0063 | `run_metric_specs.direction` nullable, `run_metric_specs.is_primary` | `reclassify_metric_errors` — **queued, runs by itself**: rebuilds runs whose verdict reasons were counted as scorer errors, and marks repeat passes whose task failed after a metric was scored |
 | 0064 | — | `project_item_failure_events` — **queued, runs by itself**: rebuilds repeat runs with a pass that failed only through an `item_failed` event |
 | 0065 | Nullable `projects.archived_at` and `runs.purge_clock_started_at`; sets `archived_at` on projects already archived (a handful of rows) | None: Trash purging pauses for archived projects from now on |
+| 0066 | Empty `background_jobs` table (shared job state for several web processes) | None |
+| 0067 | `projects.correction_approvers` (default `members`) and `projects.correction_require_different_reviewer` (default false), constant defaults on the small projects table; nullable `run_workflow_events.on_behalf_of_user_id` | None: every project keeps today's review behaviour until a manager changes it |
+| 0068 | Nullable `dataset_items.search_text`, `dataset_versions.change_counts`, `datasets.deleted_by_user_id` | `backfill_dataset_search_text` — **queued, runs by itself** (on every database, an empty one included, since the job also builds the index): fills search text in id windows (one statement per 500-item window), stores lineage counts of published versions, builds the small partial index `ix_dataset_items_unindexed_version` CONCURRENTLY, then runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` and builds `ix_dataset_items_search_trgm` CONCURRENTLY. Without the privilege to create the extension it logs that and skips the trigram index; search stays correct, only unindexed. Until the job reaches a row, search rebuilds that row's text on read; results match except a search for a JSON fragment spanning several keys of one object, whose key order PostgreSQL's JSONB text may differ. If the job ever failed (Admin → Maintenance shows it), start `backfill_dataset_search_text` again there: it resumes and is safe to repeat |
+| 0069 | Empty `dashboard_run_overview` (each run's overview inputs) and `dashboard_overview_snapshots` (the overview shared by every process and pod) tables | `backfill_dashboard_overview` — **queued, runs by itself** (on every database; on SQLite, or with no runs, it finishes at once): stores each run's overview inputs in run-key windows (one statement per 500-run window; about 0.4 s per 1,000 runs on the perf lab). Until it reaches a run, the overview reads that run's JSON, with the same numbers; the summary worker stores every run it publishes from the start. Resumable and safe to start again from Admin → Maintenance |
+| 0070 | — (one job insert) | `build_runs_search_index` — **queued, runs by itself**: runs `CREATE EXTENSION IF NOT EXISTS pg_trgm`, then builds `ix_dashboard_run_dimensions_search_trgm` (the Runs search box) CONCURRENTLY. Without the privilege to create the extension it logs "runs search index skipped" and finishes; the search stays correct, only unindexed. Safe to start again: it rebuilds the index |
+| 0071 | Nullable `dashboard_run_dimensions.search_text` (instant) and one job insert, skipped while a `build_runs_search_index` job still waits to start | `build_runs_search_index` (this release's job does all of it) — **queued, runs by itself**: builds the partial index `ix_dashboard_run_dimensions_unsearchable` CONCURRENTLY, fills `search_text` in run-key windows (one statement per 500-run window), then rebuilds `ix_dashboard_run_dimensions_search_trgm` over `search_text` and the run ID, CONCURRENTLY. It replaces `0070`'s index over descriptor expressions, which made every descriptor rewrite of a live run a non-HOT update. Until it reaches a row, the search reads that row's names from its descriptor, with the same results. Without `pg_trgm` it fills the column, logs "runs search index skipped" and finishes. Resumable and safe to start again |
 
 After `0060`/`0064` the dashboard worker republishes every ready summary once
 (a "republish wave"; about 45 s per 600 runs on the perf lab, in the
@@ -162,7 +173,7 @@ WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.r
 ### Deploy and run maintenance
 
 1. Deploy the new API with the default `QYM_ROLE=all`. Wait for migration head
-   `0065` and a healthy API. The API process then runs every queued job itself.
+   `0071` and a healthy API. The API process then runs every queued job itself.
    Do not restart the API while a job runs; the job resumes, but each restart
    costs time. Optional split layout: set `QYM_ROLE=api` on the API and start
    one worker with the same image and configuration, `QYM_ROLE=worker`, and
@@ -232,6 +243,47 @@ after destructive maintenance. Use a full `pg_dump` or a consistent storage
 snapshot, keep it off the database volume, and test the restore in isolation.
 Smaller exports of derived data can supplement that backup but do not replace it.
 
+## Several web processes in one pod (`QYM_WEB_WORKERS`)
+
+One Python process serves every request on one interpreter lock, so a few
+people opening large runs or comparisons at once make every other request wait
+(perf lab, 4 heavy readers: about 0.25 s for one alone, 0.7 s with 4, 2.3 s with
+10, while `/healthz` slowed to 0.8 s at p95). `QYM_WEB_WORKERS=N` (N above 1)
+makes the entrypoint start `python -m qym_platform.serve` instead of a single
+uvicorn:
+
+- N uvicorn worker processes serve HTTP (`QYM_ROLE=api` inside them);
+- with `QYM_ROLE=all` (the default), **one** more process in the same pod runs
+  the dashboard summary and maintenance loops, restarted if it exits; with
+  `QYM_ROLE=api` (separate worker Deployment) no loop process starts;
+- the launcher forwards SIGTERM to all of them and exits when uvicorn exits.
+
+Leaving `QYM_WEB_WORKERS` unset keeps the exact single-process command. Use
+`QYM_WEB_WORKERS` rather than `--workers` in `QYM_UVICORN_ARGS`: plain uvicorn
+workers would each run the loops (safe through database leases, but redundant
+CPU in every HTTP process).
+
+Sizing, per API pod:
+
+- **CPU/memory**: each process holds its own copy of the app (260-340 MB
+  resident each in the perf lab after a load test; the loop process about
+  75 MB). Start with N = 2-4 and at least N CPU cores' worth of limit.
+- **Database connections**: each web process has its own pool
+  (`QYM_DB_POOL_SIZE` + `QYM_DB_MAX_OVERFLOW`, 20 by default) and the loop
+  process uses the worker pool (5). With N = 4 lower the API pool, e.g.
+  `QYM_DB_POOL_SIZE=5`, `QYM_DB_MAX_OVERFLOW=5`, so pods x (N x 10 + 5) stays
+  under the server's `max_connections`.
+- **Background analyses, rule inference and product evals** run in the web
+  process that accepted them; their concurrency limits
+  (`QYM_ANALYSIS_JOB_MAX_WORKERS`, product eval workers) apply per process. Their
+  state is published to the `background_jobs` table (migration 0066), so a poll,
+  a cancel or a project archive handled by another process sees and stops the
+  same job. A job whose process stopped (restart, crash, rollout) shows as failed
+  within about 15 seconds instead of running forever; start it again.
+- **Sign-in failure limits** (`QYM_AUTH_LOGIN_MAX_FAILURES_*` and
+  `QYM_AUTH_LOGIN_EMAIL_CEILING`) are counted in each web process, so a pod with
+  N processes allows up to N times the limit.
+
 ## Optional separate worker Deployment (Helm/Kubernetes sketch)
 
 Not required. The default `QYM_ROLE=all` API Deployment runs the background loops.
@@ -239,7 +291,7 @@ Use this layout to keep long maintenance jobs away from API rollouts and probes,
 or to run several API replicas with one background process. Same image as the
 API; only the command and two variables differ. One replica. Inherit maintenance
 mode and retention settings from the same configuration as the API. Start this
-deployment only after the API has migrated to `0065`.
+deployment only after the API has migrated to `0071`.
 
 ```yaml
 apiVersion: apps/v1

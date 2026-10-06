@@ -68,7 +68,10 @@ def test_pass_approval_reaches_reviews_dataset_and_catalog(db_session, repeat):
     assert listed["facet_counts"]["dataset"] == {run.dataset: 1}
     review = listed["corrections"][0]
     assert review["pass_number"] == 2
-    assert review["output_snapshot"] == {"answer": "Pass 2"}
+    # List rows carry a preview; the full snapshot comes with the detail (C030).
+    assert review["output_preview"] == "answer: Pass 2"
+    detail = api.get_correction(review["id"], db=db_session, principal=principal)
+    assert detail["output_snapshot"] == {"answer": "Pass 2"}
     assert review["scores_snapshot"] == {"accuracy": 0.2}
     assert score(db_session, run, 1).meta == other_pass
     assert item.item_metadata == original
@@ -106,6 +109,8 @@ def test_reviews_actions_and_history_remain_on_selected_pass(db_session, repeat)
         == "pending"
     )
     api.approve_correction(first.id, {}, db=db_session, principal=principal)
+    # Reject decides only a pending correction: withdraw the approval first.
+    api.reset_correction(first.id, db=db_session, principal=principal)
     api.reject_correction(first.id, {}, db=db_session, principal=principal)
     assert (
         score(db_session, run, 2).meta[PASS_ANALYSIS_META_KEY]["root_cause_issues"][0][
@@ -216,6 +221,13 @@ def test_catalog_approval_is_idempotent_and_keeps_old_version(db_session, repeat
     act(db_session, run, item, principal, "approve", pass_number=2)
     first = db_session.query(ProjectAnalysisCategoryCatalogVersion).one()
     original = deepcopy(first.categories)
+    # Approve decides only a pending issue, so approving it again is refused.
+    with pytest.raises(HTTPException) as again:
+        act(db_session, run, item, principal, "approve", pass_number=2)
+    assert again.value.status_code == 409
+    db_session.rollback()
+    # Withdrawn and approved again, it publishes no new catalog version.
+    api.reset_correction(records(db_session, run, 2)[0].id, db=db_session, principal=principal)
     act(db_session, run, item, principal, "approve", pass_number=2)
     assert db_session.query(ProjectAnalysisCategoryCatalogVersion).count() == 1
     act(db_session, run, item, principal, "approve", index=1, pass_number=2)
@@ -395,6 +407,11 @@ def test_bulk_review_actions_preserve_all_changes_in_a_pass(db_session, repeat, 
     act(db_session, run, item, principal, "approve", pass_number=2)
     act(db_session, run, item, principal, "approve", index=1, pass_number=2)
     ids = [row.id for row in records(db_session, run, 2)]
+    if action == "reject":
+        # Reject decides only pending corrections: withdraw both approvals.
+        api.bulk_correction_action(
+            api.BulkActionRequest(ids=ids, action="reset"), db=db_session, principal=principal
+        )
     result = api.bulk_correction_action(
         api.BulkActionRequest(ids=ids, action=action),
         db=db_session,

@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>قيِّم • Dashboard</title>
   <link rel="icon" type="image/png" href="/static/qym_icon.png">
-  <link rel="stylesheet" href="/static/dashboard.css?v=p0-20260930">
-  <link rel="stylesheet" href="/static/shell.css?v=p0-20260930-3">
-  <script src="/static/qym_safe.js?v=p0-20260930"></script>
-  <script src="/static/auth.js?v=p0-20260930"></script>
-  <script src="/static/shell.js?v=p0-20260930-3"></script>
+  <link rel="stylesheet" href="/static/dashboard.css?v=p1-20261005-3">
+  <link rel="stylesheet" href="/static/shell.css?v=p1-20261005-6">
+  <script src="/static/qym_safe.js?v=p1-20261001"></script>
+  <script src="/static/auth.js?v=p1-20261005"></script>
+  <script src="/static/shell.js?v=p1-20261005-8"></script>
   <script src="/static/kpis.js?v=p0-20260930"></script>
   <style>
     .overview { }
@@ -40,11 +40,46 @@
     .review-item { display: flex; align-items: center; justify-content: space-between; padding: var(--space-sm) var(--space-lg); border-bottom: 1px solid var(--border-subtle); }
     .review-item:last-child { border-bottom: none; }
     .review-item:hover { background: var(--bg-hover); }
+    a.review-item { color: inherit; text-decoration: none; }
+    a.review-item:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
     .review-id { font-size: var(--font-sm); font-family: var(--font-mono); color: var(--text-muted); }
     .review-cause { font-size: var(--font-sm); margin-left: var(--space-sm); }
     .review-badge { font-size: var(--font-xs); font-weight: 600; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; background: rgba(245,158,11,0.12); color: var(--warning); font-family: var(--font-mono); }
     .score-bar { display: inline-block; height: 6px; border-radius: 3px; min-width: 20px; vertical-align: middle; margin-right: 6px; }
-    .trend-placeholder { background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: 8px; height: 200px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); font-size: var(--font-sm); margin-top: var(--space-lg); }
+    .card-subtitle { font-size: var(--font-sm); color: var(--text-muted); margin-top: 2px; }
+    /* Trend (C056): one task's primary metric per day, runs per day below. */
+    .ovt-card { margin-top: var(--space-lg); flex-shrink: 0; }
+    .ovt-body { overflow: visible; }
+    .ovt-controls { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; justify-content: flex-end; }
+    .ovt-controls .qym-select { max-width: 220px; }
+    .ovt-body { padding: var(--space-md) var(--space-lg) var(--space-lg); }
+    .ovt-summary { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 18px; margin-bottom: var(--space-md); }
+    .ovt-headline { display: flex; align-items: baseline; gap: var(--space-sm); }
+    .ovt-metric-name { font-size: var(--font-sm); font-weight: 600; color: var(--text-muted); }
+    .ovt-metric-value { font-size: var(--font-xl); font-weight: 700; font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-primary); }
+    .ovt-delta { font-size: var(--font-sm); font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-muted); }
+    .ovt-delta.improved { color: var(--success); }
+    .ovt-delta.regressed { color: var(--error); }
+    .ovt-delta-note { font-family: var(--font-sans); color: var(--text-muted); }
+    .ovt-meta { font-size: var(--font-sm); color: var(--text-muted); }
+    .ovt-meta .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+    .ovt-chart { position: relative; }
+    .ovt-chart svg { display: block; width: 100%; overflow: visible; }
+    .ovt-chart .ovt-axis { font-family: var(--font-mono); font-size: var(--font-sm); fill: var(--text-muted); }
+    .ovt-chart .ovt-axis-label { font-family: var(--font-sans); font-size: var(--font-sm); fill: var(--text-muted); }
+    .ovt-chart .ovt-grid { stroke: var(--border-subtle); stroke-width: 1; }
+    .ovt-chart .ovt-line { fill: none; stroke: var(--chart-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    .ovt-chart .ovt-dot { fill: var(--chart-1); stroke: var(--bg-surface); stroke-width: 2; }
+    .ovt-chart .ovt-bar { fill: var(--border-strong); }
+    .ovt-chart .ovt-hit { fill: transparent; cursor: default; }
+    .ovt-chart .ovt-hover-line { stroke: var(--border-strong); stroke-width: 1; }
+    .ovt-tooltip { position: absolute; z-index: 5; pointer-events: none; min-width: 160px; padding: var(--space-sm) var(--space-md); background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,0.35); font-size: var(--font-sm); color: var(--text-secondary); }
+    .ovt-tooltip[hidden] { display: none; }
+    .ovt-tooltip-date { color: var(--text-primary); font-weight: 600; margin-bottom: 4px; }
+    .ovt-tooltip-row { display: flex; justify-content: space-between; gap: var(--space-md); }
+    .ovt-tooltip-row .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-primary); }
+    .ovt-empty { padding: var(--space-xl) var(--space-lg); text-align: center; color: var(--text-muted); font-size: var(--font-sm); line-height: 1.5; }
+    .ovt-empty strong { display: block; color: var(--text-primary); font-size: var(--font-md); font-weight: 600; margin-bottom: 4px; }
     .empty-state { padding: var(--space-xl); text-align: center; color: var(--text-muted); font-size: var(--font-sm); }
     .live-card { margin-bottom: var(--space-lg); }
     .live-status { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: var(--font-sm); font-weight: 700; color: var(--accent-secondary); }
@@ -54,25 +89,25 @@
     .row-meta { color: var(--text-muted); font-size: var(--font-sm); margin-top: 2px; }
     .overview-status { font-size: var(--font-xs); padding: 2px 6px; }
   </style>
-  <link rel="stylesheet" href="/static/ui_components.css?v=p0-20260930">
-  <script defer src="/static/ui_components.js?v=p0-20260930-2"></script>
-  <script src="/static/metrics.js?v=p0-20260930-3"></script>
+  <link rel="stylesheet" href="/static/ui_components.css?v=p1-20261005-2">
+  <script defer src="/static/ui_components.js?v=p1-20261005"></script>
+  <script src="/static/metrics.js?v=p1-20261005"></script>
 </head>
 <body>
   <main class="overview">
     <div class="overview-header">
-      <h1 id="overview-title">Dashboard</h1>
+      <h1 id="overview-title" data-qym-project-name>Dashboard</h1>
       <p id="overview-subtitle">Project overview and recent activity.</p>
     </div>
 
     <!-- Names, definitions and values come from QymKpis.entries() (kpis.js),
          the same source as the Runs/Charts/Models topbar. -->
     <div class="overview-stats qym-stat-strip" id="overview-stats">
-      <div class="stat-card qym-stat-strip__item" data-kpi="runs"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Runs</span><button type="button" class="qym-help-marker" aria-label="Explain Runs" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">All runs in this project.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-runs">—</div><div class="stat-card-sub" id="ov-runs-sub"></div></div>
-      <div class="stat-card qym-stat-strip__item" data-kpi="execution_success"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Execution success</span><button type="button" class="qym-help-marker" aria-label="Explain Execution success" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">Share of item executions that ran without a task error. A repeat run counts each item once per pass.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-success">—</div><div class="stat-card-sub" id="ov-success-sub"></div></div>
-      <div class="stat-card qym-stat-strip__item" data-kpi="runs_with_errors"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Runs with errors</span><button type="button" class="qym-help-marker" aria-label="Explain Runs with errors" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">Runs with at least one task or metric error.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-errors">—</div><div class="stat-card-sub" id="ov-errors-sub"></div></div>
-      <div class="stat-card qym-stat-strip__item" data-kpi="models"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Models</span><button type="button" class="qym-help-marker" aria-label="Explain Models" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">Distinct model names.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-models">—</div><div class="stat-card-sub" id="ov-models-sub"></div></div>
-      <div class="stat-card qym-stat-strip__item" data-kpi="items"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Items</span><button type="button" class="qym-help-marker" aria-label="Explain Items" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">Items evaluated.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-items">—</div><div class="stat-card-sub" id="ov-items-sub"></div></div>
+      <div class="stat-card qym-stat-strip__item" data-kpi="runs"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Runs</span><button type="button" class="qym-help-marker" aria-label="Explain Runs" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">All runs in this project.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-runs" data-qym-arrive><span data-qym-skeleton="value" data-qym-skeleton-label="Loading…"></span></div><div class="stat-card-sub" id="ov-runs-sub">&nbsp;</div></div>
+      <div class="stat-card qym-stat-strip__item" data-kpi="execution_success"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Execution success</span><button type="button" class="qym-help-marker" aria-label="Explain Execution success" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">Share of item executions that ran without a task error. A repeat run counts each item once per pass.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-success" data-qym-arrive><span data-qym-skeleton="value" data-qym-skeleton-label="Loading…"></span></div><div class="stat-card-sub" id="ov-success-sub">&nbsp;</div></div>
+      <div class="stat-card qym-stat-strip__item" data-kpi="runs_with_errors"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Runs with errors</span><button type="button" class="qym-help-marker" aria-label="Explain Runs with errors" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">Runs with at least one task or metric error.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-errors" data-qym-arrive><span data-qym-skeleton="value" data-qym-skeleton-label="Loading…"></span></div><div class="stat-card-sub" id="ov-errors-sub">&nbsp;</div></div>
+      <div class="stat-card qym-stat-strip__item" data-kpi="models"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Models</span><button type="button" class="qym-help-marker" aria-label="Explain Models" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">Distinct model names.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-models" data-qym-arrive><span data-qym-skeleton="value" data-qym-skeleton-label="Loading…"></span></div><div class="stat-card-sub" id="ov-models-sub">&nbsp;</div></div>
+      <div class="stat-card qym-stat-strip__item" data-kpi="items"><div class="stat-card-label qym-stat-strip__label"><span class="ov-kpi-name">Items</span><button type="button" class="qym-help-marker" aria-label="Explain Items" aria-expanded="false">i<span class="qym-help-tooltip" role="tooltip">Items evaluated.</span></button></div><div class="stat-card-value qym-stat-strip__value" id="ov-items" data-qym-arrive><span data-qym-skeleton="value" data-qym-skeleton-label="Loading…"></span></div><div class="stat-card-sub" id="ov-items-sub">&nbsp;</div></div>
     </div>
 
     <div class="overview-card live-card">
@@ -83,8 +118,8 @@
       <div class="overview-card-body">
         <table class="recent-table">
           <thead><tr><th>Run</th><th>Owner</th><th>Status</th><th>Progress</th><th>Updated</th></tr></thead>
-          <tbody id="live-runs-body">
-            <tr><td colspan="5" class="empty-state">Loading...</td></tr>
+          <tbody id="live-runs-body" data-qym-arrive>
+            <tr><td colspan="5"><div data-qym-skeleton="lines" data-qym-skeleton-rows="1" data-qym-skeleton-height="16" data-qym-skeleton-label="Loading live runs…"></div></td></tr>
           </tbody>
         </table>
       </div>
@@ -99,8 +134,8 @@
         <div class="overview-card-body">
           <table class="recent-table" id="recent-runs-table">
             <thead><tr><th>Run</th><th>User</th><th>Status</th><th>Items</th><th>Date</th></tr></thead>
-            <tbody id="recent-runs-body">
-              <tr><td colspan="5" class="empty-state">Loading...</td></tr>
+            <tbody id="recent-runs-body" data-qym-arrive>
+              <tr><td colspan="5"><div data-qym-skeleton="lines" data-qym-skeleton-rows="5" data-qym-skeleton-height="246" data-qym-skeleton-label="Loading recent runs…"></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -113,8 +148,8 @@
         <div class="overview-card-body">
           <table class="recent-table" id="approved-runs-table">
             <thead><tr><th>Run</th><th>User</th><th>Items</th><th>Date</th></tr></thead>
-            <tbody id="approved-runs-body">
-              <tr><td colspan="4" class="empty-state">Loading...</td></tr>
+            <tbody id="approved-runs-body" data-qym-arrive>
+              <tr><td colspan="4"><div data-qym-skeleton="lines" data-qym-skeleton-rows="1" data-qym-skeleton-height="16" data-qym-skeleton-label="Loading approved runs…"></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -124,13 +159,31 @@
           <span class="overview-card-title">Pending Reviews</span>
           <a class="overview-card-link" id="view-all-reviews" href="#">View all →</a>
         </div>
-        <div class="overview-card-body" id="pending-reviews-body">
-          <div class="empty-state">Loading...</div>
+        <div class="overview-card-body" id="pending-reviews-body" data-qym-arrive>
+          <div style="padding: 0 var(--space-lg)" data-qym-skeleton="lines" data-qym-skeleton-rows="2" data-qym-skeleton-height="79" data-qym-skeleton-label="Loading pending reviews…"></div>
         </div>
       </div>
     </div>
 
-    <div class="trend-placeholder">7-day trend chart</div>
+    <div class="overview-card ovt-card" id="trend-card">
+      <div class="overview-card-header">
+        <div>
+          <div class="overview-card-title" id="trend-title">Trend</div>
+          <div class="card-subtitle" id="trend-subtitle">The primary metric of a task, per day, over finished runs.</div>
+        </div>
+        <div class="ovt-controls">
+          <select id="trend-task" class="qym-control qym-select" aria-label="Trend task and dataset" hidden></select>
+          <div class="qym-segmented" id="trend-range" role="group" aria-label="Trend range" data-qym-segmented-key="overview-trend-range">
+            <button type="button" class="qym-segmented__option active" data-days="7" aria-pressed="true">7 days</button>
+            <button type="button" class="qym-segmented__option" data-days="30" aria-pressed="false">30 days</button>
+            <button type="button" class="qym-segmented__option" data-days="90" aria-pressed="false">90 days</button>
+          </div>
+        </div>
+      </div>
+      <div class="ovt-body" id="trend-body" aria-busy="true" data-qym-arrive>
+        <div data-qym-skeleton="chart" data-qym-skeleton-label="Loading trend…"></div>
+      </div>
+    </div>
   </main>
 
   <script>
@@ -157,7 +210,7 @@
       }
 
       function renderModelLabel(modelName, hasReasoning) {
-        return '<span class="model-label"><span class="model-label-text">' + esc(modelName || '—') + '</span>' + (hasReasoning ? '<span class="model-reasoning-badge" title="' + esc(MODEL_REASONING_BADGE_TITLE) + '" aria-label="' + esc(MODEL_REASONING_BADGE_TITLE) + '">' + MODEL_REASONING_BADGE_ICON + '</span>' : '') + '</span>';
+        return '<span class="model-label"><span class="model-label-text">' + esc(modelName || '—') + '</span>' + (hasReasoning ? '<span class="model-reasoning-badge" role="img" title="' + esc(MODEL_REASONING_BADGE_TITLE) + '" aria-label="' + esc(MODEL_REASONING_BADGE_TITLE) + '">' + MODEL_REASONING_BADGE_ICON + '</span>' : '') + '</span>';
       }
 
       function projectUrl(slug, sub) {
@@ -234,12 +287,288 @@
         }).join('');
       }
 
+      // ── Trend (C056) ──
+      // One task's primary metric per day (each finished run counts once,
+      // with its run mean) and its runs per day, from POST /api/dashboard/trend.
+      const trendView = { days: 7, task: null, dataset: null, data: null, slug: '', generation: 0, chosen: false };
+      let trendResizeObserver = null;
+
+      // The range, and a task and dataset the reader picked, live in the URL
+      // (?range=30d&task=…&dataset=…; C045), so a reload, Back and a shared
+      // link open the same trend. Written with replaceState: nothing redraws.
+      const TREND_URL_RANGES = { '7d': 7, '30d': 30, '90d': 90 };
+      function applyTrendUrlState() {
+        const params = new URLSearchParams(window.location.search);
+        const days = TREND_URL_RANGES[params.get('range')];
+        if (days) trendView.days = days;
+        const task = params.get('task');
+        if (task) {
+          trendView.task = task;
+          trendView.dataset = params.get('dataset') || null;
+          trendView.chosen = true;
+        }
+        document.querySelectorAll('#trend-range [data-days]').forEach(button => {
+          const active = Number(button.dataset.days) === trendView.days;
+          button.classList.toggle('active', active);
+          button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+      }
+      function syncTrendUrl() {
+        if (!window.QymShell || typeof window.QymShell.replaceUrlQuery !== 'function') return;
+        window.QymShell.replaceUrlQuery({
+          range: trendView.days === 7 ? null : trendView.days + 'd',
+          task: trendView.chosen ? trendView.task : null,
+          dataset: trendView.chosen ? trendView.dataset : null,
+        });
+      }
+      applyTrendUrlState();
+
+      function trendIsRate(values) {
+        return values.every(value => value >= 0 && value <= 1);
+      }
+
+      function trendFormat(value, rate) {
+        if (value == null || !Number.isFinite(value)) return '—';
+        if (rate) return (value * 100).toFixed(1) + '%';
+        const abs = Math.abs(value);
+        return abs >= 100 ? value.toFixed(0) : abs >= 10 ? value.toFixed(1) : value.toFixed(3);
+      }
+
+      function trendFormatDelta(delta, rate) {
+        if (delta == null || !Number.isFinite(delta)) return '';
+        const sign = delta > 0 ? '+' : delta < 0 ? '−' : '';
+        const abs = Math.abs(delta);
+        return sign + (rate ? (abs * 100).toFixed(1) + ' pts' : trendFormat(abs, false));
+      }
+
+      function trendDayLabel(iso, withYear) {
+        const date = new Date(iso + 'T00:00:00');
+        return date.toLocaleDateString(undefined, withYear
+          ? { month: 'short', day: 'numeric', year: 'numeric' }
+          : { month: 'short', day: 'numeric' });
+      }
+
+      function trendTimeAgo(iso) {
+        if (!iso) return '';
+        const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+        if (days <= 0) return 'today';
+        return days === 1 ? '1 day ago' : days + ' days ago';
+      }
+
+      function renderTrendEmpty(title, body) {
+        const host = document.getElementById('trend-body');
+        host.innerHTML = '<div class="ovt-empty"><strong>' + esc(title) + '</strong>' + esc(body || '') + '</div>';
+      }
+
+      function renderTrendChart(data) {
+        const host = document.getElementById('trend-chart');
+        if (!host) return;
+        const points = data.points || [];
+        const values = points.map(point => point.metric_mean).filter(value => value != null && Number.isFinite(value));
+        const rate = values.length ? trendIsRate(values) : true;
+        const width = Math.max(280, host.clientWidth || 600);
+        const pad = { left: 52, right: 12, top: 10 };
+        const lineHeight = 150;
+        const barTop = pad.top + lineHeight + 26;
+        const barHeight = 34;
+        const height = barTop + barHeight + 22;
+        const plotWidth = width - pad.left - pad.right;
+        // One column per day; marks sit in the middle of their column.
+        const step = plotWidth / Math.max(1, points.length);
+        const xAt = index => pad.left + (index + 0.5) * step;
+        // The scale fits the values (padded), so a few points of change stay
+        // visible; a rate snaps to whole 5% steps inside 0-100%.
+        let low = values.length ? Math.min(...values) : 0;
+        let high = values.length ? Math.max(...values) : 1;
+        const spread = Math.max(high - low, rate ? 0.1 : Math.abs(high) * 0.1 || 1);
+        low -= spread * 0.25; high += spread * 0.25;
+        if (rate) {
+          low = Math.max(0, Math.floor(low * 20) / 20);
+          high = Math.min(1, Math.ceil(high * 20) / 20);
+        }
+        if (!values.length) { low = 0; high = 1; }
+        const yAt = value => pad.top + lineHeight - ((value - low) / (high - low)) * lineHeight;
+        const maxRuns = Math.max(1, ...points.map(point => point.runs || 0));
+        const ticks = [low, (low + high) / 2, high];
+        let svg = '<svg viewBox="0 0 ' + width + ' ' + height + '" height="' + height + '" role="img" aria-label="' + esc((data.metric || 'Metric') + ' per day') + '">';
+        ticks.forEach(tick => {
+          const y = yAt(tick);
+          svg += '<line class="ovt-grid" x1="' + pad.left + '" x2="' + (width - pad.right) + '" y1="' + y + '" y2="' + y + '"></line>';
+          svg += '<text class="ovt-axis" x="' + (pad.left - 8) + '" y="' + (y + 4) + '" text-anchor="end">' + esc(rate ? Math.round(tick * 100) + '%' : trendFormat(tick, false)) + '</text>';
+        });
+        const withData = points.map((point, index) => ({ point, index })).filter(entry => entry.point.metric_mean != null);
+        if (withData.length > 1) {
+          svg += '<path class="ovt-line" d="' + withData.map((entry, i) => (i ? 'L' : 'M') + xAt(entry.index).toFixed(1) + ' ' + yAt(entry.point.metric_mean).toFixed(1)).join(' ') + '"></path>';
+        }
+        withData.forEach(entry => {
+          svg += '<circle class="ovt-dot" cx="' + xAt(entry.index).toFixed(1) + '" cy="' + yAt(entry.point.metric_mean).toFixed(1) + '" r="4"></circle>';
+        });
+        // Runs per day: its own small chart under the line (one scale each).
+        svg += '<text class="ovt-axis-label" x="' + (pad.left - 8) + '" y="' + (barTop + barHeight - 2) + '" text-anchor="end">Runs</text>';
+        const barWidth = Math.max(2, Math.min(18, step * 0.6));
+        points.forEach((point, index) => {
+          if (!point.runs) return;
+          const h = Math.max(2, (point.runs / maxRuns) * barHeight);
+          svg += '<rect class="ovt-bar qym-arrive-bar" x="' + (xAt(index) - barWidth / 2).toFixed(1) + '" y="' + (barTop + barHeight - h).toFixed(1) + '" width="' + barWidth.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="2"></rect>';
+        });
+        const labelEvery = Math.max(1, Math.ceil(points.length / Math.max(2, Math.floor(plotWidth / 70))));
+        points.forEach((point, index) => {
+          if (index % labelEvery && index !== points.length - 1) return;
+          if (index !== points.length - 1 && points.length - 1 - index < labelEvery) return;
+          svg += '<text class="ovt-axis" x="' + xAt(index).toFixed(1) + '" y="' + (height - 4) + '" text-anchor="middle">' + esc(trendDayLabel(point.date)) + '</text>';
+        });
+        svg += '<line class="ovt-hover-line" id="trend-hover-line" x1="0" x2="0" y1="' + pad.top + '" y2="' + (barTop + barHeight) + '" visibility="hidden"></line>';
+        points.forEach((point, index) => {
+          const half = step / 2;
+          svg += '<rect class="ovt-hit" data-index="' + index + '" x="' + (xAt(index) - half).toFixed(1) + '" y="0" width="' + (half * 2).toFixed(1) + '" height="' + (barTop + barHeight) + '"></rect>';
+        });
+        svg += '</svg><div class="ovt-tooltip" id="trend-tooltip" role="status" hidden></div>';
+        host.innerHTML = svg;
+        const tooltip = document.getElementById('trend-tooltip');
+        const hoverLine = document.getElementById('trend-hover-line');
+        host.querySelectorAll('.ovt-hit').forEach(hit => {
+          hit.addEventListener('mouseenter', () => {
+            const index = Number(hit.dataset.index);
+            const point = points[index];
+            const x = xAt(index);
+            hoverLine.setAttribute('x1', x); hoverLine.setAttribute('x2', x);
+            hoverLine.setAttribute('visibility', 'visible');
+            tooltip.innerHTML = '<div class="ovt-tooltip-date">' + esc(trendDayLabel(point.date, true)) + '</div>'
+              + (point.runs
+                ? '<div class="ovt-tooltip-row"><span>' + esc(data.metric || 'Metric') + '</span><span class="mono">' + esc(trendFormat(point.metric_mean, rate)) + '</span></div>'
+                  + '<div class="ovt-tooltip-row"><span>Runs</span><span class="mono">' + esc(String(point.runs)) + '</span></div>'
+                  + '<div class="ovt-tooltip-row"><span>Execution success</span><span class="mono">' + esc(trendFormat(point.execution_success, true)) + '</span></div>'
+                : '<div>No finished runs</div>');
+            tooltip.hidden = false;
+            const left = Math.min(Math.max(0, x + 12), width - tooltip.offsetWidth - 4);
+            tooltip.style.left = (x + 12 + tooltip.offsetWidth > width ? x - tooltip.offsetWidth - 12 : left) + 'px';
+            tooltip.style.top = pad.top + 'px';
+          });
+          hit.addEventListener('mouseleave', () => {
+            tooltip.hidden = true;
+            hoverLine.setAttribute('visibility', 'hidden');
+          });
+        });
+      }
+
+      function renderTrend(data) {
+        const host = document.getElementById('trend-body');
+        host.setAttribute('aria-busy', 'false');
+        const select = document.getElementById('trend-task');
+        const tasks = data.tasks || [];
+        select.hidden = tasks.length < 2;
+        // One option per task and dataset: a trend never mixes datasets.
+        select.innerHTML = tasks.map((entry, index) => '<option value="' + index + '"' + (entry.task === data.task && entry.dataset === data.dataset ? ' selected' : '') + '>' + esc(entry.task) + (entry.dataset ? ' · ' + esc(entry.dataset) : '') + ' (' + esc(String(entry.runs)) + ')</option>').join('');
+        const range = data.days + ' days';
+        document.getElementById('trend-subtitle').textContent = data.task
+          ? (data.metric
+            ? data.metric + ' of ' + data.task + (data.dataset ? ' on ' + data.dataset : '') + ', per day over finished runs (the run means).'
+            : data.task + (data.dataset ? ' on ' + data.dataset : '') + ': runs per day.')
+          : 'The primary metric of a task, per day, over finished runs.';
+        if (!data.task) {
+          renderTrendEmpty('No runs yet', 'The trend appears once a run finishes.');
+          return;
+        }
+        const summary = data.summary || {};
+        if (!summary.runs) {
+          const latest = data.latest_run_at ? ' The latest finished run is from ' + trendTimeAgo(data.latest_run_at) + '.' : '';
+          renderTrendEmpty('No finished runs in the last ' + range, 'Choose a longer range to see earlier runs.' + latest);
+          return;
+        }
+        const values = (data.points || []).map(point => point.metric_mean).filter(value => value != null);
+        const allValues = values.concat(summary.previous_metric_mean != null ? [summary.previous_metric_mean] : []);
+        const rate = allValues.length ? trendIsRate(allValues) : true;
+        const verdict = summary.delta == null ? null
+          : (window.QymMetrics ? window.QymMetrics.metricDeltaVerdict(summary.delta, 0, data.direction) : 'changed');
+        const deltaClass = verdict === 'improved' || verdict === 'regressed' ? verdict : '';
+        const deltaText = summary.delta == null
+          ? (summary.previous_runs ? '' : '<span class="ovt-delta"><span class="ovt-delta-note">No runs in the ' + esc(range) + ' before</span></span>')
+          : '<span class="ovt-delta ' + deltaClass + '" title="' + esc('Mean of this period minus the mean of the ' + range + ' before (' + summary.previous_runs + ' runs). Not tested for noise; compare two runs for a noise band.' + (data.direction ? '' : ' The metric declares no direction, so the change is not colored.')) + '">'
+            + esc(trendFormatDelta(summary.delta, rate)) + ' <span class="ovt-delta-note">vs previous ' + esc(range) + '</span></span>';
+        host.innerHTML = '<div class="ovt-summary">'
+          + (data.metric
+            ? '<div class="ovt-headline"><span class="ovt-metric-name">' + esc(data.metric) + '</span><span class="ovt-metric-value">' + esc(trendFormat(summary.metric_mean, rate)) + '</span>' + deltaText + '</div>'
+            : '<div class="ovt-headline"><span class="ovt-metric-name">No metrics recorded for this task</span></div>')
+          + '<div class="ovt-meta"><span class="mono">' + esc(String(summary.runs)) + '</span> finished run' + (summary.runs === 1 ? '' : 's')
+          + ' · execution success <span class="mono">' + esc(trendFormat(summary.execution_success, true)) + '</span></div>'
+          + '</div><div class="ovt-chart" id="trend-chart"></div>';
+        renderTrendChart(data);
+        if (!trendResizeObserver && window.ResizeObserver) {
+          let lastWidth = 0;
+          trendResizeObserver = new ResizeObserver(entries => {
+            const width = Math.round(entries[0].contentRect.width);
+            if (!width || width === lastWidth) return;
+            lastWidth = width;
+            if (trendView.data && document.getElementById('trend-chart')) renderTrendChart(trendView.data);
+          });
+          trendResizeObserver.observe(document.getElementById('trend-card'));
+        }
+      }
+
+      async function loadTrend(slug) {
+        if (!overviewActive) return;
+        trendView.slug = slug;
+        const generation = ++trendView.generation;
+        document.getElementById('trend-body').setAttribute('aria-busy', 'true');
+        try {
+          const response = await fetch(apiUrl('api/dashboard/trend'), {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              project_slug: slug, days: trendView.days, task: trendView.task, dataset: trendView.dataset,
+              tz_offset_minutes: -new Date().getTimezoneOffset(),
+            }),
+          });
+          handleAuthResponse(response);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const data = await response.json();
+          if (!overviewActive || generation !== trendView.generation) return;
+          trendView.data = data;
+          trendView.task = data.task || null;
+          trendView.dataset = data.task ? data.dataset : null;
+          // A picked task that has no runs in the range falls back: the URL
+          // names what is shown.
+          syncTrendUrl();
+          renderTrend(data);
+        } catch (e) {
+          if (!overviewActive || generation !== trendView.generation) return;
+          console.error('[Overview] Failed to load the trend:', e);
+          document.getElementById('trend-body').setAttribute('aria-busy', 'false');
+          document.getElementById('trend-body').innerHTML = '<div class="ovt-empty"><strong>Could not load the trend</strong><button type="button" class="qym-inline-action qym-inline-action--neutral" id="trend-retry">Retry</button></div>';
+          document.getElementById('trend-retry').addEventListener('click', () => loadTrend(trendView.slug));
+        }
+      }
+
+      document.getElementById('trend-range').addEventListener('click', event => {
+        const option = event.target.closest('[data-days]');
+        if (!option) return;
+        trendView.days = Number(option.dataset.days);
+        document.querySelectorAll('#trend-range [data-days]').forEach(button => {
+          const active = button === option;
+          button.classList.toggle('active', active);
+          button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+        syncTrendUrl();
+        loadTrend(trendView.slug);
+      });
+      document.getElementById('trend-task').addEventListener('change', event => {
+        const entry = (trendView.data?.tasks || [])[Number(event.target.value)];
+        trendView.task = entry ? entry.task : null;
+        trendView.dataset = entry ? entry.dataset : null;
+        trendView.chosen = !!entry;
+        syncTrendUrl();
+        loadTrend(trendView.slug);
+      });
+
       let overviewActive = true;
+      // document listeners end when the shell unmounts this page.
+      const overviewSignal = window.QymShell && typeof window.QymShell.pageSignal === 'function' ? window.QymShell.pageSignal() : undefined;
+      const overviewListen = (options = {}) => (overviewSignal ? { ...options, signal: overviewSignal } : options);
       let summaryRefreshTimer = null;
       let liveRefreshTimer = null;
       let liveRequestGeneration = 0;
       function stopOverview() {
         overviewActive = false;
+        if (trendResizeObserver) trendResizeObserver.disconnect();
         clearTimeout(summaryRefreshTimer);
         clearInterval(liveRefreshTimer);
       }
@@ -343,7 +672,7 @@
         if (!overviewActive) return;
         // Wait for shell
         if (window.QymShell && !window.__QYM_USER__) {
-          await new Promise(r => document.addEventListener('qym:shell-ready', r, { once: true }));
+          await new Promise(r => document.addEventListener('qym:shell-ready', r, overviewListen({ once: true })));
         }
         if (!overviewActive) return;
 
@@ -365,12 +694,19 @@
         }
 
         const kpisUpdating = loadKpis(slug);
-        await loadLiveRuns(slug);
-        if (!overviewActive) return;
+        if (!trendView.data) loadTrend(slug);
+        // Every section loads at once and arrives as its answer lands; one
+        // after another, the last waited on all the others.
+        await Promise.all([loadLiveRuns(slug), loadRunLists(slug, kpisUpdating), loadPendingReviews(slug)]);
+      }
 
-        // Fetch recent runs
+      async function loadRunLists(slug, kpisUpdating) {
+        if (!overviewActive) return;
         try {
-          const data = await summaryRuns(slug, { statuses: ['DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED', 'COMPLETED', 'FAILED', 'STOPPED'] }, 5);
+          const [data, approvedData] = await Promise.all([
+            summaryRuns(slug, { statuses: ['DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED', 'COMPLETED', 'FAILED', 'STOPPED'] }, 5),
+            summaryRuns(slug, { statuses: ['APPROVED'] }, 5),
+          ]);
           if (!overviewActive) return;
           const runs = flattenRunsPayload(data);
 
@@ -380,8 +716,6 @@
           tbody.innerHTML = renderRunRows(runs.slice(0, 5), slug, { includeStatus: true, emptyText: data.freshness?.updating ? 'Updating runs…' : 'No runs yet' });
 
           // Approved runs table
-          const approvedData = await summaryRuns(slug, { statuses: ['APPROVED'] }, 5);
-          if (!overviewActive) return;
           const approvedRuns = flattenRunsPayload(approvedData);
           const approvedTotal = approvedData.total_runs != null ? approvedData.total_runs : approvedRuns.length;
           const approvedBody = document.getElementById('approved-runs-body');
@@ -402,8 +736,10 @@
           document.getElementById('recent-runs-body').innerHTML = '<tr><td colspan="5" class="empty-state">Failed to load</td></tr>';
           document.getElementById('approved-runs-body').innerHTML = '<tr><td colspan="4" class="empty-state">Failed to load</td></tr>';
         }
+      }
 
-        // Fetch pending reviews count
+      async function loadPendingReviews(slug) {
+        if (!overviewActive) return;
         try {
           const reviewLimit = 12;
           const corrUrl = slug ? `api/corrections?limit=${reviewLimit}&status=pending&project_slug=${encodeURIComponent(slug)}` : `api/corrections?limit=${reviewLimit}&status=pending`;
@@ -419,11 +755,14 @@
             if (!items.length) {
               body.innerHTML = '<div class="empty-state">No pending reviews</div>';
             } else {
+              // Each pending review opens itself in the review queue.
+              const reviewsHref = id => (slug ? projectUrl(slug, 'reviews') : '/reviews') + '?status=pending&id=' + encodeURIComponent(String(id || ''));
               body.innerHTML = items.map(c => {
-                return '<div class="review-item">'
+                // Each pending item opens on Reviews with that correction in focus.
+                return '<a class="review-item" href="' + esc(reviewsHref(c.id)) + '" title="Open review #' + esc(String(c.id || '')) + '">'
                   + '<div><span class="review-id">#' + esc(String(c.id || '')) + '</span><span class="review-cause">' + esc(c.ai_root_cause || c.human_root_cause || '—') + '</span></div>'
                   + '<span class="review-badge qym-badge qym-badge--warning">Pending</span>'
-                  + '</div>';
+                  + '</a>';
               }).join('')
               + (total > reviewLimit ? '<div class="review-item" style="justify-content:center;color:var(--text-muted);font-size:var(--font-base);">+ ' + (total - reviewLimit) + ' more pending</div>' : '');
             }
@@ -438,12 +777,13 @@
         document.querySelector('main').innerHTML = `<div class="empty-state">${esc(err.message || 'Failed to load')}</div>`;
       });
       liveRefreshTimer = setInterval(() => {
-        if (!overviewActive) return;
+        // A hidden tab does not poll.
+        if (!overviewActive || document.hidden) return;
         const ctx = window.QymShell ? window.QymShell.getPageContext() : {};
         const project = window.QymShell ? window.QymShell.getProject() : null;
         loadLiveRuns(ctx.projectSlug || (project && project.slug) || '');
       }, 10000);
-      document.addEventListener('qym:before-navigate', stopOverview, { once: true });
+      document.addEventListener('qym:before-navigate', stopOverview, overviewListen({ once: true }));
     })();
   </script>
 </body>

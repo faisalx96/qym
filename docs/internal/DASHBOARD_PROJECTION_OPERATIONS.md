@@ -37,6 +37,62 @@ published descriptor and numerical values remain visible until its pending
 outbox and all backfill source kinds have completed. New terminal historical
 runs are published only when their complete numerical snapshot is ready.
 
+The catalog revision hashes every run's publication counter, presence, list
+status and hidden flag; on PostgreSQL the hash is computed in the database, and a request reads it once for its page,
+overview and KPIs. Each API process reuses page, overview, catalog and KPI
+snapshots keyed by that revision (and by filters, sort and hidden-task policy);
+an idle entry expires after five minutes and any published change misses it.
+Deleting, restoring, submitting, approving, rejecting and withdrawing a review
+decision update the run's dimension in the same transaction (and bump the
+publication counter of an already published summary; a pending summary stays
+at revision 0 so the run keeps showing as pending), so the next list request
+shows the change without waiting for the worker, which later republishes the
+same values.
+
+On PostgreSQL the Runs, Charts and Models overview is aggregated in the
+database, in one statement, with the same numbers as the Python build (sums
+add in the same order). It reads each run's overview inputs from
+`dashboard_run_overview`, typed values the summary worker stores when it
+publishes the run (the `backfill_dashboard_overview` job, queued by migration
+`0069`, stores them for older runs). A stored row counts only while its revision
+equals the summary's publication counter; any other run is read from its JSON,
+so a missing or stale row is slower, never wrong. The computed overview is
+stored in `dashboard_overview_snapshots`, so every process and pod reuses it.
+The project-wide part is one entry per project, catalog revision, day and
+hidden-task policy. Each filter, search and sort adds an entry that holds only
+its filtered part, keyed by those and by the filters, sort and collation; a
+read joins it with the project-wide part. Every key also carries the stored
+payload's shape number (`SHARED_SHAPE`), so a release that changes the payload
+never reads an older release's entries. A time range that no later request
+repeats (Last 7 and Last 30 days: now minus N days, to the millisecond) gets
+no entry of its own: it reuses the project-wide part and builds its filtered
+part each time. A request reads the store on its own snapshot connection and
+writes after releasing it. Entries of a replaced revision go two minutes after
+it changes, any entry after a day, and a project keeps at most 200 filter
+entries (its project-wide parts are not counted); purging a run or deleting a
+project removes the project's entries. SQLite builds the overview in Python,
+as before.
+
+Filters accept `q`, a case-insensitive search (at most 200 characters) over the
+run's displayed name (`external_run_id`), its run name, and the start of its
+run ID. The two names are stored, lowercased, in
+`dashboard_run_dimensions.search_text`, which the summary worker writes with
+the descriptor; it changes only when a name does, so a live run's descriptor
+rewrites stay HOT updates. On PostgreSQL the trigram index
+`ix_dashboard_run_dimensions_search_trgm` over `search_text` and the run ID
+serves the search; the `build_runs_search_index` job (queued by migrations
+`0070` and `0071`) fills `search_text` for older rows and builds the index
+CONCURRENTLY. Until the job reaches a row, the search reads that row's names
+from its descriptor, with the same results; the partial index
+`ix_dashboard_run_dimensions_unsearchable` (rows without `search_text`, empty
+once the job is done) keeps that branch indexed. Without `pg_trgm` the job logs
+that the index was skipped and finishes, and the search scans the project's
+runs.
+
+A page orders narrow keys first and then reads only the page's rows; the
+nearest distinct means shown beside each metric value come from one query over
+the page's (task, model, dataset) groups.
+
 While an authorized project's historical backfill is unfinished, freshness also
 reports `backfilling: true`. This includes the gap between the final source scan
 and first summary publication. Ordinary updates and newly created runs do not

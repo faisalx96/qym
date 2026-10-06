@@ -623,7 +623,7 @@ def _review(engine, run_id, *actions):
         principal = _principal(db)
         for action in actions:
             if action == "submit":
-                runs_api.submit_run(run_id, db=db, principal=principal)
+                runs_api.submit_run(run_id, None, db=db, principal=principal)
             elif action == "trash":
                 runs_api.delete_run({"file_path": run_id}, db=db, principal=principal)
             elif action == "restore":
@@ -729,6 +729,9 @@ def test_review_transitions_keep_a_failed_runs_counts(database, emitter):
             # The published summary rebuilt from the source while in review.
             assert _counts(database, run_id, repair=True) == before, (name, actions)
         # A score edit in review returns the row as the run page shows it.
+        # Scores are locked while submitted or approved (C041); a rejected
+        # run is in review and open to edits.
+        assert _review(database, run_id, "unapprove", "submit", "reject") == "REJECTED"
         with Session(database) as db:
             edited = runs_api.update_metric(
                 {

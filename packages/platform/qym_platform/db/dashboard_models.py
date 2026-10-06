@@ -12,8 +12,10 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     Float,
+    ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -177,6 +179,11 @@ class DashboardRunDimension(Base):
     hidden_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     # Labels and small display descriptors only. No item/score/span payloads.
     descriptor: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # What the Runs search box matches (api.dashboard.run_search_text), kept
+    # apart from the descriptor so the trigram index over it leaves a live
+    # run's descriptor rewrites HOT. NULL until the build_runs_search_index
+    # job (migration 0071) fills a row written before the column existed.
+    search_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
 class RollupNumbers:
@@ -267,3 +274,77 @@ class DashboardDeadLetter(Base):
     source_version: Mapped[int] = mapped_column(VERSION)
     error: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+# PostgreSQL arrays; the SQLite test schema (which builds the overview in
+# Python and never reads these) stores JSON lists.
+def _array(item):
+    from sqlalchemy.dialects.postgresql import ARRAY
+
+    return JSON().with_variant(ARRAY(item), "postgresql")
+
+
+class DashboardRunOverview(Base):
+    """Each run's overview inputs, read once from its descriptor and summary.
+
+    C037: the Runs, Charts and Models overview aggregates these typed values
+    in SQL instead of parsing every run's JSON on every catalog revision. A
+    row is valid only while ``revision`` equals the summary's
+    ``projection_revision``; readers parse the JSON again otherwise, so a
+    missing or stale row is slower, never wrong. The summary worker rewrites
+    a run's row when it publishes the run (``dashboard_overview``). A change
+    to what a column holds needs a migration that empties the table and
+    queues ``backfill_dashboard_overview`` again.
+    """
+
+    __tablename__ = "dashboard_run_overview"
+    run_key: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("dashboard_run_summaries.run_key", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    revision: Mapped[int] = mapped_column(VERSION)
+    combo_task: Mapped[str] = mapped_column(Text)
+    combo_dataset: Mapped[str] = mapped_column(Text)
+    dataset_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    git_commit: Mapped[str] = mapped_column(Text)
+    owner_email: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    owner_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    success: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    item_count: Mapped[Any] = mapped_column(Numeric)
+    latency: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    median: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    trace: Mapped[bool] = mapped_column(Boolean)
+    kpi_items: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    kpi_executions: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    kpi_successes: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    kpi_errored: Mapped[int] = mapped_column(Integer)
+    mean_names: Mapped[Any] = mapped_column(_array(Text), nullable=True)
+    mean_values: Mapped[Any] = mapped_column(_array(Float), nullable=True)
+    metric_names: Mapped[Any] = mapped_column(_array(Text), nullable=True)
+    spec_names: Mapped[Any] = mapped_column(_array(Text), nullable=True)
+    spec_types: Mapped[Any] = mapped_column(_array(Text), nullable=True)
+    spec_objects: Mapped[Any] = mapped_column(_array(Boolean), nullable=True)
+    spec_json: Mapped[Any] = mapped_column(_array(Text), nullable=True)
+
+
+class DashboardOverviewSnapshot(Base):
+    """A computed overview part, shared by every process and pod (C037).
+
+    A project-wide part ("p:" keys: project, catalog revision, hidden-task
+    policy and day) or one filter's part ("f:" keys: those and the filters,
+    sort and collation), so an entry is never reused across a published
+    change. Writers prune stale revisions and old entries; losing a row only
+    costs a recompute.
+    """
+
+    __tablename__ = "dashboard_overview_snapshots"
+    cache_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_key: Mapped[str] = mapped_column(String(36))
+    catalog_revision: Mapped[str] = mapped_column(String(160))
+    payload: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        Index("ix_dashboard_overview_snapshots_project", "project_key", "created_at"),
+        Index("ix_dashboard_overview_snapshots_created", "created_at"),
+    )

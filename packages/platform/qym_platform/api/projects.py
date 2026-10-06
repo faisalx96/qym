@@ -57,6 +57,7 @@ from qym_platform.secrets import (
 )
 from qym_platform.security import api_key_prefix, hash_api_key
 from qym_platform.settings import PlatformSettings
+from qym_platform.services.correction_rules import CORRECTION_APPROVERS, correction_rules
 from qym_platform.services.analysis_prompts import (
     DEFAULT_ANALYSIS_PROMPTS,
     serialize_analysis_prompt_settings,
@@ -65,7 +66,7 @@ from qym_platform.services.retention import resume_purge_clocks
 from qym_platform.services.root_cause_categories import DEFAULT_ROOT_CAUSE_TAXONOMY
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 router = APIRouter()
 
@@ -282,6 +283,8 @@ def _project_payload(
         ),
         "created_at": to_api_timestamp(project.created_at),
         "updated_at": to_api_timestamp(project.updated_at),
+        # Who may decide diagnosis corrections (C074).
+        **correction_rules(project),
     }
 
 
@@ -345,6 +348,7 @@ def _serialize_member(member: ProjectMembership, user: User) -> Dict[str, Any]:
         "email": user.email,
         "display_name": user.display_name,
         "role": member.role.value,
+        "is_active": bool(user.is_active),
         "created_at": to_api_timestamp(member.created_at),
         "updated_at": to_api_timestamp(member.updated_at),
     }
@@ -879,6 +883,50 @@ def list_project_members(
     return {"members": [_serialize_member(member, user) for member, user in members]}
 
 
+def _like_contains(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+@router.get("/v1/projects/{project_id}/member-candidates")
+def list_member_candidates(
+    project_id: str,
+    q: str = Query(default="", max_length=200),
+    limit: int = Query(default=20, ge=1, le=50),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Active users who are not members yet, for the Add member picker.
+
+    Only people who can add members may search the user directory; plain
+    members never receive other users' emails from here.
+    """
+    _require_project_access(db, principal, project_id)
+    if not can_manage_project_members(db, principal, project_id):
+        raise HTTPException(status_code=403, detail="Manager only")
+    member_ids = select(ProjectMembership.user_id).where(
+        ProjectMembership.project_id == project_id
+    )
+    query = db.query(User).filter(User.is_active.is_(True), User.id.notin_(member_ids))
+    term = q.strip()
+    if term:
+        pattern = _like_contains(term.lower())
+        query = query.filter(
+            or_(
+                func.lower(User.email).like(pattern, escape="\\"),
+                func.lower(func.coalesce(User.display_name, "")).like(pattern, escape="\\"),
+            )
+        )
+    users = query.order_by(User.email).limit(limit + 1).all()
+    return {
+        "users": [
+            {"id": user.id, "email": user.email, "display_name": user.display_name}
+            for user in users[:limit]
+        ],
+        "has_more": len(users) > limit,
+    }
+
+
 @router.post("/v1/projects/{project_id}/members")
 def add_project_member(
     project_id: str,
@@ -918,6 +966,56 @@ def add_project_member(
     return _serialize_member(member, user)
 
 
+class ReviewRulesRequest(BaseModel):
+    correction_approvers: Optional[str] = None
+    correction_require_different_reviewer: Optional[bool] = None
+
+
+@router.patch("/v1/projects/{project_id}/review-rules")
+def update_project_review_rules(
+    project_id: str,
+    req: ReviewRulesRequest,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """Set who may approve, reject or reset corrections, and whether the
+    author of a correction may decide it (project managers and admins)."""
+    _require_project_access(db, principal, project_id)
+    if not can_manage_project_members(db, principal, project_id):
+        raise HTTPException(status_code=403, detail="Manager only")
+    require_project_writable(db, project_id)
+    project = _get_project(db, project_id)
+    if (
+        req.correction_approvers is not None
+        and req.correction_approvers not in CORRECTION_APPROVERS
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="correction_approvers must be one of: " + ", ".join(CORRECTION_APPROVERS),
+        )
+    before = correction_rules(project)
+    if req.correction_approvers is not None:
+        project.correction_approvers = req.correction_approvers
+    if req.correction_require_different_reviewer is not None:
+        project.correction_require_different_reviewer = bool(
+            req.correction_require_different_reviewer
+        )
+    after = correction_rules(project)
+    if after != before:
+        db.add(
+            AuditLog(
+                actor_user_id=principal.user.id,
+                action="project.review_rules_updated",
+                entity_type="project",
+                entity_id=project.id,
+                before=before,
+                after=after,
+            )
+        )
+    db.commit()
+    return {"project_id": project.id, **after}
+
+
 @router.patch("/v1/projects/{project_id}/members/{user_id}")
 def update_project_member(
     project_id: str,
@@ -949,17 +1047,8 @@ def update_project_member(
     return _serialize_member(member, user)
 
 
-@router.delete("/v1/projects/{project_id}/members/{user_id}")
-def remove_project_member(
-    project_id: str,
-    user_id: str,
-    db: Session = Depends(get_db),
-    principal: Principal = Depends(require_ui_principal),
-) -> Dict[str, Any]:
-    _require_project_access(db, principal, project_id)
-    if not can_manage_project_members(db, principal, project_id):
-        raise HTTPException(status_code=403, detail="Manager only")
-    member = (
+def _membership(db: Session, project_id: str, user_id: str) -> Optional[ProjectMembership]:
+    return (
         db.query(ProjectMembership)
         .filter(
             ProjectMembership.project_id == project_id,
@@ -967,9 +1056,105 @@ def remove_project_member(
         )
         .first()
     )
+
+
+@router.get("/v1/projects/{project_id}/members/{user_id}/removal-preview")
+def member_removal_preview(
+    project_id: str,
+    user_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    """What removing a member leaves behind: the runs they own (C072).
+
+    The member-removal dialog shows the counts and offers to transfer the
+    runs (``DELETE .../members/{user_id}?transfer_runs_to=``).
+    """
+    _require_project_access(db, principal, project_id)
+    if not can_manage_project_members(db, principal, project_id):
+        raise HTTPException(status_code=403, detail="Manager only")
+    if _membership(db, project_id, user_id) is None:
+        raise HTTPException(status_code=404, detail="Membership not found")
+    owned = (
+        db.query(Run.deleted_at.is_(None), func.count(Run.id))
+        .filter(Run.project_id == project_id, Run.owner_user_id == user_id)
+        .group_by(Run.deleted_at.is_(None))
+        .all()
+    )
+    counts = {bool(live): int(count) for live, count in owned}
+    return {
+        "project_id": project_id,
+        "user_id": user_id,
+        "owned_runs": counts.get(True, 0),
+        "owned_deleted_runs": counts.get(False, 0),
+    }
+
+
+def _transfer_member_runs(
+    db: Session, principal: Principal, project_id: str, user_id: str, new_owner_id: str
+) -> int:
+    """Give every run ``user_id`` owns in the project (Trash included) to
+    another active member; one ``run.owner_transferred`` audit row per run."""
+    require_project_writable(db, project_id)
+    if new_owner_id == user_id:
+        raise HTTPException(status_code=400, detail="Choose another member to take the runs")
+    new_owner = db.get(User, new_owner_id)
+    if new_owner is None or not new_owner.is_active or _membership(db, project_id, new_owner_id) is None:
+        raise HTTPException(
+            status_code=400, detail="The new owner must be an active member of the project"
+        )
+    # Lock in id order, like bulk submit, so concurrent run actions queue.
+    runs = (
+        db.query(Run)
+        .options(load_only(Run.id, Run.project_id, Run.owner_user_id, Run.deleted_at))
+        .filter(Run.project_id == project_id, Run.owner_user_id == user_id)
+        .order_by(Run.id)
+        .with_for_update()
+        .all()
+    )
+    actor_id = principal.user.id if principal.auth_type != "none" else None
+    for run in runs:
+        # An ORM change, so the runs list and dashboards pick up the owner.
+        run.owner_user_id = new_owner_id
+    db.add_all(
+        [
+            AuditLog(
+                actor_user_id=actor_id,
+                action="run.owner_transferred",
+                entity_type="run",
+                entity_id=run.id,
+                before={"owner_user_id": user_id},
+                after={"owner_user_id": new_owner_id, "reason": "member_removed"},
+            )
+            for run in runs
+        ]
+    )
+    return len(runs)
+
+
+@router.delete("/v1/projects/{project_id}/members/{user_id}")
+def remove_project_member(
+    project_id: str,
+    user_id: str,
+    transfer_runs_to: Optional[str] = Query(
+        default=None,
+        description="Active member who takes over every run the removed member owns in the project",
+    ),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    _require_project_access(db, principal, project_id)
+    if not can_manage_project_members(db, principal, project_id):
+        raise HTTPException(status_code=403, detail="Manager only")
+    member = _membership(db, project_id, user_id)
     if not member:
         raise HTTPException(status_code=404, detail="Membership not found")
     _ensure_not_last_manager(db, project_id, user_id, None)
+    # Removal stays possible in an archived project; moving runs does not.
+    target = (transfer_runs_to or "").strip()
+    transferred = (
+        _transfer_member_runs(db, principal, project_id, user_id, target) if target else 0
+    )
     # The person's keys for this project stop working with their membership.
     now = utc_now_naive()
     keys = (
@@ -983,6 +1168,9 @@ def remove_project_member(
     )
     for key in keys:
         key.revoked_at = now
+    after: Dict[str, Any] = {"revoked_api_key_ids": [key.id for key in keys]}
+    if target:
+        after.update(runs_transferred_to=target, transferred_runs=transferred)
     db.add(
         AuditLog(
             actor_user_id=principal.user.id,
@@ -990,7 +1178,7 @@ def remove_project_member(
             entity_type="project_membership",
             entity_id=f"{project_id}:{user_id}",
             before={"role": member.role.value},
-            after={"revoked_api_key_ids": [key.id for key in keys]},
+            after=after,
         )
     )
     db.delete(member)
@@ -1000,6 +1188,8 @@ def remove_project_member(
         "project_id": project_id,
         "user_id": user_id,
         "revoked_api_keys": len(keys),
+        "transferred_runs": transferred,
+        "runs_transferred_to": target or None,
     }
 
 
@@ -1140,8 +1330,16 @@ def update_project(
     project = _get_project_for_update(db, project_id)
     previous_slug = project.slug
     changes: Dict[str, Any] = {}
-    if req.name is not None and req.name.strip() != project.name:
-        changes["name"] = req.name.strip()
+    if req.name is not None:
+        next_name = req.name.strip()
+        if not next_name:
+            raise HTTPException(status_code=400, detail="Project name is required")
+        if len(next_name) > 200:
+            raise HTTPException(
+                status_code=400, detail="Project name must be 200 characters or fewer"
+            )
+        if next_name != project.name:
+            changes["name"] = next_name
     if req.slug is not None:
         next_slug = _slugify(req.slug)
         conflict = (
@@ -1292,6 +1490,10 @@ def _deletion_blocker(counts: Dict[str, int], *, archived: bool = False) -> Opti
 
 def _delete_project_rows(db: Session, project_id: str) -> None:
     """Remove everything a run-less project owns, children before parents."""
+    from qym_platform.services.dashboard_overview import forget_shared
+
+    # Overviews stored for its (since purged) runs (C037).
+    forget_shared(db, project_id)
     db.query(ApiKey).filter(ApiKey.project_id == project_id).delete(
         synchronize_session=False
     )
@@ -1420,8 +1622,9 @@ def _stop_project_jobs(
         _project_analysis_scope_key(slug) for slug in (project.slug, previous_slug) if slug
     }
     for manager in (analysis_job_manager, rule_inference_job_manager):
+        # db: jobs of the other web worker processes are stopped too.
         run_ids = sorted(
-            scope for scope in manager.active_scope_ids() if scope not in project_scopes
+            scope for scope in manager.active_scope_ids(db) if scope not in project_scopes
         )
         scopes = set(project_scopes)
         if run_ids:
@@ -1429,7 +1632,7 @@ def _stop_project_jobs(
                 row[0]
                 for row in db.query(Run.id).filter(Run.id.in_(run_ids), Run.project_id == project.id)
             )
-        manager.cancel_scopes(scopes)
+        manager.cancel_scopes(scopes, db=db)
 
 
 @router.post("/v1/admin/projects/{project_id}/unarchive")

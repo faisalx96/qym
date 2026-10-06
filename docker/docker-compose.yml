@@ -29,6 +29,9 @@ services:
       # Default `all`: this container serves HTTP and runs the background
       # loops. Set QYM_ROLE=api and start the `worker` profile to split them.
       QYM_ROLE: ${QYM_ROLE:-all}
+      # >1 serves HTTP from N processes; with QYM_ROLE=all one more process
+      # runs the background loops (qym_platform/serve.py). Default: 1 process.
+      QYM_WEB_WORKERS: ${QYM_WEB_WORKERS:-1}
       QYM_MAINTENANCE_MODE: ${QYM_MAINTENANCE_MODE:-false}
       QYM_EVENT_LOG_MODE: ${QYM_EVENT_LOG_MODE:-full}
       QYM_SPAN_RETENTION_DAYS: ${QYM_SPAN_RETENTION_DAYS:-60}
@@ -37,6 +40,16 @@ services:
       QYM_AUTH_MODE: ${QYM_AUTH_MODE}
       QYM_AUTH_SESSION_SECRET: ${QYM_AUTH_SESSION_SECRET}
       QYM_AUTH_LOCAL_ENABLED: ${QYM_AUTH_LOCAL_ENABLED}
+      QYM_AUTH_LOCAL_SIGNUP: ${QYM_AUTH_LOCAL_SIGNUP:-false}
+      QYM_AUTH_LOGIN_MAX_FAILURES_PER_EMAIL: ${QYM_AUTH_LOGIN_MAX_FAILURES_PER_EMAIL:-5}
+      QYM_AUTH_LOGIN_MAX_FAILURES_PER_CLIENT: ${QYM_AUTH_LOGIN_MAX_FAILURES_PER_CLIENT:-30}
+      QYM_AUTH_LOGIN_FAILURE_WINDOW_SECONDS: ${QYM_AUTH_LOGIN_FAILURE_WINDOW_SECONDS:-300}
+      QYM_AUTH_LOGIN_EMAIL_CEILING: ${QYM_AUTH_LOGIN_EMAIL_CEILING:-50}
+      QYM_AUTH_LOGIN_EMAIL_CEILING_WINDOW_SECONDS: ${QYM_AUTH_LOGIN_EMAIL_CEILING_WINDOW_SECONDS:-900}
+      # The ingress addresses whose X-Forwarded-For uvicorn trusts. Empty means
+      # unset (entrypoint.sh drops it), so the startup warning still shows.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-}
+      QYM_UVICORN_ARGS: ${QYM_UVICORN_ARGS:-}
       QYM_AUTH_GOOGLE_CLIENT_ID: ${QYM_AUTH_GOOGLE_CLIENT_ID}
       QYM_AUTH_GOOGLE_CLIENT_SECRET: ${QYM_AUTH_GOOGLE_CLIENT_SECRET}
       QYM_AUTH_GITHUB_CLIENT_ID: ${QYM_AUTH_GITHUB_CLIENT_ID}

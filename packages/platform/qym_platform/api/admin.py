@@ -25,11 +25,22 @@ def _require_admin(principal: Principal) -> None:
         raise HTTPException(status_code=403, detail="Admin only")
 
 
-def _worker_state(request: Request) -> Dict[str, Any]:
+def _worker_state(request: Request, settings: PlatformSettings) -> Dict[str, Any]:
+    if settings.role == "api":
+        # This HTTP process runs no loops: a worker process does (the
+        # QYM_WEB_WORKERS launcher's loop process or a worker Deployment).
+        # Its liveness is not visible from here, so do not report "stopped".
+        return {
+            "loops": "separate",
+            "summary_worker_alive": None,
+            "maintenance_worker_alive": None,
+            "maintenance_current_job": None,
+        }
     state = request.app.state
     summary = getattr(state, "dashboard_summary_worker", None)
     maint = getattr(state, "maintenance_worker", None)
     return {
+        "loops": "local",
         "summary_worker_alive": bool(summary and summary.is_alive()),
         "maintenance_worker_alive": bool(maint and maint.is_alive()),
         "maintenance_current_job": getattr(maint, "current_job_id", None),
@@ -63,7 +74,7 @@ def maintenance_overview(
             "span_retention_days": settings.span_retention_days,
             "deleted_run_grace_days": settings.deleted_run_grace_days,
         },
-        "workers": _worker_state(request),
+        "workers": _worker_state(request, settings),
         "pool": pool.status() if hasattr(pool, "status") else None,
         "db_stats": _STATS_CACHE["value"],
         "db_stats_age_seconds": round(now - _STATS_CACHE["at"], 1),

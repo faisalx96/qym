@@ -578,7 +578,7 @@ def _move_numeric_records(
     """Move visibility/time buckets with bounded numeric memory and SQL batches."""
     query = (
         select(Record)
-        .where(Record.run_key == run_id, Record.present.is_(True))
+        .where(Record.run_key == run_id, Record.present)
         .order_by(Record.id)
     )
     cursor = 0
@@ -663,7 +663,7 @@ def _execution_error_counts(db, run_id, samples):
         select(Record.record_key, pass_number.label("pass_number"))
         .where(
             Record.run_key == run_id,
-            Record.present.is_(True),
+            Record.present,
             Record.error > 0,
             error_scope,
         )
@@ -696,7 +696,7 @@ def _execution_error_breakdown(db, run_id, samples):
         select(Record.record_key, number.label("pass_number"))
         .where(
             Record.run_key == run_id,
-            Record.present.is_(True),
+            Record.present,
             Record.error > 0,
             task_scope,
         )
@@ -724,7 +724,7 @@ def _execution_error_breakdown(db, run_id, samples):
         )
         .where(
             Record.run_key == run_id,
-            Record.present.is_(True),
+            Record.present,
             Record.error > 0,
             metric_scope,
             tasks.c.record_key.is_(None),
@@ -766,7 +766,7 @@ def _repeat_execution_counts(db, run_id):
         .where(
             Record.run_key == run_id,
             Record.record_kind == "attempt",
-            Record.present.is_(True),
+            Record.present,
         )
         .group_by(Record.record_key, number)
         .subquery()
@@ -790,7 +790,7 @@ def _repeat_retry_counts(db, run_id):
         .where(
             Record.run_key == run_id,
             Record.record_kind == "attempt",
-            Record.present.is_(True),
+            Record.present,
         )
         .group_by(Record.record_key, Record.pass_number)
         .subquery()
@@ -848,7 +848,7 @@ def repair_extrema(db, project_key, bucket_key, granularity="hour"):
                     Record.project_key == project_key,
                     Record.bucket_key >= bucket_key,
                     Record.bucket_key < bucket_key + 3600,
-                    Record.present.is_(True),
+                    Record.present,
                     Record.record_kind == kind,
                     column.isnot(None),
                 )
@@ -873,7 +873,36 @@ def extrema_payload(bucket):
     }
 
 
+def dashboard_approval_info(db, approval):
+    """The review decision a runs-list row shows (None without an approval)."""
+    from qym_platform.api.runs import _iso
+    from qym_platform.db.models import User
+
+    if not approval:
+        return None
+    decider = (
+        db.get(User, approval.decision_by_user_id)
+        if approval.decision_by_user_id
+        else None
+    )
+    return {
+        "decision": getattr(approval.decision, "value", approval.decision),
+        "decision_at": _iso(approval.decision_at) if approval.decision_at else None,
+        "decision_by": (
+            {
+                "id": decider.id,
+                "email": decider.email,
+                "display_name": decider.display_name or decider.email.split("@")[0],
+            }
+            if decider
+            else None
+        ),
+        "comment": approval.comment or "",
+    }
+
+
 def _sync_dimension(db, run_id, version):
+    from qym_platform.api.dashboard import run_search_text
     from qym_platform.api.runs import (
         _dataset_version_fields,
         _dataset_version_info_map,
@@ -920,28 +949,9 @@ def _sync_dimension(db, run_id, version):
         if owner
         else None
     )
-    approval = db.scalar(select(Approval).where(Approval.run_id == run.id))
-    approval_info = None
-    if approval:
-        decider = (
-            db.get(User, approval.decision_by_user_id)
-            if approval.decision_by_user_id
-            else None
-        )
-        approval_info = {
-            "decision": getattr(approval.decision, "value", approval.decision),
-            "decision_at": _iso(approval.decision_at) if approval.decision_at else None,
-            "decision_by": (
-                {
-                    "id": decider.id,
-                    "email": decider.email,
-                    "display_name": decider.display_name or decider.email.split("@")[0],
-                }
-                if decider
-                else None
-            ),
-            "comment": approval.comment or "",
-        }
+    approval_info = dashboard_approval_info(
+        db, db.scalar(select(Approval).where(Approval.run_id == run.id))
+    )
     dataset = _dataset_version_fields(run, _dataset_version_info_map(db, [run]))
     raw_model = _strip_model_provider(run.model or "")
     trace = metadata.get("trace_stats")
@@ -1009,6 +1019,11 @@ def _sync_dimension(db, run_id, version):
         "ingest_incomplete": runs_list_ingest_flag(metadata),
         **dataset,
     }
+    # Unchanged unless a name changes, so the search index over it keeps
+    # this row's descriptor-only updates HOT.
+    dimension.search_text = run_search_text(
+        dimension.descriptor["external_run_id"], dimension.descriptor["run_name"]
+    )
     if created:
         db.add(dimension)
     db.flush()
@@ -1049,6 +1064,14 @@ def ensure_pending_summary(db, run_id, version):
     if db.get(Summary, run_id) is None:
         db.add(Summary(run_key=run_id, project_key=run.project_id, data={}, projection_revision=0))
         db.flush()
+        _store_overview_inputs(db, run_id)
+
+
+def _store_overview_inputs(db, run_id):
+    """C037: keep the run's overview inputs next to what was just written."""
+    from qym_platform.services.dashboard_overview import refresh_run_overview
+
+    refresh_run_overview(db, run_id)
 
 
 # Bump when published summary fields change; older summaries are refreshed
@@ -1082,7 +1105,7 @@ def _task_failed_passes(run_id):
         )
         .where(
             Record.run_key == run_id,
-            Record.present.is_(True),
+            Record.present,
             Record.error > 0,
             Record.record_kind == "attempt",
             or_(
@@ -1124,7 +1147,7 @@ def _repeat_pass_errors(db, run_id, left_out=()):
         item_alias.run_key == run_id,
         item_alias.record_key == Record.record_key,
         item_alias.record_kind == "item",
-        item_alias.present.is_(True),
+        item_alias.present,
     )
     affected = set(
         db.execute(
@@ -1133,7 +1156,7 @@ def _repeat_pass_errors(db, run_id, left_out=()):
             .where(
                 Record.run_key == run_id,
                 Record.record_kind == "pass_score",
-                Record.present.is_(True),
+                Record.present,
                 Record.error > 0,
             )
             .distinct()
@@ -1159,7 +1182,7 @@ def _repeat_pass_errors(db, run_id, left_out=()):
                 .where(
                     Record.run_key == run_id,
                     Record.record_kind == "pass_score",
-                    Record.present.is_(True),
+                    Record.present,
                     Record.metric_key.in_(sorted(left_out)),
                 )
                 .distinct()
@@ -1183,7 +1206,7 @@ def _repeat_pass_errors(db, run_id, left_out=()):
                 Record.terminal,
             ).where(
                 Record.run_key == run_id,
-                Record.present.is_(True),
+                Record.present,
                 Record.record_kind.in_(("score", "pass_score")),
                 Record.record_key.in_(keys[start : start + 400]),
             )
@@ -1214,6 +1237,50 @@ def _repeat_pass_errors(db, run_id, left_out=()):
     ]
 
 
+def _metric_totals_statement(run_id, run, *, exclude_not_received=False, outcome=None):
+    """Per-metric score sums of one run's counted items.
+
+    Bounded by the run, never by project history: the item lookup is a
+    semi-join on the same ``run_key`` (ix_dashboard_record_latency), so a live
+    refresh costs O(run) however many records other runs hold. ``present`` is
+    tested as a plain column, since ``present IS true`` does not match the
+    partial indexes' ``WHERE present AND ...`` predicate. ``outcome`` is how
+    the run ran, needed with ``exclude_not_received``.
+    """
+    item = aliased(Record)
+    errored = Record.error > 0
+    counted_item = [
+        item.run_key == Record.run_key,
+        item.record_key == Record.record_key,
+        item.record_kind == "item",
+        item.present,
+    ]
+    if int(run.samples or 1) <= 1:
+        # A classic item's task error counts through task_errors; a repeat
+        # item's value already holds its failed passes (its item record only
+        # carries the pass that arrived last).
+        counted_item.append(item.error == 0)
+    if exclude_not_received:
+        counted_item.append(~_item_not_received(item, run, outcome))
+    return (
+        select(
+            Record.metric_key,
+            func.sum(Record.score),
+            func.count(Record.score),
+            func.sum(case((errored, Record.score))),
+            func.count(case((and_(errored, Record.score.isnot(None)), 1))),
+            func.count(case((and_(errored, Record.score.is_(None)), 1))),
+        )
+        .where(
+            Record.run_key == run_id,
+            Record.record_kind == "score",
+            Record.present,
+            select(item.id).where(*counted_item).exists(),
+        )
+        .group_by(Record.metric_key)
+    )
+
+
 def refresh_run_summary(db, run_id, version):
     """Build display numbers from numeric state and current small dimensions."""
     dimension, run = _sync_dimension(db, run_id, version)
@@ -1228,7 +1295,7 @@ def refresh_run_summary(db, run_id, version):
     db.flush()
     db.refresh(summary)
     items = select(Record).where(
-        Record.run_key == run_id, Record.record_kind == "item", Record.present.is_(True)
+        Record.run_key == run_id, Record.record_kind == "item", Record.present
     )
     latency = items.with_only_columns(Record.latency_ms).where(
         Record.latency_ms.isnot(None)
@@ -1237,7 +1304,6 @@ def refresh_run_summary(db, run_id, version):
         summary.latency_sum / summary.latency_count if summary.latency_count else 0.0
     )
     median_latency = _median(db, latency, Record.latency_ms)
-    item_alias = aliased(Record)
     errored = Record.error > 0
     repeat = int(run.samples or 1) > 1
     # Items never received are counted apart: neither successes nor executions,
@@ -1250,7 +1316,7 @@ def refresh_run_summary(db, run_id, version):
             db.scalar(
                 select(func.count()).where(
                     Record.run_key == run_id,
-                    Record.present.is_(True),
+                    Record.present,
                     not_received_rule,
                 )
             )
@@ -1259,35 +1325,10 @@ def refresh_run_summary(db, run_id, version):
         if not_received_rule is not None
         else 0
     )
-    counted_items = [
-        item_alias.run_key == run_id,
-        item_alias.record_key == Record.record_key,
-        item_alias.record_kind == "item",
-        item_alias.present.is_(True),
-    ]
-    if not repeat:
-        # A classic item's task error counts through task_errors; a repeat
-        # item's value already holds its failed passes (its item record only
-        # carries the pass that arrived last).
-        counted_items.append(item_alias.error == 0)
-    if not_received:
-        counted_items.append(~_item_not_received(item_alias, run, outcome))
     metric_rows = db.execute(
-        select(
-            Record.metric_key,
-            func.sum(Record.score),
-            func.count(Record.score),
-            func.sum(case((errored, Record.score))),
-            func.count(case((and_(errored, Record.score.isnot(None)), 1))),
-            func.count(case((and_(errored, Record.score.is_(None)), 1))),
+        _metric_totals_statement(
+            run_id, run, exclude_not_received=bool(not_received), outcome=outcome
         )
-        .join(item_alias, and_(*counted_items))
-        .where(
-            Record.run_key == run_id,
-            Record.record_kind == "score",
-            Record.present.is_(True),
-        )
-        .group_by(Record.metric_key)
     ).all()
     metric_specs = (dimension.descriptor or {}).get("metric_specs") or {}
     directions = {
@@ -1349,7 +1390,7 @@ def refresh_run_summary(db, run_id, version):
         attempts = select(Record).where(
             Record.run_key == run_id,
             Record.record_kind == "attempt",
-            Record.present.is_(True),
+            Record.present,
             Record.is_last.is_(True),
         )
         attempt_latencies = attempts.with_only_columns(Record.latency_ms).where(
@@ -1407,7 +1448,7 @@ def refresh_run_summary(db, run_id, version):
                     Record.run_key == run_id,
                     Record.record_kind == "pass_score",
                     Record.metric_key == primary,
-                    Record.present.is_(True),
+                    Record.present,
                     or_(Record.score.isnot(None), errored),
                 )
                 .group_by(Record.pass_number)
@@ -1430,7 +1471,7 @@ def refresh_run_summary(db, run_id, version):
                     Record.run_key == run_id,
                     Record.record_kind == "pass_score",
                     Record.metric_key == primary,
-                    Record.present.is_(True),
+                    Record.present,
                     Record.error == 0,
                     Record.success == 0,
                 )
@@ -1538,7 +1579,7 @@ def refresh_run_summary(db, run_id, version):
     scores = select(Record.score).where(
         Record.run_key == run_id,
         Record.record_kind == "score",
-        Record.present.is_(True),
+        Record.present,
         Record.score.isnot(None),
     )
     summary.score_min = db.scalar(scores.order_by(Record.score).limit(1))
@@ -1551,6 +1592,7 @@ def refresh_run_summary(db, run_id, version):
         key=lambda entry: 0 if entry[3] == "hour" else 1,
     ):
         repair_extrema(db, run.project_id, bucket, granularity)
+    _store_overview_inputs(db, run_id)
 
 
 def process_partition(db: Session, run_id: str, *, max_events=500, owner=None):
@@ -2010,20 +2052,78 @@ def dashboard_freshness(db, project_ids):
     )
     # Include membership, including revision-zero pending runs. A sum alone
     # misses their insertion and can collide after a purge and publication.
-    # Read only identity/revision columns, streamed in deterministic order.
-    revision = 0
-    catalog_hash = hashlib.sha256()
-    for run_key, published_revision, present in db.execute(
-        select(Summary.run_key, Summary.projection_revision, Dimension.present)
-        .outerjoin(Dimension, Dimension.run_key == Summary.run_key)
-        .where(Summary.project_key.in_(projects))
-        .order_by(Summary.run_key)
-        .execution_options(yield_per=1000)
-    ):
-        revision += int(published_revision or 0)
-        catalog_hash.update(
-            json.dumps([run_key, published_revision, present], separators=(",", ":")).encode()
+    # Review actions and deletes change the list row's status and visibility
+    # at once; a published run also moves its revision, but a pending
+    # (revision-zero) run must stay pending, so both columns are hashed too.
+    # Read only identity/revision columns, in deterministic order.
+    def catalog(*columns):
+        return (
+            select(*columns)
+            .select_from(Summary)
+            .outerjoin(Dimension, Dimension.run_key == Summary.run_key)
+            .where(Summary.project_key.in_(projects))
         )
+
+    if db.get_bind().dialect.name == "postgresql":
+        from sqlalchemy import String, cast, literal_column
+        from sqlalchemy.dialects.postgresql import aggregate_order_by
+
+        # Every list request reads this; hash inside the database instead of
+        # streaming one row per run of the project into Python.
+        member = func.concat_ws(
+            ":",
+            Summary.run_key,
+            func.coalesce(Summary.projection_revision, 0),
+            func.coalesce(cast(Dimension.present, String), "null"),
+            func.coalesce(Dimension.status, ""),
+            case((Dimension.hidden_at.is_(None), "shown"), else_="hidden"),
+        )
+        revision, digest = db.execute(
+            catalog(
+                func.coalesce(func.sum(Summary.projection_revision), 0),
+                # sha256, not md5: md5() fails on FIPS-mode servers.
+                func.encode(
+                    func.sha256(
+                        func.convert_to(
+                            func.coalesce(
+                                func.string_agg(
+                                    member,
+                                    aggregate_order_by(
+                                        literal_column("','"), Summary.run_key
+                                    ),
+                                ),
+                                "",
+                            ),
+                            "UTF8",
+                        )
+                    ),
+                    "hex",
+                ),
+            )
+        ).one()
+        catalog_revision = f"pg:{digest}"
+    else:
+        revision = 0
+        catalog_hash = hashlib.sha256()
+        for run_key, published_revision, present, status, hidden_at in db.execute(
+            catalog(
+                Summary.run_key,
+                Summary.projection_revision,
+                Dimension.present,
+                Dimension.status,
+                Dimension.hidden_at,
+            )
+            .order_by(Summary.run_key)
+            .execution_options(yield_per=1000)
+        ):
+            revision += int(published_revision or 0)
+            catalog_hash.update(
+                json.dumps(
+                    [run_key, published_revision, present, status, hidden_at is not None],
+                    separators=(",", ":"),
+                ).encode()
+            )
+        catalog_revision = catalog_hash.hexdigest()
     pending, oldest, backfilling, unpublished, failed = db.execute(
         select(
             func.count(),
@@ -2063,7 +2163,7 @@ def dashboard_freshness(db, project_ids):
     ).one()
     return {
         "revision": int(revision),
-        "catalog_revision": catalog_hash.hexdigest(),
+        "catalog_revision": catalog_revision,
         "freshness": {
             "updating": bool(pending),
             "pending_partitions": int(pending),

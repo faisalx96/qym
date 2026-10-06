@@ -21,7 +21,8 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Iterator, List, Optional
 from uuid import uuid4
 
-from sqlalchemy import delete, func, select, text, update
+from sqlalchemy import Integer, Text, bindparam, column, delete, func, select, text, update
+from sqlalchemy import values as sa_values
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -1091,3 +1092,312 @@ def _run_retention(ctx: JobContext) -> bool:
     ctx.progress["message"] = ", ".join(f"{k}={len(v)}" for k, v in result.items())
     ctx.log(ctx.progress["message"])
     return True
+
+
+@register(
+    "backfill_dataset_search_text",
+    description="Fill dataset item search text and published lineage counts (migration 0068), then build the trigram search index.",
+)
+def _backfill_dataset_search_text(ctx: JobContext) -> bool:
+    """Three phases, each resumable from ``ctx.progress``.
+
+    ``items`` walks dataset_items in id windows and writes ``search_text`` for
+    rows that predate it; ``versions`` stores the lineage counts of published
+    versions whose parent is published too; ``index`` (PostgreSQL only) enables
+    pg_trgm and builds ``ix_dataset_items_search_trgm`` CONCURRENTLY. Without the
+    extension (no privilege), search stays correct and the job logs why the
+    index was skipped.
+    """
+    from qym_platform.db.models import DatasetItem, DatasetVersion
+    from qym_platform.services.dataset_search import dataset_item_search_text
+    from qym_platform.services.dataset_versions import store_change_counts
+
+    phase = ctx.progress.get("phase") or "items"
+    window = max(1, int(ctx.params.get("window", 500)))
+    if phase == "items":
+        cursor = int(ctx.progress.get("cursor") or 0)
+        with ctx.session() as db:
+            rows = db.execute(
+                select(
+                    DatasetItem.id,
+                    DatasetItem.item_id,
+                    DatasetItem.input,
+                    DatasetItem.expected_output,
+                    DatasetItem.item_metadata,
+                )
+                .where(DatasetItem.id > cursor, DatasetItem.search_text.is_(None))
+                .order_by(DatasetItem.id)
+                .limit(window)
+            ).all()
+            if rows:
+                # One statement per window instead of one round trip per row
+                # (PostgreSQL: UPDATE ... FROM (VALUES ...); psycopg2's
+                # executemany would still send one UPDATE per row). The IS NULL
+                # guard keeps it idempotent next to live writes.
+                items_table = DatasetItem.__table__
+                filled = [
+                    (row.id, dataset_item_search_text(row.item_id, row.input, row.expected_output, row.item_metadata))
+                    for row in rows
+                ]
+                if ctx.is_postgres():
+                    batch = sa_values(
+                        column("pk", Integer), column("st", Text), name="filled"
+                    ).data(filled)
+                    db.execute(
+                        update(items_table)
+                        .where(items_table.c.id == batch.c.pk, items_table.c.search_text.is_(None))
+                        # Derived text, not an edit: keep updated_at (its
+                        # onupdate default would stamp every row).
+                        .values(search_text=batch.c.st, updated_at=items_table.c.updated_at)
+                    )
+                else:
+                    db.connection().execute(
+                        update(items_table)
+                        .where(items_table.c.id == bindparam("pk"), items_table.c.search_text.is_(None))
+                        .values(search_text=bindparam("st"), updated_at=items_table.c.updated_at),
+                        [{"pk": pk, "st": search_text} for pk, search_text in filled],
+                    )
+            db.commit()
+            last_item_id = rows[-1].id if rows else None
+        ctx.progress["items_filled"] = int(ctx.progress.get("items_filled") or 0) + len(rows)
+        if len(rows) < window:
+            ctx.progress["phase"], ctx.progress["cursor"] = "versions", ""
+        else:
+            ctx.progress["cursor"] = last_item_id
+        ctx.progress["message"] = f"{ctx.progress['items_filled']:,} items indexed for search"
+        return False
+    if phase == "versions":
+        cursor = str(ctx.progress.get("cursor") or "")
+        with ctx.session() as db:
+            versions = list(
+                db.scalars(
+                    select(DatasetVersion)
+                    .where(DatasetVersion.id > cursor, DatasetVersion.change_counts.is_(None))
+                    .order_by(DatasetVersion.id)
+                    .limit(20)
+                )
+            )
+            stored = sum(1 for version in versions if store_change_counts(db, version) is not None)
+            batch_size = len(versions)
+            # Read before the commit: committed instances expire, and the
+            # session closes when this block ends.
+            last_version_id = versions[-1].id if versions else None
+            db.commit()
+        ctx.progress["versions_counted"] = int(ctx.progress.get("versions_counted") or 0) + stored
+        if batch_size < 20:
+            ctx.progress["phase"] = "index"
+        else:
+            ctx.progress["cursor"] = last_version_id
+        ctx.progress["message"] = f"{ctx.progress['versions_counted']:,} published versions counted"
+        return False
+    if phase == "index" and ctx.is_postgres():
+        with ctx.autocommit() as conn:
+            # The "does this version still have rows without search_text"
+            # probe runs on every search. Once the backfill is done no row
+            # qualifies, so this partial index stays empty and the probe is
+            # one index lookup instead of a walk over the whole version.
+            conn.execute(text("DROP INDEX CONCURRENTLY IF EXISTS ix_dataset_items_unindexed_version"))
+            conn.execute(
+                text(
+                    "CREATE INDEX CONCURRENTLY ix_dataset_items_unindexed_version "
+                    "ON dataset_items (dataset_version_id) WHERE search_text IS NULL"
+                )
+            )
+        if _ensure_pg_trgm(ctx, "search index"):
+            with ctx.autocommit() as conn:
+                # An earlier interrupted build leaves an INVALID index behind; rebuild it.
+                conn.execute(text("DROP INDEX CONCURRENTLY IF EXISTS ix_dataset_items_search_trgm"))
+                started = time.perf_counter()
+                conn.execute(
+                    text(
+                        "CREATE INDEX CONCURRENTLY ix_dataset_items_search_trgm "
+                        "ON dataset_items USING gin (search_text gin_trgm_ops)"
+                    )
+                )
+            ctx.log(f"created ix_dataset_items_search_trgm in {time.perf_counter() - started:.0f}s")
+    ctx.progress["phase"] = "done"
+    ctx.progress["message"] = (
+        f"done: {int(ctx.progress.get('items_filled') or 0):,} items indexed, "
+        f"{int(ctx.progress.get('versions_counted') or 0):,} versions counted"
+    )
+    ctx.log(ctx.progress["message"])
+    return True
+
+
+def _ensure_pg_trgm(ctx: JobContext, index: str) -> bool:
+    """Enable pg_trgm for a trigram index; False (logged) when it cannot be.
+
+    A missing privilege or package must not fail the job or the deploy: the
+    searches the index would serve still work without it, only slower.
+    """
+    try:
+        with ctx.autocommit() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+    except Exception as exc:  # noqa: BLE001 - see above
+        ctx.log(f"{index} skipped: pg_trgm is not available ({type(exc).__name__}); search still works without it")
+        return False
+    return True
+
+
+@register(
+    "build_runs_search_index",
+    description="Fill each run's search text and build the trigram index that serves the Runs search box (migrations 0070, 0071).",
+)
+def _build_runs_search_index(ctx: JobContext) -> bool:
+    """Three phases, each resumable from ``ctx.progress``.
+
+    ``probe`` (PostgreSQL) builds the partial index of the runs without
+    ``search_text``, CONCURRENTLY; ``fill`` walks dashboard_run_dimensions in
+    run-key windows and stores ``search_text`` where it is NULL (rows written
+    before migration 0071); ``index`` (PostgreSQL) enables pg_trgm and builds
+    the trigram index over ``search_text`` and the run id, CONCURRENTLY. It
+    replaces 0070's index over descriptor expressions, which made every
+    descriptor rewrite of a live run a non-HOT update. Without the extension
+    the job logs that the index was skipped and finishes; the search still
+    works, as a scan of the project's runs. Until ``fill`` reaches a row, the
+    search reads that row's names from its descriptor, with the same results.
+    """
+    from qym_platform.api.dashboard import (
+        RUNS_SEARCH_INDEX,
+        RUNS_UNSEARCHABLE_INDEX,
+        run_search_text,
+        runs_search_index_ddl,
+        runs_unsearchable_index_ddl,
+    )
+    from qym_platform.db.dashboard_models import DashboardRunDimension as Dimension
+
+    phase = ctx.progress.get("phase") or "probe"
+    window = max(1, int(ctx.params.get("window", 500)))
+    if phase == "probe":
+        if ctx.is_postgres():
+            with ctx.autocommit() as conn:
+                # An earlier interrupted build leaves an INVALID index behind; rebuild it.
+                conn.execute(text(f"DROP INDEX CONCURRENTLY IF EXISTS {RUNS_UNSEARCHABLE_INDEX}"))
+                conn.execute(text(runs_unsearchable_index_ddl()))
+        ctx.progress["phase"], ctx.progress["cursor"] = "fill", ""
+        return False
+    if phase == "fill":
+        cursor = str(ctx.progress.get("cursor") or "")
+        with ctx.session() as db:
+            rows = db.execute(
+                select(
+                    Dimension.run_key,
+                    Dimension.descriptor["external_run_id"].as_string(),
+                    Dimension.descriptor["run_name"].as_string(),
+                )
+                .where(Dimension.run_key > cursor, Dimension.search_text.is_(None))
+                .order_by(Dimension.run_key)
+                .limit(window)
+            ).all()
+            if rows:
+                table = Dimension.__table__
+                filled = [(key, run_search_text(external, name)) for key, external, name in rows]
+                # One statement per window; the IS NULL guard leaves a row the
+                # summary worker wrote meanwhile as it wrote it.
+                if ctx.is_postgres():
+                    batch = sa_values(
+                        column("rk", Text), column("st", Text), name="filled"
+                    ).data(filled)
+                    db.execute(
+                        update(table)
+                        .where(table.c.run_key == batch.c.rk, table.c.search_text.is_(None))
+                        .values(search_text=batch.c.st)
+                    )
+                else:
+                    db.connection().execute(
+                        update(table)
+                        .where(table.c.run_key == bindparam("rk"), table.c.search_text.is_(None))
+                        .values(search_text=bindparam("st")),
+                        [{"rk": key, "st": value} for key, value in filled],
+                    )
+            db.commit()
+        ctx.progress["runs_filled"] = int(ctx.progress.get("runs_filled") or 0) + len(rows)
+        if len(rows) < window:
+            ctx.progress["phase"], ctx.progress["cursor"] = "index", ""
+        else:
+            ctx.progress["cursor"] = rows[-1][0]
+        ctx.progress["message"] = f"{ctx.progress['runs_filled']:,} runs given search text"
+        return False
+    filled = int(ctx.progress.get("runs_filled") or 0)
+    if not ctx.is_postgres():
+        ctx.progress["message"] = f"done: {filled:,} runs given search text; index skipped: not PostgreSQL"
+    elif _ensure_pg_trgm(ctx, "runs search index"):
+        with ctx.autocommit() as conn:
+            # Replaces an older definition and an INVALID index an earlier
+            # interrupted build left behind.
+            conn.execute(text(f"DROP INDEX CONCURRENTLY IF EXISTS {RUNS_SEARCH_INDEX}"))
+            started = time.perf_counter()
+            conn.execute(text(runs_search_index_ddl()))
+        ctx.log(f"created {RUNS_SEARCH_INDEX} in {time.perf_counter() - started:.0f}s")
+        ctx.progress["message"] = f"done: {RUNS_SEARCH_INDEX} built"
+    else:
+        ctx.progress["message"] = "done: index skipped (pg_trgm is not available)"
+    ctx.progress["phase"] = "done"
+    ctx.log(ctx.progress["message"])
+    return True
+
+
+@register(
+    "backfill_dashboard_overview",
+    description="Store each run's overview inputs (migration 0069), so the Runs, Charts and Models overview stops reading every run's JSON.",
+)
+def _backfill_dashboard_overview(ctx: JobContext) -> bool:
+    """Walk the summaries in run-key windows and store the overview inputs of
+    every run whose stored row is missing or older than its summary.
+
+    Resumable from ``ctx.progress``. Runs the summary worker publishes in the
+    meantime get their row from the worker; a row never moves back to an
+    older revision. PostgreSQL only: SQLite builds the overview in Python.
+    """
+    from qym_platform.db.dashboard_models import (
+        DashboardRunDimension as Dimension,
+        DashboardRunOverview as Facts,
+        DashboardRunSummary as Summary,
+    )
+    from qym_platform.services.dashboard_overview import store_overview_facts
+
+    if not ctx.is_postgres():
+        ctx.progress["message"] = "skipped: not PostgreSQL (the overview is built in Python)"
+        ctx.log(ctx.progress["message"])
+        return True
+    window = max(1, int(ctx.params.get("window", 500)))
+    cursor = str(ctx.progress.get("cursor") or "")
+    with ctx.session() as db:
+        keys = list(
+            db.scalars(
+                select(Summary.run_key)
+                .join(Dimension, Dimension.run_key == Summary.run_key)
+                .outerjoin(
+                    Facts,
+                    (Facts.run_key == Summary.run_key)
+                    & (Facts.revision == Summary.projection_revision),
+                )
+                .where(Summary.run_key > cursor, Facts.run_key.is_(None))
+                .order_by(Summary.run_key)
+                .limit(window)
+            )
+        )
+        if keys:
+            # The JSON functions make the planner expect huge row counts; JIT
+            # compiling for a window of runs costs more than it saves.
+            db.execute(text("SET LOCAL jit = off"))
+            store_overview_facts(db, Dimension.run_key.in_(keys))
+        db.commit()
+    ctx.progress["runs_stored"] = int(ctx.progress.get("runs_stored") or 0) + len(keys)
+    if len(keys) < window:
+        # Without statistics the overview statement nests loops over the
+        # whole table (seconds instead of milliseconds) until autovacuum
+        # analyzes it; give the planner statistics right after the load.
+        try:
+            with ctx.autocommit() as conn:
+                conn.execute(text("ANALYZE dashboard_run_overview"))
+                conn.execute(text("ANALYZE dashboard_run_dimensions"))
+        except Exception as exc:  # noqa: BLE001 - autovacuum analyzes later anyway
+            ctx.log(f"analyze skipped ({type(exc).__name__}); autovacuum will analyze later")
+        ctx.progress["phase"] = "done"
+        ctx.progress["message"] = f"done: {ctx.progress['runs_stored']:,} runs stored"
+        ctx.log(ctx.progress["message"])
+        return True
+    ctx.progress["cursor"] = keys[-1]
+    ctx.progress["message"] = f"{ctx.progress['runs_stored']:,} runs stored"
+    return False

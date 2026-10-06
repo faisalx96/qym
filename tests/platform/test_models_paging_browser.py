@@ -14,6 +14,7 @@ import pytest
 
 pytestmark = pytest.mark.browser
 
+STATS = "/api/dashboard/models/stats"
 STATIC = (
     Path(__file__).resolve().parents[2]
     / "packages/platform/qym_platform/_static/dashboard"
@@ -166,6 +167,35 @@ class ModelsFixture:
                 }
             )
             return
+        if path == STATS:
+            # K-run statistics: the server's reduction (services/model_stats.py)
+            # over this fixture's item rows (C035).
+            from qym_platform.services.model_stats import group_stats
+
+            body = request.post_data_json
+            self.requests.append((path, query, body))
+            if self.fail_details:
+                self.fail_details = False
+                route.fulfill(status=503, json={"error": "temporarily unavailable"})
+                return
+            known = {row["run_id"] for row in self.rows}
+            run_ids = list(
+                dict.fromkeys(run for group in body["groups"] for run in group["runs"])
+            )
+            route.fulfill(
+                json={
+                    "groups": group_stats(
+                        [self.detail(run_id) for run_id in run_ids if run_id in known],
+                        body["groups"],
+                        body["metric"],
+                        body["threshold"],
+                        body["is_boolean"],
+                        body["direction"],
+                    ),
+                    "missing": [run_id for run_id in run_ids if run_id not in known],
+                }
+            )
+            return
         if path.startswith("/api/dashboard/"):
             body = request.post_data_json if request.method == "POST" else {}
             filters = body.get("filters", json.loads(query.get("filters", ["{}"])[0]))
@@ -305,16 +335,6 @@ class ModelsFixture:
                         "freshness": {"updating": False},
                     }
                 )
-            return
-        if path == "/api/models/runs":
-            self.requests.append((path, query, {}))
-            if self.fail_details:
-                self.fail_details = False
-                route.fulfill(status=503, json={"error": "temporarily unavailable"})
-                return
-            route.fulfill(
-                json={"runs": [self.detail(run_id) for run_id in query["files"]]}
-            )
             return
         if path == "/projects/demo/models":
             source = (STATIC / "models.html").read_text()
@@ -491,11 +511,9 @@ def test_models_candidates_equal_original_full_history_estimators(browser):
         assert (
             "late_metric" in fixture.page.locator("#models-metric-select").inner_text()
         )
-        assert all(
-            len(query["files"]) <= 100
-            for path, query, _ in fixture.requests
-            if path == "/api/models/runs"
-        )
+        # One small statistics request, never the selected runs' item rows.
+        assert not any(path == "/api/models/runs" for path, _, _ in fixture.requests)
+        assert any(path == STATS for path, _, _ in fixture.requests)
         fixture.page.evaluate(
             """async data => {
           const t = __modelsTest;
@@ -605,7 +623,7 @@ def test_models_global_filters_metric_detection_and_revision_invalidation(browse
             for stats in fixture.stats().values()
         )
         before = len(
-            [1 for path, _, _ in fixture.requests if path == "/api/models/runs"]
+            [1 for path, _, _ in fixture.requests if path == STATS]
         )
         fixture.revision += 1
         fixture.rows[50]["_revision"] += 1
@@ -617,11 +635,11 @@ def test_models_global_filters_metric_detection_and_revision_invalidation(browse
             "__modelsTest.state.modelsViewState.candidates.revision === 2"
         )
         assert (
-            len([1 for path, _, _ in fixture.requests if path == "/api/models/runs"])
+            len([1 for path, _, _ in fixture.requests if path == STATS])
             > before
         )
         before = len(
-            [1 for path, _, _ in fixture.requests if path == "/api/models/runs"]
+            [1 for path, _, _ in fixture.requests if path == STATS]
         )
         fixture.revision += 1
         fixture.rows[59]["_revision"] += 1
@@ -630,7 +648,7 @@ def test_models_global_filters_metric_detection_and_revision_invalidation(browse
             "__modelsTest.state.modelsViewState.candidates.revision === 3"
         )
         assert (
-            len([1 for path, _, _ in fixture.requests if path == "/api/models/runs"])
+            len([1 for path, _, _ in fixture.requests if path == STATS])
             == before
         )
         page.evaluate(
@@ -701,13 +719,10 @@ def test_models_large_k_batches_details_and_preserves_all_runs(browser):
             stats["K"] == 62 and len(stats["selectedPaths"]) == 60
             for stats in fixture.stats().values()
         )
-        batches = [
-            query["files"]
-            for path, query, _ in fixture.requests
-            if path == "/api/models/runs"
-        ]
-        assert [len(batch) for batch in batches[-2:]] == [100, 80]
-        assert len(set(batches[-2] + batches[-1])) == 180
+        requests = [body for path, _, body in fixture.requests if path == STATS]
+        # Every model's 60 runs in one request (no 100-run batches of rows).
+        assert [len(group["runs"]) for group in requests[-1]["groups"]] == [60, 60, 60]
+        assert len({run for group in requests[-1]["groups"] for run in group["runs"]}) == 180
         assert fixture.page.locator(".runs-warning").count() == 3
     finally:
         fixture.close()

@@ -5,7 +5,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 
 from fastapi import HTTPException, Request
 from sqlalchemy.exc import IntegrityError
@@ -110,12 +110,21 @@ def with_root_path(request: Request, path: str) -> str:
 
 
 def sanitize_next(next_value: Optional[str], default: str = "/") -> str:
+    """Return ``next_value`` only when it is a path on this site, else ``default``.
+
+    Browsers read a backslash as a slash and drop tabs and newlines, so
+    ``/\\evil.com`` or ``/<TAB>/evil.com`` would leave the site; any backslash
+    or control character is refused before the URL is parsed.
+    """
     value = (next_value or "").strip()
     if not value:
         return default
-    if not value.startswith("/"):
+    if not value.startswith("/") or value.startswith("//"):
         return default
-    if value.startswith("//"):
+    if "\\" in value or any(ord(char) < 0x20 or ord(char) == 0x7F for char in value):
+        return default
+    parts = urlsplit(value)
+    if parts.scheme or parts.netloc:
         return default
     return value
 
