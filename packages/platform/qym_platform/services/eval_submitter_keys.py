@@ -23,9 +23,12 @@ Lifecycle, one dedicated key per experiment:
   or unreadable key, or a creator who is gone, disabled or no longer in the project,
   raises ``SubmitterKeyUnavailable`` and the job is ``BLOCKED`` with its reason.
 - **Revoke** when the experiment settles (``revoke_key_when_settled``, called by
-  ``eval_experiments.recompute_experiment_status``): once every current job is
-  terminal (``BLOCKED`` doesn't count: it may be retried and its upload must still
-  work), ``api_keys.revoked_at`` is set and the blob cleared.
+  ``eval_experiments.recompute_experiment_status`` and the dispatcher's settle sweep):
+  once every current job is terminal (``BLOCKED`` doesn't count: it may be retried and
+  its upload must still work) **and** the last one finished ``KEY_REVOKE_GRACE`` ago,
+  ``api_keys.revoked_at`` is set and the blob cleared. The grace matters: the service
+  may report ``SUCCEEDED`` while the SDK is still draining the run's last events,
+  including ``run_completed``, and those must not be rejected with 401.
 - **Retry** (``ensure_key_for_retry``): a usable key is re-encrypted into a fresh
   blob; a revoked or unusable one is replaced by a newly minted key.
 
@@ -40,6 +43,7 @@ before ``api_keys``, so the lock order is the same.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta
 from typing import Any, Optional, Sequence, cast
 
 from sqlalchemy import CursorResult, update
@@ -67,6 +71,8 @@ logger = logging.getLogger(__name__)
 SUBMITTER_KEY_SCOPES = ("runs:write",)
 KEY_NAME_PREFIX = "Evaluation Service · "
 KEY_NAME_MAX = 200  # api_keys.name
+# How long a settled experiment's key keeps working, so late run events still land.
+KEY_REVOKE_GRACE = timedelta(minutes=10)
 
 KEY_UNAVAILABLE = (
     "The submitting user's qym API key is unavailable; retry to issue a new one"
@@ -296,19 +302,27 @@ def _has_live_jobs(db: Session, experiment_id: str) -> bool:
 
 
 def revoke_key_when_settled(
-    experiment: EvalExperiment, current: Sequence[EvalExperimentJob], terminal: Any
+    experiment: EvalExperiment,
+    current: Sequence[EvalExperimentJob],
+    terminal: Any,
+    *,
+    now: Optional[datetime] = None,
+    grace: timedelta = KEY_REVOKE_GRACE,
 ) -> bool:
-    """Revoke the key once every current job is in ``terminal``. Caller commits.
+    """Revoke the key once every current job is in ``terminal`` and the last one
+    finished at least ``grace`` ago. Caller commits.
 
     ``current`` are the experiment's non-superseded jobs. ``BLOCKED`` is not terminal
     here: a blocked job may be retried, and its run upload needs the key. Guarded like
     ``clear_secrets_when_settled`` (see the module docstring). Returns True when the
-    key was revoked.
+    key was revoked; inside the grace the dispatcher's settle sweep revokes it later.
     """
     seen = experiment.qym_api_key_encrypted
     if not seen:
         return False
     if not current or any(job.status not in terminal for job in current):
+        return False
+    if not settled_long_enough(current, now=now, grace=grace):
         return False
     key_id = experiment.qym_api_key_id
     session = object_session(experiment)
@@ -322,6 +336,19 @@ def revoke_key_when_settled(
     _forget_verified_keys()
     logger.info("eval experiment %s: settled; revoked its qym API key", experiment.id)
     return True
+
+
+def settled_long_enough(
+    jobs: Sequence[EvalExperimentJob],
+    *,
+    now: Optional[datetime] = None,
+    grace: timedelta = KEY_REVOKE_GRACE,
+) -> bool:
+    """Whether the last of ``jobs`` finished ``grace`` ago (unknown times count as old)."""
+    finished = [job.finished_at for job in jobs if job.finished_at is not None]
+    if not finished:
+        return True
+    return (now or utc_now_naive()) - max(finished) >= grace
 
 
 def _forget_verified_keys() -> None:

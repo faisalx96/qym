@@ -67,6 +67,9 @@ from qym_platform.services.eval_run_scores import sync_run_scores
 from qym_platform.services.issue_reviews import change_metric_issue, reconcile_issue_edits
 from qym_platform.services.run_lifecycle import (
     RUN_STATUS_REASON_ADMIN_FORCE_STOP,
+    RUN_STATUS_REASON_LEASE_TIMEOUT,
+    RUN_STATUS_REASON_UPLOAD_INCOMPLETE,
+    RUN_STATUS_REASONS_CANCELLED,
     can_force_stop_run,
     is_run_force_stopped,
     is_stale_running_run,
@@ -1448,6 +1451,36 @@ def _canonical_project_run_analyzer_redirect(
 
 def _iso(dt: Optional[datetime]) -> str:
     return to_api_timestamp(dt or utc_now_naive()) or ""
+
+
+def _status_reason_label(db: Session, run: Run) -> Optional[str]:
+    """Why a run is ``STOPPED``, in words for the run page (``None`` otherwise)."""
+    reason = run.status_reason
+    if not reason or run.status != RunWorkflowStatus.STOPPED:
+        return None
+    if reason == RUN_STATUS_REASON_LEASE_TIMEOUT:
+        seconds = PlatformSettings().run_stale_timeout_seconds
+        return (
+            f"No events received for {seconds}s; the run resumes if it sends more"
+        )
+    if reason == RUN_STATUS_REASON_ADMIN_FORCE_STOP:
+        return "Force stopped by an administrator"
+    if reason == RUN_STATUS_REASON_UPLOAD_INCOMPLETE:
+        return (
+            "The Evaluation Service finished the job, but some of this run's "
+            "events never arrived"
+        )
+    if reason in RUN_STATUS_REASONS_CANCELLED:
+        from qym_platform.db.models import EvalExperimentJob
+
+        job = db.get(EvalExperimentJob, run.experiment_job_id) if run.experiment_job_id else None
+        user = db.get(User, job.cancelled_by_user_id) if job and job.cancelled_by_user_id else None
+        who = (user.display_name or user.email) if user else None
+        label = f"Cancelled by {who}" if who else "Cancelled by a user"
+        if job and job.cancel_reason:
+            label += f": {job.cancel_reason}"
+        return label
+    return None
 
 
 def _reconcile_run_liveness(db: Session, runs: List[Run]) -> None:
@@ -3836,6 +3869,7 @@ def _build_run_data(
                 "metadata": strip_launch_token(run_metadata),
                 "status": run.status,
                 "status_reason": run.status_reason,
+                "status_reason_label": _status_reason_label(db, run),
                 "owner": owner_info,
                 "team_name": project.name if project else None,
                 "project": project_info,

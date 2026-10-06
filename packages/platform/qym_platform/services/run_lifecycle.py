@@ -8,8 +8,21 @@ from qym_platform.db.models import Run, RunWorkflowStatus
 
 RUN_STATUS_REASON_LEASE_TIMEOUT = "lease_timeout"
 RUN_STATUS_REASON_ADMIN_FORCE_STOP = "admin_force_stopped"
-# The run's evaluation job was cancelled from the queue (eval_experiments.cancel_jobs).
+# The run's evaluation job was cancelled by a user (Experiments or Queue page,
+# eval_experiments.cancel_jobs). ``cancelled_from_queue`` is the legacy value.
+RUN_STATUS_REASON_CANCELLED_BY_USER = "cancelled_by_user"
 RUN_STATUS_REASON_CANCELLED_FROM_QUEUE = "cancelled_from_queue"
+RUN_STATUS_REASONS_CANCELLED = frozenset(
+    {RUN_STATUS_REASON_CANCELLED_BY_USER, RUN_STATUS_REASON_CANCELLED_FROM_QUEUE}
+)
+# The Evaluation Service finished the job but the run never received its final
+# event and is missing items (eval_dispatcher settle sweep).
+RUN_STATUS_REASON_UPLOAD_INCOMPLETE = "upload_incomplete"
+# Stops inferred by the platform rather than reported by the run: a later live
+# event reopens the run and a later terminal event replaces them.
+SOFT_STOP_REASONS = frozenset(
+    {RUN_STATUS_REASON_LEASE_TIMEOUT, RUN_STATUS_REASON_UPLOAD_INCOMPLETE}
+)
 TERMINAL_RUN_STATUSES = frozenset(
     {
         RunWorkflowStatus.COMPLETED,
@@ -34,7 +47,7 @@ def touch_run_event(run: Run, event_at: datetime | None) -> None:
 def should_reopen_from_live_event(run: Run) -> bool:
     return (
         run.status == RunWorkflowStatus.STOPPED
-        and run.status_reason == RUN_STATUS_REASON_LEASE_TIMEOUT
+        and run.status_reason in SOFT_STOP_REASONS
     )
 
 
@@ -67,7 +80,7 @@ def mark_run_terminal(
         return
     if (
         run.status == RunWorkflowStatus.STOPPED
-        and run.status_reason != RUN_STATUS_REASON_LEASE_TIMEOUT
+        and run.status_reason not in SOFT_STOP_REASONS
         and status != RunWorkflowStatus.STOPPED
     ):
         return

@@ -131,8 +131,10 @@ class PlatformSettings(BaseSettings):
     # run_item_attempts and run_item_scores, keeping ids, numbers and status.
     event_log_mode: str = Field(default="full", pattern="^(full|structural)$")
 
-    # Run lifecycle
-    run_stale_timeout_seconds: int = Field(default=60, ge=5)
+    # Run lifecycle. A RUNNING run with no event for this long is shown STOPPED
+    # (lease_timeout) until its next event. The SDK heartbeats every 15s, but a
+    # heartbeat can wait behind a slow upload, so keep a wide margin.
+    run_stale_timeout_seconds: int = Field(default=180, ge=5)
     analysis_job_max_workers: int = Field(default=2, ge=1)
     analysis_max_concurrency: int = Field(default=20, ge=1, le=20)
     analysis_max_retries: int = Field(default=1, ge=0, le=5)
@@ -143,6 +145,10 @@ class PlatformSettings(BaseSettings):
     eval_experiment_create_rate_window_seconds: int = Field(default=3600, ge=1)
     # Jobs one experiment launch may create (combinations × environments).
     eval_sweep_max_jobs: int = Field(default=64, ge=1)
+    # A RUNNING Evaluation Service job with no remote status change and no linked-run
+    # activity for this long becomes TIMED_OUT (best-effort remote cancel first). Keep
+    # it above the service's own hard limit (Celery time_limit, 7200s by default).
+    eval_job_timeout_seconds: int = Field(default=8100, ge=600)
 
     # Product eval API
     product_eval_max_workers: int = Field(default=3, ge=1)

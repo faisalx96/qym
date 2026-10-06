@@ -580,10 +580,16 @@ def test_cancel_marks_linked_run_stopped_unless_it_ended(sessions, service, cloc
         got = {job_id: db.get(Run, run_id) for job_id, run_id in runs.items()}
         for job_id in (live, lease_timed_out):
             assert got[job_id].status == RunWorkflowStatus.STOPPED
-            assert got[job_id].status_reason == "cancelled_from_queue"
+            assert got[job_id].status_reason == "cancelled_by_user"
             assert got[job_id].ended_at == clock()
         assert got[finished].status == RunWorkflowStatus.COMPLETED
         assert got[finished].status_reason is None
+        # The run page says who cancelled it.
+        from qym_platform.api.runs import _status_reason_label
+
+        label = _status_reason_label(db, got[live])
+        assert label is not None and label.startswith("Cancelled by ")
+        assert "@example.com" in label
     for job_id in seed["job_ids"]:
         job = _job(sessions, job_id)
         assert job.status == EvalJobStatus.CANCELLED

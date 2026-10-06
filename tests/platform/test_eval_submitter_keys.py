@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import timedelta
 
 import pytest
 from fastapi import HTTPException
@@ -57,6 +58,7 @@ from qym_platform.services.eval_submitter_keys import (
     CREATOR_NOT_MEMBER,
     KEY_NAME_MAX,
     KEY_NAME_PREFIX,
+    KEY_REVOKE_GRACE,
     KEY_UNAVAILABLE,
     SUBMITTER_KEY_SCOPES,
     SubmitterKeyUnavailable,
@@ -81,11 +83,12 @@ def _authenticate(session_factory, token):
         return require_api_key_principal(db=s, authorization=f"Bearer {token}")
 
 
-def _settle(session_factory, job_id, status):
+def _settle(session_factory, job_id, status, *, ago=KEY_REVOKE_GRACE + timedelta(minutes=1)):
+    """Finish the job ``ago`` in the past (default: past the revocation grace)."""
     with session_factory() as s:
         job = s.get(EvalExperimentJob, job_id)
         job.status = status
-        job.finished_at = utc_now_naive()
+        job.finished_at = utc_now_naive() - ago
         recompute_experiment_status(s, job.experiment_id)
         s.commit()
 
@@ -160,6 +163,11 @@ def test_key_is_revoked_once_every_job_is_terminal(client, session_factory, env)
 
     # BLOCKED is not terminal here: the job may be retried and must still upload.
     _settle(session_factory, job.id, EvalJobStatus.BLOCKED)
+    row, still = _key_state(session_factory, created["id"])
+    assert row.revoked_at is None and still == token
+
+    # Just finished: the key stays usable so the SDK's last events still land.
+    _settle(session_factory, job.id, EvalJobStatus.SUCCEEDED, ago=timedelta(0))
     row, still = _key_state(session_factory, created["id"])
     assert row.revoked_at is None and still == token
 

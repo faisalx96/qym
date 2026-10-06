@@ -1304,7 +1304,10 @@ def _ingest_events_sync(
             evt.type,
             type(payload).__name__,
         )
-        touch_run_event(run, evt.sent_at)
+        # Liveness uses the platform's receive time, not the worker's ``sent_at``:
+        # a skewed worker clock or events that waited in the SDK queue must not
+        # make a live run look stale (lease_timeout).
+        touch_run_event(run, utc_now_naive())
 
         if isinstance(payload, RunStartedPayload):
             run.external_run_id = payload.external_run_id

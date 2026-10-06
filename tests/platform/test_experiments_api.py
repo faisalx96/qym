@@ -1024,12 +1024,27 @@ def test_cancel_submitted_and_leased_jobs_defers_to_dispatcher(
         lease_until=utc_now_naive() + timedelta(minutes=1),
     )
 
+    # By default a running job is left alone; the queued (leased) one is cancelled.
     res = client.post(_url(suffix=f"/{created['id']}/cancel"), headers=_headers(MEMBER))
+    assert res.status_code == 200
+    assert res.json()["outcomes"] == {leased.id: "cancelling"}
+    assert res.json()["skipped_running"] == [running.id]
+    assert _jobs_by_id(session_factory, created["id"])[running.id].status == (
+        EvalJobStatus.RUNNING
+    )
+    assert res.json()["experiment"]["cancelled_at"] is None
+
+    res = client.post(
+        _url(suffix=f"/{created['id']}/cancel"),
+        json={"include_running": True},
+        headers=_headers(MEMBER),
+    )
     assert res.status_code == 200
     assert res.json()["outcomes"] == {
         running.id: "cancelling",
         leased.id: "cancelling",
     }
+    assert res.json()["skipped_running"] == []
     after = {j.id: j for j in _jobs(session_factory, created["id"])}
     assert after[running.id].status == EvalJobStatus.CANCELLING
     assert after[running.id].cancel_requested_at is not None
@@ -1047,6 +1062,10 @@ def test_cancel_submitted_and_leased_jobs_defers_to_dispatcher(
         headers=_headers(MEMBER),
     )
     assert res.json()["outcome"] == "cancelled"
+
+
+def _jobs_by_id(session_factory, experiment_id):
+    return {j.id: j for j in _jobs(session_factory, experiment_id)}
 
 
 # --------------------------------------------------------------------------- retry

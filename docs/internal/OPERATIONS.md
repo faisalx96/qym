@@ -282,6 +282,8 @@ API, because it decrypts keys and calls the services.
 | `QYM_EVAL_SWEEP_MAX_JOBS` | `64` | Maximum jobs per launch (combinations × environments). Larger launches are refused before anything is written. |
 | `QYM_EVAL_EXPERIMENT_CREATE_RATE_LIMIT` | `30` | Launches per user per window (`0` disables). Counted from `eval_experiments` rows, so it holds across API processes. Dry-run previews are not counted. Over the limit: 429 with `Retry-After`. |
 | `QYM_EVAL_EXPERIMENT_CREATE_RATE_WINDOW_SECONDS` | `3600` | Window of the launch rate limit. |
+| `QYM_EVAL_JOB_TIMEOUT_SECONDS` | `8100` (2h15m) | A `RUNNING` job with no remote status change and no linked-run activity for this long becomes `TIMED_OUT`; also how long a failing remote cancel is retried. Keep it above the Evaluation Service's Celery hard limit (`time_limit`, 7200s); raise both together to allow longer evaluations. |
+| `QYM_RUN_STALE_TIMEOUT_SECONDS` | `180` | A `RUNNING` run with no event received for this long is shown `STOPPED` (`lease_timeout`) until its next event. Measured on the platform's clock at receipt. |
 | `QYM_ROLE` | `all` | See "Roles and processes". |
 | `QYM_ALLOW_PRIVATE_LLM_BASE_URLS` | `false` | Allows `http://` and private or loopback environment URLs, private connection and temporary-model URLs, and `http://` models in experiments. Keep it off in shared deployments. |
 
@@ -491,7 +493,8 @@ the linked qym run's status is merged in:
   the service's result (`Run completed; waiting for the service result`), then marks
   the job `SUCCEEDED`;
 - a `RUNNING` job with no remote status change and no run activity for **2h15m**
-  (the service's 7200s hard limit plus margin) becomes `TIMED_OUT`. The clock only
+  (`QYM_EVAL_JOB_TIMEOUT_SECONDS`; the service's 7200s hard limit plus margin)
+  becomes `TIMED_OUT`. The clock only
   runs while the job is `RUNNING` and qym can observe it: a job still `PENDING` on
   the service (`SUBMITTED`) never times out, and neither does one whose service is
   unreachable or paused. Before the transition the dispatcher makes one best-effort
@@ -527,8 +530,20 @@ attempts the dispatcher gives up and marks the job `CANCELLED`
 remote job by then. If the service still lists it, it becomes a stale remote job:
 it keeps counting toward the cap and a manager can cancel it from the remote queue.
 After a remote cancel, the
-linked run is marked `STOPPED` with `status_reason = cancelled_from_queue`, unless it
-already ended; a killed worker never sends a terminal event.
+linked run is marked `STOPPED` with `status_reason = cancelled_by_user` (older runs:
+`cancelled_from_queue`), unless it already ended; a killed worker never sends a
+terminal event. The run page shows who cancelled it.
+
+**Experiment-level Cancel** cancels queued jobs only. Jobs already running (status
+`RUNNING` or with a linked run) keep going and are listed in `skipped_running`; send
+`{"include_running": true}` (the UI does when nothing else is left) to stop them too.
+
+**Settle sweep.** The experiment creator's qym API key stays valid for 10 minutes
+(`KEY_REVOKE_GRACE`) after the last job finishes, so the SDK's last events
+(`run_completed` included) still land. The dispatcher then revokes it, and first
+closes out the run of any `SUCCEEDED` job that never got `run_completed`: `COMPLETED`
+when every item arrived, otherwise `STOPPED` / `upload_incomplete`. A late
+`run_completed` still replaces either inferred stop.
 
 **Retry** clones the job into a new attempt row with a new launch token; the old row
 stays in the history. A `BLOCKED` job is cancelled first. Retrying needs

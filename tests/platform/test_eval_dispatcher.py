@@ -43,14 +43,17 @@ from qym_platform.db.models import (
     ProjectLlmConnection,
     ProjectMembership,
     Run,
+    RunItem,
     RunWorkflowStatus,
     User,
 )
 from qym_platform.secrets import encrypt_llm_api_key
 from qym_platform.services.eval_submitter_keys import (
+    KEY_REVOKE_GRACE,
     issue_experiment_api_key,
     resolve_submitter_key,
 )
+from qym_platform.services.run_lifecycle import mark_run_terminal
 from qym_platform.services import eval_dispatcher as dispatcher_module
 from qym_platform.services.eval_config import is_placeholder, materialize_job_body
 from qym_platform.services.eval_dispatcher import (
@@ -1607,3 +1610,122 @@ def test_launch_hash_matching_no_key_sends_current_token_and_logs(
     assert "matches no configured encryption key" in caplog.text
     assert job_id in caplog.text
     assert token not in caplog.text
+
+
+# ------------------------------------------------------------------ configurable timeout
+
+
+def test_job_timeout_is_configurable_and_named_in_the_error(sessions, service, clock):
+    seed, _, job_id, rid = _submitted(sessions, service, clock)
+    d = _dispatcher(sessions, service, clock, job_timeout=timedelta(minutes=45))
+    service.set_status(rid, "RUNNING")
+    _poll(d, sessions, clock, job_id)
+    changed_at = clock()
+    while (job := _poll(d, sessions, clock, job_id)).status == EvalJobStatus.RUNNING:
+        assert clock() - changed_at < timedelta(minutes=45)
+    assert job.status == EvalJobStatus.TIMED_OUT
+    assert clock() - changed_at < timedelta(minutes=46)
+    assert "for 45m" in job.error
+
+
+def test_job_timeout_reads_the_setting(monkeypatch):
+    from qym_platform.services.eval_dispatcher import configured_job_timeout, format_duration
+
+    monkeypatch.setenv("QYM_EVAL_JOB_TIMEOUT_SECONDS", "3600")
+    assert configured_job_timeout() == timedelta(hours=1)
+    assert format_duration(timedelta(hours=2, minutes=15)) == "2h15m"
+    assert format_duration(timedelta(minutes=45)) == "45m"
+
+
+# ------------------------------------------------------------------ settle sweep
+
+
+def _add_items(sessions, run_id, count):
+    with sessions() as db:
+        for index in range(count):
+            db.add(RunItem(run_id=run_id, item_id=f"item-{index}", index=index, input="q"))
+        db.commit()
+
+
+def _key_revoked(sessions, experiment_id):
+    with sessions() as db:
+        return db.get(EvalExperiment, experiment_id).qym_api_key_encrypted is None
+
+
+def _succeeded_with_open_run(sessions, service, clock, *, items, total=2):
+    seed, d, job_id, rid = _submitted(sessions, service, clock)
+    service.set_status(rid, "RUNNING")
+    _poll(d, sessions, clock, job_id)
+    run_id = _link_run(
+        sessions,
+        seed,
+        job_id,
+        status=RunWorkflowStatus.RUNNING,
+        started_at=clock(),
+        last_event_at=clock(),
+        run_metadata={"total_items": total},
+    )
+    _add_items(sessions, run_id, items)
+    service.set_status(rid, "SUCCEEDED", result={"run_name": "r"})
+    assert _poll(d, sessions, clock, job_id).status == EvalJobStatus.SUCCEEDED
+    return seed, d, run_id
+
+
+def test_key_outlives_success_for_the_grace_then_is_revoked(sessions, service, clock):
+    seed, d, run_id = _succeeded_with_open_run(sessions, service, clock, items=2)
+    # The SDK may still be draining run_completed: the key must keep working.
+    assert not _key_revoked(sessions, seed["experiment_id"])
+    assert d.settle_sweep() == 0
+    with sessions() as db:
+        assert db.get(Run, run_id).status == RunWorkflowStatus.RUNNING
+
+    clock.advance(KEY_REVOKE_GRACE.total_seconds() + 1)
+    assert d.settle_sweep() == 1
+    assert _key_revoked(sessions, seed["experiment_id"])
+    with sessions() as db:
+        run = db.get(Run, run_id)
+        # Every item arrived; only the final event was lost.
+        assert run.status == RunWorkflowStatus.COMPLETED
+        assert run.status_reason is None
+
+
+def test_settle_sweep_marks_runs_with_missing_items_upload_incomplete(
+    sessions, service, clock
+):
+    seed, d, run_id = _succeeded_with_open_run(sessions, service, clock, items=1)
+    with sessions() as db:  # the liveness check already gave up on it
+        run = db.get(Run, run_id)
+        run.status = RunWorkflowStatus.STOPPED
+        run.status_reason = "lease_timeout"
+        db.commit()
+    clock.advance(KEY_REVOKE_GRACE.total_seconds() + 1)
+    assert d.settle_sweep() == 1
+    with sessions() as db:
+        run = db.get(Run, run_id)
+        assert run.status == RunWorkflowStatus.STOPPED
+        assert run.status_reason == "upload_incomplete"
+        # A late run_completed still wins over the inferred stop.
+        mark_run_terminal(run, RunWorkflowStatus.COMPLETED, ended_at=clock())
+        assert run.status == RunWorkflowStatus.COMPLETED
+
+
+def test_settle_sweep_leaves_finished_runs_and_live_experiments_alone(
+    sessions, service, clock
+):
+    seed, d, job_id, rid = _submitted(sessions, service, clock)
+    service.set_status(rid, "RUNNING")
+    _poll(d, sessions, clock, job_id)
+    clock.advance(KEY_REVOKE_GRACE.total_seconds() + 1)
+    assert d.settle_sweep() == 0  # still running: nothing to close, key kept
+    assert not _key_revoked(sessions, seed["experiment_id"])
+
+    run_id = _link_run(
+        sessions, seed, job_id, status=RunWorkflowStatus.COMPLETED, ended_at=clock()
+    )
+    service.set_status(rid, "SUCCEEDED", result={"run_name": "r"})
+    _poll(d, sessions, clock, job_id)
+    clock.advance(KEY_REVOKE_GRACE.total_seconds() + 1)
+    assert d.settle_sweep() == 0
+    assert _key_revoked(sessions, seed["experiment_id"])
+    with sessions() as db:
+        assert db.get(Run, run_id).status == RunWorkflowStatus.COMPLETED

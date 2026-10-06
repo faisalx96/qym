@@ -20,11 +20,18 @@ process when ``QYM_ROLE=all``, that mirrors ``MaintenanceWorker``. Each tick:
 4. **Poll** ``SUBMITTED``/``RUNNING`` jobs every 10s for the first 5 minutes after
    submit, then every 30s until 30 minutes, then every 60s. The linked qym run's status
    is merged in (D2): a terminal run wins over a remote ``PENDING``/``RUNNING``. A
-   ``RUNNING`` job with no remote change and no run activity for 2h15m becomes
-   ``TIMED_OUT``. The clock doesn't run while the job is still ``PENDING`` remotely or
+   ``RUNNING`` job with no remote change and no run activity for 2h15m
+   (``QYM_EVAL_JOB_TIMEOUT_SECONDS``) becomes ``TIMED_OUT``. The clock doesn't run while the job is still ``PENDING`` remotely or
    while the service can't be observed. Before the transition the dispatcher makes a
    best-effort ``POST /evals/{id}/cancel`` (``_time_out``); its outcome is appended
    to ``error`` and a failure never blocks the transition.
+
+Settle sweep (every ``SETTLE_SWEEP_SECONDS``, ``settle_sweep``): once a job has been
+``SUCCEEDED`` for ``KEY_REVOKE_GRACE``, a linked run that never got ``run_completed``
+is closed out (``COMPLETED`` when every item arrived, else ``STOPPED`` /
+``upload_incomplete``), and an experiment whose jobs all finished that long ago gets
+its creator's qym API key revoked. Revoking at the moment of settling rejected the
+SDK's last events (including ``run_completed``) and left finished runs ``STOPPED``.
 
 Stale remote jobs: a job that is terminal locally (``TIMED_OUT`` after a failed
 cancel, or ``CANCELLED`` by the ``CANCELLING`` give-up) may still be ``PENDING`` or
@@ -133,6 +140,7 @@ from ..db.models import (
     EvalJobStatus,
     EvalRemoteQueueSnapshot,
     Run,
+    RunItem,
     RunWorkflowStatus,
 )
 from ..secrets import decrypt_llm_api_key
@@ -151,11 +159,12 @@ from .eval_experiments import (
     LaunchTokenUnavailable,
     aggregate_status,
     body_with_launch_token,
+    current_jobs,
     recompute_experiment_status,
     stop_linked_run,
 )
 from .eval_model_slots import descriptor_for_schema, list_model_slots
-from .eval_run_scores import sync_job_scores
+from .eval_run_scores import sync_job_scores, sync_run_scores
 from .eval_service_client import (
     REDACTED,
     EnvAuthError,
@@ -169,12 +178,20 @@ from .eval_service_client import (
     redact_payload,
     redact_text,
 )
-from .eval_submitter_keys import SubmitterKeyUnavailable, resolve_submitter_key
+from .eval_submitter_keys import (
+    KEY_REVOKE_GRACE,
+    SubmitterKeyUnavailable,
+    resolve_submitter_key,
+    settled_long_enough,
+)
 from .eval_temporary_models import secret_lookup as temporary_secret_lookup
 from .run_lifecycle import (
     RUN_STATUS_REASON_ADMIN_FORCE_STOP,
-    RUN_STATUS_REASON_CANCELLED_FROM_QUEUE,
     RUN_STATUS_REASON_LEASE_TIMEOUT,
+    RUN_STATUS_REASON_UPLOAD_INCOMPLETE,
+    RUN_STATUS_REASONS_CANCELLED,
+    SOFT_STOP_REASONS,
+    mark_run_terminal,
 )
 
 logger = logging.getLogger(__name__)
@@ -200,8 +217,12 @@ POLL_SCHEDULE: Tuple[Tuple[float, float], ...] = (
     (30 * 60.0, 30.0),  # then until 30 minutes
 )
 POLL_SLOW_SECONDS = 60.0
-# Celery hard limit 7200s + margin (guide §2): no remote change and no run activity.
+# Default for ``QYM_EVAL_JOB_TIMEOUT_SECONDS``: the service's Celery hard limit (7200s,
+# guide §2) + margin. No remote change and no run activity for this long → TIMED_OUT.
 JOB_TIMEOUT = timedelta(hours=2, minutes=15)
+# How often the settle sweep (late key revocation, run close-out) runs.
+SETTLE_SWEEP_SECONDS = 60.0
+SETTLE_SWEEP_BATCH = 100
 # A linked run that completed while the service still says RUNNING: keep polling this
 # long for the service's ``result`` before settling on the run's outcome (D2).
 RESULT_GRACE = timedelta(minutes=10)
@@ -211,7 +232,32 @@ RECONCILE_MAX_PAGES = 20
 RECONCILE_CLOCK_SKEW = timedelta(minutes=10)
 
 ENV_AUTH_ERROR = "Evaluation service rejected the environment API key"
-TIMEOUT_ERROR = "No progress from the evaluation service or the linked run for 2h15m"
+
+def format_duration(value: timedelta) -> str:
+    """``2h15m`` / ``45m`` / ``1h``: the compact form used in job errors."""
+    minutes = int(value.total_seconds() // 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours and minutes:
+        return f"{hours}h{minutes}m"
+    return f"{hours}h" if hours else f"{minutes}m"
+
+
+def timeout_error(job_timeout: timedelta) -> str:
+    return (
+        "No progress from the evaluation service or the linked run for "
+        f"{format_duration(job_timeout)}"
+    )
+
+
+TIMEOUT_ERROR = timeout_error(JOB_TIMEOUT)
+
+
+def configured_job_timeout() -> timedelta:
+    """``QYM_EVAL_JOB_TIMEOUT_SECONDS`` (default :data:`JOB_TIMEOUT`)."""
+    try:
+        return timedelta(seconds=PlatformSettings().eval_job_timeout_seconds)
+    except Exception:  # noqa: BLE001 - settings unavailable (e.g. no database URL)
+        return JOB_TIMEOUT
 
 # Submitted (or being submitted) and not finished yet.
 INFLIGHT_JOB_STATUSES = ACTIVE_JOB_STATUSES
@@ -366,7 +412,7 @@ def _is_run_terminal(run: Run) -> bool:
     # A lease-timeout STOPPED run reopens on the next live event, so it isn't final.
     return (
         run.status == RunWorkflowStatus.STOPPED
-        and run.status_reason != RUN_STATUS_REASON_LEASE_TIMEOUT
+        and run.status_reason not in SOFT_STOP_REASONS
     )
 
 
@@ -516,8 +562,11 @@ class EvalDispatcher:
         slot_bindings_for_job: Optional[SlotBindingsFor] = None,
         secret_lookup_for: Optional[SecretLookupFor] = None,
         submitter_key_for: Optional[SubmitterKeyFor] = None,
+        job_timeout: Optional[timedelta] = None,
     ) -> None:
         self.session_factory = session_factory
+        self.job_timeout = job_timeout or configured_job_timeout()
+        self._next_settle_at: Optional[datetime] = None
         self._client_factory = client_factory
         self.clock = clock or utc_now_naive
         self.interval = interval
@@ -587,6 +636,7 @@ class EvalDispatcher:
 
     def tick(self) -> int:
         """Claim due jobs and advance each one step. Returns the number claimed."""
+        self._maybe_settle()
         claimed = self.claim()
         for job_id in claimed:
             try:
@@ -714,7 +764,7 @@ class EvalDispatcher:
             job = self._locked_job(db, job_id)
             result = fn(db, job)
             sync_job_scores(db, job)  # completion hook (§13): no-op until terminal
-            recompute_experiment_status(db, job.experiment_id)
+            recompute_experiment_status(db, job.experiment_id, now=self.clock())
             db.commit()
             return result
 
@@ -962,7 +1012,7 @@ class EvalDispatcher:
                 if job.cancel_requested_at is not None:
                     self._set_status(job, EvalJobStatus.CANCELLED)
                     self._save(job, changed=True)
-                    recompute_experiment_status(db, experiment.id)
+                    recompute_experiment_status(db, experiment.id, now=self.clock())
                     db.commit()
                     return
                 if not env.is_active:
@@ -974,7 +1024,7 @@ class EvalDispatcher:
                     )
                     job.next_attempt_at = None
                     self._save(job, changed=True)
-                    recompute_experiment_status(db, experiment.id)
+                    recompute_experiment_status(db, experiment.id, now=self.clock())
                     db.commit()
                     return
                 access = self._env_access(db, env)
@@ -987,7 +1037,7 @@ class EvalDispatcher:
                 if not prep.ok:
                     mark_job_blocked(job, prep.problems)
                     self._save(job, changed=True)
-                    recompute_experiment_status(db, experiment.id)
+                    recompute_experiment_status(db, experiment.id, now=self.clock())
                     db.commit()
                     return
                 try:
@@ -1002,7 +1052,7 @@ class EvalDispatcher:
                     )
                     job.next_attempt_at = None
                     self._save(job, changed=True)
-                    recompute_experiment_status(db, experiment.id)
+                    recompute_experiment_status(db, experiment.id, now=self.clock())
                     db.commit()
                     return
                 try:
@@ -1027,7 +1077,7 @@ class EvalDispatcher:
                     if job.status == EvalJobStatus.QUEUED and (
                         self._cancel_if_requested(db, job)
                     ):
-                        recompute_experiment_status(db, experiment.id)
+                        recompute_experiment_status(db, experiment.id, now=self.clock())
                         db.commit()
                         return
                     if job.status not in (
@@ -1044,7 +1094,7 @@ class EvalDispatcher:
                     )
                     db.commit()
                     return
-                recompute_experiment_status(db, experiment.id)
+                recompute_experiment_status(db, experiment.id, now=self.clock())
                 db.commit()  # the SUBMITTING marker is durable before the POST
             outcome = _scrub_outcome(self._post(client, body), qym_api_key)
         finally:
@@ -1416,7 +1466,7 @@ class EvalDispatcher:
         # says nothing about the job.
         observed = remote is not None or run is not None
         stuck = observed and job.status == EvalJobStatus.RUNNING
-        if stuck and now - last_change >= JOB_TIMEOUT:
+        if stuck and now - last_change >= self.job_timeout:
             # Keep the lease and the status: the remote cancel runs outside this
             # transaction, then ``_apply_timeout`` settles the job. A crash in
             # between leaves it RUNNING, so the next poll times it out again.
@@ -1446,7 +1496,7 @@ class EvalDispatcher:
                     # is gone): settle locally.
                     note = "Environment no longer exists" if remote_job_id else None
                     self._apply_cancel(db, job, "cancelled", note)
-                    recompute_experiment_status(db, job.experiment_id)
+                    recompute_experiment_status(db, job.experiment_id, now=self.clock())
                     db.commit()
                     return
                 user_id = job.cancelled_by_user_id or (
@@ -1502,6 +1552,136 @@ class EvalDispatcher:
             )
             return "retry", type(exc).__name__
         return "cancelled", None
+
+    # -- settle sweep ----------------------------------------------------------
+
+    def _maybe_settle(self) -> None:
+        now = self.clock()
+        if self._next_settle_at is not None and now < self._next_settle_at:
+            return
+        self._next_settle_at = now + timedelta(seconds=SETTLE_SWEEP_SECONDS)
+        try:
+            self.settle_sweep()
+        except Exception:  # noqa: BLE001
+            logger.exception("eval dispatcher: settle sweep failed")
+
+    def settle_sweep(self) -> int:
+        """Close out finished experiments once ``KEY_REVOKE_GRACE`` has passed.
+
+        For each experiment that still holds its creator's key: the run of every
+        ``SUCCEEDED`` job finished ``KEY_REVOKE_GRACE`` ago that never got its final
+        event is closed out (:meth:`_close_out_run`), then the experiment status is
+        recomputed, which revokes the key once every job is terminal and past the
+        grace. Returns the number of runs closed out.
+        """
+        now = self.clock()
+        with self.session_factory() as db:
+            ids = [
+                row[0]
+                for row in db.execute(
+                    select(EvalExperiment.id)
+                    .where(EvalExperiment.qym_api_key_encrypted.is_not(None))
+                    .order_by(EvalExperiment.updated_at)
+                    .limit(SETTLE_SWEEP_BATCH)
+                )
+            ]
+        closed = 0
+        for experiment_id in ids:
+            try:
+                with self.session_factory() as db:
+                    jobs = current_jobs(
+                        db.query(EvalExperimentJob)
+                        .filter(EvalExperimentJob.experiment_id == experiment_id)
+                        .all()
+                    )
+                    closed_here = 0
+                    for job in jobs:
+                        if (
+                            job.status == EvalJobStatus.SUCCEEDED
+                            and job.finished_at is not None
+                            and now - job.finished_at >= KEY_REVOKE_GRACE
+                            and self._close_out_run(db, job, now)
+                        ):
+                            closed_here += 1
+                    # Leave live experiments to the job steps: only recompute (and so
+                    # revoke) once everything finished past the grace, or a run changed.
+                    revocable = bool(jobs) and all(
+                        job.status in TERMINAL_JOB_STATUSES for job in jobs
+                    ) and settled_long_enough(jobs, now=now)
+                    if closed_here or revocable:
+                        recompute_experiment_status(db, experiment_id, now=now)
+                        db.commit()
+                    else:
+                        db.rollback()
+                    closed += closed_here
+            except OperationalError:
+                logger.info(
+                    "eval experiment %s: settle sweep lost a lock race", experiment_id
+                )
+        return closed
+
+    def _close_out_run(self, db: Session, job: EvalExperimentJob, now: datetime) -> bool:
+        """Finish the linked run of a ``SUCCEEDED`` job that never sent ``run_completed``.
+
+        The service finished the job but the run is still ``RUNNING`` (or a
+        lease-timeout ``STOPPED``): its final events were lost, e.g. rejected after
+        the key was revoked or dropped when the worker exited. If every item arrived
+        the run is ``COMPLETED``; otherwise it is ``STOPPED`` / ``upload_incomplete``.
+        Both stay open to a late ``run_completed`` (``run_lifecycle``).
+        """
+        run = _linked_run(db, job)
+        if run is None:
+            return False
+        open_run = run.status in (
+            RunWorkflowStatus.PENDING,
+            RunWorkflowStatus.RUNNING,
+        ) or (
+            run.status == RunWorkflowStatus.STOPPED
+            and run.status_reason == RUN_STATUS_REASON_LEASE_TIMEOUT
+        )
+        if not open_run:
+            return False
+        run = (
+            db.query(Run)
+            .filter(Run.id == run.id)
+            .with_for_update()
+            .populate_existing()
+            .one()
+        )
+        metadata = run.run_metadata if isinstance(run.run_metadata, dict) else {}
+        try:
+            expected = int(metadata.get("total_items"))
+        except (TypeError, ValueError):
+            expected = None
+        received = (
+            db.query(func.count(RunItem.id)).filter(RunItem.run_id == run.id).scalar()
+            or 0
+        )
+        ended_at = run.last_event_at or now
+        if expected is not None and received >= expected:
+            mark_run_terminal(run, RunWorkflowStatus.COMPLETED, ended_at=ended_at)
+            db.flush()
+            sync_run_scores(db, run)
+            logger.info(
+                "run %s: job %s succeeded without run_completed; all %d items "
+                "arrived, marked COMPLETED",
+                run.id,
+                job.id,
+                received,
+            )
+        else:
+            run.status = RunWorkflowStatus.STOPPED
+            run.status_reason = RUN_STATUS_REASON_UPLOAD_INCOMPLETE
+            run.ended_at = ended_at
+            logger.warning(
+                "run %s: job %s succeeded but the run is missing events "
+                "(%d of %s items); marked STOPPED/upload_incomplete",
+                run.id,
+                job.id,
+                received,
+                expected if expected is not None else "?",
+            )
+        return True
 
     # -- timeout ---------------------------------------------------------------
 
@@ -1581,7 +1761,9 @@ class EvalDispatcher:
             if message:
                 note += f" ({message})"
         self._set_status(
-            job, EvalJobStatus.TIMED_OUT, error=f"{TIMEOUT_ERROR}. Remote job {note}"
+            job,
+            EvalJobStatus.TIMED_OUT,
+            error=f"{timeout_error(self.job_timeout)}. Remote job {note}",
         )
         self._save(job, changed=True)
 
@@ -1615,7 +1797,7 @@ class EvalDispatcher:
             )
             job.next_attempt_at = now
             self._save(job, changed=True)
-        elif now - (job.cancel_requested_at or now) >= JOB_TIMEOUT:
+        elif now - (job.cancel_requested_at or now) >= self.job_timeout:
             # Past the service's hard limit the remote job has ended either way.
             if kind == "auth":
                 self._mark_env_unauthorized(db, job.environment_id)
@@ -1623,7 +1805,7 @@ class EvalDispatcher:
                 job,
                 EvalJobStatus.CANCELLED,
                 error="The evaluation service could not be reached to cancel; "
-                "gave up after 2h15m",
+                f"gave up after {format_duration(self.job_timeout)}",
             )
             stop_linked_run(db, job, now=now)
             self._save(job, changed=True)
@@ -1659,9 +1841,10 @@ class EvalDispatcher:
         if run.status == RunWorkflowStatus.FAILED:
             return EvalJobStatus.FAILED, "The linked run failed"
         if run.status == RunWorkflowStatus.STOPPED:
-            if job.cancel_requested_at is not None or run.status_reason in (
-                RUN_STATUS_REASON_ADMIN_FORCE_STOP,
-                RUN_STATUS_REASON_CANCELLED_FROM_QUEUE,
+            if (
+                job.cancel_requested_at is not None
+                or run.status_reason == RUN_STATUS_REASON_ADMIN_FORCE_STOP
+                or run.status_reason in RUN_STATUS_REASONS_CANCELLED
             ):
                 return EvalJobStatus.CANCELLED, "The linked run was stopped"
             return EvalJobStatus.FAILED, "The linked run stopped before completing"

@@ -7375,6 +7375,8 @@
           metaItem('Started', formatIsoDateTime(startedAt), { nowrap: true }),
           metaItem('Runtime', runtimeText, { nowrap: true }),
           metaItem('Version', versionText, { mono: true, nowrap: true }),
+          // Why a run is STOPPED (lease timeout, cancelled by whom, lost events).
+          state.viewPass ? '' : metaItem('Stop reason', run.status_reason_label || ''),
         ].filter(Boolean).join('');
         const executionContextHtml = buildExecutionContextSectionHtml();
 
@@ -7395,7 +7397,9 @@
               '</div>' +
             '</div>' +
             '<div class="hero-right">' +
-              '<div class="hero-status qym-badge ' + statusClass + '"><span class="hero-status-dot"></span>' + statusText +
+              '<div class="hero-status qym-badge ' + statusClass + '"' +
+                (!state.viewPass && run.status_reason_label ? ' title="' + escapeAttr(run.status_reason_label) + '"' : '') +
+                '><span class="hero-status-dot"></span>' + statusText +
                 ((!state.viewPass && samplesCount > 1 && (statusClass === 'running' || statusClass === 'pending'))
                   ? ' • pass ' + Math.min((parseInt(run.last_completed_pass, 10) || 0) + 1, samplesCount) + '/' + samplesCount
                   : '') +

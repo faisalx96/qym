@@ -1012,25 +1012,44 @@
     return lines;
   }
 
+  // Already executing on the service (the API's experiment cancel skips these
+  // unless include_running is sent).
+  function isRunningJob(job) {
+    return job.status === 'RUNNING' || !!job.run_id;
+  }
+
   async function cancelExperiment() {
     const x = state.detail;
     if (!x || state.busy.all) return;
     const live = (x.jobs || []).filter((job) => !job.superseded && !isTerminal(job.status) && job.status !== 'CANCELLING');
+    const running = live.filter(isRunningJob);
+    const pending = live.filter((job) => !isRunningJob(job));
+    // Running jobs are only stopped when nothing else is left to cancel, and the
+    // dialog then says so explicitly; otherwise they keep running.
+    const stopRunning = pending.length === 0 && running.length > 0;
+    const description = stopRunning
+      ? cancelDescription(running)
+      : cancelDescription(pending).concat(running.length
+        ? [running.length + ' running job' + (running.length === 1 ? '' : 's') + ' will keep running. To stop ' + (running.length === 1 ? 'it' : 'them') + ', use Cancel on the job row, or cancel the experiment again once nothing else is queued.']
+        : []);
     const ok = await confirmDialog({
-      title: 'Cancel experiment “' + (x.name || x.id) + '”?',
-      description: cancelDescription(live),
-      confirmLabel: 'Cancel experiment',
+      title: stopRunning
+        ? 'Stop ' + running.length + ' running job' + (running.length === 1 ? '' : 's') + ' of “' + (x.name || x.id) + '”?'
+        : 'Cancel queued jobs of “' + (x.name || x.id) + '”?',
+      description: description,
+      confirmLabel: stopRunning ? 'Stop running jobs' : 'Cancel queued jobs',
       cancelLabel: 'Keep running',
       confirmClass: 'shell-btn-danger',
     });
     if (!ok || !state.active) return;
     state.busy.all = true;
     renderDetail();
-    const res = await postJson(experimentsPath('/' + encodeURIComponent(x.id) + '/cancel'), {});
+    const res = await postJson(experimentsPath('/' + encodeURIComponent(x.id) + '/cancel'), { include_running: stopRunning });
     state.busy.all = false;
     if (!state.active) return;
     if (!res.ok) { handleDenied(res, 'Failed to cancel the experiment'); return; }
-    toast(outcomeSummary(res.data.outcomes), 'success');
+    const skipped = (res.data.skipped_running || []).length;
+    toast(outcomeSummary(res.data.outcomes) + (skipped ? '; ' + skipped + ' running left untouched' : ''), 'success');
     if (res.data.experiment) applyDetail(res.data.experiment);
   }
 

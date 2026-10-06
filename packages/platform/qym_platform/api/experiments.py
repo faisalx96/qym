@@ -208,6 +208,9 @@ class ExperimentCreateRequest(BaseModel):
 
 class CancelRequest(BaseModel):
     reason: Optional[str] = Field(default=None, max_length=1000)
+    # Experiment-level cancel only. Off by default: jobs that are already running
+    # (RUNNING, or with a linked run) keep going unless the caller opts in.
+    include_running: bool = False
 
 
 class RetryRequest(BaseModel):
@@ -1395,6 +1398,7 @@ def cancel_experiment(
     experiment = _get_experiment(db, project_id, experiment_id)
     _require_control(db, principal, experiment)
     reason = req.reason if req else None
+    include_running = bool(req and req.include_running)
     jobs = (
         db.query(EvalExperimentJob)
         .filter(
@@ -1403,13 +1407,25 @@ def cancel_experiment(
         )
         .all()
     )
-    outcomes = _cancel(db, principal, experiment, jobs, reason)
-    if any(o != ALREADY_TERMINAL for o in outcomes.values()):
+    skipped_running = [] if include_running else [job.id for job in jobs if _is_running(job)]
+    targets = [job for job in jobs if job.id not in set(skipped_running)]
+    outcomes = _cancel(db, principal, experiment, targets, reason) if targets else {}
+    if not skipped_running and any(o != ALREADY_TERMINAL for o in outcomes.values()):
+        # The experiment counts as cancelled only when nothing was left running.
         experiment.cancelled_at = utc_now_naive()
         experiment.cancelled_by_user_id = principal.user.id
     db.commit()
     db.refresh(experiment)
-    return {"outcomes": outcomes, "experiment": _experiment_detail(db, experiment)}
+    return {
+        "outcomes": outcomes,
+        "skipped_running": skipped_running,
+        "experiment": _experiment_detail(db, experiment),
+    }
+
+
+def _is_running(job: EvalExperimentJob) -> bool:
+    """Already executing on the service: has a linked run, or reports RUNNING."""
+    return job.status == EvalJobStatus.RUNNING or bool(job.run_id)
 
 
 @router.post(_PREFIX + "/{experiment_id}/jobs/{job_id}/cancel")

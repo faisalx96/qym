@@ -83,7 +83,7 @@ from ..secrets import previous_encryption_keys
 from ..settings import PlatformSettings
 from .eval_submitter_keys import revoke_key_when_settled
 from .run_lifecycle import (
-    RUN_STATUS_REASON_CANCELLED_FROM_QUEUE,
+    RUN_STATUS_REASON_CANCELLED_BY_USER,
     RUN_STATUS_REASON_LEASE_TIMEOUT,
 )
 
@@ -432,7 +432,10 @@ def current_jobs(jobs: Sequence[EvalExperimentJob]) -> list[EvalExperimentJob]:
 
 
 def recompute_experiment_status(
-    db: Session, experiment: Union[EvalExperiment, str]
+    db: Session,
+    experiment: Union[EvalExperiment, str],
+    *,
+    now: Optional[datetime] = None,
 ) -> Optional[EvalExperimentStatus]:
     """Refresh ``experiment.status`` from its jobs (flushes, caller commits).
 
@@ -440,8 +443,9 @@ def recompute_experiment_status(
     aggregate rule (``aggregate_status``) for the API, the queue and the dispatcher.
 
     Once the jobs have settled it also drops the temporary-model keys
-    (``clear_secrets_when_settled``) and, once every current job is terminal, revokes
-    the creator's per-experiment qym API key (``eval_submitter_keys``).
+    (``clear_secrets_when_settled``) and, once every current job is terminal and the
+    last one finished ``KEY_REVOKE_GRACE`` before ``now``, revokes the creator's
+    per-experiment qym API key (``eval_submitter_keys``).
 
     On Postgres the experiment row is locked first (``FOR NO KEY UPDATE``, reloaded),
     so transactions settling sibling jobs recompute one after another and each one
@@ -480,7 +484,7 @@ def recompute_experiment_status(
         row.status = status
     clear_secrets_when_settled(row, jobs)
     # The creator's qym API key outlives BLOCKED jobs: they may be retried.
-    revoke_key_when_settled(row, current_jobs(jobs), TERMINAL_JOB_STATUSES)
+    revoke_key_when_settled(row, current_jobs(jobs), TERMINAL_JOB_STATUSES, now=now)
     return status
 
 
@@ -666,7 +670,7 @@ def cancel_job(
 def stop_linked_run(
     db: Session, job: EvalExperimentJob, *, now: Optional[datetime] = None
 ) -> bool:
-    """Mark the job's linked run ``STOPPED`` / ``cancelled_from_queue`` (plan §13.1).
+    """Mark the job's linked run ``STOPPED`` / ``cancelled_by_user`` (plan §13.1).
 
     A cancelled worker is killed and never sends a terminal event, so the run would
     stay ``RUNNING``. Only a run without a terminal event is touched (``PENDING``,
@@ -700,7 +704,7 @@ def stop_linked_run(
             )
             .values(
                 status=RunWorkflowStatus.STOPPED,
-                status_reason=RUN_STATUS_REASON_CANCELLED_FROM_QUEUE,
+                status_reason=RUN_STATUS_REASON_CANCELLED_BY_USER,
                 ended_at=now or utc_now_naive(),
             )
             .execution_options(synchronize_session=False)
