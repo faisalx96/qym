@@ -8811,7 +8811,7 @@
         const message = ITEM_FILTER_BANNERS[state.itemFilter];
         const metric = state.selectedMetric;
         if (!message || !metric) {
-          if (!banner.hidden) { banner.hidden = true; banner.innerHTML = ''; }
+          if (!banner.hidden) { banner.hidden = true; banner.innerHTML = ''; delete banner.dataset.html; }
           return;
         }
         const html = '<span class="rdi-filter-banner__text"><strong>' + escapeHtml(message(count, metric)) + '</strong> The overview above is filtered too.</span>' +

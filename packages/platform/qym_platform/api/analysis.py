@@ -9534,8 +9534,8 @@ def approve_metric_analysis(
 
         analysis = dict(analysis)
         reviewer_id = principal.user.id if principal.auth_type != "none" else None
-        # Judge the reviews as their authors left them: the split below
-        # records the approver as the writer of every new row (C074).
+        # Judge the reviews as their authors left them, before the split
+        # below (C074).
         for existing in (
             db.query(ReviewCorrection)
             .filter(

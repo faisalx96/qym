@@ -1146,13 +1146,15 @@ def _backfill_dataset_search_text(ctx: JobContext) -> bool:
                     db.execute(
                         update(items_table)
                         .where(items_table.c.id == batch.c.pk, items_table.c.search_text.is_(None))
-                        .values(search_text=batch.c.st)
+                        # Derived text, not an edit: keep updated_at (its
+                        # onupdate default would stamp every row).
+                        .values(search_text=batch.c.st, updated_at=items_table.c.updated_at)
                     )
                 else:
                     db.connection().execute(
                         update(items_table)
                         .where(items_table.c.id == bindparam("pk"), items_table.c.search_text.is_(None))
-                        .values(search_text=bindparam("st")),
+                        .values(search_text=bindparam("st"), updated_at=items_table.c.updated_at),
                         [{"pk": pk, "st": search_text} for pk, search_text in filled],
                     )
             db.commit()

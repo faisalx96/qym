@@ -2430,6 +2430,21 @@
     _clearTraceUrl();
   }
 
+  // The page that owns this viewer unmounts: remove the viewer with it. No
+  // focus move and no URL change, as the next page owns both now.
+  function disposeViewer() {
+    S.disposed = true;
+    if (!S.shell) return;
+    const dialogs = _dialogs();
+    if (dialogs) {
+      dialogs.releaseDialog(S.el.modal, { restoreFocus: false });
+      dialogs.releaseDialog(S.el.drawer, { restoreFocus: false });
+    }
+    S.shell.remove();
+    S.shell = null;
+    document.body.classList.remove("tv-open");
+  }
+
   async function fetchTrace(meta) {
     if (!meta.endpoint) throw new Error("Missing endpoint");
     if (cache.has(meta.endpoint)) return cache.get(meta.endpoint);
@@ -2460,7 +2475,7 @@
   }
 
   async function open(meta) {
-    if (S.exportMode) return;
+    if (S.exportMode || S.disposed) return;
     S.meta = meta;
     S.data = null;
     S.selected = null;
@@ -2481,6 +2496,7 @@
 
     try {
       const data = await fetchTrace(meta);
+      if (S.disposed) return;
       S.data = normalizeAttempts(data);
 
       const currentAttempt = currentAttemptData();
@@ -2497,6 +2513,7 @@
       renderHeader(meta, S.data);
       renderTree();
     } catch (err) {
+      if (S.disposed) return;
       renderHeader(meta, { item: { trace_id: meta.traceId, trace_url: meta.traceUrl }, summary: {}, spans: [] });
       S.el.list.innerHTML = `<div class="tv-empty"><div class="tv-empty-t">Failed to load</div><div class="tv-empty-d">${esc(err.message)}</div></div>`;
     }
@@ -2681,6 +2698,9 @@
     const options = pageSignal ? { signal: pageSignal } : false;
     document.addEventListener("click", handleClick, options);
     document.addEventListener("keydown", handleKey, options);
+    if (window.QymShell && typeof window.QymShell.onPageUnmount === "function") {
+      window.QymShell.onPageUnmount(disposeViewer);
+    }
     S.ready = true;
   }
 

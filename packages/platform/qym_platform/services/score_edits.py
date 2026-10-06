@@ -11,6 +11,8 @@ import math
 import re
 from typing import Any, Optional, Tuple
 
+from qym_platform.services.model_stats import parse_score_value
+
 # Plain decimal notation only: no thousands separators, comma decimals, hex,
 # or Python-only forms such as "1_000", "nan" and "inf".
 _NUMBER = re.compile(r"^[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][+-]?[0-9]+)?$")
@@ -128,19 +130,12 @@ def edit_record(
     }
 
 
-def _as_number(value: Any) -> Optional[float]:
-    if isinstance(value, bool):
-        return 1.0 if value else 0.0
-    if isinstance(value, (int, float)):
-        number = float(value)
-        return number if math.isfinite(number) else None
-    if isinstance(value, str):
-        try:
-            number = float(value.strip())
-        except ValueError:
-            return None
-        return number if math.isfinite(number) else None
-    return None
+# Raw values that mean "no score", so their number is None by design.
+_NO_SCORE = {"", "n/a", "na", "none", "null"}
+
+
+class ScoreResetError(ValueError):
+    """A reset that cannot know the original number; nothing is changed."""
 
 
 def restore_original_score(meta: Any, current_raw: Any) -> Tuple[Any, Optional[float], dict]:
@@ -149,12 +144,23 @@ def restore_original_score(meta: Any, current_raw: Any) -> Tuple[Any, Optional[f
     Returns the original raw value, its numeric value and the metadata the
     scorer left: the edit keys are removed and a scorer failure the edit
     replaced (``supersede_metric_error``'s ``original_*``) is restored.
+
+    A saved number is used as it is, 0 and None included. An edit made before
+    numbers were saved has only the raw value, read as the dashboard reads
+    scores; a raw value with no number (a label such as "pass") raises
+    :class:`ScoreResetError`.
     """
     restored = dict(meta) if isinstance(meta, dict) else {}
     original = restored.pop("original_score", current_raw)
-    numeric = restored.pop(ORIGINAL_NUMERIC_KEY, None)
-    if numeric is None:
-        numeric = _as_number(original)
+    if ORIGINAL_NUMERIC_KEY in restored:
+        numeric = restored.pop(ORIGINAL_NUMERIC_KEY)
+    else:
+        numeric = parse_score_value(original)
+        if numeric is None and original is not None and str(original).strip().lower() not in _NO_SCORE:
+            raise ScoreResetError(
+                "The original number of this score was not saved, so it cannot be "
+                "restored. Edit the score instead."
+            )
     for key in _ERROR_KEYS:
         if f"original_{key}" in restored:
             restored[key] = restored.pop(f"original_{key}")

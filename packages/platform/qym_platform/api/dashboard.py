@@ -64,8 +64,9 @@ def _parse_filters(raw: Optional[str]) -> dict:
             not isinstance(value["q"], str) or len(value["q"]) > _MAX_SEARCH_LENGTH
         ):
             raise HTTPException(400, "Invalid search text")
-        # One cache entry per distinct search; blank text is no search.
-        value["q"] = " ".join((value["q"] or "").split()).lower()
+        # One cache entry per distinct search; blank text is no search. Inner
+        # spaces stay: run names are stored with theirs.
+        value["q"] = (value["q"] or "").strip().lower()
         if not value["q"]:
             del value["q"]
     for key in _FILTER_COLUMNS:

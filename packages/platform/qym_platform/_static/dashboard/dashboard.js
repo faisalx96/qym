@@ -2796,8 +2796,8 @@
           stats = stats || emptyModelStats();
           state.chartGroupMetricStats[cacheKey] = { status: 'ready', K: stats.K || runs.length, stats };
           if (state.currentView === 'charts') renderChartsView();
-        }).catch(() => {
-          state.chartGroupMetricStats[cacheKey] = { status: 'error', K: runs.length };
+        }).catch((error) => {
+          state.chartGroupMetricStats[cacheKey] = { status: 'error', K: runs.length, message: error?.message || '' };
           if (state.currentView === 'charts') renderChartsView();
         });
         return state.chartGroupMetricStats[cacheKey];
@@ -2846,7 +2846,10 @@
             .join('');
         }
         if (entry.status !== 'ready' || !entry.stats) {
-          return emptyCells;
+          if (!entry.message) return emptyCells;
+          return visibleGroupStatColumns
+            .map(() => `<div class="chart-metric-cell chart-group-stat-cell" title="${escapeHtml(entry.message)}"><span class="metric-na">\u2014</span></div>`)
+            .join('');
         }
         const stats = entry.stats;
         const consistencyText = stats.consistency !== null ? formatPercent(stats.consistency) : 'NA';
@@ -5687,7 +5690,8 @@
   }
 
   function setSearchQuery(value, { updateInput = false } = {}) {
-    const query = String(value || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+    // Trim only: a name with two spaces in a row must still match its copy.
+    const query = String(value || '').trim().slice(0, 200);
     const input = el('runs-search');
     if (updateInput && input) input.value = query;
     if (query === state.searchQuery) return;
@@ -6075,6 +6079,10 @@
   // depends on changed (the same groups, metric, threshold and revision).
   let modelStatsCache = null;
 
+  // The server's limits per statistics request (api/dashboard_stats.py).
+  const MAX_STAT_GROUPS = 100;
+  const MAX_STAT_RUNS = 2000;
+
   // Pass@K, Pass^K, Max@K, consistency, reliability, averages, latency, error
   // counts and the correct-count histogram per group, computed on the server
   // with the metrics.js rules (services/model_stats.py). groups: [{key, runs}].
@@ -6091,15 +6099,33 @@
     if (modelStatsCache?.key === cacheKey) return modelStatsCache.promise;
     const entry = { key: cacheKey, promise: null };
     entry.promise = (async () => {
-      let data;
+      // Whole groups per request, within the server's limits; the answers
+      // merge. A group is never split: its statistics need all its runs.
+      const batches = [];
+      let batch = null;
+      let runCount = 0;
+      payload.groups.forEach((group) => {
+        if (!batch || batch.length >= MAX_STAT_GROUPS || runCount + group.runs.length > MAX_STAT_RUNS) {
+          batch = [];
+          runCount = 0;
+          batches.push(batch);
+        }
+        batch.push(group);
+        runCount += group.runs.length;
+      });
+      let responses;
       try {
-        data = await dashboardQuery('models/stats', payload);
+        responses = await Promise.all(batches.map(groups => dashboardQuery('models/stats', { ...payload, groups })));
       } catch (error) {
         throw new Error(`Could not load model statistics (${error.message || 'request failed'})`);
       }
-      if (!data || typeof data.groups !== 'object') throw new Error('Incomplete model statistics response');
-      if (Array.isArray(data.missing) && data.missing.length) throw new Error('Some selected runs are no longer available. Refresh the model selection.');
-      return { groups: data.groups, cacheHit: false };
+      const groups = {};
+      responses.forEach((data) => {
+        if (!data || typeof data.groups !== 'object') throw new Error('Incomplete model statistics response');
+        if (Array.isArray(data.missing) && data.missing.length) throw new Error('Some selected runs are no longer available. Refresh the model selection.');
+        Object.assign(groups, data.groups);
+      });
+      return { groups, cacheHit: false };
     })();
     modelStatsCache = entry;
     entry.promise.catch(() => { if (modelStatsCache === entry) modelStatsCache = null; });
@@ -6111,6 +6137,12 @@
   // most 100 groups or 2000 runs each), not one request per group (C035).
   let chartGroupStatsBatches = new Map();
   function fetchChartGroupStats(key, paths, metric, threshold, isBoolean, direction) {
+    // One request cannot hold such a group; refuse it alone so the other
+    // groups of its batch still load.
+    const runs = [...new Set(paths)];
+    if (runs.length > MAX_STAT_RUNS) {
+      return Promise.reject(new Error(`Group statistics cover at most ${MAX_STAT_RUNS} runs. Narrow the filters to see them.`));
+    }
     const rule = {
       metric,
       threshold: Number(threshold),
@@ -6120,7 +6152,7 @@
     const signature = JSON.stringify(rule);
     let batch = chartGroupStatsBatches.get(signature);
     const runCount = batch ? batch.groups.reduce((sum, group) => sum + group.runs.length, 0) : 0;
-    if (!batch || batch.groups.length >= 100 || runCount + paths.length > 2000) {
+    if (!batch || batch.groups.length >= MAX_STAT_GROUPS || runCount + runs.length > MAX_STAT_RUNS) {
       if (batch) chartGroupStatsBatches.delete(signature);
       batch = { rule, groups: [], waiters: new Map() };
       chartGroupStatsBatches.set(signature, batch);
@@ -6147,7 +6179,7 @@
     const waiter = {};
     waiter.promise = new Promise((resolve, reject) => { waiter.resolve = resolve; waiter.reject = reject; });
     batch.waiters.set(key, waiter);
-    batch.groups.push({ key, runs: [...new Set(paths)] });
+    batch.groups.push({ key, runs });
     return waiter.promise;
   }
 
@@ -8259,6 +8291,8 @@
       overviewMark, retained,
     ]);
     if (state.dashboardPage && state.dashboardRequestKey === key && signature === state._dashboardPageSignature) {
+      // The request succeeded, so an earlier failure is over.
+      clearRunsStale();
       el('table-view')?.setAttribute('aria-busy', 'false');
       const updated = el('last-updated');
       if (updated) updated.textContent = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -8874,7 +8908,9 @@
   el('models-k-input')?.addEventListener('change', (e) => {
     const value = parseInt(e.target.value);
     if (!isNaN(value) && value >= 1) {
-      state.modelsViewState.globalK = value;
+      // The input's max: statistics take at most 100 runs per model.
+      state.modelsViewState.globalK = Math.min(100, value);
+      e.target.value = state.modelsViewState.globalK;
       state.modelsViewState.modelRunSelections = {};  // Clear custom selections when K changes
       render();
     }
@@ -9536,7 +9572,7 @@
     try {
       query = new URLSearchParams(window.location.search).get('q') || '';
     } catch {}
-    query = query.replace(/\s+/g, ' ').trim().slice(0, 200);
+    query = query.trim().slice(0, 200);
     state.searchQuery = query;
     el('runs-search').value = query;
   }

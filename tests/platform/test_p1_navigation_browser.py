@@ -742,3 +742,33 @@ def test_back_to_a_compare_item_left_at_the_top_stays_at_the_top(app):
     page.locator(selector).wait_for()
     page.wait_for_timeout(1500)
     assert _scrolled_ancestor_top(page, selector) == 0
+
+
+def test_an_empty_catalog_keeps_the_deleted_datasets_link(app, factory):
+    with factory() as db:
+        db.get(Dataset, "ds").deleted_at = datetime.utcnow()
+        db.commit()
+    page = app.goto("/projects/pa/datasets")
+    link = page.locator("a.dsx-deleted-link")
+    link.wait_for(state="visible")
+    assert not page.locator(".dsx-cat-controls .dsx-search-input").is_visible()
+    link.click()
+    page.wait_for_function("() => new URLSearchParams(location.search).get('view') === 'deleted'")
+
+
+def test_leaving_a_run_with_its_trace_open_leaves_no_overlay(app):
+    page = app.goto("/projects/pa")
+    _runs_ready(page)
+    page.locator("#runs-tbody a.run-id").first.click()
+    page.wait_for_url("**/projects/pa/runs/**")
+    page.locator("#items-grid .item-card").first.wait_for()
+    page.evaluate(
+        "window.QymTraceViewer.open({ endpoint: '/api/runs/run-000/items/item-0/trace', itemLabel: 'item-0' })"
+    )
+    page.locator(".tv-shell.open").wait_for()
+    page.go_back()
+    _runs_ready(page)
+    assert page.locator(".tv-shell").count() == 0
+    assert not page.evaluate("document.body.classList.contains('tv-open')")
+    page.locator("#runs-tbody a.run-id").first.click()
+    page.wait_for_url("**/projects/pa/runs/**")

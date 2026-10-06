@@ -174,7 +174,10 @@ def test_every_column_shows_its_change_against_the_baseline_and_filters_by_it(br
         assert banner.is_hidden()
 
         # Another baseline: the signs flip, and the link keeps the choice.
+        # The shell's history state (the scroll place) stays.
+        page.evaluate("history.replaceState({ qymScroll: { y: 7 } }, '', location.href)")
         page.locator("#metrics-baseline-select").select_option("run-2")
+        assert page.evaluate("history.state && history.state.qymScroll.y") == 7
         assert [header["baseline"] for header in _headers(page)] == [False, True]
         delta = (
             page.locator("#metrics-tbody tr")

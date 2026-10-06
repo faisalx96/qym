@@ -938,3 +938,15 @@ def test_issue_tags_and_solution_only_render_when_solution_has_text():
         assert.ok(!withoutOptionalFields.includes('metric-analysis-subcategory-tag'));
         assert.ok(!withoutOptionalFields.includes('metric-analysis-finding-tag'));
     """)
+
+
+def test_compare_issue_patch_keeps_issue_ids() -> None:
+    """Without IDs an edit next to a removal looks like two removals."""
+    _run_javascript(
+        _function("compare", "rootCauseIssues")
+        + _function("compare", "rootCauseIssuePatch")
+        + """
+        const patch = rootCauseIssuePatch([{issue_id: 'a', category: 'A2'}, {category: 'New'}]);
+        assert.deepEqual(patch.root_cause_issues.map(issue => issue.issue_id), ['a', undefined]);
+    """
+    )

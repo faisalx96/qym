@@ -999,3 +999,168 @@ def test_run_page_issue_approval_of_a_legacy_review_judges_its_author(client, se
     assert response.status_code == 403, response.text
     assert "different reviewer" in response.json()["detail"]
     _ok(client.post("/api/runs/update_root_cause_issue", json=request, headers=_ui(OWNER)))
+
+
+def _two_issue_analysis(db: Session, issues: list) -> None:
+    item = db.query(RunItem).filter_by(run_id="r1").one()
+    item.item_metadata = {
+        "metric_analyses": {
+            "accuracy": {"root_cause": issues[0]["category"], "source": "human", "root_cause_issues": issues}
+        }
+    }
+
+
+def _legacy_two_issue_review(db: Session, author: str = "member-1") -> int:
+    """A grouped review of two issues without IDs, as stored before C074."""
+    _two_issue_analysis(db, [{"category": "A", "source": "human"}, {"category": "B", "source": "human"}])
+    review = ReviewCorrection(
+        run_id="r1",
+        item_id="item-1",
+        metric_name="accuracy",
+        task="task",
+        ai_root_cause="",
+        human_root_cause="A",
+        human_root_causes=["A", "B"],
+        human_root_cause_issues=[{"category": "A"}, {"category": "B"}],
+        corrected_by_user_id=author,
+        is_active=True,
+        status=CorrectionStatus.PENDING,
+        created_at=datetime(2026, 9, 1),
+    )
+    db.add(review)
+    db.commit()
+    return review.id
+
+
+def _issue_request(action: str, index: int, category: str) -> dict:
+    return {
+        "run_id": "r1",
+        "item_id": "item-1",
+        "metric_name": "accuracy",
+        "action": action,
+        "issue_id": None,
+        "issue_index": index,
+        "expected_issue": {"category": category},
+    }
+
+
+def test_run_page_issue_removal_follows_the_correction_delete_rule(client, session_factory):
+    """Removing an issue deletes its correction: the same rule as DELETE (C074)."""
+    with session_factory() as db:
+        _run(db, "r1")
+        legacy_id = _legacy_two_issue_review(db, author="member-1")
+    _ok(_rules(client, correction_approvers="managers"))
+    whole_list = {
+        "run_id": "r1",
+        "item_id": "item-1",
+        "metric_name": "accuracy",
+        "root_cause_issues": [{"category": "B"}],
+    }
+    for path, body in (
+        ("/api/runs/update_root_cause_issue", _issue_request("delete", 0, "A")),
+        ("/api/runs/update_root_cause", whole_list),
+    ):
+        response = client.post(path, json=body, headers=_ui(OWNER))
+        assert response.status_code == 403, response.text
+        assert "delete corrections written by someone else" in response.json()["detail"]
+    with session_factory() as db:
+        legacy = db.get(ReviewCorrection, legacy_id)
+        assert (legacy.is_active, legacy.status) == (True, CorrectionStatus.PENDING)
+    _ok(client.post("/api/runs/update_root_cause_issue", json=_issue_request("delete", 0, "A"), headers=_ui(MANAGER)))
+
+
+def test_an_edit_next_to_a_removal_needs_only_the_removal_right(client, session_factory):
+    """Compare sends issue IDs, so editing A while removing B judges B alone."""
+    with session_factory() as db:
+        _run(db, "r1")
+        _two_issue_analysis(db, [
+            {"issue_id": "a", "category": "A", "source": "human", "review_status": "pending"},
+            {"issue_id": "b", "category": "B", "source": "human", "review_status": "pending"},
+        ])
+        for issue_id, category, author in (("a", "A", "member-1"), ("b", "B", "owner-1")):
+            db.add(ReviewCorrection(
+                run_id="r1", item_id="item-1", metric_name="accuracy", task="task",
+                ai_root_cause="", human_root_cause=category, human_root_causes=[category],
+                human_root_cause_issues=[{"issue_id": issue_id, "category": category}],
+                corrected_by_user_id=author, is_active=True, status=CorrectionStatus.PENDING,
+                created_at=datetime(2026, 9, 1),
+            ))
+        db.commit()
+    _ok(_rules(client, correction_approvers="managers"))
+    request = {"run_id": "r1", "item_id": "item-1", "metric_name": "accuracy"}
+    # Removing someone else's issue A is refused...
+    response = client.post(
+        "/api/runs/update_root_cause",
+        json={**request, "root_cause_issues": [{"issue_id": "b", "category": "B"}]},
+        headers=_ui(OWNER),
+    )
+    assert response.status_code == 403, response.text
+    # ...but editing it while withdrawing one's own B is not.
+    row = _ok(client.post(
+        "/api/runs/update_root_cause",
+        json={**request, "root_cause_issues": [{"issue_id": "a", "category": "A2"}]},
+        headers=_ui(OWNER),
+    ))["row"]
+    issues = row["item_metadata"]["metric_analyses"]["accuracy"]["root_cause_issues"]
+    assert [(issue["issue_id"], issue["category"]) for issue in issues] == [("a", "A2")]
+
+
+def test_splitting_a_legacy_review_keeps_its_author(client, session_factory):
+    """Approving one issue splits the grouped review; the unchanged sibling
+    still belongs to its writer, so the different-reviewer rule holds."""
+    with session_factory() as db:
+        _run(db, "r1")
+        _legacy_two_issue_review(db, author="member-1")
+    _ok(_rules(client, correction_require_different_reviewer=True))
+    _ok(client.post("/api/runs/update_root_cause_issue", json=_issue_request("approve", 0, "A"), headers=_ui(MANAGER)))
+    with session_factory() as db:
+        sibling = db.query(ReviewCorrection).filter_by(is_active=True, status=CorrectionStatus.PENDING).one()
+        assert (sibling.corrected_by_user_id, sibling.created_at) == ("member-1", datetime(2026, 9, 1))
+    response = client.post(
+        "/api/runs/update_root_cause_issue", json=_issue_request("approve", 1, "B"), headers=_ui(MEMBER)
+    )
+    assert response.status_code == 403, response.text
+    assert "different reviewer" in response.json()["detail"]
+    _ok(client.post("/api/runs/update_root_cause_issue", json=_issue_request("approve", 1, "B"), headers=_ui(MANAGER)))
+
+
+def test_a_solution_note_edit_makes_its_writer_the_author():
+    from qym_platform.services.correction_rules import correction_author_id
+
+    def review(human_note: str) -> ReviewCorrection:
+        return ReviewCorrection(
+            corrected_by_user_id="member-1",
+            ai_root_cause="Retrieval miss",
+            ai_root_causes=["Retrieval miss"],
+            ai_solution_note="Check the index",
+            human_root_cause="Retrieval miss",
+            human_root_causes=["Retrieval miss"],
+            human_solution_note=human_note,
+        )
+
+    assert correction_author_id(review("Rebuild the index")) == "member-1"
+    # A copied AI note, or none, is still the AI's text.
+    assert correction_author_id(review(" Check the index ")) is None
+    assert correction_author_id(review("")) is None
+
+
+def test_reset_of_an_edit_made_before_numbers_were_saved(client, session_factory):
+    """Older edits saved only the raw value: read it, or refuse and change nothing."""
+    def seed(original):
+        with session_factory() as db:
+            score = db.query(RunItemScore).filter_by(run_id="r1").one()
+            score.score_raw = score.score_numeric = 0.3
+            score.meta = {"modified": "true", "original_score": original}
+            db.commit()
+
+    with session_factory() as db:
+        _run(db, "r1")
+    seed("85%")
+    _ok(_reset(client, "r1"))
+    with session_factory() as db:
+        score = db.query(RunItemScore).filter_by(run_id="r1").one()
+        assert (score.score_raw, score.score_numeric) == ("85%", pytest.approx(0.85))
+    seed("pass")
+    response = _reset(client, "r1")
+    assert response.status_code == 409, response.text
+    assert _score(session_factory, "r1") == (pytest.approx(0.3), {"modified": "true", "original_score": "pass"})

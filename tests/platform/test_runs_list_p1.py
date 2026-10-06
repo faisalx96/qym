@@ -36,6 +36,8 @@ def test_search_matches_shown_name_run_name_and_id_prefix(dataset):  # noqa: F81
             **dimension.descriptor,
             "external_run_id": "baseline-Qwen3.5-0818",
         }
+        nightly = db.get(Dimension, "run-0009")
+        nightly.descriptor = {**nightly.descriptor, "external_run_id": "nightly  eval"}
         db.commit()
 
     # The name the list shows (external id), case-insensitive substring.
@@ -52,6 +54,8 @@ def test_search_matches_shown_name_run_name_and_id_prefix(dataset):  # noqa: F81
     assert get(client, filters={"q": "   "}).json()["total_runs"] == 30
     assert get(client, filters={"q": "%"}).json()["total_runs"] == 0
     assert get(client, filters={"q": "run_"}).json()["total_runs"] == 0
+    # A copied name keeps its inner spaces; only the ends are trimmed.
+    assert _ids(get(client, filters={"q": " Nightly  eval "})) == ["run-0009"]
 
 
 def test_search_scopes_counts_facets_and_kpis(dataset):  # noqa: F811

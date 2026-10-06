@@ -288,6 +288,8 @@ def test_back_to_another_project_keeps_each_projects_filters(app, factory):  # n
 
     page.go_back()
     page.wait_for_function("() => location.pathname === '/projects/pb'")
+    # The rows of pa can still be on screen, so wait for the rows of pb.
+    page.wait_for_function("() => [...document.querySelectorAll('#runs-tbody a.run-id')].map(a => a.textContent.trim()).join() === 'pb-run'")
     _runs_ready(page)
     assert page.locator("#runs-tbody a.run-id").all_inner_texts() == ["pb-run"]
     assert page.evaluate("location.search") == ""

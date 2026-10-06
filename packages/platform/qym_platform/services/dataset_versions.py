@@ -67,14 +67,18 @@ def counts_are_final(version: DatasetVersion, parent: Optional[DatasetVersion]) 
 
 
 def store_change_counts(db: Session, version: DatasetVersion, parent: Optional[DatasetVersion] = None) -> Optional[Dict[str, int]]:
-    """Compute and store the counts when they are final (call after publishing)."""
+    """Compute and store the counts when they are final (call after publishing).
+
+    Counts are derived data, so writing them keeps ``updated_at``: publishing a
+    parent must not move a published child's edit time. Flush real edits to
+    ``version`` first; their own timestamp is then already stored.
+    """
     if parent is None and version.parent_version_id:
         parent = db.get(DatasetVersion, version.parent_version_id)
-    if not counts_are_final(version, parent):
-        version.change_counts = None
-        return None
-    counts = compute_change_counts(db, version)
+    counts = compute_change_counts(db, version) if counts_are_final(version, parent) else None
     version.change_counts = counts
+    # A column self-reference keeps the stored value and skips the onupdate default.
+    version.updated_at = DatasetVersion.updated_at
     return counts
 
 

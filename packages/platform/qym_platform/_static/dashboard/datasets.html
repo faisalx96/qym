@@ -1619,7 +1619,8 @@
         { label: 'Start blank', onClick: openNewDatasetWizard },
         { label: 'Import CSV / TSV / JSON / JSONL', onClick: () => openUploadWizard({ mode: 'new' }) },
       ]); });
-      controls.appendChild(dsxSearchControl(search));
+      const searchControl = dsxSearchControl(search);
+      controls.appendChild(searchControl);
       controls.appendChild(sortSel);
       controls.appendChild(spaLink(buildUrl({ mode: 'catalog', ref: null, view: 'deleted', q: '' }), () => navigate({ mode: 'catalog', ref: null, view: 'deleted', q: '' }), { className: 'shell-btn shell-btn-secondary qym-inline-action qym-inline-action--neutral dsx-deleted-link' }, 'Deleted datasets'));
       if (!projectReadOnly()) controls.appendChild(newBtn);
@@ -1675,15 +1676,17 @@
         const totalCount = state.datasets.length;
         // First-run: let the empty-state CTA be the single focal point — the hero buttons
         // and the search/sort toolbar are noise when there's nothing to act on yet.
+        // Deleted datasets stays: restoring matters most once none are left.
         const isEmpty = totalCount === 0;
-        controls.style.display = isEmpty ? 'none' : '';
+        [searchControl, sortSel, newBtn].forEach((node) => { node.style.display = isEmpty ? 'none' : ''; });
+        controls.style.display = '';
         controls.style.visibility = '';
         sub.textContent = isEmpty
           ? 'Curated examples you version, compare, and run against any model.'
           : pluralize(totalCount, 'dataset') + ' · ' + pluralize(state.datasets.reduce((s, d) => s + (d.run_count || 0), 0), 'run');
         // They arrive with the cards, in the same fade (QymShell).
         window.QymShell?.arrive?.(sub);
-        if (!isEmpty) window.QymShell?.arrive?.(controls);
+        window.QymShell?.arrive?.(controls);
       };
       loadCatalog();
 

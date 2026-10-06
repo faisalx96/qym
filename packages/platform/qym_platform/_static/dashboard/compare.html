@@ -10685,7 +10685,8 @@
         params.delete('columns');
         if (state.baselineKey) params.set('baseline', state.baselineKey);
         if (state.passColumns === 'each') params.set('columns', 'passes');
-        window.history.replaceState(null, '', window.location.pathname + '?' + params.toString());
+        // Keep the shell's history state: it holds the scroll place to restore.
+        window.history.replaceState(window.history.state, '', window.location.pathname + '?' + params.toString());
       }
 
       function renderBaselineDeltaBanner() {
@@ -11119,6 +11120,7 @@
       function rootCauseIssuePatch(issues) {
         const displayIssues = rootCauseIssues({ root_cause_issues: issues });
         const normalized = displayIssues.map(issue => ({
+          ...(issue.issue_id ? { issue_id: issue.issue_id } : {}),
           category: issue.category,
           subcategory: issue.subcategory,
           finding: issue.finding,
@@ -16282,7 +16284,8 @@
           if (field === 'status') return rd.status || '';
           if (field === 'root_cause') return rootCauseCategories(compareRootCauseScope(rd, ri).analysis)[0] || '';
           if (field === 'root_cause_issues') {
-            const issues = rootCauseIssuePatch(rootCauseIssues(compareRootCauseScope(rd, ri).analysis)).root_cause_issues;
+            const issues = rootCauseIssuePatch(rootCauseIssues(compareRootCauseScope(rd, ri).analysis)).root_cause_issues
+              .map(({ issue_id, ...issue }) => issue);
             return issues.length ? JSON.stringify(issues) : '';
           }
           if (field === 'latency_ms') return String(rd.latency_ms || '');

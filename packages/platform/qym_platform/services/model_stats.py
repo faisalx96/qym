@@ -57,7 +57,9 @@ def _parse_float_prefix(text: str) -> Optional[float]:
     )
     if not match:
         return None
-    return float(match.group(1).replace("Infinity", "inf"))
+    number = float(match.group(1).replace("Infinity", "inf"))
+    # JSON has no Infinity: "1e999" or "Infinity" is no score, not a crash.
+    return number if math.isfinite(number) else None
 
 
 def _is_metric_error_meta(meta: Any) -> bool:

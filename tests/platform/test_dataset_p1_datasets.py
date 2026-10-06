@@ -396,3 +396,45 @@ def test_compare_across_versions_keeps_each_edits_own_time(env):
     # Adjacent compare (v2..v3) still only attributes v3's own edit.
     adjacent = client.get(f"/v1/datasets/qa/versions/{v3}:compare", params={"project_slug": "pa", "base": v2}, headers=MGR).json()
     assert [row["item_id"] for row in adjacent["changed"]] == ["i2"]
+
+
+# ------------------------------------------------- derived writes keep edit time
+
+
+def test_derived_search_text_and_counts_keep_edit_timestamps(env):
+    from qym_platform.services import maintenance
+
+    client, factory, engine = env
+    _upload(client, MGR, "qa", [("a", "one", "x", "t"), ("b", "two", "x", "t")], publish="true")
+    parent = client.post("/v1/datasets/qa/versions", params={"project_slug": "pa"}, json={"from_version": "v1"}, headers=MGR).json()["version"]
+    old = datetime(2024, 1, 2, 3, 4, 5)
+    with factory() as db:
+        draft = db.query(DatasetVersion).filter(DatasetVersion.version == parent["version"]).one()
+        db.add(DatasetVersion(id="child", dataset_id=draft.dataset_id, version="v9", status="published", parent_version_id=draft.id, created_by_user_id="mgr"))
+        db.flush()
+        db.execute(update(DatasetVersion).where(DatasetVersion.id == "child").values(updated_at=old))
+        # Rows written before migration 0068: no search text, an old edit time.
+        db.execute(update(DatasetItem).values(search_text=None, updated_at=old))
+        db.commit()
+
+    # Publishing the parent stores the child's counts, but the child was not edited.
+    assert client.post(f"/v1/datasets/qa/versions/{parent['version']}:publish", params={"project_slug": "pa"}, json={}, headers=MGR).status_code == 200
+    with factory() as db:
+        child = db.get(DatasetVersion, "child")
+        assert child.change_counts is not None and child.updated_at == old
+        published = db.query(DatasetVersion).filter(DatasetVersion.version == parent["version"]).one()
+        assert published.updated_at > old
+
+    with factory() as db:
+        db.execute(update(DatasetItem).values(search_text=None, updated_at=old))
+        db.commit()
+        maintenance.enqueue(db, "backfill_dataset_search_text", {"window": 1})
+        db.commit()
+    worker = maintenance.MaintenanceWorker(factory, engine, retention_interval=0)
+    for _ in range(20):
+        if worker.tick() in ("succeeded", "failed", None):
+            break
+    with factory() as db:
+        items = db.query(DatasetItem).all()
+    assert items and all(item.search_text for item in items)
+    assert {item.updated_at for item in items} == {old}

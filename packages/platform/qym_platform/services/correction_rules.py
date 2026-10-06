@@ -85,7 +85,8 @@ def correction_author_id(correction: ReviewCorrection) -> Optional[str]:
         correction.human_root_cause_note,
     )
     human_solution = str(correction.human_solution or "").strip()
-    if not human and not human_solution:
+    human_note = str(correction.human_solution_note or "").strip()
+    if not human and not human_solution and not human_note:
         return None
     ai = _issue_signature(
         correction.ai_root_cause_issues,
@@ -93,7 +94,11 @@ def correction_author_id(correction: ReviewCorrection) -> Optional[str]:
         correction.ai_root_cause_detail,
         correction.ai_root_cause_note,
     )
-    if human == ai and human_solution in ("", str(correction.ai_solution or "").strip()):
+    if (
+        human == ai
+        and human_solution in ("", str(correction.ai_solution or "").strip())
+        and human_note in ("", str(correction.ai_solution_note or "").strip())
+    ):
         return None
     return correction.corrected_by_user_id
 

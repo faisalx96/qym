@@ -470,7 +470,7 @@ class JobRegistry:
                 if pass_number is None
                 else _TABLE.c.pass_number == int(pass_number)
             )
-        stmt = stmt.order_by(_TABLE.c.created_at.desc()).limit(200)
+        stmt = stmt.order_by(_TABLE.c.created_at.desc())
         with _read_connection(db, engine) as conn:
             if _uses_db_clock(conn):
                 stmt = stmt.add_columns(

@@ -417,3 +417,23 @@ async def test_job_reads_use_the_request_connection_not_a_second_pooled_one(shar
     finally:
         tight.dispose()
         owner.cancel(job.job_id)
+
+
+def test_active_jobs_include_an_old_live_job_behind_many_newer_ones(shared_db) -> None:
+    now = utc_now_naive()
+    stale = now - timedelta(seconds=registry_module.STALE_AFTER_SECONDS + 5)
+
+    def row(job_id, created_at, heartbeat_at):
+        return {
+            "id": job_id, "kind": "analysis", "scope_id": job_id, "project_id": "p",
+            "status": "RUNNING", "active": True, "process_id": "proc", "snapshot": {},
+            "heartbeat_at": heartbeat_at, "created_at": created_at, "updated_at": created_at,
+        }
+
+    rows = [row("old-live", now - timedelta(hours=1), now)]
+    # 200 newer records of stopped owners: they filled the old cap of 200.
+    rows += [row(f"stale-{i}", now - timedelta(seconds=i), stale) for i in range(200)]
+    with shared_db.begin() as conn:
+        conn.execute(BackgroundJob.__table__.insert(), rows)
+    with Session(shared_db) as db:
+        assert [job["id"] for job in job_registry.active(db, "analysis")] == ["old-live"]

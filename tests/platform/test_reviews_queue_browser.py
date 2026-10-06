@@ -587,3 +587,17 @@ def test_run_sample_tabs_keep_the_chosen_metric_and_report_failures(browser, fac
         assert app.errors == []
     finally:
         app.close()
+
+
+def test_every_status_tab_round_trips_through_the_url(app):
+    page = _open_reviews(app)
+    page.click('[role="tab"][data-filter=""]')
+    page.wait_for_function("new URLSearchParams(location.search).get('status') === 'all'")
+    for status, tab in (("all", ""), ("approved", "approved")):
+        page = _open_reviews(app, f"?status={status}")
+        tabs = page.eval_on_selector_all(
+            '[role="tab"].stat-card',
+            "tabs => tabs.filter(t => t.getAttribute('aria-selected') === 'true' || t.tabIndex === 0"
+            " || t.classList.contains('active')).map(t => t.dataset.filter)",
+        )
+        assert tabs == [tab], (status, tabs)

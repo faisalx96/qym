@@ -2719,11 +2719,10 @@
 
     function applyReviewsUrlState() {
       const params = new URLSearchParams(window.location.search);
+      // "all" is the All tab; no status keeps the To review default.
       const status = params.get('status') || '';
-      if (['pending', 'approved', 'rejected'].includes(status)) {
-        state.statusFilter = status;
-        $$('.stat-card').forEach(card => card.classList.toggle('active', card.dataset.filter === status));
-      }
+      if (status === 'all') setStatusTab('');
+      else if (['pending', 'approved', 'rejected'].includes(status)) setStatusTab(status);
       for (const [param, field] of Object.entries(REVIEW_MULTI_PARAMS)) {
         if (!params.has(param)) continue;
         const values = params.getAll(param).filter(Boolean);
@@ -2756,7 +2755,7 @@
       // A load that lands after leaving the page must not edit the next URL.
       if (pageSignal && pageSignal.aborted) return;
       const updates = {
-        status: state.statusFilter || null,
+        status: state.statusFilter || 'all',
         source: state.sourceFilter || null,
         conf_min: state.confMin > 0 ? String(state.confMin) : null,
         conf_max: state.confMax < 100 ? String(state.confMax) : null,

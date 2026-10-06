@@ -492,11 +492,13 @@ def sync_issue_candidates(
                 # The JSON issue retains the full solution; this legacy column is a short label.
                 human_solution="" if is_ai else str(issue.get("solution") or "")[:200],
                 human_solution_note="" if is_ai else str(issue.get("solution_note") or ""),
-                status=status, is_active=True, corrected_by_user_id=actor_user_id,
+                status=status, is_active=True,
+                # Splitting is storage, not authorship: unchanged content keeps its writer.
+                corrected_by_user_id=legacy.corrected_by_user_id if unchanged_legacy else actor_user_id,
                 reviewed_by_user_id=legacy.reviewed_by_user_id if unchanged_legacy else None,
                 reviewed_at=legacy.reviewed_at if unchanged_legacy else None,
                 review_comment=legacy.review_comment if unchanged_legacy else "",
-                created_at=utc_now_naive(),
+                created_at=legacy.created_at if unchanged_legacy else utc_now_naive(),
             )
             db.add(candidate)
         apply_issue_review(issue, candidate)

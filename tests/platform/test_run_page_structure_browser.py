@@ -422,6 +422,10 @@ def test_fail_bar_click_lands_on_the_filtered_list_with_a_banner(browser):
         page.wait_for_function(
             "document.querySelector('#filter-count').textContent.includes('30 of 30')"
         )
+        # The same filter again shows the whole banner, not an empty one.
+        page.locator(".metric-bool-seg.fail-seg[data-metric='accuracy']").click()
+        banner.wait_for(state="visible")
+        assert banner.get_by_role("button", name="Clear filter").is_visible()
     finally:
         fixture.close()
 

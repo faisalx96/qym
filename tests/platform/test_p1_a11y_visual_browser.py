@@ -363,6 +363,18 @@ def test_failed_runs_refresh_keeps_rows_dimmed_under_a_banner(runs_view):
     assert "qym-is-stale" not in (page.locator("#table-view").get_attribute("class") or "")
 
 
+def test_an_unchanged_refresh_after_a_failure_clears_the_stale_banner(runs_view):
+    page = runs_view.page
+    page.route("**/api/dashboard/**", lambda route: route.fulfill(status=503, body="busy"))
+    page.evaluate("() => window.__dashboardTest.fetchRuns().catch(() => {})")
+    page.locator("#runs-stale-banner").wait_for()
+    page.unroute("**/api/dashboard/**")
+    # Same filters, same rows: the answer equals the shown page.
+    page.evaluate("() => window.__dashboardTest.fetchRuns()")
+    page.wait_for_function("() => !document.getElementById('runs-stale-banner')")
+    assert "qym-is-stale" not in (page.locator("#table-view").get_attribute("class") or "")
+
+
 def test_first_runs_load_failure_is_an_error_with_retry(browser):
     view = DashboardFixture(browser)
     try:

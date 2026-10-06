@@ -65,7 +65,12 @@ from qym_platform.permissions import (
     project_for_read_by_slug,
     require_project_writable,
 )
-from qym_platform.services.correction_rules import require_correction_decision
+from qym_platform.services.correction_rules import (
+    DELETE_DETAIL,
+    correction_decision_block,
+    require_correction_decision,
+    require_correction_delete,
+)
 from qym_platform.services.issue_reviews import (
     ISSUE_REVIEW_COLUMNS,
     change_metric_issue,
@@ -115,6 +120,7 @@ from qym_platform.services.score_edits import (
     ORIGINAL_NUMERIC_KEY,
     SCORE_EDIT_META_KEYS,
     ScoreEditError,
+    ScoreResetError,
     edit_record,
     is_edited,
     parse_score_edit,
@@ -155,7 +161,9 @@ from qym_platform.services.repeat_passes import (
 )
 from qym_platform.services.root_cause_changes import (
     PASS_ANALYSIS_META_KEY,
+    apply_human_patch,
     apply_root_cause_change,
+    extract_analysis_state,
     lock_run_item,
     replace_metric_review_candidate,
 )
@@ -1323,7 +1331,8 @@ def _maybe_redirect_to_login(
         f"?{request.url.query}" if request.url.query else ""
     )
     next_value = sanitize_next(full_path, default=(root + "/") if root else "/")
-    return RedirectResponse(url=f"{root}/login?next={next_value}", status_code=303)
+    # Encoded whole: a share link carries several query parameters (pass, item).
+    return RedirectResponse(url=f"{root}/login?next={quote(next_value, safe='/')}", status_code=303)
 
 
 def _project_not_found_page(request: Request, project_slug: str) -> HTMLResponse:
@@ -5679,15 +5688,19 @@ def update_metric(
         previous_value = _edit_audit_value(
             db, run, item, metric_name, pass_number, score_record
         )
-        _reset_score_edit(
-            db,
-            run=run,
-            item=item,
-            metric_name=metric_name,
-            pass_number=pass_number,
-            score_record=score_record,
-            spec=spec,
-        )
+        try:
+            _reset_score_edit(
+                db,
+                run=run,
+                item=item,
+                metric_name=metric_name,
+                pass_number=pass_number,
+                score_record=score_record,
+                spec=spec,
+            )
+        except ScoreResetError as exc:
+            # Nothing is committed: the edit and its record stay as they are.
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         db.flush()
         _record_score_edit(
             db,
@@ -5744,11 +5757,10 @@ def update_metric(
         )
         if (
             score_record.score_raw is not None
-            and score_record.score_numeric is not None
             and score_record.score_raw != score_record.score_numeric
         ):
             # A raw value that is not the number (a label, a boolean...):
-            # keep the number too so a reset restores both.
+            # keep the number too (None included) so a reset restores both.
             meta[ORIGINAL_NUMERIC_KEY] = score_record.score_numeric
     meta["modified"] = "true"
     meta[EDIT_RECORD_KEY] = record
@@ -6078,10 +6090,34 @@ def _require_issue_decision(
         issues = analysis_root_cause_issues(analysis)
         if 0 <= issue_index < len(issues):
             issue_id = issues[issue_index].get("issue_id")
-    rows = db.query(ReviewCorrection).filter(
+    rows = _active_issue_rows(db, run, item_id, metric_name, pass_number)
+    candidate = next(
+        (row for row in rows if issue_id and correction_issue_id(row) == str(issue_id)),
+        None,
+    )
+    if candidate is None:
+        # An issue of a legacy grouped review (no per-issue row yet) is
+        # judged on the grouped review, as it is before the approval splits it.
+        candidate = next((row for row in rows if not correction_issue_id(row)), None)
+    require_correction_decision(db, principal, run.project_id, candidate)
+
+
+def _active_issue_rows(
+    db: Session,
+    run: Run,
+    item_id: str,
+    metric_name: Optional[str],
+    pass_number: Optional[int],
+) -> List[ReviewCorrection]:
+    """Active corrections of one item scope (item-level when ``metric_name`` is None)."""
+    return db.query(ReviewCorrection).filter(
         ReviewCorrection.run_id == run.id,
         ReviewCorrection.item_id == item_id,
-        ReviewCorrection.metric_name == metric_name,
+        (
+            ReviewCorrection.metric_name.is_(None)
+            if metric_name is None
+            else ReviewCorrection.metric_name == metric_name
+        ),
         ReviewCorrection.is_active.is_(True),
         (
             ReviewCorrection.pass_number.is_(None)
@@ -6089,16 +6125,49 @@ def _require_issue_decision(
             else ReviewCorrection.pass_number == pass_number
         ),
     ).all()
-    candidate = next(
-        (row for row in rows if issue_id and correction_issue_id(row) == str(issue_id)),
-        None,
-    )
-    if candidate is None:
-        # An issue of a legacy grouped review (no per-issue row yet): the
-        # approval splits it and records the approver as the writer of the
-        # new rows, so judge the grouped review's author instead.
-        candidate = next((row for row in rows if not correction_issue_id(row)), None)
-    require_correction_decision(db, principal, run.project_id, candidate)
+
+
+def _removed_issue_ids(before: Any, after: Any) -> List[Optional[str]]:
+    """Issues of ``before`` that ``after`` no longer has.
+
+    ID-less (legacy) issues have no identity, so a shorter list removes from
+    the grouped review that holds them (reported as ``None``).
+    """
+    previous = analysis_root_cause_issues(before)
+    kept = analysis_root_cause_issues(after)
+    if any(issue.get("issue_id") for issue in previous):
+        kept_ids = {issue.get("issue_id") for issue in kept}
+        return [
+            issue["issue_id"]
+            for issue in previous
+            if issue.get("issue_id") and issue["issue_id"] not in kept_ids
+        ]
+    return [None] * max(0, len(previous) - len(kept))
+
+
+def _require_issue_removal(
+    db: Session,
+    principal: Principal,
+    run: Run,
+    rows: List[ReviewCorrection],
+    removed_ids: List[Optional[str]],
+) -> None:
+    """Removing an issue follows the rule for deleting its correction (C074).
+
+    Call before any change: a legacy split must not make the remover the
+    author. An issue is judged on its own row, else on the grouped review
+    that holds it; an issue with no row (a fresh AI diagnosis) on the role
+    rule alone.
+    """
+    by_id = {correction_issue_id(row): row for row in rows if correction_issue_id(row)}
+    grouped = [row for row in rows if not correction_issue_id(row)]
+    for issue_id in removed_ids:
+        own = by_id.get(str(issue_id)) if issue_id else None
+        targets = [own] if own is not None else grouped
+        for row in targets:
+            require_correction_delete(db, principal, run.project_id, row)
+        if not targets and correction_decision_block(db, principal, run.project_id):
+            raise HTTPException(status_code=403, detail=DELETE_DETAIL)
 
 
 @router.post("/api/runs/update_root_cause_issue")
@@ -6155,6 +6224,20 @@ def update_root_cause_issue(
             db, principal, run, item_id, metric_name, pass_number, request.get("issue_id"),
             issue_index=request.get("issue_index"), analysis=analysis,
         )
+    elif request.get("action") == "delete":
+        # Resolve the target as change_metric_issue does; a stale one is its 409.
+        issues = analysis_root_cause_issues(analysis)
+        target_id, index = request.get("issue_id"), request.get("issue_index")
+        if target_id:
+            target = next((issue for issue in issues if issue.get("issue_id") == target_id), None)
+        else:
+            target = issues[index] if type(index) is int and 0 <= index < len(issues) else None
+        if target is not None:
+            _require_issue_removal(
+                db, principal, run,
+                _active_issue_rows(db, run, item_id, metric_name, pass_number),
+                [target.get("issue_id")],
+            )
     analysis = change_metric_issue(
         db, run=run, item=item, metric_name=metric_name, analysis=analysis,
         request=request, actor_user_id=principal.user.id if principal.auth_type != "none" else None,
@@ -6291,6 +6374,10 @@ def update_root_cause(
             ReviewCorrection.metric_name == metric_name, ReviewCorrection.pass_number == pass_number,
             ReviewCorrection.is_active.is_(True),
         ).all()
+        _require_issue_removal(
+            db, principal, run, existing_reviews,
+            _removed_issue_ids(before_analysis, after_analysis),
+        )
         if existing_reviews:
             sync_issue_candidates(
                 db, run=run, item=item, metric_name=metric_name,
@@ -6358,6 +6445,11 @@ def update_root_cause(
             else {}
         )
         analysis = _apply_metric_analysis_patch(before_analysis, patch)
+        _require_issue_removal(
+            db, principal, run,
+            _active_issue_rows(db, run, item.item_id, metric_name, None),
+            _removed_issue_ids(before_analysis, analysis),
+        )
 
         meaningful_analysis = {
             key: value
@@ -6416,6 +6508,14 @@ def update_root_cause(
         )
         return {"ok": True, "row": updated_row}
 
+    item_state = extract_analysis_state(
+        item.item_metadata if isinstance(item.item_metadata, dict) else {}
+    )
+    if item_state.get("root_cause") and not apply_human_patch(item_state, patch).get("root_cause"):
+        # Clearing the item diagnosis withdraws its grouped correction.
+        _require_issue_removal(
+            db, principal, run, _active_issue_rows(db, run, item.item_id, None, None), [None]
+        )
     apply_root_cause_change(
         db,
         run=run,

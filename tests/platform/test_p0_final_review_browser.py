@@ -320,6 +320,8 @@ def test_models_label_the_best_value_of_a_lower_is_better_metric_min(browser):
         page = fixture.page
         page.locator("#models-metric-select").select_option("count")
         page.wait_for_function("__modelsTest.state.modelsViewState.metricIsNumeric")
+        # The cards render after the stats arrive, so wait for their labels.
+        page.wait_for_function("() => [...document.querySelectorAll('.model-card .stat-label')].some(n => n.textContent.trim().toUpperCase().startsWith('MIN@'))")
         # Labels are shown upper-case.
         labels = [label.upper() for label in page.locator(".model-card .stat-label").all_inner_texts()]
         assert any(label.startswith("MIN@") for label in labels), labels

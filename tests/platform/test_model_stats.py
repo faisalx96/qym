@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 import random
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -464,3 +466,70 @@ def test_group_stats_keeps_each_groups_run_order():
     )
     assert stats["x"]["runNames"] == ["b", "a"]
     assert stats["x"]["correctDistribution"] == [0, 1, 0]
+
+
+def test_nonfinite_score_text_is_no_score():
+    """JSON has no Infinity: such text must not crash a statistics response."""
+    for raw in ("Infinity", "-Infinity", "1e999", "1e999%"):
+        assert model_stats.parse_score_value(raw) is None
+    assert model_stats.parse_score_value("85%") == pytest.approx(0.85)
+    assert model_stats.parse_score_value("0.5 points") == pytest.approx(0.5)
+
+
+def _stats_fetch_source():
+    source = DASHBOARD_JS.read_text()
+    start = source.index("  let modelStatsCache = null;")
+    end = source.index("  function calculateModelTraceStats(runs) {", start)
+    return source[start:end]
+
+
+def test_large_stat_requests_split_within_the_server_limits():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js is required to check dashboard.js")
+    script = """
+const fs = require('fs');
+const calls = [];
+const state = {};
+const getProjectSlugFromPath = () => 'p';
+async function dashboardQuery(path, payload) {
+  calls.push(payload.groups.map(group => group.runs.length));
+  const groups = {};
+  payload.groups.forEach(group => { groups[group.key] = { n: group.runs.length }; });
+  return { groups, missing: [] };
+}
+eval(fs.readFileSync(0, 'utf8') + `
+(async () => {
+  const many = Array.from({ length: 101 }, (_, i) => ({ key: 'g' + i, runs: ['r' + i] }));
+  const wide = [0, 1, 2].map(i => ({ key: 'w' + i, runs: Array.from({ length: 900 }, (_, j) => i + '-' + j) }));
+  const a = await fetchModelStats(many, 'm', 0.5, false, null, 1);
+  const b = await fetchModelStats(wide, 'm', 0.5, false, null, 2);
+  const modelCalls = calls.splice(0);
+  const big = Array.from({ length: 2001 }, (_, j) => 'b' + j);
+  const results = await Promise.allSettled([
+    fetchChartGroupStats('big', big, 'm', 0.5, false, null),
+    fetchChartGroupStats('ok', ['x'], 'm', 0.5, false, null),
+  ]);
+  console.log(JSON.stringify({
+    groups: [Object.keys(a.groups).length, Object.keys(b.groups).length],
+    modelCalls,
+    chartCalls: calls,
+    chart: results.map(r => r.status),
+  }));
+})();
+`);
+"""
+    result = subprocess.run(
+        [node, "-e", script],
+        input=_stats_fetch_source(),
+        text=True,
+        capture_output=True,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    out = json.loads(result.stdout)
+    assert out["groups"] == [101, 3]
+    assert out["modelCalls"] == [[1] * 100, [1], [900, 900], [900]]
+    # The oversized group fails alone; the other group of its tick still loads.
+    assert out["chart"] == ["rejected", "fulfilled"]
+    assert out["chartCalls"] == [[1]]
