@@ -12,6 +12,7 @@ from qym_platform.auth import Principal, require_ui_principal
 from qym_platform.datetime_utils import to_api_timestamp, utc_now_naive
 from qym_platform.db.models import (
     ApiKey,
+    DatasetReadToken,
     Project,
     ProjectAnalysisCategoryCatalogVersion,
     ProjectAnalysisPromptSettings,
@@ -36,6 +37,7 @@ from qym_platform.permissions import (
     can_manage_project_members,
     get_project_membership,
     has_project_access,
+    is_platform_admin,
     is_project_manager,
 )
 from qym_platform.secrets import (
@@ -45,6 +47,7 @@ from qym_platform.secrets import (
 )
 from qym_platform.security import generate_api_key
 from qym_platform.settings import PlatformSettings
+from qym_platform.services import dataset_read_tokens
 from qym_platform.services.analysis_prompts import (
     DEFAULT_ANALYSIS_PROMPTS,
     serialize_analysis_prompt_settings,
@@ -366,6 +369,10 @@ class UpsertMembershipRequest(BaseModel):
 
 class UpdateMembershipRequest(BaseModel):
     role: ProjectRole
+
+
+class CreateDatasetReadTokenRequest(BaseModel):
+    name: str = Field(default="Evaluation Service", min_length=1, max_length=200)
 
 
 class CreateProjectKeyRequest(BaseModel):
@@ -1032,6 +1039,85 @@ def revoke_project_api_key(
     key.revoked_at = utc_now_naive()
     db.commit()
     return {"ok": True, "id": key.id}
+
+
+def _require_admin_project(db: Session, principal: Principal, project_id: str) -> Project:
+    project = _require_project_access(db, principal, project_id)
+    if not is_platform_admin(principal):
+        raise HTTPException(status_code=403, detail="Only admins can manage dataset read tokens")
+    return project
+
+
+def _dataset_read_token_payload(row: DatasetReadToken, creator: Optional[User]) -> Dict[str, Any]:
+    return {
+        "id": row.id,
+        "name": row.name,
+        "prefix": row.prefix,
+        "project_id": row.project_id,
+        "creator": (
+            {"id": creator.id, "email": creator.email, "display_name": creator.display_name}
+            if creator
+            else None
+        ),
+        "created_at": to_api_timestamp(row.created_at),
+        "revoked_at": to_api_timestamp(row.revoked_at),
+    }
+
+
+@router.get("/v1/projects/{project_id}/dataset-read-tokens")
+def list_dataset_read_tokens(
+    project_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    _require_admin_project(db, principal, project_id)
+    rows = (
+        db.query(DatasetReadToken, User)
+        .outerjoin(User, User.id == DatasetReadToken.created_by_user_id)
+        .filter(DatasetReadToken.project_id == project_id)
+        .order_by(DatasetReadToken.created_at.desc())
+        .all()
+    )
+    return {"tokens": [_dataset_read_token_payload(row, user) for row, user in rows]}
+
+
+@router.post("/v1/projects/{project_id}/dataset-read-tokens")
+def create_dataset_read_token(
+    project_id: str,
+    req: CreateDatasetReadTokenRequest,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    _require_admin_project(db, principal, project_id)
+    row, token = dataset_read_tokens.issue_token(
+        db,
+        project_id=project_id,
+        name=req.name.strip() or "Evaluation Service",
+        created_by_user_id=principal.user.id,
+    )
+    # The raw token is returned once and never stored.
+    return {**_dataset_read_token_payload(row, principal.user), "token": token}
+
+
+@router.delete("/v1/projects/{project_id}/dataset-read-tokens/{token_id}")
+def revoke_dataset_read_token(
+    project_id: str,
+    token_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_ui_principal),
+) -> Dict[str, Any]:
+    _require_admin_project(db, principal, project_id)
+    row = (
+        db.query(DatasetReadToken)
+        .filter(DatasetReadToken.id == token_id, DatasetReadToken.project_id == project_id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Dataset read token not found")
+    if row.revoked_at:
+        raise HTTPException(status_code=400, detail="Dataset read token already revoked")
+    dataset_read_tokens.revoke_token(db, row)
+    return {"ok": True, "id": row.id}
 
 
 @router.post("/v1/admin/projects")

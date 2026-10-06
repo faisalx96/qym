@@ -436,6 +436,27 @@ class ApiKey(Base):
     __table_args__ = (Index("ix_api_key_prefix_active", "prefix", "revoked_at"),)
 
 
+class DatasetReadToken(Base):
+    """Admin-issued token that lets a service read one project's dataset items,
+    private test sets included (``services.dataset_read_tokens``).
+
+    Sent next to a user's API key, never in place of it: the key still decides
+    who acts and in which project; the token only lifts the private test set
+    block on item reads for its own project.
+    """
+
+    __tablename__ = "dataset_read_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    prefix: Mapped[str] = mapped_column(String(16), index=True)
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary)
+    created_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
 class ProjectLlmConnection(Base):
     """A named LLM provider configuration owned by a project.
 

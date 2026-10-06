@@ -276,6 +276,21 @@
           </table>
         </div>
       </div>
+      <div class="card" id="read-tokens-card" hidden>
+        <div class="card-header">
+          <div><div class="card-title">Dataset Read Tokens</div><div class="card-subtitle">Admin-only. Lets a service such as the Evaluation Service read this project's private test sets, so any member can run experiments on them. Runs still belong to the user who launched them, and their item contents stay hidden from non-admins.</div></div>
+        </div>
+        <div class="add-bar">
+          <input class="form-input" id="read-token-name" placeholder="Token name (e.g. Evaluation Service)" />
+          <button class="btn btn-primary" id="create-read-token-btn" type="button" style="padding:0 var(--space-md);font-size:var(--font-sm);">Create Token</button>
+        </div>
+        <div class="card-body flush">
+          <table class="data-table">
+            <thead><tr><th>Name</th><th>Prefix</th><th>Creator</th><th>Status</th><th style="text-align:right">Actions</th></tr></thead>
+            <tbody id="read-tokens-tbody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- LLM Connections -->
@@ -481,7 +496,7 @@
         return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       }
 
-      let state = { me: null, project: null, members: [], users: [], apiKeys: [], analysisPrompts: null };
+      let state = { me: null, project: null, members: [], users: [], apiKeys: [], readTokens: [], analysisPrompts: null };
 
       async function fetchJson(path, options) {
         const res = await fetch(apiUrl(path), options);
@@ -493,6 +508,10 @@
 
       function canManageMembers() {
         return state.me?.role === 'ADMIN' || state.project?.role === 'MANAGER';
+      }
+
+      function isAdmin() {
+        return state.me?.role === 'ADMIN';
       }
 
       function canRevokeKey(key) {
@@ -512,6 +531,9 @@
         state.users = users || [];
         state.members = ((await fetchJson(`v1/projects/${project.id}/members`)) || {}).members || [];
         state.apiKeys = ((await fetchJson(`v1/projects/${project.id}/api-keys`)) || {}).api_keys || [];
+        state.readTokens = isAdmin()
+          ? ((await fetchJson(`v1/projects/${project.id}/dataset-read-tokens`)) || {}).tokens || []
+          : [];
         state.analysisPrompts = canManageMembers()
           ? await fetchJson(`v1/projects/${project.id}/analysis-prompts`)
           : null;
@@ -903,6 +925,27 @@
             await load();
           });
         });
+
+        // Dataset read tokens (admins only)
+        document.getElementById('read-tokens-card').hidden = !isAdmin();
+        document.getElementById('read-tokens-tbody').innerHTML = state.readTokens.length
+          ? state.readTokens.map(t => `
+          <tr>
+            <td style="font-weight:500;color:var(--text-primary)">${escapeHtml(t.name || '')}</td>
+            <td><span style="font-family:var(--font-mono);font-size:var(--font-sm);color:var(--text-muted)">${escapeHtml(t.prefix || '')}</span></td>
+            <td>${escapeHtml(t.creator?.display_name || t.creator?.email || '—')}</td>
+            <td>${t.revoked_at ? `<span style="color:var(--error)">Revoked</span>` : '<span style="color:var(--success)">Active</span>'}</td>
+            <td style="text-align:right">${!t.revoked_at ? `<button class="btn btn-danger" style="padding:4px 10px;font-size:var(--font-sm)" data-read-token-revoke="${escapeHtml(t.id)}">Revoke</button>` : ''}</td>
+          </tr>`).join('')
+          : '<tr><td colspan="5" style="color:var(--text-muted)">No dataset read tokens yet.</td></tr>';
+
+        document.querySelectorAll('[data-read-token-revoke]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (!confirm('Revoke this dataset read token? Experiments using it will no longer be able to read private test sets.')) return;
+            await fetchJson(`v1/projects/${state.project.id}/dataset-read-tokens/${btn.dataset.readTokenRevoke}`, { method: 'DELETE' });
+            await load();
+          });
+        });
       }
 
       // ── Event handlers ──
@@ -914,7 +957,20 @@
       });
 
       // ── New-key modal ──
-      function showKeyModal(token) {
+      const KEY_MODAL_COPY = {
+        apiKey: {
+          title: 'API key created',
+          warn: 'Store it in a secret manager or your <code>.env</code> as <code>QYM_API_KEY</code>.',
+        },
+        readToken: {
+          title: 'Dataset read token created',
+          warn: 'Set it on the Evaluation Service as <code>QYM_DATASET_READ_TOKEN</code>. It can read every dataset in this project, private test sets included.',
+        },
+      };
+      function showKeyModal(token, copy) {
+        const c = copy || KEY_MODAL_COPY.apiKey;
+        document.getElementById('key-modal-title').textContent = c.title;
+        document.getElementById('key-modal-warn').innerHTML = c.warn;
         document.getElementById('key-modal-token').textContent = token;
         document.getElementById('key-modal-backdrop').classList.add('open');
       }
@@ -950,6 +1006,14 @@
         document.getElementById('key-name').value = '';
         await load();
         showKeyModal(data.token);
+      });
+
+      document.getElementById('create-read-token-btn').addEventListener('click', async () => {
+        const name = document.getElementById('read-token-name').value.trim() || 'Evaluation Service';
+        const data = await fetchJson(`v1/projects/${state.project.id}/dataset-read-tokens`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+        document.getElementById('read-token-name').value = '';
+        await load();
+        showKeyModal(data.token, KEY_MODAL_COPY.readToken);
       });
 
       // ── Analysis system prompts (admins and project managers) ──
@@ -1305,7 +1369,7 @@
         <div class="token-field" id="key-modal-token"></div>
         <button class="btn btn-primary" id="key-modal-copy" type="button" style="padding:8px 14px;font-size:var(--font-sm);white-space:nowrap;">Copy</button>
       </div>
-      <div class="warn">Store it in a secret manager or your <code>.env</code> as <code>QYM_API_KEY</code>.</div>
+      <div class="warn" id="key-modal-warn">Store it in a secret manager or your <code>.env</code> as <code>QYM_API_KEY</code>.</div>
       <div class="footer">
         <button class="btn btn-secondary" id="key-modal-done" type="button" style="padding:8px 16px;font-size:var(--font-sm);">Done</button>
       </div>

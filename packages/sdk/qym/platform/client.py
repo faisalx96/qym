@@ -759,8 +759,11 @@ class PlatformClient:
         alias: Optional[str] = None,
         project_slug: Optional[str] = None,
         limit: int = 1000,
+        read_token: Optional[str] = None,
     ) -> Dict[str, Any]:
         import urllib.parse
+
+        from ..core.dataset import DATASET_READ_TOKEN_HEADER
 
         ref = urllib.parse.quote(dataset, safe="")
         version_ref = urllib.parse.quote(version or alias or "production", safe="")
@@ -771,7 +774,11 @@ class PlatformClient:
             f"{self.platform_url}/v1/datasets/{ref}/versions/{version_ref}/items?"
             + urllib.parse.urlencode(params)
         )
-        req = request.Request(url, headers={"Authorization": f"Bearer {self.api_key}"})
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        token = read_token or os.getenv("QYM_DATASET_READ_TOKEN")
+        if token:
+            headers[DATASET_READ_TOKEN_HEADER] = token
+        req = request.Request(url, headers=headers)
         with request.urlopen(req, timeout=self.CREATE_RUN_TIMEOUT) as resp:
             body = resp.read().decode("utf-8")
             return json.loads(body) if body else {}

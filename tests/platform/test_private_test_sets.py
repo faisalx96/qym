@@ -401,3 +401,72 @@ def test_analyzer_is_admin_only_on_private_runs(world):
     assert started.status_code == 403
     active = client.get("/api/runs/run-secret/analysis-jobs/active", headers=MEMBER)
     assert active.status_code == 200 and active.json() == {"job": None}
+
+
+def _member_api_key(SessionLocal, project_id: str = "project-1") -> str:
+    from qym_platform.db.models import ApiKey
+    from qym_platform.security import generate_api_key
+
+    token, prefix, key_hash = generate_api_key()
+    with SessionLocal() as db:
+        db.add(ApiKey(user_id="member-1", project_id=project_id, name="k", prefix=prefix, key_hash=key_hash))
+        db.commit()
+    return token
+
+
+def test_only_admins_manage_dataset_read_tokens(world):
+    client, _ = world
+    path = "/v1/projects/project-1/dataset-read-tokens"
+    assert client.post(path, json={"name": "svc"}, headers=MEMBER).status_code == 403
+    assert client.get(path, headers=MEMBER).status_code == 403
+
+    created = client.post(path, json={"name": "svc"}, headers=ADMIN)
+    assert created.status_code == 200
+    body = created.json()
+    assert body["token"].startswith("qym_dr_")
+    listed = client.get(path, headers=ADMIN).json()["tokens"]
+    assert [t["id"] for t in listed] == [body["id"]]
+    assert "token" not in listed[0]
+    assert client.delete(f"{path}/{body['id']}", headers=MEMBER).status_code == 403
+
+
+def test_dataset_read_token_lets_member_key_read_private_items(world):
+    client, SessionLocal = world
+    key = _member_api_key(SessionLocal)
+    token = client.post("/v1/projects/project-1/dataset-read-tokens", json={}, headers=ADMIN).json()
+    items_path = "/v1/datasets/secret/versions/v1/items"
+    bearer = {"Authorization": f"Bearer {key}"}
+
+    assert client.get(items_path, headers=bearer).status_code == 403
+    with_token = {**bearer, "X-Qym-Dataset-Read-Token": token["token"]}
+    for path in (items_path, "/v1/datasets/secret/versions/v1/items/item-1", "/v1/datasets/secret/versions/v1:download"):
+        response = client.get(path, headers=with_token)
+        assert response.status_code == 200, path
+        assert SECRET_INPUT in response.text
+
+    # Reads only: edits stay admin-only.
+    edit = client.patch("/v1/datasets/secret/versions/v1/items/item-1", json={"input": "x"}, headers=with_token)
+    assert edit.status_code == 403
+    # A browser session can't use the token; it rides next to an API key only.
+    ui = client.get(items_path, params={"project_slug": "p"}, headers={**MEMBER, "X-Qym-Dataset-Read-Token": token["token"]})
+    assert ui.status_code == 403
+    assert client.get(items_path, headers={**bearer, "X-Qym-Dataset-Read-Token": "qym_dr_wrong"}).status_code == 403
+
+    client.delete(f"/v1/projects/project-1/dataset-read-tokens/{token['id']}", headers=ADMIN)
+    assert client.get(items_path, headers=with_token).status_code == 403
+
+
+def test_dataset_read_token_is_scoped_to_its_project(world):
+    client, SessionLocal = world
+    with SessionLocal() as db:
+        db.add(Project(id="project-2", name="Q", slug="q", created_by_user_id="admin-1"))
+        db.add(ProjectMembership(project_id="project-2", user_id="admin-1", role=ProjectRole.MANAGER))
+        db.commit()
+    other = client.post("/v1/projects/project-2/dataset-read-tokens", json={}, headers=ADMIN).json()
+    key = _member_api_key(SessionLocal)
+    response = client.get(
+        "/v1/datasets/secret/versions/v1/items",
+        headers={"Authorization": f"Bearer {key}", "X-Qym-Dataset-Read-Token": other["token"]},
+    )
+    assert response.status_code == 403
+    assert not _leaks(response)

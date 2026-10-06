@@ -45,6 +45,8 @@ from qym_platform.permissions import (
     is_platform_admin,
 )
 from qym_platform.security import api_key_prefix, verify_api_key
+from qym_platform.services.dataset_read_tokens import HEADER as DATASET_READ_TOKEN_HEADER
+from qym_platform.services.dataset_read_tokens import token_grants_project
 from qym_platform.services.dataset_search import filter_dataset_item_search
 
 
@@ -163,9 +165,26 @@ def _get_dataset(db: Session, project: Project, ref: str) -> Dataset:
     return dataset
 
 
-def _require_items_visible(principal: Principal, dataset: Dataset) -> None:
-    if not can_view_dataset_items(principal, dataset):
-        raise HTTPException(status_code=403, detail=PRIVATE_TEST_SET_DETAIL)
+def _require_items_visible(
+    principal: Principal,
+    dataset: Dataset,
+    *,
+    db: Optional[Session] = None,
+    read_token: Optional[str] = None,
+) -> None:
+    if can_view_dataset_items(principal, dataset):
+        return
+    # Item reads only: an admin-issued dataset read token of this dataset's
+    # project, sent next to an API key, lifts the private test set block
+    # (Evaluation Service runs). The key still decides the user and project.
+    if (
+        db is not None
+        and read_token
+        and principal.auth_type == "api_key"
+        and token_grants_project(db, read_token, dataset.project_id)
+    ):
+        return
+    raise HTTPException(status_code=403, detail=PRIVATE_TEST_SET_DETAIL)
 
 
 def _require_admin_for_private_flag(principal: Principal) -> None:
@@ -1372,11 +1391,12 @@ def list_items(
     label: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(dataset_principal),
+    read_token: Optional[str] = Header(default=None, alias=DATASET_READ_TOKEN_HEADER),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
-    _require_items_visible(principal, dataset)
+    _require_items_visible(principal, dataset, db=db, read_token=read_token)
     version = _resolve_version(db, dataset, version_ref)
     query = db.query(DatasetItem).filter(DatasetItem.dataset_version_id == version.id)
     query = filter_dataset_item_search(db, query, search)
@@ -1537,11 +1557,12 @@ def get_item(
     project_slug: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(dataset_principal),
+    read_token: Optional[str] = Header(default=None, alias=DATASET_READ_TOKEN_HEADER),
 ) -> Dict[str, Any]:
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
-    _require_items_visible(principal, dataset)
+    _require_items_visible(principal, dataset, db=db, read_token=read_token)
     version = _resolve_version(db, dataset, version_ref)
     item = (
         db.query(DatasetItem)
@@ -2212,11 +2233,12 @@ def download_version(
     project_slug: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
     principal: Principal = Depends(dataset_principal),
+    read_token: Optional[str] = Header(default=None, alias=DATASET_READ_TOKEN_HEADER),
 ) -> Response:
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
     dataset = _get_dataset(db, project, dataset_ref)
-    _require_items_visible(principal, dataset)
+    _require_items_visible(principal, dataset, db=db, read_token=read_token)
     version = _resolve_version(db, dataset, version_ref)
     items = db.query(DatasetItem).filter(DatasetItem.dataset_version_id == version.id).order_by(DatasetItem.index).all()
     lines = [

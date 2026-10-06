@@ -383,6 +383,9 @@ class InMemoryDataset:
         return self.size
 
 
+DATASET_READ_TOKEN_HEADER = "X-Qym-Dataset-Read-Token"
+
+
 class QymDataset:
     """Load a versioned dataset from the qym platform."""
 
@@ -395,6 +398,7 @@ class QymDataset:
         platform_url: str | None = None,
         api_key: str | None = None,
         project_slug: str | None = None,
+        read_token: str | None = None,
     ) -> None:
         self.name = dataset_name
         self.version = version
@@ -403,6 +407,10 @@ class QymDataset:
             platform_url or os.getenv("QYM_BASE_URL") or ""
         ).rstrip("/")
         self.api_key = api_key or os.getenv("QYM_API_KEY")
+        # Optional admin-issued dataset read token, set by a service (e.g. the
+        # Evaluation Service) so runs can read private test sets. Sent only on
+        # dataset reads; the API key still authenticates and owns the run.
+        self.read_token = read_token or os.getenv("QYM_DATASET_READ_TOKEN") or None
         self.project_slug = project_slug
         self.id: Optional[str] = None
         self.dataset_version_id: Optional[str] = None
@@ -416,10 +424,10 @@ class QymDataset:
             )
 
     def _fetch_json(self, path: str) -> Dict[str, Any]:
-        req = request.Request(
-            f"{self.platform_url}{path}",
-            headers={"Authorization": f"Bearer {self.api_key}"},
-        )
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        if self.read_token:
+            headers[DATASET_READ_TOKEN_HEADER] = self.read_token
+        req = request.Request(f"{self.platform_url}{path}", headers=headers)
         try:
             with request.urlopen(req, timeout=30) as resp:
                 raw = resp.read().decode("utf-8")

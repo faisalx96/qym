@@ -340,6 +340,23 @@ Rules for callers and for the service:
   run upload has finished. A caller that mints a key per job should revoke it only after
   that.
 
+#### 4.0.1 Private test sets: `QYM_DATASET_READ_TOKEN` (service config, optional)
+
+A private test set's items are readable only by platform admins, so a job submitted
+by a non-admin can't load one with `qym_api_key` alone. To let any member run
+experiments on private test sets, a platform admin creates a **dataset read token**
+for the project (Project Settings → API Keys → Dataset Read Tokens) and the service
+sets it as the `QYM_DATASET_READ_TOKEN` environment variable of its workers.
+
+- The SDK sends it in the `X-Qym-Dataset-Read-Token` header on dataset item reads
+  only, next to `QYM_API_KEY`. The run upload uses `QYM_API_KEY` alone, so the run
+  still belongs to the submitting user.
+- A token belongs to one project and only lifts the private test set block on item
+  reads in that project. It never identifies a user and never allows edits.
+- It is a service secret: set it per deployment, never per job, and never put it in
+  the job body. Revoke it in the same settings page.
+- Run results on private test sets stay redacted for non-admins on the platform.
+
 ### 4.1 `evaluator` (`EvaluatorInputs`)
 
 | Field | Type | Required | Notes |
