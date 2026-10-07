@@ -28,6 +28,10 @@ services:
       QYM_DATABASE_URL: ${QYM_DATABASE_URL}
       # Default `all`: this container serves HTTP and runs the background
       # loops. Set QYM_ROLE=api and start the `worker` profile to split them.
+      # Recommended for production (the API warns at startup otherwise): a
+      # heavy maintenance job then cannot OOM-kill the API, since each
+      # container has its own memory limit. See docs/internal/OPERATIONS.md,
+      # "Recommended production layout".
       QYM_ROLE: ${QYM_ROLE:-all}
       # >1 serves HTTP from N processes; with QYM_ROLE=all one more process
       # runs the background loops (qym_platform/serve.py). Default: 1 process.
@@ -72,6 +76,9 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=512m,mode=1777
+    # Example memory ceiling (the tmpfs above counts toward it). Roughly
+    # 350 MB per web process plus headroom for product evals and analyses.
+    # mem_limit: 2g
     ports:
       - "8000:8000"
     depends_on:
@@ -121,6 +128,9 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=256m,mode=1777
+    # Its own ceiling: a heavy maintenance job is restarted alone (jobs resume)
+    # instead of taking the API down with it.
+    # mem_limit: 1g
     depends_on:
       api:
         condition: service_healthy

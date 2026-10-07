@@ -38,6 +38,9 @@ sure one process runs a given job.
 | `QYM_AUTH_LOGIN_MAX_FAILURES_PER_EMAIL` / `..._PER_CLIENT` / `QYM_AUTH_LOGIN_FAILURE_WINDOW_SECONDS` | `5` / `30` / `300` | Failed password sign-ins before `429`. `..._PER_EMAIL` counts one email from one client address and refuses only that client, so the right password from another client still works; `..._PER_CLIENT` counts one address over all emails. "Account already exists" answers at sign-up count only against the client. An attempt counts as a failure from the moment it passes the check until its password proves right, so concurrent attempts cannot get past a limit. All limits are counted per API process (with `QYM_WEB_WORKERS=N` each process counts on its own, so a pod allows up to N times the limit). uvicorn trusts `X-Forwarded-For` only from `FORWARDED_ALLOW_IPS` (default `127.0.0.1`): set `FORWARDED_ALLOW_IPS` (or `--forwarded-allow-ips=...` in `QYM_UVICORN_ARGS`) to the ingress/pod CIDR, otherwise every client shares the ingress address and the per-client limit applies to all of them together. The API logs a warning at startup when password sign-in is on outside dev/test and neither is set |
 | `QYM_AUTH_LOGIN_EMAIL_CEILING` / `QYM_AUTH_LOGIN_EMAIL_CEILING_WINDOW_SECONDS` | `50` / `900` | Failed password sign-ins for one email from all clients together; past it, password sign-in for that email answers `429` from every client, even with the right password, until failures age out. Counted per API process |
 | `QYM_DB_POOL_SIZE` / `QYM_DB_MAX_OVERFLOW` | `10` / `10` | API connection pool |
+| `QYM_HTTP_THREADPOOL_SIZE` | `0` (= `QYM_DB_POOL_SIZE` + `QYM_DB_MAX_OVERFLOW`) | Threads for sync request handlers, per web process. AnyIO's default (40) exceeded the API pool, so under load the extra threads waited `QYM_DB_POOL_TIMEOUT_SECONDS` and failed with pool timeouts; capped, extra requests queue for a thread instead. Raise the pool and this together, keeping pods x processes x pool under `max_connections` |
+| `QYM_MIGRATION_LOCK_TIMEOUT` | `10s` | `lock_timeout` for the migration session (`0` disables). See "Migrations and large tables" |
+| `QYM_PRODUCT_EVAL_MAX_RETAINED_JOBS` | `100` | Finished product evals kept in each process's memory; older ones are served from `background_jobs` |
 | `QYM_DB_WORKER_POOL_SIZE` / `QYM_DB_WORKER_MAX_OVERFLOW` | `3` / `2` | Worker pool |
 | `QYM_DB_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement guard on API connections |
 | `QYM_DB_LOCK_TIMEOUT_MS` | `5000` | Lock-wait guard (all roles) |
@@ -95,6 +98,17 @@ builds are deferred to maintenance jobs. Migration `0057` also backfills existin
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
 Migrations `0058`–`0082` are quick DDL or small job/queue inserts.
+
+On PostgreSQL every `alembic upgrade` takes a per-schema advisory lock, so
+replicas that start together migrate one at a time (the others wait, then find
+nothing to do), and sets `lock_timeout` to `QYM_MIGRATION_LOCK_TIMEOUT`
+(default `10s`). A DDL statement that cannot get its lock in time fails the
+start and the container restarts and retries, instead of queueing every query
+on that table behind it. With more than one API replica, prefer running the
+migration once per release as its own job (same image, command
+`alembic -c packages/platform/qym_platform/migrations/alembic.ini upgrade head`,
+for example a Helm pre-upgrade hook) and set `QYM_SKIP_MIGRATIONS=1` on every
+replica and worker.
 
 | Migration | Work during startup | Deferred job (if table is large) |
 |---|---|---|
@@ -313,6 +327,35 @@ Sizing, per API pod:
 - **Sign-in failure limits** (`QYM_AUTH_LOGIN_MAX_FAILURES_*` and
   `QYM_AUTH_LOGIN_EMAIL_CEILING`) are counted in each web process, so a pod with
   N processes allows up to N times the limit.
+
+## Recommended production layout
+
+The default `QYM_ROLE=all` with `QYM_WEB_WORKERS=1` puts HTTP, the dashboard
+summary, maintenance (retention, purges, backfills), eval-dispatch loops and
+in-process product evals in **one** process: a memory spike in any of them
+(OOM kill) takes the API down too. The API logs a warning at startup when it
+runs this way outside a dev/test `QYM_ENVIRONMENT`. For production:
+
+1. **Migrations**: a one-off job per release (see "Migrations and large
+   tables"); `QYM_SKIP_MIGRATIONS=1` everywhere else.
+2. **API** Deployment/container: `QYM_ROLE=api`, `QYM_WEB_WORKERS` 2-4 as
+   needed, memory limit sized per web process (about 350 MB each plus headroom
+   for product evals and analyses, which run in the process that accepted
+   them).
+3. **Worker**: one replica, `QYM_ROLE=worker`, `QYM_SKIP_MIGRATIONS=1`,
+   command `python -m qym_platform.worker`, with its **own** memory limit (start
+   at 1 GiB) so a heavy maintenance job is killed and restarted on its own
+   (jobs resume from their saved progress) without touching HTTP.
+
+With Docker Compose: set `QYM_ROLE=api` in `.env` and run
+`docker compose --profile worker up -d`; the compose file shows example
+`mem_limit` values. On Kubernetes use the sketch below.
+
+Retention runs in the worker. Soft-deleted runs are purged in 5000-row
+batches (spans, events, items and their scores), each its own transaction,
+while the purge holds only the run row; span partitions are created with
+`ATTACH PARTITION` and dropped with `DETACH`, both under a 1 s `lock_timeout`
+with a few retries, so neither holds locks that stall API queries for long.
 
 ## Optional separate worker Deployment (Helm/Kubernetes sketch)
 
