@@ -423,3 +423,124 @@ def test_public_restore_during_dashboard_cleanup_preserves_lock_order(
             ).scalar()
             == 1
         )
+
+
+def _seed_bulk(conn, run_id, created_at, *, items, spans, events):
+    for index in range(1, items):
+        conn.execute(
+            text(
+                "INSERT INTO run_items (run_id, item_id, index, input, item_metadata, retry_count) "
+                "VALUES (:r, :i, :n, '{}', '{}', 0)"
+            ),
+            {"r": run_id, "i": f"i{index}", "n": index},
+        )
+    for index in range(1, spans):
+        conn.execute(
+            text(
+                "INSERT INTO spans (run_created_at, run_id, trace_id, span_id, name) "
+                "VALUES (:c, :r, 't', :s, 'x')"
+            ),
+            {"c": created_at, "r": run_id, "s": f"s{index:03d}"},
+        )
+    for index in range(events):
+        conn.execute(
+            text(
+                "INSERT INTO run_events (run_id, event_id, sequence, type, sent_at, payload) "
+                "VALUES (:r, :e, :n, 'item', now(), '{}')"
+            ),
+            {"r": run_id, "e": f"{run_id}-e{index}", "n": index},
+        )
+
+
+def test_purge_deletes_bulk_children_in_batches(migrated_postgres):
+    engine = migrated_postgres
+    now = datetime(2026, 9, 14)
+    from qym_platform.migrations_support import ensure_month_partitions_between
+
+    ensure_month_partitions_between(engine, now - timedelta(days=40), now)
+    created = now - timedelta(days=5)
+    with engine.begin() as conn:
+        # _seed_run adds one item and one span; _seed_bulk adds the rest.
+        _seed_run(conn, "bulk", created, deleted_at=now - timedelta(days=40))
+        _seed_bulk(conn, "bulk", created, items=7, spans=9, events=5)
+        _seed_run(conn, "keep", created)
+        _seed_bulk(conn, "keep", created, items=3, spans=3, events=2)
+    batches = []
+
+    def count(conn, cursor, statement, parameters, context, executemany):
+        if statement.startswith("DELETE FROM ") and "RETURNING" in statement:
+            batches.append(statement.split()[2])
+
+    event.listen(engine, "before_cursor_execute", count)
+    try:
+        purged = retention.purge_soft_deleted_runs(
+            engine, grace_days=30, now=now, batch_size=2
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", count)
+    assert purged == ["bulk"]
+    # 9 spans in batches of 2 -> 5 statements; items and events batch too.
+    assert batches.count("spans") == 5
+    assert batches.count("run_items") == 4
+    assert batches.count("run_events") == 3
+    with engine.connect() as conn:
+        for table in ("runs", "run_items", "spans", "run_events"):
+            column = "id" if table == "runs" else "run_id"
+            left = conn.execute(
+                text(f"SELECT count(*) FROM {table} WHERE {column} = 'bulk'")
+            ).scalar()
+            assert left == 0, table
+        keep = {
+            table: conn.execute(
+                text(f"SELECT count(*) FROM {table} WHERE run_id = 'keep'")
+            ).scalar()
+            for table in ("run_items", "spans", "run_events")
+        }
+        assert keep == {"run_items": 3, "spans": 3, "run_events": 2}
+
+
+def test_purge_defers_a_run_whose_batch_hits_a_lock_timeout(migrated_postgres):
+    engine = migrated_postgres
+    now = datetime(2026, 9, 14)
+    from qym_platform.migrations_support import ensure_month_partitions_between
+
+    ensure_month_partitions_between(engine, now - timedelta(days=40), now)
+    with engine.begin() as conn:
+        _seed_run(
+            conn, "held", now - timedelta(days=5), deleted_at=now - timedelta(days=40)
+        )
+    holder = engine.connect()
+    try:
+        holder.execute(
+            text("SELECT 1 FROM run_items WHERE run_id = 'held' FOR UPDATE")
+        )
+
+        def short_timeout(conn, cursor, statement, parameters, context, executemany):
+            if statement == "SET LOCAL lock_timeout = '5s'":
+                cursor.execute("SET LOCAL lock_timeout = '200ms'")
+
+        event.listen(engine, "after_cursor_execute", short_timeout)
+        try:
+            assert (
+                retention.purge_soft_deleted_runs(engine, grace_days=30, now=now)
+                == []
+            )
+        finally:
+            event.remove(engine, "after_cursor_execute", short_timeout)
+    finally:
+        holder.rollback()
+        holder.close()
+    with engine.connect() as conn:
+        # The run stays soft-deleted with its items for the next tick.
+        assert conn.execute(
+            text("SELECT deleted_at IS NOT NULL FROM runs WHERE id = 'held'")
+        ).scalar()
+        assert (
+            conn.execute(
+                text("SELECT count(*) FROM run_items WHERE run_id = 'held'")
+            ).scalar()
+            == 1
+        )
+    assert retention.purge_soft_deleted_runs(engine, grace_days=30, now=now) == [
+        "held"
+    ]
