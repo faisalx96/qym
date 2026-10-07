@@ -97,4 +97,9 @@ def job_execution_queued(settings: PlatformSettings | None = None) -> bool:
     return resolve_layout(settings or PlatformSettings()).queues_jobs
 
 
-__all__ = ["ServiceLayout", "job_execution_queued", "normalize_prefix", "resolve_layout"]
+__all__ = [
+    "ServiceLayout",
+    "job_execution_queued",
+    "normalize_prefix",
+    "resolve_layout",
+]

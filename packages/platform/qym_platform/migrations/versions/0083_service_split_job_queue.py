@@ -34,7 +34,9 @@ def upgrade() -> None:
             sa.Column("queued", sa.Boolean(), nullable=False, server_default=sa.false())
         )
         batch_op.add_column(sa.Column("payload", sa.JSON(), nullable=True))
-        batch_op.add_column(sa.Column("claimed_by", sa.String(length=160), nullable=True))
+        batch_op.add_column(
+            sa.Column("claimed_by", sa.String(length=160), nullable=True)
+        )
         batch_op.add_column(sa.Column("claimed_at", sa.DateTime(), nullable=True))
     op.create_index(
         "ix_background_jobs_queue",
@@ -52,7 +54,9 @@ def upgrade() -> None:
         sa.Column("info", sa.JSON(), nullable=False),
     )
     op.create_index(
-        "ix_service_heartbeats_service", "service_heartbeats", ["service", "heartbeat_at"]
+        "ix_service_heartbeats_service",
+        "service_heartbeats",
+        ["service", "heartbeat_at"],
     )
 
 

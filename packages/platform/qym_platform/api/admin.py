@@ -39,7 +39,10 @@ def _worker_state(request: Request, settings: PlatformSettings, db: Session | No
 
         workers = heartbeat_summary(db.get_bind()) if db is not None else {"processes": []}
         live = [p for p in workers.get("processes") or [] if p.get("alive")]
-        reported = bool(workers.get("processes"))
+        layout = getattr(state, "service_layout", None)
+        # An explicit split (QYM_SERVICE=main) expects a workers service that
+        # heartbeats: none at all means it is down, not unknown.
+        reported = bool(workers.get("processes")) or bool(layout is not None and layout.queues_jobs)
         loops = (live[0].get("loops") or {}) if live else {}
         return {
             "loops": "separate",

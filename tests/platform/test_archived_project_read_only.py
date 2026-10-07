@@ -596,6 +596,15 @@ KEY_ONLY = [
         "/v1/runs:upload",
         {"data": {"task": "t", "dataset": "d"}, "files": {"file": ("r.csv", b"input\nq\n", "text/csv")}},
     ),
+    # The same ingest routes under QYM_INGESTION_PREFIX (service split alias).
+    ("POST", "/ingestion/v1/runs", "/ingestion/v1/runs", {"json": {"task": "t", "dataset": "d"}}),
+    ("POST", "/ingestion/v1/runs/{run_id}/events", "/ingestion/v1/runs/r1/events", {"content": b""}),
+    (
+        "POST",
+        "/ingestion/v1/runs:upload",
+        "/ingestion/v1/runs:upload",
+        {"data": {"task": "t", "dataset": "d"}, "files": {"file": ("r.csv", b"input\nq\n", "text/csv")}},
+    ),
     ("POST", "/v1/product-evals", "/v1/product-evals", {"json": {}}),
     ("POST", "/v1/product-evals/jobs/{job_id}/stop", "/v1/product-evals/jobs/j1/stop", None),
     ("POST", "/v1/product-evals/{identifier}/stop", "/v1/product-evals/r1/stop", None),

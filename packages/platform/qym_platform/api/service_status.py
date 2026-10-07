@@ -60,7 +60,9 @@ def heartbeat_summary(bind: Any) -> Dict[str, Any]:
             "process_id": row["id"],
             "alive": row["alive"],
             "age_seconds": row["age_seconds"],
-            "started_at": row["started_at"].isoformat() + "Z" if row.get("started_at") else None,
+            "started_at": (
+                row["started_at"].isoformat() + "Z" if row.get("started_at") else None
+            ),
             "loops": row["info"].get("loops"),
             "job_executor": row["info"].get("job_executor"),
             "maintenance_current_job": row["info"].get("maintenance_current_job"),
@@ -106,4 +108,9 @@ def local_status(app_state: Any, bind: Optional[Any] = None) -> Dict[str, Any]:
     return payload
 
 
-__all__ = ["healthz_router", "heartbeat_summary", "local_status", "workers_status_router"]
+__all__ = [
+    "healthz_router",
+    "heartbeat_summary",
+    "local_status",
+    "workers_status_router",
+]

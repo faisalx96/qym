@@ -24,7 +24,9 @@ from qym_platform.services.job_registry import job_registry
 logger = logging.getLogger(__name__)
 
 
-def _analysis_kinds(session_factory: Any) -> List[Tuple[str, Any, Callable[[Dict[str, Any], Any], Any], str]]:
+def _analysis_kinds(
+    session_factory: Any,
+) -> List[Tuple[str, Any, Callable[[Dict[str, Any], Any], Any], str]]:
     from qym_platform.api.analysis import _run_analysis_job, _run_rule_inference_job
     from qym_platform.services.analysis_jobs import (
         analysis_job_manager,
@@ -73,7 +75,9 @@ class JobExecutor:
         engine: Any,
         *,
         poll_interval: float = 1.0,
-        kinds: Optional[List[Tuple[str, Any, Callable[[Dict[str, Any], Any], Any], str]]] = None,
+        kinds: Optional[
+            List[Tuple[str, Any, Callable[[Dict[str, Any], Any], Any], str]]
+        ] = None,
     ) -> None:
         # Jobs open their own sessions on this engine (the API-sized pool;
         # connections are only opened while a job runs).
@@ -86,9 +90,13 @@ class JobExecutor:
         self.claimed_total = 0
         self.last_error: Optional[str] = None
 
-    def _resolve_kinds(self) -> List[Tuple[str, Any, Callable[[Dict[str, Any], Any], Any], str]]:
+    def _resolve_kinds(
+        self,
+    ) -> List[Tuple[str, Any, Callable[[Dict[str, Any], Any], Any], str]]:
         if self._kinds is None:
-            session_factory = sessionmaker(bind=self.engine, autoflush=False, autocommit=False)
+            session_factory = sessionmaker(
+                bind=self.engine, autoflush=False, autocommit=False
+            )
             self._kinds = _analysis_kinds(session_factory) + [_product_eval_kind()]
         return self._kinds
 
@@ -109,7 +117,9 @@ class JobExecutor:
                     started += 1
                     logger.info("Started queued %s job %s", kind, row["id"])
                 except Exception as exc:  # the job, not the executor, fails
-                    logger.exception("Could not start queued %s job %s", kind, row["id"])
+                    logger.exception(
+                        "Could not start queued %s job %s", kind, row["id"]
+                    )
                     job_registry.fail(
                         self.engine,
                         str(row["id"]),
@@ -134,7 +144,9 @@ class JobExecutor:
         if self.is_alive():
             return
         self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, name="qym-job-executor", daemon=True)
+        self._thread = threading.Thread(
+            target=self._loop, name="qym-job-executor", daemon=True
+        )
         self._thread.start()
 
     def is_alive(self) -> bool:

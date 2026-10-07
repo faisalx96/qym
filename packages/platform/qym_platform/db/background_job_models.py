@@ -52,7 +52,8 @@ class BackgroundJob(Base):
     queued: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     # What the worker needs to run the job; secrets inside are Fernet-encrypted
     # and the whole payload is cleared once the job finishes or is cancelled.
-    payload: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    # none_as_null: a wiped payload is SQL NULL, not the JSON value null.
+    payload: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON(none_as_null=True), nullable=True)
     # The workers process that claimed it (its lease is ``heartbeat_at``).
     claimed_by: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
     claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

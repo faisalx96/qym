@@ -80,7 +80,11 @@ class ServiceHeartbeatWriter:
                         info=info,
                     )
                 )
-            conn.execute(delete(_HEARTBEATS).where(_HEARTBEATS.c.heartbeat_at < now - PRUNE_AFTER))
+            conn.execute(
+                delete(_HEARTBEATS).where(
+                    _HEARTBEATS.c.heartbeat_at < now - PRUNE_AFTER
+                )
+            )
 
     def _loop(self) -> None:
         while not self._stop.is_set():
@@ -94,7 +98,9 @@ class ServiceHeartbeatWriter:
         if self.is_alive():
             return
         self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, name="qym-heartbeat", daemon=True)
+        self._thread = threading.Thread(
+            target=self._loop, name="qym-heartbeat", daemon=True
+        )
         self._thread.start()
 
     def is_alive(self) -> bool:
@@ -104,14 +110,22 @@ class ServiceHeartbeatWriter:
         self._stop.set()
         if self._thread is not None:
             self._thread.join(5)
-        try:  # a clean shutdown leaves no stale "alive" row behind
+        try:  # a clean shutdown reads as stopped at once (pruned after a day)
             with self.engine.begin() as conn:
-                conn.execute(delete(_HEARTBEATS).where(_HEARTBEATS.c.id == process_id()))
+                conn.execute(
+                    update(_HEARTBEATS)
+                    .where(_HEARTBEATS.c.id == process_id())
+                    .values(info={"stopped": True, "interval_seconds": self.interval})
+                )
         except Exception:
-            logger.warning("Could not remove the service heartbeat", exc_info=True)
+            logger.warning(
+                "Could not mark the service heartbeat stopped", exc_info=True
+            )
 
 
-def read_service_heartbeats(bind: Any, service: str = "workers") -> List[Dict[str, Any]]:
+def read_service_heartbeats(
+    bind: Any, service: str = "workers"
+) -> List[Dict[str, Any]]:
     """Heartbeat rows of ``service``, newest first, each with an ``alive`` flag."""
     engine = getattr(bind, "engine", bind)
     now = utc_now_naive()
@@ -129,7 +143,7 @@ def read_service_heartbeats(bind: Any, service: str = "workers") -> List[Dict[st
         age = (now - data["heartbeat_at"]).total_seconds()
         data["info"] = info
         data["age_seconds"] = round(age, 1)
-        data["alive"] = age <= interval * ALIVE_INTERVALS
+        data["alive"] = age <= interval * ALIVE_INTERVALS and not info.get("stopped")
         out.append(data)
     return out
 
@@ -154,8 +168,12 @@ class WorkersRuntime:
             rule_inference_job_manager,
         )
 
-        analysis_job_manager.configure(max_workers=self.settings.analysis_job_max_workers)
-        rule_inference_job_manager.configure(max_workers=self.settings.analysis_job_max_workers)
+        analysis_job_manager.configure(
+            max_workers=self.settings.analysis_job_max_workers
+        )
+        rule_inference_job_manager.configure(
+            max_workers=self.settings.analysis_job_max_workers
+        )
         # Loops: their own small pool, so a backfill cannot starve jobs.
         self.engine = build_engine(self.settings, role="worker")
         sessions = sessionmaker(bind=self.engine, autoflush=False, autocommit=False)
@@ -184,7 +202,9 @@ class WorkersRuntime:
             loop.start()
         self.executor.start()
         self.heartbeat.start()
-        logger.info("qym workers runtime started (%s)", ", ".join([*self.loops, "job_executor"]))
+        logger.info(
+            "qym workers runtime started (%s)", ", ".join([*self.loops, "job_executor"])
+        )
 
     def supervise_once(self) -> None:
         """Restart whatever died (called about once a second)."""
