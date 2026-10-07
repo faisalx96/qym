@@ -7,6 +7,7 @@ import io
 import itertools
 import json
 import re
+import sys
 import unicodedata
 from collections import defaultdict
 from datetime import datetime
@@ -15,15 +16,13 @@ from urllib.parse import quote
 from uuid import uuid4
 
 from fastapi import APIRouter, Body, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
-
-from qym_platform.uploads import read_upload
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import DateTime, String, and_, bindparam, case, cast, func, insert, literal, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
-from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm.attributes import flag_modified
+from starlette.concurrency import run_in_threadpool
 
 from qym_platform.auth import Principal, require_api_key_scope, require_ui_principal, resolve_api_key_principal
 from qym_platform.datetime_utils import to_api_timestamp, utc_now_naive
@@ -61,7 +60,7 @@ from qym_platform.services.dataset_versions import (
     store_change_counts,
 )
 from qym_platform.services.run_means import metric_directions
-
+from qym_platform.uploads import read_upload
 
 router = APIRouter()
 
@@ -844,27 +843,33 @@ def _item_result_summaries(
             .filter(*score_scope)
         )
 
-    for dataset_item_pk, run_item_id, metric, count, total, low, high in scores_query(
-        RunItem.dataset_item_pk,
-        RunItem.item_id,
-        RunItemScore.metric_name,
-        func.count(RunItemScore.score_numeric),
-        func.sum(RunItemScore.score_numeric),
-        func.min(RunItemScore.score_numeric),
-        func.max(RunItemScore.score_numeric),
-    ).filter(RunItemScore.score_numeric.isnot(None)).group_by(
-        RunItem.dataset_item_pk, RunItem.item_id, RunItemScore.metric_name
+    for dataset_item_pk, run_item_id, metric, count, total, low, high in (
+        scores_query(
+            RunItem.dataset_item_pk,
+            RunItem.item_id,
+            RunItemScore.metric_name,
+            func.count(RunItemScore.score_numeric),
+            func.sum(RunItemScore.score_numeric),
+            func.min(RunItemScore.score_numeric),
+            func.max(RunItemScore.score_numeric),
+        )
+        .filter(RunItemScore.score_numeric.isnot(None))
+        .group_by(RunItem.dataset_item_pk, RunItem.item_id, RunItemScore.metric_name)
     ):
         item = owner(dataset_item_pk, run_item_id)
         if item is None or not count:
             continue
         add(item, metric, int(count), float(total), float(low), float(high))
-    for dataset_item_pk, run_item_id, metric, raw in scores_query(
-        RunItem.dataset_item_pk,
-        RunItem.item_id,
-        RunItemScore.metric_name,
-        RunItemScore.score_raw,
-    ).filter(RunItemScore.score_numeric.is_(None), RunItemScore.score_raw.isnot(None)).yield_per(1000):
+    for dataset_item_pk, run_item_id, metric, raw in (
+        scores_query(
+            RunItem.dataset_item_pk,
+            RunItem.item_id,
+            RunItemScore.metric_name,
+            RunItemScore.score_raw,
+        )
+        .filter(RunItemScore.score_numeric.is_(None), RunItemScore.score_raw.isnot(None))
+        .yield_per(1000)
+    ):
         item = owner(dataset_item_pk, run_item_id)
         value = _numeric_score(None, raw) if item is not None else None
         if value is None:
@@ -1263,9 +1268,24 @@ def _decodes(raw: bytes, codec: str) -> bool:
         for start in range(0, len(raw), _DECODE_CHUNK_BYTES):
             decoder.decode(raw[start : start + _DECODE_CHUNK_BYTES], False)
         decoder.decode(b"", True)
-    except UnicodeDecodeError:
+    except UnicodeError:
         return False
     return True
+
+
+def _without_bom_native(codec: str, raw: bytes) -> str:
+    """The codec ``bytes.decode`` really applies to a BOM-less UTF-16/32 file.
+
+    ``raw.decode("utf-16")`` reads a file without a BOM in native byte order,
+    but the incremental decoders (and so a text stream) refuse it; name the
+    native-order codec instead so both read the file the same way.
+    """
+    order = "le" if sys.byteorder == "little" else "be"
+    if codec == "utf-16" and not raw.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return f"utf-16-{order}"
+    if codec == "utf-32" and not raw.startswith((codecs.BOM_UTF32_LE, codecs.BOM_UTF32_BE)):
+        return f"utf-32-{order}"
+    return codec
 
 
 def _detect_csv_encoding(raw: bytes, encoding: Optional[str] = None) -> tuple[str, str, bool]:
@@ -1289,6 +1309,7 @@ def _detect_csv_encoding(raw: bytes, encoding: Optional[str] = None) -> tuple[st
             raise HTTPException(status_code=400, detail=f"Unsupported CSV encoding: {encoding}")
         if codec.startswith("utf-16") and raw.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
             codec = "utf-16"
+        codec = _without_bom_native(codec, raw)
         if _decodes(raw, codec):
             return codec, requested, True
         label = requested.upper() if requested.startswith("utf") else requested
@@ -1326,7 +1347,7 @@ def _decode_csv(raw: bytes, encoding: Optional[str] = None) -> tuple[str, str]:
     """Decode an uploaded CSV. Returns the text and the encoding label that was used."""
     codec, label, strip_bom = _detect_csv_encoding(raw, encoding)
     text = raw.decode(codec)
-    return (text.lstrip("\uFEFF") if strip_bom else text), label
+    return (text.lstrip("\ufeff") if strip_bom else text), label
 
 
 _CSV_SNIFF_CHARS = 65536
@@ -1342,7 +1363,7 @@ def _csv_reader(raw: bytes, encoding: Optional[str] = None) -> tuple[csv.DictRea
     head_chars = 0
     for line in stream:
         if not head and strip_bom:
-            line = line.lstrip("\uFEFF")
+            line = line.lstrip("\ufeff")
             if not line:
                 continue
         head.append(line)
@@ -1533,16 +1554,14 @@ def _upload_format(requested: str, filename: str, raw: bytes) -> str:
 _INSERT_BATCH_SIZE = 1000
 
 
-def _insert_items(db: Session, version_id: str, items: list[Dict[str, Any]]) -> tuple[int, str]:
+def _insert_items(db: Session, version_id: str, items: list[Dict[str, Any]]) -> int:
     """Insert parsed items in batches with Core inserts (no ORM objects kept).
 
-    Returns the item count and the content hash, computed while inserting: the
-    items go in index order, which is the hash order. ``search_text`` is
-    written here because Core inserts skip the ORM listener that sets it.
+    Returns the item count. ``search_text`` is written here because Core
+    inserts skip the ORM listener that sets it.
     """
     duplicate_counts: dict[str, int] = defaultdict(int)
     seen_ids: set[str] = set()
-    hasher = _ContentHasher()
     table = DatasetItem.__table__
     batch: list[Dict[str, Any]] = []
     now = utc_now_naive()
@@ -1559,7 +1578,6 @@ def _insert_items(db: Session, version_id: str, items: list[Dict[str, Any]]) -> 
         if item_id in seen_ids:
             raise HTTPException(status_code=409, detail=f"Duplicate item_id: {item_id}")
         seen_ids.add(item_id)
-        hasher.update(item_id, input_value, expected, metadata, labels, fingerprint)
         batch.append(
             {
                 "dataset_version_id": version_id,
@@ -1580,7 +1598,7 @@ def _insert_items(db: Session, version_id: str, items: list[Dict[str, Any]]) -> 
             batch = []
     if batch:
         db.execute(insert(table), batch)
-    return len(items), hasher.hexdigest()
+    return len(items)
 
 
 def _copy_items(db: Session, from_version_id: str, to_version_id: str) -> None:
@@ -1613,9 +1631,7 @@ def _copy_items(db: Session, from_version_id: str, to_version_id: str) -> None:
         .order_by(source.index, source.id)
     )
     db.execute(
-        insert(DatasetItem.__table__).from_select(
-            ["dataset_version_id", *columns, "created_at", "updated_at"], rows
-        )
+        insert(DatasetItem.__table__).from_select(["dataset_version_id", *columns, "created_at", "updated_at"], rows)
     )
     # Rows written before search_text existed copy a NULL; give the copies the
     # text an ORM insert would have written (normally there are none).
@@ -2030,8 +2046,7 @@ def list_dataset_runs(
     def run_metric_averages(run_id: str) -> Dict[str, Optional[float]]:
         metrics = metric_values_by_run.get(run_id, {})
         return {
-            metric: round(total / count, 4) if count else None
-            for metric, (total, count) in sorted(metrics.items())
+            metric: round(total / count, 4) if count else None for metric, (total, count) in sorted(metrics.items())
         }
 
     def run_eval_score(run_id: str) -> Optional[float]:
@@ -2136,7 +2151,13 @@ def publish_version(
     version.published_at = utc_now_naive()
     version.updated_at = utc_now_naive()
     _record_change(db, version, {"type": "published", "item_count": item_count}, actor_user_id=principal.user.id)
-    _audit(db, principal, "dataset.version_published", dataset, after={"version": version.version, "item_count": item_count})
+    _audit(
+        db,
+        principal,
+        "dataset.version_published",
+        dataset,
+        after={"version": version.version, "item_count": item_count},
+    )
     _store_published_counts(db, version)
     if req.set_alias:
         _set_alias(db, dataset, req.set_alias, version, principal)
@@ -3255,7 +3276,9 @@ def compare_versions(
     base: str = Query(...),
     project_slug: Optional[str] = Query(default=None),
     include_diffs: int = Query(default=0),
-    kind: Optional[str] = Query(default=None, description="With limit: which list to page (changed, added, removed, unchanged)."),
+    kind: Optional[str] = Query(
+        default=None, description="With limit: which list to page (changed, added, removed, unchanged)."
+    ),
     limit: Optional[int] = Query(
         default=None,
         ge=1,
@@ -3361,8 +3384,10 @@ def compare_versions(
     lists = {"changed": changed_ids, "added": added, "removed": removed, "unchanged": unchanged}
     # Without ``limit``, each list's bodies stop at _COMPARE_DIFF_LIMIT items
     # (``diffs_truncated`` says so): an unbounded diff loaded every body.
-    truncated = want_diffs and not paged and any(
-        len(lists[name]) > _COMPARE_DIFF_LIMIT for name in ("changed", "added", "removed")
+    truncated = (
+        want_diffs
+        and not paged
+        and any(len(lists[name]) > _COMPARE_DIFF_LIMIT for name in ("changed", "added", "removed"))
     )
 
     def _window(kind_name: str) -> list[str]:
@@ -3660,7 +3685,18 @@ def _upload_dataset_sync(
     else:
         project = db.get(Project, project_id)
         _free_slug_from_deleted(db, project, slug)
-        dataset = Dataset(id=str(uuid4()), project_id=project_id, name=clean_name, slug=slug, description=description, tags=_labels(tags), private_test_set=private_test_set, created_by_user_id=user_id, created_at=utc_now_naive(), updated_at=utc_now_naive())
+        dataset = Dataset(
+            id=str(uuid4()),
+            project_id=project_id,
+            name=clean_name,
+            slug=slug,
+            description=description,
+            tags=_labels(tags),
+            private_test_set=private_test_set,
+            created_by_user_id=user_id,
+            created_at=utc_now_naive(),
+            updated_at=utc_now_naive(),
+        )
         db.add(dataset)
         db.flush()
     version_label, display_name = _version_identity(db, dataset, version, version_name)
@@ -3684,18 +3720,29 @@ def _upload_dataset_sync(
     )
     db.add(version_row)
     db.flush()
-    item_count, content_hash = _insert_items(db, version_row.id, items)
+    item_count = _insert_items(db, version_row.id, items)
     del items
     version_row.item_count = item_count
     _record_change(
-        db, version_row, {"type": "uploaded", "source_type": source_type, "item_count": item_count}, actor_user_id=user_id
+        db,
+        version_row,
+        {"type": "uploaded", "source_type": source_type, "item_count": item_count},
+        actor_user_id=user_id,
     )
     if publish:
         version_row.status = DatasetVersionStatus.PUBLISHED
         version_row.published_by_user_id = user_id
         version_row.published_at = utc_now_naive()
-        version_row.content_hash = content_hash
-        _audit(db, principal, "dataset.version_published", dataset, after={"version": version_row.version, "item_count": item_count})
+        # Hashed from the stored rows, streamed, like a later publish would:
+        # the database's JSON may normalize numbers (e.g. 1e20, -0.0).
+        version_row.content_hash = _stream_version_hash(db, version_row.id)[1]
+        _audit(
+            db,
+            principal,
+            "dataset.version_published",
+            dataset,
+            after={"version": version_row.version, "item_count": item_count},
+        )
         _store_published_counts(db, version_row)
         if set_alias:
             _set_alias(db, dataset, set_alias, version_row, principal)
@@ -3755,8 +3802,7 @@ def _jsonl_chunks(session_factory: sessionmaker, version_id: str) -> Iterator[by
             if after is not None:
                 last_index, last_id = after
                 query = query.filter(
-                    (DatasetItem.index > last_index)
-                    | ((DatasetItem.index == last_index) & (DatasetItem.id > last_id))
+                    (DatasetItem.index > last_index) | ((DatasetItem.index == last_index) & (DatasetItem.id > last_id))
                 )
             rows = query.order_by(DatasetItem.index, DatasetItem.id).limit(_DOWNLOAD_BATCH_SIZE).all()
         if not rows:
