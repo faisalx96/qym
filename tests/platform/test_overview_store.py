@@ -460,3 +460,50 @@ def test_sqlite_builds_the_overview_in_python_and_stores_nothing(database, emitt
     served = _served(database)
     assert _model_values(served)["metricAverages"] == {"q": 0.5}
     assert _snapshots(database) == []
+
+
+def test_concurrent_writers_of_one_project_skip_instead_of_waiting(pg):  # noqa: F811
+    """Readers that miss the cache together never queue on one another's
+    insert and prune: while one writer holds the project's advisory lock,
+    another skips its write at once; the next write proceeds."""
+    key = dashboard_overview._store_lock_key("project:p")
+    with pg.connect() as holder:
+        holder.execute(select(func.pg_advisory_lock(key)))
+        try:
+            started = time.perf_counter()
+            dashboard_overview.store_shared(pg, {"f:held": {"a": 1}}, "p", "r1")
+            assert time.perf_counter() - started < 2
+            assert _snapshots(pg) == []
+        finally:
+            holder.execute(select(func.pg_advisory_unlock(key)))
+            holder.commit()
+    dashboard_overview.store_shared(pg, {"f:free": {"a": 1}}, "p", "r1")
+    assert [row.cache_key for row in _snapshots(pg)] == ["f:free"]
+
+
+def test_writes_prune_other_projects_only_occasionally(pg, monkeypatch):  # noqa: F811
+    """A write prunes its own project's old entries every time, and every
+    project's old entries at most once per interval."""
+    old = datetime.utcnow() - dashboard_overview.SHARED_MAX_AGE - timedelta(hours=1)
+    with Session(pg) as db:
+        db.add(Project(id="q", name="Q", slug="q", created_by_user_id="u"))
+        for project in ("p", "q"):
+            db.add(
+                Snapshot(
+                    cache_key="f:old-" + project,
+                    project_key=project,
+                    catalog_revision="r1",
+                    payload="{}",
+                    created_at=old,
+                )
+            )
+        db.commit()
+    monkeypatch.setattr(dashboard_overview, "_next_global_prune", float("inf"))
+    dashboard_overview.store_shared(pg, {"f:new": {"a": 1}}, "p", "r1")
+    assert [row.cache_key for row in _snapshots(pg)] == ["f:new"]
+    assert [row.cache_key for row in _snapshots(pg, "q")] == ["f:old-q"]
+    monkeypatch.setattr(dashboard_overview, "_next_global_prune", 0.0)
+    dashboard_overview.store_shared(pg, {"f:newer": {"a": 1}}, "p", "r1")
+    assert _snapshots(pg, "q") == []
+    # The next prune of every project waits for the interval.
+    assert dashboard_overview._next_global_prune > time.monotonic()
