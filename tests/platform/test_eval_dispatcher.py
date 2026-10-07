@@ -71,6 +71,7 @@ from qym_platform.services.eval_experiments import (
     build_qym_launch,
     hash_launch_token,
     launch_token_for_job,
+    recompute_experiment_status,
 )
 from qym_platform.services.eval_model_slots import detect_model_slots
 from qym_platform.services.eval_schema_form import build_form_descriptor
@@ -1793,3 +1794,28 @@ def test_paused_env_probe_respects_the_interval(sessions, service, clock):
     job = _job(sessions, job_id)
     assert job.status == EvalJobStatus.QUEUED
     assert job.wait_reason == "Environment unhealthy"
+
+
+def test_recompute_status_does_not_load_job_json(sessions):
+    from sqlalchemy import event
+
+    seed = _seed(sessions, jobs=2)
+    statements: List[str] = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        if "FROM eval_experiment_jobs" in statement:
+            statements.append(statement)
+
+    with sessions() as db:
+        engine = db.get_bind()
+        event.listen(engine, "before_cursor_execute", capture)
+        try:
+            status = recompute_experiment_status(db, seed["experiment_id"])
+        finally:
+            event.remove(engine, "before_cursor_execute", capture)
+        db.rollback()
+    assert status is not None
+    assert statements
+    for statement in statements:
+        for column in ("request_body", "remote_result", "params"):
+            assert f"eval_experiment_jobs.{column}" not in statement
