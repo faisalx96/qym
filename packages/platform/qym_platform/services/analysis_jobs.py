@@ -63,6 +63,10 @@ class AnalysisJob:
     future: Optional[Future[Any]] = field(default=None, repr=False)
     worker_loop: Optional[asyncio.AbstractEventLoop] = field(default=None, repr=False)
     request_wakeup_task: Optional[asyncio.Task[Any]] = field(default=None, repr=False)
+    # True once the job is published to ``background_jobs``; a finished job's
+    # full result then lives there and is released from memory (``released``).
+    published: bool = field(default=False, repr=False)
+    released: bool = field(default=False, repr=False)
 
     def touch(self) -> None:
         self.updated_at = utc_now_naive()
@@ -147,12 +151,12 @@ class AnalysisJobManager:
     def __init__(
         self,
         *,
-        max_retained_jobs: int = 100,
+        max_retained_jobs: int = 20,
         max_workers: Optional[int] = None,
         job_id_prefix: str = "analysis",
     ) -> None:
         self._jobs: Dict[str, AnalysisJob] = {}
-        self._max_retained_jobs = max(10, int(max_retained_jobs))
+        self._max_retained_jobs = max(1, int(max_retained_jobs))
         self._max_workers = max(1, int(max_workers or _configured_worker_count()))
         self._job_id_prefix = str(job_id_prefix or "analysis")
         self._lock = threading.RLock()
@@ -180,13 +184,20 @@ class AnalysisJobManager:
         return self._job_id_prefix
 
     def get(self, job_id: str, db: Any = None) -> Optional[AnyAnalysisJob]:
-        """This process's job, else (given ``db``) the one another process published."""
+        """This process's job, else (given ``db``) the one another process published.
+
+        A finished local job whose result was released from memory is read
+        back from its published row so pollers still get the full result.
+        """
         with self._lock:
             job = self._jobs.get(job_id)
-        if job is not None or db is None:
+            released = job is not None and job.released
+        if db is None or (job is not None and not released):
             return job
         row = job_registry.fetch(db, self.kind, job_id)
-        return RemoteAnalysisJob(row) if row is not None else None
+        if row is not None:
+            return RemoteAnalysisJob(row)
+        return job
 
     def active_for_run(
         self, run_id: str, pass_number: Optional[int] = None, db: Any = None
@@ -275,7 +286,7 @@ class AnalysisJobManager:
             # Claimed before it starts: a second start on another web worker
             # process gets this job back instead of a duplicate LLM run.
             try:
-                job_registry.track(
+                published = job_registry.track(
                     store_bind,
                     kind=self.kind,
                     job_id=job.job_id,
@@ -287,6 +298,8 @@ class AnalysisJobManager:
                 with self._lock:
                     self._jobs.pop(job.job_id, None)
                 return RemoteAnalysisJob(conflict.row), False
+            with self._lock:
+                job.published = bool(published)
         with self._lock:
             executor = self._ensure_executor()
             # A tiny caller-loop heartbeat makes thread-originated progress
@@ -367,6 +380,31 @@ class AnalysisJobManager:
                 job.touch()
                 self._prune_unlocked()
             job_registry.changed(job.job_id, flush=True)
+            self._release_if_persisted(job)
+
+    def _release_if_persisted(self, job: AnalysisJob) -> None:
+        """Drop a finished job's heavy state once ``background_jobs`` holds it.
+
+        The terminal snapshot (with the full ``result``) is written by the
+        flush above, and the registry forgets a job only after that write
+        succeeded.  Without a shareable database (in-memory SQLite: tests,
+        embedded use) the result stays in memory, bounded by
+        ``max_retained_jobs``.
+        """
+        with self._lock:
+            if (
+                not job.published
+                or job.released
+                or job.status not in TERMINAL_JOB_STATUSES
+                or job_registry.is_tracked(job.job_id)
+            ):
+                return
+            job.result = None
+            pass_number = _pass_number_from_payload(job.request_payload)
+            job.request_payload = (
+                {"pass_number": pass_number} if pass_number is not None else {}
+            )
+            job.released = True
 
     @staticmethod
     def _finish_cancelled_unlocked(job: AnalysisJob) -> None:
