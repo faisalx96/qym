@@ -29,8 +29,8 @@ from qym_platform.services.dashboard_outbox import (
     enqueue_snapshots,
     snapshot,
     execution_event_numbers,
-    execution_event_query,
-    execution_event_object,
+    source_snapshot_object,
+    source_snapshot_query,
 )
 from qym_platform.services.ingest_completeness import runs_list_ingest_flag
 from qym_platform.services.metric_semantics import declared_direction, primary_metric
@@ -1868,59 +1868,6 @@ def reconcile_summary_shapes(db, *, limit=100):
     return result.rowcount
 
 
-def _backfill_source_query(model):
-    """Select only the fields consumed by numeric snapshots."""
-    from qym_platform.db.models import (
-        RunEvent,
-        RunItem,
-        RunItemAttempt,
-        RunItemPassScore,
-    )
-
-    if model is RunEvent:
-        return execution_event_query()
-    columns = [model.id, model.run_id, model.item_id]
-    if model is RunItem:
-        columns.extend(
-            (
-                model.output.isnot(None).label("has_output"),
-                model.error.isnot(None).label("has_error"),
-                model.latency_ms,
-                model.retry_count,
-                model.item_metadata,
-            )
-        )
-    elif model is RunItemAttempt:
-        columns.extend(
-            (
-                model.pass_number,
-                model.attempt_number,
-                model.status,
-                model.latency_ms,
-                model.task_started_at_ms,
-                model.is_last_attempt,
-            )
-        )
-    else:
-        columns.extend((model.metric_name, model.score_numeric, model.meta))
-        if model is RunItemPassScore:
-            columns.append(model.pass_number)
-    return select(*columns)
-
-
-def _backfill_source_object(model, row):
-    from qym_platform.db.models import RunEvent, RunItem
-
-    if model is RunEvent:
-        return execution_event_object(row)
-    values = dict(row._mapping)
-    if model is RunItem:
-        # Preserve SQL NULL versus JSON null without materializing the output.
-        values["output"] = True if values.pop("has_output") else None
-        values["error"] = "error" if values.pop("has_error") else None
-    return model(**values)
-
-
 def backfill_partition(db, run_id, *, chunk_size=500):
     """Resume a bounded source partition while live transactional events continue."""
     from qym_platform.db.models import (
@@ -1961,7 +1908,7 @@ def backfill_partition(db, run_id, *, chunk_size=500):
         0,
     )
     kind, model = source_types[position]
-    query = _backfill_source_query(model)
+    query = source_snapshot_query(model)
     # Reuse the existing (run_id, sequence) event index for bounded keyset scans.
     cursor_column = RunEvent.sequence if model is RunEvent else model.id
     query = (
@@ -1973,7 +1920,7 @@ def backfill_partition(db, run_id, *, chunk_size=500):
         # The cost is bounded: 500 rows per chunk, once per historical run.
         .with_for_update()
     )
-    rows = [_backfill_source_object(model, row) for row in db.execute(query)]
+    rows = [source_snapshot_object(model, row) for row in db.execute(query)]
     next_position = position
     if len(rows) < chunk_size:
         next_position += 1

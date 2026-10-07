@@ -14,6 +14,9 @@ from sqlalchemy.orm import Session
 from qym_platform.services.run_means import is_item_edit, is_metric_error
 
 _installed = False
+# Rows read (and change events inserted) per statement by a bulk source
+# UPDATE/DELETE; bounds memory and IN-list size for runs with many items.
+BULK_SNAPSHOT_CHUNK = 1000
 NUMERIC_FIELDS = (
     "observed",
     "terminal",
@@ -132,6 +135,72 @@ def execution_event_object(row):
             for key in ("item_id", "pass_number", "retry_count", "attempt_number")
         },
     )
+
+
+def source_snapshot_query(model):
+    """Select only the source fields ``snapshot`` reads, never large payloads.
+
+    RunItem input, expected and output, and event payloads beyond their
+    counters, can be large: a projection of the fields the outbox reads keeps
+    bulk mutations and backfill scans small.
+    """
+    from qym_platform.db.models import (
+        Run,
+        RunEvent,
+        RunItem,
+        RunItemAttempt,
+        RunItemPassScore,
+        RunItemScore,
+    )
+
+    if model is RunEvent:
+        return execution_event_query()
+    if model is Run:
+        return select(Run.id, Run.project_id, Run.deleted_at)
+    if model not in (RunItem, RunItemAttempt, RunItemScore, RunItemPassScore):
+        # Run-level sources (metric specs, approvals) only name their run.
+        return select(model.id, model.run_id)
+    columns = [model.id, model.run_id, model.item_id]
+    if model is RunItem:
+        columns.extend(
+            (
+                model.output.isnot(None).label("has_output"),
+                model.error.isnot(None).label("has_error"),
+                model.latency_ms,
+                model.retry_count,
+                model.item_metadata,
+            )
+        )
+    elif model is RunItemAttempt:
+        columns.extend(
+            (
+                model.pass_number,
+                model.attempt_number,
+                model.status,
+                model.latency_ms,
+                model.task_started_at_ms,
+                model.is_last_attempt,
+            )
+        )
+    else:
+        columns.extend((model.metric_name, model.score_numeric, model.meta))
+        if model is RunItemPassScore:
+            columns.append(model.pass_number)
+    return select(*columns)
+
+
+def source_snapshot_object(model, row):
+    """A transient source object holding the fields of ``source_snapshot_query``."""
+    from qym_platform.db.models import RunEvent, RunItem
+
+    if model is RunEvent:
+        return execution_event_object(row)
+    values = dict(row._mapping)
+    if model is RunItem:
+        # Preserve SQL NULL versus JSON null without materializing the output.
+        values["output"] = True if values.pop("has_output") else None
+        values["error"] = "error" if values.pop("has_error") else None
+    return model(**values)
 
 
 def _causes(value: Any, *, pass_score=False):
@@ -525,40 +594,37 @@ def _bulk_source_mutation(state):
     if mapper is None or mapper.class_ not in _source_types():
         return
     model = mapper.class_
-    statement = state.statement
-    where = statement.whereclause
-    from qym_platform.db.models import RunEvent
-
-    query = execution_event_query() if model is RunEvent else select(model)
+    session = state.session
+    where = state.statement.whereclause
+    fields = source_snapshot_query(model)
+    matched = fields.with_only_columns(model.id)
     if where is not None:
-        query = query.where(where)
-    objects = (
-        [
-            execution_event_object(row)
-            for row in state.session.execute(query.with_for_update())
-        ]
-        if model is RunEvent
-        else list(state.session.scalars(query.with_for_update()))
-    )
-    if not objects:
+        matched = matched.where(where)
+    # Lock the affected rows by primary key only, then read the snapshot
+    # fields in bounded chunks: a run's bulk delete or retention never loads
+    # every row's input/output JSON (or ORM identity) into memory.
+    ids = list(session.execute(matched.with_for_update()).scalars())
+    if not ids:
         return
-    snapshots = [snapshot(obj, True) for obj in objects]
-    ids = [obj.id for obj in objects]
+
+    def snapshots(deleted):
+        found = []
+        for start in range(0, len(ids), BULK_SNAPSHOT_CHUNK):
+            chunk = ids[start : start + BULK_SNAPSHOT_CHUNK]
+            found.extend(
+                snapshot(source_snapshot_object(model, row), deleted)
+                for row in session.execute(fields.where(model.id.in_(chunk)))
+            )
+        return found
+
+    changes = snapshots(True)
     result = state.invoke_statement()
     if state.is_update:
-        state.session.expire_all()
-        objects = (
-            [
-                execution_event_object(row)
-                for row in state.session.execute(
-                    execution_event_query().where(model.id.in_(ids))
-                )
-            ]
-            if model is RunEvent
-            else state.session.scalars(select(model).where(model.id.in_(ids)))
-        )
-        snapshots = [snapshot(obj) for obj in objects]
-    enqueue_snapshots(state.session.connection(), snapshots)
+        session.expire_all()
+        changes = snapshots(False)
+    connection = session.connection()
+    for start in range(0, len(changes), BULK_SNAPSHOT_CHUNK):
+        enqueue_snapshots(connection, changes[start : start + BULK_SNAPSHOT_CHUNK])
     return result
 
 

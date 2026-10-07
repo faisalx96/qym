@@ -499,6 +499,57 @@ def test_bulk_mutations_repeat_deletion_and_dimension_changes(database):
     assert projected(database)["owner"]["display_name"] == "New owner"
 
 
+def test_bulk_mutations_read_snapshot_fields_in_chunks(database, monkeypatch):
+    """A bulk UPDATE/DELETE of source rows locks them by key and reads only the
+    snapshot fields, in bounded chunks: never the rows' input/output JSON."""
+    from qym_platform.services import dashboard_outbox
+
+    monkeypatch.setattr(dashboard_outbox, "BULK_SNAPSHOT_CHUNK", 2)
+    with Session(database) as db:
+        run(db, run_metadata={"total_items": 5})
+        for i in range(5):
+            item(
+                db,
+                str(i),
+                latency_ms=i,
+                input={"large": "x" * 1000},
+                output="large output",
+                item_metadata={"root_cause": f"cause-{i % 2}"},
+            )
+        db.commit()
+    drain(database)
+    assert_legacy_parity(database)
+    statements = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().lower().startswith("select"):
+            statements.append(statement)
+
+    event.listen(database, "before_cursor_execute", capture)
+    try:
+        with Session(database) as db:
+            # The WHERE no longer matches after the update: the new values
+            # are still read by key.
+            db.execute(
+                update(RunItem)
+                .where(RunItem.error.is_(None), RunItem.item_id != "0")
+                .values(error="failed", latency_ms=50)
+            )
+            db.execute(delete(RunItem).where(RunItem.item_id == "0"))
+            db.commit()
+    finally:
+        event.remove(database, "before_cursor_execute", capture)
+    reads = [s for s in statements if "run_items" in s]
+    assert reads
+    assert not [s for s in reads if "run_items.input" in s]
+    # One keyed lock, then two-row chunks before and after the update.
+    assert sum("IN (" in s.upper() and "run_items.id" in s for s in reads) >= 4
+    drain(database)
+    assert_legacy_parity(database)
+    assert projected(database)["total_items"] == 4
+    assert projected(database)["error_count"] == 4
+
+
 def test_backfill_resumes_and_live_corrections_win(database):
     with Session(database) as db:
         db.info["dashboard_projection_worker"] = True
