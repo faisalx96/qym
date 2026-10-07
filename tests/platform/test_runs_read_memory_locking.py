@@ -10,11 +10,22 @@ from __future__ import annotations
 import hashlib
 import json
 
-from qym_platform.db.models import (ReviewCorrection, Run, RunItem,
-                                    RunItemAttempt, RunItemScore)
+from qym_platform.db.models import (
+    ReviewCorrection,
+    Run,
+    RunItem,
+    RunItemAttempt,
+    RunItemScore,
+)
 from sqlalchemy import event
-from test_review_rules import (OWNER, _ok, _run, _ui,  # noqa: F401  (fixtures)
-                               client, session_factory)
+from test_review_rules import (
+    OWNER,
+    _ok,
+    _run,
+    _ui,  # noqa: F401  (fixtures)
+    client,
+    session_factory,
+)
 
 
 def _capture_statements(session_factory):
@@ -241,3 +252,55 @@ def test_root_cause_edit_builds_only_the_edited_item(
     assert row["compare_item_id"] == "item-1"
     issues = row["item_metadata"]["metric_analyses"]["accuracy"]["root_cause_issues"]
     assert [issue["category"] for issue in issues] == ["Retrieval miss"]
+
+
+def test_passes_view_reads_no_attempt_outputs(client, session_factory):
+    with session_factory() as db:
+        _repeat_run_with_attempts(db)
+    statements, stop = _capture_statements(session_factory)
+    try:
+        body = _ok(client.get("/api/runs/rep-att/passes", headers=_ui(OWNER)))
+    finally:
+        stop()
+    assert body
+    assert not any(
+        "FROM run_item_attempts" in s and "run_item_attempts.output" in s
+        for s in statements
+    )
+
+
+def _spans(db, run_id, count, traces=2):
+    from qym_platform.db.models import Span
+
+    for index in range(count):
+        db.add(
+            Span(
+                run_id=run_id,
+                trace_id=f"t{index % traces}",
+                span_id=f"s{index}",
+                name=f"span-{index}",
+                start_time_ns=1000 + index,
+                attributes={},
+            )
+        )
+    db.commit()
+
+
+def test_run_spans_are_paginated(client, session_factory):
+    with session_factory() as db:
+        _run(db, "sp")
+        db.commit()
+        _spans(db, "sp", 7)
+    first = _ok(client.get("/api/runs/sp/spans?limit=3", headers=_ui(OWNER)))
+    assert [s["name"] for s in first["spans"]] == ["span-0", "span-1", "span-2"]
+    assert first["next_offset"] == 3
+    last = _ok(client.get("/api/runs/sp/spans?limit=3&offset=6", headers=_ui(OWNER)))
+    assert [s["name"] for s in last["spans"]] == ["span-6"]
+    assert last["next_offset"] is None
+    # Default page holds every span of a small run.
+    whole = _ok(client.get("/api/runs/sp/spans", headers=_ui(OWNER)))
+    assert len(whole["spans"]) == 7 and whole["next_offset"] is None
+    one_trace = _ok(client.get("/api/runs/sp/spans?trace_id=t1", headers=_ui(OWNER)))
+    assert [s["name"] for s in one_trace["spans"]] == ["span-1", "span-3", "span-5"]
+    too_many = client.get("/api/runs/sp/spans?limit=5001", headers=_ui(OWNER))
+    assert too_many.status_code == 422

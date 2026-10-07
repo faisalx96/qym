@@ -4802,10 +4802,12 @@ def run_passes(
     # Per-pass item state.  Final attempts are canonical; lifecycle events
     # cover the currently-running item and legacy outcomes that have no final
     # attempt row.
-    attempt_rows = (
-        db.query(RunItemAttempt).filter(RunItemAttempt.run_id == run.id).all()
+    # Status, latency and trace columns only: outputs and errors are not
+    # shown here, and the event state's scan supplies the attempt rows.
+    event_state = _repeat_pass_event_state(
+        db, run.id, include_outputs=False, with_attempt_rows=True
     )
-    event_state = _repeat_pass_event_state(db, run.id)
+    attempt_rows = event_state["attempt_rows"]
     attempts_by_item_pass: Dict[tuple[str, int], Dict[str, Any]] = {}
     max_attempt_by_pair: Dict[tuple[str, int], int] = {}
     for attempt in attempt_rows:
@@ -7372,26 +7374,49 @@ def get_run_review_history(
 # ---------------------------------------------------------------------------
 
 
+SPANS_PAGE_DEFAULT = 1000
+SPANS_PAGE_MAX = 5000
+
+
 @router.get("/api/runs/{run_id}/spans")
 def get_run_spans(
     run_id: str,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
+    limit: int = Query(default=SPANS_PAGE_DEFAULT, ge=1, le=SPANS_PAGE_MAX),
+    offset: int = Query(default=0, ge=0),
+    trace_id: Optional[str] = Query(default=None, max_length=200),
 ):
-    """Return all OTEL spans captured for a run, ordered by start time."""
+    """Return a page of a run's OTEL spans, ordered by start time.
+
+    At most ``limit`` spans (default 1000, max 5000) from ``offset``,
+    optionally of one ``trace_id``. ``next_offset`` is the offset of the next
+    page, or null after the last one.
+    """
     run = Run.active(db).filter(Run.id == run_id).first()
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     if not can_view_run(db, principal, run):
         raise HTTPException(status_code=403, detail="Access denied")
 
+    query = db.query(Span).filter(Span.run_id == run_id)
+    if trace_id:
+        query = query.filter(Span.trace_id == trace_id)
+    # One extra row tells whether another page follows.
     spans = (
-        db.query(Span)
-        .filter(Span.run_id == run_id)
-        .order_by(Span.start_time_ns.asc().nullslast())
+        query.order_by(Span.start_time_ns.asc().nullslast(), Span.id.asc())
+        .offset(offset)
+        .limit(limit + 1)
         .all()
     )
-    payload = {"spans": [_serialize_span(s) for s in spans]}
+    has_more = len(spans) > limit
+    spans = spans[:limit]
+    payload = {
+        "spans": [_serialize_span(s) for s in spans],
+        "limit": limit,
+        "offset": offset,
+        "next_offset": offset + limit if has_more else None,
+    }
     if not can_view_run_items(db, principal, run):
         redact_item_content(payload["spans"])
     return payload
@@ -7495,7 +7520,9 @@ def get_item_trace(
                 )
             )
     elif pass_number is not None:
-        event_state = _repeat_pass_event_state(db, run_id)
+        event_state = _repeat_pass_event_state(
+            db, run_id, item_ids=[item_id], include_outputs=False
+        )
         event_attempt = event_state["outcomes"].get(
             (item_id, pass_number)
         ) or event_state["active_attempts"].get((item_id, pass_number))
