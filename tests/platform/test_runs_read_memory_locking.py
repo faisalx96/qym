@@ -170,3 +170,74 @@ def test_single_run_explanations_full_and_compact(client, session_factory):
     # The index keeps no explanation text, only its key for the chooser.
     assert "explanation" not in meta and meta["label"] == "ok"
     assert "explanation" in compact["snapshot"]["metric_meta_keys"]["accuracy"]
+
+
+def test_compare_refuses_more_runs_than_the_cap(client, session_factory):
+    from qym_platform.api.runs import MAX_COMPARE_RUNS
+
+    files = [f"r{index}" for index in range(MAX_COMPARE_RUNS + 1)]
+    response = client.get(
+        "/api/compare", params={"files": files, "view": "compact"}, headers=_ui(OWNER)
+    )
+    assert response.status_code == 422, response.text
+    assert str(MAX_COMPARE_RUNS) in response.json()["detail"]
+    # Repeats of one run count once; a comma list counts each run.
+    with session_factory() as db:
+        _run(db, "c1")
+        _run(db, "c2")
+        db.commit()
+    body = _ok(
+        client.get(
+            "/api/compare",
+            params={"files": ["c1,c2"] + ["c1"] * MAX_COMPARE_RUNS, "view": "compact"},
+            headers=_ui(OWNER),
+        )
+    )
+    assert [run["run"]["run_id"] for run in body["runs"]] == ["c1", "c2"]
+
+
+def test_root_cause_edit_builds_only_the_edited_item(
+    client, session_factory, monkeypatch
+):
+    import qym_platform.api.runs as runs_api
+
+    with session_factory() as db:
+        _run(db, "r1")
+        for index in range(2, 5):
+            db.add(
+                RunItem(
+                    run_id="r1",
+                    item_id=f"item-{index}",
+                    index=index,
+                    input={"q": index},
+                    output="o",
+                    latency_ms=1,
+                    item_metadata={},
+                )
+            )
+        db.commit()
+    calls = []
+    original = runs_api._build_run_data
+
+    def spy(db, run, **kwargs):
+        calls.append(kwargs.get("item_ids"))
+        return original(db, run, **kwargs)
+
+    monkeypatch.setattr(runs_api, "_build_run_data", spy)
+    row = _ok(
+        client.post(
+            "/api/runs/update_root_cause",
+            json={
+                "run_id": "r1",
+                "item_id": "item-1",
+                "metric_name": "accuracy",
+                "root_cause_issues": [{"category": "Retrieval miss"}],
+            },
+            headers=_ui(OWNER),
+        )
+    )["row"]
+    assert calls == [["item-1"]]
+    assert row["item_id"] == "item-1"
+    assert row["compare_item_id"] == "item-1"
+    issues = row["item_metadata"]["metric_analyses"]["accuracy"]["root_cause_issues"]
+    assert [issue["category"] for issue in issues] == ["Retrieval miss"]

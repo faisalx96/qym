@@ -203,6 +203,9 @@ router = APIRouter()
 _LANGFUSE_URL_RE = re.compile(r"(https?://[^/]+)/project/([^/]+)")
 # Attempt outputs read per query when a run page is built.
 _ATTEMPT_OUTPUT_BATCH = 200
+# Distinct runs one /api/compare request may build (cohort comparisons send
+# both cohorts' runs in one request, so this is above two small cohorts).
+MAX_COMPARE_RUNS = 20
 
 
 def _metric_spec_payload(spec: RunMetricSpec) -> Dict[str, Any]:
@@ -3617,6 +3620,13 @@ def legacy_compare(
         raise HTTPException(status_code=400, detail="No files specified")
     # Each run is built once however often it is requested.
     run_ids = list(dict.fromkeys(_parse_requested_run_ids(files)))
+    if len(run_ids) > MAX_COMPARE_RUNS:
+        # Every run is built in full into one response: bound the request.
+        raise HTTPException(
+            status_code=422,
+            detail=f"Compare at most {MAX_COMPARE_RUNS} runs at once "
+            f"({len(run_ids)} requested)",
+        )
 
     runs_data: list[dict[str, Any]] = []
     # Requested runs the caller cannot get (deleted, never existed, or not
@@ -6461,6 +6471,21 @@ def _require_issue_removal(
             raise HTTPException(status_code=403, detail=DELETE_DETAIL)
 
 
+def _updated_item_row(db: Session, run: Run, item_id: str) -> Optional[Dict[str, Any]]:
+    """The edited item's UI row, built from that item alone.
+
+    A fingerprint-based comparison ID numbers duplicate items across the
+    whole run, so a one-item build cannot know it: such a row leaves the
+    comparison identity out and the page keeps its own (as items/details).
+    """
+    rows = _build_run_data(db, run, item_ids=[item_id]).get("snapshot", {}).get("rows", [])
+    row = next((row for row in rows if row.get("item_id") == item_id), None)
+    if row is not None and row.get("compare_alignment_source") == "fingerprint":
+        row.pop("compare_item_id", None)
+        row.pop("compare_alignment_source", None)
+    return row
+
+
 @router.post("/api/runs/update_root_cause_issue")
 def update_root_cause_issue(
     request: Dict[str, Any],
@@ -6542,8 +6567,9 @@ def update_root_cause_issue(
         _refresh_metric_analysis_error(meta)
         item.item_metadata = meta
     db.commit()
-    rows = _build_run_data(db, run).get("snapshot", {}).get("rows", [])
-    return _with_item_visibility(db, principal, run, {"ok": True, "row": next((row for row in rows if row.get("item_id") == item_id), None)})
+    return _with_item_visibility(
+        db, principal, run, {"ok": True, "row": _updated_item_row(db, run, item_id)}
+    )
 
 
 @router.post("/api/runs/update_root_cause")
@@ -6701,16 +6727,7 @@ def update_root_cause(
                 )
             )
         db.commit()
-        updated_snapshot = _build_run_data(db, run).get("snapshot", {})
-        updated_rows = (
-            updated_snapshot.get("rows", [])
-            if isinstance(updated_snapshot, dict)
-            else []
-        )
-        updated_row = next(
-            (row for row in updated_rows if row.get("item_id") == item.item_id),
-            None,
-        )
+        updated_row = _updated_item_row(db, run, item.item_id)
         return _with_item_visibility(db, principal, run, {"ok": True, "row": updated_row})
 
     raw_metric_name = request.get("metric_name")
@@ -6787,16 +6804,7 @@ def update_root_cause(
                 )
             )
         db.commit()
-        updated_snapshot = _build_run_data(db, run).get("snapshot", {})
-        updated_rows = (
-            updated_snapshot.get("rows", [])
-            if isinstance(updated_snapshot, dict)
-            else []
-        )
-        updated_row = next(
-            (row for row in updated_rows if row.get("item_id") == item.item_id),
-            None,
-        )
+        updated_row = _updated_item_row(db, run, item.item_id)
         return _with_item_visibility(db, principal, run, {"ok": True, "row": updated_row})
 
     item_state = extract_analysis_state(
@@ -6818,13 +6826,7 @@ def update_root_cause(
     )
 
     db.commit()
-    updated_snapshot = _build_run_data(db, run).get("snapshot", {})
-    updated_rows = (
-        updated_snapshot.get("rows", []) if isinstance(updated_snapshot, dict) else []
-    )
-    updated_row = next(
-        (row for row in updated_rows if row.get("item_id") == item.item_id), None
-    )
+    updated_row = _updated_item_row(db, run, item.item_id)
     return _with_item_visibility(db, principal, run, {"ok": True, "row": updated_row})
 
 
