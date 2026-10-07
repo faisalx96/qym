@@ -10,19 +10,24 @@ from __future__ import annotations
 import hashlib
 import json
 
+import sqlalchemy.orm
+from sqlalchemy import event
+from sqlalchemy.dialects import postgresql
+
 from qym_platform.db.models import (
     ReviewCorrection,
     Run,
     RunItem,
     RunItemAttempt,
     RunItemScore,
+    RunWorkflowStatus,
 )
-from sqlalchemy import event
-from test_review_rules import (
+
+from test_review_rules import (  # noqa: F401  (fixtures)
     OWNER,
     _ok,
     _run,
-    _ui,  # noqa: F401  (fixtures)
+    _ui,
     client,
     session_factory,
 )
@@ -304,3 +309,56 @@ def test_run_spans_are_paginated(client, session_factory):
     assert [s["name"] for s in one_trace["spans"]] == ["span-1", "span-3", "span-5"]
     too_many = client.get("/api/runs/sp/spans?limit=5001", headers=_ui(OWNER))
     assert too_many.status_code == 422
+
+
+def _record_run_locks(monkeypatch):
+    """PostgreSQL row-lock clauses of Run queries (SQLite renders none)."""
+    locks: list[str] = []
+    original = sqlalchemy.orm.Query.with_for_update
+
+    def spy(self, *args, **kwargs):
+        query = original(self, *args, **kwargs)
+        entity = self.column_descriptions[0].get("entity")
+        if entity is Run:
+            sql = str(query.statement.compile(dialect=postgresql.dialect()))
+            locks.append(sql[sql.rindex("FOR ") :])
+        return query
+
+    monkeypatch.setattr(sqlalchemy.orm.Query, "with_for_update", spy)
+    return locks
+
+
+def test_liveness_reconcile_skips_runs_ingestion_holds(
+    client, session_factory, monkeypatch
+):
+    with session_factory() as db:
+        _run(db, "stale", status=RunWorkflowStatus.RUNNING)
+        db.commit()
+    locks = _record_run_locks(monkeypatch)
+    body = _ok(client.get("/api/runs/stale/live-status", headers=_ui(OWNER)))
+    assert locks == ["FOR NO KEY UPDATE SKIP LOCKED"]
+    assert "stopped" in json.dumps(body).lower()
+    with session_factory() as db:
+        assert db.get(Run, "stale").status == RunWorkflowStatus.STOPPED
+
+
+def test_delete_and_restore_lock_runs_for_no_key_update(
+    client, session_factory, monkeypatch
+):
+    with session_factory() as db:
+        _run(db, "gone")
+        db.commit()
+    locks = _record_run_locks(monkeypatch)
+    _ok(
+        client.post(
+            "/api/runs/delete", json={"file_path": "gone"}, headers=_ui(OWNER)
+        )
+    )
+    _ok(
+        client.post(
+            "/api/runs/restore",
+            json={"run_id": "gone"},
+            headers=_ui("admin@example.com"),
+        )
+    )
+    assert locks == ["FOR NO KEY UPDATE", "FOR NO KEY UPDATE"]

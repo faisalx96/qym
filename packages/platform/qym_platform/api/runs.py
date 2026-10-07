@@ -1680,11 +1680,14 @@ def _reconcile_run_liveness(db: Session, runs: List[Run]) -> None:
         return
     # A GET may have loaded RUNNING before an admin stop or a fresh heartbeat.
     # Refresh under the same lock as ingestion before inferring a timeout.
+    # SKIP LOCKED: a run ingestion holds is live by definition, and a read
+    # must not queue behind it (like reconcile_expired_dashboard_runs). Only
+    # non-key columns change, so child-row inserts (FOR KEY SHARE) go on.
     locked_runs = (
         db.query(Run)
         .filter(Run.id.in_(running_ids))
         .order_by(Run.id)
-        .with_for_update()
+        .with_for_update(key_share=True, skip_locked=True)
         .populate_existing()
         .all()
     )
@@ -6902,9 +6905,11 @@ def delete_run(
     if not file_path:
         raise HTTPException(status_code=400, detail="file_path required")
 
+    # FOR NO KEY UPDATE: deletion sets only non-key columns, so it need not
+    # wait for (or block) inserts of the run's child rows (FOR KEY SHARE).
     run = (
         Run.active(db).filter(Run.id == file_path)
-        .populate_existing().with_for_update().first()
+        .populate_existing().with_for_update(key_share=True).first()
     )
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -6975,7 +6980,7 @@ def restore_run(
             for run in db.query(Run)
             .filter(Run.id.in_(wanted), Run.deleted_at.isnot(None))
             .order_by(Run.id)
-            .with_for_update()
+            .with_for_update(key_share=True)
             .populate_existing()
             .all()
         }
@@ -7008,7 +7013,7 @@ def restore_run(
     run = (
         db.query(Run)
         .filter(Run.id == run_id, Run.deleted_at.isnot(None))
-        .with_for_update()
+        .with_for_update(key_share=True)
         .populate_existing()
         .first()
     )

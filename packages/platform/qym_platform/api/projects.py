@@ -1129,12 +1129,14 @@ def _transfer_member_runs(
             status_code=400, detail="The new owner must be an active member of the project"
         )
     # Lock in id order, like bulk submit, so concurrent run actions queue.
+    # FOR NO KEY UPDATE: only owner_user_id (not a key) changes, so inserts of
+    # the runs' child rows (FOR KEY SHARE) are not blocked.
     runs = (
         db.query(Run)
         .options(load_only(Run.id, Run.project_id, Run.owner_user_id, Run.deleted_at))
         .filter(Run.project_id == project_id, Run.owner_user_id == user_id)
         .order_by(Run.id)
-        .with_for_update()
+        .with_for_update(key_share=True)
         .all()
     )
     actor_id = principal.user.id if principal.auth_type != "none" else None
