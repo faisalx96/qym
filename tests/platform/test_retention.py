@@ -219,7 +219,9 @@ def test_restore_waiting_for_purge_returns_404(migrated_postgres):
             assert resume.wait(10)
 
     def before_restore(conn, cursor, statement, parameters, context, executemany):
-        if "runs.deleted_at IS NOT NULL" in statement and "FOR UPDATE" in statement:
+        if "runs.deleted_at IS NOT NULL" in statement and (
+            "FOR UPDATE" in statement or "FOR NO KEY UPDATE" in statement
+        ):
             restore_started.set()
 
     event.listen(engine, "after_cursor_execute", observe)
