@@ -420,3 +420,56 @@ def test_group_by_ref_returns_each_lane_as_if_requested_alone(client, session_fa
         "/api/runs/step-latency?run_ids=run-1&group_by=run", headers=headers
     )
     assert rejected.status_code == 422
+
+
+def test_run_count_is_capped(client, session_factory):
+    from qym_platform.api.step_latency import MAX_STEP_LATENCY_RUNS
+
+    ids = ",".join(f"run-{index}" for index in range(MAX_STEP_LATENCY_RUNS + 1))
+    resp = client.get(
+        f"/api/runs/step-latency?run_ids={ids}", headers=_headers("owner@example.com")
+    )
+    assert resp.status_code == 422
+    assert str(MAX_STEP_LATENCY_RUNS) in resp.json()["detail"]
+
+
+def test_legacy_spans_read_only_the_attributes_used(client, session_factory):
+    """Spans without promoted columns read their attributes from the JSON,
+    by key in SQL, never the whole (possibly large) attributes document."""
+    from sqlalchemy import event
+
+    with session_factory() as session:
+        _seed(session)
+        session.add(
+            _span(
+                "run-1", "trace-1-tok", "ChatCompletion", parent="trace-1-task",
+                dur=50.0,
+                attrs={
+                    **_llm_attrs("m2"),
+                    "llm.token_count.prompt": 7,
+                    "llm.token_count.completion": 5,
+                    "input.value": "x" * 5000,
+                },
+            )
+        )
+        session.commit()
+        engine = session.get_bind()
+    statements = []
+
+    def capture(conn, cursor, statement, params, context, executemany):
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        resp = client.get(
+            "/api/runs/run-1/step-latency?level=spans",
+            headers=_headers("owner@example.com"),
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+    assert resp.status_code == 200
+    row = next(s for s in resp.json()["spans"] if s["span_id"] == "trace-1-tok")
+    tokens = (row["tokens_total"], row["tokens_prompt"], row["tokens_completion"])
+    assert tokens == (12, 7, 5)
+    assert row["step_type"] == "llm:m2"
+    assert not any("spans.attributes AS" in s for s in statements), statements
