@@ -285,17 +285,26 @@ async def test_finished_result_is_visible_to_other_processes(shared_db, managers
 
 
 @pytest.mark.asyncio
-async def test_owner_releases_a_persisted_result_but_still_serves_it(shared_db, managers) -> None:
+async def test_owner_releases_a_persisted_result_but_still_serves_it(
+    shared_db, managers
+) -> None:
     owner, _ = managers
-    big = {"total_analyzed": 2, "results": [{"item_id": f"i{n}", "summary": "x" * 50} for n in range(2)]}
+    big = {
+        "total_analyzed": 2,
+        "results": [{"item_id": f"i{n}", "summary": "x" * 50} for n in range(2)],
+    }
 
     async def runner(job):
         return big
 
     job, _ = await owner.submit(
-        run_id="run-r", user_id="u", auth_type="none",
+        run_id="run-r",
+        user_id="u",
+        auth_type="none",
         request_payload={"pass_number": 3, "item_ids": ["a", "b"]},
-        progress={}, runner=runner, store_bind=shared_db,
+        progress={},
+        runner=runner,
+        store_bind=shared_db,
     )
     await asyncio.wait_for(asyncio.wrap_future(job.future), timeout=5)
     # The full result now lives in background_jobs, not in this process.
@@ -316,12 +325,17 @@ async def test_unshared_database_keeps_results_in_bounded_memory() -> None:
     try:
         jobs = []
         for n in range(4):
+
             async def runner(job, n=n):
                 return {"n": n}
 
             job, _ = await manager.submit(
-                run_id=f"run-{n}", user_id="u", auth_type="none", request_payload={},
-                progress={}, runner=runner,
+                run_id=f"run-{n}",
+                user_id="u",
+                auth_type="none",
+                request_payload={},
+                progress={},
+                runner=runner,
             )
             await asyncio.wait_for(asyncio.wrap_future(job.future), timeout=5)
             jobs.append(job)

@@ -67,7 +67,9 @@ def _seed(db: Session, count: int) -> tuple[User, Run]:
     return actor, run
 
 
-def test_items_load_without_payloads_and_targets_get_theirs(db_session: Session) -> None:
+def test_items_load_without_payloads_and_targets_get_theirs(
+    db_session: Session,
+) -> None:
     _, run = _seed(db_session, 3)
     db_session.expunge_all()
     run = db_session.get(Run, RUN_ID)
@@ -83,7 +85,8 @@ def test_items_load_without_payloads_and_targets_get_theirs(db_session: Session)
     assert scores["item-1"]["accuracy"].score_numeric == 0.0
     # Nothing ORM-tracked from the load stays in the session.
     assert not any(
-        isinstance(obj, (RunItem, RunItemScore)) for obj in db_session.identity_map.values()
+        isinstance(obj, (RunItem, RunItemScore))
+        for obj in db_session.identity_map.values()
     )
 
     analysis_api._load_analysis_payloads(db_session, run, None, [items[1]])
@@ -95,7 +98,9 @@ def test_items_load_without_payloads_and_targets_get_theirs(db_session: Session)
     only, _ = analysis_api._load_run_items_and_scores(
         db_session, run, item_ids=["item-2"]
     )
-    assert [(item.item_id, item.output) for item in only] == [("item-2", {"answer": "o2"})]
+    assert [(item.item_id, item.output) for item in only] == [
+        ("item-2", {"answer": "o2"})
+    ]
     assert only[0].trace_content == []
 
 

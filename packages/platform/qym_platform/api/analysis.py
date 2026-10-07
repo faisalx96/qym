@@ -1278,9 +1278,7 @@ class _AnalysisItem:
 def _column_keys(model: Any, exclude: Iterable[str] = ()) -> list[str]:
     excluded = set(exclude)
     return [
-        attr.key
-        for attr in sa_inspect(model).column_attrs
-        if attr.key not in excluded
+        attr.key for attr in sa_inspect(model).column_attrs if attr.key not in excluded
     ]
 
 
@@ -1379,7 +1377,9 @@ def _load_run_items_and_scores(
     validation and aggregation, which never read them. Load them for the
     chosen targets with ``_load_analysis_payloads``.
     """
-    wanted_ids = sorted({str(value) for value in item_ids}) if item_ids is not None else None
+    wanted_ids = (
+        sorted({str(value) for value in item_ids}) if item_ids is not None else None
+    )
     item_keys = _column_keys(RunItem, () if with_payloads else _ITEM_PAYLOAD_KEYS)
     all_items = [
         _AnalysisItem(values, db)
@@ -1493,7 +1493,9 @@ def _load_run_items_and_scores(
         item_pass_scores = pass_scores_by_item.get(item.item_id) or {}
         metric_analyses: dict[str, Any] = {}
         for metric_name, pass_score in item_pass_scores.items():
-            pass_meta = pass_score["meta"] if isinstance(pass_score["meta"], dict) else {}
+            pass_meta = (
+                pass_score["meta"] if isinstance(pass_score["meta"], dict) else {}
+            )
             analysis = pass_meta.get(PASS_ANALYSIS_META_KEY)
             if isinstance(analysis, dict):
                 metric_analyses[metric_name] = dict(analysis)
@@ -1518,7 +1520,9 @@ def _load_run_items_and_scores(
                 str(score["label"] or "").lower() == "error"
                 for score in item_pass_scores.values()
             )
-            item.error = (item.error or "Pass execution failed") if failed_pass else None
+            item.error = (
+                (item.error or "Pass execution failed") if failed_pass else None
+            )
             item.latency_ms = None
             item.trace_id = ""
             item.trace_url = ""
@@ -1528,10 +1532,16 @@ def _load_run_items_and_scores(
             # The analyzer expects the reduced-score interface.  A pass score
             # has the same semantic fields, so expose them on this read-only
             # projection.
-            scoped_meta = dict(pass_score["meta"]) if isinstance(pass_score["meta"], dict) else {}
+            scoped_meta = (
+                dict(pass_score["meta"]) if isinstance(pass_score["meta"], dict) else {}
+            )
             scoped_meta.pop(PASS_ANALYSIS_META_KEY, None)
             item_scores[metric_name] = SimpleNamespace(
-                **{**pass_score, "meta": scoped_meta, "score_raw": pass_score["score_numeric"]}
+                **{
+                    **pass_score,
+                    "meta": scoped_meta,
+                    "score_raw": pass_score["score_numeric"],
+                }
             )
         scoped_scores[item.item_id] = item_scores
 
@@ -3457,7 +3467,9 @@ def _save_analysis_results(
                     (candidate.item_id, candidate.metric_name), []
                 ).append(candidate)
             else:
-                legacy_candidates_by_item.setdefault(candidate.item_id, []).append(candidate)
+                legacy_candidates_by_item.setdefault(candidate.item_id, []).append(
+                    candidate
+                )
         approved_review_keys = {
             (
                 candidate.item_id,
@@ -3507,18 +3519,15 @@ def _save_analysis_results(
             # candidates are created independently for each metric below.
             primary_overwrites_legacy_human = False
             if successful and allow_human_overwrite:
-                legacy_source = str(
-                    original_meta.get("root_cause_source") or ""
-                ).strip().lower()
+                legacy_source = (
+                    str(original_meta.get("root_cause_source") or "").strip().lower()
+                )
                 legacy_metric = str(
                     original_meta.get("root_cause_metric_name") or ""
                 ).strip()
-                primary_overwrites_legacy_human = (
-                    legacy_source == "human"
-                    and (
-                        not legacy_metric
-                        or legacy_metric == str(successful[0].metric_name or "").strip()
-                    )
+                primary_overwrites_legacy_human = legacy_source == "human" and (
+                    not legacy_metric
+                    or legacy_metric == str(successful[0].metric_name or "").strip()
                 )
             if successful and (
                 original_meta.get("root_cause_source") != "human"
@@ -3617,8 +3626,7 @@ def _save_analysis_results(
             if successful:
                 taxonomy_sources = [meta.get("category_taxonomy")]
                 taxonomy_sources.extend(
-                    getattr(result, "category_taxonomy", None)
-                    for result in successful
+                    getattr(result, "category_taxonomy", None) for result in successful
                 )
                 merged_taxonomy = merge_category_taxonomies(*taxonomy_sources)
                 if merged_taxonomy:
@@ -3632,7 +3640,9 @@ def _save_analysis_results(
                 existing_warning = str(meta.get("analysis_warning") or "").strip()
                 if warning not in existing_warning:
                     meta["analysis_warning"] = (
-                        f"{existing_warning}; {warning}" if existing_warning else warning
+                        f"{existing_warning}; {warning}"
+                        if existing_warning
+                        else warning
                     )
             if item_errors:
                 meta["analysis_error"] = "; ".join(item_errors)
@@ -3665,7 +3675,9 @@ def _save_analysis_results(
                     analysis=metric_analyses[metric_name],
                     actor_user_id=actor_user_id,
                     actor_source="ai",
-                    active_candidates=candidates_by_key.get((item.item_id, metric_name), []),
+                    active_candidates=candidates_by_key.get(
+                        (item.item_id, metric_name), []
+                    ),
                     scores_snapshot=scores_by_item.get(item.item_id, {}),
                     item_locked=True,
                 )
@@ -4617,9 +4629,7 @@ async def aggregate_saved_analysis_results(
             raise HTTPException(status_code=403, detail="Access denied")
         require_project_writable(db, run.project_id)
         _require_selected_pass_for_repeat_run(run, request.pass_number)
-        _check_pass_version(
-            db, run, request.pass_number, request.expected_pass_version
-        )
+        _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
 
         all_items, scores_by_item = _load_run_items_and_scores(
             db, run, request.pass_number, with_payloads=False
@@ -5239,7 +5249,8 @@ async def analyze_run_items_stream(
                             aggregation_error = str(exc)
                     try:
                         if request.pass_number is not None:
-                            response_results, error_count = await run_in_threadpool(_save_pass_analysis_results,
+                            response_results, error_count = await run_in_threadpool(
+                                _save_pass_analysis_results,
                                 db,
                                 run,
                                 results,
@@ -5258,7 +5269,8 @@ async def analyze_run_items_stream(
                                 ),
                             )
                         else:
-                            response_results, error_count = await run_in_threadpool(_save_analysis_results,
+                            response_results, error_count = await run_in_threadpool(
+                                _save_analysis_results,
                                 db,
                                 run,
                                 analysis_targets,

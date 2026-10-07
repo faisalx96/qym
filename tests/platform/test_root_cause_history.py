@@ -6019,15 +6019,28 @@ def test_approved_example_picker_pages_and_facets_in_sql(
 
     def listing(**overrides: Any) -> dict:
         params: dict[str, Any] = dict(
-            scope_id=run.id, page=1, page_size=3, task=None, dataset=None,
-            model=None, run_name=None, user_id=None, source=None, conf_min=0,
-            conf_max=100, search="sql-item", selected_ids=None,
-            db=db_session, principal=Principal(user=manager, auth_type="none"),
+            scope_id=run.id,
+            page=1,
+            page_size=3,
+            task=None,
+            dataset=None,
+            model=None,
+            run_name=None,
+            user_id=None,
+            source=None,
+            conf_min=0,
+            conf_max=100,
+            search="sql-item",
+            selected_ids=None,
+            db=db_session,
+            principal=Principal(user=manager, auth_type="none"),
         )
         params.update(overrides)
         return _list_analysis_examples(**params)
 
-    newest_first = [c.id for c in sorted(corrections, key=lambda c: c.created_at, reverse=True)]
+    newest_first = [
+        c.id for c in sorted(corrections, key=lambda c: c.created_at, reverse=True)
+    ]
     payload = listing(page=2, selected_ids=[corrections[1].id, corrections[2].id])
     assert payload["total"] == 7
     assert payload["page_count"] == 3
@@ -6036,7 +6049,9 @@ def test_approved_example_picker_pages_and_facets_in_sql(
     assert payload["matching_characters"] == sum(
         estimate_rule_writer_example_characters(c) for c in corrections
     )
-    assert sorted(payload["selected_ids"]) == sorted([corrections[1].id, corrections[2].id])
+    assert sorted(payload["selected_ids"]) == sorted(
+        [corrections[1].id, corrections[2].id]
+    )
     assert payload["selected_count"] == 2
     assert payload["selected_characters"] == sum(
         estimate_rule_writer_example_characters(c) for c in corrections[1:3]
