@@ -44,6 +44,10 @@ sure one process runs a given job.
 | `QYM_REQUEST_TIMING` | `false` | `Server-Timing` header + per-request log line |
 | `QYM_MAX_UPLOAD_BYTES` | `104857600` (100 MB) | Largest file a dataset or run upload may carry. Larger multipart bodies get 413 before they are parsed (so they never reach `/tmp`); a multipart request without `Content-Length` gets 411 |
 | `QYM_PLATFORM_EVENT_SPILL_BYTES` | `0` in the image (SDK default 256 MB) | Disk overflow for run-event streams. `0` never spills: events wait in memory (16 MB) instead of being written to `/tmp` |
+| `QYM_PLATFORM_REQUEST_TIMEOUT` | `60` | SDK client timeout (s) for a mid-run event batch POST. Keep it above the platform's statement timeout (30 s) so the SDK never re-sends a batch the server is still applying |
+| `QYM_PLATFORM_DRAIN_REQUEST_TIMEOUT` | `45` | SDK client timeout (s) for batch POSTs while a run drains at close, and for direct sends (`run_completed`, Ctrl+C `STOPPED`) |
+| `QYM_PLATFORM_FLUSH_INTERVAL` | `1.0` | SDK cadence (s) for flushing a partly filled batch. It stretches up to 5 s while POSTs take over 1 s; full batches (200 events / 2 MB) still go at once |
+| `QYM_PLATFORM_MAX_FIELD_BYTES` | `262144` (256 KB) | Largest string (task output, input, span attribute) the SDK uploads in a run event; longer ones are cut and marked `…[truncated by qym: N bytes omitted]`, and the event payload carries `_qym_truncated`. `0` disables the cap. Local results keep full values |
 | `INSIGHTOR_TIMINGS_FILE` | unset | Opt-in JSONL file for `insightor_eval.py` timings. Unset, timings are DEBUG log lines; point it at a mounted volume if you need the file |
 
 ## Container filesystem (read-only)
