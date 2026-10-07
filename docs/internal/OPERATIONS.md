@@ -14,6 +14,7 @@ The Evaluation Service runbook (dispatcher, environments, queue triage) is in
 | API pod(s) | Serve HTTP; apply Alembic migrations on start; run the dashboard summary backfill, maintenance jobs, and hourly retention | `QYM_ROLE=all` (default) |
 | Worker pod (optional) | Runs the background loops in a separate process | `QYM_ROLE=worker`, `QYM_SKIP_MIGRATIONS=1`, command `python -m qym_platform.worker`; set `QYM_ROLE=api` on the API |
 | Web processes (optional) | Several uvicorn processes serve HTTP in one API pod; with `QYM_ROLE=all` one extra process in the same pod runs the background loops | `QYM_WEB_WORKERS=N` (default `1`) |
+| Service split (optional) | main (UI + API), ingestion (SDK write path) and workers (loops + queued jobs) as three services behind ingress rules | `QYM_SERVICE=main\|ingestion\|workers`; see [Service split deployment](#service-split-deployment) |
 | Maintenance jobs | Reclaim, index builds, span copy, and purges. Progress is saved between steps. Final legacy verification and DROP share one transaction | `Admin → Maintenance`, `GET/POST /api/admin/maintenance/jobs` |
 | Maintenance mode | Ingest answers `503 Retry-After: 60`; SDKs buffer (16 MiB RAM + 256 MiB disk) and retry; UI stays readable | `QYM_MAINTENANCE_MODE=1` |
 
@@ -397,6 +398,240 @@ spec:
 
 And on the API Deployment set `QYM_ROLE=api` so it no longer runs the background
 loops. Without that setting the API keeps running them, which is safe but redundant.
+
+## Service split deployment
+
+Optional. The single server (`QYM_SERVICE` unset or `all`, the default) keeps
+working exactly as before: same paths, same in-process jobs, same
+`docker/docker-compose.yml`. The split runs the same image as three services
+that share one PostgreSQL database:
+
+| Service | `QYM_SERVICE` | Serves (prefix env, default) | Runs |
+|---|---|---|---|
+| **main** | `main` | UI, `/api/*`, every `/v1/*` route (`QYM_MAIN_PREFIX`, `""` = `/`); keeps the ingest routes too unless `QYM_MAIN_INCLUDE_INGEST=false` | HTTP only. Analyses, rule inference and product evals are **queued**, not run |
+| **ingestion** | `ingestion` | `POST /v1/runs`, `POST /v1/runs/{id}/events`, `POST /v1/runs:upload` under `QYM_INGESTION_PREFIX` (`/ingestion`) **and** at those legacy paths (`QYM_INGESTION_LEGACY_PATHS=true`); `/healthz` | HTTP only; Bearer API keys only (no session, no UI: any other path is 404) |
+| **workers** | `workers` | `/healthz`, `{QYM_WORKERS_PREFIX}/healthz` and `{QYM_WORKERS_PREFIX}/status` (`/workers`) | Dashboard summary, maintenance + hourly retention, Evaluation Service dispatcher, remote queue snapshotter, the **job executor** for queued jobs, and a liveness heartbeat. One uvicorn process |
+
+Every service also answers plain `/healthz` (probe path) and `{prefix}/healthz`.
+`QYM_ROOT_PATH` still applies in front of every prefix.
+
+`QYM_SERVICE` wins over the legacy `QYM_ROLE` when set. Unset, `QYM_ROLE`
+maps `all → all`, `api → main` and `worker → workers`, with one difference:
+a legacy `QYM_ROLE=api` process keeps the single-server HTTP surface and runs
+its jobs in-process, as before. Only an explicit `QYM_SERVICE=main` queues
+jobs for the workers service.
+
+### How the services communicate
+
+```
+ SDK / Evaluation Service ──┐                 ┌─ browser
+                            ▼                 ▼
+                  ingress (nginx / ingress-nginx)
+   /v1/runs, /v1/runs:upload,        /workers/*            everything else
+   /v1/runs/{id}/events, /ingestion/*   │                         │
+             │                          ▼                         ▼
+             ▼                     workers ◄──── DB only ────►  main
+         ingestion                  │  ▲  (outbox, leases,        │
+             │                      │  │   background_jobs queue, │
+             └──────────────► PostgreSQL ◄────────────────────────┘
+                                    │
+          workers' product-eval runner ──HTTP──► QYM_INTERNAL_PLATFORM_URL (ingress)
+```
+
+- **Database only** between main, ingestion and workers. Ingest writes runs,
+  items, events and the dashboard outbox; the workers' summary loop publishes
+  them. Maintenance jobs use `maintenance_jobs` leases, Evaluation Service
+  jobs compare-and-set + `SKIP LOCKED`, exactly as with a separate worker.
+- **Job queue** (`background_jobs`, migration `0083`): main inserts a
+  `queued` row with the job's `payload` (one unfinished analysis per run and
+  pass is still enforced at insert). The workers' executor polls every
+  `QYM_JOB_POLL_INTERVAL_SECONDS` (1 s), claims as many rows as it has free
+  slots (`SELECT … FOR UPDATE SKIP LOCKED`), clears the payload in the same
+  update and runs the job with the same code as the single server. Status,
+  active-job lookups, polling, cancel and project archive are answered by main
+  from the table. A queued job is never "lost"; if no worker claims it within
+  `QYM_JOB_QUEUE_TIMEOUT_SECONDS` (1800) it reads as failed ("No workers
+  service picked up this job in time"). A claimed job whose worker stops
+  reads as failed after 15 s, as before.
+- **Product eval secrets**: the caller's API key and refresh token are stored
+  in the payload Fernet-encrypted with `QYM_LLM_CONFIG_ENCRYPTION_KEY` and
+  wiped (SQL `NULL`) as soon as a worker claims the job, or when it is
+  cancelled. Without the key main refuses product evals with
+  `503 queue_unavailable`. Queue capacity: unfinished product evals across all
+  workers are capped at `QYM_PRODUCT_EVAL_MAX_QUEUED` (0 = `QYM_PRODUCT_EVAL_MAX_WORKERS`),
+  above it `429 queue_full`. The submit call waits up to 5 s for the first run
+  id by polling the row.
+- **HTTP** is used only by the workers' product-eval runner: its in-process
+  SDK talks to `QYM_INTERNAL_PLATFORM_URL` (default `QYM_BASE_URL`), normally
+  the ingress's in-cluster address, so run writes reach ingestion and dataset
+  reads reach main through the same rules as any SDK.
+- **Heartbeat**: each workers process upserts `service_heartbeats` every
+  `QYM_SERVICE_HEARTBEAT_SECONDS` (10) with its loop and executor state; a
+  clean stop marks it stopped. Admin → Maintenance on main shows "workers
+  service alive (n/n processes)" or "NOT RESPONDING". `GET /workers/status`
+  answers 503 when a loop or the executor is dead (use it as the liveness probe).
+- Links built outside main (`live_url` of `POST /v1/runs`, product-eval run
+  and compare URLs) use `QYM_PUBLIC_UI_URL` (default `QYM_BASE_URL`).
+
+### Ingress rules
+
+SDK clients need no change: they keep `QYM_BASE_URL` pointed at the ingress
+and the ingress sends exactly the three ingest paths to ingestion. None of
+main's own `/v1/runs/*` routes (`submit`, `owner`, `approve`, `reject`,
+`unapprove`, `unreject`, `/v1/runs/submit`) matches them (a test asserts the
+route sets are disjoint). Paths are passed through unchanged (no rewrite).
+
+| Rule | Service |
+|---|---|
+| `= /v1/runs` | ingestion |
+| `= /v1/runs:upload` | ingestion |
+| `~ ^/v1/runs/[^/]+/events$` | ingestion |
+| `/ingestion/` | ingestion |
+| `/workers/` | workers |
+| `/` | main |
+
+nginx: `docker/nginx.split.conf` (used by `docker/docker-compose.split.yml`).
+Kubernetes ingress-nginx (the regex rule needs `use-regex`; with it every path of
+that Ingress is a regex, so anchor them):
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: qym
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "110m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"   # analyze-stream
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: qym.example.com
+      http:
+        paths:
+          - { path: "/v1/runs$",              pathType: ImplementationSpecific, backend: { service: { name: qym-ingestion, port: { number: 8000 } } } }
+          - { path: "/v1/runs:upload$",       pathType: ImplementationSpecific, backend: { service: { name: qym-ingestion, port: { number: 8000 } } } }
+          - { path: "/v1/runs/[^/]+/events$", pathType: ImplementationSpecific, backend: { service: { name: qym-ingestion, port: { number: 8000 } } } }
+          - { path: "/ingestion/",            pathType: ImplementationSpecific, backend: { service: { name: qym-ingestion, port: { number: 8000 } } } }
+          - { path: "/workers/",              pathType: ImplementationSpecific, backend: { service: { name: qym-workers,   port: { number: 8000 } } } }
+          - { path: "/",                      pathType: ImplementationSpecific, backend: { service: { name: qym-main,      port: { number: 8000 } } } }
+```
+
+ingress-nginx orders regex locations by path length (longest first), so the
+ingest rules win over `/`. Do not expose `/workers/` publicly if you prefer:
+probes can use the pod address directly.
+
+### Environment variables per service
+
+Shared (all three, same values):
+
+| Variable | Required | Default | Notes |
+|---|---|---|---|
+| `QYM_SERVICE` | yes (split) | unset = `QYM_ROLE` | `main`, `ingestion`, `workers` |
+| `QYM_DATABASE_URL` | yes | — | Same database for all |
+| `QYM_ENVIRONMENT` | yes | `dev` | |
+| `QYM_SKIP_MIGRATIONS` | yes | `0` | `1` on every service; one migration job per release |
+| `QYM_LLM_CONFIG_ENCRYPTION_KEY` | yes (split) | — | Same key everywhere: main encrypts queued product-eval secrets and LLM connections, workers decrypt them. `..._KEYS_PREVIOUS` as for rotation |
+| `QYM_AUTH_MODE` | yes | `none` | Ingestion only authenticates Bearer API keys, but `none` vs others changes key handling |
+| `QYM_MAINTENANCE_MODE` | no | `false` | Ingestion answers 503 + `Retry-After`; set on all services for one window |
+| `QYM_BASE_URL` | yes | `http://localhost:8000` | Public URL of the ingress (OIDC redirect URIs, same-origin guard, link fallback) |
+| `QYM_ROOT_PATH`, `QYM_MAIN_PREFIX`, `QYM_INGESTION_PREFIX`, `QYM_WORKERS_PREFIX` | no | `""`, `""`, `/ingestion`, `/workers` | Keep identical on all services and in the ingress |
+| `QYM_DB_LOCK_TIMEOUT_MS`, `QYM_DB_STATEMENT_TIMEOUT_MS`, `QYM_DB_POOL_TIMEOUT_SECONDS` | no | `5000`, `30000`, `10` | |
+
+main:
+
+| Variable | Required | Default | Notes |
+|---|---|---|---|
+| `QYM_AUTH_SESSION_SECRET`, `QYM_AUTH_LOCAL_*`, `QYM_AUTH_GOOGLE_*`, `QYM_AUTH_GITHUB_*`, `QYM_AUTH_GITLAB_*`, `QYM_ADMIN_BOOTSTRAP_TOKEN` | per auth mode | — | Only main serves sign-in |
+| `QYM_WEB_WORKERS` | no | `1` | 2 recommended; no loop process is started for `main` |
+| `QYM_DB_POOL_SIZE` / `QYM_DB_MAX_OVERFLOW` / `QYM_HTTP_THREADPOOL_SIZE` | no | `10` / `10` / `0` | Per web process |
+| `QYM_MAX_UPLOAD_BYTES` | no | 100 MB | Dataset uploads |
+| `QYM_MAIN_INCLUDE_INGEST` | no | `true` | Keep the ingest routes (works without the ingress rules) |
+| `QYM_PRODUCT_EVAL_MAX_QUEUED` | no | `0` | Queue cap for product evals (0 = `QYM_PRODUCT_EVAL_MAX_WORKERS`) |
+| `QYM_JOB_QUEUE_TIMEOUT_SECONDS` | no | `1800` | Unclaimed queued jobs read as failed after this |
+| `QYM_PUBLIC_UI_URL` | no | `QYM_BASE_URL` | Product-eval run/compare links |
+| `FORWARDED_ALLOW_IPS` | yes behind an ingress | `127.0.0.1` | Ingress CIDR, for sign-in throttling |
+
+ingestion:
+
+| Variable | Required | Default | Notes |
+|---|---|---|---|
+| `QYM_PUBLIC_UI_URL` | recommended | `QYM_BASE_URL` | `live_url` in `POST /v1/runs` answers |
+| `QYM_INGESTION_LEGACY_PATHS` | no | `true` | Serve `/v1/runs…` at the legacy paths too |
+| `QYM_MAX_INGEST_BODY_BYTES` | no | 20 MB | Per events POST |
+| `QYM_MAX_UPLOAD_BYTES` | no | 100 MB | `POST /v1/runs:upload` |
+| `QYM_EVENT_LOG_MODE` | no | `full` | `structural` after rollout |
+| `QYM_SPAN_MAX_BYTES` | no | 1 MiB | |
+| `QYM_WEB_WORKERS`, `QYM_DB_POOL_SIZE`, `QYM_DB_MAX_OVERFLOW` | no | `1`, `10`, `10` | Per process; scale with replicas |
+| `QYM_RUN_STALE_TIMEOUT_SECONDS` | no | `180` | Same value as main |
+
+workers:
+
+| Variable | Required | Default | Notes |
+|---|---|---|---|
+| `QYM_INTERNAL_PLATFORM_URL` | recommended | `QYM_BASE_URL` | In-cluster ingress URL for the product-eval runner (e.g. `http://qym-ingress.qym.svc`); it must apply the ingress rules or point at main with `QYM_MAIN_INCLUDE_INGEST=true` |
+| `QYM_PUBLIC_UI_URL` | no | `QYM_BASE_URL` | |
+| `QYM_DB_WORKER_POOL_SIZE` / `QYM_DB_WORKER_MAX_OVERFLOW` / `QYM_DB_WORKER_STATEMENT_TIMEOUT_MS` | no | `3` / `2` / `300000` | Loops |
+| `QYM_DB_POOL_SIZE` / `QYM_DB_MAX_OVERFLOW` | no | `10` / `10` | Pool the jobs use (opened only while jobs run); `5`/`5` is plenty |
+| `QYM_ANALYSIS_JOB_MAX_WORKERS`, `QYM_ANALYSIS_MAX_CONCURRENCY`, `QYM_ANALYSIS_MAX_RETRIES` | no | `2`, `20`, `1` | Per workers process |
+| `QYM_PRODUCT_EVAL_MAX_WORKERS`, `QYM_PRODUCT_EVAL_*` (concurrency, timeout, run count, default dataset, `MAX_RETAINED_JOBS`) | no | `3`, … | Per workers process |
+| `QYM_JOB_POLL_INTERVAL_SECONDS`, `QYM_SERVICE_HEARTBEAT_SECONDS` | no | `1`, `10` | |
+| `QYM_EVAL_JOB_TIMEOUT_SECONDS`, `QYM_EVAL_*` | no | `8100` | Evaluation Service dispatcher |
+| `QYM_SPAN_RETENTION_DAYS`, `QYM_DELETED_RUN_GRACE_DAYS` | no | `60`, `30` | Retention runs here |
+| `QYM_ALLOW_PRIVATE_LLM_BASE_URLS` | no | `false` | Analyses call the LLM from here |
+| `QYM_INSIGHTOR_EVAL_SCRIPT` | no | repo `insightor_eval.py` | Product-eval preset script |
+
+SDK clients: `QYM_BASE_URL` (the ingress) and `QYM_API_KEY` as before.
+**No SDK change or upgrade is needed**: the ingress rules send the ingest
+calls to the ingestion service. An external Evaluation Service that streams
+runs keeps its qym URL too (point it at the ingress).
+
+### Resources and connection budget
+
+Measured in the smoke run (one host, PostgreSQL 16, `QYM_WEB_WORKERS=2` for
+main and ingestion; RSS per process):
+
+| Process | Idle | After smoke (SDK run, analysis, product eval) | Under load | Load |
+|---|---|---|---|---|
+| main (each of 2) | 142 MB | 160 MB | 312–515 MB peak | 4 parallel run-detail reads of 5,000-item runs (54 MB JSON each) |
+| ingestion (each of 2) | 145 MB | 152 MB | 170 MB peak | 4 SDK runs × 5,000 items × ~5 KB in parallel (20,000 items in 57 s) |
+| workers (1) | 151 MB | 168 MB | 173 MB peak | the summaries of those runs + a 3-pass product eval (test preset) + a 12-item analysis |
+
+Recommendations (starting points; product evals with the real Insightor
+preset and large analyses dominate the workers' memory):
+
+| Service | Request | Limit | Replicas / scaling | Why |
+|---|---|---|---|---|
+| main | 1 CPU / 1 GiB | 2 CPU / 2 GiB | 2+, HPA on CPU | 2 web processes at 150–515 MB each, run detail/compare JSON of large runs (tens of MB per response), inline LLM streaming and dataset upload parsing |
+| ingestion | 500m / 512 MiB | 1.5 CPU / 1.5 GiB | ≥2, HPA on CPU | JSON parsing of event batches; worst case ~12 request threads × 20 MB body × 3–4× parsing overhead; measured steady state stays near 170 MB per process |
+| workers | 500m / 1.5 GiB | 2 CPU / 3 GiB | 1 (leases and SKIP LOCKED make more safe) | Loops + maintenance jobs (retention purges, backfills) + up to `QYM_ANALYSIS_JOB_MAX_WORKERS` analyses + `QYM_PRODUCT_EVAL_MAX_WORKERS` in-process SDK Evaluators |
+
+PostgreSQL connections (pool size + overflow per process):
+
+- main: `QYM_WEB_WORKERS` × (`QYM_DB_POOL_SIZE` + `QYM_DB_MAX_OVERFLOW`) = 2 × (6 + 6) = 24 per replica;
+- ingestion: 2 × 12 = 24 per replica;
+- workers: loops 3 + 2 = 5, jobs pool up to 10 (5 + 5), heartbeat and executor share the loop pool: ~15;
+- migration job: 1 while it runs.
+
+With main ×2, ingestion ×2 and one worker: 48 + 48 + 15 = 111, plus psql
+and backups; keep the sum below `max_connections` (100 by default: raise it
+or lower the pools, e.g. `QYM_DB_POOL_SIZE=5`, `QYM_DB_MAX_OVERFLOW=5`). The
+smoke run used 8 API and 3 worker connections at rest.
+
+### Rollout: single server → split
+
+1. **Migrate once**: run the migration job (`alembic -c packages/platform/qym_platform/migrations/alembic.ini upgrade head`, up to revision `0083`) with the new image; set `QYM_SKIP_MIGRATIONS=1` on all three services.
+2. Set the **same** `QYM_DATABASE_URL`, `QYM_LLM_CONFIG_ENCRYPTION_KEY`, `QYM_BASE_URL` and prefixes on all services; `QYM_SERVICE=main|ingestion|workers`.
+3. Deploy **workers** first (one replica), then **ingestion**, then switch the old API Deployment to **main** (`QYM_SERVICE=main`). Remove a legacy `QYM_ROLE=worker` Deployment (or set `QYM_SERVICE=workers` on it): two loop processes are safe but redundant.
+4. Add the **ingress rules** above. Until they exist, main still accepts ingest (`QYM_MAIN_INCLUDE_INGEST=true`).
+5. **IdP redirect URIs are unchanged** (`{QYM_BASE_URL}/v1/auth/callback/{provider}`): main's prefix stays `""`.
+6. **SDK clients**: nothing to change. An external **Evaluation Service** keeps its qym URL (the ingress); point it straight at the ingestion service only if it bypasses the ingress.
+7. Check: `GET /workers/status` is 200, Admin → Maintenance shows the workers service alive, a new SDK run appears in Runs, and an analysis started in the UI completes (its row in `background_jobs` has `claimed_by` set to a workers process).
+
+Rollback: set `QYM_SERVICE=all` (or unset) on main and stop ingestion and
+workers. Jobs still queued then are not run by the single server; they read
+as failed after `QYM_JOB_QUEUE_TIMEOUT_SECONDS` and can be started again.
 
 ## Evaluation Service experiments
 
