@@ -42,7 +42,7 @@ def test_alembic_has_one_upgrade_head() -> None:
     config.set_main_option("script_location", str(MIGRATIONS_DIR))
     heads = ScriptDirectory.from_config(config).get_heads()
 
-    assert heads == ["0082"]
+    assert heads == ["0083"]
 
 
 def test_operations_docs_name_the_current_migration_head() -> None:

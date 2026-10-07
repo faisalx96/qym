@@ -11,7 +11,9 @@ place, so with the default ``QYM_ROLE=all`` this launcher starts:
   (the loops), restarted with a back-off if it exits.
 
 With ``QYM_ROLE=api`` (loops in a separate worker Deployment) only the web
-workers start. The launcher forwards SIGTERM/SIGINT to both children, and
+workers start. With the service split (``QYM_SERVICE``), ``main`` and
+``ingestion`` start N web workers and no loop process (the workers service
+runs the loops), and ``workers`` always runs one process. The launcher forwards SIGTERM/SIGINT to both children, and
 exits when uvicorn exits so the container restarts as before.
 
 ``docker/entrypoint.sh`` uses this launcher only when ``QYM_WEB_WORKERS`` is
@@ -97,9 +99,14 @@ def plan(env: Optional[Dict[str, str]] = None) -> Dict[str, object]:
     """The processes to start: uvicorn's argv/env and the optional loop process."""
     env = dict(os.environ if env is None else env)
     role = (env.get("QYM_ROLE") or "all").strip().lower()
-    if role == "worker":
+    service = (env.get("QYM_SERVICE") or "").strip().lower()
+    if service not in ("", "all", "main", "ingestion", "workers"):
+        raise SystemExit(f"QYM_SERVICE must be all, main, ingestion or workers, got {service!r}")
+    if not service and role == "worker":
         raise SystemExit("QYM_ROLE=worker runs `python -m qym_platform.worker`, not the web launcher")
-    workers = web_workers(env)
+    # The workers service is one process: its loops and job executor must not
+    # be duplicated per web worker (leases would make that safe, not useful).
+    workers = 1 if service == "workers" else web_workers(env)
     extra = shlex.split(env.get("QYM_UVICORN_ARGS", ""))
     uvicorn_argv: List[str] = [
         sys.executable,
@@ -116,10 +123,14 @@ def plan(env: Optional[Dict[str, str]] = None) -> Dict[str, object]:
     ] + extra
     web_env = dict(env)
     loops_env: Optional[Dict[str, str]] = None
-    if role == "all" and workers > 1:
-        # HTTP workers leave the loops to the single loop process below.
+    single_server = service == "all" or (not service and role == "all")
+    if single_server and workers > 1:
+        # HTTP workers leave the loops to the single loop process below
+        # (legacy roles: QYM_SERVICE would override them).
+        web_env.pop("QYM_SERVICE", None)
         web_env["QYM_ROLE"] = "api"
         loops_env = dict(env)
+        loops_env.pop("QYM_SERVICE", None)
         loops_env["QYM_ROLE"] = "worker"
     return {
         "workers": workers,

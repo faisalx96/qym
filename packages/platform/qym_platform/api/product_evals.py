@@ -27,6 +27,7 @@ from qym_platform.deps import get_db
 from qym_platform.permissions import can_view_run_items, redact_item_content
 from qym_platform.services.ingest_completeness import public_run_metadata
 from qym_platform.services.product_evals import (
+    ProductEvalConfigError,
     ProductEvalError,
     ProductEvalJob,
     ProductEvalJobManager,
@@ -37,6 +38,7 @@ from qym_platform.services.run_lifecycle import (
     REVIEW_RUN_STATUSES,
     TERMINAL_RUN_STATUSES,
 )
+from qym_platform.service_layout import job_execution_queued
 from qym_platform.settings import PlatformSettings
 
 
@@ -108,7 +110,7 @@ def _qym_run_url(run_id: Optional[str]) -> Optional[str]:
     if not run_id:
         return None
     settings = PlatformSettings()
-    return f"{settings.base_url.rstrip('/')}/run/{run_id}"
+    return f"{settings.public_ui_base}/run/{run_id}"
 
 
 def _qym_compare_url(run_ids: List[str]) -> Optional[str]:
@@ -116,7 +118,7 @@ def _qym_compare_url(run_ids: List[str]) -> Optional[str]:
     if len(clean) < 2:
         return None
     settings = PlatformSettings()
-    return f"{settings.base_url.rstrip('/')}/compare?{urlencode({'runs': clean}, doseq=True)}"
+    return f"{settings.public_ui_base}/compare?{urlencode({'runs': clean}, doseq=True)}"
 
 
 def _run_summary_payload(db: Session, run: Run) -> Dict[str, Any]:
@@ -723,6 +725,9 @@ def submit_product_eval(
             project_id=principal.project_id,
             run_count=request.run_count,
             store_bind=db.get_bind(),
+            # Split mode (QYM_SERVICE=main): queued for the workers service.
+            enqueue=job_execution_queued(),
+            db=db,
         )
     except ProductEvalError as exc:
         return _error_response(400, "invalid_request", str(exc))
@@ -733,6 +738,8 @@ def submit_product_eval(
             str(exc),
             headers={"Retry-After": "30"},
         )
+    except ProductEvalConfigError as exc:
+        return _error_response(503, "queue_unavailable", str(exc))
     except RuntimeError as exc:
         return _error_response(500, "preset_error", str(exc))
 

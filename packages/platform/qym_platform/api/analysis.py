@@ -163,6 +163,7 @@ from qym_platform.services.analysis_jobs import (
     rule_inference_job_manager,
 )
 from qym_platform.services.analysis_prompts import get_effective_analysis_prompts
+from qym_platform.service_layout import job_execution_queued
 from qym_platform.settings import PlatformSettings
 from sqlalchemy import String, and_, cast, func, or_, tuple_
 from sqlalchemy import inspect as sa_inspect
@@ -4757,6 +4758,8 @@ async def start_analysis_job(
         },
         runner=run_job,
         store_bind=db.get_bind(),
+        # Split mode (QYM_SERVICE=main): the workers service runs it.
+        enqueue=job_execution_queued(),
     )
     payload = _analysis_job_payload(job) or {}
     payload["created"] = created
@@ -6549,6 +6552,8 @@ async def _start_rule_inference_job(
         progress={"phase": "queued", "completed": 0, "total": 0},
         runner=run_job,
         store_bind=db.get_bind(),
+        # Split mode (QYM_SERVICE=main): the workers service runs it.
+        enqueue=job_execution_queued(),
     )
     payload = _rule_inference_job_payload(job) or {}
     payload["created"] = created
