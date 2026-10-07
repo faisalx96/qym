@@ -140,6 +140,9 @@ class PlatformSettings(BaseSettings):
     # payload (a single span above it keeps its scalar attributes and is
     # marked ``qym.span_oversized``) so one bad client cannot wedge ingest.
     span_max_bytes: int = Field(default=1_048_576, ge=65_536)
+    # Largest POST /v1/runs/{id}/events body (HTTP 413 above it); a single
+    # event line may use half of it. SDKs send batches of about 2 MB.
+    max_ingest_body_bytes: int = Field(default=20 * 1024 * 1024, ge=131_072)
     # "full" keeps every event payload verbatim in run_events (legacy);
     # "structural" drops item/metric bodies that already live in run_items,
     # run_item_attempts and run_item_scores, keeping ids, numbers and status.
