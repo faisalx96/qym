@@ -349,11 +349,7 @@ def test_delete_and_restore_lock_runs_for_no_key_update(
         _run(db, "gone")
         db.commit()
     locks = _record_run_locks(monkeypatch)
-    _ok(
-        client.post(
-            "/api/runs/delete", json={"file_path": "gone"}, headers=_ui(OWNER)
-        )
-    )
+    _ok(client.post("/api/runs/delete", json={"file_path": "gone"}, headers=_ui(OWNER)))
     _ok(
         client.post(
             "/api/runs/restore",
