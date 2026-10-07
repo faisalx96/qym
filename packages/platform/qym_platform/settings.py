@@ -193,3 +193,6 @@ class ProductEvalSettings(BaseSettings):
     metric_timeout: int = Field(default=300, ge=1)
     run_count: int = Field(default=3, ge=1, le=100)
     default_dataset: str = Field(default="playground_set_v2")
+    # Finished jobs kept in this process's memory (older ones are served from
+    # the shared ``background_jobs`` registry).
+    max_retained_jobs: int = Field(default=100, ge=1)
