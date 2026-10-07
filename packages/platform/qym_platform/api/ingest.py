@@ -1062,7 +1062,7 @@ def create_run(
         live_path = f"/projects/{project.slug}/runs/{run.id}"
     else:
         live_path = f"/run/{run.id}"
-    live_url = f"{settings.base_url.rstrip('/')}{live_path}"
+    live_url = f"{settings.public_ui_base}{live_path}"
     # supports_pass_events: capability flag for repeat runs (samples=k) — new
     # SDKs check it before streaming pass-aware events to old platforms.
     return {
@@ -3293,5 +3293,5 @@ def _upload_run_sync(
         )
 
     settings = PlatformSettings()
-    live_url = f"{settings.base_url.rstrip('/')}/run/{run.id}"
+    live_url = f"{settings.public_ui_base}/run/{run.id}"
     return {"run_id": run.id, "live_url": live_url}

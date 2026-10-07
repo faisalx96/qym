@@ -123,6 +123,36 @@ class PlatformSettings(BaseSettings):
     # runs only the background loop (separate Deployment/pod).
     role: str = Field(default="all", pattern="^(all|api|worker)$")
 
+    # Service split (docs/internal/OPERATIONS.md, "Service split deployment").
+    # ``QYM_SERVICE`` picks which of the three services this process is:
+    # "all" (single server, the default), "main" (UI + regular API),
+    # "ingestion" (SDK write path) or "workers" (background loops + job
+    # execution). Unset, the legacy ``QYM_ROLE`` decides (api -> main without
+    # the job queue, worker -> workers, all -> all); set, it wins over QYM_ROLE.
+    service: str = Field(default="", pattern="^(|all|main|ingestion|workers)$")
+    # URL prefix each service serves under (joined after ``root_path``).
+    main_prefix: str = Field(default="")
+    ingestion_prefix: str = Field(default="/ingestion")
+    workers_prefix: str = Field(default="/workers")
+    # Main keeps the ingest routes so SDKs pointed at it keep working without
+    # the ingress rules that send them to the ingestion service.
+    main_include_ingest: bool = Field(default=True)
+    # Ingestion also serves the legacy paths (/v1/runs, /v1/runs/{id}/events,
+    # /v1/runs:upload), so an ingress can route them there transparently.
+    ingestion_legacy_paths: bool = Field(default=True)
+    # Browser-facing UI URL for links built outside main (live_url, run and
+    # compare links). Empty: ``base_url``.
+    public_ui_url: str = Field(default="")
+    # URL the workers' product-eval runner calls the platform at (ingress or
+    # main: the ingress sends ingest paths to ingestion). Empty: ``base_url``.
+    internal_platform_url: str = Field(default="")
+    # Queued jobs (split mode) no worker claimed within this many seconds are
+    # reported failed, so a page never waits forever without a workers service.
+    job_queue_timeout_seconds: int = Field(default=1800, ge=30)
+    # Workers: how often to look for queued jobs, and the liveness heartbeat.
+    job_poll_interval_seconds: float = Field(default=1.0, gt=0, le=60)
+    service_heartbeat_seconds: float = Field(default=10.0, ge=1, le=300)
+
     # Observability
     request_timing: bool = Field(
         default=False,
@@ -182,6 +212,16 @@ class PlatformSettings(BaseSettings):
     product_eval_run_count: int = Field(default=3, ge=1, le=100)
     product_eval_default_dataset: str = Field(default="playground_set_v2")
 
+    @property
+    def public_ui_base(self) -> str:
+        """Base of browser links (``QYM_PUBLIC_UI_URL``, else ``QYM_BASE_URL``)."""
+        return (self.public_ui_url or self.base_url).rstrip("/")
+
+    @property
+    def internal_platform_base(self) -> str:
+        """Where in-process SDK clients reach the platform (workers' product evals)."""
+        return (self.internal_platform_url or self.base_url).rstrip("/")
+
 
 class ProductEvalSettings(BaseSettings):
     """Product eval settings that are safe to load before DB config exists."""
@@ -201,6 +241,10 @@ class ProductEvalSettings(BaseSettings):
     metric_timeout: int = Field(default=300, ge=1)
     run_count: int = Field(default=3, ge=1, le=100)
     default_dataset: str = Field(default="playground_set_v2")
+    # Split mode (QYM_SERVICE=main): unfinished product evals (queued or
+    # running) allowed in the shared queue before submit answers 429.
+    # 0 uses ``max_workers`` (one workers replica's capacity).
+    max_queued: int = Field(default=0, ge=0)
     # Finished jobs kept in this process's memory (older ones are served from
     # the shared ``background_jobs`` registry).
     max_retained_jobs: int = Field(default=100, ge=1)
