@@ -1729,3 +1729,67 @@ def test_settle_sweep_leaves_finished_runs_and_live_experiments_alone(
     assert _key_revoked(sessions, seed["experiment_id"])
     with sessions() as db:
         assert db.get(Run, run_id).status == RunWorkflowStatus.COMPLETED
+
+
+class ProbeObservingService(FakeService):
+    """Records, during each health probe, whether the job row is lockable."""
+
+    def __init__(self, clock: FakeClock, sessions, job_id: str) -> None:
+        super().__init__(clock)
+        self.sessions = sessions
+        self.job_id = job_id
+        self.row_free: List[bool] = []
+
+    async def list(self, **kwargs):
+        with self.sessions() as db:
+            if db.bind.dialect.name == "postgresql":
+                try:
+                    db.execute(
+                        text(
+                            "SELECT id FROM eval_experiment_jobs WHERE id = :j FOR UPDATE NOWAIT"
+                        ),
+                        {"j": self.job_id},
+                    )
+                    self.row_free.append(True)
+                except Exception:  # noqa: BLE001 - lock not available
+                    self.row_free.append(False)
+                db.rollback()
+            else:
+                self.row_free.append(True)
+        return await super().list(**kwargs)
+
+
+def test_paused_env_probe_runs_outside_the_job_lock(sessions, clock):
+    seed = _seed(sessions)
+    job_id = seed["job_ids"][0]
+    service = ProbeObservingService(clock, sessions, job_id)
+    with sessions() as db:
+        env = db.get(EvalEnvironment, seed["env_id"])
+        env.health_status = "error"
+        env.health_error = "down"
+        env.health_checked_at = None
+        db.commit()
+    d = _dispatcher(sessions, service, clock)
+    d.tick()
+    assert service.row_free == [True]
+    with sessions() as db:
+        env = db.get(EvalEnvironment, seed["env_id"])
+        assert env.health_status == "ok" and env.health_error is None
+    # Healthy again, the same tick submitted the job.
+    assert _job(sessions, job_id).status == EvalJobStatus.SUBMITTED
+
+
+def test_paused_env_probe_respects_the_interval(sessions, service, clock):
+    seed = _seed(sessions)
+    job_id = seed["job_ids"][0]
+    with sessions() as db:
+        env = db.get(EvalEnvironment, seed["env_id"])
+        env.health_status = "error"
+        env.health_checked_at = clock()
+        db.commit()
+    d = _dispatcher(sessions, service, clock)
+    d.tick()
+    assert service.calls["list"] == 0
+    job = _job(sessions, job_id)
+    assert job.status == EvalJobStatus.QUEUED
+    assert job.wait_reason == "Environment unhealthy"
