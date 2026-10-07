@@ -106,6 +106,7 @@ from qym_platform.services.run_versioning import (
     versioning_conditions,
 )
 from qym_platform.services.run_payloads import (
+    compact_attempt,
     compact_row,
     detail_item_ids,
     meta_key_schema,
@@ -200,6 +201,8 @@ from qym_platform.settings import PlatformSettings
 router = APIRouter()
 
 _LANGFUSE_URL_RE = re.compile(r"(https?://[^/]+)/project/([^/]+)")
+# Attempt outputs read per query when a run page is built.
+_ATTEMPT_OUTPUT_BATCH = 200
 
 
 def _metric_spec_payload(spec: RunMetricSpec) -> Dict[str, Any]:
@@ -890,6 +893,8 @@ def _repeat_pass_event_state(
     *,
     item_ids: Optional[List[str]] = None,
     output_pass: Optional[int] = None,
+    include_outputs: bool = True,
+    with_attempt_rows: bool = False,
 ) -> Dict[str, Any]:
     """Per-pass lifecycle state from ``run_item_attempts`` (no event replay).
 
@@ -898,9 +903,16 @@ def _repeat_pass_event_state(
     Runs ingested before attempt rows existed fall back to the event log.
     ``output_pass`` loads attempt outputs of that pass only (a one-sample view
     drops the others); every pass's state is still read.
+    ``include_outputs=False`` reads no attempt output at all: outcomes taken
+    from attempt rows then carry an empty output (for callers that need only
+    status, latency or traces, or that read final outputs themselves).
+    ``with_attempt_rows`` also returns the scalar attempt rows read (with no
+    output column) as ``attempt_rows``, so a caller need not query them again.
     """
     output_column: Any = RunItemAttempt.output
-    if output_pass is not None:
+    if not include_outputs:
+        output_column = type_coerce(null(), RunItemAttempt.output.type)
+    elif output_pass is not None:
         output_column = type_coerce(
             case((RunItemAttempt.pass_number == int(output_pass), RunItemAttempt.output), else_=null()),
             RunItemAttempt.output.type,
@@ -916,6 +928,7 @@ def _repeat_pass_event_state(
         RunItemAttempt.trace_url,
         RunItemAttempt.error,
         RunItemAttempt.is_last_attempt,
+        RunItemAttempt.id,
         output_column,
     ).filter(RunItemAttempt.run_id == run_id)
     if item_ids is not None:
@@ -924,14 +937,18 @@ def _repeat_pass_event_state(
     if not rows:
         has_events = db.query(RunEvent.id).filter(RunEvent.run_id == run_id).first() is not None
         if has_events:
-            return _repeat_pass_event_state_from_events(db, run_id, item_ids=item_ids)
-        return {"outcomes": {}, "active_attempts": {}, "starts_by_pass": defaultdict(list), "completed_passes": set()}
+            state = _repeat_pass_event_state_from_events(db, run_id, item_ids=item_ids)
+        else:
+            state = {"outcomes": {}, "active_attempts": {}, "starts_by_pass": defaultdict(list), "completed_passes": set()}
+        if with_attempt_rows:
+            state["attempt_rows"] = []
+        return state
 
     outcomes: Dict[tuple[str, int], Dict[str, Any]] = {}
     active_attempts: Dict[tuple[str, int], Dict[str, Any]] = {}
     starts_by_pass: Dict[int, List[int]] = defaultdict(list)
     for row in rows:
-        item_id, pass_number, attempt_number, status, latency_ms, start_ms, trace_id, trace_url, error, is_last, output = row
+        item_id, pass_number, attempt_number, status, latency_ms, start_ms, trace_id, trace_url, error, is_last, _attempt_id, output = row
         pass_number = max(1, int(pass_number or 1))
         key = (item_id, pass_number)
         if start_ms is not None:
@@ -1040,12 +1057,15 @@ def _repeat_pass_event_state(
             if pass_number in missing_passes or not starts_by_pass.get(pass_number):
                 starts_by_pass[pass_number].extend(values)
         completed_passes |= set(legacy["completed_passes"])
-    return {
+    state = {
         "outcomes": outcomes,
         "active_attempts": active_attempts,
         "starts_by_pass": starts_by_pass,
         "completed_passes": completed_passes,
     }
+    if with_attempt_rows:
+        state["attempt_rows"] = rows
+    return state
 
 
 def _repeat_pass_event_state_from_events(
@@ -3687,8 +3707,18 @@ def _build_run_data(
     items = item_query.yield_per(200) if compact else item_query.all()
     metrics = list(run.metrics or [])
     metric_specs = _metric_specs_for_runs(db, [run.id]).get(run.id, {})
+    # Only the columns the rows and issue_review_statuses read: a correction
+    # row also carries the item's input/expected/output snapshots.
     corrections = (
-        db.query(ReviewCorrection)
+        db.query(
+            ReviewCorrection.id,
+            ReviewCorrection.item_id,
+            ReviewCorrection.metric_name,
+            ReviewCorrection.pass_number,
+            ReviewCorrection.status,
+            ReviewCorrection.created_at,
+            *ISSUE_REVIEW_COLUMNS,
+        )
         .filter(ReviewCorrection.run_id == run.id, ReviewCorrection.is_active.is_(True),
                 ReviewCorrection.pass_number.is_(None))
         .filter(
@@ -3697,12 +3727,12 @@ def _build_run_data(
         .order_by(ReviewCorrection.created_at.desc())
         .all()
     )
-    correction_by_item: Dict[str, ReviewCorrection] = {}
-    corrections_by_item_metric: Dict[str, Dict[str, ReviewCorrection]] = {}
+    correction_by_item: Dict[str, Any] = {}
+    corrections_by_item_metric: Dict[str, Dict[str, Any]] = {}
     # Every active correction of an (item, metric, pass) scope: an issue's
     # review status is its correction's, not the issue JSON's (older data
     # can say pending there while the correction is decided).
-    issue_reviews: Dict[Any, List[ReviewCorrection]] = {}
+    issue_reviews: Dict[Any, List[Any]] = {}
     for corr in corrections:
         if corr.metric_name:
             corrections_by_item_metric.setdefault(corr.item_id, {}).setdefault(
@@ -3724,13 +3754,27 @@ def _build_run_data(
     )
 
     # Build per-item score/meta for UI
+    # Plain column rows, not ORM objects. The index drops explanations, so
+    # compact builds read only whether there is one (its first character).
     scores = (
-        db.query(RunItemScore)
+        db.query(
+            RunItemScore.item_id,
+            RunItemScore.metric_name,
+            RunItemScore.score_raw,
+            RunItemScore.score_numeric,
+            RunItemScore.meta,
+            RunItemScore.label,
+            (
+                func.substr(RunItemScore.explanation, 1, 1)
+                if compact
+                else RunItemScore.explanation
+            ).label("explanation"),
+        )
         .filter(RunItemScore.run_id == run.id)
         .filter(RunItemScore.item_id.in_(item_ids) if item_ids is not None else True)
         .all()
     )
-    by_item: Dict[str, Dict[str, RunItemScore]] = {}
+    by_item: Dict[str, Dict[str, Any]] = {}
     for s in scores:
         by_item.setdefault(s.item_id, {})[s.metric_name] = s
 
@@ -3823,20 +3867,23 @@ def _build_run_data(
         # show each attempt, not just the item's last one.  Event state fills
         # the two gaps in this table: an attempt that is currently running and
         # legacy item outcomes that arrived without a final-attempt event.
+        #
+        # One scalar read of the attempts (no outputs) serves both the event
+        # state and the final attempts below. Outcomes the event state takes
+        # from attempt rows are final attempts, which win over event state, so
+        # it needs no outputs.
         pass_event_state = _repeat_pass_event_state(
-            db, run.id, item_ids=item_ids, output_pass=pass_number
+            db,
+            run.id,
+            item_ids=item_ids,
+            include_outputs=False,
+            with_attempt_rows=True,
         )
-        all_attempts = (
-            db.query(RunItemAttempt)
-            .filter(RunItemAttempt.run_id == run.id)
-            .filter(
-                RunItemAttempt.item_id.in_(item_ids) if item_ids is not None else True
-            )
-            .filter(
-                RunItemAttempt.pass_number == pass_number if pass_number is not None else True
-            )
-            .all()
-        )
+        all_attempts = [
+            attempt
+            for attempt in pass_event_state["attempt_rows"]
+            if pass_number is None or int(attempt.pass_number) == pass_number
+        ]
         final_attempts = [
             attempt for attempt in all_attempts if attempt.is_last_attempt
         ]
@@ -3850,12 +3897,6 @@ def _build_run_data(
             key: max(0, max_attempt - 1)
             for key, max_attempt in max_attempt_by_pair.items()
         }
-        missing_output_pairs = {
-            (att.item_id, int(att.pass_number))
-            for att in final_attempts
-            if att.output is None
-        }
-        recovered_outputs = _completed_pass_outputs(db, run.id, missing_output_pairs)
         run_status = str(getattr(run.status, "value", run.status) or "").upper()
         terminal_active_status = {
             "COMPLETED": "completed",
@@ -3909,22 +3950,16 @@ def _build_run_data(
         else:
             trace_stats_by_id = {}
 
+        # Payloads of final attempts whose output is still to be read, by
+        # attempt id. A failed attempt with an error shows the error instead.
+        awaiting_output: Dict[int, Dict[str, Any]] = {}
         for att in final_attempts:
             att_error = att.error or ""
             is_failed = str(att.status or "").lower() == "failed"
-            attempt_output = att.output
-            if attempt_output is None:
-                attempt_output = recovered_outputs.get(
-                    (att.item_id, int(att.pass_number))
-                )
-            pass_attempts_by_item.setdefault(att.item_id, {})[int(att.pass_number)] = {
+            payload = {
                 "pass_number": int(att.pass_number),
                 "status": "error" if is_failed else "completed",
-                "output": (
-                    f"ERROR: {att_error}"
-                    if is_failed and att_error
-                    else _stringify(attempt_output)
-                ),
+                "output": f"ERROR: {att_error}" if is_failed and att_error else "",
                 "error": att_error,
                 "latency_ms": att.latency_ms,
                 "task_started_at_ms": att.task_started_at_ms,
@@ -3933,6 +3968,55 @@ def _build_run_data(
                 "retry_count": retry_counts.get((att.item_id, int(att.pass_number)), 0),
                 "trace_stats": trace_stats_by_id.get(att.trace_id),
             }
+            if not (is_failed and att_error):
+                awaiting_output[att.id] = payload
+            elif compact:
+                payload = compact_attempt(payload)
+            pass_attempts_by_item.setdefault(att.item_id, {})[
+                int(att.pass_number)
+            ] = payload
+
+        def _settle_output(attempt_id: int, output: Any) -> None:
+            payload = awaiting_output.pop(attempt_id)
+            payload["output"] = _stringify(output)
+            if compact:
+                # The index keeps only the output's digest: drop the text now
+                # rather than hold every pass's output until the row is built.
+                compacted = compact_attempt(payload)
+                payload.clear()
+                payload.update(compacted)
+
+        if awaiting_output:
+            # Final outputs in bounded batches, never every pass's at once.
+            wanted_ids = sorted(awaiting_output)
+            for offset in range(0, len(wanted_ids), _ATTEMPT_OUTPUT_BATCH):
+                batch_ids = wanted_ids[offset : offset + _ATTEMPT_OUTPUT_BATCH]
+                output_query = db.query(
+                    RunItemAttempt.id, RunItemAttempt.output
+                ).filter(
+                    RunItemAttempt.run_id == run.id,
+                    RunItemAttempt.id.in_(batch_ids),
+                )
+                if pass_number is not None:
+                    output_query = output_query.filter(
+                        RunItemAttempt.pass_number == pass_number
+                    )
+                for attempt_id, output in output_query:
+                    if output is not None and attempt_id in awaiting_output:
+                        _settle_output(attempt_id, output)
+            # Attempts written by pre-fix SDK event ordering: the output is
+            # only on the item_completed event.
+            missing = {
+                attempt_id: (att.item_id, int(att.pass_number))
+                for att in final_attempts
+                for attempt_id in (att.id,)
+                if attempt_id in awaiting_output
+            }
+            recovered_outputs = _completed_pass_outputs(
+                db, run.id, set(missing.values())
+            )
+            for attempt_id, pair in missing.items():
+                _settle_output(attempt_id, recovered_outputs.get(pair))
 
         for (item_id, pass_number), event_attempt in event_attempts.items():
             if pass_number in pass_attempts_by_item.get(item_id, {}):
