@@ -26,7 +26,16 @@ if [ "$#" -gt 0 ]; then
   exec "$@"
 fi
 
-if [ "${QYM_ROLE:-all}" = "worker" ]; then
+# Service split (docs/internal/OPERATIONS.md, "Service split deployment"):
+# QYM_SERVICE=workers runs the loops and the job executor in one uvicorn
+# process (its small HTTP app serves /healthz and ${QYM_WORKERS_PREFIX}/status);
+# main and ingestion continue below like the API (QYM_WEB_WORKERS applies).
+if [ "${QYM_SERVICE:-}" = "workers" ]; then
+  echo "Starting workers service..."
+  exec uvicorn qym_platform.main:app --host 0.0.0.0 --port 8000 ${QYM_UVICORN_ARGS:-}
+fi
+
+if [ -z "${QYM_SERVICE:-}" ] && [ "${QYM_ROLE:-all}" = "worker" ]; then
   echo "Starting worker..."
   exec python -m qym_platform.worker
 fi
