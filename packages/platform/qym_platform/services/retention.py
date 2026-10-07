@@ -12,8 +12,9 @@ stopped: ``resume_purge_clocks`` moves the run's purge clock forward.
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from sqlalchemy import bindparam, select, text, update
 from sqlalchemy.engine import Engine
@@ -50,21 +51,99 @@ def _bounds(expr: str):
     return datetime.strptime(m.group(1)[:19], fmt), datetime.strptime(m.group(2)[:19], fmt)
 
 
+# Partition DDL waits at most this long for a lock, then retries: a DDL
+# statement queued behind a long reader would otherwise block every later
+# query on ``spans`` (they all queue behind its ACCESS EXCLUSIVE request).
+PARTITION_LOCK_TIMEOUT = "1s"
+PARTITION_LOCK_ATTEMPTS = 5
+_LOCK_NOT_AVAILABLE = "55P03"
+
+
+def _is_lock_timeout(exc: OperationalError) -> bool:
+    return getattr(exc.orig, "pgcode", None) == _LOCK_NOT_AVAILABLE
+
+
+def _with_lock_retries(engine: Engine, what: str, ddl: Callable[[Any], None]) -> bool:
+    """Run ``ddl(conn)`` in its own transaction under a short lock_timeout.
+
+    Retries a lock timeout with a growing pause; gives up (False) after
+    ``PARTITION_LOCK_ATTEMPTS`` so the next hourly pass tries again.
+    """
+    for attempt in range(1, PARTITION_LOCK_ATTEMPTS + 1):
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(f"SET LOCAL lock_timeout = '{PARTITION_LOCK_TIMEOUT}'"))
+                ddl(conn)
+            return True
+        except OperationalError as exc:
+            if not _is_lock_timeout(exc):
+                raise
+            logger.info("%s: lock busy (attempt %d/%d)", what, attempt, PARTITION_LOCK_ATTEMPTS)
+            if attempt < PARTITION_LOCK_ATTEMPTS:
+                time.sleep(min(0.5 * attempt, 2.0))
+    logger.warning("%s: gave up after %d lock timeouts; retrying next pass", what, PARTITION_LOCK_ATTEMPTS)
+    return False
+
+
+def _literal(value: datetime) -> str:
+    return "'" + value.strftime("%Y-%m-%d %H:%M:%S") + "'"
+
+
+def _create_partition(conn: Any, name: str, start: datetime, end: datetime) -> None:
+    """Create ``name`` beside ``spans`` and ATTACH it.
+
+    ``CREATE TABLE ... PARTITION OF`` takes ACCESS EXCLUSIVE on ``spans``;
+    ATTACH takes only SHARE UPDATE EXCLUSIVE there, so queries pruned to
+    other months and ingest keep flowing. It still locks the DEFAULT
+    partition exclusively to check it holds no rows of the new range (it is
+    normally empty, so that check is instant), which is why it also runs
+    under a short lock_timeout. The CHECK constraint matching the bound lets
+    ATTACH skip scanning the new table; it is dropped once the bound
+    enforces the range.
+    """
+    lower, upper = _literal(start), _literal(end)
+    conn.execute(
+        text(
+            f"CREATE TABLE {name} (LIKE spans INCLUDING DEFAULTS INCLUDING CONSTRAINTS"
+            " INCLUDING STORAGE INCLUDING COMPRESSION)"
+        )
+    )
+    conn.execute(
+        text(
+            f"ALTER TABLE {name} ADD CONSTRAINT {name}_bound CHECK ("
+            f"run_created_at IS NOT NULL AND run_created_at >= {lower}"
+            f" AND run_created_at < {upper})"
+        )
+    )
+    conn.execute(
+        text(f"ALTER TABLE spans ATTACH PARTITION {name} FOR VALUES FROM ({lower}) TO ({upper})")
+    )
+    conn.execute(text(f"ALTER TABLE {name} DROP CONSTRAINT {name}_bound"))
+
+
 def ensure_span_partitions(engine: Engine, *, months_ahead: int = 3, now: datetime = None) -> List[str]:
-    """Create monthly partitions through now + months_ahead. Postgres only."""
+    """Create monthly partitions through now + months_ahead. Postgres only.
+
+    Each partition is created and attached in its own short transaction with
+    a short lock_timeout and a few retries (see ``_create_partition``).
+    """
     if engine.dialect.name != "postgresql":
         return []
     now = now or datetime.utcnow()
     created: List[str] = []
-    with engine.begin() as conn:
+    with engine.connect() as conn:
         existing = {row[0] for row in conn.execute(_PARTITIONS)}
-        start = _month_start(now)
-        for _ in range(months_ahead + 1):
-            name = f"spans_y{start.year:04d}m{start.month:02d}"
-            if name not in existing:
-                conn.execute(text(f"CREATE TABLE {name} PARTITION OF spans FOR VALUES FROM (:s) TO (:e)").bindparams(s=start, e=_next_month(start)))
-                created.append(name)
-            start = _next_month(start)
+    start = _month_start(now)
+    for _ in range(months_ahead + 1):
+        name = f"spans_y{start.year:04d}m{start.month:02d}"
+        end = _next_month(start)
+        if name not in existing and _with_lock_retries(
+            engine,
+            f"create span partition {name}",
+            lambda conn, name=name, start=start, end=end: _create_partition(conn, name, start, end),
+        ):
+            created.append(name)
+        start = end
     if created:
         logger.info("created span partitions %s", created)
     return created
@@ -83,14 +162,17 @@ def drop_expired_span_partitions(engine: Engine, *, retention_days: int, now: da
         bounds = _bounds(expr)
         if not bounds or bounds[1] > cutoff:
             continue
-        # Plain DETACH (CONCURRENTLY is unavailable while a DEFAULT partition exists);
-        # it holds the parent's lock for milliseconds, once an hour at most.
-        with engine.begin() as conn:
-            conn.execute(text("SET LOCAL lock_timeout = '10s'"))
+
+        # Plain DETACH (CONCURRENTLY is unavailable while a DEFAULT partition
+        # exists) needs ACCESS EXCLUSIVE on ``spans`` for milliseconds; a short
+        # lock_timeout keeps it from queueing every span query behind it.
+        def detach(conn: Any, name: str = name) -> None:
             conn.execute(text(f"ALTER TABLE spans DETACH PARTITION {name}"))
             conn.execute(text(f"DROP TABLE {name}"))
-        dropped.append(name)
-        logger.info("dropped expired span partition %s (upper bound %s)", name, bounds[1])
+
+        if _with_lock_retries(engine, f"drop span partition {name}", detach):
+            dropped.append(name)
+            logger.info("dropped expired span partition %s (upper bound %s)", name, bounds[1])
     return dropped
 
 

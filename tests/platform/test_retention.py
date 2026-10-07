@@ -544,3 +544,84 @@ def test_purge_defers_a_run_whose_batch_hits_a_lock_timeout(migrated_postgres):
     assert retention.purge_soft_deleted_runs(engine, grace_days=30, now=now) == [
         "held"
     ]
+
+
+def _partition_shape(conn, name):
+    indexes = conn.execute(
+        text("SELECT count(*) FROM pg_indexes WHERE tablename = :t"), {"t": name}
+    ).scalar()
+    fks = conn.execute(
+        text(
+            "SELECT count(*) FROM pg_constraint WHERE conrelid = CAST(:t AS regclass) AND contype = 'f'"
+        ),
+        {"t": name},
+    ).scalar()
+    checks = conn.execute(
+        text(
+            "SELECT count(*) FROM pg_constraint WHERE conrelid = CAST(:t AS regclass) AND contype = 'c'"
+        ),
+        {"t": name},
+    ).scalar()
+    return indexes, fks, checks
+
+
+def test_attached_partition_matches_a_partition_of_and_takes_rows(migrated_postgres):
+    engine = migrated_postgres
+    now = datetime(2031, 1, 10)
+    from qym_platform.migrations_support import ensure_month_partitions_between
+
+    # Reference shape: a partition built by the migrations' PARTITION OF path.
+    ensure_month_partitions_between(engine, datetime(2030, 12, 1), datetime(2030, 12, 1))
+    # A reader of another month holds ACCESS SHARE on ``spans`` itself, which
+    # CREATE TABLE ... PARTITION OF (ACCESS EXCLUSIVE) would wait for; the
+    # ATTACH path (SHARE UPDATE EXCLUSIVE on the parent) does not.
+    reader = engine.connect()
+    try:
+        reader.execute(
+            text(
+                "SELECT count(*) FROM spans WHERE run_created_at >= '2030-12-01'"
+                " AND run_created_at < '2031-01-01'"
+            )
+        )
+        assert retention.ensure_span_partitions(engine, months_ahead=0, now=now) == [
+            "spans_y2031m01"
+        ]
+    finally:
+        reader.rollback()
+        reader.close()
+    with engine.begin() as conn:
+        assert _partition_shape(conn, "spans_y2031m01") == _partition_shape(
+            conn, "spans_y2030m12"
+        )
+        _seed_run(conn, "jan", now)
+        placed = conn.execute(
+            text("SELECT tableoid::regclass::text, id FROM spans WHERE run_id = 'jan'")
+        ).one()
+        assert placed[0] == "spans_y2031m01" and placed[1] is not None
+
+
+def test_partition_drop_gives_up_on_a_busy_lock_without_queueing(
+    migrated_postgres, monkeypatch
+):
+    engine = migrated_postgres
+    now = datetime(2026, 9, 14)
+    from qym_platform.migrations_support import ensure_month_partitions_between
+
+    ensure_month_partitions_between(engine, datetime(2026, 5, 1), now)
+    monkeypatch.setattr(retention, "PARTITION_LOCK_TIMEOUT", "100ms")
+    monkeypatch.setattr(retention, "PARTITION_LOCK_ATTEMPTS", 2)
+    monkeypatch.setattr(retention.time, "sleep", lambda _: None)
+    reader = engine.connect()
+    try:
+        reader.execute(text("SELECT count(*) FROM spans"))
+        assert (
+            retention.drop_expired_span_partitions(engine, retention_days=60, now=now)
+            == []
+        )
+    finally:
+        reader.rollback()
+        reader.close()
+    assert "spans_y2026m05" in _span_partitions(engine)
+    assert sorted(
+        retention.drop_expired_span_partitions(engine, retention_days=60, now=now)
+    ) == ["spans_y2026m05", "spans_y2026m06"]
