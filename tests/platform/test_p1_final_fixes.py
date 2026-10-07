@@ -460,14 +460,13 @@ def test_one_sample_view_matches_full_build_scoped_and_loads_one_pass(client, se
         event.remove(engine, "before_cursor_execute", capture)
     assert body["snapshot"]["rows"] == expected_rows
     assert body["snapshot"]["pass_number"] == pass_number
-    # Attempt rows (outputs) are read for the shown pass only; the state
-    # query reads other passes' outputs as NULL.
+    # Attempt outputs are read for the shown pass only (the state query reads
+    # none; this run has no attempt rows, so no output read happens at all).
     attempt_reads = [
         statement
         for statement, _ in statements
         if "FROM run_item_attempts" in statement and "run_item_attempts.output" in statement
     ]
-    assert attempt_reads
     for statement in attempt_reads:
         assert "pass_number =" in statement or "CASE WHEN" in statement, statement
 

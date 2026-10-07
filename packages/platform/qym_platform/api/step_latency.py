@@ -406,6 +406,21 @@ def summarize_step_latency(
 
 
 PASS_REF_SEP = "::pass"
+# Distinct runs (and run or pass refs) one step-latency request may pool; the
+# run cap matches GET /api/compare, whose lanes this endpoint serves.
+MAX_STEP_LATENCY_RUNS = 20
+MAX_STEP_LATENCY_REFS = 500
+# The attributes this module reads, for spans stored before promoted columns.
+_LEGACY_ATTRIBUTE_KEYS = (
+    "openinference.span.kind",
+    "ai.openinference.span.kind",
+    "qym.usage_scope",
+    "llm.model_name",
+    "tool.name",
+    "llm.token_count.total",
+    "llm.token_count.prompt",
+    "llm.token_count.completion",
+)
 
 
 def _parse_run_ref(ref: str) -> tuple:
@@ -436,8 +451,20 @@ def _load_spans(
     if not run_ids:
         raise HTTPException(status_code=400, detail="No run ids given")
 
+    if len(set(run_ids)) > MAX_STEP_LATENCY_REFS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"At most {MAX_STEP_LATENCY_REFS} run or pass refs at once",
+        )
     refs = [_parse_run_ref(ref) for ref in run_ids]
     base_ids = list(dict.fromkeys(base for base, _ in refs))
+    if len(base_ids) > MAX_STEP_LATENCY_RUNS:
+        # Every span of every run is pooled in memory: bound the request.
+        raise HTTPException(
+            status_code=422,
+            detail=f"At most {MAX_STEP_LATENCY_RUNS} runs at once "
+            f"({len(base_ids)} requested)",
+        )
 
     runs = Run.active(db).filter(Run.id.in_(base_ids)).all()
     found = {run.id: run for run in runs}
@@ -548,10 +575,16 @@ def _project_spans(db: Session, filters) -> List[_SpanView]:
     rows = db.query(*cols).filter(or_(*filters)).order_by(Span.start_time_ns.asc().nullslast(), Span.id.asc()).all()
     legacy_ids = [row[16] for row in rows if row[9] is None and row[10] is None and row[13] is None]
     legacy_attrs: Dict[int, Dict[str, Any]] = {}
+    # Only the attribute keys read here, extracted in SQL, not the whole JSON.
+    legacy_cols = [Span.attributes[key] for key in _LEGACY_ATTRIBUTE_KEYS]
     for start in range(0, len(legacy_ids), 500):
         chunk = legacy_ids[start : start + 500]
-        for span_id, attrs in db.query(Span.id, Span.attributes).filter(Span.id.in_(chunk)):
-            legacy_attrs[span_id] = attrs or {}
+        for span_id, *values in db.query(Span.id, *legacy_cols).filter(Span.id.in_(chunk)):
+            legacy_attrs[span_id] = {
+                key: value
+                for key, value in zip(_LEGACY_ATTRIBUTE_KEYS, values)
+                if value is not None
+            }
     views: List[_SpanView] = []
     for row in rows:
         if row[16] in legacy_attrs:
