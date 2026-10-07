@@ -1242,6 +1242,8 @@ def _playground_config_to_analyzer(
 
 _ITEM_PAYLOAD_KEYS = ("input", "expected", "output")
 _IN_CHUNK = 500
+# Items saved per transaction by ``_save_analysis_results``.
+_ANALYSIS_SAVE_CHUNK_ITEMS = 100
 
 
 class _AnalysisItem:
@@ -2967,15 +2969,21 @@ async def _aggregate_pass_analysis_results(
     expected_pass_version: int | None = None,
 ) -> tuple[dict[str, int], int]:
     """Canonicalize saved diagnoses for one pass without touching the run row."""
-    pass_scores = (
-        db.query(RunItemPassScore)
+    # Plain (item_id, metric_name, meta) rows: nothing ORM-tracked is kept
+    # through the model call; the save re-reads the rows it locks.
+    pass_scores = [
+        SimpleNamespace(item_id=item_id, metric_name=metric_name, meta=meta)
+        for item_id, metric_name, meta in db.query(
+            RunItemPassScore.item_id,
+            RunItemPassScore.metric_name,
+            RunItemPassScore.meta,
+        )
         .filter(
             RunItemPassScore.run_id == run.id,
             RunItemPassScore.pass_number == pass_number,
         )
         .order_by(RunItemPassScore.item_id.asc(), RunItemPassScore.metric_name.asc())
-        .all()
-    )
+    ]
     bindings: list[_PassPersistedAnalysisBinding] = []
     for score in pass_scores:
         if metric_scope is not None and score.metric_name not in metric_scope:
@@ -3100,20 +3108,27 @@ async def _aggregate_pass_analysis_results(
     _check_pass_version(db, run, pass_number, expected_pass_version, lock=True)
     # Approval may have committed while the LLM was working. Follow the review
     # lock order and reload score metadata before deciding what can be changed.
+    # Only the changed items are locked: the item rows by key alone (nothing
+    # here reads their payloads) and only their pass scores, not the pass's.
     item_ids = sorted({binding.score.item_id for binding in changed_bindings})
-    db.query(RunItem).filter(
-        RunItem.run_id == run.id, RunItem.item_id.in_(item_ids)
-    ).order_by(RunItem.item_id).populate_existing().with_for_update().all()
-    locked_scores = (
-        db.query(RunItemPassScore)
-        .filter(
-            RunItemPassScore.run_id == run.id,
-            RunItemPassScore.pass_number == pass_number,
+    locked_scores: list[RunItemPassScore] = []
+    for batch in _chunked(item_ids):
+        db.query(RunItem.id).filter(
+            RunItem.run_id == run.id, RunItem.item_id.in_(batch)
+        ).order_by(RunItem.item_id).with_for_update().all()
+    for batch in _chunked(item_ids):
+        locked_scores.extend(
+            db.query(RunItemPassScore)
+            .filter(
+                RunItemPassScore.run_id == run.id,
+                RunItemPassScore.pass_number == pass_number,
+                RunItemPassScore.item_id.in_(batch),
+            )
+            .order_by(RunItemPassScore.item_id, RunItemPassScore.metric_name)
+            .populate_existing()
+            .with_for_update()
+            .all()
         )
-        .populate_existing()
-        .with_for_update()
-        .all()
-    )
     locked_by_key = {
         (score.item_id, score.metric_name): score for score in locked_scores
     }
@@ -3358,289 +3373,306 @@ def _save_analysis_results(
         )
         response_results.append(payload)
 
-    # Acquire every affected item lock in a deterministic order only after all
-    # analyzer/aggregation work has completed.  The locked rows are reloaded
-    # from the database, so a concurrent reviewer edit is authoritative.
-    target_item_ids = sorted(results_by_item)
-    locked_items = (
-        db.query(RunItem)
-        .filter(
-            RunItem.run_id == run.id,
-            RunItem.item_id.in_(target_item_ids),
-        )
-        .order_by(RunItem.item_id.asc())
-        .populate_existing()
-        .with_for_update()
-        .all()
-        if target_item_ids
-        else []
-    )
-    items_by_id = {item.item_id: item for item in locked_items}
-    score_rows = (
-        db.query(RunItemScore)
-        .filter(
-            RunItemScore.run_id == run.id,
-            RunItemScore.item_id.in_(target_item_ids),
-        )
-        .all()
-        if target_item_ids
-        else []
-    )
-    scores_by_item: dict[str, dict[str, Any]] = {}
-    for score in score_rows:
-        scores_by_item.setdefault(score.item_id, {})[score.metric_name] = (
-            score.score_numeric
-            if score.score_numeric is not None
-            else score.score_raw
-        )
-    active_candidates = (
-        db.query(ReviewCorrection)
-        .filter(
-            ReviewCorrection.run_id == run.id,
-            ReviewCorrection.item_id.in_(target_item_ids),
-            ReviewCorrection.is_active.is_(True),
-            ReviewCorrection.pass_number.is_(None),
-        )
-        .all()
-        if target_item_ids
-        else []
-    )
-    candidates_by_key: dict[tuple[str, str], list[ReviewCorrection]] = {}
-    legacy_candidates_by_item: dict[str, list[ReviewCorrection]] = {}
-    for candidate in active_candidates:
-        if candidate.metric_name:
-            candidates_by_key.setdefault(
-                (candidate.item_id, candidate.metric_name), []
-            ).append(candidate)
-        else:
-            legacy_candidates_by_item.setdefault(candidate.item_id, []).append(candidate)
-    approved_review_keys = {
-        (
-            candidate.item_id,
-            str(candidate.metric_name).strip() if candidate.metric_name else None,
-        )
-        for candidate in active_candidates
-        if candidate.status == CorrectionStatus.APPROVED
-    }
+    payloads_by_key: dict[tuple[Any, Any], list[Dict[str, Any]]] = {}
+    for payload in response_results:
+        payloads_by_key.setdefault(
+            (payload.get("item_id"), payload.get("metric_name")), []
+        ).append(payload)
 
     def set_status(result: AnalysisResult, status: str) -> None:
-        for payload in response_results:
-            if (
-                payload.get("item_id") == result.item_id
-                and payload.get("metric_name") == result.metric_name
-                and payload.get("persistence_status")
-                not in {
-                    "skipped_human_protection",
-                    "skipped_approved_protection",
-                }
-            ):
+        for payload in payloads_by_key.get((result.item_id, result.metric_name), []):
+            if payload.get("persistence_status") not in {
+                "skipped_human_protection",
+                "skipped_approved_protection",
+            }:
                 payload["persistence_status"] = status
                 return
 
-    for item_id in target_item_ids:
-        item_results = results_by_item[item_id]
-        item = items_by_id.get(item_id)
-        if item is None:
-            for result in item_results:
-                set_status(result, "analysis_failed")
-            continue
-
-        original_meta = (
-            dict(item.item_metadata) if isinstance(item.item_metadata, dict) else {}
+    # Save in chunks of items, each in its own short transaction: a large
+    # analysis must not hold the run row and hundreds of item locks (with
+    # their payloads loaded) while every item's review rows are rebuilt.
+    # Every item is still saved from its freshly locked row under the run
+    # lock, so a concurrent reviewer edit stays authoritative; a failure
+    # keeps the chunks saved before it.
+    target_item_ids = sorted(results_by_item)
+    chunks = [
+        target_item_ids[start : start + _ANALYSIS_SAVE_CHUNK_ITEMS]
+        for start in range(0, len(target_item_ids), _ANALYSIS_SAVE_CHUNK_ITEMS)
+    ]
+    for chunk_number, chunk_item_ids in enumerate(chunks):
+        if chunk_number:
+            run = _lock_run_for_save(db, run)
+        # Acquire this chunk's item locks in a deterministic order only after
+        # all analyzer/aggregation work has completed.  The locked rows are
+        # reloaded from the database, so a concurrent reviewer edit is
+        # authoritative.
+        locked_items = (
+            db.query(RunItem)
+            .filter(
+                RunItem.run_id == run.id,
+                RunItem.item_id.in_(chunk_item_ids),
+            )
+            .order_by(RunItem.item_id.asc())
+            .populate_existing()
+            .with_for_update()
+            .all()
+            if chunk_item_ids
+            else []
         )
-        # Re-check ownership at the persistence boundary. Target selection
-        # happens before the LLM call, so a reviewer can add a human label
-        # while analysis is running. Never let that late edit be overwritten
-        # unless the request explicitly opted into human-label replacement.
-        persistable_results = []
-        for result in item_results:
-            if _review_key_is_approved(
-                approved_review_keys, result.item_id, result.metric_name
-            ):
-                set_status(result, "skipped_approved_protection")
-                continue
-            if (
-                result.metric_name
-                and not allow_human_overwrite
-                and is_human_metric_analysis(original_meta, result.metric_name)
-            ):
-                set_status(result, "skipped_human_protection")
-            elif result.error:
-                set_status(result, "analysis_failed")
-                error_count += 1
-                persistable_results.append(result)
+        items_by_id = {item.item_id: item for item in locked_items}
+        score_rows = (
+            db.query(RunItemScore)
+            .filter(
+                RunItemScore.run_id == run.id,
+                RunItemScore.item_id.in_(chunk_item_ids),
+            )
+            .all()
+            if chunk_item_ids
+            else []
+        )
+        scores_by_item: dict[str, dict[str, Any]] = {}
+        for score in score_rows:
+            scores_by_item.setdefault(score.item_id, {})[score.metric_name] = (
+                score.score_numeric
+                if score.score_numeric is not None
+                else score.score_raw
+            )
+        active_candidates = (
+            db.query(ReviewCorrection)
+            .filter(
+                ReviewCorrection.run_id == run.id,
+                ReviewCorrection.item_id.in_(chunk_item_ids),
+                ReviewCorrection.is_active.is_(True),
+                ReviewCorrection.pass_number.is_(None),
+            )
+            .all()
+            if chunk_item_ids
+            else []
+        )
+        candidates_by_key: dict[tuple[str, str], list[ReviewCorrection]] = {}
+        legacy_candidates_by_item: dict[str, list[ReviewCorrection]] = {}
+        for candidate in active_candidates:
+            if candidate.metric_name:
+                candidates_by_key.setdefault(
+                    (candidate.item_id, candidate.metric_name), []
+                ).append(candidate)
             else:
-                persistable_results.append(result)
-        successful = [result for result in persistable_results if not result.error]
-
-        # Keep the legacy item-level summary for older consumers, but review
-        # candidates are created independently for each metric below.
-        primary_overwrites_legacy_human = False
-        if successful and allow_human_overwrite:
-            legacy_source = str(
-                original_meta.get("root_cause_source") or ""
-            ).strip().lower()
-            legacy_metric = str(
-                original_meta.get("root_cause_metric_name") or ""
-            ).strip()
-            primary_overwrites_legacy_human = (
-                legacy_source == "human"
-                and (
-                    not legacy_metric
-                    or legacy_metric == str(successful[0].metric_name or "").strip()
-                )
+                legacy_candidates_by_item.setdefault(candidate.item_id, []).append(candidate)
+        approved_review_keys = {
+            (
+                candidate.item_id,
+                str(candidate.metric_name).strip() if candidate.metric_name else None,
             )
-        if successful and (
-            original_meta.get("root_cause_source") != "human"
-            or primary_overwrites_legacy_human
-        ):
-            primary = successful[0]
-            item.item_metadata = build_item_metadata(
-                original_meta,
-                build_ai_state(
-                    root_cause=primary.root_cause,
-                    root_cause_issues=_result_root_cause_issues(primary),
-                    root_causes=normalize_root_causes(
-                        getattr(primary, "root_causes", None) or primary.root_cause
-                    ),
-                    root_cause_detail=primary.root_cause_detail,
-                    root_cause_reason=primary.root_cause_reason,
-                    root_cause_note=primary.root_cause_note,
-                    confidence=primary.confidence,
-                    solution=primary.solution,
-                    solution_note=primary.solution_note,
-                    category_taxonomy=merge_category_taxonomies(
-                        original_meta.get("category_taxonomy"),
-                        getattr(primary, "category_taxonomy", None),
-                    ),
-                ),
-            )
-            item.item_metadata["root_cause_metric_name"] = primary.metric_name
+            for candidate in active_candidates
+            if candidate.status == CorrectionStatus.APPROVED
+        }
 
-        meta = (
-            dict(item.item_metadata)
-            if isinstance(item.item_metadata, dict)
-            else original_meta
-        )
-        metric_analyses = dict(meta.get("metric_analyses") or {})
-        item_errors: list[str] = []
-        for result in persistable_results:
-            metric_name = str(result.metric_name or "").strip()
-            if not metric_name:
+        for item_id in chunk_item_ids:
+            item_results = results_by_item[item_id]
+            item = items_by_id.get(item_id)
+            if item is None:
+                for result in item_results:
+                    set_status(result, "analysis_failed")
                 continue
-            if result.error:
-                item_errors.append(f"{metric_name}: {result.error}")
+
+            original_meta = (
+                dict(item.item_metadata) if isinstance(item.item_metadata, dict) else {}
+            )
+            # Re-check ownership at the persistence boundary. Target selection
+            # happens before the LLM call, so a reviewer can add a human label
+            # while analysis is running. Never let that late edit be overwritten
+            # unless the request explicitly opted into human-label replacement.
+            persistable_results = []
+            for result in item_results:
+                if _review_key_is_approved(
+                    approved_review_keys, result.item_id, result.metric_name
+                ):
+                    set_status(result, "skipped_approved_protection")
+                    continue
+                if (
+                    result.metric_name
+                    and not allow_human_overwrite
+                    and is_human_metric_analysis(original_meta, result.metric_name)
+                ):
+                    set_status(result, "skipped_human_protection")
+                elif result.error:
+                    set_status(result, "analysis_failed")
+                    error_count += 1
+                    persistable_results.append(result)
+                else:
+                    persistable_results.append(result)
+            successful = [result for result in persistable_results if not result.error]
+
+            # Keep the legacy item-level summary for older consumers, but review
+            # candidates are created independently for each metric below.
+            primary_overwrites_legacy_human = False
+            if successful and allow_human_overwrite:
+                legacy_source = str(
+                    original_meta.get("root_cause_source") or ""
+                ).strip().lower()
+                legacy_metric = str(
+                    original_meta.get("root_cause_metric_name") or ""
+                ).strip()
+                primary_overwrites_legacy_human = (
+                    legacy_source == "human"
+                    and (
+                        not legacy_metric
+                        or legacy_metric == str(successful[0].metric_name or "").strip()
+                    )
+                )
+            if successful and (
+                original_meta.get("root_cause_source") != "human"
+                or primary_overwrites_legacy_human
+            ):
+                primary = successful[0]
+                item.item_metadata = build_item_metadata(
+                    original_meta,
+                    build_ai_state(
+                        root_cause=primary.root_cause,
+                        root_cause_issues=_result_root_cause_issues(primary),
+                        root_causes=normalize_root_causes(
+                            getattr(primary, "root_causes", None) or primary.root_cause
+                        ),
+                        root_cause_detail=primary.root_cause_detail,
+                        root_cause_reason=primary.root_cause_reason,
+                        root_cause_note=primary.root_cause_note,
+                        confidence=primary.confidence,
+                        solution=primary.solution,
+                        solution_note=primary.solution_note,
+                        category_taxonomy=merge_category_taxonomies(
+                            original_meta.get("category_taxonomy"),
+                            getattr(primary, "category_taxonomy", None),
+                        ),
+                    ),
+                )
+                item.item_metadata["root_cause_metric_name"] = primary.metric_name
+
+            meta = (
+                dict(item.item_metadata)
+                if isinstance(item.item_metadata, dict)
+                else original_meta
+            )
+            metric_analyses = dict(meta.get("metric_analyses") or {})
+            item_errors: list[str] = []
+            for result in persistable_results:
+                metric_name = str(result.metric_name or "").strip()
+                if not metric_name:
+                    continue
+                if result.error:
+                    item_errors.append(f"{metric_name}: {result.error}")
+                    metric_analyses[metric_name] = {
+                        "source": "ai",
+                        "error": result.error,
+                        "error_code": result.error_code,
+                        "analyzer_model": result.analyzer_model,
+                        "analyzer_connection_id": analyzer_connection_id,
+                        "analyzer_rule_version_id": analyzer_rule_version_id,
+                        "category_catalog_version": category_catalog_version,
+                        "category_catalog_version_id": category_catalog_version_id,
+                        "prompt_hash": result.prompt_hash,
+                        "retry_count": result.retry_count,
+                        "retry_reason": result.retry_reason,
+                        "request_timeout_seconds": result.request_timeout_seconds,
+                    }
+                    continue
+                previous_metric_analysis = metric_analyses.get(metric_name)
+                previous_metric_taxonomy = (
+                    previous_metric_analysis.get("category_taxonomy")
+                    if isinstance(previous_metric_analysis, dict)
+                    else None
+                )
                 metric_analyses[metric_name] = {
                     "source": "ai",
-                    "error": result.error,
-                    "error_code": result.error_code,
+                    "root_cause": result.root_cause,
+                    "root_cause_issues": _result_root_cause_issues(result),
+                    "root_causes": normalize_root_causes(
+                        getattr(result, "root_causes", None) or result.root_cause
+                    ),
+                    "root_cause_detail": result.root_cause_detail,
+                    "root_cause_reason": result.root_cause_reason,
+                    "root_cause_note": result.root_cause_note,
+                    "warning": result.warning or "",
+                    "category_taxonomy": merge_category_taxonomies(
+                        previous_metric_taxonomy,
+                        getattr(result, "category_taxonomy", None),
+                    ),
+                    "confidence": result.confidence,
+                    "solution": result.solution,
+                    "solution_note": result.solution_note,
                     "analyzer_model": result.analyzer_model,
                     "analyzer_connection_id": analyzer_connection_id,
                     "analyzer_rule_version_id": analyzer_rule_version_id,
                     "category_catalog_version": category_catalog_version,
                     "category_catalog_version_id": category_catalog_version_id,
                     "prompt_hash": result.prompt_hash,
+                    "provider_request_id": result.provider_request_id,
                     "retry_count": result.retry_count,
                     "retry_reason": result.retry_reason,
                     "request_timeout_seconds": result.request_timeout_seconds,
+                    "prompt_tokens": result.prompt_tokens,
+                    "completion_tokens": result.completion_tokens,
+                    "total_tokens": result.total_tokens,
+                    "analyzed_at": to_api_timestamp(utc_now_naive()),
                 }
-                continue
-            previous_metric_analysis = metric_analyses.get(metric_name)
-            previous_metric_taxonomy = (
-                previous_metric_analysis.get("category_taxonomy")
-                if isinstance(previous_metric_analysis, dict)
-                else None
-            )
-            metric_analyses[metric_name] = {
-                "source": "ai",
-                "root_cause": result.root_cause,
-                "root_cause_issues": _result_root_cause_issues(result),
-                "root_causes": normalize_root_causes(
-                    getattr(result, "root_causes", None) or result.root_cause
-                ),
-                "root_cause_detail": result.root_cause_detail,
-                "root_cause_reason": result.root_cause_reason,
-                "root_cause_note": result.root_cause_note,
-                "warning": result.warning or "",
-                "category_taxonomy": merge_category_taxonomies(
-                    previous_metric_taxonomy,
-                    getattr(result, "category_taxonomy", None),
-                ),
-                "confidence": result.confidence,
-                "solution": result.solution,
-                "solution_note": result.solution_note,
-                "analyzer_model": result.analyzer_model,
-                "analyzer_connection_id": analyzer_connection_id,
-                "analyzer_rule_version_id": analyzer_rule_version_id,
-                "category_catalog_version": category_catalog_version,
-                "category_catalog_version_id": category_catalog_version_id,
-                "prompt_hash": result.prompt_hash,
-                "provider_request_id": result.provider_request_id,
-                "retry_count": result.retry_count,
-                "retry_reason": result.retry_reason,
-                "request_timeout_seconds": result.request_timeout_seconds,
-                "prompt_tokens": result.prompt_tokens,
-                "completion_tokens": result.completion_tokens,
-                "total_tokens": result.total_tokens,
-                "analyzed_at": to_api_timestamp(utc_now_naive()),
-            }
-        if successful:
-            taxonomy_sources = [meta.get("category_taxonomy")]
-            taxonomy_sources.extend(
-                getattr(result, "category_taxonomy", None)
-                for result in successful
-            )
-            merged_taxonomy = merge_category_taxonomies(*taxonomy_sources)
-            if merged_taxonomy:
-                meta["category_taxonomy"] = merged_taxonomy
-        meta["metric_analyses"] = metric_analyses
-        _sync_item_analysis_warning(meta)
-        for result in successful:
-            warning = str(result.warning or "").strip()
-            if not warning:
-                continue
-            existing_warning = str(meta.get("analysis_warning") or "").strip()
-            if warning not in existing_warning:
-                meta["analysis_warning"] = (
-                    f"{existing_warning}; {warning}" if existing_warning else warning
+            if successful:
+                taxonomy_sources = [meta.get("category_taxonomy")]
+                taxonomy_sources.extend(
+                    getattr(result, "category_taxonomy", None)
+                    for result in successful
                 )
-        if item_errors:
-            meta["analysis_error"] = "; ".join(item_errors)
-        else:
-            meta.pop("analysis_error", None)
-        item.item_metadata = meta
-        actor_user_id = principal.user.id if principal.auth_type != "none" else None
-        if successful:
-            # Metric-scoped candidates supersede the old item-scoped review
-            # candidate. Leaving both active makes the review workflow appear
-            # to have one shared diagnosis even though every metric now has an
-            # independent category, root cause, and feedback.
-            legacy_candidates = legacy_candidates_by_item.get(item.item_id, [])
-            for candidate in legacy_candidates:
-                if candidate.status == CorrectionStatus.APPROVED:
+                merged_taxonomy = merge_category_taxonomies(*taxonomy_sources)
+                if merged_taxonomy:
+                    meta["category_taxonomy"] = merged_taxonomy
+            meta["metric_analyses"] = metric_analyses
+            _sync_item_analysis_warning(meta)
+            for result in successful:
+                warning = str(result.warning or "").strip()
+                if not warning:
                     continue
-                candidate.is_active = False
-                candidate.status = CorrectionStatus.SUPERSEDED
-        for result in successful:
-            set_status(result, "persisted")
-            metric_name = str(result.metric_name or "").strip()
-            if not metric_name:
-                set_status(result, "analysis_failed")
-                continue
-            replace_metric_review_candidate(
-                db,
-                run=run,
-                item=item,
-                metric_name=metric_name,
-                analysis=metric_analyses[metric_name],
-                actor_user_id=actor_user_id,
-                actor_source="ai",
-                active_candidates=candidates_by_key.get((item.item_id, metric_name), []),
-                scores_snapshot=scores_by_item.get(item.item_id, {}),
-                item_locked=True,
-            )
+                existing_warning = str(meta.get("analysis_warning") or "").strip()
+                if warning not in existing_warning:
+                    meta["analysis_warning"] = (
+                        f"{existing_warning}; {warning}" if existing_warning else warning
+                    )
+            if item_errors:
+                meta["analysis_error"] = "; ".join(item_errors)
+            else:
+                meta.pop("analysis_error", None)
+            item.item_metadata = meta
+            actor_user_id = principal.user.id if principal.auth_type != "none" else None
+            if successful:
+                # Metric-scoped candidates supersede the old item-scoped review
+                # candidate. Leaving both active makes the review workflow appear
+                # to have one shared diagnosis even though every metric now has an
+                # independent category, root cause, and feedback.
+                legacy_candidates = legacy_candidates_by_item.get(item.item_id, [])
+                for candidate in legacy_candidates:
+                    if candidate.status == CorrectionStatus.APPROVED:
+                        continue
+                    candidate.is_active = False
+                    candidate.status = CorrectionStatus.SUPERSEDED
+            for result in successful:
+                set_status(result, "persisted")
+                metric_name = str(result.metric_name or "").strip()
+                if not metric_name:
+                    set_status(result, "analysis_failed")
+                    continue
+                replace_metric_review_candidate(
+                    db,
+                    run=run,
+                    item=item,
+                    metric_name=metric_name,
+                    analysis=metric_analyses[metric_name],
+                    actor_user_id=actor_user_id,
+                    actor_source="ai",
+                    active_candidates=candidates_by_key.get((item.item_id, metric_name), []),
+                    scores_snapshot=scores_by_item.get(item.item_id, {}),
+                    item_locked=True,
+                )
 
-    db.commit()
+        db.commit()
+    if not chunks:
+        db.commit()
     return response_results, error_count
 
 
@@ -3661,40 +3693,61 @@ def _save_pass_analysis_results(
     response_results: list[Dict[str, Any]] = []
     error_count = 0
     item_ids = sorted({result.item_id for result in results})
-    items = db.query(RunItem).filter(
-        RunItem.run_id == run.id, RunItem.item_id.in_(item_ids),
-    ).order_by(RunItem.item_id).populate_existing().with_for_update().all() if item_ids else []
-    items_by_id = {item.item_id: item for item in items}
-    score_rows = (
-        db.query(RunItemPassScore)
-        .filter(
-            RunItemPassScore.run_id == run.id,
-            RunItemPassScore.pass_number == pass_number,
-            RunItemPassScore.item_id.in_(item_ids),
+    # Lock the item rows by key alone: the diagnoses are written to pass
+    # scores, and only items with existing reviews need their full row.
+    locked_item_ids: set[str] = set()
+    for batch in _chunked(item_ids):
+        locked_item_ids.update(
+            item_id
+            for (item_id,) in db.query(RunItem.item_id)
+            .filter(RunItem.run_id == run.id, RunItem.item_id.in_(batch))
+            .order_by(RunItem.item_id)
+            .with_for_update()
         )
-        .populate_existing().with_for_update()
-        .all()
-        if item_ids
-        else []
-    )
+    score_rows: list[RunItemPassScore] = []
+    review_rows: list[ReviewCorrection] = []
+    for batch in _chunked(item_ids):
+        score_rows.extend(
+            db.query(RunItemPassScore)
+            .filter(
+                RunItemPassScore.run_id == run.id,
+                RunItemPassScore.pass_number == pass_number,
+                RunItemPassScore.item_id.in_(batch),
+            )
+            .populate_existing()
+            .with_for_update()
+            .all()
+        )
+    for batch in _chunked(item_ids):
+        review_rows.extend(
+            db.query(ReviewCorrection)
+            .filter(
+                ReviewCorrection.run_id == run.id,
+                ReviewCorrection.item_id.in_(batch),
+                ReviewCorrection.pass_number == pass_number,
+                ReviewCorrection.is_active.is_(True),
+            )
+            .populate_existing()
+            .all()
+        )
     scores_by_key = {
         (score.item_id, score.metric_name): score for score in score_rows
     }
-    review_rows = (
-        db.query(ReviewCorrection)
-        .filter(
-            ReviewCorrection.run_id == run.id,
-            ReviewCorrection.item_id.in_(item_ids),
-            ReviewCorrection.pass_number == pass_number,
-            ReviewCorrection.is_active.is_(True),
-        )
-        .populate_existing()
-        .all()
-        if item_ids else []
-    )
     reviews_by_key: dict[tuple[str, str], list[ReviewCorrection]] = {}
     for candidate in review_rows:
         reviews_by_key.setdefault((candidate.item_id, candidate.metric_name), []).append(candidate)
+    reviewed_item_ids = sorted(
+        {candidate.item_id for candidate in review_rows} & locked_item_ids
+    )
+    items_by_id: dict[str, RunItem] = {}
+    for batch in _chunked(reviewed_item_ids):
+        # Already locked above; reload so the reconciliation sees current rows.
+        items_by_id.update(
+            (item.item_id, item)
+            for item in db.query(RunItem)
+            .filter(RunItem.run_id == run.id, RunItem.item_id.in_(batch))
+            .populate_existing()
+        )
 
     for result in results:
         payload = _analysis_result_payload(result)
