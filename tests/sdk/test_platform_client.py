@@ -224,6 +224,7 @@ def test_platform_event_stream_close_is_bounded_when_flush_is_stuck(monkeypatch)
 
     monkeypatch.setattr(client_module, "_post_ndjson", fake_post_ndjson)
     monkeypatch.setattr(client_module.PlatformEventStream, "CLOSE_JOIN_TIMEOUT", 0.05)
+    monkeypatch.setattr(client_module.PlatformEventStream, "FLUSH_INTERVAL", 0.01)
 
     stream = client_module.PlatformEventStream(
         platform_url="https://platform.example",
