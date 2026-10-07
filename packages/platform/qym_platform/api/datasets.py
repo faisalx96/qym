@@ -1003,6 +1003,15 @@ def _item_edit_counts(db: Session, version: DatasetVersion, items: list[DatasetI
     return counts
 
 
+def _revision_count(db: Session, version: DatasetVersion) -> int:
+    return int(
+        db.query(func.count(DatasetItemRevision.id))
+        .filter(DatasetItemRevision.dataset_version_id == version.id)
+        .scalar()
+        or 0
+    )
+
+
 def _record_item_revision(
     db: Session,
     version: DatasetVersion,
@@ -1012,18 +1021,16 @@ def _record_item_revision(
     before: Optional[Dict[str, Any]],
     after: Optional[Dict[str, Any]],
     actor_user_id: str,
+    revision_number: Optional[int] = None,
 ) -> None:
-    count = (
-        db.query(func.count(DatasetItemRevision.id))
-        .filter(DatasetItemRevision.dataset_version_id == version.id)
-        .scalar()
-        or 0
-    )
+    """Add a revision row; ``revision_number`` skips the count when the caller tracks it."""
+    if revision_number is None:
+        revision_number = _revision_count(db, version) + 1
     db.add(
         DatasetItemRevision(
             dataset_item_id=item.id if item else None,
             dataset_version_id=version.id,
-            revision_number=int(count) + 1,
+            revision_number=revision_number,
             change_type=change_type,
             before=before or {},
             after=after or {},
@@ -2670,6 +2677,9 @@ def delete_item(
     return {"ok": True}
 
 
+MAX_BULK_ENTRIES = 1000
+
+
 @router.post("/v1/datasets/{dataset_ref}/versions/{version_ref}/items:bulk")
 def bulk_items(
     dataset_ref: str,
@@ -2679,38 +2689,77 @@ def bulk_items(
     db: Session = Depends(get_db),
     principal: Principal = Depends(dataset_principal),
 ) -> Dict[str, Any]:
+    """Create, update and delete draft items in one transaction.
+
+    At most ``MAX_BULK_ENTRIES`` upserts and deletes per request (422 above;
+    send larger imports in several requests). Lookups, detaches and the
+    version's item count are set-based, and the version row is written once,
+    at the end, so its row lock is held only for the commit.
+    """
     _require_scope(principal, "datasets:write")
+    entries = len(req.upserts or []) + len(req.deletes or [])
+    if entries > MAX_BULK_ENTRIES:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"A bulk request takes at most {MAX_BULK_ENTRIES} upserts and deletes together "
+                f"({entries} sent). Send the items in several requests."
+            ),
+        )
     project = _project_for_request(db, principal, project_slug, write=True)
     dataset = _get_dataset(db, project, dataset_ref)
     _require_items_visible(principal, dataset)
     version = _resolve_version(db, dataset, version_ref)
     _require_draft(version)
+    actor_user_id = principal.user.id
+    revision_number = _revision_count(db, version)
+
+    def next_revision() -> int:
+        nonlocal revision_number
+        revision_number += 1
+        return revision_number
 
     created: list[Dict[str, Any]] = []
     updated: list[Dict[str, Any]] = []
     deleted: list[str] = []
 
-    for raw_id in req.deletes or []:
-        target_id = (raw_id or "").strip()
-        if not target_id:
+    delete_ids = list(dict.fromkeys(target for target in ((raw or "").strip() for raw in req.deletes or []) if target))
+    doomed = (
+        {
+            item.item_id: item
+            for item in db.query(DatasetItem).filter(
+                DatasetItem.dataset_version_id == version.id, DatasetItem.item_id.in_(delete_ids)
+            )
+        }
+        if delete_ids
+        else {}
+    )
+    doomed_pks: list[int] = []
+    for target_id in delete_ids:
+        item = doomed.get(target_id)
+        if item is None:
             continue
-        item = (
-            db.query(DatasetItem)
-            .filter(DatasetItem.dataset_version_id == version.id, DatasetItem.item_id == target_id)
-            .first()
-        )
-        if not item:
-            continue
-        before = _item_payload(item)
         _record_item_revision(
-            db, version, None, change_type="deleted", before=before, after={}, actor_user_id=principal.user.id,
+            db,
+            version,
+            None,
+            change_type="deleted",
+            before=_item_payload(item),
+            after={},
+            actor_user_id=actor_user_id,
+            revision_number=next_revision(),
         )
-        _detach_item_revisions(db, item)
-        _detach_item_run_results(db, item)
-        db.delete(item)
-        version.item_count = max(0, int(version.item_count or 0) - 1)
+        doomed_pks.append(item.id)
         deleted.append(target_id)
-
+    if doomed_pks:
+        db.query(DatasetItemRevision).filter(DatasetItemRevision.dataset_item_id.in_(doomed_pks)).update(
+            {DatasetItemRevision.dataset_item_id: None}, synchronize_session=False
+        )
+        db.query(RunItem).filter(RunItem.dataset_item_pk.in_(doomed_pks)).update(
+            {RunItem.dataset_item_pk: None}, synchronize_session=False
+        )
+        for target_id in deleted:
+            db.delete(doomed[target_id])
     db.flush()
 
     max_index = (
@@ -2720,21 +2769,75 @@ def bulk_items(
     )
     next_index = int(max_index) + 1 if max_index is not None else 0
 
-    for entry in req.upserts or []:
+    upserts = req.upserts or []
+    named = {(entry.item_id or "").strip() for entry in upserts if entry.item_id} - {""}
+    existing_by_id: Dict[str, DatasetItem] = (
+        {
+            item.item_id: item
+            for item in db.query(DatasetItem).filter(
+                DatasetItem.dataset_version_id == version.id, DatasetItem.item_id.in_(named)
+            )
+        }
+        if named
+        else {}
+    )
+    # New items are flushed together; their "created" revisions need their ids.
+    pending: list[tuple[DatasetItem, int]] = []
+
+    def conflict(item_id: str) -> HTTPException:
+        db.rollback()
+        return HTTPException(status_code=409, detail=f"Dataset item ID already exists: {item_id}")
+
+    def flush_pending() -> None:
+        if not pending:
+            return
+        # Generated IDs were not prefetched: refuse one that is taken, by name.
+        generated = [item.item_id for item, _ in pending if item.item_id not in named]
+        if generated:
+            taken = {
+                item_id
+                for (item_id,) in db.query(DatasetItem.item_id).filter(
+                    DatasetItem.dataset_version_id == version.id, DatasetItem.item_id.in_(generated)
+                )
+            }
+            for item_id in generated:
+                if item_id in taken:
+                    raise conflict(item_id)
+        try:
+            db.flush()
+        except IntegrityError as exc:
+            db.rollback()
+            raise HTTPException(
+                status_code=409, detail=f"Dataset item ID already exists: {pending[0][0].item_id}"
+            ) from exc
+        for new_item, number in pending:
+            payload = _item_payload(new_item)
+            _record_item_revision(
+                db,
+                version,
+                new_item,
+                change_type="created",
+                before={},
+                after=payload,
+                actor_user_id=actor_user_id,
+                revision_number=number,
+            )
+            created.append(payload)
+        pending.clear()
+
+    for entry in upserts:
         input_value = _json_safe(entry.input)
         expected = _json_safe(entry.expected_output)
         metadata = _json_safe(entry.metadata or {})
         labels = _labels(entry.labels)
         fingerprint = build_identity_fingerprint(input_value=input_value, expected_value=expected, metadata=metadata)
-        existing = None
-        if entry.item_id:
-            existing = (
-                db.query(DatasetItem)
-                .filter(DatasetItem.dataset_version_id == version.id, DatasetItem.item_id == entry.item_id.strip())
-                .first()
-            )
+        key = (entry.item_id or "").strip()
+        existing = existing_by_id.get(key) if entry.item_id else None
         op = (entry.op or "").lower()
         if existing and op != "create":
+            if existing.id is None:
+                # Updating an item created earlier in this request.
+                flush_pending()
             before = _item_payload(existing)
             existing.input = input_value
             existing.expected_output = expected
@@ -2743,36 +2846,43 @@ def bulk_items(
             existing.fingerprint = fingerprint
             existing.updated_at = utc_now_naive()
             _record_item_revision(
-                db, version, existing, change_type="updated", before=before, after=_item_payload(existing), actor_user_id=principal.user.id,
+                db,
+                version,
+                existing,
+                change_type="updated",
+                before=before,
+                after=_item_payload(existing),
+                actor_user_id=actor_user_id,
+                revision_number=next_revision(),
             )
             updated.append(_item_payload(existing))
-        else:
-            item_id = (entry.item_id or "").strip() or f"item-{next_index + 1}"
-            new_item = DatasetItem(
-                dataset_version_id=version.id,
-                item_id=item_id,
-                index=next_index,
-                input=input_value,
-                expected_output=expected,
-                item_metadata=metadata,
-                labels=labels,
-                fingerprint=fingerprint,
-                created_at=utc_now_naive(),
-                updated_at=utc_now_naive(),
-            )
-            db.add(new_item)
-            version.item_count = int(version.item_count or 0) + 1
-            try:
-                db.flush()
-            except IntegrityError as exc:
-                db.rollback()
-                raise HTTPException(status_code=409, detail=f"Dataset item ID already exists: {item_id}") from exc
-            _record_item_revision(
-                db, version, new_item, change_type="created", before={}, after=_item_payload(new_item), actor_user_id=principal.user.id,
-            )
-            created.append(_item_payload(new_item))
-            next_index += 1
+            continue
+        item_id = key or f"item-{next_index + 1}"
+        if existing or item_id in existing_by_id:
+            raise conflict(item_id)
+        new_item = DatasetItem(
+            dataset_version_id=version.id,
+            item_id=item_id,
+            index=next_index,
+            input=input_value,
+            expected_output=expected,
+            item_metadata=metadata,
+            labels=labels,
+            fingerprint=fingerprint,
+            created_at=utc_now_naive(),
+            updated_at=utc_now_naive(),
+        )
+        db.add(new_item)
+        existing_by_id[item_id] = new_item
+        pending.append((new_item, next_revision()))
+        next_index += 1
+    flush_pending()
 
+    # The version row is written once, last: its lock lasts only to the commit.
+    db.flush()
+    version.item_count = int(
+        db.query(func.count(DatasetItem.id)).filter(DatasetItem.dataset_version_id == version.id).scalar() or 0
+    )
     db.commit()
     return {
         "summary": {"created": len(created), "updated": len(updated), "deleted": len(deleted)},
@@ -3106,6 +3216,38 @@ def _compare_rows(db: Session, version_id: str) -> Dict[str, Any]:
     }
 
 
+_COMPARE_DIFF_LIMIT = 500
+
+
+def _compare_bodies(db: Session, version_id: str, item_ids: list[str]) -> Dict[str, Any]:
+    """The compared body columns of some items (no ORM objects)."""
+    return {
+        row.item_id: row
+        for row in db.query(
+            DatasetItem.item_id,
+            DatasetItem.input,
+            DatasetItem.expected_output,
+            DatasetItem.item_metadata,
+            DatasetItem.labels,
+        ).filter(DatasetItem.dataset_version_id == version_id, DatasetItem.item_id.in_(item_ids))
+    }
+
+
+def _changed_fields(b: Any, t: Any) -> list[str]:
+    """Which fields differ between two item bodies (type-strict JSON compare)."""
+    fields = []
+    # Type-strict, so "51" -> 51 (or 1 -> true) is reported as a change.
+    if not _same_json(b.input, t.input):
+        fields.append("input")
+    if not _same_json(b.expected_output, t.expected_output):
+        fields.append("expected_output")
+    if not _same_json(b.item_metadata or {}, t.item_metadata or {}):
+        fields.append("metadata")
+    if (b.labels or []) != (t.labels or []):
+        fields.append("labels")
+    return fields
+
+
 @router.get("/v1/datasets/{dataset_ref}/versions/{version_ref}:compare")
 def compare_versions(
     dataset_ref: str,
@@ -3114,7 +3256,12 @@ def compare_versions(
     project_slug: Optional[str] = Query(default=None),
     include_diffs: int = Query(default=0),
     kind: Optional[str] = Query(default=None, description="With limit: which list to page (changed, added, removed, unchanged)."),
-    limit: Optional[int] = Query(default=None, ge=1, le=500, description="Page the item bodies of one list; omit for every list in full."),
+    limit: Optional[int] = Query(
+        default=None,
+        ge=1,
+        le=500,
+        description="Page the item bodies of one list; omit for every list, each with at most 500 bodies.",
+    ),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     principal: Principal = Depends(dataset_principal),
@@ -3127,7 +3274,10 @@ def compare_versions(
     (an uploaded file, a version created before revisions were kept);
     ``changed_at_source`` says which. With ``limit``, item bodies are loaded
     only for one page of one list, so a version that edits thousands of items
-    opens without loading them all.
+    opens without loading them all. Without ``limit``, ``include_diffs``
+    returns the bodies of the first 500 items of each list (in list order) and
+    sets ``diffs_truncated`` when a list is longer; page with ``limit`` for the
+    rest. Every list of item IDs, and each changed item's ``fields``, stays whole.
     """
     _require_scope(principal, "datasets:read")
     project = _project_for_request(db, principal, project_slug)
@@ -3209,19 +3359,23 @@ def compare_versions(
     want_diffs = bool(include_diffs)
     paged = want_diffs and limit is not None
     lists = {"changed": changed_ids, "added": added, "removed": removed, "unchanged": unchanged}
+    # Without ``limit``, each list's bodies stop at _COMPARE_DIFF_LIMIT items
+    # (``diffs_truncated`` says so): an unbounded diff loaded every body.
+    truncated = want_diffs and not paged and any(
+        len(lists[name]) > _COMPARE_DIFF_LIMIT for name in ("changed", "added", "removed")
+    )
 
     def _window(kind_name: str) -> list[str]:
         ids = lists[kind_name]
         if not want_diffs or (paged and kind_name != page_kind):
             return []
-        return ids[offset : offset + limit] if paged else ids
+        return ids[offset : offset + limit] if paged else ids[:_COMPARE_DIFF_LIMIT]
 
-    # Full rows only for the item IDs whose bodies are returned. Without paging
-    # every changed item lists its changed fields, as callers always had.
-    changed_bodies = set(_window("changed")) if paged else set(changed_ids)
-    need_base = changed_bodies | set(_window("removed"))
+    # Full rows only for the item IDs whose bodies are returned.
+    changed_window = set(_window("changed"))
+    need_base = changed_window | set(_window("removed"))
     # Unchanged bodies are returned only as a page (``unchanged_items``).
-    need_target = changed_bodies | set(_window("added")) | (set(_window("unchanged")) if paged else set())
+    need_target = changed_window | set(_window("added")) | (set(_window("unchanged")) if paged else set())
 
     def _full(version_id: str, wanted: set[str]) -> Dict[str, DatasetItem]:
         if not wanted:
@@ -3236,9 +3390,26 @@ def compare_versions(
     base_full = _full(base_version.id, need_base)
     target_full = _full(target.id, need_target)
 
+    # Without paging every changed item lists its changed fields, as callers
+    # always had: items outside the returned bodies are compared in batches of
+    # body columns, so memory stays bounded whatever the diff size.
+    fields_by_id: Dict[str, list[str]] = {
+        item_id_key: _changed_fields(base_full[item_id_key], target_full[item_id_key])
+        for item_id_key in changed_window
+        if item_id_key in base_full and item_id_key in target_full
+    }
+    if not paged:
+        rest = [item_id_key for item_id_key in changed_ids if item_id_key not in fields_by_id]
+        for start in range(0, len(rest), _COMPARE_DIFF_LIMIT):
+            chunk = rest[start : start + _COMPARE_DIFF_LIMIT]
+            base_bodies = _compare_bodies(db, base_version.id, chunk)
+            target_bodies = _compare_bodies(db, target.id, chunk)
+            for item_id_key in chunk:
+                if item_id_key in base_bodies and item_id_key in target_bodies:
+                    fields_by_id[item_id_key] = _changed_fields(base_bodies[item_id_key], target_bodies[item_id_key])
+
     changed = []
     field_diffs: list[Dict[str, Any]] = []
-    changed_window = set(_window("changed"))
     # A paged response carries only its page: changed entries are built for
     # the changed window alone, so its size follows ``limit``, not the diff.
     for item_id_key in (_window("changed") if paged else changed_ids):
@@ -3251,26 +3422,16 @@ def compare_versions(
             "edited_by": _revision_actor_payload(item_id_key),
             **_timing(item_id_key),
         }
-        b = base_full.get(item_id_key)
-        t = target_full.get(item_id_key)
-        if b is None or t is None:
+        if item_id_key not in fields_by_id:
             # Outside the returned page: the changed fields need the bodies, so
             # a paged compare lists them only for the diffs it returns.
             changed.append(entry)
             continue
-        fields = []
-        # Type-strict, so "51" -> 51 (or 1 -> true) is reported as a change.
-        if not _same_json(b.input, t.input):
-            fields.append("input")
-        if not _same_json(b.expected_output, t.expected_output):
-            fields.append("expected_output")
-        if not _same_json(b.item_metadata or {}, t.item_metadata or {}):
-            fields.append("metadata")
-        if (b.labels or []) != (t.labels or []):
-            fields.append("labels")
-        entry["fields"] = fields
+        entry["fields"] = fields_by_id[item_id_key]
         changed.append(entry)
-        if want_diffs and item_id_key in changed_window:
+        b = base_full.get(item_id_key)
+        t = target_full.get(item_id_key)
+        if want_diffs and item_id_key in changed_window and b is not None and t is not None:
             field_diffs.append(
                 dict(
                     entry,
@@ -3312,6 +3473,9 @@ def compare_versions(
             _item_payload(base_full[i]) | _timing(i) for i in _window("removed") if i in base_full
         ]
         response["field_diffs"] = field_diffs
+        if truncated:
+            response["diffs_truncated"] = True
+            response["diffs_limit"] = _COMPARE_DIFF_LIMIT
         if paged:
             response["unchanged_items"] = [_item_payload(target_full[i]) for i in _window("unchanged") if i in target_full]
             total = len(lists[page_kind])
