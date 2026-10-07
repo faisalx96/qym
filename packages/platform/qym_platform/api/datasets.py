@@ -684,6 +684,46 @@ def _numeric_score(score_numeric: Optional[float], raw: Any) -> Optional[float]:
     return None
 
 
+def _run_metric_sums(db: Session, run_ids: list[str]) -> Iterator[tuple[str, str, float, int]]:
+    """(run_id, metric_name, sum, count) of each run's numeric scores.
+
+    Scores with ``score_numeric`` are summed in SQL. The rest fall back to
+    ``score_raw`` as :func:`_numeric_score` reads it; only those rows' raw
+    values are loaded (never explanations or meta). A run and metric may come
+    back twice, once per source; every count is at least 1.
+    """
+    for run_id, metric_name, total, count in (
+        db.query(
+            RunItemScore.run_id,
+            RunItemScore.metric_name,
+            func.sum(RunItemScore.score_numeric),
+            func.count(RunItemScore.score_numeric),
+        )
+        .filter(RunItemScore.run_id.in_(run_ids), RunItemScore.score_numeric.isnot(None))
+        .group_by(RunItemScore.run_id, RunItemScore.metric_name)
+    ):
+        if count:
+            yield run_id, metric_name, float(total), int(count)
+    fallback: Dict[tuple[str, str], list[float]] = {}
+    for run_id, metric_name, raw in (
+        db.query(RunItemScore.run_id, RunItemScore.metric_name, RunItemScore.score_raw)
+        .filter(
+            RunItemScore.run_id.in_(run_ids),
+            RunItemScore.score_numeric.is_(None),
+            RunItemScore.score_raw.isnot(None),
+        )
+        .yield_per(1000)
+    ):
+        value = _numeric_score(None, raw)
+        if value is None:
+            continue
+        pair = fallback.setdefault((run_id, metric_name), [0.0, 0])
+        pair[0] += value
+        pair[1] += 1
+    for (run_id, metric_name), (total, count) in fallback.items():
+        yield run_id, metric_name, total, int(count)
+
+
 def _is_generated_item_id(value: Any) -> bool:
     text = str(value or "").strip()
     if not text:
@@ -697,39 +737,31 @@ def _is_generated_item_id(value: Any) -> bool:
     return False
 
 
+_ITEM_FILTER_LIMIT = 1000
+
+
 def _item_result_summaries(
     db: Session,
     version: DatasetVersion,
     items: list[Any],
+    *,
+    with_scores: bool = True,
+    metric_name: Optional[str] = None,
 ) -> Dict[int, Dict[str, Any]]:
     """Run results per dataset item (``items`` need ``id`` and ``item_id`` only).
 
-    Reads only the columns it aggregates (no run or item bodies), so a computed
-    sort over a whole version stays light.
+    Aggregated in SQL per (dataset_item_pk, item_id) group of the version's
+    run items, so memory follows the number of items and metrics, not runs x
+    items. Each group counts for the item it names by row id, else by item ID,
+    as before. Scores whose ``score_numeric`` is NULL fall back to
+    ``score_raw`` (only those rows' raw values are read). ``with_scores=False``
+    skips scores (run count and latency sorts); ``metric_name`` keeps only that
+    metric's scores (a metric sort).
     """
     if not items:
         return {}
     by_pk = {item.id: item for item in items}
     by_item_id = {item.item_id: item for item in items}
-    rows = (
-        db.query(
-            RunItem.run_id,
-            RunItem.dataset_item_pk,
-            RunItem.item_id,
-            RunItem.error,
-            RunItem.latency_ms,
-        )
-        .join(Run, RunItem.run_id == Run.id)
-        .filter(
-            Run.deleted_at.is_(None),
-            Run.dataset_version_id == version.id,
-            (
-                RunItem.dataset_item_pk.in_(list(by_pk))
-                | RunItem.item_id.in_(list(by_item_id))
-            ),
-        )
-        .all()
-    )
     summaries: Dict[int, Dict[str, Any]] = {
         item.id: {
             "run_count": 0,
@@ -741,66 +773,117 @@ def _item_result_summaries(
         }
         for item in items
     }
-    run_item_keys_by_pk: Dict[int, set[tuple[str, str]]] = {item.id: set() for item in items}
-    latencies_by_pk: Dict[int, list[float]] = {item.id: [] for item in items}
-    for run_id, dataset_item_pk, run_item_id, error, latency_ms in rows:
+
+    def owner(dataset_item_pk: Optional[int], run_item_id: str) -> Any:
         item = by_pk.get(dataset_item_pk) if dataset_item_pk is not None else None
-        if item is None:
-            item = by_item_id.get(run_item_id)
+        return item if item is not None else by_item_id.get(run_item_id)
+
+    scope = [Run.deleted_at.is_(None), Run.dataset_version_id == version.id]
+    if len(items) <= _ITEM_FILTER_LIMIT:
+        # A page of items: let the indexes narrow the rows. A whole-version
+        # sort reads every group instead of binding thousands of parameters;
+        # groups of other items are skipped by ``owner``.
+        scope.append(RunItem.dataset_item_pk.in_(list(by_pk)) | RunItem.item_id.in_(list(by_item_id)))
+
+    errored = case((and_(RunItem.error.isnot(None), RunItem.error != ""), 1), else_=0)
+    latency_totals: Dict[int, list[float]] = {item.id: [0.0, 0] for item in items}
+    for dataset_item_pk, run_item_id, runs, errors, latency_sum, latency_count in (
+        db.query(
+            RunItem.dataset_item_pk,
+            RunItem.item_id,
+            func.count(RunItem.id),
+            func.sum(errored),
+            func.sum(RunItem.latency_ms),
+            func.count(RunItem.latency_ms),
+        )
+        .join(Run, RunItem.run_id == Run.id)
+        .filter(*scope)
+        .group_by(RunItem.dataset_item_pk, RunItem.item_id)
+    ):
+        item = owner(dataset_item_pk, run_item_id)
         if item is None:
             continue
         summary = summaries[item.id]
-        summary["run_count"] += 1
-        if error:
-            summary["error_count"] += 1
-        else:
-            summary["success_count"] += 1
-        if latency_ms is not None:
-            latencies_by_pk[item.id].append(float(latency_ms))
-        run_item_keys_by_pk[item.id].add((run_id, run_item_id))
+        summary["run_count"] += int(runs)
+        summary["error_count"] += int(errors or 0)
+        summary["success_count"] += int(runs) - int(errors or 0)
+        if latency_count:
+            latency_totals[item.id][0] += float(latency_sum)
+            latency_totals[item.id][1] += int(latency_count)
+    for item_pk, (total, count) in latency_totals.items():
+        summaries[item_pk]["avg_latency_ms"] = round(total / count, 2) if count else None
+    if not with_scores:
+        return summaries
 
-    all_run_ids = {run_id for keys in run_item_keys_by_pk.values() for run_id, _ in keys}
-    all_item_ids = {item_id for keys in run_item_keys_by_pk.values() for _, item_id in keys}
-    scores_by_key: Dict[tuple[str, str], list[tuple[str, Optional[float]]]] = defaultdict(list)
-    if all_run_ids and all_item_ids:
-        for run_id, score_item_id, metric_name, score_numeric, score_raw in (
-            db.query(
-                RunItemScore.run_id,
-                RunItemScore.item_id,
-                RunItemScore.metric_name,
-                RunItemScore.score_numeric,
-                RunItemScore.score_raw,
-            )
-            .filter(RunItemScore.run_id.in_(all_run_ids), RunItemScore.item_id.in_(all_item_ids))
-        ):
-            scores_by_key[(run_id, score_item_id)].append(
-                (metric_name, _numeric_score(score_numeric, score_raw))
-            )
+    # metric -> [count, sum, min, max] per item, and [sum, count] over all metrics.
+    metrics_by_pk: Dict[int, Dict[str, list[Any]]] = {item.id: {} for item in items}
+    score_totals: Dict[int, list[float]] = {item.id: [0.0, 0] for item in items}
+
+    def add(item: Any, metric: str, count: int, total: float, low: float, high: float) -> None:
+        metric_row = metrics_by_pk[item.id].get(metric)
+        if metric_row is None:
+            metrics_by_pk[item.id][metric] = [count, total, low, high]
+        else:
+            metric_row[0] += count
+            metric_row[1] += total
+            metric_row[2] = min(metric_row[2], low)
+            metric_row[3] = max(metric_row[3], high)
+        score_totals[item.id][0] += total
+        score_totals[item.id][1] += count
+
+    score_scope = list(scope)
+    if metric_name is not None:
+        score_scope.append(RunItemScore.metric_name == metric_name)
+
+    def scores_query(*columns: Any) -> Any:
+        return (
+            db.query(*columns)
+            .select_from(RunItemScore)
+            .join(RunItem, and_(RunItem.run_id == RunItemScore.run_id, RunItem.item_id == RunItemScore.item_id))
+            .join(Run, Run.id == RunItem.run_id)
+            .filter(*score_scope)
+        )
+
+    for dataset_item_pk, run_item_id, metric, count, total, low, high in scores_query(
+        RunItem.dataset_item_pk,
+        RunItem.item_id,
+        RunItemScore.metric_name,
+        func.count(RunItemScore.score_numeric),
+        func.sum(RunItemScore.score_numeric),
+        func.min(RunItemScore.score_numeric),
+        func.max(RunItemScore.score_numeric),
+    ).filter(RunItemScore.score_numeric.isnot(None)).group_by(
+        RunItem.dataset_item_pk, RunItem.item_id, RunItemScore.metric_name
+    ):
+        item = owner(dataset_item_pk, run_item_id)
+        if item is None or not count:
+            continue
+        add(item, metric, int(count), float(total), float(low), float(high))
+    for dataset_item_pk, run_item_id, metric, raw in scores_query(
+        RunItem.dataset_item_pk,
+        RunItem.item_id,
+        RunItemScore.metric_name,
+        RunItemScore.score_raw,
+    ).filter(RunItemScore.score_numeric.is_(None), RunItemScore.score_raw.isnot(None)).yield_per(1000):
+        item = owner(dataset_item_pk, run_item_id)
+        value = _numeric_score(None, raw) if item is not None else None
+        if value is None:
+            continue
+        add(item, metric, 1, value, value, value)
 
     for item in items:
-        numeric_scores: list[float] = []
-        metrics: Dict[str, Dict[str, Any]] = {}
-        for key in run_item_keys_by_pk[item.id]:
-            for metric_name, value in scores_by_key.get(key, []):
-                if value is None:
-                    continue
-                numeric_scores.append(value)
-                metric = metrics.setdefault(
-                    metric_name,
-                    {"count": 0, "avg": None, "min": None, "max": None, "_sum": 0.0},
-                )
-                metric["count"] += 1
-                metric["_sum"] += value
-                metric["min"] = value if metric["min"] is None else min(float(metric["min"]), value)
-                metric["max"] = value if metric["max"] is None else max(float(metric["max"]), value)
-        for metric in metrics.values():
-            metric["avg"] = round(float(metric["_sum"]) / int(metric["count"]), 4) if metric["count"] else None
-            metric.pop("_sum", None)
-        latencies = latencies_by_pk[item.id]
         summary = summaries[item.id]
-        summary["avg_latency_ms"] = round(sum(latencies) / len(latencies), 2) if latencies else None
-        summary["avg_score"] = round(sum(numeric_scores) / len(numeric_scores), 4) if numeric_scores else None
-        summary["metrics"] = metrics
+        summary["metrics"] = {
+            metric: {
+                "count": count,
+                "avg": round(total / count, 4) if count else None,
+                "min": low,
+                "max": high,
+            }
+            for metric, (count, total, low, high) in sorted(metrics_by_pk[item.id].items())
+        }
+        total, count = score_totals[item.id]
+        summary["avg_score"] = round(total / count, 4) if count else None
     return summaries
 
 
@@ -869,17 +952,19 @@ def _version_metric_names(db: Session, version: DatasetVersion) -> list[str]:
 def _item_edit_counts(db: Session, version: DatasetVersion, items: list[DatasetItem]) -> Dict[int, int]:
     if not items:
         return {}
-    versions_by_id = {
-        row.id: row
-        for row in db.query(DatasetVersion).filter(DatasetVersion.dataset_id == version.dataset_id).all()
-    }
+    parents = dict(
+        db.query(DatasetVersion.id, DatasetVersion.parent_version_id).filter(
+            DatasetVersion.dataset_id == version.dataset_id
+        )
+    )
     chain_ids: list[str] = []
     seen: set[str] = set()
-    cursor: Optional[DatasetVersion] = version
-    while cursor and cursor.id not in seen:
-        seen.add(cursor.id)
-        chain_ids.append(cursor.id)
-        cursor = versions_by_id.get(cursor.parent_version_id) if cursor.parent_version_id else None
+    cursor_id: Optional[str] = version.id
+    while cursor_id and cursor_id not in seen:
+        seen.add(cursor_id)
+        chain_ids.append(cursor_id)
+        parent_id = parents.get(cursor_id)
+        cursor_id = parent_id if parent_id in parents else None
 
     # Each revision counts for the first item (in ``items`` order) it matches by
     # row id, by item ID, or by index for generated IDs; lookups are by key so a
@@ -892,27 +977,25 @@ def _item_edit_counts(db: Session, version: DatasetVersion, items: list[DatasetI
         by_item_id.setdefault(item.item_id, item.id)
         if _is_generated_item_id(item.item_id):
             by_index.setdefault(item.index, item.id)
-    revisions = (
-        db.query(
-            DatasetItemRevision.dataset_item_id,
-            DatasetItemRevision.before,
-            DatasetItemRevision.after,
-        )
-        .filter(
-            DatasetItemRevision.dataset_version_id.in_(chain_ids),
-            DatasetItemRevision.change_type == "updated",
-        )
-        .all()
+    # Only the keys the match reads, extracted from the stored JSON in SQL:
+    # never the before/after item bodies.
+    revisions = db.query(
+        DatasetItemRevision.dataset_item_id,
+        DatasetItemRevision.before["item_id"],
+        DatasetItemRevision.after["item_id"],
+        DatasetItemRevision.before["index"],
+        DatasetItemRevision.after["index"],
+    ).filter(
+        DatasetItemRevision.dataset_version_id.in_(chain_ids),
+        DatasetItemRevision.change_type == "updated",
     )
-    for dataset_item_id, before, after in revisions:
-        before = before or {}
-        after = after or {}
+    for dataset_item_id, before_id, after_id, before_index, after_index in revisions:
         candidates = [
             dataset_item_id if dataset_item_id in counts else None,
-            by_item_id.get(str(before.get("item_id") or "")),
-            by_item_id.get(str(after.get("item_id") or "")),
-            by_index.get(before.get("index")) if before.get("index") is not None else None,
-            by_index.get(after.get("index")) if after.get("index") is not None else None,
+            by_item_id.get(str(before_id or "")),
+            by_item_id.get(str(after_id or "")),
+            by_index.get(before_index) if before_index is not None else None,
+            by_index.get(after_index) if after_index is not None else None,
         ]
         matched = [pk for pk in candidates if pk is not None]
         if matched:
@@ -1906,8 +1989,9 @@ def list_dataset_runs(
     run_ids = [run.id for run in runs]
     items_counts: Dict[str, int] = {}
     avg_latencies: Dict[str, float] = {}
-    metric_values_by_run: Dict[str, Dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
-    eval_values_by_run: Dict[str, list[float]] = defaultdict(list)
+    # (sum, count) of the numeric scores per run and metric, and per run.
+    metric_values_by_run: Dict[str, Dict[str, list[float]]] = defaultdict(lambda: defaultdict(lambda: [0.0, 0]))
+    eval_values_by_run: Dict[str, list[float]] = defaultdict(lambda: [0.0, 0])
     run_directions = metric_directions(db, run_ids)
     if run_ids:
         items_counts = dict(
@@ -1926,30 +2010,26 @@ def list_dataset_runs(
             )
             if avg_latency is not None
         }
-        score_rows = (
-            db.query(RunItemScore)
-            .filter(RunItemScore.run_id.in_(run_ids))
-            .all()
-        )
-        for score in score_rows:
-            value = _score_numeric_value(score)
-            if value is None:
-                continue
-            metric_values_by_run[score.run_id][score.metric_name].append(value)
-            eval_values_by_run[score.run_id].append(value)
+        for run_id, metric_name, total, count in _run_metric_sums(db, run_ids):
+            pair = metric_values_by_run[run_id][metric_name]
+            pair[0] += total
+            pair[1] += count
+            run_pair = eval_values_by_run[run_id]
+            run_pair[0] += total
+            run_pair[1] += count
 
     metric_names = sorted({metric for metrics in metric_values_by_run.values() for metric in metrics})
 
     def run_metric_averages(run_id: str) -> Dict[str, Optional[float]]:
         metrics = metric_values_by_run.get(run_id, {})
         return {
-            metric: round(sum(values) / len(values), 4) if values else None
-            for metric, values in sorted(metrics.items())
+            metric: round(total / count, 4) if count else None
+            for metric, (total, count) in sorted(metrics.items())
         }
 
     def run_eval_score(run_id: str) -> Optional[float]:
-        values = eval_values_by_run.get(run_id) or []
-        return round(sum(values) / len(values), 4) if values else None
+        total, count = eval_values_by_run.get(run_id) or (0.0, 0)
+        return round(total / count, 4) if count else None
 
     return {
         "runs": [
@@ -2308,8 +2388,16 @@ def _computed_sort_ids(db: Session, version: DatasetVersion, query, sort_raw: st
         def computed_value(row: Any) -> Any:
             return edit_counts.get(row.id, 0)
     else:
-        summaries = _item_result_summaries(db, version, light)
         metric_name = sort_raw.split(":")[1] if sort_key.startswith("metric:") and len(sort_raw.split(":")) >= 2 else ""
+        # Only what the sort reads: no scores for run counts or latency, and
+        # one metric's scores for a metric sort.
+        summaries = _item_result_summaries(
+            db,
+            version,
+            light,
+            with_scores=sort_key.startswith("metric:"),
+            metric_name=metric_name if sort_key.startswith("metric:") else None,
+        )
 
         def computed_value(row: Any) -> Any:
             summary = summaries.get(row.id, {}) or {}
