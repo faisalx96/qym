@@ -11,6 +11,7 @@ import math
 from functools import partial
 from dataclasses import dataclass
 from datetime import datetime
+from types import SimpleNamespace
 from typing import Any, Dict, Iterable, List, Literal, Optional, Union
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
@@ -5508,46 +5509,108 @@ def _analysis_example_row(
     }
 
 
+_EXAMPLE_FACET_DIMENSIONS = ("task", "dataset", "model", "run_name", "user_id")
+
+# Columns the rule-writer size estimate reads (see
+# ``estimate_rule_writer_example_characters``); the rest of a correction row
+# (scores, taxonomies, review comments) is not loaded for the budget totals.
+_RULE_WRITER_ESTIMATE_COLUMNS = (
+    ReviewCorrection.id,
+    ReviewCorrection.input_snapshot,
+    ReviewCorrection.expected_snapshot,
+    ReviewCorrection.output_snapshot,
+    ReviewCorrection.ai_root_cause,
+    ReviewCorrection.ai_root_causes,
+    ReviewCorrection.ai_root_cause_issues,
+    ReviewCorrection.ai_root_cause_detail,
+    ReviewCorrection.ai_root_cause_note,
+    ReviewCorrection.human_root_cause,
+    ReviewCorrection.human_root_causes,
+    ReviewCorrection.human_root_cause_issues,
+    ReviewCorrection.human_root_cause_detail,
+    ReviewCorrection.human_root_cause_note,
+)
+_EXAMPLE_CHARACTER_BATCH = 200
+
+
+def _example_characters(query: Any) -> int:
+    """Sum the rule-writer source size of every correction ``query`` matches.
+
+    Rows are streamed as plain column tuples in batches, so the snapshots of
+    a large approved bank are never all in memory (or the identity map) at
+    once.
+    """
+    total = 0
+    rows = (
+        query.with_entities(*_RULE_WRITER_ESTIMATE_COLUMNS)
+        .order_by(None)
+        .yield_per(_EXAMPLE_CHARACTER_BATCH)
+    )
+    for row in rows:
+        total += estimate_rule_writer_example_characters(
+            SimpleNamespace(**row._asdict())  # type: ignore[arg-type]
+        )
+    return total
+
+
 def _analysis_example_facets(
-    corrections_by_dimension: Dict[str, List[ReviewCorrection]],
-    *,
-    runs_by_id: Dict[str, Run],
-    users_by_id: Dict[str, User],
+    facet_queries: Dict[str, Any],
+    db: Session,
 ) -> Dict[str, Any]:
+    """Facet values computed with DISTINCT queries, never full correction rows.
+
+    ``facet_queries`` maps each dimension to the bank filtered by every other
+    active filter (see ``_list_analysis_examples``).
+    """
+
     def unique(values: Any) -> list[str]:
         return sorted({str(value).strip() for value in values if str(value).strip()})
 
-    def corrections_for(dimension: str) -> List[ReviewCorrection]:
-        return corrections_by_dimension.get(dimension, [])
+    def distinct(dimension: str, *columns: Any) -> list[Any]:
+        return (
+            facet_queries[dimension]
+            .with_entities(*columns)
+            .order_by(None)
+            .distinct()
+            .all()
+        )
 
-    user_corrections = corrections_for("user_id")
+    tasks = unique(row[0] for row in distinct("task", ReviewCorrection.task))
+    datasets = unique(row[0] or "" for row in distinct("dataset", Run.dataset))
+    models = unique(
+        _strip_model_provider(row[0] or "") for row in distinct("model", Run.model)
+    )
+    run_name_ids = sorted(row[0] for row in distinct("run_name", Run.id))
+    run_names: list[str] = []
+    if run_name_ids:
+        run_names = unique(
+            _run_display_name(
+                SimpleNamespace(  # type: ignore[arg-type]
+                    id=row.id,
+                    external_run_id=row.external_run_id,
+                    run_config=row.run_config,
+                )
+            )
+            for row in db.query(Run.id, Run.external_run_id, Run.run_config).filter(
+                Run.id.in_(run_name_ids)
+            )
+        )
     user_ids = {
         user_id
-        for correction in user_corrections
-        for user_id in (
-            correction.corrected_by_user_id,
-            correction.reviewed_by_user_id,
+        for row in distinct(
+            "user_id",
+            ReviewCorrection.corrected_by_user_id,
+            ReviewCorrection.reviewed_by_user_id,
         )
+        for user_id in row
         if user_id
     }
+    users_by_id = _load_users_map(db, user_ids)
     return {
-        "tasks": unique(correction.task for correction in corrections_for("task")),
-        "datasets": unique(
-            runs_by_id.get(correction.run_id).dataset
-            if runs_by_id.get(correction.run_id)
-            else ""
-            for correction in corrections_for("dataset")
-        ),
-        "models": unique(
-            _strip_model_provider(runs_by_id.get(correction.run_id).model or "")
-            if runs_by_id.get(correction.run_id)
-            else ""
-            for correction in corrections_for("model")
-        ),
-        "run_names": unique(
-            _run_display_name(runs_by_id.get(correction.run_id))
-            for correction in corrections_for("run_name")
-        ),
+        "tasks": tasks,
+        "datasets": datasets,
+        "models": models,
+        "run_names": run_names,
         "users": [
             _serialize_user(users_by_id[user_id])
             for user_id in sorted(user_ids)
@@ -5609,13 +5672,13 @@ def _list_analysis_examples(
         "run_name": run_name,
         "user_id": user_id,
     }
-    facet_corrections_by_dimension: Dict[str, List[ReviewCorrection]] = {}
-    for dimension in facet_filters:
+    facet_queries: Dict[str, Any] = {}
+    for dimension in _EXAMPLE_FACET_DIMENSIONS:
         dimension_filters = {
             key: values if key != dimension else None
             for key, values in facet_filters.items()
         }
-        facet_query = _analysis_example_filter_query(
+        facet_queries[dimension] = _analysis_example_filter_query(
             base_query,
             task=dimension_filters["task"],
             dataset=dimension_filters["dataset"],
@@ -5627,44 +5690,55 @@ def _list_analysis_examples(
             conf_max=conf_max,
             search=search,
         )
-        facet_corrections_by_dimension[dimension] = facet_query.all()
 
-    facet_corrections = [
-        correction
-        for corrections in facet_corrections_by_dimension.values()
-        for correction in corrections
-    ]
     if selected_only:
         # SQLAlchemy renders an empty IN list as a false predicate, so an
         # empty selection is a valid, deterministic "View selected" state.
         filtered_query = filtered_query.filter(ReviewCorrection.id.in_(selected_values))
-    matching = filtered_query.order_by(
-        ReviewCorrection.created_at.desc(), ReviewCorrection.id.desc()
-    ).all()
-    selected_corrections = (
-        _analysis_example_query(db, scope)
-        .filter(ReviewCorrection.id.in_(selected_values))
-        .all()
+    # Ids, counts and sizes come from column queries; only the requested page
+    # loads full correction rows.
+    matching_ids = [
+        row[0]
+        for row in filtered_query.with_entities(ReviewCorrection.id).order_by(
+            ReviewCorrection.created_at.desc(), ReviewCorrection.id.desc()
+        )
+    ]
+    matching_characters = _example_characters(filtered_query) if matching_ids else 0
+    selected_query = _analysis_example_query(db, scope).filter(
+        ReviewCorrection.id.in_(selected_values)
+    )
+    selected_ids_found = (
+        [row[0] for row in selected_query.with_entities(ReviewCorrection.id)]
         if selected_values
         else []
     )
-    run_ids = {
-        correction.run_id
-        for correction in matching + selected_corrections + facet_corrections
-    }
-    runs_by_id = _load_runs_map(db, run_ids)
-    user_ids = {
-        user_id
-        for correction in matching + selected_corrections + facet_corrections
-        for user_id in (
-            correction.corrected_by_user_id,
-            correction.reviewed_by_user_id,
-        )
-        if user_id
-    }
-    users_by_id = _load_users_map(db, user_ids)
+    selected_characters = (
+        _example_characters(selected_query) if selected_ids_found else 0
+    )
     first = (page - 1) * page_size
-    page_rows = matching[first : first + page_size]
+    page_rows = (
+        filtered_query.order_by(
+            ReviewCorrection.created_at.desc(), ReviewCorrection.id.desc()
+        )
+        .offset(first)
+        .limit(page_size)
+        .all()
+        if first < len(matching_ids)
+        else []
+    )
+    runs_by_id = _load_runs_map(db, {correction.run_id for correction in page_rows})
+    users_by_id = _load_users_map(
+        db,
+        {
+            user_id
+            for correction in page_rows
+            for user_id in (
+                correction.corrected_by_user_id,
+                correction.reviewed_by_user_id,
+            )
+            if user_id
+        },
+    )
     hidden_runs = _hidden_item_run_ids_for(
         db, principal, {correction.run_id for correction in page_rows}
     )
@@ -5679,28 +5753,18 @@ def _list_analysis_examples(
         )
         for correction in page_rows
     ]
-    facets = _analysis_example_facets(
-        facet_corrections_by_dimension,
-        runs_by_id=runs_by_id,
-        users_by_id=users_by_id,
-    )
+    facets = _analysis_example_facets(facet_queries, db)
     return {
         "examples": rows,
-        "total": len(matching),
+        "total": len(matching_ids),
         "page": page,
         "page_size": page_size,
-        "page_count": math.ceil(len(matching) / page_size) if matching else 0,
-        "matching_ids": [correction.id for correction in matching],
-        "matching_characters": sum(
-            estimate_rule_writer_example_characters(correction)
-            for correction in matching
-        ),
-        "selected_ids": [correction.id for correction in selected_corrections],
-        "selected_count": len(selected_corrections),
-        "selected_characters": sum(
-            estimate_rule_writer_example_characters(correction)
-            for correction in selected_corrections
-        ),
+        "page_count": math.ceil(len(matching_ids) / page_size) if matching_ids else 0,
+        "matching_ids": matching_ids,
+        "matching_characters": matching_characters,
+        "selected_ids": selected_ids_found,
+        "selected_count": len(selected_ids_found),
+        "selected_characters": selected_characters,
         "facets": facets,
         "limits": {
             "approved_examples_prompt_characters": MAX_RULE_WRITER_EXAMPLE_CHARS,
