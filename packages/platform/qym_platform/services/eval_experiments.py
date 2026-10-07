@@ -65,7 +65,7 @@ from typing import (
 )
 
 from sqlalchemy import CursorResult, and_, or_, select, update
-from sqlalchemy.orm import Session, object_session
+from sqlalchemy.orm import Session, load_only, object_session
 from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy.orm.util import identity_key
 
@@ -474,8 +474,18 @@ def recompute_experiment_status(
         row = experiment
     if row is None:
         return None
+    # Only the columns the status rules read: params, request_body and
+    # remote_result are large JSON and are not loaded under the lock.
     jobs = (
         db.query(EvalExperimentJob)
+        .options(
+            load_only(
+                EvalExperimentJob.id,
+                EvalExperimentJob.status,
+                EvalExperimentJob.retry_of_job_id,
+                EvalExperimentJob.finished_at,
+            )
+        )
         .filter(EvalExperimentJob.experiment_id == row.id)
         .all()
     )

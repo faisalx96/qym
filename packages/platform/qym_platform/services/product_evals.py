@@ -418,6 +418,17 @@ def _load_script(script_path: Path) -> Any:
     return module
 
 
+def _unload_script(module: Any) -> None:
+    """Drop a preset module loaded by ``_load_script`` from ``sys.modules``.
+
+    Each job loads its preset under a unique module name; leaving it in
+    ``sys.modules`` would keep the module and all its globals alive forever.
+    """
+    name = getattr(module, "__name__", None)
+    if name and sys.modules.get(name) is module:
+        sys.modules.pop(name, None)
+
+
 def _get_function(
     module: Any, script_path: Path, function_name: str
 ) -> Callable[..., Any]:
@@ -580,10 +591,22 @@ PRODUCT_EVAL_JOB_KIND = "product_eval"
 
 
 class ProductEvalJobManager:
-    def __init__(self, *, max_workers: Optional[int] = None) -> None:
-        if max_workers is None:
-            max_workers = ProductEvalSettings().max_workers
+    def __init__(
+        self,
+        *,
+        max_workers: Optional[int] = None,
+        max_retained_jobs: Optional[int] = None,
+    ) -> None:
+        if max_workers is None or max_retained_jobs is None:
+            settings = ProductEvalSettings()
+            if max_workers is None:
+                max_workers = settings.max_workers
+            if max_retained_jobs is None:
+                max_retained_jobs = settings.max_retained_jobs
         self._max_workers = max(1, int(max_workers))
+        # Finished jobs stay readable here for a while; older ones are only
+        # served from the shared ``background_jobs`` registry.
+        self._max_retained_jobs = max(1, int(max_retained_jobs))
         self._executor = ThreadPoolExecutor(
             max_workers=self._max_workers, thread_name_prefix="qym-product-eval"
         )
@@ -596,6 +619,27 @@ class ProductEvalJobManager:
             for job in self._jobs.values()
             if job.to_dict()["status"] not in TERMINAL_JOB_STATUSES
         )
+
+    def _prune_locked(self) -> None:
+        """Bound ``self._jobs``: forget the oldest finished jobs over the cap."""
+        excess = len(self._jobs) - self._max_retained_jobs
+        if excess <= 0:
+            return
+        terminal = sorted(
+            (
+                job
+                for job in self._jobs.values()
+                if job.to_dict()["status"] in TERMINAL_JOB_STATUSES
+            ),
+            key=lambda job: job.updated_at,
+        )
+        for job in terminal[:excess]:
+            self._jobs.pop(job.job_id, None)
+
+    def _finished(self, job: ProductEvalJob) -> None:
+        """Prune old finished jobs once ``job`` is done."""
+        with self._lock:
+            self._prune_locked()
 
     def submit(
         self,
@@ -637,6 +681,7 @@ class ProductEvalJobManager:
                 raise ProductEvalQueueFull(
                     "Too many product eval jobs are already running. Try again later."
                 )
+            self._prune_locked()
             self._jobs[job.job_id] = job
         if store_bind is not None:
             # Before the thread starts, so its first change finds the handle.
@@ -736,6 +781,7 @@ class ProductEvalJobManager:
         run_count: int = 3,
     ) -> None:
         job.mark(status="RUNNING")
+        module: Any = None
         try:
             if job.stop_requested():
                 job.mark(status="STOPPED")
@@ -928,3 +974,7 @@ class ProductEvalJobManager:
             else:
                 job.mark(status="FAILED", error=error)
                 logger.warning("Product eval %s failed: %s", job.eval_id, error)
+        finally:
+            if module is not None:
+                _unload_script(module)
+            self._finished(job)

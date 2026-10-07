@@ -8,7 +8,13 @@ if [ -z "${FORWARDED_ALLOW_IPS:-}" ]; then
 fi
 
 # Optional worker containers (QYM_ROLE=worker) run alongside API pods that
-# already applied the schema; skip the migration step there.
+# already applied the schema; skip the migration step there. With several
+# replicas, prefer one migration job (this image, command
+# `alembic -c packages/platform/qym_platform/migrations/alembic.ini upgrade head`)
+# and QYM_SKIP_MIGRATIONS=1 on every replica. Replicas that do migrate take
+# turns (PostgreSQL advisory lock) and each DDL waits at most
+# QYM_MIGRATION_LOCK_TIMEOUT (default 10s) for its locks; on a timeout the
+# container exits and restarts instead of stalling traffic behind the DDL.
 if [ "${QYM_SKIP_MIGRATIONS:-0}" = "1" ]; then
   echo "Skipping migrations (QYM_SKIP_MIGRATIONS=1)"
 else

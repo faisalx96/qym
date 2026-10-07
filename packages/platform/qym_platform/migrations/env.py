@@ -12,6 +12,7 @@ from sqlalchemy import engine_from_config, pool
 
 from qym_platform.db.base import Base
 from qym_platform.db import models  # noqa: F401  (import models for metadata)
+from qym_platform.db.migration_lock import migration_guard
 from qym_platform.settings import PlatformSettings
 
 
@@ -50,10 +51,13 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        # PostgreSQL: replicas starting together take turns (advisory lock)
+        # and DDL waits at most QYM_MIGRATION_LOCK_TIMEOUT for its locks.
+        with migration_guard(connection):
+            context.configure(connection=connection, target_metadata=target_metadata)
 
-        with context.begin_transaction():
-            context.run_migrations()
+            with context.begin_transaction():
+                context.run_migrations()
 
 
 if context.is_offline_mode():

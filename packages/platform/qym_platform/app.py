@@ -42,6 +42,28 @@ from qym_platform.static_files import GZipExceptStatic, PrecompressedStaticFiles
 # the CPU of level 6 for 2-4 % smaller bodies.
 GZIP_COMPRESSLEVEL = 6
 
+_DEV_ENVIRONMENTS = {"dev", "development", "local", "test", "testing"}
+
+
+def process_layout_warning(settings: PlatformSettings) -> str | None:
+    """Warn when a non-dev deployment runs HTTP and every loop in one process.
+
+    ``QYM_ROLE=all`` (the default) puts request handling, the dashboard,
+    maintenance and eval-dispatch loops in this process, so one memory spike
+    (a large retention purge, a backfill) takes HTTP down with it.
+    """
+    if settings.role != "all":
+        return None
+    if str(settings.environment or "").strip().lower() in _DEV_ENVIRONMENTS:
+        return None
+    return (
+        "QYM_ROLE=all runs HTTP and all background loops in this process. For "
+        "production run the API with QYM_ROLE=api and a separate worker "
+        "(QYM_ROLE=worker, QYM_SKIP_MIGRATIONS=1, `python -m qym_platform.worker`, "
+        "docker compose --profile worker) with its own memory limit; see "
+        "docs/internal/OPERATIONS.md."
+    )
+
 
 def create_app(settings: PlatformSettings | None = None) -> FastAPI:
     settings = settings or PlatformSettings()
@@ -95,6 +117,24 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
             logging.getLogger("uvicorn.error").info("Eval dispatcher started")
             remote_queue_snapshotter.start()
             logging.getLogger("uvicorn.error").info("Remote queue snapshotter started")
+
+    @app.on_event("startup")
+    async def cap_request_threadpool() -> None:
+        # Sync handlers each hold a pooled connection; never run more of them
+        # at once than the API pool can serve (see request_threadpool_size).
+        import anyio.to_thread
+
+        from qym_platform.db.session import request_threadpool_size
+
+        size = request_threadpool_size(settings)
+        anyio.to_thread.current_default_thread_limiter().total_tokens = size
+        logging.getLogger("uvicorn.error").info("Request threadpool capped at %d threads", size)
+
+    @app.on_event("startup")
+    def warn_single_process_layout() -> None:
+        warning = process_layout_warning(settings)
+        if warning:
+            logging.getLogger("uvicorn.error").warning(warning)
 
     @app.on_event("startup")
     def warn_untrusted_proxy() -> None:

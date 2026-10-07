@@ -734,6 +734,11 @@ class EvalDispatcher:
             if job is None:
                 return
             status = job.status
+            env_id = job.environment_id
+        # A paused environment's health probe is an HTTP call: make it here,
+        # before any step takes the job row FOR UPDATE.
+        if env_id:
+            self._probe_paused_env(env_id)
         if status == EvalJobStatus.QUEUED:
             self._step_queued(job_id)
         elif status == EvalJobStatus.SUBMITTING:
@@ -825,12 +830,8 @@ class EvalDispatcher:
 
     # -- environment access ----------------------------------------------------
 
-    def _env_access(self, db: Session, env: EvalEnvironment) -> _EnvAccess:
-        """A client for ``env``, or the reason its queue is paused.
-
-        A paused environment (``health_status == "error"``) is probed at most every
-        ``ENV_PROBE_INTERVAL_SECONDS``. A successful probe marks it healthy again.
-        """
+    def _client_for(self, env: EvalEnvironment) -> _EnvAccess:
+        """A client for ``env`` (whatever its health), or why there is none."""
         if not env.api_key_encrypted:
             return _EnvAccess(paused_reason="Environment has no API key")
         try:
@@ -847,29 +848,93 @@ class EvalDispatcher:
             )
         finally:
             del api_key
-        if env.health_status != "error":
-            return _EnvAccess(client=client)
-        now = self.clock()
-        checked = env.health_checked_at
-        if checked is not None and now - checked < timedelta(
-            seconds=ENV_PROBE_INTERVAL_SECONDS
-        ):
-            self._close(client)
+        return _EnvAccess(client=client)
+
+    def _env_access(self, db: Session, env: EvalEnvironment) -> _EnvAccess:
+        """A client for ``env``, or the reason its queue is paused.
+
+        A paused environment (``health_status == "error"``) stays paused here;
+        ``_probe_paused_env`` (run before the job row is locked) probes it at
+        most every ``ENV_PROBE_INTERVAL_SECONDS`` and marks it healthy again.
+        """
+        if env.health_status == "error":
+            if not env.api_key_encrypted:
+                return _EnvAccess(paused_reason="Environment has no API key")
             return _EnvAccess(paused_reason=self._paused_reason(env))
-        env.health_checked_at = now
+        return self._client_for(env)
+
+    def _probe_paused_env(self, env_id: str) -> None:
+        """Probe a paused environment whose recheck is due, holding no row lock.
+
+        The probe is claimed first (compare-and-set on ``health_checked_at`` in a
+        short transaction) so concurrent workers probe once; its outcome is
+        written in a second short transaction, unless the environment changed
+        meanwhile (an admin edit or another probe).
+        """
+        now = self.clock()
+        with self.session_factory() as db:
+            env = db.get(EvalEnvironment, env_id)
+            if env is None or env.health_status != "error":
+                return
+            checked = env.health_checked_at
+            if checked is not None and now - checked < timedelta(
+                seconds=ENV_PROBE_INTERVAL_SECONDS
+            ):
+                return
+            table = EvalEnvironment
+            claimed = db.execute(
+                update(table)
+                .where(
+                    table.id == env_id,
+                    table.health_status == "error",
+                    (
+                        table.health_checked_at.is_(None)
+                        if checked is None
+                        else table.health_checked_at == checked
+                    ),
+                )
+                .values(health_checked_at=now)
+                .execution_options(synchronize_session=False)
+            )
+            if _rowcount(claimed) != 1:
+                db.rollback()
+                return
+            db.commit()
+            access = self._client_for(env)
+        client = access.client
+        if client is None:
+            return
+        healthy = False
+        error: Optional[str] = None
         try:
             self._await(client.list(limit=1))
+            healthy = True
         except EnvAuthError:
-            env.health_error = ENV_AUTH_ERROR
+            error = ENV_AUTH_ERROR
         except EvalServiceError as exc:
-            env.health_error = _short(_redacted_text(exc), 500)
-        else:
-            env.health_status = "ok"
-            env.health_error = None
-            logger.info("eval environment %s is healthy again; resuming", env.id)
-            return _EnvAccess(client=client)
-        self._close(client)
-        return _EnvAccess(paused_reason=self._paused_reason(env))
+            error = _short(_redacted_text(exc), 500)
+        finally:
+            self._close(client)
+        with self.session_factory() as db:
+            table = EvalEnvironment
+            values: Dict[str, Any] = (
+                {"health_status": "ok", "health_error": None}
+                if healthy
+                else {"health_error": error}
+            )
+            result = db.execute(
+                update(table)
+                .where(
+                    table.id == env_id,
+                    table.health_status == "error",
+                    table.health_checked_at == now,
+                )
+                .values(**values)
+                .execution_options(synchronize_session=False)
+            )
+            db.commit()
+        if healthy and _rowcount(result) == 1:
+            logger.info("eval environment %s is healthy again; resuming", env_id)
 
     @staticmethod
     def _paused_reason(env: EvalEnvironment) -> str:
