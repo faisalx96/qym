@@ -1,0 +1,148 @@
+# Service split: main (UI + API), ingestion (SDK write path) and workers
+# (background loops + queued jobs) behind one nginx ingress.
+#
+#   docker compose -f docker/docker-compose.split.yml up -d --build
+#
+# Uses the same .env as docker-compose.yml. QYM_BASE_URL must be the ingress
+# URL (http://localhost:8080 by default). QYM_LLM_CONFIG_ENCRYPTION_KEY is
+# required: product evals carry the caller's keys to the workers encrypted.
+# docker-compose.yml (single server) is unchanged and still the default.
+# See docs/internal/OPERATIONS.md, "Service split deployment".
+version: "3.9"
+
+x-qym-image: &qym-image
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile
+  read_only: true
+  tmpfs:
+    - /tmp:size=512m,mode=1777
+  restart: unless-stopped
+
+x-qym-shared-env: &qym-shared-env
+  QYM_ENVIRONMENT: ${QYM_ENVIRONMENT:-dev}
+  QYM_DATABASE_URL: ${QYM_DATABASE_URL}
+  QYM_BASE_URL: ${QYM_BASE_URL:-http://localhost:8080}
+  QYM_AUTH_MODE: ${QYM_AUTH_MODE}
+  QYM_LLM_CONFIG_ENCRYPTION_KEY: ${QYM_LLM_CONFIG_ENCRYPTION_KEY:?set QYM_LLM_CONFIG_ENCRYPTION_KEY for the service split}
+  QYM_MAINTENANCE_MODE: ${QYM_MAINTENANCE_MODE:-false}
+  # One migration job below; every service skips the step.
+  QYM_SKIP_MIGRATIONS: "1"
+  QYM_INGESTION_PREFIX: ${QYM_INGESTION_PREFIX:-/ingestion}
+  QYM_WORKERS_PREFIX: ${QYM_WORKERS_PREFIX:-/workers}
+  QYM_MAIN_PREFIX: ${QYM_MAIN_PREFIX:-}
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qym -d qym"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-off migration job per release (advisory-locked; see "Migrations and large tables").
+  migrate:
+    <<: *qym-image
+    restart: "no"
+    command: ["alembic", "-c", "packages/platform/qym_platform/migrations/alembic.ini", "upgrade", "head"]
+    environment:
+      <<: *qym-shared-env
+    depends_on:
+      db:
+        condition: service_healthy
+
+  main:
+    <<: *qym-image
+    environment:
+      <<: *qym-shared-env
+      QYM_SERVICE: main
+      QYM_WEB_WORKERS: ${QYM_WEB_WORKERS:-2}
+      QYM_ADMIN_BOOTSTRAP_TOKEN: ${QYM_ADMIN_BOOTSTRAP_TOKEN}
+      QYM_AUTH_SESSION_SECRET: ${QYM_AUTH_SESSION_SECRET}
+      QYM_AUTH_LOCAL_ENABLED: ${QYM_AUTH_LOCAL_ENABLED}
+      QYM_AUTH_LOCAL_SIGNUP: ${QYM_AUTH_LOCAL_SIGNUP:-false}
+      QYM_AUTH_GOOGLE_CLIENT_ID: ${QYM_AUTH_GOOGLE_CLIENT_ID:-}
+      QYM_AUTH_GOOGLE_CLIENT_SECRET: ${QYM_AUTH_GOOGLE_CLIENT_SECRET:-}
+      QYM_AUTH_GITHUB_CLIENT_ID: ${QYM_AUTH_GITHUB_CLIENT_ID:-}
+      QYM_AUTH_GITHUB_CLIENT_SECRET: ${QYM_AUTH_GITHUB_CLIENT_SECRET:-}
+      QYM_AUTH_GITLAB_URL: ${QYM_AUTH_GITLAB_URL:-}
+      QYM_AUTH_GITLAB_CLIENT_ID: ${QYM_AUTH_GITLAB_CLIENT_ID:-}
+      QYM_AUTH_GITLAB_CLIENT_SECRET: ${QYM_AUTH_GITLAB_CLIENT_SECRET:-}
+      QYM_MAX_UPLOAD_BYTES: ${QYM_MAX_UPLOAD_BYTES:-104857600}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
+    # mem_limit: 2g
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/healthz\").read()'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  ingestion:
+    <<: *qym-image
+    environment:
+      <<: *qym-shared-env
+      QYM_SERVICE: ingestion
+      QYM_WEB_WORKERS: ${QYM_INGESTION_WEB_WORKERS:-2}
+      # Browser links in POST /v1/runs answers (live_url).
+      QYM_PUBLIC_UI_URL: ${QYM_PUBLIC_UI_URL:-}
+      QYM_EVENT_LOG_MODE: ${QYM_EVENT_LOG_MODE:-full}
+      QYM_MAX_INGEST_BODY_BYTES: ${QYM_MAX_INGEST_BODY_BYTES:-20971520}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
+    # mem_limit: 1536m
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/healthz\").read()'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  workers:
+    <<: *qym-image
+    environment:
+      <<: *qym-shared-env
+      QYM_SERVICE: workers
+      # The product-eval runner calls the platform through the ingress
+      # (ingest paths reach the ingestion service, dataset reads reach main).
+      QYM_INTERNAL_PLATFORM_URL: ${QYM_INTERNAL_PLATFORM_URL:-http://ingress:8080}
+      QYM_PUBLIC_UI_URL: ${QYM_PUBLIC_UI_URL:-}
+      QYM_SPAN_RETENTION_DAYS: ${QYM_SPAN_RETENTION_DAYS:-60}
+      QYM_DELETED_RUN_GRACE_DAYS: ${QYM_DELETED_RUN_GRACE_DAYS:-30}
+      QYM_ANALYSIS_JOB_MAX_WORKERS: ${QYM_ANALYSIS_JOB_MAX_WORKERS:-2}
+      QYM_PRODUCT_EVAL_MAX_WORKERS: ${QYM_PRODUCT_EVAL_MAX_WORKERS:-3}
+      QYM_ALLOW_PRIVATE_LLM_BASE_URLS: ${QYM_ALLOW_PRIVATE_LLM_BASE_URLS:-false}
+    # mem_limit: 3g
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/workers/status\").read()'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  ingress:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./nginx.split.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${QYM_INGRESS_PORT:-8080}:8080"
+    depends_on:
+      - main
+      - ingestion
+      - workers
+    restart: unless-stopped
+
+volumes:
+  pgdata:
