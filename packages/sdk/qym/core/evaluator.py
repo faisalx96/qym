@@ -1212,9 +1212,10 @@ class Evaluator:
                         api_key=platform_api_key,
                         run_id=handle.run_id,
                     )
-                    # Connect QymSpanProcessor to platform stream for local DB capture
+                    # Route this run's spans to its stream. The shared
+                    # QymSpanProcessor reads the stream from the context, so
+                    # it never holds a reference to it after the run.
                     if self._otel.enabled and self._otel.qym_processor:
-                        self._otel.qym_processor.set_stream(self._platform_stream)
                         otel_stream_token = self._otel.bind_stream(
                             self._platform_stream
                         )
