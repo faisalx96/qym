@@ -1812,6 +1812,12 @@ class Evaluator:
                 }
                 if rejected_events:
                     summary["rejected_events"] = rejected_events
+                # Best-effort telemetry the stream skipped or cut: reported so
+                # the run record says its traces may be partial.
+                for counter in ("dropped_spans", "truncated_events"):
+                    value = getattr(platform_stream, counter, 0)
+                    if isinstance(value, int) and value > 0:
+                        summary[counter] = value
                 # Send run_completed after the ordered queue has drained.
                 await _emit_platform_event(
                     platform_stream,
@@ -2894,8 +2900,16 @@ class Evaluator:
                         "retry_count": retry_count,
                     },
                 )
-        except Exception:
-            pass
+        except Exception as exc:
+            # The item's result stays in the local results; the platform run
+            # will be missing it, so say so instead of losing it silently.
+            logger.warning(
+                "Item %s: item_completed could not be queued for the platform "
+                "(%s: %s); the run page will be missing this result.",
+                getattr(item, "id", None) or f"item_{index}",
+                type(exc).__name__,
+                exc,
+            )
         self._notify_observer(
             "on_item_complete",
             item_index=index,
@@ -2961,8 +2975,14 @@ class Evaluator:
                         "retry_count": retry_count,
                     },
                 )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "Item %s: item_failed could not be queued for the platform "
+                "(%s: %s); the run page will be missing this failure.",
+                item_id,
+                type(exc).__name__,
+                exc,
+            )
         if attempt is not None:
             await self._emit_item_attempt_finished(index, item, attempt, is_last_attempt=True)
         # 2. Update local tracker
