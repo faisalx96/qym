@@ -613,7 +613,8 @@ def test_warm_refresh_does_not_load_unrelated_items_or_spans(database):
         db, run, touched_trace_ids={"t-7"}, touched_item_ids={"7"}
     )
     assert len([obj for obj in loaded if isinstance(obj, RunItem)]) == 1
-    assert len([obj for obj in loaded if isinstance(obj, Span)]) == 1
+    # Spans are read as projected columns, never as ORM entities.
+    assert not [obj for obj in loaded if isinstance(obj, Span)]
     assert len([obj for obj in loaded if isinstance(obj, RunTraceContribution)]) == 1
 
 
@@ -660,8 +661,10 @@ async def test_ingest_worker_does_not_block_loop_and_owns_session(
     monkeypatch.setattr(ingest, "_ingest_events_sync", blocked)
 
     class Request:
-        async def body(self):
-            return b""
+        headers = {}
+
+        async def stream(self):
+            yield b""
 
     task = asyncio.create_task(ingest.ingest_events(run.id, Request(), db, principal))
     try:
@@ -753,9 +756,7 @@ def test_legacy_cached_trace_survives_first_incremental_backfill(database):
     assert db.query(RunItem).one().item_metadata["trace_stats"]["tokens"] == 42
 
 
-def test_failed_trace_projection_rebuilds_on_next_unrelated_batch(
-    database, monkeypatch
-):
+def test_failed_trace_projection_is_repaired_after_back_off(database, monkeypatch):
     _, db, run, principal = database
     ingest._refresh_live_trace_stats(db, run)
     db.commit()
@@ -792,8 +793,15 @@ def test_failed_trace_projection_rebuilds_on_next_unrelated_batch(
             ),
         ],
     )
-    assert db.get(RunTraceSummary, run.id) is None
+    # The ledger is kept and marked stale with what the failed batch touched.
+    summary = db.get(RunTraceSummary, run.id)
+    db.refresh(summary)
+    stale = summary.totals["_stale"]
+    assert (stale["traces"], stale["items"], stale["failures"]) == (["t"], ["a"], 1)
+    assert stale["retry_at"] > 0
     monkeypatch.setattr(ingest, "_refresh_live_trace_stats", original)
+    # Within the back-off the next batch does no trace work; it only adds
+    # its own touched ids to the marker.
     _apply(
         db,
         run,
@@ -804,6 +812,27 @@ def test_failed_trace_projection_rebuilds_on_next_unrelated_batch(
             )
         ],
     )
+    db.refresh(summary)
+    assert summary.totals["_stale"]["items"] == ["a", "b"]
+    assert "avg_tokens" not in (run.run_metadata.get("trace_stats") or {})
+    # Once the back-off expires, the next batch repairs incrementally.
+    summary.totals = {
+        **summary.totals,
+        "_stale": {**stale, "items": ["a", "b"], "retry_at": 0},
+    }
+    db.commit()
+    _apply(
+        db,
+        run,
+        principal,
+        [
+            _event(
+                run, 4, "item_completed", dict(item_id="c", output="ok", latency_ms=1)
+            )
+        ],
+    )
+    db.refresh(summary)
+    assert "_stale" not in summary.totals
     assert run.run_metadata["trace_stats"]["avg_tokens"] == 10
 
 
@@ -828,8 +857,10 @@ async def test_auth_connection_is_returned_before_ingest_checkout(database):
             auth = Principal(user=owner, auth_type="api_key", project_id="project")
 
             class Request:
-                async def body(self):
-                    return b""
+                headers = {}
+
+                async def stream(self):
+                    yield b""
 
             result = await ingest.ingest_events(run.id, Request(), request_db, auth)
             assert json.loads(result.body)["ok"]
