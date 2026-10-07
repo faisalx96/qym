@@ -18,6 +18,7 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from anyio import CapacityLimiter, to_thread
 from fastapi.responses import JSONResponse, StreamingResponse
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, field_validator
 from qym_platform.auth import Principal, require_ui_principal
 from qym_platform.datetime_utils import to_api_timestamp, utc_now_naive
@@ -4054,6 +4055,98 @@ def _filter_analysis_targets(
     return targets
 
 
+@dataclass
+class _AnalysisSetup:
+    """What an analyze request reads before its model phase."""
+
+    run: Run
+    llm_config: dict[str, Any]
+    all_items: list[Any]
+    scores_by_item: dict[str, dict[str, Any]]
+    metric_scope: set[str] | None
+    analysis_targets: list[tuple[Any, str]]
+    analyzer_config: dict[str, Any] | None = None
+
+
+def _prepare_run_analysis(
+    db: Session,
+    principal: Principal,
+    run_id: str,
+    request: AnalyzeRequest,
+    *,
+    with_config: bool = False,
+    load_payloads: bool = True,
+) -> _AnalysisSetup:
+    """Validate an analyze request and load what its model phase needs.
+
+    Synchronous on purpose: async endpoints call it via ``run_in_threadpool``
+    so the reads never block the event loop. Items are loaded without
+    payloads; only the targets get input/expected/output (``load_payloads``).
+    """
+    run = Run.active(db).filter(Run.id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if not _can_operate_analyzer(db, principal, run):
+        raise HTTPException(status_code=403, detail="Access denied")
+    require_run_items_visible(db, principal, run)
+    require_project_writable(db, run.project_id)
+    _require_selected_pass_for_repeat_run(run, request.pass_number)
+    _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
+    llm_config = _get_llm_config(db, run.project_id, request.connection_id)
+
+    all_items, scores_by_item = _load_run_items_and_scores(
+        db, run, request.pass_number, with_payloads=False
+    )
+    metric_specs = _load_metric_specs(db, run)
+    metric_scope = _requested_metric_scope(request)
+    _validate_requested_metric(
+        run,
+        scores_by_item,
+        request.metrics if request.metrics is not None else request.metric,
+    )
+    analysis_targets = _filter_analysis_targets(
+        run,
+        request,
+        all_items,
+        scores_by_item,
+        metric_specs,
+        approved_review_keys=(
+            set()
+            if request.pass_number is not None
+            else _active_approved_review_keys(
+                db, run, {item.item_id for item in all_items}
+            )
+        ),
+    )
+    setup = _AnalysisSetup(
+        run=run,
+        llm_config=llm_config,
+        all_items=all_items,
+        scores_by_item=scores_by_item,
+        metric_scope=metric_scope,
+        analysis_targets=analysis_targets,
+    )
+    if with_config:
+        analyzer_config = _analysis_config_with_project_context(
+            db,
+            run,
+            _playground_config_to_analyzer(request.config),
+        )
+        setup.analyzer_config = _analysis_config_with_category_catalog(
+            db,
+            run,
+            all_items,
+            analyzer_config,
+            request.category_catalog_version_id,
+        )
+    if load_payloads:
+        # Only the targets carry their input/expected/output into the model phase.
+        _load_analysis_payloads(
+            db, run, request.pass_number, (item for item, _ in analysis_targets)
+        )
+    return setup
+
+
 def _analysis_job_payload(job: AnalysisJob | None) -> dict[str, Any] | None:
     """Return a JSON-safe job snapshot for the UI status endpoints."""
     if job is None:
@@ -4462,33 +4555,41 @@ async def aggregate_saved_analysis_results(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     """Canonicalize saved AI diagnoses without rerunning item analysis."""
-    run = Run.active(db).filter(Run.id == run_id).first()
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found")
-    if not _can_operate_analyzer(db, principal, run):
-        raise HTTPException(status_code=403, detail="Access denied")
-    require_project_writable(db, run.project_id)
-    _require_selected_pass_for_repeat_run(run, request.pass_number)
-    _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
 
-    all_items, scores_by_item = _load_run_items_and_scores(
-        db, run, request.pass_number, with_payloads=False
-    )
-    _validate_requested_metric(run, scores_by_item, request.metric)
+    def prepare() -> tuple[Run, list[Any], dict[str, Any], dict[str, Any] | None]:
+        run = Run.active(db).filter(Run.id == run_id).first()
+        if not run:
+            raise HTTPException(status_code=404, detail="Run not found")
+        if not _can_operate_analyzer(db, principal, run):
+            raise HTTPException(status_code=403, detail="Access denied")
+        require_project_writable(db, run.project_id)
+        _require_selected_pass_for_repeat_run(run, request.pass_number)
+        _check_pass_version(
+            db, run, request.pass_number, request.expected_pass_version
+        )
+
+        all_items, scores_by_item = _load_run_items_and_scores(
+            db, run, request.pass_number, with_payloads=False
+        )
+        _validate_requested_metric(run, scores_by_item, request.metric)
+        llm_config = _get_llm_config(db, run.project_id, request.connection_id)
+        analyzer_config = _analysis_config_with_project_context(
+            db,
+            run,
+            None,
+        )
+        analyzer_config = _analysis_config_with_category_catalog(
+            db,
+            run,
+            all_items,
+            analyzer_config,
+            request.category_catalog_version_id,
+        )
+        return run, all_items, llm_config, analyzer_config
+
+    # The reads are synchronous; run them off the event loop.
+    run, all_items, llm_config, analyzer_config = await run_in_threadpool(prepare)
     metric_scope = {request.metric} if request.metric else None
-    llm_config = _get_llm_config(db, run.project_id, request.connection_id)
-    analyzer_config = _analysis_config_with_project_context(
-        db,
-        run,
-        None,
-    )
-    analyzer_config = _analysis_config_with_category_catalog(
-        db,
-        run,
-        all_items,
-        analyzer_config,
-        request.category_catalog_version_id,
-    )
 
     try:
         if request.pass_number is not None:
@@ -4557,42 +4658,18 @@ async def start_analysis_job(
     principal: Principal = Depends(require_ui_principal),
 ) -> JSONResponse:
     """Start analysis independently of the browser request lifecycle."""
-    run = Run.active(db).filter(Run.id == run_id).first()
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found")
-    if not _can_operate_analyzer(db, principal, run):
-        raise HTTPException(status_code=403, detail="Access denied")
-    require_run_items_visible(db, principal, run)
-    require_project_writable(db, run.project_id)
-    _require_selected_pass_for_repeat_run(run, request.pass_number)
-    _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
 
-    # Validate the request before creating a background task so malformed
-    # filters and missing connections are reported to the initiating page.
-    _get_llm_config(db, run.project_id, request.connection_id)
-    all_items, scores_by_item = _load_run_items_and_scores(
-        db, run, request.pass_number, with_payloads=False
-    )
-    metric_specs = _load_metric_specs(db, run)
-    _validate_requested_metric(
-        run,
-        scores_by_item,
-        request.metrics if request.metrics is not None else request.metric,
-    )
-    analysis_targets = _filter_analysis_targets(
-        run,
-        request,
-        all_items,
-        scores_by_item,
-        metric_specs,
-        approved_review_keys=(
-            set()
-            if request.pass_number is not None
-            else _active_approved_review_keys(
-                db, run, {item.item_id for item in all_items}
-            )
-        ),
-    )
+    def validate() -> tuple[Run, int]:
+        # Validate the request before creating a background task so malformed
+        # filters and missing connections are reported to the initiating page.
+        # Items are read without payloads and dropped once counted; the job
+        # loads its own data.
+        setup = _prepare_run_analysis(
+            db, principal, run_id, request, load_payloads=False
+        )
+        return setup.run, len(setup.analysis_targets)
+
+    run, target_count = await run_in_threadpool(validate)
 
     job_session_factory = sessionmaker(
         bind=db.get_bind(),
@@ -4611,7 +4688,7 @@ async def start_analysis_job(
         progress={
             "phase": "queued",
             "completed": 0,
-            "total": len(analysis_targets),
+            "total": target_count,
             "errors": 0,
             "retries": 0,
         },
@@ -4695,55 +4772,17 @@ async def analyze_run_items(
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
     """Trigger LLM-powered root cause analysis for selected items in a run."""
-    run = Run.active(db).filter(Run.id == run_id).first()
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found")
-    if not _can_operate_analyzer(db, principal, run):
-        raise HTTPException(status_code=403, detail="Access denied")
-    require_run_items_visible(db, principal, run)
-    require_project_writable(db, run.project_id)
-    _require_selected_pass_for_repeat_run(run, request.pass_number)
-    _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
-    llm_config = _get_llm_config(db, run.project_id, request.connection_id)
-
-    all_items, scores_by_item = _load_run_items_and_scores(
-        db, run, request.pass_number, with_payloads=False
+    # The reads are synchronous; run them off the event loop.
+    setup = await run_in_threadpool(
+        _prepare_run_analysis, db, principal, run_id, request, with_config=True
     )
-
-    metric_specs = _load_metric_specs(db, run)
-    metric_scope = _requested_metric_scope(request)
-    _validate_requested_metric(
-        run,
-        scores_by_item,
-        request.metrics if request.metrics is not None else request.metric,
-    )
-    analysis_targets = _filter_analysis_targets(
-        run,
-        request,
-        all_items,
-        scores_by_item,
-        metric_specs,
-        approved_review_keys=(
-            set()
-            if request.pass_number is not None
-            else _active_approved_review_keys(
-                db, run, {item.item_id for item in all_items}
-            )
-        ),
-    )
-
-    analyzer_config = _analysis_config_with_project_context(
-        db,
-        run,
-        _playground_config_to_analyzer(request.config),
-    )
-    analyzer_config = _analysis_config_with_category_catalog(
-        db,
-        run,
-        all_items,
-        analyzer_config,
-        request.category_catalog_version_id,
-    )
+    run = setup.run
+    llm_config = setup.llm_config
+    all_items = setup.all_items
+    scores_by_item = setup.scores_by_item
+    metric_scope = setup.metric_scope
+    analysis_targets = setup.analysis_targets
+    analyzer_config = setup.analyzer_config
     client = build_client(llm_config)
     model = llm_config.get("llm_model", "gpt-4o-mini")
 
@@ -4785,10 +4824,6 @@ async def analyze_run_items(
             **_persistence_totals([]),
         }
 
-    # Only the targets carry their input/expected/output into the model phase.
-    _load_analysis_payloads(
-        db, run, request.pass_number, (item for item, _ in analysis_targets)
-    )
     # Run async LLM analysis with no transaction open.
     _release_transaction_for_llm(db)
     results = await _analyze_targets_batch(
@@ -4841,9 +4876,10 @@ async def analyze_run_items(
             aggregation_error = str(exc)
 
     # Save pass diagnoses beside the selected pass score; aggregate diagnoses
-    # keep the legacy item-level persistence path.
+    # keep the legacy item-level persistence path. Saves run off the loop.
     if request.pass_number is not None:
-        response_results, error_count = _save_pass_analysis_results(
+        response_results, error_count = await run_in_threadpool(
+            _save_pass_analysis_results,
             db,
             run,
             results,
@@ -4862,7 +4898,8 @@ async def analyze_run_items(
             ),
         )
     else:
-        response_results, error_count = _save_analysis_results(
+        response_results, error_count = await run_in_threadpool(
+            _save_analysis_results,
             db,
             run,
             analysis_targets,
@@ -4901,45 +4938,31 @@ async def analyze_run_items_stream(
     principal: Principal = Depends(require_ui_principal),
 ) -> StreamingResponse:
     """Stream LLM-powered root cause analysis progress for selected items."""
-    run = Run.active(db).filter(Run.id == run_id).first()
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found")
-    if not _can_operate_analyzer(db, principal, run):
-        raise HTTPException(status_code=403, detail="Access denied")
-    require_run_items_visible(db, principal, run)
-    require_project_writable(db, run.project_id)
-    _require_selected_pass_for_repeat_run(run, request.pass_number)
-    _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
-    llm_config = _get_llm_config(db, run.project_id, request.connection_id)
+    # Validation and loading are synchronous; run them off the event loop so
+    # errors are still reported as HTTP errors before the stream starts.
+    setup = await run_in_threadpool(
+        _prepare_run_analysis, db, principal, run_id, request
+    )
+    run = setup.run
+    llm_config = setup.llm_config
+    all_items = setup.all_items
+    scores_by_item = setup.scores_by_item
+    metric_scope = setup.metric_scope
+    analysis_targets = setup.analysis_targets
 
-    all_items, scores_by_item = _load_run_items_and_scores(
-        db, run, request.pass_number, with_payloads=False
-    )
-    metric_specs = _load_metric_specs(db, run)
-    metric_scope = _requested_metric_scope(request)
-    _validate_requested_metric(
-        run,
-        scores_by_item,
-        request.metrics if request.metrics is not None else request.metric,
-    )
-    analysis_targets = _filter_analysis_targets(
-        run,
-        request,
-        all_items,
-        scores_by_item,
-        metric_specs,
-        approved_review_keys=(
-            set()
-            if request.pass_number is not None
-            else _active_approved_review_keys(
-                db, run, {item.item_id for item in all_items}
-            )
-        ),
-    )
-    # Only the targets carry their input/expected/output into the model phase.
-    _load_analysis_payloads(
-        db, run, request.pass_number, (item for item, _ in analysis_targets)
-    )
+    def build_analyzer_config() -> dict[str, Any] | None:
+        config = _analysis_config_with_project_context(
+            db,
+            run,
+            _playground_config_to_analyzer(request.config),
+        )
+        return _analysis_config_with_category_catalog(
+            db,
+            run,
+            all_items,
+            config,
+            request.category_catalog_version_id,
+        )
 
     async def stream_events():
         def encode(event: Dict[str, Any]) -> str:
@@ -4957,18 +4980,7 @@ async def analyze_run_items_stream(
             }
         )
 
-        analyzer_config = _analysis_config_with_project_context(
-            db,
-            run,
-            _playground_config_to_analyzer(request.config),
-        )
-        analyzer_config = _analysis_config_with_category_catalog(
-            db,
-            run,
-            all_items,
-            analyzer_config,
-            request.category_catalog_version_id,
-        )
+        analyzer_config = await run_in_threadpool(build_analyzer_config)
         client = build_client(llm_config)
         model = llm_config.get("llm_model", "gpt-4o-mini")
 
@@ -5174,7 +5186,7 @@ async def analyze_run_items_stream(
                             aggregation_error = str(exc)
                     try:
                         if request.pass_number is not None:
-                            response_results, error_count = _save_pass_analysis_results(
+                            response_results, error_count = await run_in_threadpool(_save_pass_analysis_results,
                                 db,
                                 run,
                                 results,
@@ -5193,7 +5205,7 @@ async def analyze_run_items_stream(
                                 ),
                             )
                         else:
-                            response_results, error_count = _save_analysis_results(
+                            response_results, error_count = await run_in_threadpool(_save_analysis_results,
                                 db,
                                 run,
                                 analysis_targets,
