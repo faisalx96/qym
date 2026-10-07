@@ -40,6 +40,7 @@ from qym_platform.db.models import (
     RunItemPassScore,
     RunItemScore,
     RunMetricSpec,
+    Span,
     User,
     UserRole,
 )
@@ -163,6 +164,7 @@ from qym_platform.services.analysis_jobs import (
 from qym_platform.services.analysis_prompts import get_effective_analysis_prompts
 from qym_platform.settings import PlatformSettings
 from sqlalchemy import String, and_, cast, func, or_, tuple_
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, object_session, sessionmaker
 
@@ -1237,20 +1239,174 @@ def _playground_config_to_analyzer(
     return cfg if cfg else None
 
 
-def _load_run_items_and_scores(
-    db: Session, run: Run, pass_number: int | None = None
-) -> tuple[list[RunItem], dict[str, dict[str, Any]]]:
-    """Load run data, optionally projecting it onto one repeat-run pass."""
-    all_items: list[RunItem] = (
-        db.query(RunItem)
-        .filter(RunItem.run_id == run.id)
-        .order_by(RunItem.index.asc())
-        .all()
+_ITEM_PAYLOAD_KEYS = ("input", "expected", "output")
+_IN_CHUNK = 500
+
+
+class _AnalysisItem:
+    """A plain, session-free copy of one ``RunItem`` row for the analyzer.
+
+    The analyzer only reads item fields, and an analysis spends minutes in
+    model calls. Plain copies keep the loaded rows out of the session's
+    identity map, so nothing ORM-tracked (with change history for every JSON
+    payload) stays alive through the model phase, and only the target items
+    carry their input/expected/output payloads (``_load_analysis_payloads``).
+    Writes always re-read and lock the real rows.
+    """
+
+    def __init__(self, values: Dict[str, Any], session: Optional[Session]) -> None:
+        self.__dict__.update(values)
+        self._session = session
+
+    @property
+    def trace_content(self) -> list[dict[str, Any]]:
+        """The item's spans, read like ``RunItem.trace_content``."""
+        session = self._session
+        if session is None or not getattr(self, "trace_id", None):
+            return []
+        if session.in_transaction():
+            return RunItem._trace_content_from(self, session)  # type: ignore[arg-type]
+        # No transaction is open during a model call; read on a short-lived
+        # session instead of reopening (and idling) the owning one.
+        with Session(bind=session.get_bind(Span)) as reader:
+            return RunItem._trace_content_from(self, reader)  # type: ignore[arg-type]
+
+
+def _column_keys(model: Any, exclude: Iterable[str] = ()) -> list[str]:
+    excluded = set(exclude)
+    return [
+        attr.key
+        for attr in sa_inspect(model).column_attrs
+        if attr.key not in excluded
+    ]
+
+
+def _chunked(values: list[str], size: int = _IN_CHUNK) -> Iterable[list[str]]:
+    for start in range(0, len(values), size):
+        yield values[start : start + size]
+
+
+def _column_rows(
+    db: Session,
+    model: Any,
+    keys: list[str],
+    criteria: list[Any],
+    *,
+    item_ids: Optional[list[str]] = None,
+    order_by: Any = None,
+) -> list[Dict[str, Any]]:
+    """Rows of ``model`` as plain dicts (no ORM instances), optionally per item."""
+    columns = [getattr(model, key) for key in keys]
+    batches: Iterable[Optional[list[str]]] = (
+        [None] if item_ids is None else _chunked(item_ids)
     )
-    all_scores = db.query(RunItemScore).filter(RunItemScore.run_id == run.id).all()
-    scores_by_item: dict[str, dict[str, RunItemScore]] = {}
-    for s in all_scores:
-        scores_by_item.setdefault(s.item_id, {})[s.metric_name] = s
+    rows: list[Dict[str, Any]] = []
+    for batch in batches:
+        query = db.query(*columns).filter(*criteria)
+        if batch is not None:
+            query = query.filter(model.item_id.in_(batch))
+        if order_by is not None:
+            query = query.order_by(order_by)
+        rows.extend(row._asdict() for row in query)
+    return rows
+
+
+def _select_pass_attempts(attempts: list[Dict[str, Any]]) -> dict[str, Dict[str, Any]]:
+    attempt_by_item: dict[str, Dict[str, Any]] = {}
+    for attempt in attempts:
+        previous = attempt_by_item.get(attempt["item_id"])
+        if (
+            previous is None
+            or attempt["is_last_attempt"]
+            or (
+                not previous["is_last_attempt"]
+                and int(attempt["attempt_number"] or 0)
+                > int(previous["attempt_number"] or 0)
+            )
+        ):
+            attempt_by_item[attempt["item_id"]] = attempt
+    return attempt_by_item
+
+
+def _recover_pass_outputs(
+    db: Session, run: Run, pass_number: int, item_ids: set[str]
+) -> dict[str, Any]:
+    """Outputs of ``item_completed`` events for attempts stored without one.
+
+    Older SDKs emitted item_completed before item_attempt_finished. Events are
+    streamed in batches and only the wanted items' outputs are kept.
+    """
+    recovered: dict[str, Any] = {}
+    if not item_ids:
+        return recovered
+    events = (
+        db.query(RunEvent.payload)
+        .filter(RunEvent.run_id == run.id, RunEvent.type == "item_completed")
+        .order_by(RunEvent.sequence.asc())
+        .yield_per(200)
+    )
+    for (payload,) in events:
+        if not isinstance(payload, dict):
+            continue
+        if str(payload.get("item_id") or "") not in item_ids:
+            continue
+        try:
+            event_pass_number = max(1, int(payload.get("pass_number") or 1))
+        except (TypeError, ValueError):
+            event_pass_number = 1
+        if event_pass_number == pass_number and "output" in payload:
+            recovered[str(payload.get("item_id"))] = payload.get("output")
+    return recovered
+
+
+def _load_run_items_and_scores(
+    db: Session,
+    run: Run,
+    pass_number: int | None = None,
+    *,
+    item_ids: Optional[Iterable[str]] = None,
+    with_payloads: bool = True,
+) -> tuple[list[Any], dict[str, dict[str, Any]]]:
+    """Load run data, optionally projecting it onto one repeat-run pass.
+
+    Items and scores come back as plain session-free copies
+    (``_AnalysisItem`` / ``SimpleNamespace``) read with column queries.
+    ``item_ids`` limits the load to those items; ``with_payloads=False``
+    leaves input/expected/output unloaded (``None``) for target selection,
+    validation and aggregation, which never read them. Load them for the
+    chosen targets with ``_load_analysis_payloads``.
+    """
+    wanted_ids = sorted({str(value) for value in item_ids}) if item_ids is not None else None
+    item_keys = _column_keys(RunItem, () if with_payloads else _ITEM_PAYLOAD_KEYS)
+    all_items = [
+        _AnalysisItem(values, db)
+        for values in _column_rows(
+            db,
+            RunItem,
+            item_keys,
+            [RunItem.run_id == run.id],
+            item_ids=wanted_ids,
+            order_by=RunItem.index.asc(),
+        )
+    ]
+    if wanted_ids is not None and len(wanted_ids) > _IN_CHUNK:
+        all_items.sort(key=lambda item: int(item.index or 0))
+    for item in all_items:
+        for key in _ITEM_PAYLOAD_KEYS:
+            item.__dict__.setdefault(key, None)
+        item._payloads_loaded = with_payloads
+
+    scores_by_item: dict[str, dict[str, Any]] = {}
+    for values in _column_rows(
+        db,
+        RunItemScore,
+        _column_keys(RunItemScore),
+        [RunItemScore.run_id == run.id],
+        item_ids=wanted_ids,
+    ):
+        scores_by_item.setdefault(values["item_id"], {})[values["metric_name"]] = (
+            SimpleNamespace(**values)
+        )
     if pass_number is None:
         return all_items, scores_by_item
 
@@ -1258,69 +1414,61 @@ def _load_run_items_and_scores(
     if not has_repeat_pass_context(run) or pass_number < 1 or pass_number > run_samples:
         raise HTTPException(status_code=400, detail="pass_number is outside this run")
 
-    pass_scores = (
-        db.query(RunItemPassScore)
-        .filter(
+    pass_scores_by_item: dict[str, dict[str, Dict[str, Any]]] = {}
+    for values in _column_rows(
+        db,
+        RunItemPassScore,
+        _column_keys(RunItemPassScore),
+        [
             RunItemPassScore.run_id == run.id,
             RunItemPassScore.pass_number == pass_number,
+        ],
+        item_ids=wanted_ids,
+    ):
+        pass_scores_by_item.setdefault(values["item_id"], {})[
+            values["metric_name"]
+        ] = values
+
+    attempt_keys = [
+        "item_id",
+        "attempt_number",
+        "is_last_attempt",
+        "error",
+        "latency_ms",
+        "trace_id",
+        "trace_url",
+    ]
+    if with_payloads:
+        attempt_keys.append("output")
+    attempt_by_item = _select_pass_attempts(
+        _column_rows(
+            db,
+            RunItemAttempt,
+            attempt_keys,
+            [
+                RunItemAttempt.run_id == run.id,
+                RunItemAttempt.pass_number == pass_number,
+            ],
+            item_ids=wanted_ids,
         )
-        .all()
     )
-    pass_scores_by_item: dict[str, dict[str, RunItemPassScore]] = {}
-    for score in pass_scores:
-        pass_scores_by_item.setdefault(score.item_id, {})[score.metric_name] = score
-
-    attempts = (
-        db.query(RunItemAttempt)
-        .filter(
-            RunItemAttempt.run_id == run.id,
-            RunItemAttempt.pass_number == pass_number,
+    recovered_outputs = (
+        _recover_pass_outputs(
+            db,
+            run,
+            pass_number,
+            {
+                attempt["item_id"]
+                for attempt in attempt_by_item.values()
+                if attempt.get("output") is None
+            },
         )
-        .all()
+        if with_payloads
+        else {}
     )
-    attempt_by_item: dict[str, RunItemAttempt] = {}
-    for attempt in attempts:
-        previous = attempt_by_item.get(attempt.item_id)
-        if (
-            previous is None
-            or attempt.is_last_attempt
-            or (
-                not previous.is_last_attempt
-                and int(attempt.attempt_number or 0)
-                > int(previous.attempt_number or 0)
-            )
-        ):
-            attempt_by_item[attempt.item_id] = attempt
 
-    missing_output_items = {
-        attempt.item_id
-        for attempt in attempt_by_item.values()
-        if attempt.output is None
-    }
-    recovered_outputs: dict[str, Any] = {}
-    if missing_output_items:
-        completed_events = (
-            db.query(RunEvent.payload)
-            .filter(RunEvent.run_id == run.id, RunEvent.type == "item_completed")
-            .order_by(RunEvent.sequence.asc())
-            .all()
-        )
-        for (payload,) in completed_events:
-            if not isinstance(payload, dict):
-                continue
-            if str(payload.get("item_id") or "") not in missing_output_items:
-                continue
-            try:
-                event_pass_number = max(1, int(payload.get("pass_number") or 1))
-            except (TypeError, ValueError):
-                event_pass_number = 1
-            if event_pass_number == pass_number and "output" in payload:
-                recovered_outputs[str(payload.get("item_id"))] = payload.get("output")
-
-    scoped_items: list[RunItem] = []
     scoped_scores: dict[str, dict[str, Any]] = {}
     for item in all_items:
-        scoped_item = copy.copy(item)
         metadata = dict(item.item_metadata) if isinstance(item.item_metadata, dict) else {}
         for key in (
             "root_cause",
@@ -1339,11 +1487,10 @@ def _load_run_items_and_scores(
             "analysis_warning",
         ):
             metadata.pop(key, None)
+        item_pass_scores = pass_scores_by_item.get(item.item_id) or {}
         metric_analyses: dict[str, Any] = {}
-        for metric_name, pass_score in (
-            pass_scores_by_item.get(item.item_id) or {}
-        ).items():
-            pass_meta = pass_score.meta if isinstance(pass_score.meta, dict) else {}
+        for metric_name, pass_score in item_pass_scores.items():
+            pass_meta = pass_score["meta"] if isinstance(pass_score["meta"], dict) else {}
             analysis = pass_meta.get(PASS_ANALYSIS_META_KEY)
             if isinstance(analysis, dict):
                 metric_analyses[metric_name] = dict(analysis)
@@ -1351,45 +1498,67 @@ def _load_run_items_and_scores(
             metadata["metric_analyses"] = metric_analyses
         else:
             metadata.pop("metric_analyses", None)
-        scoped_item.item_metadata = metadata
+        item.item_metadata = metadata
 
         attempt = attempt_by_item.get(item.item_id)
         if attempt is not None:
             # Older SDKs emitted item_completed before item_attempt_finished,
             # leaving the attempt output empty even though the event has it.
-            scoped_item.output = recovered_outputs.get(item.item_id, attempt.output)
-            scoped_item.error = attempt.error or None
-            scoped_item.latency_ms = attempt.latency_ms
-            scoped_item.trace_id = attempt.trace_id or ""
-            scoped_item.trace_url = attempt.trace_url or ""
+            item.output = recovered_outputs.get(item.item_id, attempt.get("output"))
+            item.error = attempt["error"] or None
+            item.latency_ms = attempt["latency_ms"]
+            item.trace_id = attempt["trace_id"] or ""
+            item.trace_url = attempt["trace_url"] or ""
         else:
-            scoped_item.output = None
+            item.output = None
             failed_pass = any(
-                str(score.label or "").lower() == "error"
-                for score in (pass_scores_by_item.get(item.item_id) or {}).values()
+                str(score["label"] or "").lower() == "error"
+                for score in item_pass_scores.values()
             )
-            scoped_item.error = (item.error or "Pass execution failed") if failed_pass else None
-            scoped_item.latency_ms = None
-            scoped_item.trace_id = ""
-            scoped_item.trace_url = ""
-        scoped_items.append(scoped_item)
+            item.error = (item.error or "Pass execution failed") if failed_pass else None
+            item.latency_ms = None
+            item.trace_id = ""
+            item.trace_url = ""
 
         item_scores: dict[str, Any] = {}
-        for metric_name, pass_score in (
-            pass_scores_by_item.get(item.item_id) or {}
-        ).items():
-            scoped_score = copy.copy(pass_score)
+        for metric_name, pass_score in item_pass_scores.items():
             # The analyzer expects the reduced-score interface.  A pass score
             # has the same semantic fields, so expose them on this read-only
-            # projection without attaching it to the SQLAlchemy session.
-            scoped_score.score_raw = pass_score.score_numeric
-            scoped_meta = dict(pass_score.meta) if isinstance(pass_score.meta, dict) else {}
+            # projection.
+            scoped_meta = dict(pass_score["meta"]) if isinstance(pass_score["meta"], dict) else {}
             scoped_meta.pop(PASS_ANALYSIS_META_KEY, None)
-            scoped_score.meta = scoped_meta
-            item_scores[metric_name] = scoped_score
+            item_scores[metric_name] = SimpleNamespace(
+                **{**pass_score, "meta": scoped_meta, "score_raw": pass_score["score_numeric"]}
+            )
         scoped_scores[item.item_id] = item_scores
 
-    return scoped_items, scoped_scores
+    return all_items, scoped_scores
+
+
+def _load_analysis_payloads(
+    db: Session,
+    run: Run,
+    pass_number: int | None,
+    items: Iterable[Any],
+) -> None:
+    """Fill input/expected/output on the selected (target) items in place."""
+    pending = {
+        item.item_id: item
+        for item in items
+        if not getattr(item, "_payloads_loaded", True)
+    }
+    if not pending:
+        return
+    loaded, _ = _load_run_items_and_scores(
+        db, run, pass_number, item_ids=list(pending), with_payloads=True
+    )
+    for source in loaded:
+        target = pending.get(source.item_id)
+        if target is None:
+            continue
+        for key in _ITEM_PAYLOAD_KEYS:
+            setattr(target, key, getattr(source, key, None))
+        target._payloads_loaded = True
 
 
 def _require_selected_pass_for_repeat_run(run: Run, pass_number: int | None) -> None:
@@ -2368,21 +2537,21 @@ def _active_approved_review_keys(
     normalized_item_ids = sorted({str(item_id) for item_id in item_ids if item_id})
     if not normalized_item_ids:
         return set()
-    rows = (
-        db.query(ReviewCorrection)
-        .filter(
+    keys: set[tuple[str, str | None]] = set()
+    for batch in _chunked(normalized_item_ids):
+        # Column query: approved rows carry full input/output snapshots.
+        rows = db.query(ReviewCorrection.item_id, ReviewCorrection.metric_name).filter(
             ReviewCorrection.run_id == run.id,
-            ReviewCorrection.item_id.in_(normalized_item_ids),
+            ReviewCorrection.item_id.in_(batch),
             ReviewCorrection.status == CorrectionStatus.APPROVED,
             ReviewCorrection.is_active.is_(True),
             ReviewCorrection.pass_number.is_(None),
         )
-        .all()
-    )
-    return {
-        (row.item_id, str(row.metric_name).strip() if row.metric_name else None)
-        for row in rows
-    }
+        keys.update(
+            (item_id, str(metric_name).strip() if metric_name else None)
+            for item_id, metric_name in rows
+        )
+    return keys
 
 
 def _review_key_is_approved(
@@ -3920,7 +4089,7 @@ async def _run_analysis_job(
         _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
         llm_config = _get_llm_config(db, run.project_id, request.connection_id)
         all_items, scores_by_item = _load_run_items_and_scores(
-            db, run, request.pass_number
+            db, run, request.pass_number, with_payloads=False
         )
         metric_specs = _load_metric_specs(db, run)
         metric_scope = _requested_metric_scope(request)
@@ -4073,6 +4242,10 @@ async def _run_analysis_job(
                 metric_name=result.metric_name,
             )
 
+        # Only the targets carry their input/expected/output into the model phase.
+        _load_analysis_payloads(
+            db, run, request.pass_number, (item for item, _ in analysis_targets)
+        )
         # Reads are done: no transaction may stay open across the model calls.
         _release_transaction_for_llm(db)
         results = await _analyze_targets_batch(
@@ -4299,7 +4472,7 @@ async def aggregate_saved_analysis_results(
     _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
 
     all_items, scores_by_item = _load_run_items_and_scores(
-        db, run, request.pass_number
+        db, run, request.pass_number, with_payloads=False
     )
     _validate_requested_metric(run, scores_by_item, request.metric)
     metric_scope = {request.metric} if request.metric else None
@@ -4398,7 +4571,7 @@ async def start_analysis_job(
     # filters and missing connections are reported to the initiating page.
     _get_llm_config(db, run.project_id, request.connection_id)
     all_items, scores_by_item = _load_run_items_and_scores(
-        db, run, request.pass_number
+        db, run, request.pass_number, with_payloads=False
     )
     metric_specs = _load_metric_specs(db, run)
     _validate_requested_metric(
@@ -4534,7 +4707,7 @@ async def analyze_run_items(
     llm_config = _get_llm_config(db, run.project_id, request.connection_id)
 
     all_items, scores_by_item = _load_run_items_and_scores(
-        db, run, request.pass_number
+        db, run, request.pass_number, with_payloads=False
     )
 
     metric_specs = _load_metric_specs(db, run)
@@ -4612,6 +4785,10 @@ async def analyze_run_items(
             **_persistence_totals([]),
         }
 
+    # Only the targets carry their input/expected/output into the model phase.
+    _load_analysis_payloads(
+        db, run, request.pass_number, (item for item, _ in analysis_targets)
+    )
     # Run async LLM analysis with no transaction open.
     _release_transaction_for_llm(db)
     results = await _analyze_targets_batch(
@@ -4736,7 +4913,7 @@ async def analyze_run_items_stream(
     llm_config = _get_llm_config(db, run.project_id, request.connection_id)
 
     all_items, scores_by_item = _load_run_items_and_scores(
-        db, run, request.pass_number
+        db, run, request.pass_number, with_payloads=False
     )
     metric_specs = _load_metric_specs(db, run)
     metric_scope = _requested_metric_scope(request)
@@ -4758,6 +4935,10 @@ async def analyze_run_items_stream(
                 db, run, {item.item_id for item in all_items}
             )
         ),
+    )
+    # Only the targets carry their input/expected/output into the model phase.
+    _load_analysis_payloads(
+        db, run, request.pass_number, (item for item, _ in analysis_targets)
     )
 
     async def stream_events():
@@ -6966,7 +7147,7 @@ def analyze_preview(
     _check_pass_version(db, run, request.pass_number, request.expected_pass_version)
 
     all_items, scores_by_item = _load_run_items_and_scores(
-        db, run, request.pass_number
+        db, run, request.pass_number, item_ids=[request.item_id]
     )
     item = next(
         (candidate for candidate in all_items if candidate.item_id == request.item_id),
@@ -7052,7 +7233,7 @@ async def analyze_test(
     llm_config = _get_llm_config(db, run.project_id, request.connection_id)
 
     all_items, all_scores_by_item = _load_run_items_and_scores(
-        db, run, request.pass_number
+        db, run, request.pass_number, item_ids=request.item_ids
     )
     items = [item for item in all_items if item.item_id in request.item_ids]
     if not items:
