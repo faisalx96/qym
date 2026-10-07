@@ -2,7 +2,7 @@
 
 ## Before you update
 
-- **Migrations `0072`–`0082` (head `0082`).** Evaluation Service environments, experiments, presets and best-run scores, filterable run versioning, admin-only private test sets and dataset read tokens. All are quick DDL. These revisions were numbered `0060`–`0070` before `main`'s `0060`–`0071` were merged; a database stamped with one of the old ids needs the one-time re-stamp in `docs/internal/OPERATIONS.md` ("Databases that ran the pre-merge eval branch").
+- **Migrations `0072`–`0083` (head `0083`).** Evaluation Service environments, experiments, presets and best-run scores, filterable run versioning, admin-only private test sets and dataset read tokens. All are quick DDL. These revisions were numbered `0060`–`0070` before `main`'s `0060`–`0071` were merged; a database stamped with one of the old ids needs the one-time re-stamp in `docs/internal/OPERATIONS.md` ("Databases that ran the pre-merge eval branch"). `0083` adds the job queue columns to `background_jobs` and the empty `service_heartbeats` table for the optional service split (main / ingestion / workers); the single-server layout is unchanged.
 
 # October 2026 — Platform 0.5.0 (SDK 1.8.0 unchanged)
 

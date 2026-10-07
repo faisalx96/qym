@@ -1878,7 +1878,7 @@ class RunTraceNamedContribution(Base):
 
 # Import projection mappings so Base.metadata includes their durable tables.
 from qym_platform.db.maintenance_models import MaintenanceJob  # noqa: E402,F401
-from qym_platform.db.background_job_models import BackgroundJob  # noqa: E402,F401
+from qym_platform.db.background_job_models import BackgroundJob, ServiceHeartbeat  # noqa: E402,F401
 from qym_platform.db.dashboard_models import (  # noqa: E402,F401
     DashboardChangeEvent, DashboardEventCause, DashboardRecordState,
     DashboardRecordCause, DashboardRunDimension, DashboardRunSummary,

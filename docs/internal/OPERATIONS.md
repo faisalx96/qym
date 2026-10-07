@@ -96,12 +96,12 @@ A component that tries to write anywhere else now fails loudly
 
 ## Migrations and large tables
 
-The combined migration chain has one head, `0082`, following `0050` through
-`0051`–`0081`. Migrations run before API readiness. Large storage rewrites and index
+The combined migration chain has one head, `0083`, following `0050` through
+`0051`–`0082`. Migrations run before API readiness. Large storage rewrites and index
 builds are deferred to maintenance jobs. Migration `0057` also backfills existing
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
-Migrations `0058`–`0082` are quick DDL or small job/queue inserts.
+Migrations `0058`–`0083` are quick DDL or small job/queue inserts.
 
 On PostgreSQL every `alembic upgrade` takes a per-schema advisory lock, so
 replicas that start together migrate one at a time (the others wait, then find
@@ -221,7 +221,7 @@ WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.r
 ### Deploy and run maintenance
 
 1. Deploy the new API with the default `QYM_ROLE=all`. Wait for migration head
-   `0082` and a healthy API. The API process then runs every queued job itself.
+   `0083` and a healthy API. The API process then runs every queued job itself.
    Do not restart the API while a job runs; the job resumes, but each restart
    costs time. Optional split layout: set `QYM_ROLE=api` on the API and start
    one worker with the same image and configuration, `QYM_ROLE=worker`, and
@@ -368,7 +368,7 @@ Use this layout to keep long maintenance jobs away from API rollouts and probes,
 or to run several API replicas with one background process. Same image as the
 API; only the command and two variables differ. One replica. Inherit maintenance
 mode and retention settings from the same configuration as the API. Start this
-deployment only after the API has migrated to `0082`.
+deployment only after the API has migrated to `0083`.
 
 ```yaml
 apiVersion: apps/v1
@@ -527,7 +527,7 @@ Steps:
 
 1. Set `QYM_LLM_CONFIG_ENCRYPTION_KEY` on every API and worker process (if it isn't
    already set for LLM connections), plus any `QYM_EVAL_*` overrides.
-2. Deploy the image. The API applies migrations up to `0082` before it reports ready,
+2. Deploy the image. The API applies migrations up to `0083` before it reports ready,
    as for every release. A split worker starts after the API, with
    `QYM_SKIP_MIGRATIONS=1`. On a large `runs` table, time the `0073` scan on a
    populated copy before setting readiness deadlines.
