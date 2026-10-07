@@ -2850,8 +2850,14 @@
             }
             const ref = wstate.draftRef;
             const ver = wstate.draftVersion || state.versionLabel;
-            const resp = await apiFetch('/v1/datasets/' + encodeURIComponent(ref) + '/versions/' + encodeURIComponent(ver) + '/items:bulk?project_slug=' + encodeURIComponent(state.slug), { method: 'POST', body: { upserts: upserts } });
-            Shell.toast(pluralize(resp.summary.created + resp.summary.updated, 'item') + ' added', 'success');
+            // The bulk endpoint takes at most 1000 entries per request.
+            const bulkUrl = '/v1/datasets/' + encodeURIComponent(ref) + '/versions/' + encodeURIComponent(ver) + '/items:bulk?project_slug=' + encodeURIComponent(state.slug);
+            let added = 0;
+            for (let start = 0; start < upserts.length || start === 0; start += 1000) {
+              const resp = await apiFetch(bulkUrl, { method: 'POST', body: { upserts: upserts.slice(start, start + 1000) } });
+              added += resp.summary.created + resp.summary.updated;
+            }
+            Shell.toast(pluralize(added, 'item') + ' added', 'success');
             close();
             refreshDetailView({ force: true });
           }
