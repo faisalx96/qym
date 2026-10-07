@@ -48,7 +48,6 @@ qym --task-file examples/example.py \
 ## Environment Variables
 - SDK: `QYM_BASE_URL`, `QYM_API_KEY`, `QYM_PLATFORM_DEBUG`, `QYM_DATASET_READ_TOKEN` (optional, admin-issued per project; lets a service read private test sets — sent only on dataset reads, runs still use `QYM_API_KEY`)
 - Platform: `QYM_ENVIRONMENT`, `QYM_DATABASE_URL`, `QYM_AUTH_MODE`, `QYM_ADMIN_BOOTSTRAP_TOKEN`, `QYM_BASE_URL`, `QYM_ALLOW_PRIVATE_LLM_BASE_URLS`, `QYM_RUN_STALE_TIMEOUT_SECONDS` (default 180), `QYM_EVAL_JOB_TIMEOUT_SECONDS` (default 8100)
-- Langfuse: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`
 - Langfuse trace links (optional, platform compare view): `LANGFUSE_HOST` (or `LANGFUSE_BASE_URL`), `LANGFUSE_PROJECT_ID`
 
 ## Coding Style & Naming Conventions

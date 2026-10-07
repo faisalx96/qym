@@ -5809,7 +5809,8 @@
     state.filterVersions.clear();
     state.filterDatasets.clear();
     state.filterUsers.clear();
-    state.filterVersioning.clear();
+    // In place: the open dropdowns keep a reference to each selection set.
+    state.filterVersioning.forEach(selection => selection.clear());
     state.quickFilter = 'all';
     setQuickFilterSelection('all');
     state.filterOrigin = 'all';

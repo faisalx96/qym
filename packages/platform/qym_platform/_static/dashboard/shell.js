@@ -359,6 +359,7 @@
   // their own notices (they can mix projects).
   var ARCHIVED_NOTICE_PAGES = {
     runs: true, overview: true, charts: true, models: true, datasets: true, settings: true, 'run-detail': true,
+    experiments: true, 'experiments-queue': true,
   };
 
   function renderArchivedNotice() {

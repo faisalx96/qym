@@ -336,7 +336,7 @@ def test_runs_badges_separate_error_types_without_changing_item_math() -> None:
     assert "run.samples > 1 ? ' across all passes' : ''" in source
     assert "const retryScope = run.samples > 1 ? ' across all passes' : ' across all items';" in source
     assert "${retryScope}" in source
-    assert "dashboard.js?v=p1-20261005-9" in index
+    assert "dashboard.js?v=p1-20261006-1" in index
 
 
 def test_run_column_wraps_names_at_400px() -> None:
@@ -393,7 +393,7 @@ def test_repeat_parent_checkbox_selects_its_current_scope() -> None:
     assert "isPartiallySelected" not in source
     assert "state.selectedRuns.delete(filePath);" in source
     assert "if (!allSelected) refs.forEach(ref => state.selectedRuns.add(ref));" in source
-    assert "dashboard.js?v=p1-20261005-9" in index
+    assert "dashboard.js?v=p1-20261006-1" in index
 
 
 def test_repeat_comparison_selection_expands_to_exact_passes() -> None:
@@ -3407,7 +3407,7 @@ def test_auto_analysis_is_a_first_class_project_page() -> None:
     assert '"type": "retrying"' in analysis_api
     assert "state.phase === 'retrying'" in playground
     assert "Retrying timed-out analysis…" in playground
-    assert "playground.js?v=p1-20261005-3" in (
+    assert "playground.js?v=p1-20261006-1" in (
         DASHBOARD_DIR / "analyzer.html"
     ).read_text(encoding="utf-8")
     assert "Timeout retries: <strong>" in playground

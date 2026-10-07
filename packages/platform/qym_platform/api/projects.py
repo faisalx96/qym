@@ -1602,6 +1602,10 @@ def _delete_project_rows(db: Session, project_id: str) -> None:
     db.query(ApiKey).filter(ApiKey.project_id == project_id).delete(
         synchronize_session=False
     )
+    # Revoked tokens too: the rows keep a foreign key to the project.
+    db.query(DatasetReadToken).filter(DatasetReadToken.project_id == project_id).delete(
+        synchronize_session=False
+    )
     db.query(ProjectLlmConnection).filter(
         ProjectLlmConnection.project_id == project_id
     ).delete(synchronize_session=False)

@@ -524,6 +524,7 @@ def build_overview_postgres(
             Dimension.status.collate("C").label("status"),
             Dimension.version.collate("C").label("version"),
             Dimension.owner.collate("C").label("owner_id"),
+            _FILTER_COLUMNS["origins"].collate("C").label("origin"),
             Dimension.timestamp.label("timestamp"),
             Summary.projection_revision.label("revision"),
             func.row_number().over(order_by=legacy).label("pos_g"),
@@ -904,6 +905,7 @@ def _filter_parts(scope, filter_names):
         "statuses": s.status,
         "versions": s.version,
         "users": s.owner_id,
+        "origins": s.origin,
     }
     sort_columns = {
         "tasks": s.task,
@@ -1145,8 +1147,9 @@ SHARED_MAX_AGE = timedelta(days=1)
 SHARED_PER_PROJECT = 200
 # Bump when the stored payload changes shape, so pods of a new release never
 # read an entry an older release stored for the same revision. 2: a filter
-# entry holds only its filtered part.
-SHARED_SHAPE = 2
+# entry holds only its filtered part. 3: the filtered facets carry origins
+# and versioning.
+SHARED_SHAPE = 3
 # Key prefixes: the whole-project part and one filter's part.
 _PROJECT_PART = "p:"
 _FILTER_PART = "f:"

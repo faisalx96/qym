@@ -38,6 +38,7 @@ from qym_platform.db.models import (
     DatasetAlias,
     DatasetItem,
     DatasetItemRevision,
+    DatasetReadToken,
     DatasetVersion,
     DatasetVersionChange,
     DatasetVersionStatus,
@@ -140,6 +141,14 @@ def _create_project(client, session_factory, slug: str) -> str:
                 characters=4,
             )
         )
+        # One live and one revoked read token: both keep a foreign key.
+        for index, revoked in enumerate((None, datetime.utcnow())):
+            db.add(
+                DatasetReadToken(
+                    project_id=project_id, name=f"svc-{index}", prefix=f"qrt{index}{slug}"[:16],
+                    token_hash=b"x", created_by_user_id="admin", revoked_at=revoked,
+                )
+            )
         dataset = Dataset(id=f"ds-{slug}", project_id=project_id, name="golden", slug="golden", created_by_user_id="mgr")
         db.add(dataset)
         db.flush()
@@ -209,6 +218,9 @@ def _row_counts(session_factory, project_id: str) -> dict:
         return {
             "project": db.query(Project).filter(Project.id == project_id).count(),
             "keys": db.query(ApiKey).filter(ApiKey.project_id == project_id).count(),
+            "read_tokens": db.query(DatasetReadToken)
+            .filter(DatasetReadToken.project_id == project_id)
+            .count(),
             "members": db.query(ProjectMembership).filter(ProjectMembership.project_id == project_id).count(),
             "llm": db.query(ProjectLlmConnection).filter(ProjectLlmConnection.project_id == project_id).count(),
             "docs": db.query(AnalyzerDocument).filter(AnalyzerDocument.project_id == project_id).count(),
@@ -284,7 +296,7 @@ def test_delete_removes_datasets_llm_connections_and_settings(client, session_fa
     assert response.json()["deleted"] is True
     assert response.json()["counts"]["datasets"] == 1
     assert _row_counts(session_factory, project_id) == {
-        "project": 0, "keys": 0, "members": 0, "llm": 0, "docs": 0,
+        "project": 0, "keys": 0, "read_tokens": 0, "members": 0, "llm": 0, "docs": 0,
         "datasets": 0, "versions": 0, "rules": 0, "catalogs": 0,
     }
     with session_factory() as db:
