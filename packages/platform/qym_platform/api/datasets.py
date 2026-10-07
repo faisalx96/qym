@@ -2,24 +2,27 @@ from __future__ import annotations
 
 import codecs
 import csv
+import hashlib
 import io
+import itertools
 import json
 import re
 import unicodedata
 from collections import defaultdict
 from datetime import datetime
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Iterator, Optional
 from urllib.parse import quote
 from uuid import uuid4
 
 from fastapi import APIRouter, Body, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 
 from qym_platform.uploads import read_upload
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import String, cast, func
+from sqlalchemy import DateTime, String, and_, bindparam, case, cast, func, insert, literal, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm.attributes import flag_modified
 
 from qym_platform.auth import Principal, require_api_key_scope, require_ui_principal, resolve_api_key_principal
@@ -52,7 +55,7 @@ from qym_platform.permissions import (
 )
 from qym_platform.services.dataset_read_tokens import HEADER as DATASET_READ_TOKEN_HEADER
 from qym_platform.services.dataset_read_tokens import token_grants_project
-from qym_platform.services.dataset_search import filter_dataset_item_search
+from qym_platform.services.dataset_search import dataset_item_search_text, filter_dataset_item_search
 from qym_platform.services.dataset_versions import (
     change_counts_for,
     store_change_counts,
@@ -962,8 +965,12 @@ def _detach_item_run_results(db: Session, item: DatasetItem) -> None:
 
 
 def _content_hash(items: Iterable[DatasetItem]) -> str:
-    import hashlib
+    """SHA-256 of a version's items in (index, item_id) order.
 
+    The routes compute the same digest with :class:`_ContentHasher` while they
+    stream items; this whole-list form is the reference definition (tests
+    assert the two agree).
+    """
     payload = [
         {
             "item_id": item.item_id,
@@ -977,6 +984,85 @@ def _content_hash(items: Iterable[DatasetItem]) -> str:
     ]
     raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+class _ContentHasher:
+    """Incremental :func:`_content_hash`: feed items in (index, item_id) order.
+
+    Hashes the same bytes as ``json.dumps([payload, ...])`` with the same
+    options, one item at a time, so no list of payloads or giant JSON string is
+    built.
+    """
+
+    def __init__(self) -> None:
+        self._sha = hashlib.sha256(b"[")
+        self._first = True
+
+    def update(
+        self, item_id: str, input_value: Any, expected: Any, metadata: Any, labels: Any, fingerprint: Optional[str]
+    ) -> None:
+        payload = {
+            "item_id": item_id,
+            "input": input_value,
+            "expected_output": expected,
+            "metadata": metadata or {},
+            "labels": labels or [],
+            "fingerprint": fingerprint,
+        }
+        if not self._first:
+            self._sha.update(b",")
+        self._first = False
+        raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str)
+        self._sha.update(raw.encode("utf-8"))
+
+    def hexdigest(self) -> str:
+        sha = self._sha.copy()
+        sha.update(b"]")
+        return sha.hexdigest()
+
+
+def _stream_version_hash(db: Session, version_id: str) -> tuple[int, str]:
+    """Item count and content hash of a version, streamed from the database.
+
+    Rows are read in batches over the hashed columns only (no ORM objects).
+    Rows sharing an index are re-sorted by item_id in Python, so the order is
+    exactly ``_content_hash``'s (index, item_id) whatever the database collation.
+    Raises 409 on a duplicate item_id, as publishing always has.
+    """
+    rows = (
+        db.query(
+            DatasetItem.index,
+            DatasetItem.item_id,
+            DatasetItem.input,
+            DatasetItem.expected_output,
+            DatasetItem.item_metadata,
+            DatasetItem.labels,
+            DatasetItem.fingerprint,
+        )
+        .filter(DatasetItem.dataset_version_id == version_id)
+        .order_by(DatasetItem.index, DatasetItem.id)
+        .yield_per(1000)
+    )
+    hasher = _ContentHasher()
+    seen: set[str] = set()
+    count = 0
+    group: list[Any] = []
+
+    def flush_group() -> None:
+        for row in sorted(group, key=lambda r: r.item_id):
+            hasher.update(row.item_id, row.input, row.expected_output, row.item_metadata, row.labels, row.fingerprint)
+        group.clear()
+
+    for row in rows:
+        if row.item_id in seen:
+            raise HTTPException(status_code=409, detail=f"Duplicate item_id: {row.item_id}")
+        seen.add(row.item_id)
+        count += 1
+        if group and group[0].index != row.index:
+            flush_group()
+        group.append(row)
+    flush_group()
+    return count, hasher.hexdigest()
 
 
 def _parse_cell(raw: Any) -> Any:
@@ -1075,13 +1161,34 @@ def _legacy_text_score(text: str) -> int:
     return total
 
 
-def _decode_csv(raw: bytes, encoding: Optional[str] = None) -> tuple[str, str]:
-    """Decode an uploaded CSV. Returns the text and the encoding label that was used.
+# Encoding checks decode in chunks of this many bytes, so a large upload is never
+# held in memory a second time as one decoded string per candidate encoding.
+_DECODE_CHUNK_BYTES = 1 << 20
+
+
+def _decodes(raw: bytes, codec: str) -> bool:
+    """Whether ``raw`` decodes with ``codec``, checked chunk by chunk (no full copy)."""
+    decoder = codecs.getincrementaldecoder(codec)()
+    try:
+        for start in range(0, len(raw), _DECODE_CHUNK_BYTES):
+            decoder.decode(raw[start : start + _DECODE_CHUNK_BYTES], False)
+        decoder.decode(b"", True)
+    except UnicodeDecodeError:
+        return False
+    return True
+
+
+def _detect_csv_encoding(raw: bytes, encoding: Optional[str] = None) -> tuple[str, str, bool]:
+    """The codec, encoding label and whether to strip leading BOMs for an uploaded CSV.
 
     An explicit ``encoding`` (from the upload wizard's Encoding choice) is honored or
     rejected; otherwise BOMs and strict UTF-8 win, and a non-UTF-8 file is decoded with
     the legacy encoding whose result looks most like real text (Windows-1256 Arabic
     exports from Excel no longer turn into Windows-1252 mojibake).
+
+    Every candidate is validated over the whole file, but incrementally; only the
+    legacy candidates' leading sample is decoded in full for scoring. The legacy
+    encodings are single-byte, so the first N bytes are exactly the first N characters.
     """
     if not raw:
         raise HTTPException(status_code=400, detail="CSV file is empty")
@@ -1092,53 +1199,71 @@ def _decode_csv(raw: bytes, encoding: Optional[str] = None) -> tuple[str, str]:
             raise HTTPException(status_code=400, detail=f"Unsupported CSV encoding: {encoding}")
         if codec.startswith("utf-16") and raw.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
             codec = "utf-16"
-        try:
-            return raw.decode(codec).lstrip("\uFEFF"), requested
-        except UnicodeDecodeError as exc:
-            label = requested.upper() if requested.startswith("utf") else requested
-            raise HTTPException(
-                status_code=400,
-                detail=f"The file is not valid {label}. Choose the file's real encoding. {_CSV_ENCODING_HELP}",
-            ) from exc
+        if _decodes(raw, codec):
+            return codec, requested, True
+        label = requested.upper() if requested.startswith("utf") else requested
+        raise HTTPException(
+            status_code=400,
+            detail=f"The file is not valid {label}. Choose the file's real encoding. {_CSV_ENCODING_HELP}",
+        )
     if raw.startswith((codecs.BOM_UTF32_LE, codecs.BOM_UTF32_BE)):
-        try:
-            return raw.decode("utf-32"), "utf-32"
-        except UnicodeDecodeError:
-            pass
+        if _decodes(raw, "utf-32"):
+            return "utf-32", "utf-32", False
     elif raw.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
-        try:
-            return raw.decode("utf-16"), "utf-16"
-        except UnicodeDecodeError:
-            pass
+        if _decodes(raw, "utf-16"):
+            return "utf-16", "utf-16", False
     else:
-        try:
-            return raw.decode("utf-8-sig"), "utf-8"
-        except UnicodeDecodeError:
-            pass
-        best: Optional[tuple[int, str, str]] = None
+        if _decodes(raw, "utf-8-sig"):
+            return "utf-8-sig", "utf-8", False
+        best: Optional[tuple[int, str]] = None
+        sample = raw[:_ENCODING_SAMPLE_CHARS]
         for label in _LEGACY_CSV_ENCODINGS:
-            try:
-                text = raw.decode(_CSV_ENCODINGS[label])
-            except UnicodeDecodeError:
+            codec = _CSV_ENCODINGS[label]
+            if not _decodes(raw, codec):
                 continue
-            score = _legacy_text_score(text[:_ENCODING_SAMPLE_CHARS])
+            score = _legacy_text_score(sample.decode(codec))
             if best is None or score > best[0]:
-                best = (score, label, text)
+                best = (score, label)
         if best is not None:
-            return best[2], best[1]
+            return _CSV_ENCODINGS[best[1]], best[1], False
     raise HTTPException(
         status_code=400,
         detail=f"Could not detect the CSV encoding. {_CSV_ENCODING_HELP}",
     )
 
 
+def _decode_csv(raw: bytes, encoding: Optional[str] = None) -> tuple[str, str]:
+    """Decode an uploaded CSV. Returns the text and the encoding label that was used."""
+    codec, label, strip_bom = _detect_csv_encoding(raw, encoding)
+    text = raw.decode(codec)
+    return (text.lstrip("\uFEFF") if strip_bom else text), label
+
+
+_CSV_SNIFF_CHARS = 65536
+
+
 def _csv_reader(raw: bytes, encoding: Optional[str] = None) -> tuple[csv.DictReader, str]:
-    text, used_encoding = _decode_csv(raw, encoding)
+    """A DictReader that decodes the file line by line (no full decoded copy)."""
+    codec, used_encoding, strip_bom = _detect_csv_encoding(raw, encoding)
+    # newline="" as for a csv file: lines keep their endings and quoted fields
+    # may span lines, exactly like io.StringIO(text, newline="").
+    stream = io.TextIOWrapper(io.BytesIO(raw), encoding=codec, newline="")
+    head: list[str] = []
+    head_chars = 0
+    for line in stream:
+        if not head and strip_bom:
+            line = line.lstrip("\uFEFF")
+            if not line:
+                continue
+        head.append(line)
+        head_chars += len(line)
+        if head_chars >= _CSV_SNIFF_CHARS:
+            break
     try:
-        dialect = csv.Sniffer().sniff(text[:65536], delimiters=",;\t|")
+        dialect = csv.Sniffer().sniff("".join(head)[:_CSV_SNIFF_CHARS], delimiters=",;\t|")
     except csv.Error:
         dialect = csv.excel
-    return csv.DictReader(io.StringIO(text, newline=""), dialect=dialect), used_encoding
+    return csv.DictReader(itertools.chain(head, stream), dialect=dialect), used_encoding
 
 
 def _items_from_csv(
@@ -1237,22 +1362,27 @@ def _items_from_jsonl(raw: bytes) -> list[Dict[str, Any]]:
     items: list[Dict[str, Any]] = []
     problems: list[str] = []
     record_count = 0
-    # Split on newlines only (like the browser import), so U+2028 inside a string is not a line break.
-    for line_no, line in enumerate(_decode_json_text(raw, "JSONL").split("\n"), start=1):
-        text = line.strip()
-        if not text:
-            continue
-        record_count += 1
-        try:
-            obj = json.loads(text)
-        except json.JSONDecodeError as exc:
-            problems.append(f"line {line_no} is not valid JSON ({exc.msg})")
-            continue
-        problem = _json_record_problem(obj)
-        if problem:
-            problems.append(f"line {line_no} {problem}")
-            continue
-        items.append(_json_record_item(obj))
+    # Split on newlines only (like the browser import), so U+2028 inside a string is
+    # not a line break. Lines are decoded one at a time: no full decoded copy.
+    stream = io.TextIOWrapper(io.BytesIO(raw), encoding="utf-8-sig", newline="\n")
+    try:
+        for line_no, line in enumerate(stream, start=1):
+            text = line.strip()
+            if not text:
+                continue
+            record_count += 1
+            try:
+                obj = json.loads(text)
+            except json.JSONDecodeError as exc:
+                problems.append(f"line {line_no} is not valid JSON ({exc.msg})")
+                continue
+            problem = _json_record_problem(obj)
+            if problem:
+                problems.append(f"line {line_no} {problem}")
+                continue
+            items.append(_json_record_item(obj))
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=400, detail="JSONL files must be UTF-8 encoded") from exc
     if problems:
         shown = "; ".join(problems[:_MAX_REPORTED_LINE_ERRORS])
         more = len(problems) - _MAX_REPORTED_LINE_ERRORS
@@ -1310,9 +1440,22 @@ def _upload_format(requested: str, filename: str, raw: bytes) -> str:
     return "csv"
 
 
-def _insert_items(db: Session, version: DatasetVersion, items: list[Dict[str, Any]]) -> None:
+_INSERT_BATCH_SIZE = 1000
+
+
+def _insert_items(db: Session, version_id: str, items: list[Dict[str, Any]]) -> tuple[int, str]:
+    """Insert parsed items in batches with Core inserts (no ORM objects kept).
+
+    Returns the item count and the content hash, computed while inserting: the
+    items go in index order, which is the hash order. ``search_text`` is
+    written here because Core inserts skip the ORM listener that sets it.
+    """
     duplicate_counts: dict[str, int] = defaultdict(int)
     seen_ids: set[str] = set()
+    hasher = _ContentHasher()
+    table = DatasetItem.__table__
+    batch: list[Dict[str, Any]] = []
+    now = utc_now_naive()
     for index, source in enumerate(items):
         input_value = _json_safe(source.get("input"))
         expected = _json_safe(source.get("expected_output"))
@@ -1326,21 +1469,100 @@ def _insert_items(db: Session, version: DatasetVersion, items: list[Dict[str, An
         if item_id in seen_ids:
             raise HTTPException(status_code=409, detail=f"Duplicate item_id: {item_id}")
         seen_ids.add(item_id)
-        db.add(
-            DatasetItem(
-                dataset_version_id=version.id,
-                item_id=item_id,
-                index=index,
-                input=input_value,
-                expected_output=expected,
-                item_metadata=metadata,
-                labels=labels,
-                fingerprint=fingerprint,
-                created_at=utc_now_naive(),
-                updated_at=utc_now_naive(),
-            )
+        hasher.update(item_id, input_value, expected, metadata, labels, fingerprint)
+        batch.append(
+            {
+                "dataset_version_id": version_id,
+                "item_id": item_id,
+                "index": index,
+                "input": input_value,
+                "expected_output": expected,
+                "metadata": metadata,
+                "labels": labels,
+                "fingerprint": fingerprint,
+                "search_text": dataset_item_search_text(item_id, input_value, expected, metadata),
+                "created_at": now,
+                "updated_at": now,
+            }
         )
-    version.item_count = len(items)
+        if len(batch) >= _INSERT_BATCH_SIZE:
+            db.execute(insert(table), batch)
+            batch = []
+    if batch:
+        db.execute(insert(table), batch)
+    return len(items), hasher.hexdigest()
+
+
+def _copy_items(db: Session, from_version_id: str, to_version_id: str) -> None:
+    """Copy every item of one version into another with one INSERT ... SELECT.
+
+    No item body passes through Python. Copies keep their stored values (item
+    ID, index, bodies, labels, fingerprint, search text) and get new
+    timestamps, as the ORM copy did.
+    """
+    now = utc_now_naive()
+    columns = (
+        "item_id",
+        "index",
+        "input",
+        "expected_output",
+        "metadata",
+        "labels",
+        "fingerprint",
+        "search_text",
+    )
+    source = DatasetItem.__table__.c
+    rows = (
+        select(
+            literal(to_version_id).label("dataset_version_id"),
+            *(source[name] for name in columns),
+            literal(now, DateTime).label("created_at"),
+            literal(now, DateTime).label("updated_at"),
+        )
+        .where(source.dataset_version_id == from_version_id)
+        .order_by(source.index, source.id)
+    )
+    db.execute(
+        insert(DatasetItem.__table__).from_select(
+            ["dataset_version_id", *columns, "created_at", "updated_at"], rows
+        )
+    )
+    # Rows written before search_text existed copy a NULL; give the copies the
+    # text an ORM insert would have written (normally there are none).
+    last_id = 0
+    while True:
+        pending = (
+            db.query(
+                DatasetItem.id,
+                DatasetItem.item_id,
+                DatasetItem.input,
+                DatasetItem.expected_output,
+                DatasetItem.item_metadata,
+            )
+            .filter(
+                DatasetItem.dataset_version_id == to_version_id,
+                DatasetItem.search_text.is_(None),
+                DatasetItem.id > last_id,
+            )
+            .order_by(DatasetItem.id)
+            .limit(_INSERT_BATCH_SIZE)
+            .all()
+        )
+        if not pending:
+            return
+        last_id = pending[-1].id
+        db.execute(
+            DatasetItem.__table__.update()
+            .where(DatasetItem.__table__.c.id == bindparam("pk"))
+            .values(search_text=bindparam("text")),
+            [
+                {
+                    "pk": row.id,
+                    "text": dataset_item_search_text(row.item_id, row.input, row.expected_output, row.item_metadata),
+                }
+                for row in pending
+            ],
+        )
 
 
 class CreateDatasetRequest(BaseModel):
@@ -1792,21 +2014,7 @@ def create_version(
     db.add(version)
     db.flush()
     if parent:
-        for item in db.query(DatasetItem).filter(DatasetItem.dataset_version_id == parent.id).order_by(DatasetItem.index).all():
-            db.add(
-                DatasetItem(
-                    dataset_version_id=version.id,
-                    item_id=item.item_id,
-                    index=item.index,
-                    input=item.input,
-                    expected_output=item.expected_output,
-                    item_metadata=dict(item.item_metadata or {}),
-                    labels=list(item.labels or []),
-                    fingerprint=item.fingerprint,
-                    created_at=utc_now_naive(),
-                    updated_at=utc_now_naive(),
-                )
-            )
+        _copy_items(db, parent.id, version.id)
         version.item_count = parent.item_count
     _record_change(
         db, version, {"type": "created", "from_version_id": parent.id if parent else None}, actor_user_id=principal.user.id
@@ -1830,22 +2038,18 @@ def publish_version(
     version = _resolve_version(db, dataset, version_ref)
     if req.set_alias:
         _require_alias_permission(db, principal, dataset, req.set_alias)
-    items = db.query(DatasetItem).filter(DatasetItem.dataset_version_id == version.id).order_by(DatasetItem.index).all()
-    if not items:
+    # Streamed over the hashed columns: no ORM item objects, no payload list.
+    item_count, content_hash = _stream_version_hash(db, version.id)
+    if not item_count:
         raise HTTPException(status_code=400, detail="Cannot publish an empty dataset version")
-    seen = set()
-    for item in items:
-        if item.item_id in seen:
-            raise HTTPException(status_code=409, detail=f"Duplicate item_id: {item.item_id}")
-        seen.add(item.item_id)
     version.status = DatasetVersionStatus.PUBLISHED
-    version.item_count = len(items)
-    version.content_hash = _content_hash(items)
+    version.item_count = item_count
+    version.content_hash = content_hash
     version.published_by_user_id = principal.user.id
     version.published_at = utc_now_naive()
     version.updated_at = utc_now_naive()
-    _record_change(db, version, {"type": "published", "item_count": len(items)}, actor_user_id=principal.user.id)
-    _audit(db, principal, "dataset.version_published", dataset, after={"version": version.version, "item_count": len(items)})
+    _record_change(db, version, {"type": "published", "item_count": item_count}, actor_user_id=principal.user.id)
+    _audit(db, principal, "dataset.version_published", dataset, after={"version": version.version, "item_count": item_count})
     _store_published_counts(db, version)
     if req.set_alias:
         _set_alias(db, dataset, req.set_alias, version, principal)
@@ -3066,10 +3270,78 @@ async def upload_dataset(
     - ``create_only``: always create a new dataset; 409 if the name or slug is taken.
     - neither (SDK/CI default): append to the dataset with the same name or slug,
       otherwise create it. A different name that only shares the slug is a 409.
+
+    Only the multipart read runs on the event loop; parsing and the database
+    work run in the threadpool, so a large file never blocks other requests.
     """
     _require_scope(principal, "datasets:write")
     # Bounded read before any database work: an oversized file is a 413.
     raw = await read_upload(file)
+    return await run_in_threadpool(
+        _upload_dataset_sync,
+        db=db,
+        principal=principal,
+        raw=raw,
+        filename=file.filename or "",
+        name=name,
+        project_slug=project_slug,
+        version=version,
+        version_name=version_name,
+        description=description,
+        tags=tags,
+        labels=labels,
+        publish=publish,
+        set_alias=set_alias,
+        input_col=input_col,
+        expected_col=expected_col,
+        input_cols=input_cols,
+        expected_cols=expected_cols,
+        id_col=id_col,
+        metadata_cols=metadata_cols,
+        label_cols=label_cols,
+        upload_format=upload_format,
+        encoding=encoding,
+        create_only=create_only,
+        dataset_ref=dataset_ref,
+        private_test_set=private_test_set,
+    )
+
+
+def _upload_dataset_sync(
+    *,
+    db: Session,
+    principal: Principal,
+    raw: bytes,
+    filename: str,
+    name: str,
+    project_slug: Optional[str],
+    version: str,
+    version_name: str,
+    description: str,
+    tags: str,
+    labels: str,
+    publish: bool,
+    set_alias: Optional[str],
+    input_col: str,
+    expected_col: str,
+    input_cols: str,
+    expected_cols: str,
+    id_col: Optional[str],
+    metadata_cols: str,
+    label_cols: str,
+    upload_format: str,
+    encoding: str,
+    create_only: bool,
+    dataset_ref: Optional[str],
+    private_test_set: bool,
+) -> Dict[str, Any]:
+    """The upload's checks, parse and writes (runs in the threadpool).
+
+    Order keeps locks short: every check reads first, the read transaction ends
+    before the file is parsed (no connection is held, nothing is idle in a
+    transaction), and only then are the dataset, version and items written,
+    in one short transaction.
+    """
     project = _project_for_request(db, principal, project_slug, write=True)
     clean_name = (name or "").strip()
     if not clean_name:
@@ -3094,14 +3366,6 @@ async def upload_dataset(
     if dataset and publish and set_alias:
         # Refuse before anything is written: an upload must not move production for a member.
         _require_alias_permission(db, principal, dataset, set_alias)
-    if dataset:
-        if private_test_set:
-            dataset.private_test_set = True
-    else:
-        _free_slug_from_deleted(db, project, slug)
-        dataset = Dataset(id=str(uuid4()), project_id=project.id, name=clean_name, slug=slug, description=description, tags=_labels(tags), private_test_set=private_test_set, created_by_user_id=principal.user.id, created_at=utc_now_naive(), updated_at=utc_now_naive())
-        db.add(dataset)
-        db.flush()
     # New-style callers (the dashboard) send the multi-column params input_cols/expected_cols,
     # where an empty expected_cols genuinely means "no expected output". Legacy callers (the SDK)
     # send the single-column input_col/expected_col, which carry the historical defaults.
@@ -3111,7 +3375,12 @@ async def upload_dataset(
     else:
         input_columns = [input_col] if input_col else []
         expected_columns = [expected_col] if expected_col else []
-    filename = file.filename or ""
+    project_id = project.id
+    dataset_id = dataset.id if dataset else None
+    user_id = principal.user.id
+    # End the read transaction before the (possibly long) parse.
+    db.rollback()
+
     source_type = _upload_format(upload_format, filename, raw)
     used_encoding: Optional[str] = None
     if source_type == "jsonl":
@@ -3128,6 +3397,20 @@ async def upload_dataset(
             label_cols=_labels(label_cols),
             encoding=encoding or None,
         )
+    del raw
+
+    if dataset_id:
+        dataset = db.get(Dataset, dataset_id)
+        if dataset is None or dataset.deleted_at is not None:
+            raise HTTPException(status_code=404, detail="Dataset not found")
+        if private_test_set:
+            dataset.private_test_set = True
+    else:
+        project = db.get(Project, project_id)
+        _free_slug_from_deleted(db, project, slug)
+        dataset = Dataset(id=str(uuid4()), project_id=project_id, name=clean_name, slug=slug, description=description, tags=_labels(tags), private_test_set=private_test_set, created_by_user_id=user_id, created_at=utc_now_naive(), updated_at=utc_now_naive())
+        db.add(dataset)
+        db.flush()
     version_label, display_name = _version_identity(db, dataset, version, version_name)
     schema = {"input_cols": input_columns, "expected_cols": expected_columns, "id_col": id_col, "metadata_cols": _labels(metadata_cols), "label_cols": _labels(label_cols)}
     if used_encoding:
@@ -3143,23 +3426,24 @@ async def upload_dataset(
         source_uri=filename,
         labels=_labels(labels),
         schema=schema,
-        created_by_user_id=principal.user.id,
+        created_by_user_id=user_id,
         created_at=utc_now_naive(),
         updated_at=utc_now_naive(),
     )
     db.add(version_row)
     db.flush()
-    _insert_items(db, version_row, items)
+    item_count, content_hash = _insert_items(db, version_row.id, items)
+    del items
+    version_row.item_count = item_count
     _record_change(
-        db, version_row, {"type": "uploaded", "source_type": source_type, "item_count": len(items)}, actor_user_id=principal.user.id
+        db, version_row, {"type": "uploaded", "source_type": source_type, "item_count": item_count}, actor_user_id=user_id
     )
     if publish:
-        inserted = db.query(DatasetItem).filter(DatasetItem.dataset_version_id == version_row.id).all()
         version_row.status = DatasetVersionStatus.PUBLISHED
-        version_row.published_by_user_id = principal.user.id
+        version_row.published_by_user_id = user_id
         version_row.published_at = utc_now_naive()
-        version_row.content_hash = _content_hash(inserted)
-        _audit(db, principal, "dataset.version_published", dataset, after={"version": version_row.version, "item_count": len(inserted)})
+        version_row.content_hash = content_hash
+        _audit(db, principal, "dataset.version_published", dataset, after={"version": version_row.version, "item_count": item_count})
         _store_published_counts(db, version_row)
         if set_alias:
             _set_alias(db, dataset, set_alias, version_row, principal)
@@ -3181,27 +3465,67 @@ def download_version(
     dataset = _get_dataset(db, project, dataset_ref)
     _require_items_visible(principal, dataset, db=db, read_token=read_token)
     version = _resolve_version(db, dataset, version_ref)
-    items = db.query(DatasetItem).filter(DatasetItem.dataset_version_id == version.id).order_by(DatasetItem.index).all()
-    lines = [
-        json.dumps(
-            {
-                "item_id": item.item_id,
-                "input": item.input,
-                "expected_output": item.expected_output,
-                "metadata": item.item_metadata or {},
-                "labels": item.labels or [],
-            },
-            ensure_ascii=False,
-        )
-        for item in items
-    ]
     filename = f"{dataset.slug}-{version.version}.jsonl"
     fallback = f"{_ascii_name(dataset.slug, 'dataset')}-{_ascii_name(version.version, 'version')}.jsonl"
-    return Response(
-        "\n".join(lines) + ("\n" if lines else ""),
+    session_factory = sessionmaker(bind=db.get_bind(), autoflush=False)
+    # Return the request's connection to the pool now: the body is streamed
+    # after this returns and must not keep a transaction open meanwhile.
+    db.rollback()
+    return StreamingResponse(
+        _jsonl_chunks(session_factory, version.id),
         media_type="application/x-ndjson",
         headers={"Content-Disposition": _attachment_disposition(filename, fallback)},
     )
+
+
+_DOWNLOAD_BATCH_SIZE = 1000
+
+
+def _jsonl_chunks(session_factory: sessionmaker, version_id: str) -> Iterator[bytes]:
+    """The version's JSONL, one chunk per batch of items, in index order.
+
+    Each batch is a keyset page read by its own short-lived session, closed
+    before the chunk is sent: a slow client never holds a database connection
+    or leaves a transaction idle, and only one batch is in memory at a time.
+    """
+    after: Optional[tuple[int, int]] = None
+    while True:
+        with session_factory() as session:
+            query = session.query(
+                DatasetItem.id,
+                DatasetItem.index,
+                DatasetItem.item_id,
+                DatasetItem.input,
+                DatasetItem.expected_output,
+                DatasetItem.item_metadata,
+                DatasetItem.labels,
+            ).filter(DatasetItem.dataset_version_id == version_id)
+            if after is not None:
+                last_index, last_id = after
+                query = query.filter(
+                    (DatasetItem.index > last_index)
+                    | ((DatasetItem.index == last_index) & (DatasetItem.id > last_id))
+                )
+            rows = query.order_by(DatasetItem.index, DatasetItem.id).limit(_DOWNLOAD_BATCH_SIZE).all()
+        if not rows:
+            return
+        after = (rows[-1].index, rows[-1].id)
+        yield "".join(
+            json.dumps(
+                {
+                    "item_id": row.item_id,
+                    "input": row.input,
+                    "expected_output": row.expected_output,
+                    "metadata": row.item_metadata or {},
+                    "labels": row.labels or [],
+                },
+                ensure_ascii=False,
+            )
+            + "\n"
+            for row in rows
+        ).encode("utf-8")
+        if len(rows) < _DOWNLOAD_BATCH_SIZE:
+            return
 
 
 @router.get("/v1/datasets/{dataset_ref}/versions/{version_ref}")
