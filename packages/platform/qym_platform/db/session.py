@@ -47,6 +47,21 @@ def build_engine(settings: PlatformSettings | None = None, *, role: str = "api")
     return create_engine(url, **kwargs)
 
 
+def request_threadpool_size(settings: PlatformSettings) -> int:
+    """Threads for sync request handlers: the API pool's connection ceiling.
+
+    Starlette runs sync handlers on AnyIO's default limiter (40 threads), more
+    than the API pool's ``db_pool_size + db_max_overflow`` connections, so
+    under load the surplus threads waited ``db_pool_timeout_seconds`` and
+    failed. Capping the threads instead queues those requests, and never
+    raises the number of Postgres connections a process can open.
+    ``QYM_HTTP_THREADPOOL_SIZE`` overrides it.
+    """
+    if settings.http_threadpool_size > 0:
+        return int(settings.http_threadpool_size)
+    return max(1, int(settings.db_pool_size) + int(settings.db_max_overflow))
+
+
 def _build_engine():
     return build_engine()
 

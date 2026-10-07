@@ -83,6 +83,11 @@ class PlatformSettings(BaseSettings):
     db_worker_pool_size: int = Field(default=3, ge=1)
     db_worker_max_overflow: int = Field(default=2, ge=0)
     db_pool_timeout_seconds: int = Field(default=10, ge=1)
+    # Threads AnyIO may use for sync request handlers. Each one may hold an
+    # API pool connection, so 0 (default) caps it at db_pool_size +
+    # db_max_overflow: excess requests then queue for a thread instead of
+    # timing out on the pool (AnyIO's own default is 40 threads).
+    http_threadpool_size: int = Field(default=0, ge=0)
     db_pool_recycle_seconds: int = Field(default=1800, ge=60)
     # Server-side guards (ms). A runaway statement or lock wait fails fast
     # instead of holding a pooled connection for minutes.
