@@ -550,6 +550,79 @@ def test_bulk_mutations_read_snapshot_fields_in_chunks(database, monkeypatch):
     assert projected(database)["error_count"] == 4
 
 
+def test_worker_defers_and_throttles_live_rebuilds_outside_the_partition_lock(
+    database, monkeypatch
+):
+    """A live run's first rebuild publishes with its partition transaction;
+    later rebuilds run after commit in their own transaction, at most once per
+    interval, and still converge. Terminal publication stays transactional."""
+    with Session(database) as db:
+        run(db)
+        item(db, "a")
+        db.commit()
+    worker = service.DashboardSummaryWorker(
+        sessionmaker(database, autoflush=False), live_refresh_interval=3600
+    )
+    worker.tick()
+    assert projected(database)["total_items"] == 1
+    calls = []
+    inner = service.refresh_live_summary
+
+    def spy(db, run_id):
+        # Called on a fresh session after the partition transaction committed.
+        assert not db.dirty and not db.new
+        calls.append(run_id)
+        return inner(db, run_id)
+
+    monkeypatch.setattr(service, "refresh_live_summary", spy)
+    with Session(database) as db:
+        item(db, "b", latency_ms=30.0)
+        db.commit()
+    worker.tick()
+    with Session(database) as db:
+        partition = db.get(Partition, "r")
+        # Events and watermark committed; the rebuild waits for the interval.
+        assert partition.last_applied_version == partition.last_enqueued_version
+        assert db.get(Summary, "r").count == 2
+    assert projected(database)["total_items"] == 1
+    assert calls == []
+    worker.live_refresh_interval = 0
+    worker.tick()
+    assert calls == ["r"]
+    assert projected(database)["total_items"] == 2
+    assert projected(database)["median_latency_ms"] == 20.0
+    assert_legacy_parity(database)
+    with Session(database) as db:
+        db.get(Run, "r").status = RunWorkflowStatus.COMPLETED
+        item(db, "c")
+        db.commit()
+    worker.live_refresh_interval = 3600
+    worker.tick()
+    assert projected(database)["total_items"] == 3
+    assert projected(database)["status"] == "COMPLETED"
+    assert "r" not in worker._live_refresh
+    assert_legacy_parity(database)
+
+
+def test_projected_median_matches_python_median(database):
+    import random
+    import statistics
+
+    rng = random.Random(7)
+    for count in (1, 2, 5, 8):
+        run_id = f"median-{count}"
+        latencies = [rng.uniform(0.1, 9000.0) for _ in range(count)]
+        with Session(database) as db:
+            run(db, run_id, status=RunWorkflowStatus.COMPLETED)
+            for n, latency in enumerate(latencies):
+                item(db, str(n), run_id=run_id, latency_ms=latency)
+            db.commit()
+        drain(database)
+        assert projected(database, run_id)["median_latency_ms"] == statistics.median(
+            latencies
+        )
+
+
 def test_backfill_resumes_and_live_corrections_win(database):
     with Session(database) as db:
         db.info["dashboard_projection_worker"] = True
