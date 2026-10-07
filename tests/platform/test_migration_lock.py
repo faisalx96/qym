@@ -4,14 +4,13 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import make_url
-
 from qym_platform.db.migration_lock import (
     MIGRATION_LOCK_CLASS,
     migration_guard,
     migration_lock_timeout,
 )
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 
 MIGRATIONS = (
     Path(__file__).resolve().parents[2]
@@ -93,7 +92,9 @@ def test_concurrent_upgrades_take_turns(pg_schema):
 
     holder = pg_schema.connect()
     holder.execute(
-        text("SELECT pg_advisory_lock(CAST(:k AS integer), hashtext(current_schema()))"),
+        text(
+            "SELECT pg_advisory_lock(CAST(:k AS integer), hashtext(current_schema()))"
+        ),
         {"k": MIGRATION_LOCK_CLASS},
     )
     holder.commit()
@@ -114,10 +115,15 @@ def test_concurrent_upgrades_take_turns(pg_schema):
         # Waiting for the other "replica": no table created yet.
         assert thread.is_alive()
         with pg_schema.connect() as conn:
-            assert conn.execute(text("SELECT to_regclass('alembic_version')")).scalar() is None
+            assert (
+                conn.execute(text("SELECT to_regclass('alembic_version')")).scalar()
+                is None
+            )
     finally:
         holder.execute(
-            text("SELECT pg_advisory_unlock(CAST(:k AS integer), hashtext(current_schema()))"),
+            text(
+                "SELECT pg_advisory_unlock(CAST(:k AS integer), hashtext(current_schema()))"
+            ),
             {"k": MIGRATION_LOCK_CLASS},
         )
         holder.commit()
@@ -126,5 +132,8 @@ def test_concurrent_upgrades_take_turns(pg_schema):
     assert not thread.is_alive()
     assert not errors, errors
     with pg_schema.connect() as conn:
-        assert conn.execute(text("SELECT to_regclass('alembic_version')")).scalar() is not None
+        assert (
+            conn.execute(text("SELECT to_regclass('alembic_version')")).scalar()
+            is not None
+        )
     assert not _advisory_held(pg_schema)

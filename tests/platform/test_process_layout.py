@@ -6,7 +6,6 @@ os.environ.setdefault("QYM_DATABASE_URL", "sqlite:///:memory:")
 
 import anyio.to_thread
 from fastapi.testclient import TestClient
-
 from qym_platform.app import create_app, process_layout_warning
 from qym_platform.db.session import request_threadpool_size
 from qym_platform.settings import PlatformSettings
@@ -19,7 +18,9 @@ def _settings(**values) -> PlatformSettings:
 def test_single_process_layout_warns_outside_dev_only() -> None:
     assert process_layout_warning(_settings(environment="dev", role="all")) is None
     assert process_layout_warning(_settings(environment="test", role="all")) is None
-    assert process_layout_warning(_settings(environment="production", role="api")) is None
+    assert (
+        process_layout_warning(_settings(environment="production", role="api")) is None
+    )
     warning = process_layout_warning(_settings(environment="production", role="all"))
     assert warning and "QYM_ROLE=api" in warning and "QYM_ROLE=worker" in warning
     assert process_layout_warning(_settings(environment="Staging", role="all"))
