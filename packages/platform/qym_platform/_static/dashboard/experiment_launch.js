@@ -246,7 +246,7 @@
       }));
       if (!chosen) return null;
       current = chosen;
-      candidates = fields[chosen].children || [];
+      candidates = (fields[chosen].children || []).concat(fields[chosen].additional_pointer ? [fields[chosen].additional_pointer] : []);
     }
     return current;
   }
@@ -2087,9 +2087,53 @@
       }
       if (type === 'json' || type === 'array' || type === 'object') {
         if (!text.trim()) return { unset: true };
-        try { return { value: JSON.parse(text) }; } catch (_) { return { error: 'Enter valid JSON' }; }
+        try { return { value: JSON.parse(text) }; } catch (_) {
+          if (acceptsText(entry, text)) return { value: text };
+          return { error: 'Enter valid JSON' };
+        }
       }
       return text === '' ? { unset: true } : { value: text };
+    }
+
+    /** Whether text that is not JSON is kept as a string (a JSON field that takes strings). */
+    function acceptsText(entry, text) {
+      if (entry.type !== 'json' || entry.fallback) return false;
+      const accepts = entry.accepts;
+      if (accepts && accepts.indexOf('string') < 0) return false;
+      // Text that looks like JSON is a typo, not a string.
+      return !/^\s*[[{"]/.test(text);
+    }
+
+    /** Whether a value can be shown by the field's own widget (else it is edited as JSON). */
+    function fitsWidget(entry, value) {
+      if (value === undefined || isSweepValue(value)) return true;
+      if (entry.secret || entry.widget === 'secret') return true;
+      switch (entry.type) {
+        case 'boolean': return typeof value === 'boolean';
+        case 'enum': return (entry.enum || []).some((v) => sameValue(v, value));
+        case 'integer': return typeof value === 'number' && Number.isInteger(value);
+        case 'number': return typeof value === 'number' && Number.isFinite(value);
+        case 'string': return typeof value === 'string';
+        case 'array': return Array.isArray(value);
+        case 'object': return isPlainObject(value);
+        default: return true;
+      }
+    }
+
+    /**
+     * The entry a value is edited with: its own, or a JSON field when the value does not
+     * fit the widget (a preset or clone may hold any value), so nothing is hidden.
+     */
+    function editEntry(entry, pointer) {
+      if (entry.type === 'json') return entry;
+      const invalid = has(st.invalid, pointer) ? st.invalid[pointer] : null;
+      if (invalid ? !invalid.json : fitsWidget(entry, st.values[pointer])) return entry;
+      return jsonFallback(entry);
+    }
+
+    function jsonFallback(entry) {
+      if (entry.fallback) return entry;
+      return Object.assign({}, entry, { type: 'json', widget: 'json', enum: null, fallback: entry.type });
     }
 
     function collectionKeys(entry, concrete) {
@@ -2138,10 +2182,11 @@
     function onLeafInput(entry, pointer, control, wrapper) {
       // A sweep editor (#34) or the structured JSON editor already wrote st.values.
       if (!control.hasAttribute('data-xs-sweep') && !control.hasAttribute('data-xl-structured')) {
-        const parsed = parseInput(entry, control.value);
+        const edit = control.hasAttribute('data-xl-json-fallback') ? jsonFallback(entry) : entry;
+        const parsed = parseInput(edit, control.value);
         delete st.invalid[pointer];
         if (parsed.unset) delete st.values[pointer];
-        else if (parsed.error) { delete st.values[pointer]; st.invalid[pointer] = { message: parsed.error, raw: control.value }; }
+        else if (parsed.error) { delete st.values[pointer]; st.invalid[pointer] = { message: parsed.error, raw: control.value, json: !!edit.fallback }; }
         else st.values[pointer] = parsed.value;
       }
       markChanged(wrapper, pointer);
@@ -2233,6 +2278,18 @@
           title: 'Swept values; they are launched as they are',
         }));
         control.value = 'Sweep: ' + current.sweep.map(formatValue).join(', ');
+        return control;
+      }
+      const own = entry;
+      entry = editEntry(entry, pointer);
+      if (entry !== own) {
+        // A value the widget cannot show (e.g. an object in a number field): raw JSON.
+        control = el('textarea', Object.assign({}, common, {
+          className: 'xl-textarea', spellcheck: 'false', placeholder, 'data-xl-json-fallback': own.type,
+          title: 'This value is not a ' + own.type + '; it is edited as JSON',
+        }));
+        control.value = has(st.invalid, pointer) ? st.invalid[pointer].raw
+          : current === undefined ? '' : JSON.stringify(current, null, 2);
         return control;
       }
       if (structured && !bound) {
@@ -2426,6 +2483,14 @@
       if (b.maximum != null) range.push('≤ ' + b.maximum);
       if (b.exclusiveMaximum != null) range.push('< ' + b.exclusiveMaximum);
       if (range.length) parts.push('Range ' + range.join(', ') + '.');
+      if (entry.format && entry.type === 'string' && !entry.secret) parts.push('Format: ' + entry.format + '.');
+      if (entry.type === 'array' && entry.item_type) parts.push('A JSON list of ' + entry.item_type + ' values.');
+      if (entry.type === 'json' && !entry.fallback) {
+        parts.push(entry.accepts && entry.accepts.length
+          ? 'JSON value: ' + entry.accepts.join(' or ') + '.' + (entry.accepts.indexOf('string') >= 0 ? ' Plain text is sent as a string.' : '')
+          : 'Any JSON value; plain text is sent as a string.');
+      }
+      if (entry.fallback) parts.push('This value is not a ' + entry.fallback + ', so it is edited as JSON.');
       return parts.join(' ');
     }
 
@@ -2435,8 +2500,8 @@
       return model.envs.filter((id) => present.indexOf(id) < 0);
     }
 
-    function renderLeaf(model, template, pointer, bound, context) {
-      const entry = model.fields[template];
+    function renderLeaf(model, template, pointer, bound, context, override) {
+      const entry = override || model.fields[template];
       const missing = missingFrom(model, template);
       const label = (context ? context + ' · ' : '') + (entry.label || entry.name);
       const wrapper = el('div', { className: 'xl-field', 'data-xl-leaf': pointer });
@@ -2469,7 +2534,7 @@
       const id = 'xl-f-' + Math.random().toString(36).slice(2, 10);
       control.id = id;
       head.querySelector('label').setAttribute('for', id);
-      const hint = hintText(entry);
+      const hint = hintText(editEntry(entry, pointer));
       wrapper.appendChild(head);
       wrapper.appendChild(control);
       const jsonActions = isSweepValue(st.values[pointer]) ? null : rawJsonActions(entry, pointer, control);
@@ -2602,7 +2667,114 @@
       const missing = missingFrom(model, template);
       return el('div', { className: 'xl-object', 'data-xl-container': '1', 'data-xl-pointer': '/env_overrides' + pointer }, [
         el('div', { className: 'xl-object-title' }, [el('span', { text: entry.label || entry.name })].concat(missing.map((id) => tag('not in ' + envName(id), 'warning')))),
-      ].concat(renderChildren(model, entry, pointer, bound, context)));
+      ].concat(renderChildren(model, entry, pointer, bound, context), renderExtraKeys(model, entry, pointer, bound)));
+    }
+
+    /** Remove every value at or under `pointer`. */
+    function dropValuesUnder(pointer) {
+      [st.values, st.invalid].forEach((map) => Object.keys(map).forEach((p) => {
+        if (p === pointer || p.indexOf(pointer + '/') === 0) delete map[p];
+      }));
+    }
+
+    /** Keys the schema lets an object hold beside its own properties (additional_pointer). */
+    function renderExtraKeys(model, entry, pointer, bound) {
+      const template = entry.additional_pointer;
+      const item = template && model.fields[template];
+      if (!item) return [];
+      const fixed = {};
+      (entry.children || []).forEach((child) => {
+        const c = model.fields[child];
+        if (!c) return;
+        if (c.kind === 'role_table') (c.rows || []).forEach((r) => { fixed[r.key] = true; });
+        else fixed[c.path[c.path.length - 1]] = true;
+      });
+      const addedKey = pointer + '#extra';
+      const keys = [];
+      Object.keys(st.values).concat(Object.keys(st.invalid)).forEach((p) => {
+        if (p.indexOf(pointer + '/') !== 0) return;
+        const key = splitPointer(p.slice(pointer.length))[0];
+        if (key != null && !fixed[key] && keys.indexOf(key) < 0) keys.push(key);
+      });
+      (st.addedKeys[addedKey] || []).forEach((key) => { if (keys.indexOf(key) < 0) keys.push(key); });
+      const rows = keys.map((key) => {
+        const concrete = pointer + '/' + escSeg(key);
+        const remove = el('button', {
+          type: 'button', className: 'xl-link-btn', text: 'Remove', 'data-xl-extra-remove': key,
+          onClick: () => {
+            st.addedKeys[addedKey] = (st.addedKeys[addedKey] || []).filter((k) => k !== key);
+            dropValuesUnder(concrete);
+            renderSettings();
+            updateChangedCount();
+            renderPreviewSoon();
+            schedulePreview();
+          },
+        });
+        if (item.kind === 'field') {
+          const leaf = renderLeaf(model, template, concrete, bound, entry.label || entry.name, Object.assign({}, item, { name: key, label: key }));
+          leaf.querySelector('.xl-field-head').appendChild(remove);
+          return leaf;
+        }
+        return el('div', { className: 'xl-object', 'data-xl-container': '1', 'data-xl-pointer': '/env_overrides' + concrete }, [
+          el('div', { className: 'xl-object-title' }, [el('span', { className: 'xl-mono', text: key }), remove]),
+        ].concat(renderChildren(model, item, concrete, bound, key)));
+      });
+      const keyInput = el('input', { className: 'qym-control qym-input xl-mono', type: 'text', maxlength: '100', placeholder: 'key', 'aria-label': 'New key in ' + (entry.label || entry.name), 'data-xl-extra-key': '1' });
+      const addError = el('span', { className: 'xl-error-text', role: 'alert' });
+      const add = el('div', { className: 'xl-row' }, [keyInput, el('button', {
+        type: 'button', className: 'qym-inline-action qym-inline-action--neutral', text: '+ Add key', 'data-xl-extra-add': '1',
+        onClick: () => {
+          const key = keyInput.value.trim();
+          addError.textContent = '';
+          if (!key) { addError.textContent = 'Enter a name.'; return; }
+          if (fixed[key] || keys.indexOf(key) >= 0) { addError.textContent = 'Already present.'; return; }
+          (st.addedKeys[addedKey] = st.addedKeys[addedKey] || []).push(key);
+          renderSettings();
+        },
+      }), addError]);
+      const leaves = rows.filter((n) => n.classList.contains('xl-field'));
+      const blocks = rows.filter((n) => !n.classList.contains('xl-field'));
+      return (leaves.length ? [el('div', { className: 'xl-fields' }, leaves)] : []).concat(blocks, [add]);
+    }
+
+    /**
+     * Values no selected schema describes (e.g. from a preset or a clone): shown and
+     * editable as JSON so nothing launches unseen; the launch check reports them.
+     */
+    function unmatchedPointers(model) {
+      const descriptor = { root: [], fields: model.fields };
+      model.groups.forEach((g) => g.pointers.forEach((p) => descriptor.root.push(p)));
+      const out = [];
+      Object.keys(st.values).concat(Object.keys(st.invalid)).forEach((p) => {
+        if (out.indexOf(p) >= 0) return;
+        const template = matchPointer(descriptor, p);
+        const entry = template && model.fields[template];
+        if (entry && entry.kind === 'field') return;
+        out.push(p);
+      });
+      return out.sort();
+    }
+
+    function renderUnmatched(model, pointers, bound) {
+      const leaves = pointers.map((p) => {
+        const segs = splitPointer(p);
+        const leaf = renderLeaf(model, p, p, bound, '', {
+          pointer: p, name: segs[segs.length - 1] || p, label: p, kind: 'field', type: 'json', widget: 'json',
+          accepts: null, path: segs, description: 'A value this form has no setting for; edited as JSON.',
+        });
+        leaf.querySelector('.xl-field-head').appendChild(el('button', {
+          type: 'button', className: 'xl-link-btn', text: 'Remove', 'data-xl-extra-remove': p,
+          onClick: () => {
+            dropValuesUnder(p);
+            renderSettings();
+            updateChangedCount();
+            renderPreviewSoon();
+            schedulePreview();
+          },
+        }));
+        return leaf;
+      });
+      return el('div', { className: 'xl-group-body' }, [el('div', { className: 'xl-fields' }, leaves)]);
     }
 
     /** Settings that differ from the base (every set value on a Blank base). */
@@ -2737,6 +2909,21 @@
         });
         children.push(details);
       });
+      const unmatched = unmatchedPointers(model);
+      if (unmatched.length) {
+        const details = el('details', { className: 'xl-group', 'data-xl-group': 'unmatched' }, [
+          el('summary', null, [el('span', { text: 'Other values' }), el('span', { className: 'xl-group-count', text: String(unmatched.length) })]),
+          renderUnmatched(model, unmatched, bound),
+        ]);
+        // Open by default: these values launch as they are unless removed.
+        if (!has(st.groupOpen, 'unmatched')) st.groupOpen.unmatched = true;
+        setGroupOpen(details, !!st.groupOpen.unmatched, true);
+        details.addEventListener('toggle', () => {
+          if (details._xlAuto) { details._xlAuto = false; return; }
+          st.groupOpen.unmatched = details.open;
+        });
+        children.push(details);
+      }
       children.push(el('div', { className: 'xl-empty', 'data-xl-filter-empty': '1', hidden: true, text: 'No settings match.' }));
       body.replaceChildren.apply(body, children);
       applyFilters();

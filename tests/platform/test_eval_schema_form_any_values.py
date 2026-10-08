@@ -5,8 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from qym_platform.services.eval_schema_form import (build_form_descriptor,
-                                                    match_pointer)
+from qym_platform.services.eval_schema_form import build_form_descriptor, match_pointer
 
 
 def _fields(props: dict, **root) -> dict:
@@ -257,3 +256,32 @@ def test_defaults_of_any_type_round_trip():
     for key, (_, value) in defaults.items():
         assert fields["/" + key]["has_default"] is True
         assert fields["/" + key]["default"] == value
+
+
+def test_preset_remap_keeps_extra_keys_of_open_objects():
+    from qym_platform.services.eval_presets import _remap_env
+
+    descriptor = build_form_descriptor(
+        {
+            "type": "object",
+            "properties": {
+                "OPTS": {
+                    "type": "object",
+                    "properties": {"a": {"type": "string"}},
+                    "additionalProperties": True,
+                },
+                "CLOSED": {
+                    "type": "object",
+                    "properties": {"b": {"type": "string"}},
+                },
+            },
+        }
+    )
+    dropped: list = []
+    value = {
+        "OPTS": {"a": "x", "extra": {"deep": [1]}},
+        "CLOSED": {"b": "y", "zz": 1},
+    }
+    kept = _remap_env(value, "", descriptor, dropped)
+    assert kept == {"OPTS": {"a": "x", "extra": {"deep": [1]}}, "CLOSED": {"b": "y"}}
+    assert [d[0] for d in dropped] == ["/CLOSED/zz"]
