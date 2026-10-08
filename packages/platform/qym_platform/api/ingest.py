@@ -3,13 +3,13 @@ from __future__ import annotations
 import csv
 import io
 import json
-import logging
 import math
 import sys
 from collections import defaultdict
 
 csv.field_size_limit(sys.maxsize)
 from typing import Any, Dict, Optional
+from qym_platform.log import get_logger
 
 
 def _sanitize_for_json(obj: Any) -> Any:
@@ -23,7 +23,7 @@ def _sanitize_for_json(obj: Any) -> Any:
     return obj
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 

@@ -56,7 +56,6 @@ the Python build on seeded projects.
 from __future__ import annotations
 
 import json
-import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, Tuple
 
@@ -84,8 +83,9 @@ from sqlalchemy.orm import aliased
 from sqlalchemy.types import JSON
 
 from qym_platform.services.dashboard_views import _iso, _utf16_key
+from qym_platform.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Each run's descriptor and published summary are parsed once, into these.
 _DESCRIPTOR_FIELDS = (

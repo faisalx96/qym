@@ -16,7 +16,6 @@ Dead loops are restarted by :meth:`WorkersRuntime.supervise_once`.
 
 from __future__ import annotations
 
-import logging
 import threading
 import time
 from datetime import timedelta
@@ -28,8 +27,9 @@ from sqlalchemy.orm import sessionmaker
 from qym_platform.datetime_utils import utc_now_naive
 from qym_platform.db.background_job_models import ServiceHeartbeat
 from qym_platform.services.job_registry import process_id
+from qym_platform.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _HEARTBEATS = ServiceHeartbeat.__table__
 # A heartbeat older than this many intervals reads as a stopped process.

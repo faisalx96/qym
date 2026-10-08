@@ -20,7 +20,6 @@ The mean is the runs-list rule shared with the experiments API
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from sqlalchemy import delete, func, select
@@ -42,8 +41,9 @@ from qym_platform.db.models import (
 )
 from qym_platform.services.eval_experiments import TERMINAL_JOB_STATUSES
 from qym_platform.services.repeat_analysis import pass_at_k_curve
+from qym_platform.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # A completed run may move on into the review flow; its scores still count.
 SCORABLE_RUN_STATUSES = frozenset(

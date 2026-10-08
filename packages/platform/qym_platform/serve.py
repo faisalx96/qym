@@ -22,7 +22,6 @@ above 1; the default stays the single ``uvicorn`` process.
 
 from __future__ import annotations
 
-import logging
 import os
 import shlex
 import socket
@@ -33,7 +32,9 @@ import threading
 import time
 from typing import Dict, List, Optional
 
-logger = logging.getLogger("qym_platform.serve")
+from qym_platform.log import configure_logging, get_logger
+
+logger = get_logger("qym_platform.serve")
 
 
 def web_workers(env: Optional[Dict[str, str]] = None) -> int:
@@ -203,7 +204,7 @@ class _Supervisor:
 def main() -> int:
     if sys.argv[1:2] == ["--uvicorn"]:
         return run_uvicorn(sys.argv[2:])
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    configure_logging()
     spec = plan()
     logger.info(
         "starting %s web worker(s)%s",

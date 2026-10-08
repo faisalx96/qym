@@ -6,7 +6,6 @@ import base64
 import copy
 import hashlib
 import json
-import logging
 import math
 from functools import partial
 from dataclasses import dataclass
@@ -169,8 +168,9 @@ from sqlalchemy import String, and_, cast, func, or_, tuple_
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, object_session, sessionmaker
+from qym_platform.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 router = APIRouter(tags=["analysis"])
 
 

@@ -16,7 +16,6 @@ sets ``QYM_SKIP_MIGRATIONS=1``.
 
 from __future__ import annotations
 
-import logging
 import signal
 import threading
 
@@ -26,11 +25,14 @@ from qym_platform.services.dashboard_summaries import DashboardSummaryWorker  # 
 from qym_platform.services.eval_dispatcher import EvalDispatcher  # noqa: F401
 from qym_platform.services.eval_remote_queue import RemoteQueueSnapshotter  # noqa: F401
 from qym_platform.services.maintenance import MaintenanceWorker  # noqa: F401
+from qym_platform.log import configure_logging, get_logger
 from qym_platform.settings import PlatformSettings
+
+logger = get_logger("qym_platform.worker")
 
 
 def main() -> int:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    configure_logging()
     # Register every model and its outbox hooks before either thread can issue
     # an ORM query. Concurrent lazy imports can expose half-defined mappings.
     from qym_platform.db import models  # noqa: F401
@@ -47,15 +49,19 @@ def main() -> int:
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, _stop)
     runtime.start()
-    logging.getLogger(__name__).info(
+    logger.info(
         "qym worker started (role=%s, service=%s)", settings.role, settings.service or "-"
     )
     try:
         while not stop.is_set():
             stop.wait(1.0)
             runtime.supervise_once()
+    except Exception:
+        logger.exception("qym worker supervision failed; stopping")
+        raise
     finally:
         runtime.stop()
+        logger.info("qym worker stopped")
     return 0
 
 

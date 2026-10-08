@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -37,6 +36,10 @@ from qym_platform.services.analysis_jobs import (
 )
 from qym_platform.services.dashboard_summaries import DashboardSummaryWorker
 from qym_platform.static_files import GZipExceptStatic, PrecompressedStaticFiles
+from qym_platform.log import configure_logging, get_logger
+from qym_platform.middleware.request_context import install_request_context
+
+logger = get_logger(__name__)
 
 # Starlette defaults to level 9: on multi-MB run/compare JSON that is about 3x
 # the CPU of level 6 for 2-4 % smaller bodies.
@@ -69,6 +72,7 @@ def process_layout_warning(settings: PlatformSettings) -> str | None:
 
 
 def create_app(settings: PlatformSettings | None = None) -> FastAPI:
+    configure_logging()
     settings = settings or PlatformSettings()
     analysis_job_manager.configure(max_workers=settings.analysis_job_max_workers)
     rule_inference_job_manager.configure(max_workers=settings.analysis_job_max_workers)
@@ -116,20 +120,20 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
         # The default role `all` runs the loops here. API-only processes
         # (QYM_ROLE=api) leave them to an optional separate worker process.
         if not runs_loops:
-            logging.getLogger("uvicorn.error").info(
+            logger.info(
                 "Dashboard summary worker disabled (service=%s: loops run in the workers service)",
                 layout.service,
             )
             return
         if get_db not in app.dependency_overrides:
             dashboard_worker.start()
-            logging.getLogger("uvicorn.error").info("Dashboard summary worker started")
+            logger.info("Dashboard summary worker started")
             maintenance_worker.start()
-            logging.getLogger("uvicorn.error").info("Maintenance worker started")
+            logger.info("Maintenance worker started")
             eval_dispatcher.start()
-            logging.getLogger("uvicorn.error").info("Eval dispatcher started")
+            logger.info("Eval dispatcher started")
             remote_queue_snapshotter.start()
-            logging.getLogger("uvicorn.error").info("Remote queue snapshotter started")
+            logger.info("Remote queue snapshotter started")
 
     @app.on_event("startup")
     async def cap_request_threadpool() -> None:
@@ -141,13 +145,13 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
 
         size = request_threadpool_size(settings)
         anyio.to_thread.current_default_thread_limiter().total_tokens = size
-        logging.getLogger("uvicorn.error").info("Request threadpool capped at %d threads", size)
+        logger.info("Request threadpool capped at %d threads", size)
 
     @app.on_event("startup")
     def warn_single_process_layout() -> None:
         warning = process_layout_warning(settings)
         if warning:
-            logging.getLogger("uvicorn.error").warning(warning)
+            logger.warning(warning)
 
     @app.on_event("startup")
     def warn_untrusted_proxy() -> None:
@@ -155,7 +159,7 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
 
         warning = proxy_trust_warning(settings)
         if warning:
-            logging.getLogger("uvicorn.error").warning(warning)
+            logger.warning(warning)
 
     @app.on_event("shutdown")
     def stop_dashboard_summary_worker() -> None:
@@ -163,9 +167,9 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
         eval_dispatcher.stop()
         maintenance_worker.stop()
         if dashboard_worker.stop():
-            logging.getLogger("uvicorn.error").info("Dashboard summary worker stopped")
+            logger.info("Dashboard summary worker stopped")
         else:
-            logging.getLogger("uvicorn.error").warning(
+            logger.warning(
                 "Dashboard summary worker did not stop within the shutdown timeout"
             )
 
@@ -292,6 +296,9 @@ def create_app(settings: PlatformSettings | None = None) -> FastAPI:
         analysis_job_manager.shutdown(wait=True)
         rule_inference_job_manager.shutdown(wait=True)
 
+    # Outermost: request ids on every log line, unhandled errors logged with traceback.
+    install_request_context(app)
+    logger.info("platform app created (service=%s, environment=%s)", layout.service, settings.environment)
     return app
 
 
@@ -304,7 +311,7 @@ def _cap_threadpool_on_startup(app: FastAPI, settings: PlatformSettings) -> None
 
         size = request_threadpool_size(settings)
         anyio.to_thread.current_default_thread_limiter().total_tokens = size
-        logging.getLogger("uvicorn.error").info("Request threadpool capped at %d threads", size)
+        logger.info("Request threadpool capped at %d threads", size)
 
 
 def create_ingestion_app(settings: PlatformSettings | None = None) -> FastAPI:
@@ -320,6 +327,7 @@ def create_ingestion_app(settings: PlatformSettings | None = None) -> FastAPI:
     from qym_platform.service_layout import resolve_layout
     from qym_platform.uploads import UploadLimitMiddleware
 
+    configure_logging()
     settings = settings or PlatformSettings()
     layout = resolve_layout(settings)
     app = FastAPI(title="qym-ingestion", version="0.2.3", docs_url=None, redoc_url=None, openapi_url=None)
@@ -346,6 +354,8 @@ def create_ingestion_app(settings: PlatformSettings | None = None) -> FastAPI:
         app.include_router(ingest_router, prefix=layout.ingestion_prefix)
     if layout.ingestion_legacy_paths or not layout.ingestion_prefix:
         app.include_router(ingest_router)
+    install_request_context(app)
+    logger.info("ingestion app created (prefix=%s)", layout.ingestion_prefix or "-")
     return app
 
 
@@ -362,6 +372,7 @@ def create_workers_app(settings: PlatformSettings | None = None, *, runtime_fact
     from qym_platform.api.service_status import healthz_router, workers_status_router
     from qym_platform.service_layout import resolve_layout
 
+    configure_logging()
     settings = settings or PlatformSettings()
     layout = resolve_layout(settings)
     holder: dict = {}
@@ -387,11 +398,11 @@ def create_workers_app(settings: PlatformSettings | None = None, *, runtime_fact
                 try:
                     runtime.supervise_once()
                 except Exception:  # pragma: no cover - keep supervising
-                    logging.getLogger(__name__).exception("workers supervision failed")
+                    logger.exception("workers supervision failed")
 
         supervisor = threading.Thread(target=supervise, name="qym-workers-supervisor", daemon=True)
         supervisor.start()
-        logging.getLogger("uvicorn.error").info("qym workers service started")
+        logger.info("qym workers service started")
         try:
             yield
         finally:
@@ -399,6 +410,7 @@ def create_workers_app(settings: PlatformSettings | None = None, *, runtime_fact
             supervisor.join(5)
             runtime.stop()
             holder.pop("runtime", None)
+            logger.info("qym workers service stopped")
 
     app = FastAPI(
         title="qym-workers", version="0.2.3", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan
@@ -422,4 +434,5 @@ def create_workers_app(settings: PlatformSettings | None = None, *, runtime_fact
         )
     else:
         app.include_router(workers_status_router(prefix="", environment=settings.environment, status=status))
+    install_request_context(app)
     return app

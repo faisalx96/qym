@@ -51,7 +51,6 @@ import base64
 import copy
 import hashlib
 import hmac
-import logging
 from datetime import datetime
 from typing import (
     TYPE_CHECKING,
@@ -86,11 +85,12 @@ from .run_lifecycle import (
     RUN_STATUS_REASON_CANCELLED_BY_USER,
     RUN_STATUS_REASON_LEASE_TIMEOUT,
 )
+from qym_platform.log import get_logger
 
 if TYPE_CHECKING:
     from ..auth import Principal
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _TOKEN_KEY_LABEL = b"qym-eval-launch-token-v1"
 TOKEN_PREFIX = "qlt_"

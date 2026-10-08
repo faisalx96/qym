@@ -6,13 +6,13 @@ counts only, never job contents or configuration secrets.
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Callable, Dict, Optional
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
+from qym_platform.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def healthz_router(*, service: str, environment: str, prefix: str = "") -> APIRouter:

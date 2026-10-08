@@ -42,7 +42,6 @@ before ``api_keys``, so the lock order is the same.
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timedelta
 from typing import Any, Optional, Sequence, cast
 
@@ -62,8 +61,9 @@ from ..db.models import (
 from ..secrets import decrypt_llm_api_key, encrypt_llm_api_key
 from ..security import api_key_prefix, generate_api_key
 from ..settings import PlatformSettings
+from qym_platform.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # What the SDK needs to create a run and stream its events (``POST /v1/runs``,
 # ``POST /v1/runs/{id}/events``). Scopes aren't enforced today (auth.py); these are

@@ -35,7 +35,6 @@ a column that only ``create_run`` sets.
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Mapping, Optional
 
 from sqlalchemy import update
@@ -53,8 +52,9 @@ from qym_platform.db.models import (
 from qym_platform.services.eval_config import RESERVED_METADATA_PREFIX
 from qym_platform.services.eval_experiments import verify_launch_token
 from qym_platform.services.run_versioning import merge_versioning_details
+from qym_platform.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 LAUNCH_KEY = "qym_launch"
 TOKEN_KEY = "token"

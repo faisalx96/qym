@@ -5,7 +5,6 @@ from __future__ import annotations
 import bisect
 import hashlib
 import json
-import logging
 import time
 import math
 import threading
@@ -46,6 +45,7 @@ from qym_platform.services.run_means import (
 )
 from sqlalchemy import and_, case, delete, func, insert, or_, select, tuple_, update
 from sqlalchemy.orm import Session, aliased
+from qym_platform.log import get_logger
 
 MAX_LATE_EVENT_AGE = timedelta(days=30)
 MAX_EVENT_ATTEMPTS = 5
@@ -2532,7 +2532,7 @@ class DashboardSummaryWorker:
         self._stop = threading.Event()
         self._thread = None
         self._lock = threading.Lock()
-        self._logger = logging.getLogger(__name__)
+        self._logger = get_logger(__name__)
         self._made_progress = False
         # Discovery/reconcile scans are cheap but need not run 20x per second.
         self._next_reconcile = 0.0

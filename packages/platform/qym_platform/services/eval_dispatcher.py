@@ -106,7 +106,6 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
-import logging
 import socket
 import threading
 from dataclasses import dataclass
@@ -193,8 +192,9 @@ from .run_lifecycle import (
     SOFT_STOP_REASONS,
     mark_run_terminal,
 )
+from qym_platform.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 T = TypeVar("T")
 

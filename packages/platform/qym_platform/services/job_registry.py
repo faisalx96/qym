@@ -30,7 +30,6 @@ pooled connections safely, so the registry is off there (tests, embedded use).
 
 from __future__ import annotations
 
-import logging
 import os
 import socket
 import threading
@@ -48,8 +47,9 @@ from sqlalchemy.orm import Session as OrmSession
 
 from qym_platform.datetime_utils import utc_now_naive
 from qym_platform.db.background_job_models import BackgroundJob
+from qym_platform.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 FLUSH_SECONDS = 0.5
 HEARTBEAT_SECONDS = 2.0

@@ -12,7 +12,6 @@ Statements that cannot run inside a transaction (``VACUUM``,
 
 from __future__ import annotations
 
-import logging
 import socket
 import threading
 import time
@@ -27,8 +26,9 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from qym_platform.db.maintenance_models import MaintenanceJob
+from qym_platform.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 LEASE_SECONDS = 120
 LOG_LINES = 200

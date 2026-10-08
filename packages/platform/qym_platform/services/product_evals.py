@@ -5,7 +5,6 @@ import os
 import sys
 import threading
 import time
-import logging
 import re
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -16,9 +15,10 @@ from uuid import uuid4
 
 from qym_platform.services.job_registry import EXPIRED_ERROR, JobDescription, job_registry
 from qym_platform.settings import PlatformSettings, ProductEvalSettings
+from qym_platform.log import get_logger
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 MAX_EFFECTIVE_CONCURRENCY = 20
 

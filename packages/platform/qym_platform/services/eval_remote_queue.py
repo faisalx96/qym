@@ -45,7 +45,6 @@ does.
 from __future__ import annotations
 
 import asyncio
-import logging
 import threading
 from datetime import datetime, timedelta
 from typing import (
@@ -85,8 +84,9 @@ from .eval_service_client import (
     EvalServiceError,
     redact_text,
 )
+from qym_platform.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 T = TypeVar("T")
 

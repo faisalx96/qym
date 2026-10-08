@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlencode
 
@@ -40,9 +39,10 @@ from qym_platform.services.run_lifecycle import (
 )
 from qym_platform.service_layout import job_execution_queued
 from qym_platform.settings import PlatformSettings
+from qym_platform.log import get_logger
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Stop never touches a finished run, nor one in review (its status is the
 # review state; moving it would strand the review).

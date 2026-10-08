@@ -16,7 +16,6 @@ stopped: ``resume_purge_clocks`` moves the run's purge clock forward.
 
 from __future__ import annotations
 
-import logging
 import time
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional
@@ -32,8 +31,9 @@ from qym_platform.migrations_support import (
     overlaps,
     partition_bounds,
 )
+from qym_platform.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Daily partitions are created this many days ahead of today by default
 # (``QYM_SPAN_PARTITION_DAYS_AHEAD``). The retention pass runs hourly, so a

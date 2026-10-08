@@ -18,8 +18,9 @@ from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
+from qym_platform.log import get_logger
 
-logger = logging.getLogger("qym.timing")
+logger = get_logger(__name__)
 
 _db_stats: contextvars.ContextVar[Optional[Dict[str, float]]] = contextvars.ContextVar("qym_db_stats", default=None)
 _installed_engines: set = set()
