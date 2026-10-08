@@ -81,6 +81,7 @@ from qym_platform.services.eval_best_run import (
 from qym_platform.services.eval_bindings import resolve_slot_bindings
 from qym_platform.services.eval_config import binding_kind
 from qym_platform.services.eval_config_snapshot import job_qym_config, run_qym_config
+from qym_platform.services.eval_evaluator_schema import environment_evaluator_schema
 from qym_platform.services.eval_experiments import (
     is_secret_ref,
     redact_secret_refs,
@@ -369,6 +370,7 @@ def run_base(
         db.get(EvalEnvironmentSchema, job.schema_id),
         to_schema,
         to_slots=slots,
+        evaluator_schema=environment_evaluator_schema(db, env),
     )
     config, prompts = unbind_temporary(result.config)
     warnings = rebind_connections(

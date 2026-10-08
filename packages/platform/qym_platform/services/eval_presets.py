@@ -26,7 +26,10 @@ show them and the launch form can require re-picking the model (§9.1).
 
 A document authored on another schema hash is carried onto the current one with
 :func:`remap` (§9.3); :func:`remap_version` does it for a stored version without
-touching it.
+touching it. Both also check ``evaluator`` against the environment's current
+evaluator schema (guide v1.1 §3.4; the static mirror on older services), so an
+``evaluator.config`` key the service no longer accepts is dropped and listed, even
+when the env-overrides hash did not change.
 """
 
 from __future__ import annotations
@@ -48,6 +51,7 @@ from qym_platform.db.models import (
     User,
 )
 from qym_platform.services.eval_config import binding_kind, validate_config_document
+from qym_platform.services.eval_evaluator_schema import environment_evaluator_schema
 from qym_platform.services.eval_model_slots import (
     descriptor_for_schema,
     detect_model_slots,
@@ -310,6 +314,7 @@ def prepare_config(
         descriptor=descriptor_for_schema(schema),
         schema_hash=schema.schema_hash,
         require_dataset=False,
+        evaluator_schema=environment_evaluator_schema(db, env),
     )
     errors += result.errors
     warnings += result.warnings
@@ -791,6 +796,7 @@ def remap(
     *,
     to_slots: Optional[Sequence[Any]] = None,
     require_dataset: bool = False,
+    evaluator_schema: Optional[Mapping[str, Any]] = None,
 ) -> RemapResult:
     """Re-map a §8.1 document authored on ``from_schema`` onto ``to_schema`` (§9.3).
 
@@ -804,7 +810,9 @@ def remap(
     ``to_slots`` are the target schema's slot rows or dicts (stale ones included, so
     they are reported as such); by default the detected slots of ``to_schema``.
     ``from_schema`` only supplies form pointers for the dropped list and may be
-    ``None``. Pure: nothing is read from or written to the database, and ``config``
+    ``None``. ``evaluator_schema`` is the environment's current evaluator schema
+    (``None``: the static mirror); ``evaluator`` values it rejects are dropped too.
+    Pure: nothing is read from or written to the database, and ``config``
     is not modified. Sweeps are not expanded; a document holding them keeps them and
     reports them in ``errors``.
     """
@@ -869,6 +877,7 @@ def remap(
             descriptor=to_descriptor,
             schema_hash=to_schema.schema_hash,
             require_dataset=require_dataset,
+            evaluator_schema=evaluator_schema,
         )
         errors = []
         if attempt == _MAX_REMAP_PASSES:
@@ -938,6 +947,9 @@ def remap_version(
         to_schema,
         # The persisted slots, as ``prepare_config`` validates against them.
         to_slots=list_model_slots(db, to_schema.id),
+        evaluator_schema=environment_evaluator_schema(
+            db, db.get(EvalEnvironment, to_schema.environment_id)
+        ),
     )
 
 

@@ -185,6 +185,15 @@ def current_evaluator_schema(
     return db.get(EvalEnvironmentEvaluatorSchema, schema_id) if schema_id else None
 
 
+def environment_evaluator_schema(
+    db: Session, env: Optional[EvalEnvironment]
+) -> Optional[Dict[str, Any]]:
+    """The environment's evaluator schema, ``None`` for the static fallback."""
+    if env is None:
+        return None
+    return evaluator_schema_json(current_evaluator_schema(db, env))
+
+
 def evaluator_schema_json(
     row: Optional[EvalEnvironmentEvaluatorSchema],
 ) -> Optional[Dict[str, Any]]:
@@ -304,6 +313,7 @@ __all__ = [
     "config_schema",
     "current_evaluator_schema",
     "descriptor_for_row",
+    "environment_evaluator_schema",
     "evaluator_config_descriptor_for",
     "evaluator_schema_diff",
     "evaluator_schema_json",

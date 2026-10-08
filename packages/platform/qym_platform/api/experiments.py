@@ -1,8 +1,14 @@
 """Evaluation Service experiments: launch, list, detail, cancel, retry and clone.
 
 Routes live under ``/v1/projects/{project_id}/experiments`` (plan §14).
-``GET .../experiments/evaluator-config`` serves the static ``EvaluatorRequestConfig``
-descriptor for the launch form's Advanced panel (§8.4, D5; ``eval_config``).
+``GET .../experiments/evaluator-config`` serves the ``evaluator.config`` descriptor for
+the launch form's Advanced panel (§8.4, D5; ``eval_config``): with
+``?environment_id=…`` (repeatable) it is the union of those environments' evaluator
+schemas (guide v1.1 §3.4, ``eval_evaluator_schema``); an environment whose service has
+no such endpoint, and a call without ids, get the static ``EvaluatorRequestConfig``.
+Each job is validated against its own environment's evaluator schema. The experiment's
+``versioning_details`` are also sent as ``evaluator.config.versioning_details`` to every
+environment whose evaluator schema declares that key (B22).
 
 - Members may create (``dry_run`` previews without persisting), list, read and clone.
   ``HIGH`` priority needs a project manager and ``acknowledge_preemption: true``
@@ -110,10 +116,19 @@ from qym_platform.services.eval_best_run import BestRunError
 from qym_platform.services.eval_best_run_base import official_run_job
 from qym_platform.services.eval_bindings import resolve_slot_bindings
 from qym_platform.services.eval_config import (
+    PLATFORM_OWNED_CONFIG_FIELDS,
+    RESERVED_METADATA_PREFIX,
+    EvaluatorPanelSource,
     binding_kind,
     evaluator_inputs_panel,
     is_sweep,
     validate_config_document,
+)
+from qym_platform.services.eval_evaluator_schema import (
+    accepts_config_key,
+    current_evaluator_schema,
+    descriptor_for_row,
+    evaluator_schema_json,
 )
 from qym_platform.services.eval_experiments import (
     ALREADY_TERMINAL,
@@ -687,7 +702,11 @@ def _named_spec_bindings(
 
 
 def _environment_context(db: Session, env: EvalEnvironment) -> Dict[str, Any]:
-    """The environment's schema, descriptor and confirmed slots (loaded once)."""
+    """The environment's schemas, descriptors and confirmed slots (loaded once).
+
+    ``evaluator_schema`` is ``None`` for a service without ``GET
+    /evals/evaluator/schema``: validation then uses the static mirror.
+    """
     schema = (
         db.get(EvalEnvironmentSchema, env.current_schema_id)
         if env.current_schema_id
@@ -695,8 +714,19 @@ def _environment_context(db: Session, env: EvalEnvironment) -> Dict[str, Any]:
     )
     if schema is None:
         return {"schema": None}
+    evaluator_row = current_evaluator_schema(db, env)
     return {
         "schema": schema,
+        "evaluator_schema": evaluator_schema_json(evaluator_row),
+        "evaluator_descriptor": (
+            descriptor_for_row(
+                evaluator_row,
+                platform_owned=PLATFORM_OWNED_CONFIG_FIELDS,
+                reserved_prefix=RESERVED_METADATA_PREFIX,
+            )
+            if evaluator_row is not None
+            else None
+        ),
         "descriptor": descriptor_for_schema(schema),
         "slots": [
             slot
@@ -741,6 +771,8 @@ def _environment_plan(
         descriptor=descriptor,
         schema_hash=schema.schema_hash,
         environment_name=env.name,
+        evaluator_schema=context.get("evaluator_schema"),
+        evaluator_descriptor=context.get("evaluator_descriptor"),
     )
     resolution = resolve_slot_bindings(
         db,
@@ -758,6 +790,20 @@ def _environment_plan(
     }
 
 
+def _preview_body(
+    body: Optional[Mapping[str, Any]], versioning_details: Optional[Mapping[str, Any]]
+) -> Any:
+    """The dry run's ``request_body``: the plan's body plus what launch adds (B22)."""
+    out = strip_secret_refs(body)
+    if isinstance(out, dict) and versioning_details:
+        evaluator = out.setdefault("evaluator", {})
+        if isinstance(evaluator, dict):
+            config = evaluator.setdefault("config", {})
+            if isinstance(config, dict):
+                config["versioning_details"] = copy.deepcopy(dict(versioning_details))
+    return out
+
+
 def _request_body(
     body: Mapping[str, Any],
     *,
@@ -771,6 +817,7 @@ def _request_body(
     run_name: str,
     qym_config: Mapping[str, Any],
     retry_of_job_id: Optional[str] = None,
+    versioning_details: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     out = copy.deepcopy(dict(body))
     out["user_id"] = user_id
@@ -779,6 +826,8 @@ def _request_body(
     config = evaluator.setdefault("config", {})
     config["run_name"] = run_name
     config["live_mode"] = "platform"
+    if versioning_details:
+        config["versioning_details"] = copy.deepcopy(dict(versioning_details))
     metadata = config.setdefault("run_metadata", {})
     metadata["qym_launch"] = build_qym_launch(
         experiment_id=experiment_id,
@@ -790,6 +839,22 @@ def _request_body(
     )
     metadata["qym_config"] = redact_secret_refs(qym_config)
     return out
+
+
+def _service_versioning_details(
+    context: Mapping[str, Any], details: Optional[Mapping[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    """What ``evaluator.config.versioning_details`` gets on this environment (B22).
+
+    The experiment's details, for an environment whose evaluator schema declares the
+    key (guide v1.1 §4.2); ``None`` otherwise, so older services (whose config is
+    ``extra="forbid"``) never see it. Ingest still merges them at link time.
+    """
+    if not details or not accepts_config_key(
+        context.get("evaluator_schema"), "versioning_details"
+    ):
+        return None
+    return dict(details)
 
 
 def _qym_config(
@@ -1150,7 +1215,10 @@ def create_experiment(
                 {**w, "environment_id": env.id, "combo_index": combo.index}
                 for w in plan["warnings"]
             ],
-            "request_body": strip_secret_refs(plan["body"]),
+            "request_body": _preview_body(
+                plan["body"],
+                _service_versioning_details(contexts[env.id], versioning_details),
+            ),
         }
         for combo, env, schema, plan, params, run_name in planned
     ]
@@ -1243,6 +1311,9 @@ def create_experiment(
                         plan["models"],
                         sweep=params.get("sweep"),
                     ),
+                    versioning_details=_service_versioning_details(
+                        contexts[env.id], versioning_details
+                    ),
                 ),
                 schema_id=schema.id,
                 launch_token_hash=launch_token_hash_for_job(job_id),
@@ -1276,12 +1347,50 @@ def create_experiment(
 @router.get(_PREFIX + "/evaluator-config")
 def get_evaluator_config_panel(
     project_id: str,
+    environment_id: List[str] = Query(default_factory=list),
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_ui_principal),
 ) -> Dict[str, Any]:
-    """Static ``EvaluatorRequestConfig`` descriptor for the Advanced panel (§8.4, D5)."""
+    """``evaluator.config`` descriptor for the Advanced panel (§8.4, D5).
+
+    With ``environment_id`` (repeatable, this project's environments) it is built
+    from their evaluator schemas (guide v1.1 §3.4); environments without one use the
+    static ``EvaluatorRequestConfig``, as does a call without ids.
+    """
     _require_project_access(db, principal, project_id)
-    return evaluator_inputs_panel()
+    ids = list(dict.fromkeys(i for i in environment_id if i))[:50]
+    sources = []
+    if ids:
+        rows = {
+            env.id: env
+            for env in db.query(EvalEnvironment).filter(
+                EvalEnvironment.project_id == project_id, EvalEnvironment.id.in_(ids)
+            )
+        }
+        for env_id in ids:
+            env = rows.get(env_id)
+            if env is None:
+                raise HTTPException(status_code=404, detail="Environment not found")
+            row = current_evaluator_schema(db, env)
+            sources.append(
+                EvaluatorPanelSource(
+                    environment_id=env.id,
+                    name=env.name,
+                    schema=evaluator_schema_json(row),
+                    schema_hash=row.schema_hash if row else None,
+                    status=env.evaluator_schema_status or "unknown",
+                    descriptor=(
+                        descriptor_for_row(
+                            row,
+                            platform_owned=PLATFORM_OWNED_CONFIG_FIELDS,
+                            reserved_prefix=RESERVED_METADATA_PREFIX,
+                        )
+                        if row is not None
+                        else None
+                    ),
+                )
+            )
+    return evaluator_inputs_panel(sources)
 
 
 @router.get(_PREFIX)
