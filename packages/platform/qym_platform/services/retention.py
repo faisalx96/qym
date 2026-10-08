@@ -1,8 +1,13 @@
-"""Retention: monthly span partitions and purge of soft-deleted runs.
+"""Retention: daily span partitions and purge of soft-deleted runs.
 
 Age-based span retention preserves items, attempts, scores, and summaries.
 Raw spans older than ``QYM_SPAN_RETENTION_DAYS`` are removed by dropping whole
-monthly partitions — instant, no dead tuples, disk returned immediately.
+partitions — instant, no dead tuples, disk returned immediately. New
+partitions are daily (``spans_yYYYYmMMdDD``); monthly ones (``spans_yYYYYmMM``)
+created before migration 0085 keep working beside them. Creation and drops
+go by each partition's bounds, so a daily partition is never created inside
+a monthly one's range and a monthly one is dropped once its whole month has
+expired.
 Soft-deleted runs older than ``QYM_DELETED_RUN_GRACE_DAYS`` are hard-deleted
 (children cascade via migration 0054). Purging pauses while a run's project is
 archived (Restore is refused there too) and resumes on unarchive where it
@@ -21,34 +26,20 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-logger = logging.getLogger(__name__)
-
-_PARTITIONS = text(
-    """
-    SELECT c.relname, pg_get_expr(c.relpartbound, c.oid)
-    FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid
-    WHERE i.inhparent = 'spans'::regclass
-    """
+from qym_platform.migrations_support import (
+    day_partition_name,
+    day_start,
+    overlaps,
+    partition_bounds,
 )
 
+logger = logging.getLogger(__name__)
 
-def _month_start(value: datetime) -> datetime:
-    return value.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-
-
-def _next_month(value: datetime) -> datetime:
-    return (value.replace(day=28) + timedelta(days=4)).replace(day=1)
-
-
-def _bounds(expr: str):
-    """Parse "FOR VALUES FROM ('2026-01-01 00:00:00') TO ('2026-02-01 00:00:00')"."""
-    import re
-
-    m = re.search(r"FROM \('([^']+)'\) TO \('([^']+)'\)", expr or "")
-    if not m:
-        return None
-    fmt = "%Y-%m-%d %H:%M:%S"
-    return datetime.strptime(m.group(1)[:19], fmt), datetime.strptime(m.group(2)[:19], fmt)
+# Daily partitions are created this many days ahead of today by default
+# (``QYM_SPAN_PARTITION_DAYS_AHEAD``). The retention pass runs hourly, so a
+# fortnight leaves ample slack for a stopped worker before rows would fall
+# into the DEFAULT partition.
+DEFAULT_PARTITION_DAYS_AHEAD = 14
 
 
 # Partition DDL waits at most this long for a lock, then retries: a DDL
@@ -121,28 +112,40 @@ def _create_partition(conn: Any, name: str, start: datetime, end: datetime) -> N
     conn.execute(text(f"ALTER TABLE {name} DROP CONSTRAINT {name}_bound"))
 
 
-def ensure_span_partitions(engine: Engine, *, months_ahead: int = 3, now: datetime = None) -> List[str]:
-    """Create monthly partitions through now + months_ahead. Postgres only.
+def ensure_span_partitions(
+    engine: Engine, *, days_ahead: int = DEFAULT_PARTITION_DAYS_AHEAD, now: datetime = None
+) -> List[str]:
+    """Create daily partitions for today through today + days_ahead. Postgres only.
 
-    Each partition is created and attached in its own short transaction with
-    a short lock_timeout and a few retries (see ``_create_partition``).
+    A day already covered by an existing partition (a monthly one from before
+    migration 0085, or the day itself) is skipped, so daily partitions start
+    where the last monthly partition ends. Each partition is created and
+    attached in its own short transaction with a short lock_timeout and a few
+    retries (see ``_create_partition``).
     """
     if engine.dialect.name != "postgresql":
         return []
     now = now or datetime.utcnow()
     created: List[str] = []
     with engine.connect() as conn:
-        existing = {row[0] for row in conn.execute(_PARTITIONS)}
-    start = _month_start(now)
-    for _ in range(months_ahead + 1):
-        name = f"spans_y{start.year:04d}m{start.month:02d}"
-        end = _next_month(start)
-        if name not in existing and _with_lock_retries(
-            engine,
-            f"create span partition {name}",
-            lambda conn, name=name, start=start, end=end: _create_partition(conn, name, start, end),
+        rows = partition_bounds(conn)
+    names = {name for name, _ in rows}
+    bounds = [b for _, b in rows if b]
+    start = day_start(now)
+    for _ in range(max(days_ahead, 0) + 1):
+        end = start + timedelta(days=1)
+        name = day_partition_name(start)
+        if (
+            name not in names
+            and not overlaps(start, end, bounds)
+            and _with_lock_retries(
+                engine,
+                f"create span partition {name}",
+                lambda conn, name=name, start=start, end=end: _create_partition(conn, name, start, end),
+            )
         ):
             created.append(name)
+            bounds.append((start, end))
         start = end
     if created:
         logger.info("created span partitions %s", created)
@@ -150,16 +153,18 @@ def ensure_span_partitions(engine: Engine, *, months_ahead: int = 3, now: dateti
 
 
 def drop_expired_span_partitions(engine: Engine, *, retention_days: int, now: datetime = None) -> List[str]:
-    """Drop monthly partitions whose upper bound is older than the retention window."""
+    """Drop partitions (daily or monthly) whose upper bound is older than the retention window.
+
+    A monthly partition goes only once its whole month is past the window.
+    """
     if engine.dialect.name != "postgresql" or retention_days <= 0:
         return []
     now = now or datetime.utcnow()
     cutoff = now - timedelta(days=retention_days)
     dropped: List[str] = []
     with engine.connect() as conn:
-        rows = conn.execute(_PARTITIONS).fetchall()
-    for name, expr in rows:
-        bounds = _bounds(expr)
+        rows = partition_bounds(conn)
+    for name, bounds in sorted(rows, key=lambda row: row[1] or (datetime.max, datetime.max)):
         if not bounds or bounds[1] > cutoff:
             continue
 
@@ -420,9 +425,15 @@ def purge_soft_deleted_runs(
     return purged
 
 
-def run_retention(engine: Engine, *, span_retention_days: int, deleted_run_grace_days: int) -> Dict[str, List[str]]:
+def run_retention(
+    engine: Engine,
+    *,
+    span_retention_days: int,
+    deleted_run_grace_days: int,
+    partition_days_ahead: int = DEFAULT_PARTITION_DAYS_AHEAD,
+) -> Dict[str, List[str]]:
     return {
-        "partitions_created": ensure_span_partitions(engine),
+        "partitions_created": ensure_span_partitions(engine, days_ahead=partition_days_ahead),
         "partitions_dropped": drop_expired_span_partitions(engine, retention_days=span_retention_days),
         "runs_purged": purge_soft_deleted_runs(engine, grace_days=deleted_run_grace_days),
     }

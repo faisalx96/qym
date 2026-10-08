@@ -34,6 +34,7 @@ sure one process runs a given job.
 | `QYM_EVENT_LOG_MODE` | `full` | `structural` drops item/metric bodies from `run_events` (bodies live in `run_items`/attempts/scores). Enable after the new image is live |
 | `QYM_SPAN_MAX_BYTES` | `1048576` | Safety ceiling per span; larger spans keep scalar attributes only and are flagged |
 | `QYM_SPAN_RETENTION_DAYS` | `60` | Raw traces older than this are dropped by partition (0 = keep forever) |
+| `QYM_SPAN_PARTITION_DAYS_AHEAD` | `14` | Daily `spans` partitions kept created this many days ahead (hourly retention pass) |
 | `QYM_DELETED_RUN_GRACE_DAYS` | `30` | Soft-deleted runs are hard-deleted after this; time their project spends archived does not count |
 | `QYM_AUTH_LOCAL_SIGNUP` | `false` | Email/password self sign-up; off means admins add people (open only while no active admin exists) |
 | `QYM_AUTH_LOGIN_MAX_FAILURES_PER_EMAIL` / `..._PER_CLIENT` / `QYM_AUTH_LOGIN_FAILURE_WINDOW_SECONDS` | `5` / `30` / `300` | Failed password sign-ins before `429`. `..._PER_EMAIL` counts one email from one client address and refuses only that client, so the right password from another client still works; `..._PER_CLIENT` counts one address over all emails. "Account already exists" answers at sign-up count only against the client. An attempt counts as a failure from the moment it passes the check until its password proves right, so concurrent attempts cannot get past a limit. All limits are counted per API process (with `QYM_WEB_WORKERS=N` each process counts on its own, so a pod allows up to N times the limit). uvicorn trusts `X-Forwarded-For` only from `FORWARDED_ALLOW_IPS` (default `127.0.0.1`): set `FORWARDED_ALLOW_IPS` (or `--forwarded-allow-ips=...` in `QYM_UVICORN_ARGS`) to the ingress/pod CIDR, otherwise every client shares the ingress address and the per-client limit applies to all of them together. The API logs a warning at startup when password sign-in is on outside dev/test and neither is set |
@@ -80,8 +81,10 @@ A component that tries to write anywhere else now fails loudly
 
 ## Storage model after this release
 
-- `spans` — one row per span, **partitioned monthly by `run_created_at`**, jsonb + LZ4.
-  Retention = drop partition. Scalar columns (`oi_kind`, `usage_scope`, `model_name`,
+- `spans` — one row per span, **partitioned daily by `run_created_at`**, jsonb + LZ4.
+  Retention = drop partition. Partitions are named `spans_yYYYYmMMdDD`; monthly
+  ones (`spans_yYYYYmMM`) from before migration `0085` stay and coexist (see
+  "Span partitions" below). Scalar columns (`oi_kind`, `usage_scope`, `model_name`,
   `tool_name`, `token_*`) serve statistics without touching the JSON.
 - `run_events` — structural history only (no `span_completed` rows). bigint id, jsonb.
 - Deleting a run hides it immediately. After the grace period, purge locks and
@@ -97,12 +100,14 @@ A component that tries to write anywhere else now fails loudly
 
 ## Migrations and large tables
 
-The combined migration chain has one head, `0083`, following `0050` through
-`0051`–`0082`. Migrations run before API readiness. Large storage rewrites and index
+The combined migration chain has one head, `0085`, following `0050` through
+`0051`–`0083`. Migrations run before API readiness. Large storage rewrites and index
 builds are deferred to maintenance jobs. Migration `0057` also backfills existing
 pass approvals in bounded batches within its migration transaction; measure its
 startup time on a populated copy before setting deployment readiness deadlines.
-Migrations `0058`–`0083` are quick DDL or small job/queue inserts.
+Migrations `0058`–`0083` are quick DDL or small job/queue inserts. `0085`
+switches `spans` to daily partitions; it locks `spans` for an instant only to
+drop still-empty monthly partitions that start after today.
 
 On PostgreSQL every `alembic upgrade` takes a per-schema advisory lock, so
 replicas that start together migrate one at a time (the others wait, then find
@@ -137,6 +142,7 @@ replica and worker.
 | 0068 | Nullable `dataset_items.search_text`, `dataset_versions.change_counts`, `datasets.deleted_by_user_id` | `backfill_dataset_search_text` — **queued, runs by itself** (on every database, an empty one included, since the job also builds the index): fills search text in id windows (one statement per 500-item window), stores lineage counts of published versions, builds the small partial index `ix_dataset_items_unindexed_version` CONCURRENTLY, then runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` and builds `ix_dataset_items_search_trgm` CONCURRENTLY. Without the privilege to create the extension it logs that and skips the trigram index; search stays correct, only unindexed. Until the job reaches a row, search rebuilds that row's text on read; results match except a search for a JSON fragment spanning several keys of one object, whose key order PostgreSQL's JSONB text may differ. If the job ever failed (Admin → Maintenance shows it), start `backfill_dataset_search_text` again there: it resumes and is safe to repeat |
 | 0069 | Empty `dashboard_run_overview` (each run's overview inputs) and `dashboard_overview_snapshots` (the overview shared by every process and pod) tables | `backfill_dashboard_overview` — **queued, runs by itself** (on every database; on SQLite, or with no runs, it finishes at once): stores each run's overview inputs in run-key windows (one statement per 500-run window; about 0.4 s per 1,000 runs on the perf lab). Until it reaches a run, the overview reads that run's JSON, with the same numbers; the summary worker stores every run it publishes from the start. Resumable and safe to start again from Admin → Maintenance |
 | 0070 | — (one job insert) | `build_runs_search_index` — **queued, runs by itself**: runs `CREATE EXTENSION IF NOT EXISTS pg_trgm`, then builds `ix_dashboard_run_dimensions_search_trgm` (the Runs search box) CONCURRENTLY. Without the privilege to create the extension it logs "runs search index skipped" and finishes; the search stays correct, only unindexed. Safe to start again: it rebuilds the index |
+| 0085 | Drops still-empty monthly `spans` partitions that start after today (brief `ACCESS EXCLUSIVE` on `spans`, under `QYM_MIGRATION_LOCK_TIMEOUT`) and creates daily partitions for the next 14 days | None: the hourly retention pass keeps daily partitions ahead; see "Span partitions" |
 | 0071 | Nullable `dashboard_run_dimensions.search_text` (instant) and one job insert, skipped while a `build_runs_search_index` job still waits to start | `build_runs_search_index` (this release's job does all of it) — **queued, runs by itself**: builds the partial index `ix_dashboard_run_dimensions_unsearchable` CONCURRENTLY, fills `search_text` in run-key windows (one statement per 500-run window), then rebuilds `ix_dashboard_run_dimensions_search_trgm` over `search_text` and the run ID, CONCURRENTLY. It replaces `0070`'s index over descriptor expressions, which made every descriptor rewrite of a live run a non-HOT update. Until it reaches a row, the search reads that row's names from its descriptor, with the same results. Without `pg_trgm` it fills the column, logs "runs search index skipped" and finishes. Resumable and safe to start again |
 
 After `0060`/`0064` the dashboard worker republishes every ready summary once
@@ -222,7 +228,7 @@ WHERE k.revoked_at IS NULL AND (p.is_active IS NOT TRUE OR (m.id IS NULL AND u.r
 ### Deploy and run maintenance
 
 1. Deploy the new API with the default `QYM_ROLE=all`. Wait for migration head
-   `0083` and a healthy API. The API process then runs every queued job itself.
+   `0085` and a healthy API. The API process then runs every queued job itself.
    Do not restart the API while a job runs; the job resumes, but each restart
    costs time. Optional split layout: set `QYM_ROLE=api` on the API and start
    one worker with the same image and configuration, `QYM_ROLE=worker`, and
@@ -362,6 +368,41 @@ while the purge holds only the run row; span partitions are created with
 `ATTACH PARTITION` and dropped with `DETACH`, both under a 1 s `lock_timeout`
 with a few retries, so neither holds locks that stall API queries for long.
 
+### Span partitions
+
+`spans` is range-partitioned by `run_created_at` (its run's creation time),
+with a `spans_default` catch-all.
+
+- **Daily from `0085` on.** The hourly retention pass (`run_retention`) keeps
+  daily partitions `spans_yYYYYmMMdDD` created for today through
+  `QYM_SPAN_PARTITION_DAYS_AHEAD` (default `14`) days ahead, and drops any
+  partition (daily or monthly) whose upper bound is more than
+  `QYM_SPAN_RETENTION_DAYS` old. Retention therefore frees one day at a time
+  instead of one month.
+- **Monthly partitions coexist.** Partitions created before `0085` are
+  monthly (`spans_yYYYYmMM`) and keep their data. Creation and drops work
+  from each partition's bounds, not its name: a day already covered by a
+  monthly partition gets no daily one, so daily partitions start where the
+  last monthly one ends, and a monthly partition is dropped once its whole
+  month is past the window (up to a month later than its last day would be).
+- **Migration `0085`** drops the monthly partitions that start after today
+  (pre-created ahead and still empty; one that holds rows is kept), then
+  creates the daily partitions for the next 14 days. On an upgraded database
+  the current month stays monthly and daily partitions take over on the 1st
+  of next month. Downgrading leaves the daily partitions in place; the older
+  code's retention pass then logs an overlap error each hour when it tries
+  to pre-create a monthly partition over them, so recreate monthly partitions
+  by hand if you run older code for long.
+- **Backfill (`migrate_spans`)** makes room for historic rows with one
+  monthly partition per untouched month (not ~30 daily ones) and daily
+  partitions only for the uncovered days of a month that daily partitions
+  already reach.
+- Check what exists with
+  `SELECT c.relname, pg_get_expr(c.relpartbound, c.oid) FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid WHERE i.inhparent = 'spans'::regclass ORDER BY 1;`
+  Rows in `spans_default` mean a partition was missing when they arrived
+  (the worker was stopped longer than the days-ahead window, or a run's
+  creation time lies outside every partition).
+
 ## Optional separate worker Deployment (Helm/Kubernetes sketch)
 
 Not required. The default `QYM_ROLE=all` API Deployment runs the background loops.
@@ -369,7 +410,7 @@ Use this layout to keep long maintenance jobs away from API rollouts and probes,
 or to run several API replicas with one background process. Same image as the
 API; only the command and two variables differ. One replica. Inherit maintenance
 mode and retention settings from the same configuration as the API. Start this
-deployment only after the API has migrated to `0083`.
+deployment only after the API has migrated to `0085`.
 
 ```yaml
 apiVersion: apps/v1
@@ -578,7 +619,7 @@ workers:
 | `QYM_PRODUCT_EVAL_MAX_WORKERS`, `QYM_PRODUCT_EVAL_*` (concurrency, timeout, run count, default dataset, `MAX_RETAINED_JOBS`) | no | `3`, … | Per workers process |
 | `QYM_JOB_POLL_INTERVAL_SECONDS`, `QYM_SERVICE_HEARTBEAT_SECONDS` | no | `1`, `10` | |
 | `QYM_EVAL_JOB_TIMEOUT_SECONDS`, `QYM_EVAL_*` | no | `8100` | Evaluation Service dispatcher |
-| `QYM_SPAN_RETENTION_DAYS`, `QYM_DELETED_RUN_GRACE_DAYS` | no | `60`, `30` | Retention runs here |
+| `QYM_SPAN_RETENTION_DAYS`, `QYM_DELETED_RUN_GRACE_DAYS`, `QYM_SPAN_PARTITION_DAYS_AHEAD` | no | `60`, `30`, `14` | Retention runs here |
 | `QYM_ALLOW_PRIVATE_LLM_BASE_URLS` | no | `false` | Analyses call the LLM from here |
 | `QYM_INSIGHTOR_EVAL_SCRIPT` | no | repo `insightor_eval.py` | Product-eval preset script |
 
@@ -621,7 +662,7 @@ smoke run used 8 API and 3 worker connections at rest.
 
 ### Rollout: single server → split
 
-1. **Migrate once**: run the migration job (`alembic -c packages/platform/qym_platform/migrations/alembic.ini upgrade head`, up to revision `0083`) with the new image; set `QYM_SKIP_MIGRATIONS=1` on all three services.
+1. **Migrate once**: run the migration job (`alembic -c packages/platform/qym_platform/migrations/alembic.ini upgrade head`, up to revision `0085`) with the new image; set `QYM_SKIP_MIGRATIONS=1` on all three services.
 2. Set the **same** `QYM_DATABASE_URL`, `QYM_LLM_CONFIG_ENCRYPTION_KEY`, `QYM_BASE_URL` and prefixes on all services; `QYM_SERVICE=main|ingestion|workers`.
 3. Deploy **workers** first (one replica), then **ingestion**, then switch the old API Deployment to **main** (`QYM_SERVICE=main`). Remove a legacy `QYM_ROLE=worker` Deployment (or set `QYM_SERVICE=workers` on it): two loop processes are safe but redundant.
 4. Add the **ingress rules** above. Until they exist, main still accepts ingest (`QYM_MAIN_INCLUDE_INGEST=true`).
@@ -762,7 +803,7 @@ Steps:
 
 1. Set `QYM_LLM_CONFIG_ENCRYPTION_KEY` on every API and worker process (if it isn't
    already set for LLM connections), plus any `QYM_EVAL_*` overrides.
-2. Deploy the image. The API applies migrations up to `0083` before it reports ready,
+2. Deploy the image. The API applies migrations up to `0085` before it reports ready,
    as for every release. A split worker starts after the API, with
    `QYM_SKIP_MIGRATIONS=1`. On a large `runs` table, time the `0073` scan on a
    populated copy before setting readiness deadlines.

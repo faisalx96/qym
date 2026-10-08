@@ -312,7 +312,12 @@ class MaintenanceWorker:
 
         settings = ingest_settings_for_maintenance()
         try:
-            run_retention(self.engine, span_retention_days=settings.span_retention_days, deleted_run_grace_days=settings.deleted_run_grace_days)
+            run_retention(
+                self.engine,
+                span_retention_days=settings.span_retention_days,
+                deleted_run_grace_days=settings.deleted_run_grace_days,
+                partition_days_ahead=settings.span_partition_days_ahead,
+            )
         except Exception:  # noqa: BLE001
             logger.exception("scheduled retention failed")
 
@@ -601,13 +606,16 @@ def _migrate_spans(ctx: JobContext) -> bool:
         if first and first < cutoff:
             first = cutoff
         if first:
-            # Partitions for every month the copy can touch.
+            # Partitions for every day the copy can touch. Historic months
+            # get one monthly partition each (not ~30 daily ones); only the
+            # uncovered days of a month already partly covered by daily
+            # partitions get daily ones.
             from qym_platform.migrations_support import ensure_month_partitions_between
 
             created = ensure_month_partitions_between(ctx.engine, first, datetime.utcnow())
             if created:
                 ctx.log(f"created partitions {created}")
-        ensure_span_partitions(ctx.engine)
+        ensure_span_partitions(ctx.engine, days_ahead=ingest_settings_for_maintenance().span_partition_days_ahead)
     with ctx.session() as db:
         rows = db.execute(text("SELECT id, created_at, deleted_at FROM runs WHERE id > :c ORDER BY id LIMIT :n"), {"c": cursor, "n": batch_runs}).fetchall()
         if not rows:
@@ -1087,7 +1095,12 @@ def _run_retention(ctx: JobContext) -> bool:
     from qym_platform.services.retention import run_retention
 
     settings = ingest_settings_for_maintenance()
-    result = run_retention(ctx.engine, span_retention_days=int(ctx.params.get("span_retention_days", settings.span_retention_days)), deleted_run_grace_days=int(ctx.params.get("deleted_run_grace_days", settings.deleted_run_grace_days)))
+    result = run_retention(
+        ctx.engine,
+        span_retention_days=int(ctx.params.get("span_retention_days", settings.span_retention_days)),
+        deleted_run_grace_days=int(ctx.params.get("deleted_run_grace_days", settings.deleted_run_grace_days)),
+        partition_days_ahead=int(ctx.params.get("partition_days_ahead", settings.span_partition_days_ahead)),
+    )
     ctx.progress.update(result)
     ctx.progress["message"] = ", ".join(f"{k}={len(v)}" for k, v in result.items())
     ctx.log(ctx.progress["message"])
