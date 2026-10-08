@@ -5,7 +5,10 @@ from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
+from qym_platform.log import get_logger
 from qym_platform.settings import PlatformSettings
+
+logger = get_logger(__name__)
 
 
 def llm_config_has_api_key(cfg: dict[str, Any] | None) -> bool:
@@ -72,6 +75,7 @@ def _multi_fernet_for_keys(keys: tuple[str, ...]) -> MultiFernet:
             label = "QYM_LLM_CONFIG_ENCRYPTION_KEY" if index == 0 else (
                 f"QYM_LLM_CONFIG_ENCRYPTION_KEYS_PREVIOUS entry {index}"
             )
+            logger.error("%s is not a valid Fernet key", label)
             raise RuntimeError(f"{label} is not a valid Fernet key") from exc
     return MultiFernet(fernets)
 
@@ -96,6 +100,7 @@ def decrypt_llm_api_key(token: str, settings: PlatformSettings | None = None) ->
     try:
         return _multi_fernet_for_keys(tuple(keys)).decrypt(token.encode("utf-8")).decode("utf-8")
     except InvalidToken as exc:
+        logger.error("stored LLM API key could not be decrypted with any configured encryption key", exc_info=True)
         raise RuntimeError("Stored LLM API key could not be decrypted") from exc
 
 
@@ -122,6 +127,7 @@ def reencrypt_llm_api_key(token: str, settings: PlatformSettings | None = None) 
     try:
         return _multi_fernet_for_keys(tuple(keys)).rotate(token.encode("utf-8")).decode("utf-8")
     except InvalidToken as exc:
+        logger.error("stored LLM API key could not be decrypted with any configured encryption key", exc_info=True)
         raise RuntimeError("Stored LLM API key could not be decrypted") from exc
 
 

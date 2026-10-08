@@ -77,6 +77,7 @@ def queue_timeout_seconds() -> float:
 
             _queue_timeout = float(PlatformSettings().job_queue_timeout_seconds)
         except Exception:  # settings unavailable (no database URL): the default
+            logger.debug("job queue timeout setting unavailable; using the default", exc_info=True)
             _queue_timeout = DEFAULT_QUEUE_TIMEOUT_SECONDS
     return _queue_timeout
 

@@ -1066,6 +1066,12 @@ def create_run(
     _store_metric_specs(db, run, req.metric_specs)
     db.commit()
     db.refresh(run)
+    logger.info(
+        "Run %s created (project=%s, origin=%s)",
+        run.id,
+        run.project_id,
+        getattr(run, "origin", None) or "-",
+    )
 
     settings = PlatformSettings()
     project = db.query(Project).filter(Project.id == run.project_id).first()
@@ -1169,6 +1175,7 @@ def _ingest_events_worker(
         "refused events: %s",
         run_id,
         _store_error_reason(error),
+        exc_info=error,
     )
     # A refused value fails its batch the same way on every retry, and
     # clients retry a 5xx forever. Apply the batch again in halves, each in
@@ -2069,6 +2076,12 @@ def _ingest_events_sync(
         except Exception:
             # The common path uses one bulk write/savepoint. Isolate individual
             # failures only when needed so a bad span cannot discard good ones.
+            logger.warning(
+                "Bulk span insert failed for run %s; storing %d spans one by one",
+                run_id,
+                len(rows),
+                exc_info=True,
+            )
             inserted = []
             for row in rows:
                 try:
@@ -2365,7 +2378,7 @@ def _ingest_events_sync(
                 try:
                     ts_ms = int(evt.sent_at.timestamp() * 1000 - payload.latency_ms)
                 except Exception:
-                    pass
+                    logger.debug("Could not derive task start for run %s", run_id, exc_info=True)
 
             item = _get_item(payload.item_id)
             payload_metadata = (
@@ -2485,7 +2498,7 @@ def _ingest_events_sync(
                 _FINAL_STATUS.get(payload.final_status, RunWorkflowStatus.FAILED),
                 ended_at=payload.ended_at,
             )
-            logger.debug("Run %s status -> %s", run_id, payload.final_status)
+            logger.info("Run %s status -> %s", run_id, payload.final_status)
             # Allow the client to attach final metadata (e.g., langfuse_url) at completion time.
             try:
                 md = (
@@ -2499,7 +2512,9 @@ def _ingest_events_sync(
                         merge_run_metadata(run.run_metadata, md)
                     )
             except Exception:
-                pass
+                logger.warning(
+                    "Could not merge final run metadata for run %s", run_id, exc_info=True
+                )
 
             # Bring trace stats up to date with this batch. Incremental, like
             # live batches: earlier batches already maintained the ledger, so
@@ -2639,7 +2654,7 @@ def _ingest_events_sync(
                     defer_on_backoff=True,
                 )
         except Exception as e:
-            logger.warning("Live trace aggregation failed for run %s: %s", run_id, e)
+            logger.warning("Live trace aggregation failed for run %s: %s", run_id, e, exc_info=True)
             _mark_trace_summary_stale()
 
     # Best-run index (plan §4.7): run_completed, or scores arriving after it, on an
@@ -3313,6 +3328,12 @@ def _upload_run_sync(
             status_code=400, detail="Unsupported file type (use .csv or .json)"
         )
 
+    logger.info(
+        "Run %s uploaded from %s file (project=%s)",
+        run.id,
+        "JSON" if filename.endswith(".json") else "CSV",
+        run.project_id,
+    )
     settings = PlatformSettings()
     live_url = f"{settings.public_ui_base}/run/{run.id}"
     return {"run_id": run.id, "live_url": live_url}

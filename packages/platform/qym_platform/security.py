@@ -6,6 +6,10 @@ import hmac
 import os
 import secrets
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 
 _PBKDF2_PREFIX = "pbkdf2_sha256"
 _PBKDF2_ITERATIONS = 600_000
@@ -50,6 +54,7 @@ def _verify_pbkdf2(secret: str, stored_hash: bytes, prefix: str) -> bool:
             salt = base64.urlsafe_b64decode(salt_raw.encode("ascii"))
             expected = base64.urlsafe_b64decode(derived_raw.encode("ascii"))
         except Exception:
+            logger.warning("stored API key hash is malformed; refusing the key", exc_info=True)
             return False
         actual = hashlib.pbkdf2_hmac("sha256", secret.encode("utf-8"), salt, iterations)
         return hmac.compare_digest(actual, expected)

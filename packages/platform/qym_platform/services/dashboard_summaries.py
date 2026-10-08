@@ -47,6 +47,8 @@ from sqlalchemy import and_, case, delete, func, insert, or_, select, tuple_, up
 from sqlalchemy.orm import Session, aliased
 from qym_platform.log import get_logger
 
+logger = get_logger(__name__)
+
 MAX_LATE_EVENT_AGE = timedelta(days=30)
 MAX_EVENT_ATTEMPTS = 5
 HISTOGRAM_VERSION = 1
@@ -1759,6 +1761,12 @@ def process_partition(
             apply_events(db, events)
         accepted = events
     except Exception:
+        logger.warning(
+            "Dashboard batch apply failed for partition %s; applying %d events one by one",
+            run_id,
+            len(events),
+            exc_info=True,
+        )
         accepted = []
         for event in events:
             try:
@@ -1788,7 +1796,20 @@ def process_partition(
                     )
                     event.published_at = now
                     partition.queue_state = "repair_required"
+                    logger.warning(
+                        "Dashboard event %s of partition %s dead-lettered after %d attempts",
+                        event.event_id,
+                        run_id,
+                        event.attempt_count,
+                        exc_info=True,
+                    )
                 else:
+                    logger.debug(
+                        "Dashboard event %s of partition %s failed; will retry",
+                        event.event_id,
+                        run_id,
+                        exc_info=True,
+                    )
                     break
             accepted.append(event)
     db.flush()

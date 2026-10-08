@@ -394,11 +394,15 @@ class RemoteQueueSnapshotter:
             return None, "Environment has no API key"
         try:
             api_key = decrypt_llm_api_key(env.api_key_encrypted)
-        except Exception:  # noqa: BLE001 - never surface key material
+        except Exception as exc:  # noqa: BLE001 - never surface key material
+            logger.warning(
+                "remote queue %s: API key cannot be decrypted (%s)", env.id, type(exc).__name__
+            )
             return None, "Environment API key cannot be decrypted"
         try:
             return self.client_factory(env.base_url, api_key), ""
         except Exception as exc:  # noqa: BLE001 - e.g. URL now refused by policy
+            logger.warning("remote queue %s: client unavailable (%s)", env.id, type(exc).__name__)
             return None, _short("Environment unavailable: " + type(exc).__name__)
         finally:
             del api_key
@@ -490,10 +494,15 @@ class RemoteQueueSnapshotter:
         try:
             pages = self._await(asyncio.wait_for(fetch_all(), self.fetch_timeout))
         except EnvAuthError:
+            logger.warning("remote queue fetch: the service rejected the API key")
             return {}, ENV_AUTH_ERROR, True
         except EvalServiceError as exc:
-            return {}, _short(redact_text(str(exc)), FETCH_ERROR_MAX), False
+            error = _short(redact_text(str(exc)), FETCH_ERROR_MAX)
+            # Redacted text, no traceback: the service's message may echo secrets.
+            logger.warning("remote queue fetch failed: %s", error)
+            return {}, error, False
         except asyncio.TimeoutError:
+            logger.warning("remote queue fetch timed out after %ss", self.fetch_timeout)
             return {}, "Evaluation service did not answer in time", False
         except Exception as exc:  # noqa: BLE001 - keep details out of the snapshot
             logger.warning("remote queue fetch failed: %s", type(exc).__name__)

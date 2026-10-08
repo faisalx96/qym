@@ -18,7 +18,10 @@ from qym_platform.db.models import ApiKey, Project, ProjectMembership, User, Use
 from qym_platform.auth_oidc import get_session_user_and_provider, session_auth_enabled
 from qym_platform.deps import get_db
 from qym_platform.security import api_key_prefix, verify_api_key
+from qym_platform.log import get_logger
 from qym_platform.settings import PlatformSettings
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -63,9 +66,12 @@ def _provision_proxy_header_user(db: Session, email: str) -> User:
         db.rollback()
         existing = db.query(User).filter(User.email == email).first()
         if existing and existing.is_active:
+            logger.debug("proxy-header user provisioned concurrently; reusing user %s", existing.id)
             return existing
+        logger.exception("could not provision proxy-header user")
         raise
     db.refresh(user)
+    logger.info("provisioned proxy-header user %s", user.id)
     return user
 
 
@@ -170,12 +176,14 @@ def resolve_api_key_principal(db: Session, token: str) -> Principal:
         .first()
     )
     if not row:
+        logger.info("API key rejected: unknown or revoked key (prefix=%s)", prefix)
         raise HTTPException(
             status_code=401,
             detail="Invalid API key",
             headers={"X-Qym-Key-State": "invalid"},
         )
     if not _verify_api_key_cached(token, row.id, row.key_hash):
+        logger.info("API key rejected: hash mismatch (key=%s)", row.id)
         raise HTTPException(
             status_code=401,
             detail="Invalid API key",
@@ -184,6 +192,7 @@ def resolve_api_key_principal(db: Session, token: str) -> Principal:
 
     user = db.query(User).filter(User.id == row.user_id).first()
     if not user or not user.is_active:
+        logger.info("API key rejected: owner disabled (key=%s)", row.id)
         raise HTTPException(
             status_code=403,
             detail="User disabled",

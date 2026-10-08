@@ -12,7 +12,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from qym_platform.db.models import User, UserIdentity, UserRole, UserSession
+from qym_platform.log import get_logger
 from qym_platform.settings import PlatformSettings
+
+logger = get_logger(__name__)
 
 
 SESSION_USER_ID_KEY = "qym_user_id"
@@ -285,6 +288,7 @@ def resolve_or_provision_user(db: Session, identity: ProviderIdentity) -> User:
         db.flush()
         created_user = True
     elif not user.is_active:
+        logger.info("sign-in refused for disabled user %s (provider=%s)", user.id, identity.provider)
         raise HTTPException(status_code=403, detail="User disabled")
     elif not user.display_name and identity.display_name:
         user.display_name = identity.display_name.strip()
@@ -304,13 +308,17 @@ def resolve_or_provision_user(db: Session, identity: ProviderIdentity) -> User:
         db.rollback()
         resolved = db.query(User).filter(User.email == identity.email).first()
         if resolved and resolved.is_active:
+            logger.debug("identity linked concurrently; reusing user %s", resolved.id)
             return resolved
+        logger.exception("could not link %s identity to a user", identity.provider)
         raise
     db.refresh(user)
     if created_user and not user.display_name:
         user.display_name = _default_display_name(identity.email)
         db.commit()
         db.refresh(user)
+    if created_user:
+        logger.info("created user %s from %s sign-in", user.id, identity.provider)
     return user
 
 
@@ -318,6 +326,7 @@ def _oauth_client(settings: PlatformSettings, provider: str):
     try:
         from authlib.integrations.starlette_client import OAuth
     except ImportError as exc:
+        logger.error("Authlib is not installed; OIDC login is unavailable")
         raise RuntimeError("Authlib is required for OIDC login. Install qym-platform with auth dependencies.") from exc
 
     oauth = OAuth()
@@ -469,5 +478,6 @@ def origin_matches_base(origin: str, base_url: str) -> bool:
         o = urlparse(origin)
         b = urlparse(base_url)
     except Exception:
+        logger.debug("unparseable origin or base URL", exc_info=True)
         return False
     return bool(o.scheme and o.netloc and b.scheme and b.netloc and o.scheme == b.scheme and o.netloc == b.netloc)

@@ -456,6 +456,9 @@ def _handle_response(
         try:
             return response.json()
         except ValueError:
+            logger.warning(
+                "Evaluation service %s %s returned a non-JSON %s response", method, url, status
+            )
             raise EvalServiceError(
                 "Evaluation service returned a non-JSON response", status_code=status
             ) from None

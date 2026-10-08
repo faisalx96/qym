@@ -5191,6 +5191,7 @@ async def analyze_run_items_stream(
                 )
                 await queue.put({"type": "_complete", "results": results})
             except Exception as exc:
+                logger.exception("Analysis stream failed for run %s", run_id)
                 logger_msg = f"Analysis stream failed for run {run_id}: {exc}"
                 await queue.put({"type": "error", "message": logger_msg})
 
@@ -5292,6 +5293,7 @@ async def analyze_run_items_stream(
                                 allow_human_overwrite=request.allow_human_overwrite,
                             )
                     except Exception as exc:
+                        logger.exception("Failed to save analysis results for run %s", run_id)
                         db.rollback()
                         yield encode(
                             {

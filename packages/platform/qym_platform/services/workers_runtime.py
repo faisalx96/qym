@@ -61,6 +61,7 @@ class ServiceHeartbeatWriter:
         try:
             info = dict(self.info() or {})
         except Exception as exc:  # report, never skip the heartbeat
+            logger.warning("Could not read the service status for the heartbeat", exc_info=True)
             info = {"error": f"{type(exc).__name__}: {exc}"[:300]}
         info["interval_seconds"] = self.interval
         me = process_id()
@@ -235,6 +236,7 @@ class WorkersRuntime:
         analysis_job_manager.shutdown(wait=False)
         rule_inference_job_manager.shutdown(wait=False)
         self.engine.dispose()
+        logger.info("qym workers runtime stopped")
 
     def status(self) -> Dict[str, Any]:
         maintenance = self.loops.get("maintenance")
