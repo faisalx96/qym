@@ -27,12 +27,15 @@ from typing import Any, Awaitable, Callable, Dict, Iterable, Optional, Set, Tupl
 from uuid import uuid4
 
 from qym_platform.datetime_utils import utc_now_naive
+from qym_platform.log import get_logger
 from qym_platform.services.job_registry import (
     EXPIRED_ERROR,
     ActiveJobExists,
     JobDescription,
     job_registry,
 )
+
+logger = get_logger(__name__)
 
 
 ACTIVE_JOB_STATUSES = frozenset({"queued", "running", "cancelling"})
@@ -335,6 +338,7 @@ class AnalysisJobManager:
             )
             job.future = executor.submit(self._worker_entry, job, runner)
             self._prune_unlocked()
+        logger.info("%s job %s submitted for run %s", self.kind, job.job_id, run_id)
         return job, True
 
     def _enqueue(
@@ -380,6 +384,7 @@ class AnalysisJobManager:
             )
         except ActiveJobExists as conflict:
             return RemoteAnalysisJob(conflict.row), False
+        logger.info("%s job %s queued for run %s", self.kind, job.job_id, run_id)
         return RemoteAnalysisJob(row), True
 
     def free_slots(self) -> int:
@@ -428,6 +433,7 @@ class AnalysisJobManager:
             executor = self._ensure_executor()
             job.future = executor.submit(self._worker_entry, job, runner)
             self._prune_unlocked()
+        logger.info("%s job %s adopted for run %s", self.kind, job.job_id, job.run_id)
         return job
 
     async def _request_loop_heartbeat(self, job: AnalysisJob) -> None:
@@ -482,10 +488,13 @@ class AnalysisJobManager:
                 else:
                     job.result = result
                     job.status = "completed"
+            logger.info("%s job %s for run %s finished (%s)", self.kind, job.job_id, job.run_id, job.status)
         except asyncio.CancelledError:
             with self._lock:
                 self._finish_cancelled_unlocked(job)
+            logger.info("%s job %s for run %s cancelled", self.kind, job.job_id, job.run_id)
         except Exception as exc:  # pragma: no cover - runner-specific failures
+            logger.exception("%s job %s for run %s failed", self.kind, job.job_id, job.run_id)
             with self._lock:
                 job.status = "failed"
                 job.progress["phase"] = "failed"

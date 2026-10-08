@@ -5,6 +5,7 @@ from collections import defaultdict
 from typing import Any, Dict, List, Optional
 
 from qym_platform.datetime_utils import utc_now_naive
+from qym_platform.log import get_logger
 from qym_platform.services.score_edits import SCORE_EDIT_META_KEYS
 from qym_platform.services.run_means import metric_directions, reduce_pass_scores
 from qym_platform.db.models import (
@@ -24,6 +25,8 @@ from qym_platform.db.models import (
 from sqlalchemy import Integer, and_, cast, func, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
+
+logger = get_logger(__name__)
 
 
 class RepeatPassDeletionError(ValueError):
@@ -666,6 +669,16 @@ def delete_repeat_pass(
                 },
             },
         )
+    )
+    logger.info(
+        "pass %d of run %s deleted by user %s (%d attempts, %d scores, %d events, %d reviews retired)",
+        pass_number,
+        run.id,
+        actor_user_id or "-",
+        deleted_attempts,
+        deleted_scores,
+        deleted_events,
+        retired_reviews,
     )
     return {
         "ok": True,

@@ -6,7 +6,6 @@ import base64
 import copy
 import hashlib
 import json
-import logging
 import math
 from functools import partial
 from dataclasses import dataclass
@@ -169,8 +168,9 @@ from sqlalchemy import String, and_, cast, func, or_, tuple_
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, object_session, sessionmaker
+from qym_platform.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 router = APIRouter(tags=["analysis"])
 
 
@@ -562,10 +562,16 @@ def _create_analysis_rule_version(
             ):
                 raise
             if attempt == 2:
+                logger.warning(
+                    "Could not allocate a rule version for project %s after %d attempts",
+                    project_id,
+                    attempt + 1,
+                )
                 raise HTTPException(
                     status_code=409,
                     detail="Could not allocate a rule version; please retry.",
                 ) from exc
+            logger.debug("Rule version allocation raced for project %s; retrying", project_id)
     raise AssertionError("Rule version allocation retry loop exited unexpectedly")
 
 
@@ -4879,6 +4885,7 @@ async def analyze_run_items(
             db.commit()
         except AnalysisAggregationError as exc:
             db.rollback()
+            logger.warning("Analysis aggregation failed for run %s: %s", run_id, exc)
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         return {
             "total_analyzed": 0,
@@ -5090,6 +5097,7 @@ async def analyze_run_items_stream(
                 db.commit()
             except AnalysisAggregationError as exc:
                 db.rollback()
+                logger.warning("Analysis stream aggregation failed for run %s: %s", run_id, exc)
                 yield encode({"type": "error", "message": str(exc)})
                 return
             yield encode(
@@ -5191,6 +5199,7 @@ async def analyze_run_items_stream(
                 )
                 await queue.put({"type": "_complete", "results": results})
             except Exception as exc:
+                logger.exception("Analysis stream failed for run %s", run_id)
                 logger_msg = f"Analysis stream failed for run {run_id}: {exc}"
                 await queue.put({"type": "error", "message": logger_msg})
 
@@ -5292,6 +5301,7 @@ async def analyze_run_items_stream(
                                 allow_human_overwrite=request.allow_human_overwrite,
                             )
                     except Exception as exc:
+                        logger.exception("Failed to save analysis results for run %s", run_id)
                         db.rollback()
                         yield encode(
                             {
@@ -5529,6 +5539,12 @@ def delete_analysis_document(
     require_project_writable(db, run.project_id)
     db.delete(document)
     db.commit()
+    logger.info(
+        "Analyzer document %s deleted from project %s by user %s",
+        document_id,
+        run.project_id,
+        principal.user.id,
+    )
     return {"ok": True, "document_id": document_id}
 
 
@@ -6696,6 +6712,12 @@ def create_project_analysis_rule_version(
         description=request.description,
     )
     db.commit()
+    logger.info(
+        "Analysis rule version %s created as draft for project %s by user %s",
+        version.id,
+        run.project_id,
+        principal.user.id,
+    )
     production = _active_analysis_rule_version(db, run.project_id)
     return {
         "version": _analysis_rule_version_payload(
@@ -6749,6 +6771,13 @@ def publish_project_analysis_rule_version(
             actor_user_id=principal.user.id,
         )
     db.commit()
+    logger.info(
+        "Analysis rule version %s published for project %s by user %s%s",
+        version.id,
+        run.project_id,
+        principal.user.id,
+        f" (alias {request.set_alias})" if request.set_alias else "",
+    )
     production = _active_analysis_rule_version(db, run.project_id)
     return {
         "version": _analysis_rule_version_payload(
@@ -6781,6 +6810,13 @@ def set_project_analysis_rule_alias(
         actor_user_id=principal.user.id,
     )
     db.commit()
+    logger.info(
+        "Analysis rule alias %s of project %s now points to version %s (user %s)",
+        alias_name,
+        run.project_id,
+        version.id,
+        principal.user.id,
+    )
     return {
         "alias": alias.alias,
         "version": _analysis_rule_version_payload(
@@ -7438,6 +7474,7 @@ async def analyze_test(
             result.category_taxonomy = category_taxonomy
         categories = _category_counts(analyzed_results)
         aggregation_error = str(exc)
+        logger.warning("Test analysis aggregation failed; keeping per-item labels: %s", exc)
     results = [
         {
             "item_id": result.item_id,
@@ -9862,6 +9899,12 @@ def approve_correction(
     )
 
     db.commit()
+    logger.info(
+        "Correction %s approved for run %s by user %s",
+        target.id,
+        run.id,
+        principal.user.id if principal.auth_type != "none" else "-",
+    )
     return _serialize_corrections_with_history(db, [target], principal)[0]
 
 
@@ -10060,6 +10103,12 @@ def reject_correction(
     )
 
     db.commit()
+    logger.info(
+        "Correction %s rejected for run %s by user %s",
+        c.id,
+        run.id,
+        principal.user.id if principal.auth_type != "none" else "-",
+    )
     return _serialize_corrections_with_history(db, [c], principal)[0]
 
 
@@ -10237,6 +10286,13 @@ def bulk_correction_action(
         db.flush()
 
     db.commit()
+    logger.info(
+        "Bulk correction %s affected %d of %d corrections (user %s)",
+        request.action,
+        affected,
+        len(request.ids),
+        principal.user.id if principal.auth_type != "none" else "-",
+    )
     result: Dict[str, Any] = {"ok": True, "affected": affected}
     if request.action in ("approve", "reject", "reset"):
         # The decided rows as the single-card routes return them (reviewer,
@@ -10272,6 +10328,12 @@ def delete_correction(
         reviewed_at=utc_now_naive(),
     )
     db.commit()
+    logger.info(
+        "Correction %s deleted for run %s by user %s",
+        correction_id,
+        run.id,
+        principal.user.id if principal.auth_type != "none" else "-",
+    )
     return {
         "ok": True,
         "deleted_id": correction_id,

@@ -106,7 +106,6 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
-import logging
 import socket
 import threading
 from dataclasses import dataclass
@@ -193,8 +192,9 @@ from .run_lifecycle import (
     SOFT_STOP_REASONS,
     mark_run_terminal,
 )
+from qym_platform.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 T = TypeVar("T")
 
@@ -257,6 +257,7 @@ def configured_job_timeout() -> timedelta:
     try:
         return timedelta(seconds=PlatformSettings().eval_job_timeout_seconds)
     except Exception:  # noqa: BLE001 - settings unavailable (e.g. no database URL)
+        logger.debug("eval job timeout setting unavailable; using the default", exc_info=True)
         return JOB_TIMEOUT
 
 # Submitted (or being submitted) and not finished yet.
@@ -794,6 +795,13 @@ class EvalDispatcher:
         wait_reason: Optional[str] = None,
         error: Optional[str] = None,
     ) -> None:
+        if job.status != status:
+            logger.info(
+                "eval job %s: status %s -> %s",
+                job.id,
+                getattr(job.status, "value", job.status),
+                getattr(status, "value", status),
+            )
         job.status = status
         job.wait_reason = _short(_redacted_text(wait_reason)) if wait_reason else None
         if error is not None:
@@ -836,11 +844,20 @@ class EvalDispatcher:
             return _EnvAccess(paused_reason="Environment has no API key")
         try:
             api_key = decrypt_llm_api_key(env.api_key_encrypted)
-        except Exception:  # noqa: BLE001 - never surface key material
+        except Exception as exc:  # noqa: BLE001 - never surface key material
+            # Type name only: the cause may carry the ciphertext or key material.
+            logger.warning(
+                "eval environment %s: API key cannot be decrypted (%s)",
+                env.id,
+                type(exc).__name__,
+            )
             return _EnvAccess(paused_reason="Environment API key cannot be decrypted")
         try:
             client = self.client_factory(env.base_url, api_key)
         except Exception as exc:  # noqa: BLE001 - e.g. URL now refused by policy
+            logger.warning(
+                "eval environment %s: client unavailable (%s)", env.id, type(exc).__name__
+            )
             return _EnvAccess(
                 paused_reason=_short(
                     "Environment unavailable: " + redact_text(type(exc).__name__)
@@ -911,8 +928,11 @@ class EvalDispatcher:
             healthy = True
         except EnvAuthError:
             error = ENV_AUTH_ERROR
+            logger.warning("eval environment %s: probe rejected the API key", env_id)
         except EvalServiceError as exc:
             error = _short(_redacted_text(exc), 500)
+            # Redacted text, no traceback: the service's message may echo secrets.
+            logger.warning("eval environment %s: probe failed: %s", env_id, error)
         finally:
             self._close(client)
         with self.session_factory() as db:
@@ -1126,6 +1146,10 @@ class EvalDispatcher:
                     )
                 except LaunchTokenUnavailable:
                     del prep
+                    logger.warning(
+                        "eval job %s: launch token unavailable (QYM_LLM_CONFIG_ENCRYPTION_KEY unset); deferring",
+                        job.id,
+                    )
                     self._defer(
                         job,
                         ENV_PAUSE_RECHECK_SECONDS,
@@ -1316,6 +1340,7 @@ class EvalDispatcher:
             except EnvAuthError:
                 # Stay SUBMITTING: the remote job may exist, so the check must
                 # still run before any resubmit once the key works again.
+                logger.warning("eval job %s: reconcile refused the environment API key; pausing", job_id)
                 self._with_job(job_id, self._pause_submitting)
                 return
             except EvalServiceError as exc:
@@ -1407,8 +1432,10 @@ class EvalDispatcher:
                 try:
                     remote = self._await(client.get(remote_job_id))
                 except EnvAuthError:
+                    logger.warning("eval job %s: poll refused the environment API key", job_id)
                     remote_error = "auth"
                 except RemoteNotFound:
+                    logger.warning("eval job %s: remote job %s not found", job_id, remote_job_id)
                     remote_error = "not_found"
                 except EvalServiceError as exc:
                     logger.info(
@@ -1510,6 +1537,12 @@ class EvalDispatcher:
         elif remote_error == "retry":
             wait_reason = "Evaluation service unreachable; retrying"
         if new_status != job.status:
+            logger.info(
+                "eval job %s: status %s -> %s",
+                job.id,
+                getattr(job.status, "value", job.status),
+                new_status.value,
+            )
             job.status = new_status
             changed = True
         job.wait_reason = wait_reason

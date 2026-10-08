@@ -51,7 +51,6 @@ import base64
 import copy
 import hashlib
 import hmac
-import logging
 from datetime import datetime
 from typing import (
     TYPE_CHECKING,
@@ -86,11 +85,12 @@ from .run_lifecycle import (
     RUN_STATUS_REASON_CANCELLED_BY_USER,
     RUN_STATUS_REASON_LEASE_TIMEOUT,
 )
+from qym_platform.log import get_logger
 
 if TYPE_CHECKING:
     from ..auth import Principal
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _TOKEN_KEY_LABEL = b"qym-eval-launch-token-v1"
 TOKEN_PREFIX = "qlt_"
@@ -491,6 +491,12 @@ def recompute_experiment_status(
     )
     status = aggregate_status([j.status for j in current_jobs(jobs)])
     if row.status != status:
+        logger.info(
+            "eval experiment %s: status %s -> %s",
+            row.id,
+            getattr(row.status, "value", row.status),
+            getattr(status, "value", status),
+        )
         row.status = status
     clear_secrets_when_settled(row, jobs)
     # The creator's qym API key outlives BLOCKED jobs: they may be retried.
@@ -608,6 +614,18 @@ def cancel_job(
     concurrently. Permission checks are the caller's; the caller commits and
     recomputes the experiment status.
     """
+    outcome = _cancel_job(db, job, user_id=user_id, reason=reason)
+    logger.info("eval job %s: cancel requested by user %s -> %s", job.id, user_id or "-", outcome)
+    return outcome
+
+
+def _cancel_job(
+    db: Session,
+    job: EvalExperimentJob,
+    *,
+    user_id: Optional[str],
+    reason: Optional[str] = None,
+) -> str:
     now = utc_now_naive()
     status = EvalExperimentJob.status
     fields = {
@@ -722,6 +740,7 @@ def stop_linked_run(
     )
     stopped = bool(result.rowcount)
     if stopped:
+        logger.info("eval job %s: linked run %s stopped (cancelled by user)", job.id, run_id)
         run = db.identity_map.get(identity_key(Run, run_id))
         if run is not None:
             db.expire(run)

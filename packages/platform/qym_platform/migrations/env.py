@@ -13,13 +13,22 @@ from sqlalchemy import engine_from_config, pool
 from qym_platform.db.base import Base
 from qym_platform.db import models  # noqa: F401  (import models for metadata)
 from qym_platform.db.migration_lock import migration_guard
+from qym_platform.log import apply_platform_format, get_logger
 from qym_platform.settings import PlatformSettings
 
 
 config = context.config
 if config.config_file_name is not None:
+    import logging as _logging
+
     # Provide `sys` so alembic.ini handler args like `(sys.stderr,)` evaluate correctly.
-    fileConfig(config.config_file_name, defaults={"sys": sys})
+    # Keep the platform's module loggers enabled (fileConfig disables every
+    # logger it does not name by default), and give alembic.ini's handler the
+    # platform format (QYM_LOG_FORMAT) and secret redaction.
+    fileConfig(config.config_file_name, defaults={"sys": sys}, disable_existing_loggers=False)
+    apply_platform_format(_logging.getLogger().handlers)
+
+logger = get_logger("qym_platform.migrations")
 
 target_metadata = Base.metadata
 
@@ -60,9 +69,16 @@ def run_migrations_online() -> None:
                 context.run_migrations()
 
 
-if context.is_offline_mode():
-    run_migrations_offline()
-else:
-    run_migrations_online()
+try:
+    if context.is_offline_mode():
+        logger.info("running migrations offline")
+        run_migrations_offline()
+    else:
+        logger.info("running migrations")
+        run_migrations_online()
+except Exception:
+    logger.exception("migrations failed")
+    raise
+logger.info("migrations finished")
 
 

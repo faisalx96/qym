@@ -78,6 +78,10 @@ from .eval_service_client import (
     redact_text,
 )
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 if TYPE_CHECKING:
     from ..auth import Principal
 
@@ -413,13 +417,17 @@ async def cancel_remote_orphans(
         except RemoteNotFound:
             outcomes[rid] = ORPHAN_NOT_FOUND
         except EnvAuthError:
+            logger.warning("orphan cancel %s: the service rejected the environment API key", rid)
             auth_failed = True
             outcomes[rid] = ORPHAN_ERROR
             errors[rid] = "Evaluation service rejected the environment API key"
         except EvalServiceError as exc:
             outcomes[rid] = ORPHAN_ERROR
             errors[rid] = redact_text(str(exc))[:ERROR_MESSAGE_MAX]
+            # Redacted text, no traceback: the service's message may echo secrets.
+            logger.warning("orphan cancel %s failed: %s", rid, errors[rid])
         except Exception as exc:  # noqa: BLE001 - transport/policy; never echo details
+            logger.warning("orphan cancel %s failed (%s)", rid, type(exc).__name__, exc_info=True)
             outcomes[rid] = ORPHAN_ERROR
             errors[rid] = f"Remote cancel failed: {type(exc).__name__}"
         else:

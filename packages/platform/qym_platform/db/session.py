@@ -4,7 +4,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import sessionmaker
 
+from qym_platform.log import get_logger
 from qym_platform.settings import PlatformSettings
+
+logger = get_logger(__name__)
 
 
 def build_engine(settings: PlatformSettings | None = None, *, role: str = "api") -> Engine:
@@ -44,7 +47,16 @@ def build_engine(settings: PlatformSettings | None = None, *, role: str = "api")
             connect_args={"options": " ".join(options)},
         )
     # future=True by default in SQLAlchemy 2.x
-    return create_engine(url, **kwargs)
+    engine = create_engine(url, **kwargs)
+    # Never the URL: it carries the database password.
+    logger.info(
+        "database engine created (role=%s, backend=%s, pool_size=%s, max_overflow=%s)",
+        role,
+        engine.dialect.name,
+        kwargs.get("pool_size", "-"),
+        kwargs.get("max_overflow", "-"),
+    )
+    return engine
 
 
 def request_threadpool_size(settings: PlatformSettings) -> int:

@@ -169,6 +169,10 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 router = APIRouter()
 
 _PREFIX = "/v1/projects/{project_id}/experiments"
@@ -1269,6 +1273,9 @@ def create_experiment(
     )
     db.commit()
     db.refresh(experiment)
+    logger.info(
+        "Experiment %s created in project %s with %d job(s)", experiment.id, project_id, len(planned)
+    )
     return _experiment_detail(db, experiment)
 
 
@@ -1427,6 +1434,13 @@ def cancel_experiment(
         experiment.cancelled_by_user_id = principal.user.id
     db.commit()
     db.refresh(experiment)
+    logger.info(
+        "Experiment %s cancel by user %s: %d job(s) targeted, %d running skipped",
+        experiment.id,
+        principal.user.id,
+        len(targets),
+        len(skipped_running),
+    )
     return {
         "outcomes": outcomes,
         "skipped_running": skipped_running,
@@ -1455,6 +1469,7 @@ def cancel_experiment_job(
     outcomes = _cancel(db, principal, experiment, [job], req.reason if req else None)
     db.commit()
     db.refresh(experiment)
+    logger.info("Experiment %s job %s cancel: %s", experiment.id, job.id, outcomes.get(job.id))
     return {
         "outcome": outcomes[job.id],
         "experiment": _experiment_detail(db, experiment),
@@ -1603,6 +1618,7 @@ def retry_experiment_job(
     )
     db.commit()
     db.refresh(experiment)
+    logger.info("Experiment %s job retried as %s (attempt %s)", experiment.id, new_id, attempt)
     return {"job_id": new_id, "experiment": _experiment_detail(db, experiment)}
 
 

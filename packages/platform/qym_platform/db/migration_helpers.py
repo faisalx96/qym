@@ -16,6 +16,10 @@ from uuid import uuid4
 
 import sqlalchemy as sa
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 DEFAULT_INLINE_BYTES = 1 * 1024 * 1024 * 1024  # 1 GiB
 
 
@@ -45,6 +49,7 @@ def enqueue_job(bind, kind: str, params: Optional[Dict[str, Any]] = None, *, not
         ),
         {"id": job_id, "kind": kind, "status": "paused" if paused else "queued", "params": json.dumps(params or {}), "log": note, "now": now},
     )
+    logger.info("migration queued maintenance job %s (kind=%s, %s)", job_id, kind, "paused" if paused else "queued")
     return job_id
 
 

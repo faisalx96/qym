@@ -58,6 +58,7 @@ from qym_platform.secrets import (
     resolve_llm_api_key,
 )
 from qym_platform.security import generate_api_key
+from qym_platform.log import get_logger
 from qym_platform.settings import PlatformSettings
 from qym_platform.services import dataset_read_tokens
 from qym_platform.services.correction_rules import CORRECTION_APPROVERS, correction_rules
@@ -71,6 +72,8 @@ from qym_platform.services.root_cause_categories import DEFAULT_ROOT_CAUSE_TAXON
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, load_only
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -594,6 +597,7 @@ def create_llm_connection(
             status_code=400, detail="A connection with that name already exists"
         )
     db.refresh(conn)
+    logger.info("LLM connection %s saved in project %s", conn.id, project_id)
     return _serialize_connection(conn)
 
 
@@ -618,6 +622,7 @@ def update_llm_connection(
             status_code=400, detail="A connection with that name already exists"
         )
     db.refresh(conn)
+    logger.info("LLM connection %s saved in project %s", conn.id, project_id)
     return _serialize_connection(conn)
 
 
@@ -645,6 +650,7 @@ def delete_llm_connection(
         if nxt:
             nxt.is_default = True
     db.commit()
+    logger.info("LLM connection %s deleted from project %s", connection_id, project_id)
     return {"ok": True, "id": connection_id}
 
 
@@ -664,6 +670,7 @@ def set_default_llm_connection(
     conn.is_default = True
     db.commit()
     db.refresh(conn)
+    logger.info("LLM connection %s saved in project %s", conn.id, project_id)
     return _serialize_connection(conn)
 
 
@@ -714,6 +721,14 @@ async def test_llm_connection(
         )
         return {"ok": True, "model": model, "response": resp.choices[0].message.content}
     except Exception as e:  # noqa: BLE001 - surface provider error to the user
+        # Never the key; provider messages pass through the log redaction.
+        logger.warning(
+            "LLM connection test failed (project=%s, connection=%s, model=%s)",
+            project_id,
+            connection_id,
+            model,
+            exc_info=True,
+        )
         raise HTTPException(status_code=400, detail=f"LLM connection failed: {e}")
 
 
@@ -866,6 +881,7 @@ def create_project_for_creator(
     )
     db.commit()
     db.refresh(project)
+    logger.info("Project %s (%s) created by user %s", project.id, project.slug, principal.user.id)
     return _project_payload(db, project, principal)
 
 
@@ -988,6 +1004,7 @@ def add_project_member(
     db.add(member)
     db.commit()
     db.refresh(member)
+    logger.info("User %s added to project %s as %s", user.id, project.id, getattr(req.role, "value", req.role))
     return _serialize_member(member, user)
 
 
@@ -1210,6 +1227,13 @@ def remove_project_member(
     )
     db.delete(member)
     db.commit()
+    logger.info(
+        "User %s removed from project %s (%d API keys revoked, %d runs transferred)",
+        user_id,
+        project_id,
+        len(keys),
+        transferred,
+    )
     return {
         "ok": True,
         "project_id": project_id,
@@ -1276,6 +1300,8 @@ def create_project_api_key(
     db.add(row)
     db.commit()
     db.refresh(row)
+    # The prefix is a lookup handle, not a secret; the token is never logged.
+    logger.info("API key %s (prefix=%s) issued in project %s for user %s", row.id, row.prefix, project_id, principal.user.id)
     return {"id": row.id, "prefix": row.prefix, "token": token}
 
 
@@ -1302,6 +1328,7 @@ def revoke_project_api_key(
         raise HTTPException(status_code=400, detail="API key already revoked")
     key.revoked_at = utc_now_naive()
     db.commit()
+    logger.info("API key %s revoked in project %s by user %s", key.id, project_id, principal.user.id)
     return {"ok": True, "id": key.id}
 
 
@@ -1360,7 +1387,8 @@ def create_dataset_read_token(
         name=req.name.strip() or "Evaluation Service",
         created_by_user_id=principal.user.id,
     )
-    # The raw token is returned once and never stored.
+    # The raw token is returned once and never stored (or logged).
+    logger.info("Dataset read token %s issued in project %s", row.id, project_id)
     return {**_dataset_read_token_payload(row, principal.user), "token": token}
 
 
@@ -1382,6 +1410,7 @@ def revoke_dataset_read_token(
     if row.revoked_at:
         raise HTTPException(status_code=400, detail="Dataset read token already revoked")
     dataset_read_tokens.revoke_token(db, row)
+    logger.info("Dataset read token %s revoked in project %s", row.id, project_id)
     return {"ok": True, "id": row.id}
 
 
@@ -1423,6 +1452,7 @@ def create_project(
     )
     db.commit()
     db.refresh(project)
+    logger.info("Project %s (%s) created by user %s", project.id, project.slug, principal.user.id)
     return _project_payload(db, project, principal)
 
 
@@ -1707,6 +1737,7 @@ def archive_project(
         _set_project_archived(db, project, True)
     # Also ends the transaction of a repeated request, releasing the row lock.
     db.commit()
+    logger.info("Project %s archived by admin %s", project.id, principal.user.id)
     _stop_project_jobs(db, project)
     return {"ok": True, "project_id": project.id, "archived": True}
 
@@ -1758,6 +1789,7 @@ def unarchive_project(
         _audit_project(db, principal, project, "project.unarchived", {"is_active": True})
         _set_project_archived(db, project, False)
     db.commit()
+    logger.info("Project %s unarchived by admin %s", project.id, principal.user.id)
     db.refresh(project)
     return _project_payload(db, project, principal)
 
@@ -1938,9 +1970,13 @@ def delete_project(
         db.commit()
     except IntegrityError as exc:
         db.rollback()
+        logger.warning(
+            "Project %s deletion refused: other data still references it", project_id, exc_info=True
+        )
         raise HTTPException(
             status_code=409,
             detail="Other data still references this project (for example runs in "
             "another project that use its datasets); nothing was deleted.",
         ) from exc
+    logger.info("Project %s deleted by admin %s", project_id, principal.user.id)
     return {"ok": True, "project_id": project_id, "deleted": True, "counts": counts}

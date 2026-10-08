@@ -62,6 +62,10 @@ from qym_platform.services.dataset_versions import (
 from qym_platform.services.run_means import metric_directions
 from qym_platform.uploads import read_upload
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 router = APIRouter()
 
 
@@ -1802,6 +1806,7 @@ def create_dataset(
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=_slug_conflict_detail(db, project, slug)) from exc
+    logger.info("Dataset %s created in project %s", dataset.id, project.id)
     return {"dataset": _dataset_payload(db, dataset, principal)}
 
 
@@ -1893,6 +1898,7 @@ def delete_dataset(
         after={"deleted_at": to_api_timestamp(dataset.deleted_at)},
     )
     db.commit()
+    logger.info("Dataset %s deleted (restorable) in project %s", dataset.id, project.id)
     return {"ok": True, "restorable": True}
 
 
@@ -1954,6 +1960,7 @@ def restore_dataset(
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=_slug_conflict_detail(db, project, slug)) from exc
+    logger.info("Dataset %s restored in project %s", dataset.id, project.id)
     return {"dataset": _dataset_payload(db, dataset, principal)}
 
 
@@ -2122,6 +2129,7 @@ def create_version(
         db, version, {"type": "created", "from_version_id": parent.id if parent else None}, actor_user_id=principal.user.id
     )
     db.commit()
+    logger.info("Dataset version %s created (dataset=%s)", version.id, version.dataset_id)
     return {"version": _version_payload(db, version)}
 
 
@@ -2162,6 +2170,7 @@ def publish_version(
     if req.set_alias:
         _set_alias(db, dataset, req.set_alias, version, principal)
     db.commit()
+    logger.info("Dataset %s version %s published (%s items)", dataset.id, version.version, item_count)
     return {"version": _version_payload(db, version)}
 
 
@@ -3747,6 +3756,14 @@ def _upload_dataset_sync(
         if set_alias:
             _set_alias(db, dataset, set_alias, version_row, principal)
     db.commit()
+    logger.info(
+        "Dataset %s uploaded: version %s, %d items from %s%s",
+        dataset.id,
+        version_row.version,
+        item_count,
+        source_type,
+        " (published)" if publish else "",
+    )
     return {"dataset": _dataset_payload(db, dataset, principal), "version": _version_payload(db, version_row)}
 
 

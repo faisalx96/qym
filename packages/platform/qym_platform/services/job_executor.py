@@ -12,7 +12,6 @@ through ``background_jobs`` exactly as before.
 
 from __future__ import annotations
 
-import logging
 import threading
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -20,8 +19,9 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from sqlalchemy.orm import sessionmaker
 
 from qym_platform.services.job_registry import job_registry
+from qym_platform.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _analysis_kinds(

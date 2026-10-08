@@ -30,7 +30,6 @@ pooled connections safely, so the registry is off there (tests, embedded use).
 
 from __future__ import annotations
 
-import logging
 import os
 import socket
 import threading
@@ -48,8 +47,9 @@ from sqlalchemy.orm import Session as OrmSession
 
 from qym_platform.datetime_utils import utc_now_naive
 from qym_platform.db.background_job_models import BackgroundJob
+from qym_platform.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 FLUSH_SECONDS = 0.5
 HEARTBEAT_SECONDS = 2.0
@@ -77,6 +77,7 @@ def queue_timeout_seconds() -> float:
 
             _queue_timeout = float(PlatformSettings().job_queue_timeout_seconds)
         except Exception:  # settings unavailable (no database URL): the default
+            logger.debug("job queue timeout setting unavailable; using the default", exc_info=True)
             _queue_timeout = DEFAULT_QUEUE_TIMEOUT_SECONDS
     return _queue_timeout
 
@@ -124,6 +125,7 @@ def _engine_of_session(db: Any) -> Optional[Engine]:
     try:
         return shared_engine(db.get_bind())
     except Exception:  # pragma: no cover - unbound session
+        logger.debug("session has no bound engine", exc_info=True)
         return None
 
 
@@ -288,7 +290,7 @@ class JobRegistry:
                     self._insert(conn, handle, handle.describe(), payload=payload)
                 return
             except IntegrityError:
-                pass
+                logger.debug("background job %s/%s already claimed; re-reading", handle.kind, handle.describe().scope_id)
             desc = handle.describe()
             with handle.engine.begin() as conn:
                 row = conn.execute(

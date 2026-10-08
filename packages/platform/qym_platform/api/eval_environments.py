@@ -69,6 +69,10 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 router = APIRouter()
 
 _PREFIX = "/v1/projects/{project_id}/eval-environments"
@@ -216,6 +220,7 @@ def _stored_key(env: EvalEnvironment, settings: PlatformSettings) -> str:
     try:
         return decrypt_llm_api_key(env.api_key_encrypted, settings)
     except RuntimeError as exc:
+        logger.warning("Environment %s key could not be decrypted: %s", env.id, exc)
         raise HTTPException(status_code=400, detail=str(exc))
 
 
@@ -230,6 +235,8 @@ def _safe_message(exc: BaseException, api_key: str) -> str:
 def _remote_http_error(exc: Exception, api_key: str) -> HTTPException:
     """Map a client/transport error to the HTTP answer of this API."""
     message = _safe_message(exc, api_key)
+    # Only the redacted message: a traceback could carry the raw key.
+    logger.warning("Evaluation Service call failed (%s): %s", type(exc).__name__, message)
     if isinstance(exc, LlmEndpointValidationError):
         return HTTPException(status_code=400, detail=message)
     if isinstance(exc, EnvAuthError):
@@ -665,6 +672,7 @@ async def create_environment(
     _commit(db)
     db.refresh(env)
     slots = list_model_slots(db, schema.id)
+    logger.info("Evaluation environment %s created in project %s", env.id, project_id)
     return {
         "environment": _serialize_environment(env, schema, _slot_summary(slots)),
         **_slots_payload(slots),
@@ -743,6 +751,13 @@ def update_environment(
         env.health_error = None
     _commit(db)
     db.refresh(env)
+    logger.info(
+        "Evaluation environment %s updated (url_changed=%s, key_changed=%s, active=%s)",
+        env.id,
+        url_changed,
+        key_changed,
+        env.is_active,
+    )
     return _environment_payload(db, env)
 
 
@@ -759,6 +774,7 @@ def delete_environment(
     if _environment_in_use(db, env):
         env.is_active = False
         db.commit()
+        logger.info("Evaluation environment %s disabled (still referenced)", env_id)
         return {"ok": True, "id": env_id, "deleted": False, "disabled": True}
     # Break the env <-> current schema cycle, then remove children explicitly so
     # this works without database-level cascades (e.g. SQLite without FK pragma).
@@ -772,6 +788,7 @@ def delete_environment(
     ).delete(synchronize_session=False)
     db.delete(env)
     db.commit()
+    logger.info("Evaluation environment %s deleted from project %s", env_id, project_id)
     return {"ok": True, "id": env_id, "deleted": True, "disabled": False}
 
 
@@ -853,6 +870,7 @@ async def refresh_environment_schema(
     _record_health(env, ok=True)
     _commit(db)
     slots = list_model_slots(db, schema.id)
+    logger.info("Evaluation environment %s schema refreshed (changed=%s)", env.id, changed)
     return {
         "changed": changed,
         **diff,
@@ -960,6 +978,7 @@ def put_model_slots(
         db.rollback()
         raise HTTPException(status_code=422, detail={"errors": exc.errors})
     db.commit()
+    logger.info("Model slots confirmed for environment %s (schema=%s)", env.id, schema.id)
     return {
         "environment_id": env.id,
         "schema_id": schema.id,

@@ -45,7 +45,10 @@ from qym_platform.secrets import (
     is_encrypted_with_current_key,
     reencrypt_llm_api_key,
 )
+from qym_platform.log import get_logger
 from qym_platform.settings import PlatformSettings
+
+logger = get_logger(__name__)
 
 # (label, model, column attribute name)
 ENCRYPTED_COLUMNS: Tuple[Tuple[str, Any, str], ...] = (
@@ -97,6 +100,7 @@ def reencrypt_column(
             try:
                 new_value = reencrypt_llm_api_key(value, settings)
             except RuntimeError:
+                logger.warning("could not re-encrypt stored LLM key (row %s); left unchanged", row_id)
                 stats["failed"] += 1
                 if len(stats["failed_ids"]) < _MAX_FAILED_IDS:
                     stats["failed_ids"].append(row_id)
@@ -190,6 +194,7 @@ def main(
             )
     except RuntimeError as exc:
         # e.g. a malformed key; the message names the setting, never the key.
+        logger.error("LLM key re-encryption aborted", exc_info=True)
         print(json.dumps({"error": str(exc)}))
         return 2
     print(json.dumps(stats, sort_keys=True))

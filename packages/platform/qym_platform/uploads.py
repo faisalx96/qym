@@ -13,7 +13,10 @@ from typing import Any, Awaitable, Callable, Dict
 
 from fastapi import HTTPException, UploadFile
 
+from qym_platform.log import get_logger
 from qym_platform.settings import PlatformSettings
+
+logger = get_logger(__name__)
 
 # Form fields and multipart boundaries around the file part.
 MULTIPART_OVERHEAD_BYTES = 1024 * 1024
@@ -59,14 +62,22 @@ class UploadLimitMiddleware:
             if content_type.startswith("multipart/form-data"):
                 length = headers.get(b"content-length")
                 if length is None:
+                    logger.info("upload refused: no Content-Length (path=%s)", scope.get("path"))
                     await _reply(send, 411, "Uploads need a Content-Length header.")
                     return
                 try:
                     size = int(length)
                 except ValueError:
+                    logger.info("upload refused: invalid Content-Length (path=%s)", scope.get("path"))
                     await _reply(send, 400, "Invalid Content-Length header.")
                     return
                 if size > self.max_body_bytes:
+                    logger.info(
+                        "upload refused: %d bytes over the %d byte limit (path=%s)",
+                        size,
+                        self.max_upload_bytes,
+                        scope.get("path"),
+                    )
                     await _reply(send, 413, upload_limit_message(self.max_upload_bytes))
                     return
         await self.app(scope, receive, send)

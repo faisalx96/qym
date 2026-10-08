@@ -4,7 +4,6 @@ import ast
 import asyncio
 import hashlib
 import json
-import logging
 import math
 import re
 from dataclasses import dataclass
@@ -43,8 +42,9 @@ from qym_platform.services.root_cause_categories import (
     taxonomy_is_complete,
 )
 from sqlalchemy.orm import Session
+from qym_platform.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 # Rule writing is deliberately split by source.  These limits are large enough
 # to learn from a useful project library, while still leaving room for the
 # writer instructions and the model's response in a normal context window.

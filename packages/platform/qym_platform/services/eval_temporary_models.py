@@ -59,6 +59,10 @@ from ..settings import PlatformSettings
 from .eval_config import binding_kind, is_sweep
 from .eval_schema_form import escape_pointer_segment
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 KEY_ROLE = "api_key"
 MAX_KEY_LENGTH = 4096
 MAX_LABEL_LENGTH = 200  # ProjectLlmConnection.name
@@ -293,7 +297,8 @@ def decrypt_secrets(
         return {}
     try:
         value = json.loads(decrypt_llm_api_key(blob, settings))
-    except Exception:  # noqa: BLE001 - never surface decryption details
+    except Exception as exc:  # noqa: BLE001 - never surface decryption details
+        logger.warning("temporary model secrets could not be decrypted (%s)", type(exc).__name__)
         return {}
     if not isinstance(value, dict):
         return {}

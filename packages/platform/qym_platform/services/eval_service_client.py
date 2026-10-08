@@ -16,7 +16,6 @@ top-level ``qym_api_key``) in the error text it logs or raises.
 from __future__ import annotations
 
 import json
-import logging
 import re
 import time
 from typing import Any, Dict, List, Mapping, Optional, Sequence
@@ -29,8 +28,9 @@ from qym_platform.llm_endpoint_security import (
     validate_llm_base_url,
 )
 from qym_platform.settings import PlatformSettings
+from qym_platform.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 CONNECT_TIMEOUT_SECONDS = 5.0
 READ_TIMEOUT_SECONDS = 30.0
@@ -456,6 +456,9 @@ def _handle_response(
         try:
             return response.json()
         except ValueError:
+            logger.warning(
+                "Evaluation service %s %s returned a non-JSON %s response", method, url, status
+            )
             raise EvalServiceError(
                 "Evaluation service returned a non-JSON response", status_code=status
             ) from None

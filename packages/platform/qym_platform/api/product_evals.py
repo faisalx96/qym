@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlencode
 
@@ -40,9 +39,10 @@ from qym_platform.services.run_lifecycle import (
 )
 from qym_platform.service_layout import job_execution_queued
 from qym_platform.settings import PlatformSettings
+from qym_platform.log import get_logger
 
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Stop never touches a finished run, nor one in review (its status is the
 # review state; moving it would strand the review).
@@ -447,6 +447,8 @@ def _stop_product_eval_runs(
         run.last_event_at = now
         stopped += 1
     db.commit()
+    if stopped:
+        logger.info("Stopped %d product eval run(s)", stopped)
     return stopped
 
 
@@ -487,6 +489,8 @@ def _stop_runs(db: Session, runs: List[Run]) -> int:
         run.last_event_at = now
         stopped += 1
     db.commit()
+    if stopped:
+        logger.info("Stopped %d product eval run(s)", stopped)
     return stopped
 
 
@@ -500,6 +504,7 @@ def _mark_run_stopped(db: Session, run: Run) -> bool:
     run.ended_at = now
     run.last_event_at = now
     db.commit()
+    logger.info("Product eval run %s stopped", run.id)
     return True
 
 
@@ -648,6 +653,7 @@ def build_product_eval_run_payload(
     try:
         total = int(total_raw)
     except Exception:
+        logger.debug("Run %s has an unreadable total_items", run.id, exc_info=True)
         total = len(items)
     total = max(total, len(items))
     pending = max(total - completed - failed - in_progress, 0)
@@ -732,6 +738,7 @@ def submit_product_eval(
     except ProductEvalError as exc:
         return _error_response(400, "invalid_request", str(exc))
     except ProductEvalQueueFull as exc:
+        logger.warning("Product eval refused: queue full (%s)", exc)
         return _error_response(
             429,
             "queue_full",
@@ -739,10 +746,13 @@ def submit_product_eval(
             headers={"Retry-After": "30"},
         )
     except ProductEvalConfigError as exc:
+        logger.error("Product eval refused: queue unavailable (%s)", exc)
         return _error_response(503, "queue_unavailable", str(exc))
     except RuntimeError as exc:
+        logger.exception("Product eval submission failed")
         return _error_response(500, "preset_error", str(exc))
 
+    logger.info("Product eval job %s submitted by user %s", job.job_id, principal.user.id)
     job.wait_for_run(timeout=5.0)
     return JSONResponse(
         _ok(_job_payload(job, db=db, principal=principal)), status_code=202

@@ -5,7 +5,6 @@ from __future__ import annotations
 import bisect
 import hashlib
 import json
-import logging
 import time
 import math
 import threading
@@ -46,6 +45,9 @@ from qym_platform.services.run_means import (
 )
 from sqlalchemy import and_, case, delete, func, insert, or_, select, tuple_, update
 from sqlalchemy.orm import Session, aliased
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
 
 MAX_LATE_EVENT_AGE = timedelta(days=30)
 MAX_EVENT_ATTEMPTS = 5
@@ -1759,6 +1761,12 @@ def process_partition(
             apply_events(db, events)
         accepted = events
     except Exception:
+        logger.warning(
+            "Dashboard batch apply failed for partition %s; applying %d events one by one",
+            run_id,
+            len(events),
+            exc_info=True,
+        )
         accepted = []
         for event in events:
             try:
@@ -1788,7 +1796,20 @@ def process_partition(
                     )
                     event.published_at = now
                     partition.queue_state = "repair_required"
+                    logger.warning(
+                        "Dashboard event %s of partition %s dead-lettered after %d attempts",
+                        event.event_id,
+                        run_id,
+                        event.attempt_count,
+                        exc_info=True,
+                    )
                 else:
+                    logger.debug(
+                        "Dashboard event %s of partition %s failed; will retry",
+                        event.event_id,
+                        run_id,
+                        exc_info=True,
+                    )
                     break
             accepted.append(event)
     db.flush()
@@ -2532,7 +2553,7 @@ class DashboardSummaryWorker:
         self._stop = threading.Event()
         self._thread = None
         self._lock = threading.Lock()
-        self._logger = logging.getLogger(__name__)
+        self._logger = get_logger(__name__)
         self._made_progress = False
         # Discovery/reconcile scans are cheap but need not run 20x per second.
         self._next_reconcile = 0.0

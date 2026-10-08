@@ -22,6 +22,10 @@ from typing import Any, Iterator
 
 from sqlalchemy import text
 
+from qym_platform.log import get_logger
+
+logger = get_logger(__name__)
+
 # pg_advisory_lock(int4, int4): a constant class id ("QYM") + the schema hash.
 MIGRATION_LOCK_CLASS = 0x51594D
 DEFAULT_MIGRATION_LOCK_TIMEOUT = "10s"
@@ -74,4 +78,4 @@ def migration_guard(connection: Any) -> Iterator[None]:
         except Exception:
             # A broken connection drops its session lock when it closes; do
             # not mask the migration's own error.
-            pass
+            logger.warning("could not release the migration advisory lock", exc_info=True)
